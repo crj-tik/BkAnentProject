@@ -1,0 +1,21 @@
+server:
+  port: 9003
+
+spring:
+  application:
+    name: notification-service
+
+dubbo:
+  application:
+    name: notification-service
+  protocol:
+    name: dubbo
+    port: 20883
+  registry:
+    address: nacos://${NACOS_SERVER:127.0.0.1:8848}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

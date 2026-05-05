@@ -1,0 +1,15 @@
+server:
+  port: 9007
+
+spring:
+  application:
+    name: media-worker-service
+
+dubbo:
+  application:
+    name: media-worker-service
+  protocol:
+    name: dubbo
+    port: 20887
+  registry:
+    address: nacos://${NACOS_SERVER:127.0.0.1:8848}

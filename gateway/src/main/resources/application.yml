@@ -1,0 +1,71 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: gateway
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+    gateway:
+      routes:
+        - id: auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/auth/**
+        - id: agent-service
+          uri: lb://agent-service
+          predicates:
+            - Path=/agent/**
+        - id: listing-master-service
+          uri: lb://listing-master-service
+          predicates:
+            - Path=/listings/**
+        - id: customer-service
+          uri: lb://customer-service
+          predicates:
+            - Path=/customers/**
+        - id: business-service
+          uri: lb://business-service
+          predicates:
+            - Path=/business/**
+        - id: compare-engine-service
+          uri: lb://compare-engine-service
+          predicates:
+            - Path=/compare/**
+        - id: contract-service
+          uri: lb://contract-service
+          predicates:
+            - Path=/contracts/**
+        - id: settlement-service
+          uri: lb://settlement-service
+          predicates:
+            - Path=/settlements/**
+        - id: promotion-service
+          uri: lb://promotion-service
+          predicates:
+            - Path=/promotions/**
+        - id: marketing-content-service
+          uri: lb://marketing-content-service
+          predicates:
+            - Path=/marketing/**
+        - id: notification-service
+          uri: lb://notification-service
+          predicates:
+            - Path=/notifications/**
+
+dubbo:
+  application:
+    name: gateway
+  protocol:
+    name: dubbo
+    port: 20880
+  registry:
+    address: nacos://${NACOS_SERVER:127.0.0.1:8848}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway

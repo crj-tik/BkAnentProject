@@ -1,0 +1,21 @@
+server:
+  port: 9006
+
+spring:
+  application:
+    name: compare-engine-service
+
+dubbo:
+  application:
+    name: compare-engine-service
+  protocol:
+    name: dubbo
+    port: 20886
+  registry:
+    address: nacos://${NACOS_SERVER:127.0.0.1:8848}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

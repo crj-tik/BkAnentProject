@@ -1,0 +1,21 @@
+server:
+  port: 9009
+
+spring:
+  application:
+    name: promotion-service
+
+dubbo:
+  application:
+    name: promotion-service
+  protocol:
+    name: dubbo
+    port: 20889
+  registry:
+    address: nacos://${NACOS_SERVER:127.0.0.1:8848}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
