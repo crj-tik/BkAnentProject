@@ -23,4 +23,4 @@ There is no committed test suite yet; new business logic should add tests under 
 The repository has no commit history yet, so adopt short imperative commit messages such as `feat: add listing rag indexing` or `fix: handle empty Milvus search response`. Keep one logical change per commit. Pull requests should include scope, affected modules, config or schema changes, verification commands, and sample requests/responses for API changes.
 
 ## Security & Configuration Tips
-Do not hardcode secrets. Supply MySQL, Nacos, DashScope, and Milvus values through environment variables in `application.yml`. Review `sql/mysql-init.sql` before applying it to shared environments.
+Do not hardcode secrets. Supply MySQL, Nacos, DeepSeek, and Milvus values through environment variables in `application.yml`. Review `sql/mysql-init.sql` before applying it to shared environments.

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bkanent.contract.mapper.ContractTemplateMapper">
+
+    <resultMap id="ContractTemplateResultMap" type="com.bkanent.contract.entity.ContractTemplateEntity">
+        <id column="id" property="id"/>
+        <result column="template_code" property="templateCode"/>
+        <result column="template_name" property="templateName"/>
+        <result column="contract_type" property="contractType"/>
+        <result column="version_no" property="versionNo"/>
+        <result column="template_content" property="templateContent"/>
+        <result column="template_file_url" property="templateFileUrl"/>
+        <result column="status" property="status"/>
+        <result column="remark" property="remark"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, template_code, template_name, contract_type, version_no, template_content, template_file_url,
+        status, remark, created_at, updated_at, deleted
+    </sql>
+
+</mapper>

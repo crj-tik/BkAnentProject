@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bkanent.business.mapper.EmployeeDailyWorkloadMapper">
+
+    <resultMap id="EmployeeDailyWorkloadResultMap" type="com.bkanent.business.entity.EmployeeDailyWorkloadEntity">
+        <id column="id" property="id"/>
+        <result column="employee_id" property="employeeId"/>
+        <result column="employee_name" property="employeeName"/>
+        <result column="store_name" property="storeName"/>
+        <result column="region_name" property="regionName"/>
+        <result column="stat_date" property="statDate"/>
+        <result column="viewing_count" property="viewingCount"/>
+        <result column="new_listings" property="newListings"/>
+        <result column="new_customers" property="newCustomers"/>
+        <result column="follow_up_count" property="followUpCount"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, employee_id, employee_name, store_name, region_name, stat_date, viewing_count, new_listings,
+        new_customers, follow_up_count, created_at, updated_at, deleted
+    </sql>
+
+    <select id="selectDailyWorkloads" resultMap="EmployeeDailyWorkloadResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM employee_daily_workload
+        WHERE deleted = 0
+          AND stat_date = #{statDate}
+        ORDER BY viewing_count DESC, new_customers DESC, id ASC
+    </select>
+
+</mapper>

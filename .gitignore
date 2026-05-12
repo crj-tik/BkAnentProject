@@ -1,4 +1,5 @@
 target/
 .mvn-local/
+.m2repo/
 .idea/
 *.iml

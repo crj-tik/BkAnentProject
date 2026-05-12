@@ -5,6 +5,9 @@ import org.apache.dubbo.config.spring.context.annotation.EnableDubbo;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
+/**
+ * ListingMasterServiceApplication 启动类。
+ */
 @MapperScan("com.bkanent.listing.mapper")
 @EnableDubbo
 @SpringBootApplication
@@ -14,3 +17,5 @@ public class ListingMasterServiceApplication {
         SpringApplication.run(ListingMasterServiceApplication.class, args);
     }
 }
+
+

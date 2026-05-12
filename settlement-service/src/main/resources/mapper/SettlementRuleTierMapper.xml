@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bkanent.settlement.mapper.SettlementRuleTierMapper">
+
+    <resultMap id="SettlementRuleTierResultMap" type="com.bkanent.settlement.entity.SettlementRuleTierEntity">
+        <id column="id" property="id"/>
+        <result column="rule_id" property="ruleId"/>
+        <result column="tier_level" property="tierLevel"/>
+        <result column="min_deal_amount" property="minDealAmount"/>
+        <result column="max_deal_amount" property="maxDealAmount"/>
+        <result column="commission_rate" property="commissionRate"/>
+        <result column="store_split_ratio" property="storeSplitRatio"/>
+        <result column="team_split_ratio" property="teamSplitRatio"/>
+        <result column="remark" property="remark"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, rule_id, tier_level, min_deal_amount, max_deal_amount, commission_rate,
+        store_split_ratio, team_split_ratio, remark, created_at, updated_at, deleted
+    </sql>
+
+</mapper>

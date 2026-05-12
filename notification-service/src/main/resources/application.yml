@@ -4,6 +4,15 @@ server:
 spring:
   application:
     name: notification-service
+  config:
+    import: optional:nacos:${spring.application.name}.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+      config:
+        server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+        file-extension: yaml
 
 dubbo:
   application:
@@ -13,9 +22,3 @@ dubbo:
     port: 20883
   registry:
     address: nacos://${NACOS_SERVER:127.0.0.1:8848}
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info

@@ -4,6 +4,37 @@ server:
 spring:
   application:
     name: compare-engine-service
+  cloud:
+    discovery:
+      enabled: false
+    service-registry:
+      auto-registration:
+        enabled: false
+    nacos:
+      discovery:
+        enabled: false
+      config:
+        import-check:
+          enabled: false
+---
+spring:
+  config:
+    activate:
+      on-profile: "!local"
+    import: optional:nacos:${spring.application.name}.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+  cloud:
+    discovery:
+      enabled: true
+    service-registry:
+      auto-registration:
+        enabled: true
+    nacos:
+      discovery:
+        enabled: true
+        server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+      config:
+        server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+        file-extension: yaml
 
 dubbo:
   application:
@@ -13,9 +44,3 @@ dubbo:
     port: 20886
   registry:
     address: nacos://${NACOS_SERVER:127.0.0.1:8848}
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info

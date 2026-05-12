@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bkanent.business.mapper.StoreDashboardSnapshotMapper">
+
+    <resultMap id="StoreDashboardSnapshotResultMap" type="com.bkanent.business.entity.StoreDashboardSnapshotEntity">
+        <id column="id" property="id"/>
+        <result column="store_name" property="storeName"/>
+        <result column="region_name" property="regionName"/>
+        <result column="stat_date" property="statDate"/>
+        <result column="active_listing_count" property="activeListingCount"/>
+        <result column="today_viewing_count" property="todayViewingCount"/>
+        <result column="today_new_customer_count" property="todayNewCustomerCount"/>
+        <result column="today_deal_count" property="todayDealCount"/>
+        <result column="today_performance_amount" property="todayPerformanceAmount"/>
+        <result column="satisfaction_score" property="satisfactionScore"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, store_name, region_name, stat_date, active_listing_count, today_viewing_count,
+        today_new_customer_count, today_deal_count, today_performance_amount, satisfaction_score,
+        created_at, updated_at, deleted
+    </sql>
+
+    <select id="selectLatestByStoreName" resultMap="StoreDashboardSnapshotResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM store_dashboard_snapshot
+        WHERE deleted = 0
+          AND store_name = #{storeName}
+        ORDER BY stat_date DESC, id DESC
+        LIMIT 1
+    </select>
+
+</mapper>

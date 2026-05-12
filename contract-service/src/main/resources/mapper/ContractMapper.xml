@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bkanent.contract.mapper.ContractMapper">
+
+    <resultMap id="ContractResultMap" type="com.bkanent.contract.entity.ContractEntity">
+        <id column="id" property="id"/>
+        <result column="template_id" property="templateId"/>
+        <result column="contract_no" property="contractNo"/>
+        <result column="title" property="title"/>
+        <result column="contract_type" property="contractType"/>
+        <result column="status" property="status"/>
+        <result column="expiry_date" property="expiryDate"/>
+        <result column="broker_id" property="brokerId"/>
+        <result column="listing_id" property="listingId"/>
+        <result column="customer_name" property="customerName"/>
+        <result column="party_a_name" property="partyAName"/>
+        <result column="party_b_name" property="partyBName"/>
+        <result column="deal_amount" property="dealAmount"/>
+        <result column="signed_document_url" property="signedDocumentUrl"/>
+        <result column="external_seal_no" property="externalSealNo"/>
+        <result column="sign_start_time" property="signStartTime"/>
+        <result column="both_signed_time" property="bothSignedTime"/>
+        <result column="archived_time" property="archivedTime"/>
+        <result column="dispute_time" property="disputeTime"/>
+        <result column="archive_status" property="archiveStatus"/>
+        <result column="seal_status" property="sealStatus"/>
+        <result column="seal_provider" property="sealProvider"/>
+        <result column="seal_time" property="sealTime"/>
+        <result column="ocr_summary" property="ocrSummary"/>
+        <result column="remark" property="remark"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, template_id, contract_no, title, contract_type, status, expiry_date, broker_id, listing_id,
+        customer_name, party_a_name, party_b_name, deal_amount, signed_document_url, external_seal_no, sign_start_time,
+        both_signed_time, archived_time, dispute_time, archive_status, seal_status, seal_provider, seal_time,
+        ocr_summary, remark, created_at, updated_at, deleted
+    </sql>
+
+    <select id="selectContracts" resultMap="ContractResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM contract_record
+        WHERE deleted = 0
+        ORDER BY updated_at DESC, id DESC
+    </select>
+
+</mapper>

@@ -1,0 +1,43 @@
+spring:
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_BUSINESS:bk_business}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DB_BUSINESS:1}
+      timeout: ${REDIS_TIMEOUT:3000ms}
+      lettuce:
+        pool:
+          max-active: ${REDIS_POOL_MAX_ACTIVE:8}
+          max-idle: ${REDIS_POOL_MAX_IDLE:8}
+          min-idle: ${REDIS_POOL_MIN_IDLE:1}
+          max-wait: ${REDIS_POOL_MAX_WAIT:3000ms}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+mybatis-plus:
+  mapper-locations: classpath:/mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+business:
+  ranking:
+    use-redis: ${BUSINESS_RANKING_USE_REDIS:true}
+  redis:
+    enabled: ${BUSINESS_REDIS_ENABLED:true}
+    ranking-key-prefix: ${BUSINESS_RANKING_KEY_PREFIX:business:ranking:}
+    ranking-ttl-hours: ${BUSINESS_RANKING_TTL_HOURS:24}

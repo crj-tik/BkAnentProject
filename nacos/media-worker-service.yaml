@@ -1,0 +1,29 @@
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+rocketmq:
+  name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
+  producer:
+    group: ${MEDIA_ROCKETMQ_PRODUCER_GROUP:media-worker-producer-group}
+
+media:
+  rocketmq:
+    generate-topic: ${MEDIA_GENERATE_TOPIC:media_generate_task}
+    consumer-group: ${MEDIA_ROCKETMQ_CONSUMER_GROUP:media-worker-consumer-group}
+  minio:
+    endpoint: ${MINIO_ENDPOINT:http://127.0.0.1:9000}
+    access-key: ${MINIO_ACCESS_KEY:minioadmin}
+    secret-key: ${MINIO_SECRET_KEY:minioadmin}
+    bucket: ${MINIO_BUCKET:generated-assets}
+    public-base-url: ${MINIO_PUBLIC_BASE_URL:https://minio.local}
+  task:
+    sync-wait-timeout-ms: ${MEDIA_TASK_SYNC_WAIT_TIMEOUT_MS:15000}
+    sync-poll-interval-ms: ${MEDIA_TASK_SYNC_POLL_INTERVAL_MS:200}
+    default-angles:
+      - ${MEDIA_TASK_ANGLE_1:客厅视角}
+      - ${MEDIA_TASK_ANGLE_2:卧室视角}
+      - ${MEDIA_TASK_ANGLE_3:阳台视角}
+      - ${MEDIA_TASK_ANGLE_4:海报视角}

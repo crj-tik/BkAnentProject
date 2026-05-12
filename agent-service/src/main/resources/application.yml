@@ -5,9 +5,36 @@ spring:
   application:
     name: agent-service
   cloud:
+    discovery:
+      enabled: false
+    service-registry:
+      auto-registration:
+        enabled: false
     nacos:
       discovery:
+        enabled: false
+      config:
+        import-check:
+          enabled: false
+---
+spring:
+  config:
+    activate:
+      on-profile: "!local"
+    import: optional:nacos:${spring.application.name}.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+  cloud:
+    discovery:
+      enabled: true
+    service-registry:
+      auto-registration:
+        enabled: true
+    nacos:
+      discovery:
+        enabled: true
         server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+      config:
+        server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+        file-extension: yaml
 
 dubbo:
   application:
@@ -17,35 +44,3 @@ dubbo:
     port: 20882
   registry:
     address: nacos://${NACOS_SERVER:127.0.0.1:8848}
-
-spring.ai.alibaba:
-  dashscope:
-    api-key: ${DASHSCOPE_API_KEY:test-key}
-
-agent:
-  qwen:
-    model: ${AGENT_QWEN_MODEL:qwen-plus}
-    temperature: ${AGENT_QWEN_TEMPERATURE:0.2}
-    max-tokens: ${AGENT_QWEN_MAX_TOKENS:1200}
-    decision-max-tokens: ${AGENT_QWEN_DECISION_MAX_TOKENS:320}
-    default-top-k: ${AGENT_QWEN_DEFAULT_TOP_K:4}
-
-milvus:
-  enabled: ${MILVUS_ENABLED:false}
-  endpoint: ${MILVUS_ENDPOINT:http://127.0.0.1:19530}
-  token: ${MILVUS_TOKEN:root:Milvus}
-  database: ${MILVUS_DATABASE:default}
-  default-collection: ${MILVUS_COLLECTION:agent_knowledge}
-  primary-field: ${MILVUS_PRIMARY_FIELD:doc_id}
-  vector-field: ${MILVUS_VECTOR_FIELD:embedding}
-  text-field: ${MILVUS_TEXT_FIELD:content}
-  source-type-field: ${MILVUS_SOURCE_TYPE_FIELD:source_type}
-  source-id-field: ${MILVUS_SOURCE_ID_FIELD:source_id}
-  metric-type: ${MILVUS_METRIC_TYPE:COSINE}
-  max-text-length: ${MILVUS_MAX_TEXT_LENGTH:8192}
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info

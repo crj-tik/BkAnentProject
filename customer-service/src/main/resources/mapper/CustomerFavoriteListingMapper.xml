@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bkanent.customer.mapper.CustomerFavoriteListingMapper">
+
+    <resultMap id="CustomerFavoriteListingResultMap" type="com.bkanent.customer.entity.CustomerFavoriteListingEntity">
+        <id column="id" property="id"/>
+        <result column="customer_id" property="customerId"/>
+        <result column="listing_id" property="listingId"/>
+        <result column="favorite_source" property="favoriteSource"/>
+        <result column="remark" property="remark"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, customer_id, listing_id, favorite_source, remark, created_at, updated_at, deleted
+    </sql>
+
+</mapper>

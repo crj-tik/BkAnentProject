@@ -10,6 +10,9 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.time.LocalDateTime;
 
+/**
+ * Shared base entity for MyBatis Plus models.
+ */
 public class BaseEntity implements Serializable {
 
     @Serial

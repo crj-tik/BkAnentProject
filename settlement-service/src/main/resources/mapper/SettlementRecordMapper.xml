@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bkanent.settlement.mapper.SettlementRecordMapper">
+
+    <resultMap id="SettlementRecordResultMap" type="com.bkanent.settlement.entity.SettlementRecordEntity">
+        <id column="id" property="id"/>
+        <result column="employee_id" property="employeeId"/>
+        <result column="employee_name" property="employeeName"/>
+        <result column="team_name" property="teamName"/>
+        <result column="store_name" property="storeName"/>
+        <result column="contract_id" property="contractId"/>
+        <result column="listing_id" property="listingId"/>
+        <result column="stat_month" property="statMonth"/>
+        <result column="deal_amount" property="dealAmount"/>
+        <result column="commission_rate" property="commissionRate"/>
+        <result column="commission_amount" property="commissionAmount"/>
+        <result column="payout_status" property="payoutStatus"/>
+        <result column="payout_time" property="payoutTime"/>
+        <result column="rule_code" property="ruleCode"/>
+        <result column="remark" property="remark"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, employee_id, employee_name, team_name, store_name, contract_id, listing_id, stat_month, deal_amount,
+        commission_rate, commission_amount, payout_status, payout_time, rule_code, remark, created_at, updated_at, deleted
+    </sql>
+
+</mapper>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bkanent.customer.mapper.OwnerEntrustRecordMapper">
+
+    <resultMap id="OwnerEntrustRecordResultMap" type="com.bkanent.customer.entity.OwnerEntrustRecordEntity">
+        <id column="id" property="id"/>
+        <result column="customer_id" property="customerId"/>
+        <result column="listing_id" property="listingId"/>
+        <result column="contract_no" property="contractNo"/>
+        <result column="entrust_start_date" property="entrustStartDate"/>
+        <result column="entrust_end_date" property="entrustEndDate"/>
+        <result column="reminder_days" property="reminderDays"/>
+        <result column="status" property="status"/>
+        <result column="remark" property="remark"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, customer_id, listing_id, contract_no, entrust_start_date, entrust_end_date, reminder_days, status,
+        remark, created_at, updated_at, deleted
+    </sql>
+
+</mapper>

@@ -1,0 +1,38 @@
+mysql:
+  host: ${MYSQL_HOST:127.0.0.1}
+  port: ${MYSQL_PORT:3306}
+  username: ${MYSQL_USER:root}
+  password: ${MYSQL_PASSWORD:root}
+  params: ${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
+
+  databases:
+    nacos: ${MYSQL_DB_NACOS:nacos}
+    auth: ${MYSQL_DB_AUTH:bk_auth}
+    agent: ${MYSQL_DB_AGENT:bk_agent}
+    listing: ${MYSQL_DB_LISTING:bk_listing}
+    customer: ${MYSQL_DB_CUSTOMER:bk_customer}
+    notification: ${MYSQL_DB_NOTIFICATION:bk_notification}
+    marketing: ${MYSQL_DB_MARKETING:bk_marketing}
+    promotion: ${MYSQL_DB_PROMOTION:bk_promotion}
+    business: ${MYSQL_DB_BUSINESS:bk_business}
+    contract: ${MYSQL_DB_CONTRACT:bk_contract}
+    settlement: ${MYSQL_DB_SETTLEMENT:bk_settlement}
+
+  jdbc:
+    nacos: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_NACOS:nacos}?${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
+    auth: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_AUTH:bk_auth}?${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
+    agent: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_AGENT:bk_agent}?${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
+    listing: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_LISTING:bk_listing}?${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
+    customer: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_CUSTOMER:bk_customer}?${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
+    notification: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_NOTIFICATION:bk_notification}?${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
+    marketing: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_MARKETING:bk_marketing}?${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
+    promotion: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_PROMOTION:bk_promotion}?${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
+    business: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_BUSINESS:bk_business}?${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
+    contract: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_CONTRACT:bk_contract}?${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
+    settlement: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_SETTLEMENT:bk_settlement}?${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
+
+spring:
+  datasource:
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver

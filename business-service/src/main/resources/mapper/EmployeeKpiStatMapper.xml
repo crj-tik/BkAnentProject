@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bkanent.business.mapper.EmployeeKpiStatMapper">
+
+    <resultMap id="EmployeeKpiStatResultMap" type="com.bkanent.business.entity.EmployeeKpiStatEntity">
+        <id column="id" property="id"/>
+        <result column="employee_id" property="employeeId"/>
+        <result column="employee_name" property="employeeName"/>
+        <result column="store_name" property="storeName"/>
+        <result column="region_name" property="regionName"/>
+        <result column="stat_month" property="statMonth"/>
+        <result column="sale_deals" property="saleDeals"/>
+        <result column="rental_deals" property="rentalDeals"/>
+        <result column="closed_deals" property="closedDeals"/>
+        <result column="viewing_count" property="viewingCount"/>
+        <result column="new_listings" property="newListings"/>
+        <result column="new_customers" property="newCustomers"/>
+        <result column="private_message_count" property="privateMessageCount"/>
+        <result column="performance_amount" property="performanceAmount"/>
+        <result column="completion_rate" property="completionRate"/>
+        <result column="conversion_rate" property="conversionRate"/>
+        <result column="satisfaction_score" property="satisfactionScore"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, employee_id, employee_name, store_name, region_name, stat_month, sale_deals, rental_deals, closed_deals,
+        viewing_count, new_listings, new_customers, private_message_count, performance_amount, completion_rate,
+        conversion_rate, satisfaction_score, created_at, updated_at, deleted
+    </sql>
+
+    <select id="selectMonthlyStats" resultMap="EmployeeKpiStatResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM employee_kpi_stat
+        WHERE deleted = 0
+          AND stat_month = #{month}
+        ORDER BY completion_rate DESC, performance_amount DESC, id ASC
+    </select>
+
+</mapper>

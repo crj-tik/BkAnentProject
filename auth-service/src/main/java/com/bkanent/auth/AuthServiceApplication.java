@@ -5,6 +5,9 @@ import org.apache.dubbo.config.spring.context.annotation.EnableDubbo;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
+/**
+ * AuthServiceApplication 启动类。
+ */
 @MapperScan("com.bkanent.auth.mapper")
 @EnableDubbo
 @SpringBootApplication
@@ -14,3 +17,5 @@ public class AuthServiceApplication {
         SpringApplication.run(AuthServiceApplication.class, args);
     }
 }
+
+

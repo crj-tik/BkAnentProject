@@ -3,14 +3,35 @@ package com.bkanent.auth.entity;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.bkanent.common.model.BaseEntity;
 
+/**
+ * UserAccountEntity 实体类。
+ */
 @TableName("user_account")
 public class UserAccountEntity extends BaseEntity {
 
+    /**
+     * 业务属性：username。
+     */
     private String username;
+    /**
+     * 业务属性：passwordHash。
+     */
     private String passwordHash;
+    /**
+     * 业务属性：displayName。
+     */
     private String displayName;
+    /**
+     * 业务属性：roleCode。
+     */
     private String roleCode;
+    /**
+     * 业务属性：tenantCode。
+     */
     private String tenantCode;
+    /**
+     * 业务属性：accountStatus。
+     */
     private String accountStatus;
 
     public String getUsername() {
@@ -61,3 +82,4 @@ public class UserAccountEntity extends BaseEntity {
         this.accountStatus = accountStatus;
     }
 }
+

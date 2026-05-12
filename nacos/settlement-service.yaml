@@ -1,0 +1,30 @@
+spring:
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_SETTLEMENT:bk_settlement}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+mybatis-plus:
+  mapper-locations: classpath:/mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+settlement:
+  batch:
+    batch-no-prefix: ${SETTLEMENT_BATCH_PREFIX:SETBATCH}
+  auto-generate:
+    enabled: ${SETTLEMENT_AUTO_GENERATE_ENABLED:true}
+    cron: ${SETTLEMENT_AUTO_GENERATE_CRON:0 15 2 * * ?}
+    month-offset: ${SETTLEMENT_AUTO_GENERATE_MONTH_OFFSET:0}

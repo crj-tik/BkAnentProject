@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bkanent.promotion.mapper.PromotionPublishRecordMapper">
+
+    <resultMap id="PromotionPublishRecordResultMap" type="com.bkanent.promotion.entity.PromotionPublishRecordEntity">
+        <id column="id" property="id"/>
+        <result column="content_id" property="contentId"/>
+        <result column="listing_id" property="listingId"/>
+        <result column="platform" property="platform"/>
+        <result column="channel_account" property="channelAccount"/>
+        <result column="publish_status" property="publishStatus"/>
+        <result column="external_publish_id" property="externalPublishId"/>
+        <result column="publish_time" property="publishTime"/>
+        <result column="publish_message" property="publishMessage"/>
+        <result column="cost_amount" property="costAmount"/>
+        <result column="operator_name" property="operatorName"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, content_id, listing_id, platform, channel_account, publish_status, external_publish_id, publish_time,
+        publish_message, cost_amount, operator_name, created_at, updated_at, deleted
+    </sql>
+
+</mapper>

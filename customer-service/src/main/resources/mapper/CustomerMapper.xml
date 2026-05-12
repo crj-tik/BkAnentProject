@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bkanent.customer.mapper.CustomerMapper">
+
+    <resultMap id="CustomerResultMap" type="com.bkanent.customer.entity.CustomerEntity">
+        <id column="id" property="id"/>
+        <result column="profile_type" property="profileType"/>
+        <result column="name" property="name"/>
+        <result column="mobile" property="mobile"/>
+        <result column="wechat_no" property="wechatNo"/>
+        <result column="gender" property="gender"/>
+        <result column="intention" property="intention"/>
+        <result column="preferred_area" property="preferredArea"/>
+        <result column="preferred_layout" property="preferredLayout"/>
+        <result column="budget_min" property="budgetMin"/>
+        <result column="budget_max" property="budgetMax"/>
+        <result column="preferred_area_min" property="preferredAreaMin"/>
+        <result column="preferred_area_max" property="preferredAreaMax"/>
+        <result column="broker_id" property="brokerId"/>
+        <result column="source_channel" property="sourceChannel"/>
+        <result column="remark" property="remark"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, profile_type, name, mobile, wechat_no, gender, intention, preferred_area, preferred_layout,
+        budget_min, budget_max, preferred_area_min, preferred_area_max, broker_id, source_channel, remark,
+        created_at, updated_at, deleted
+    </sql>
+
+</mapper>

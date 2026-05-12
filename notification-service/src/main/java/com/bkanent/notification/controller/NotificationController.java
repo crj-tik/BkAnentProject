@@ -2,28 +2,65 @@ package com.bkanent.notification.controller;
 
 import com.bkanent.common.model.ApiResponse;
 import com.bkanent.common.model.HealthStatusDTO;
-import com.bkanent.common.model.NotificationMessageDTO;
-import com.bkanent.common.rpc.NotificationRpcService;
+import com.bkanent.notification.model.NotificationListItemResponse;
+import com.bkanent.notification.model.NotificationMessageRequest;
+import com.bkanent.notification.model.NotificationReadRequest;
+import com.bkanent.notification.model.RobotMessageRequest;
+import com.bkanent.notification.service.NotificationManagementService;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
+/**
+ * Notification delivery controller.
+ */
 @RestController
 @RequestMapping("/notifications")
 public class NotificationController {
 
-    private final NotificationRpcService notificationRpcService;
+    private final NotificationManagementService notificationManagementService;
 
-    public NotificationController(NotificationRpcService notificationRpcService) {
-        this.notificationRpcService = notificationRpcService;
+    public NotificationController(NotificationManagementService notificationManagementService) {
+        this.notificationManagementService = notificationManagementService;
     }
 
     @PostMapping("/station")
-    public ApiResponse<Void> station(@RequestBody NotificationMessageDTO request) {
-        notificationRpcService.sendStationMessage(request.userId(), request.title(), request.content());
+    public ApiResponse<Long> station(@RequestBody NotificationMessageRequest request) {
+        return ApiResponse.ok(notificationManagementService.sendStationMessage(request));
+    }
+
+    @PostMapping("/email")
+    public ApiResponse<Long> email(@RequestBody NotificationMessageRequest request) {
+        return ApiResponse.ok(notificationManagementService.sendEmailMessage(request));
+    }
+
+    @PostMapping("/robot")
+    public ApiResponse<Long> robot(@RequestBody RobotMessageRequest request) {
+        return ApiResponse.ok(notificationManagementService.sendRobotMessage(request));
+    }
+
+    @GetMapping
+    public ApiResponse<List<NotificationListItemResponse>> list(@RequestParam Long userId,
+                                                                @RequestParam(required = false) String channel,
+                                                                @RequestParam(required = false) String readStatus) {
+        return ApiResponse.ok(notificationManagementService.listUserMessages(userId, channel, readStatus));
+    }
+
+    @PostMapping("/{id}/read")
+    public ApiResponse<Void> markRead(@PathVariable Long id, @RequestBody NotificationReadRequest request) {
+        notificationManagementService.markMessageRead(id, request.userId());
         return ApiResponse.ok(null);
+    }
+
+    @GetMapping("/unread-count")
+    public ApiResponse<Long> unreadCount(@RequestParam Long userId) {
+        return ApiResponse.ok(notificationManagementService.countUnreadMessages(userId));
     }
 
     @GetMapping("/health")

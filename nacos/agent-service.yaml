@@ -1,0 +1,59 @@
+spring:
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_AGENT:bk_agent}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  ai:
+    deepseek:
+      api-key: ${DEEPSEEK_API_KEY:test-key}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+mybatis-plus:
+  mapper-locations: classpath:/mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+agent:
+  deepseek:
+    model: ${AGENT_DEEPSEEK_MODEL:deepseek-chat}
+    temperature: ${AGENT_DEEPSEEK_TEMPERATURE:0.2}
+    max-tokens: ${AGENT_DEEPSEEK_MAX_TOKENS:1600}
+    top-p: ${AGENT_DEEPSEEK_TOP_P:}
+    default-top-k: ${AGENT_DEEPSEEK_DEFAULT_TOP_K:4}
+    planner-max-replan-count: ${AGENT_DEEPSEEK_PLANNER_MAX_REPLAN_COUNT:2}
+    planner-fix-retry-count: ${AGENT_DEEPSEEK_PLANNER_FIX_RETRY_COUNT:1}
+    system-prompt: ${AGENT_DEEPSEEK_SYSTEM_PROMPT:}
+  milvus:
+    default-collection: ${MILVUS_COLLECTION:agent_knowledge}
+    primary-field: ${MILVUS_PRIMARY_FIELD:doc_id}
+    vector-field: ${MILVUS_VECTOR_FIELD:embedding}
+    text-field: ${MILVUS_TEXT_FIELD:content}
+    source-type-field: ${MILVUS_SOURCE_TYPE_FIELD:source_type}
+    source-id-field: ${MILVUS_SOURCE_ID_FIELD:source_id}
+    metric-type: ${MILVUS_METRIC_TYPE:COSINE}
+    max-text-length: ${MILVUS_MAX_TEXT_LENGTH:8192}
+  mcp:
+    connect-timeout: ${AGENT_MCP_CONNECT_TIMEOUT:5s}
+    request-timeout: ${AGENT_MCP_REQUEST_TIMEOUT:15s}
+    initialization-timeout: ${AGENT_MCP_INITIALIZATION_TIMEOUT:10s}
+    servers:
+      business-mcp-server: ${BUSINESS_MCP_ENDPOINT:http://127.0.0.1:9010/mcp}
+      compare-mcp-server: ${COMPARE_MCP_ENDPOINT:http://127.0.0.1:9006/mcp}
+      marketing-mcp-server: ${MARKETING_MCP_ENDPOINT:http://127.0.0.1:9008/mcp}
+
+milvus:
+  enabled: ${MILVUS_ENABLED:false}
+  endpoint: ${MILVUS_ENDPOINT:http://127.0.0.1:19530}
+  token: ${MILVUS_TOKEN:root:Milvus}
+  database: ${MILVUS_DATABASE:default}

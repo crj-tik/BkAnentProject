@@ -4,11 +4,15 @@ server:
 spring:
   application:
     name: customer-service
-  datasource:
-    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_CUSTOMER:bk_customer}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
-    username: ${MYSQL_USER:root}
-    password: ${MYSQL_PASSWORD:root}
-    driver-class-name: com.mysql.cj.jdbc.Driver
+  config:
+    import: optional:nacos:${spring.application.name}.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+      config:
+        server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+        file-extension: yaml
 
 dubbo:
   application:
@@ -18,18 +22,3 @@ dubbo:
     port: 20885
   registry:
     address: nacos://${NACOS_SERVER:127.0.0.1:8848}
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info
-
-mybatis-plus:
-  configuration:
-    map-underscore-to-camel-case: true
-  global-config:
-    db-config:
-      logic-delete-field: deleted
-      logic-delete-value: 1
-      logic-not-delete-value: 0

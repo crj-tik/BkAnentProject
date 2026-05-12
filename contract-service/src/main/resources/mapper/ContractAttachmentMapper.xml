@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bkanent.contract.mapper.ContractAttachmentMapper">
+
+    <resultMap id="ContractAttachmentResultMap" type="com.bkanent.contract.entity.ContractAttachmentEntity">
+        <id column="id" property="id"/>
+        <result column="contract_id" property="contractId"/>
+        <result column="attachment_type" property="attachmentType"/>
+        <result column="file_name" property="fileName"/>
+        <result column="file_url" property="fileUrl"/>
+        <result column="ocr_status" property="ocrStatus"/>
+        <result column="ocr_text" property="ocrText"/>
+        <result column="ocr_structured_data" property="ocrStructuredData"/>
+        <result column="ocr_provider" property="ocrProvider"/>
+        <result column="ocr_time" property="ocrTime"/>
+        <result column="remark" property="remark"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, contract_id, attachment_type, file_name, file_url, ocr_status, ocr_text, ocr_structured_data,
+        ocr_provider, ocr_time, remark, created_at, updated_at, deleted
+    </sql>
+
+</mapper>

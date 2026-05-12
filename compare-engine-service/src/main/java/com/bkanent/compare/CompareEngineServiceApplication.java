@@ -1,10 +1,11 @@
 package com.bkanent.compare;
 
-import org.apache.dubbo.config.spring.context.annotation.EnableDubbo;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-@EnableDubbo
+/**
+ * 房源对比引擎服务启动类。
+ */
 @SpringBootApplication
 public class CompareEngineServiceApplication {
 

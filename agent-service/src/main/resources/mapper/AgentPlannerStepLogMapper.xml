@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bkanent.agent.mapper.AgentPlannerStepLogMapper">
+
+    <resultMap id="AgentPlannerStepLogResultMap" type="com.bkanent.agent.entity.AgentPlannerStepLogEntity">
+        <id column="id" property="id"/>
+        <result column="planner_log_id" property="plannerLogId"/>
+        <result column="session_no" property="sessionNo"/>
+        <result column="step_no" property="stepNo"/>
+        <result column="action" property="action"/>
+        <result column="success" property="success"/>
+        <result column="skipped" property="skipped"/>
+        <result column="request_content" property="requestContent"/>
+        <result column="resolved_input" property="resolvedInput"/>
+        <result column="output_key" property="outputKey"/>
+        <result column="output_content" property="outputContent"/>
+        <result column="output_payload_json" property="outputPayloadJson"/>
+        <result column="error_message" property="errorMessage"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, planner_log_id, session_no, step_no, action, success, skipped, request_content, resolved_input, output_key,
+        output_content, output_payload_json, error_message, created_at, updated_at, deleted
+    </sql>
+
+</mapper>

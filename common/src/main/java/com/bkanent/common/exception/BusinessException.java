@@ -1,4 +1,7 @@
 package com.bkanent.common.exception;
+/**
+ * BusinessException 异常类。
+ */
 
 public class BusinessException extends RuntimeException {
 
@@ -13,3 +16,4 @@ public class BusinessException extends RuntimeException {
         return code;
     }
 }
+

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bkanent.business.mapper.ListingTurnoverStatMapper">
+
+    <resultMap id="ListingTurnoverStatResultMap" type="com.bkanent.business.entity.ListingTurnoverStatEntity">
+        <id column="id" property="id"/>
+        <result column="listing_id" property="listingId"/>
+        <result column="listing_title" property="listingTitle"/>
+        <result column="store_name" property="storeName"/>
+        <result column="region_name" property="regionName"/>
+        <result column="stat_month" property="statMonth"/>
+        <result column="listing_to_viewing_days" property="listingToViewingDays"/>
+        <result column="viewing_to_deal_days" property="viewingToDealDays"/>
+        <result column="total_turnover_days" property="totalTurnoverDays"/>
+        <result column="turnover_status" property="turnoverStatus"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, listing_id, listing_title, store_name, region_name, stat_month, listing_to_viewing_days,
+        viewing_to_deal_days, total_turnover_days, turnover_status, created_at, updated_at, deleted
+    </sql>
+
+    <select id="selectTurnoverStats" resultMap="ListingTurnoverStatResultMap">
+        SELECT
+        <include refid="Base_Column_List"/>
+        FROM listing_turnover_stat
+        WHERE deleted = 0
+          AND stat_month = #{month}
+        ORDER BY total_turnover_days ASC, id ASC
+    </select>
+
+</mapper>

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bkanent.marketing.mapper.MarketingContentMapper">
+
+    <resultMap id="MarketingContentResultMap" type="com.bkanent.marketing.entity.MarketingContentEntity">
+        <id column="id" property="id"/>
+        <result column="listing_id" property="listingId"/>
+        <result column="platform" property="platform"/>
+        <result column="title" property="title"/>
+        <result column="content_type" property="contentType"/>
+        <result column="copywriting" property="copywriting"/>
+        <result column="asset_urls" property="assetUrls"/>
+        <result column="cover_image_url" property="coverImageUrl"/>
+        <result column="video_url" property="videoUrl"/>
+        <result column="version_no" property="versionNo"/>
+        <result column="parent_content_id" property="parentContentId"/>
+        <result column="platform_variant" property="platformVariant"/>
+        <result column="tags" property="tags"/>
+        <result column="audit_status" property="auditStatus"/>
+        <result column="status" property="status"/>
+        <result column="publish_message" property="publishMessage"/>
+        <result column="external_publish_id" property="externalPublishId"/>
+        <result column="publish_time" property="publishTime"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, listing_id, platform, title, content_type, copywriting, asset_urls, cover_image_url, video_url,
+        version_no, parent_content_id, platform_variant, tags, audit_status, status, publish_message, external_publish_id,
+        publish_time,
+        created_at, updated_at, deleted
+    </sql>
+
+</mapper>

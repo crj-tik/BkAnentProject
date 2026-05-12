@@ -1,82 +1,132 @@
 package com.bkanent.agent.service;
 
-import com.bkanent.agent.config.AgentQwenProperties;
-import com.bkanent.agent.mcp.MilvusMcpTool;
-import com.bkanent.agent.mcp.MilvusSearchResult;
+import com.bkanent.agent.config.AgentDeepSeekProperties;
+import com.bkanent.agent.enums.AgentExecutionMode;
+import com.bkanent.agent.model.chat.AgentChatRequest;
+import com.bkanent.agent.model.chat.AgentChatResponse;
+import com.bkanent.agent.model.chat.AgentToolDecision;
+import com.bkanent.agent.model.planner.AgentPlannerSession;
+import com.bkanent.agent.tool.context.AgentToolContextHolder;
+import com.bkanent.agent.tool.context.AgentToolSessionSnapshot;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
-
+/**
+ * Main agent orchestration service.
+ */
 @Service
 public class AgentOrchestratorService {
 
-    private static final String ANSWER_SYSTEM_PROMPT = """
-            You are a real-estate middle-platform agent.
-            Answer accurately and concisely for business users.
-            If MCP context is provided, prioritize that context and do not invent facts.
-            If context is insufficient, say so clearly and provide the next step.
-            """;
+    private final DeepSeekChatService deepSeekChatService;
+    private final AgentDeepSeekProperties agentDeepSeekProperties;
+    private final AgentPlanExecutorService agentPlanExecutorService;
+    private final AgentPlannerService agentPlannerService;
+    private final AgentPlannerLogPersistenceService agentPlannerLogPersistenceService;
 
-    private final AgentMcpDecisionService agentMcpDecisionService;
-    private final MilvusMcpTool milvusMcpTool;
-    private final QwenChatService qwenChatService;
-    private final AgentQwenProperties agentQwenProperties;
-
-    public AgentOrchestratorService(AgentMcpDecisionService agentMcpDecisionService,
-                                    MilvusMcpTool milvusMcpTool,
-                                    QwenChatService qwenChatService,
-                                    AgentQwenProperties agentQwenProperties) {
-        this.agentMcpDecisionService = agentMcpDecisionService;
-        this.milvusMcpTool = milvusMcpTool;
-        this.qwenChatService = qwenChatService;
-        this.agentQwenProperties = agentQwenProperties;
+    public AgentOrchestratorService(DeepSeekChatService deepSeekChatService,
+                                    AgentDeepSeekProperties agentDeepSeekProperties,
+                                    AgentPlanExecutorService agentPlanExecutorService,
+                                    AgentPlannerService agentPlannerService,
+                                    AgentPlannerLogPersistenceService agentPlannerLogPersistenceService) {
+        this.deepSeekChatService = deepSeekChatService;
+        this.agentDeepSeekProperties = agentDeepSeekProperties;
+        this.agentPlanExecutorService = agentPlanExecutorService;
+        this.agentPlannerService = agentPlannerService;
+        this.agentPlannerLogPersistenceService = agentPlannerLogPersistenceService;
     }
 
     public AgentChatResponse chat(AgentChatRequest request) {
         String message = request.message() == null ? "" : request.message().trim();
         if (message.isBlank()) {
-            throw new IllegalArgumentException("message must not be blank");
+            throw new IllegalArgumentException("Message must not be blank");
         }
 
+        int topK = request.topK() == null ? agentDeepSeekProperties.getDefaultTopK() : Math.max(1, request.topK());
         boolean allowMcp = request.allowMcp() == null || request.allowMcp();
-        AgentMcpDecision decision = agentMcpDecisionService.decide(message, allowMcp);
-        List<MilvusSearchResult> toolResults = decision.useMcp()
-                ? milvusMcpTool.search(request.collectionName(), decision.query(), resolveTopK(request.topK(), decision.topK()))
-                : List.of();
-        String toolContext = buildToolContext(toolResults);
-        String answer = qwenChatService.complete(ANSWER_SYSTEM_PROMPT, buildAnswerUserPrompt(message, toolContext));
-        return new AgentChatResponse(answer, qwenChatService.getModel(), decision, toolResults, toolContext);
+        AgentExecutionMode executionMode = request.executionMode() == null ? AgentExecutionMode.TOOL : request.executionMode();
+
+        AgentToolContextHolder.init(request.collectionName(), topK, allowMcp);
+        try {
+            return executionMode == AgentExecutionMode.PLANNER
+                    ? plannerChat(message, executionMode)
+                    : toolChat(message, request.collectionName(), topK, allowMcp, executionMode);
+        } finally {
+            AgentToolContextHolder.clear();
+        }
     }
 
-    private int resolveTopK(Integer requestTopK, Integer decisionTopK) {
-        if (requestTopK != null) {
-            return Math.max(1, requestTopK);
-        }
-        if (decisionTopK != null) {
-            return Math.max(1, decisionTopK);
-        }
-        return agentQwenProperties.getDefaultTopK();
+    private AgentChatResponse toolChat(String message,
+                                       String collectionName,
+                                       int topK,
+                                       boolean allowMcp,
+                                       AgentExecutionMode executionMode) {
+        String answer = deepSeekChatService.call(
+                deepSeekChatService.getSystemPrompt(),
+                buildUserPrompt(message, collectionName, topK, allowMcp)
+        );
+        AgentToolSessionSnapshot snapshot = AgentToolContextHolder.snapshot();
+        return new AgentChatResponse(
+                answer,
+                deepSeekChatService.getModel(),
+                null,
+                executionMode,
+                buildDecision(snapshot),
+                snapshot.milvusResults(),
+                snapshot.toolContext(),
+                null
+        );
     }
 
-    private String buildToolContext(List<MilvusSearchResult> toolResults) {
-        if (toolResults == null || toolResults.isEmpty()) {
-            return "";
-        }
-        StringBuilder builder = new StringBuilder();
-        for (int index = 0; index < toolResults.size(); index++) {
-            MilvusSearchResult result = toolResults.get(index);
-            builder.append(index + 1)
-                    .append(". [collection=").append(result.collection()).append(", score=").append(result.score()).append("] ")
-                    .append(result.content())
-                    .append(System.lineSeparator());
-        }
-        return builder.toString().trim();
+    private AgentChatResponse plannerChat(String message, AgentExecutionMode executionMode) {
+        AgentPlannerSession plannerSession = agentPlanExecutorService.execute(message);
+        String answer = agentPlannerService.buildFinalAnswer(message, plannerSession.executionResults(), plannerSession.completed());
+        AgentToolSessionSnapshot snapshot = AgentToolContextHolder.snapshot();
+        agentPlannerLogPersistenceService.savePlannerSession(
+                plannerSession.sessionNo(),
+                executionMode,
+                message,
+                answer,
+                snapshot.toolContext(),
+                plannerSession
+        );
+        return new AgentChatResponse(
+                answer,
+                deepSeekChatService.getModel(),
+                plannerSession.sessionNo(),
+                executionMode,
+                buildDecision(snapshot),
+                snapshot.milvusResults(),
+                snapshot.toolContext(),
+                plannerSession
+        );
     }
 
-    private String buildAnswerUserPrompt(String message, String toolContext) {
-        if (toolContext == null || toolContext.isBlank()) {
-            return "User question:\n" + message + "\n\nNo MCP context is available. Answer directly.";
+    private String buildUserPrompt(String message, String collectionName, int topK, boolean allowMcp) {
+        return """
+                User question:
+                %s
+
+                Current session context:
+                - Knowledge collection: %s
+                - Default search topK: %s
+                - MCP tools allowed: %s
+
+                Decide whether tools are needed first, then answer based on real tool results.
+                """.formatted(
+                message,
+                collectionName == null || collectionName.isBlank() ? "agent_knowledge" : collectionName,
+                topK,
+                allowMcp ? "yes" : "no"
+        ).trim();
+    }
+
+    private AgentToolDecision buildDecision(AgentToolSessionSnapshot snapshot) {
+        if (!snapshot.usedTool()) {
+            return new AgentToolDecision(false, null, null, null, "Model decided no tool call was needed");
         }
-        return "User question:\n" + message + "\n\nMCP context:\n" + toolContext + "\n\nAnswer using the context.";
+        boolean usedKnowledgeTool = snapshot.milvusResults() != null && !snapshot.milvusResults().isEmpty();
+        String reason = usedKnowledgeTool
+                ? "Model invoked the Milvus knowledge retrieval tool"
+                : "Model invoked an external business tool";
+        return new AgentToolDecision(usedKnowledgeTool, snapshot.firstToolName(), snapshot.firstToolQuery(), snapshot.topK(), reason);
     }
 }

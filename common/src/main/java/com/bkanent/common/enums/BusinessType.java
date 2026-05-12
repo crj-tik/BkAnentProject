@@ -1,4 +1,7 @@
 package com.bkanent.common.enums;
+/**
+ * BusinessType 枚举定义。
+ */
 
 public enum BusinessType {
     LISTING,
@@ -8,3 +11,4 @@ public enum BusinessType {
     CONTRACT,
     SETTLEMENT
 }
+

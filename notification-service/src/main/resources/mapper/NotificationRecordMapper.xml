@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bkanent.notification.mapper.NotificationRecordMapper">
+
+    <resultMap id="NotificationRecordResultMap" type="com.bkanent.notification.entity.NotificationRecordEntity">
+        <id column="id" property="id"/>
+        <result column="recipient_user_id" property="recipientUserId"/>
+        <result column="channel" property="channel"/>
+        <result column="scene_code" property="sceneCode"/>
+        <result column="title" property="title"/>
+        <result column="content" property="content"/>
+        <result column="receiver_address" property="receiverAddress"/>
+        <result column="external_webhook" property="externalWebhook"/>
+        <result column="send_status" property="sendStatus"/>
+        <result column="read_status" property="readStatus"/>
+        <result column="read_time" property="readTime"/>
+        <result column="send_time" property="sendTime"/>
+        <result column="external_message_id" property="externalMessageId"/>
+        <result column="error_message" property="errorMessage"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, recipient_user_id, channel, scene_code, title, content, receiver_address, external_webhook, send_status,
+        read_status, read_time, send_time, external_message_id, error_message, created_at, updated_at, deleted
+    </sql>
+
+</mapper>

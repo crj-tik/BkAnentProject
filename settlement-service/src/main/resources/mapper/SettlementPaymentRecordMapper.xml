@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bkanent.settlement.mapper.SettlementPaymentRecordMapper">
+
+    <resultMap id="SettlementPaymentRecordResultMap" type="com.bkanent.settlement.entity.SettlementPaymentRecordEntity">
+        <id column="id" property="id"/>
+        <result column="batch_id" property="batchId"/>
+        <result column="settlement_id" property="settlementId"/>
+        <result column="payee_employee_id" property="payeeEmployeeId"/>
+        <result column="payee_name" property="payeeName"/>
+        <result column="payment_amount" property="paymentAmount"/>
+        <result column="payment_status" property="paymentStatus"/>
+        <result column="payment_time" property="paymentTime"/>
+        <result column="bank_serial_no" property="bankSerialNo"/>
+        <result column="remark" property="remark"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, batch_id, settlement_id, payee_employee_id, payee_name, payment_amount, payment_status,
+        payment_time, bank_serial_no, remark, created_at, updated_at, deleted
+    </sql>
+
+</mapper>

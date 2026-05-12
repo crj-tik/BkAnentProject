@@ -1,0 +1,43 @@
+spring:
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_CONTRACT:bk_contract}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:root}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+mybatis-plus:
+  mapper-locations: classpath:/mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+contract:
+  reminder:
+    enabled: true
+    pending-sign-days: 3
+    pending-sign-cron: 0 30 9 * * ?
+  integration:
+    # Supported OCR providers:
+    # - mock-ocr-provider
+    # - vendor-ocr-provider
+    # Legacy aliases still accepted by code:
+    # - mock
+    # - vendor
+    # - third-party-ocr
+    # - dashscope
+    ocr-provider: ${CONTRACT_OCR_PROVIDER:mock-ocr-provider}
+    # Supported e-sign providers:
+    # - mock-esign-provider
+    # - esign-cn
+    # - fadada
+    esign-provider: ${CONTRACT_ESIGN_PROVIDER:mock-esign-provider}

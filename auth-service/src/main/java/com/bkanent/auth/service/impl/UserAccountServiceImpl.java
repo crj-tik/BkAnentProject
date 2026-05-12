@@ -7,6 +7,9 @@ import com.bkanent.auth.mapper.UserAccountMapper;
 import com.bkanent.auth.service.UserAccountService;
 import org.springframework.stereotype.Service;
 
+/**
+ * UserAccountServiceImpl 服务实现类。
+ */
 @Service
 public class UserAccountServiceImpl extends ServiceImpl<UserAccountMapper, UserAccountEntity> implements UserAccountService {
 
@@ -17,3 +20,5 @@ public class UserAccountServiceImpl extends ServiceImpl<UserAccountMapper, UserA
                 .last("limit 1"));
     }
 }
+
+

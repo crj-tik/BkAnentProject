@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bkanent.promotion.mapper.PromotionEffectStatMapper">
+
+    <resultMap id="PromotionEffectStatResultMap" type="com.bkanent.promotion.entity.PromotionEffectStatEntity">
+        <id column="id" property="id"/>
+        <result column="publish_record_id" property="publishRecordId"/>
+        <result column="content_id" property="contentId"/>
+        <result column="listing_id" property="listingId"/>
+        <result column="platform" property="platform"/>
+        <result column="exposure_count" property="exposureCount"/>
+        <result column="click_count" property="clickCount"/>
+        <result column="private_message_count" property="privateMessageCount"/>
+        <result column="lead_count" property="leadCount"/>
+        <result column="ctr_value" property="ctrValue"/>
+        <result column="conversion_rate" property="conversionRate"/>
+        <result column="roi_value" property="roiValue"/>
+        <result column="stat_date" property="statDate"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, publish_record_id, content_id, listing_id, platform, exposure_count, click_count, private_message_count,
+        lead_count, ctr_value, conversion_rate, roi_value, stat_date, created_at, updated_at, deleted
+    </sql>
+
+</mapper>

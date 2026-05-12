@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bkanent.customer.mapper.CustomerFollowRecordMapper">
+
+    <resultMap id="CustomerFollowRecordResultMap" type="com.bkanent.customer.entity.CustomerFollowRecordEntity">
+        <id column="id" property="id"/>
+        <result column="customer_id" property="customerId"/>
+        <result column="broker_id" property="brokerId"/>
+        <result column="follow_type" property="followType"/>
+        <result column="content" property="content"/>
+        <result column="result_tag" property="resultTag"/>
+        <result column="next_follow_time" property="nextFollowTime"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, customer_id, broker_id, follow_type, content, result_tag, next_follow_time, created_at, updated_at, deleted
+    </sql>
+
+</mapper>

@@ -1,46 +1,53 @@
 package com.bkanent.agent.rag;
 
-import com.bkanent.agent.mcp.MilvusCollectionInitRequest;
-import com.bkanent.agent.mcp.MilvusMcpTool;
-import com.bkanent.agent.mcp.MilvusSearchResult;
-import com.bkanent.agent.mcp.MilvusUpsertRequest;
-import com.bkanent.agent.mcp.MilvusVectorDocument;
-import com.bkanent.agent.mcp.MilvusMcpToolImpl;
+import com.bkanent.agent.model.rag.ListingIndexRequest;
+import com.bkanent.agent.model.rag.ListingRagQueryRequest;
+import com.bkanent.agent.model.rag.ListingRagResponse;
+import com.bkanent.agent.model.vector.MilvusCollectionInitRequest;
+import com.bkanent.agent.model.vector.MilvusSearchResult;
+import com.bkanent.agent.model.vector.MilvusUpsertRequest;
+import com.bkanent.agent.model.vector.MilvusVectorDocument;
+import com.bkanent.agent.vector.MilvusVectorStoreTool;
+import com.bkanent.agent.vector.impl.MilvusVectorStoreToolImpl;
 import com.bkanent.common.model.ListingDTO;
 import com.bkanent.common.rpc.ListingMasterRpcService;
-import org.apache.dubbo.config.annotation.DubboReference;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+/**
+ * 房源 Milvus RAG 服务。
+ */
 @Service
 public class ListingMilvusRagService {
 
-    @DubboReference(check = false)
-    private ListingMasterRpcService listingMasterRpcService;
+    private final MilvusVectorStoreTool milvusVectorStoreTool;
+    private final MilvusVectorStoreToolImpl milvusVectorStoreToolImpl;
+    private final ListingMasterRpcService listingMasterRpcService;
 
-    private final MilvusMcpTool milvusMcpTool;
-    private final MilvusMcpToolImpl milvusMcpToolImpl;
-
-    public ListingMilvusRagService(MilvusMcpTool milvusMcpTool, MilvusMcpToolImpl milvusMcpToolImpl) {
-        this.milvusMcpTool = milvusMcpTool;
-        this.milvusMcpToolImpl = milvusMcpToolImpl;
+    public ListingMilvusRagService(MilvusVectorStoreTool milvusVectorStoreTool,
+                                   MilvusVectorStoreToolImpl milvusVectorStoreToolImpl,
+                                   ObjectProvider<ListingMasterRpcService> listingMasterRpcServiceProvider) {
+        this.milvusVectorStoreTool = milvusVectorStoreTool;
+        this.milvusVectorStoreToolImpl = milvusVectorStoreToolImpl;
+        this.listingMasterRpcService = listingMasterRpcServiceProvider.getIfAvailable();
     }
 
     public void initializeCollection(String collectionName) {
-        milvusMcpTool.initializeCollection(new MilvusCollectionInitRequest(collectionName, null));
+        milvusVectorStoreTool.initializeCollection(new MilvusCollectionInitRequest(collectionName, null));
     }
 
     public void indexListing(ListingIndexRequest request) {
         ListingDTO listing = listingMasterRpcService == null ? null : listingMasterRpcService.getListingById(request.listingId());
         if (listing == null) {
-            throw new IllegalArgumentException("listing not found: " + request.listingId());
+            throw new IllegalArgumentException("未找到房源: " + request.listingId());
         }
 
         String content = buildListingDocument(listing);
-        List<Float> vector = milvusMcpToolImpl.embed(content);
+        List<Float> vector = milvusVectorStoreToolImpl.embed(content);
         initializeCollection(request.collectionName());
-        milvusMcpTool.upsert(new MilvusUpsertRequest(
+        milvusVectorStoreTool.upsert(new MilvusUpsertRequest(
                 request.collectionName(),
                 List.of(new MilvusVectorDocument(
                         "listing:" + listing.id(),
@@ -53,17 +60,24 @@ public class ListingMilvusRagService {
     }
 
     public ListingRagResponse query(ListingRagQueryRequest request) {
-        List<MilvusSearchResult> matches = milvusMcpTool.search(request.collectionName(), request.query(), request.topK() == null ? 5 : request.topK());
-        String context = matches.stream().map(MilvusSearchResult::content).reduce((left, right) -> left + "\n---\n" + right).orElse("");
+        List<MilvusSearchResult> matches = milvusVectorStoreTool.search(
+                request.collectionName(),
+                request.query(),
+                request.topK() == null ? 5 : request.topK()
+        );
+        String context = matches.stream()
+                .map(MilvusSearchResult::content)
+                .reduce((left, right) -> left + "\n---\n" + right)
+                .orElse("");
         return new ListingRagResponse(request.query(), context, matches);
     }
 
     private String buildListingDocument(ListingDTO listing) {
-        return "Listing Title: " + listing.title() +
-                "; Address: " + listing.address() +
-                "; Layout: " + listing.layout() +
-                "; Area: " + listing.area() +
-                "; Total Price: " + listing.totalPrice() +
-                "; Status: " + listing.status();
+        return "房源标题：" + listing.title()
+                + "；地址：" + listing.address()
+                + "；户型：" + listing.layout()
+                + "；面积：" + listing.area()
+                + "；总价：" + listing.totalPrice()
+                + "；状态：" + listing.status();
     }
 }
