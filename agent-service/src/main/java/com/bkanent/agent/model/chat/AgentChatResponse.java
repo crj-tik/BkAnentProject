@@ -1,22 +1,17 @@
 package com.bkanent.agent.model.chat;
 
-import com.bkanent.agent.enums.AgentExecutionMode;
-import com.bkanent.agent.model.planner.AgentPlannerSession;
-import com.bkanent.agent.model.vector.MilvusSearchResult;
+import com.bkanent.agent.milvus.core.model.MilvusSearchResult;
 
 import java.util.List;
 
 /**
- * Agent chat response.
+ * AgentChatResponse 数据对象。
  */
 public record AgentChatResponse(
         String answer,
         String model,
-        String sessionNo,
-        AgentExecutionMode executionMode,
         AgentToolDecision decision,
         List<MilvusSearchResult> toolResults,
-        String toolContext,
-        AgentPlannerSession plannerSession
+        String toolContext
 ) {
 }

@@ -30,4 +30,14 @@ public interface AgentRpcService {
      * 业务方法：generateCompareConclusion。
      */
     String generateCompareConclusion(String comparePrompt);
+
+    /**
+     * 同步房源知识文档到向量索引。
+     */
+    void syncListingKnowledge(Long listingId);
+
+    /**
+     * 删除房源知识文档向量索引。
+     */
+    void deleteListingKnowledge(Long listingId);
 }

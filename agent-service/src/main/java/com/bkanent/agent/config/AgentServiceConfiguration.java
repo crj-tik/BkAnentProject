@@ -7,20 +7,62 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.client.RestClient;
 
-/**
- * Agent 服务基础配置。
- */
+import java.util.Arrays;
+
 @Configuration
-@EnableConfigurationProperties({MilvusConnectionProperties.class, AgentMilvusProperties.class, AgentDeepSeekProperties.class, AgentMcpProperties.class})
+@EnableConfigurationProperties({
+        MilvusConnectionProperties.class,
+        AgentMilvusProperties.class,
+        AgentChatProperties.class,
+        AgentMcpProperties.class,
+        ListingRagProperties.class,
+        DistributedAgentProperties.class,
+        MemoryServiceProperties.class
+})
+/**
+ * AgentServiceConfiguration 配置类。
+ */
 public class AgentServiceConfiguration {
 
-    @Bean
-    public ChatClient chatClient(ChatModel chatModel,
-                                 @Qualifier("baseToolCallbackProvider") ToolCallbackProvider baseToolCallbackProvider) {
+    @Bean("combinedToolCallbackProvider")
+    public ToolCallbackProvider combinedToolCallbackProvider(
+            @Qualifier("localBaseToolCallbackProvider") ToolCallbackProvider localBaseToolCallbackProvider,
+            @Qualifier("mcpToolCallbackProvider") ToolCallbackProvider mcpToolCallbackProvider) {
+        return () -> {
+            org.springframework.ai.tool.ToolCallback[] localCallbacks = localBaseToolCallbackProvider.getToolCallbacks();
+            org.springframework.ai.tool.ToolCallback[] mcpCallbacks = mcpToolCallbackProvider.getToolCallbacks();
+            org.springframework.ai.tool.ToolCallback[] combined = Arrays.copyOf(localCallbacks, localCallbacks.length + mcpCallbacks.length);
+            System.arraycopy(mcpCallbacks, 0, combined, localCallbacks.length, mcpCallbacks.length);
+            return combined;
+        };
+    }
 
+    /**
+     * 处理对话client。
+     */
+    @Bean("chatClient")
+    public ChatClient chatClient(ChatModel chatModel,
+                                 @Qualifier("combinedToolCallbackProvider") ToolCallbackProvider combinedToolCallbackProvider) {
         return ChatClient.builder(chatModel)
-                .defaultToolCallbacks(baseToolCallbackProvider)
+                .defaultToolCallbacks(combinedToolCallbackProvider)
                 .build();
+    }
+
+    /**
+     * 处理localOnlyChatClient。
+     */
+    @Bean("localOnlyChatClient")
+    public ChatClient localOnlyChatClient(ChatModel chatModel,
+                                          @Qualifier("localBaseToolCallbackProvider") ToolCallbackProvider localBaseToolCallbackProvider) {
+        return ChatClient.builder(chatModel)
+                .defaultToolCallbacks(localBaseToolCallbackProvider)
+                .build();
+    }
+
+    @Bean
+    public RestClient.Builder restClientBuilder() {
+        return RestClient.builder();
     }
 }

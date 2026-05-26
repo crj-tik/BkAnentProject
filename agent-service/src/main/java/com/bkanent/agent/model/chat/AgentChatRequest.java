@@ -1,18 +1,19 @@
 package com.bkanent.agent.model.chat;
 
-import com.bkanent.agent.enums.AgentExecutionMode;
-
 /**
- * Agent chat request.
+ * AgentChatRequest 数据对象。
  */
 public record AgentChatRequest(
+        String userId,
         String message,
         String collectionName,
         Integer topK,
-        Boolean allowMcp,
-        AgentExecutionMode executionMode
+        Boolean allowMcp
 ) {
+    /**
+     * 处理AgentChatRequest。
+     */
     public AgentChatRequest(String message, String collectionName, Integer topK) {
-        this(message, collectionName, topK, true, AgentExecutionMode.TOOL);
+        this(null, message, collectionName, topK, true);
     }
 }

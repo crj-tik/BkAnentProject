@@ -1,11 +1,11 @@
 package com.bkanent.agent.tool.context;
 
-import com.bkanent.agent.model.vector.MilvusSearchResult;
+import com.bkanent.agent.milvus.core.model.MilvusSearchResult;
 
 import java.util.List;
 
 /**
- * Agent 工具调用快照。
+ * AgentToolSessionSnapshot 数据对象。
  */
 public record AgentToolSessionSnapshot(
         boolean usedTool,

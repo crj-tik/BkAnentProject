@@ -5,8 +5,10 @@ import com.bkanent.common.model.HealthStatusDTO;
 import com.bkanent.notification.model.NotificationListItemResponse;
 import com.bkanent.notification.model.NotificationMessageRequest;
 import com.bkanent.notification.model.NotificationReadRequest;
+import com.bkanent.notification.model.NotificationWorkflowEventConsumeResponse;
 import com.bkanent.notification.model.RobotMessageRequest;
 import com.bkanent.notification.service.NotificationManagementService;
+import com.bkanent.notification.service.NotificationWorkflowEventQueryService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,9 +27,12 @@ import java.util.List;
 public class NotificationController {
 
     private final NotificationManagementService notificationManagementService;
+    private final NotificationWorkflowEventQueryService notificationWorkflowEventQueryService;
 
-    public NotificationController(NotificationManagementService notificationManagementService) {
+    public NotificationController(NotificationManagementService notificationManagementService,
+                                  NotificationWorkflowEventQueryService notificationWorkflowEventQueryService) {
         this.notificationManagementService = notificationManagementService;
+        this.notificationWorkflowEventQueryService = notificationWorkflowEventQueryService;
     }
 
     @PostMapping("/station")
@@ -61,6 +66,22 @@ public class NotificationController {
     @GetMapping("/unread-count")
     public ApiResponse<Long> unreadCount(@RequestParam Long userId) {
         return ApiResponse.ok(notificationManagementService.countUnreadMessages(userId));
+    }
+
+    @GetMapping("/workflow-events")
+    public ApiResponse<List<NotificationWorkflowEventConsumeResponse>> workflowEvents(
+            @RequestParam(required = false) String consumeStatus,
+            @RequestParam(required = false) String eventType,
+            @RequestParam(required = false) String taskId,
+            @RequestParam(required = false) Long recipientUserId,
+            @RequestParam(required = false) Integer limit) {
+        return ApiResponse.ok(notificationWorkflowEventQueryService.listRecent(
+                consumeStatus,
+                eventType,
+                taskId,
+                recipientUserId,
+                limit
+        ));
     }
 
     @GetMapping("/health")

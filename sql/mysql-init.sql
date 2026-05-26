@@ -6,6 +6,7 @@ CREATE DATABASE IF NOT EXISTS bk_marketing DEFAULT CHARACTER SET utf8mb4 COLLATE
 CREATE DATABASE IF NOT EXISTS bk_promotion DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS bk_business DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS bk_agent DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS bk_memory DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS bk_contract DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS bk_settlement DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS nacos DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -176,6 +177,28 @@ CREATE TABLE IF NOT EXISTS notification_record (
     KEY idx_notification_record_channel (channel),
     KEY idx_notification_record_send_status (send_status),
     KEY idx_notification_record_read_status (read_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS notification_event_consume (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    dedupe_key VARCHAR(255) NOT NULL,
+    event_type VARCHAR(64) NOT NULL,
+    task_id VARCHAR(64) NULL,
+    trace_id VARCHAR(64) NULL,
+    recipient_user_id BIGINT NULL,
+    consume_status VARCHAR(32) NOT NULL DEFAULT 'PROCESSING',
+    attempt_count INT NOT NULL DEFAULT 1,
+    notification_id BIGINT NULL,
+    error_message VARCHAR(255) NULL,
+    consumed_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_notification_event_consume_dedupe_key (dedupe_key),
+    KEY idx_notification_event_consume_event_type (event_type),
+    KEY idx_notification_event_consume_task_id (task_id),
+    KEY idx_notification_event_consume_recipient_user_id (recipient_user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 USE bk_marketing;
@@ -704,4 +727,215 @@ CREATE TABLE IF NOT EXISTS agent_planner_step_log (
     KEY idx_agent_planner_step_log_planner_log_id (planner_log_id),
     KEY idx_agent_planner_step_log_session_no (session_no),
     KEY idx_agent_planner_step_log_step_no (step_no)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS agent_workflow_checkpoint (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    task_id VARCHAR(64) NOT NULL,
+    session_id VARCHAR(64) NOT NULL,
+    trace_id VARCHAR(64) NOT NULL,
+    workflow_status VARCHAR(32) NOT NULL,
+    selected_agent_id VARCHAR(64) NULL,
+    pending_approval_id VARCHAR(64) NULL,
+    snapshot_json LONGTEXT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_agent_workflow_checkpoint_task_id (task_id),
+    KEY idx_agent_workflow_checkpoint_session_id (session_id),
+    KEY idx_agent_workflow_checkpoint_trace_id (trace_id),
+    KEY idx_agent_workflow_checkpoint_workflow_status (workflow_status),
+    KEY idx_agent_workflow_checkpoint_pending_approval_id (pending_approval_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS agent_task_artifact (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    artifact_id VARCHAR(64) NOT NULL,
+    task_id VARCHAR(64) NOT NULL,
+    session_id VARCHAR(64) NOT NULL,
+    agent_id VARCHAR(64) NOT NULL,
+    artifact_type VARCHAR(64) NOT NULL,
+    version_no INT NOT NULL DEFAULT 1,
+    content_json LONGTEXT NOT NULL,
+    metadata_json LONGTEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_agent_task_artifact_artifact_id (artifact_id),
+    KEY idx_agent_task_artifact_task_id (task_id),
+    KEY idx_agent_task_artifact_session_id (session_id),
+    KEY idx_agent_task_artifact_agent_id (agent_id),
+    KEY idx_agent_task_artifact_artifact_type (artifact_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS agent_async_task (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    async_task_id VARCHAR(64) NOT NULL,
+    session_id VARCHAR(64) NOT NULL,
+    task_id VARCHAR(64) NOT NULL,
+    trace_id VARCHAR(64) NOT NULL,
+    user_id VARCHAR(64) NULL,
+    selected_agent_id VARCHAR(64) NOT NULL,
+    mode VARCHAR(32) NOT NULL,
+    child_async_task_id VARCHAR(128) NULL,
+    status VARCHAR(32) NOT NULL,
+    result_json LONGTEXT NULL,
+    error_message TEXT NULL,
+    original_request_json LONGTEXT NULL,
+    started_at_ms BIGINT NULL,
+    finished_at_ms BIGINT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_agent_async_task_async_task_id (async_task_id),
+    KEY idx_agent_async_task_task_id (task_id),
+    KEY idx_agent_async_task_session_id (session_id),
+    KEY idx_agent_async_task_trace_id (trace_id),
+    KEY idx_agent_async_task_selected_agent_id (selected_agent_id),
+    KEY idx_agent_async_task_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS agent_async_workflow (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    async_workflow_id VARCHAR(64) NOT NULL,
+    session_id VARCHAR(64) NOT NULL,
+    task_id VARCHAR(64) NOT NULL,
+    trace_id VARCHAR(64) NOT NULL,
+    user_id VARCHAR(64) NULL,
+    status VARCHAR(32) NOT NULL,
+    result_json LONGTEXT NULL,
+    error_message TEXT NULL,
+    original_request_json LONGTEXT NOT NULL,
+    cancel_requested TINYINT NOT NULL DEFAULT 0,
+    started_at_ms BIGINT NULL,
+    finished_at_ms BIGINT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_agent_async_workflow_async_workflow_id (async_workflow_id),
+    KEY idx_agent_async_workflow_task_id (task_id),
+    KEY idx_agent_async_workflow_session_id (session_id),
+    KEY idx_agent_async_workflow_trace_id (trace_id),
+    KEY idx_agent_async_workflow_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS agent_governance_override (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    override_type VARCHAR(32) NOT NULL,
+    override_key VARCHAR(128) NOT NULL,
+    payload_json LONGTEXT NOT NULL,
+    active TINYINT NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_agent_governance_override_type_key (override_type, override_key),
+    KEY idx_agent_governance_override_type (override_type),
+    KEY idx_agent_governance_override_active (active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS agent_event_audit (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    session_id VARCHAR(64) NOT NULL,
+    task_id VARCHAR(64) NULL,
+    agent_id VARCHAR(64) NOT NULL,
+    event_type VARCHAR(128) NOT NULL,
+    stage VARCHAR(64) NULL,
+    content TEXT NULL,
+    metadata_json LONGTEXT NULL,
+    trace_id VARCHAR(64) NULL,
+    approval_id VARCHAR(64) NULL,
+    artifact_id VARCHAR(64) NULL,
+    async_task_id VARCHAR(64) NULL,
+    async_workflow_id VARCHAR(64) NULL,
+    gray_strategy_version VARCHAR(64) NULL,
+    event_timestamp BIGINT NOT NULL,
+    archived TINYINT NOT NULL DEFAULT 0,
+    archived_at_ms BIGINT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_agent_event_audit_task_id (task_id),
+    KEY idx_agent_event_audit_trace_id (trace_id),
+    KEY idx_agent_event_audit_event_type (event_type),
+    KEY idx_agent_event_audit_approval_id (approval_id),
+    KEY idx_agent_event_audit_artifact_id (artifact_id),
+    KEY idx_agent_event_audit_async_task_id (async_task_id),
+    KEY idx_agent_event_audit_async_workflow_id (async_workflow_id),
+    KEY idx_agent_event_audit_gray_strategy_version (gray_strategy_version),
+    KEY idx_agent_event_audit_event_timestamp (event_timestamp),
+    KEY idx_agent_event_audit_archived (archived)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+USE bk_memory;
+
+CREATE TABLE IF NOT EXISTS session_shared_memory (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    session_id VARCHAR(64) NOT NULL,
+    user_id VARCHAR(64) NULL,
+    memory_json LONGTEXT NOT NULL,
+    summary VARCHAR(255) NULL,
+    trace_id VARCHAR(64) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_session_shared_memory_session_id (session_id),
+    KEY idx_session_shared_memory_user_id (user_id),
+    KEY idx_session_shared_memory_trace_id (trace_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS task_artifact_memory (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    artifact_id VARCHAR(64) NOT NULL,
+    task_id VARCHAR(64) NOT NULL,
+    session_id VARCHAR(64) NOT NULL,
+    agent_id VARCHAR(64) NOT NULL,
+    artifact_type VARCHAR(64) NOT NULL,
+    version_no INT NOT NULL DEFAULT 1,
+    content_json LONGTEXT NOT NULL,
+    metadata_json LONGTEXT NULL,
+    trace_id VARCHAR(64) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_task_artifact_memory_artifact_id (artifact_id),
+    KEY idx_task_artifact_memory_task_id (task_id),
+    KEY idx_task_artifact_memory_session_id (session_id),
+    KEY idx_task_artifact_memory_agent_id (agent_id),
+    KEY idx_task_artifact_memory_artifact_type (artifact_type),
+    KEY idx_task_artifact_memory_trace_id (trace_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS handoff_relation_memory (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    handoff_id VARCHAR(64) NOT NULL,
+    session_id VARCHAR(64) NOT NULL,
+    task_id VARCHAR(64) NOT NULL,
+    parent_task_id VARCHAR(64) NULL,
+    trace_id VARCHAR(64) NOT NULL,
+    from_agent VARCHAR(64) NOT NULL,
+    to_agent VARCHAR(64) NOT NULL,
+    reason VARCHAR(255) NULL,
+    user_goal VARCHAR(512) NULL,
+    structured_context_json LONGTEXT NULL,
+    artifact_ids_json LONGTEXT NULL,
+    constraints_json LONGTEXT NULL,
+    expected_output VARCHAR(512) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_handoff_relation_memory_handoff_id (handoff_id),
+    KEY idx_handoff_relation_memory_task_id (task_id),
+    KEY idx_handoff_relation_memory_session_id (session_id),
+    KEY idx_handoff_relation_memory_trace_id (trace_id),
+    KEY idx_handoff_relation_memory_from_agent (from_agent),
+    KEY idx_handoff_relation_memory_to_agent (to_agent)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

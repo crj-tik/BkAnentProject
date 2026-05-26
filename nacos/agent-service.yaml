@@ -12,7 +12,20 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when_authorized
+    prometheus:
+      access: unrestricted
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      service: ${spring.application.name}
 
 mybatis-plus:
   mapper-locations: classpath:/mapper/*.xml
@@ -25,24 +38,37 @@ mybatis-plus:
       logic-not-delete-value: 0
 
 agent:
-  deepseek:
-    model: ${AGENT_DEEPSEEK_MODEL:deepseek-chat}
-    temperature: ${AGENT_DEEPSEEK_TEMPERATURE:0.2}
-    max-tokens: ${AGENT_DEEPSEEK_MAX_TOKENS:1600}
-    top-p: ${AGENT_DEEPSEEK_TOP_P:}
-    default-top-k: ${AGENT_DEEPSEEK_DEFAULT_TOP_K:4}
-    planner-max-replan-count: ${AGENT_DEEPSEEK_PLANNER_MAX_REPLAN_COUNT:2}
-    planner-fix-retry-count: ${AGENT_DEEPSEEK_PLANNER_FIX_RETRY_COUNT:1}
-    system-prompt: ${AGENT_DEEPSEEK_SYSTEM_PROMPT:}
+  memory:
+    base-url: ${MEMORY_SERVICE_BASE_URL:http://127.0.0.1:9011}
+  chat:
+    model: ${AGENT_CHAT_MODEL:${AGENT_DEEPSEEK_MODEL:deepseek-chat}}
+    temperature: ${AGENT_CHAT_TEMPERATURE:${AGENT_DEEPSEEK_TEMPERATURE:0.2}}
+    max-tokens: ${AGENT_CHAT_MAX_TOKENS:${AGENT_DEEPSEEK_MAX_TOKENS:1600}}
+    top-p: ${AGENT_CHAT_TOP_P:${AGENT_DEEPSEEK_TOP_P:}}
+    default-top-k: ${AGENT_CHAT_DEFAULT_TOP_K:${AGENT_DEEPSEEK_DEFAULT_TOP_K:4}}
+    system-prompt: ${AGENT_CHAT_SYSTEM_PROMPT:${AGENT_DEEPSEEK_SYSTEM_PROMPT:}}
   milvus:
     default-collection: ${MILVUS_COLLECTION:agent_knowledge}
+    listing-collection: ${MILVUS_LISTING_COLLECTION:listing_knowledge}
     primary-field: ${MILVUS_PRIMARY_FIELD:doc_id}
     vector-field: ${MILVUS_VECTOR_FIELD:embedding}
     text-field: ${MILVUS_TEXT_FIELD:content}
     source-type-field: ${MILVUS_SOURCE_TYPE_FIELD:source_type}
     source-id-field: ${MILVUS_SOURCE_ID_FIELD:source_id}
+    metadata-field: ${MILVUS_METADATA_FIELD:metadata}
     metric-type: ${MILVUS_METRIC_TYPE:COSINE}
+    index-type: ${MILVUS_INDEX_TYPE:IVF_FLAT}
+    index-parameters: ${MILVUS_INDEX_PARAMETERS:{"nlist":1024}}
+    embedding-dimension: ${MILVUS_EMBEDDING_DIMENSION:1024}
     max-text-length: ${MILVUS_MAX_TEXT_LENGTH:8192}
+  rag:
+    keyword-top-k: ${AGENT_RAG_KEYWORD_TOP_K:20}
+    vector-top-k: ${AGENT_RAG_VECTOR_TOP_K:20}
+    rerank-top-k: ${AGENT_RAG_RERANK_TOP_K:10}
+    vector-similarity-threshold: ${AGENT_RAG_VECTOR_SIMILARITY_THRESHOLD:0.0}
+    rerank-endpoint: ${AGENT_RAG_RERANK_ENDPOINT:}
+    rerank-api-key: ${AGENT_RAG_RERANK_API_KEY:}
+    rerank-model: ${AGENT_RAG_RERANK_MODEL:BAAI/bge-reranker-v2-m3}
   mcp:
     connect-timeout: ${AGENT_MCP_CONNECT_TIMEOUT:5s}
     request-timeout: ${AGENT_MCP_REQUEST_TIMEOUT:15s}
@@ -51,9 +77,66 @@ agent:
       business-mcp-server: ${BUSINESS_MCP_ENDPOINT:http://127.0.0.1:9010/mcp}
       compare-mcp-server: ${COMPARE_MCP_ENDPOINT:http://127.0.0.1:9006/mcp}
       marketing-mcp-server: ${MARKETING_MCP_ENDPOINT:http://127.0.0.1:9008/mcp}
+  distributed:
+    supervisor-agent-id: ${SUPERVISOR_AGENT_ID:supervisor-agent}
+    refresh-interval-seconds: ${AGENT_DISCOVERY_REFRESH_INTERVAL_SECONDS:30}
+    a2a:
+      discovery-provider: ${AGENT_A2A_DISCOVERY_PROVIDER:official}
+    catalog:
+      strict-nacos: ${AGENT_CATALOG_STRICT_NACOS:true}
+    rate-limit:
+      enabled: ${AGENT_RATE_LIMIT_ENABLED:true}
+      provider: ${AGENT_RATE_LIMIT_PROVIDER:memory}
+      window-seconds: ${AGENT_RATE_LIMIT_WINDOW_SECONDS:60}
+      default-per-window: ${AGENT_RATE_LIMIT_DEFAULT_PER_WINDOW:60}
+      supervisor-tasks-per-window: ${AGENT_RATE_LIMIT_SUPERVISOR_TASKS_PER_WINDOW:60}
+      supervisor-async-tasks-per-window: ${AGENT_RATE_LIMIT_SUPERVISOR_ASYNC_TASKS_PER_WINDOW:40}
+      supervisor-workflows-per-window: ${AGENT_RATE_LIMIT_SUPERVISOR_WORKFLOWS_PER_WINDOW:30}
+      supervisor-async-workflows-per-window: ${AGENT_RATE_LIMIT_SUPERVISOR_ASYNC_WORKFLOWS_PER_WINDOW:20}
+    gray-release:
+      enabled: ${AGENT_GRAY_RELEASE_ENABLED:false}
+      strategy-version: ${AGENT_GRAY_RELEASE_STRATEGY_VERSION:v2}
+      prefer-async-a2a: ${AGENT_GRAY_RELEASE_PREFER_ASYNC_A2A:false}
+      user-ids: ${AGENT_GRAY_RELEASE_USER_IDS:}
+      session-ids: ${AGENT_GRAY_RELEASE_SESSION_IDS:}
+      domains: ${AGENT_GRAY_RELEASE_DOMAINS:}
+      preferred-agent-ids: ${AGENT_GRAY_RELEASE_PREFERRED_AGENT_IDS:{}}
+      route-override-domains: ${AGENT_GRAY_RELEASE_ROUTE_OVERRIDE_DOMAINS:{}}
+      versioned-preferred-agent-ids: ${AGENT_GRAY_RELEASE_VERSIONED_PREFERRED_AGENT_IDS:{}}
+      versioned-route-override-domains: ${AGENT_GRAY_RELEASE_VERSIONED_ROUTE_OVERRIDE_DOMAINS:{}}
+    event-audit:
+      max-active-events: ${AGENT_EVENT_AUDIT_MAX_ACTIVE_EVENTS:5000}
+      archive-enabled: ${AGENT_EVENT_AUDIT_ARCHIVE_ENABLED:true}
+      max-archived-events: ${AGENT_EVENT_AUDIT_MAX_ARCHIVED_EVENTS:10000}
+      retention-seconds: ${AGENT_EVENT_AUDIT_RETENTION_SECONDS:86400}
+    async-runtime:
+      enabled: ${AGENT_ASYNC_RUNTIME_ENABLED:true}
+      dispatch-interval-ms: ${AGENT_ASYNC_RUNTIME_DISPATCH_INTERVAL_MS:1000}
+      dispatch-batch-size: ${AGENT_ASYNC_RUNTIME_DISPATCH_BATCH_SIZE:10}
+    planning:
+      llm-enabled: ${AGENT_PLANNING_LLM_ENABLED:false}
+      allow-fallback: ${AGENT_PLANNING_ALLOW_FALLBACK:true}
+      strategy: ${AGENT_PLANNING_STRATEGY:rule-first}
+    stream:
+      provider: ${AGENT_STREAM_PROVIDER:memory}
+      rocketmq:
+        topic: ${AGENT_STREAM_ROCKETMQ_TOPIC:bk.agent.session.stream}
+        consumer-group: ${AGENT_STREAM_ROCKETMQ_CONSUMER_GROUP:agent-service-session-stream}
+        producer-group: ${AGENT_STREAM_ROCKETMQ_PRODUCER_GROUP:agent-service-session-stream-producer}
+    discovery-enabled: ${AGENT_DISCOVERY_ENABLED:true}
+    agent-card-path: ${AGENT_CARD_PATH:/.well-known/agent.json}
+    agents: {}
+
+rocketmq:
+  name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
+  producer:
+    group: ${AGENT_STREAM_ROCKETMQ_PRODUCER_GROUP:agent-service-session-stream-producer}
 
 milvus:
   enabled: ${MILVUS_ENABLED:false}
   endpoint: ${MILVUS_ENDPOINT:http://127.0.0.1:19530}
   token: ${MILVUS_TOKEN:root:Milvus}
   database: ${MILVUS_DATABASE:default}
+  username: ${MILVUS_USERNAME:root}
+  password: ${MILVUS_PASSWORD:Milvus}
+  uri: ${MILVUS_URI:}

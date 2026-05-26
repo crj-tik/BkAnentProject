@@ -16,12 +16,10 @@ import reactor.core.publisher.Mono;
 
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * RateLimitFilter 全局限流过滤器。
- */
 @Component
 public class RateLimitFilter implements GlobalFilter, Ordered {
 
@@ -51,14 +49,16 @@ public class RateLimitFilter implements GlobalFilter, Ordered {
 
         long now = System.currentTimeMillis();
         long windowMillis = gatewayRateLimitProperties.getWindowSeconds() * 1000;
-        String key = resolveClientIp(request) + ":" + resolveRouteKey(path);
+        int limit = resolveLimit(path);
+        String identity = resolveIdentity(request);
+        String key = identity + ":" + resolveRouteKey(path);
         WindowCounter counter = counters.compute(key, (ignored, existing) -> refreshWindow(existing, now, windowMillis));
         int current = counter.count().incrementAndGet();
-        if (current > gatewayRateLimitProperties.getRequestsPerWindow()) {
-            log.warn("触发网关限流 path={} clientIp={} count={}", path, resolveClientIp(request), current);
+        if (current > limit) {
+            log.warn("gateway rate limited path={} identity={} count={} limit={}", path, identity, current, limit);
             exchange.getResponse().setStatusCode(HttpStatus.TOO_MANY_REQUESTS);
             exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
-            String body = "{\"success\":false,\"code\":\"429\",\"message\":\"请求过于频繁，请稍后重试\"}";
+            String body = "{\"success\":false,\"code\":\"RATE_LIMITED\",\"message\":\"请求过于频繁，请稍后重试\"}";
             return exchange.getResponse().writeWith(Mono.just(
                     exchange.getResponse().bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8))
             ));
@@ -78,6 +78,33 @@ public class RateLimitFilter implements GlobalFilter, Ordered {
         return existing;
     }
 
+    private int resolveLimit(String path) {
+        for (Map.Entry<String, Integer> entry : gatewayRateLimitProperties.getPathLimits().entrySet()) {
+            if (path.startsWith(entry.getKey())) {
+                return entry.getValue();
+            }
+        }
+        return gatewayRateLimitProperties.getRequestsPerWindow();
+    }
+
+    private String resolveIdentity(ServerHttpRequest request) {
+        String userId = request.getHeaders().getFirst("X-User-Id");
+        if (userId == null || userId.isBlank()) {
+            userId = request.getQueryParams().getFirst("userId");
+        }
+        if (userId != null && !userId.isBlank()) {
+            return "user:" + userId;
+        }
+        String sessionId = request.getHeaders().getFirst("X-Session-Id");
+        if (sessionId == null || sessionId.isBlank()) {
+            sessionId = request.getQueryParams().getFirst("sessionId");
+        }
+        if (sessionId != null && !sessionId.isBlank()) {
+            return "session:" + sessionId;
+        }
+        return "ip:" + resolveClientIp(request);
+    }
+
     private String resolveClientIp(ServerHttpRequest request) {
         String forwardedFor = request.getHeaders().getFirst("X-Forwarded-For");
         if (forwardedFor != null && !forwardedFor.isBlank()) {
@@ -92,9 +119,6 @@ public class RateLimitFilter implements GlobalFilter, Ordered {
         return segments.length > 1 ? segments[1] : "root";
     }
 
-    /**
-     * WindowCounter 固定窗口计数器。
-     */
     private record WindowCounter(long windowStart, AtomicInteger count) {
     }
 }

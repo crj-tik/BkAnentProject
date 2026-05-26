@@ -77,3 +77,8 @@ gateway:
     enabled: true
     requests-per-window: 100
     window-seconds: 60
+    path-limits:
+      /agent/supervisor/tasks: 60
+      /agent/supervisor/tasks/async: 40
+      /agent/supervisor/workflows: 30
+      /agent/supervisor/workflows/async: 20

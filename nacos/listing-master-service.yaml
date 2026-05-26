@@ -4,6 +4,8 @@ spring:
     username: ${MYSQL_USER:root}
     password: ${MYSQL_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URIS:http://127.0.0.1:9200}
 
 management:
   endpoints:
@@ -20,3 +22,9 @@ mybatis-plus:
       logic-delete-field: deleted
       logic-delete-value: 1
       logic-not-delete-value: 0
+
+listing:
+  search:
+    use-elasticsearch: ${LISTING_SEARCH_USE_ES:true}
+    write-enabled: ${LISTING_SEARCH_WRITE_ENABLED:false}
+    index-name: ${LISTING_SEARCH_INDEX:listing_info}

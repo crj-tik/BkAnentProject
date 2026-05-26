@@ -4,7 +4,7 @@ import com.bkanent.agent.mcp.AgentMcpClient;
 import com.bkanent.agent.mcp.AgentMcpNames;
 import com.bkanent.agent.mcp.model.AgentMcpCallResult;
 import com.bkanent.agent.service.AgentCapabilityService;
-import com.bkanent.agent.service.DeepSeekChatService;
+import com.bkanent.agent.service.AgentChatService;
 import com.bkanent.common.model.CompareReportDTO;
 import com.bkanent.common.model.KpiSummaryDTO;
 import com.bkanent.common.model.MarketingContentDTO;
@@ -17,7 +17,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Agent capability service implementation.
+ * AgentCapabilityServiceImpl 服务实现类。
  */
 @Service
 public class AgentCapabilityServiceImpl implements AgentCapabilityService {
@@ -40,21 +40,36 @@ public class AgentCapabilityServiceImpl implements AgentCapabilityService {
             结论需要包含差异总结、性价比判断、适合人群和决策建议。
             """;
 
-    private final DeepSeekChatService deepSeekChatService;
+    /**
+     * 字段：deepSeekChatService。
+     */
+    private final AgentChatService agentChatService;
+    /**
+     * 字段：agentMcpClient。
+     */
     private final AgentMcpClient agentMcpClient;
+    /**
+     * 字段：objectMapper。
+     */
     private final ObjectMapper objectMapper;
 
-    public AgentCapabilityServiceImpl(DeepSeekChatService deepSeekChatService,
+    /**
+     * 构造 AgentCapabilityServiceImpl 实例。
+     */
+    public AgentCapabilityServiceImpl(AgentChatService agentChatService,
                                       AgentMcpClient agentMcpClient,
                                       ObjectMapper objectMapper) {
-        this.deepSeekChatService = deepSeekChatService;
+        this.agentChatService = agentChatService;
         this.agentMcpClient = agentMcpClient;
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * 发布listingByPrompt。
+     */
     @Override
     public List<MarketingContentDTO> publishListingByPrompt(String rawInput) {
-        String copywriting = deepSeekChatService.call(
+        String copywriting = agentChatService.call(
                 MARKETING_COPY_SYSTEM_PROMPT,
                 "请根据以下需求生成一版中文房源营销文案：\n" + rawInput
         );
@@ -71,17 +86,23 @@ public class AgentCapabilityServiceImpl implements AgentCapabilityService {
         });
     }
 
+    /**
+     * 生成kpiNarrative。
+     */
     @Override
     public String generateKpiNarrative(List<KpiSummaryDTO> kpis) {
         List<KpiSummaryDTO> source = (kpis == null || kpis.isEmpty())
                 ? loadMonthlyKpis("2026-05")
                 : kpis;
-        return deepSeekChatService.call(
+        return agentChatService.call(
                 KPI_NARRATIVE_SYSTEM_PROMPT,
                 "请基于以下 KPI 数据生成总结：\n" + formatKpis(source)
         );
     }
 
+    /**
+     * 分析listings。
+     */
     @Override
     public CompareReportDTO analyzeListings(List<Long> listingIds) {
         String listingIdsText = listingIds == null ? "" : listingIds.stream()
@@ -97,11 +118,17 @@ public class AgentCapabilityServiceImpl implements AgentCapabilityService {
         return new CompareReportDTO(List.of(), markdown, conclusion);
     }
 
+    /**
+     * 生成compareConclusion。
+     */
     @Override
     public String generateCompareConclusion(String comparePrompt) {
-        return deepSeekChatService.call(COMPARE_CONCLUSION_SYSTEM_PROMPT, comparePrompt);
+        return agentChatService.call(COMPARE_CONCLUSION_SYSTEM_PROMPT, comparePrompt);
     }
 
+    /**
+     * 加载monthlyKpis。
+     */
     private List<KpiSummaryDTO> loadMonthlyKpis(String month) {
         AgentMcpCallResult result = agentMcpClient.callTool(
                 AgentMcpNames.BUSINESS_SERVER,
@@ -112,6 +139,9 @@ public class AgentCapabilityServiceImpl implements AgentCapabilityService {
         });
     }
 
+    /**
+     * 格式化kpis。
+     */
     private String formatKpis(List<KpiSummaryDTO> kpis) {
         if (kpis == null || kpis.isEmpty()) {
             return "未查询到 KPI 汇总数据。";
@@ -133,6 +163,9 @@ public class AgentCapabilityServiceImpl implements AgentCapabilityService {
         return builder.toString().trim();
     }
 
+    /**
+     * 读取list。
+     */
     private <T> List<T> readList(Object value, TypeReference<List<T>> typeReference) {
         if (value == null) {
             return List.of();

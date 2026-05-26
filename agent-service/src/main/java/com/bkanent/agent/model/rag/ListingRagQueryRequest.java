@@ -1,14 +1,22 @@
 package com.bkanent.agent.model.rag;
 
+import java.math.BigDecimal;
+
 /**
- * 房源 RAG 查询请求对象。
+ * ListingRagQueryRequest 数据对象。
  */
 public record ListingRagQueryRequest(
-        /** 业务属性：query。 */
+        String userId,
         String query,
-        /** 业务属性：topK。 */
         Integer topK,
-        /** 业务属性：collectionName。 */
-        String collectionName
+        Integer keywordTopK,
+        Integer vectorTopK,
+        String collectionName,
+        String region,
+        BigDecimal minTotalPrice,
+        BigDecimal maxTotalPrice,
+        String layout,
+        BigDecimal minArea,
+        BigDecimal maxArea
 ) {
 }

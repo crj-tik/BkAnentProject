@@ -4,12 +4,54 @@ server:
 spring:
   application:
     name: media-worker-service
+  ai:
+    alibaba:
+      a2a:
+        server:
+          enabled: true
+          message-url: /a2a
+          agent-card-url: /.well-known/agent.json
+          card:
+            name: media-agent
+            description: 负责媒体任务生成与发布前素材准备
+            version: 1.0.0
+            url: http://127.0.0.1:${server.port}
+            default-input-modes: text,application/json
+            default-output-modes: text,application/json
+            capabilities:
+              streaming: true
+              push-notifications: false
+              state-transition-history: true
+            skills:
+              - id: media.generate
+                name: 媒体任务生成
+                description: 生成视频脚本、封面与发布前媒体引用
+                tags: media,video,publish
+        nacos:
+          enabled: true
+          server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+          namespace: ${NACOS_NAMESPACE:}
+          group: DEFAULT_GROUP
+          registry:
+            enabled: true
+          discovery:
+            enabled: true
   config:
     import: optional:nacos:${spring.application.name}.yaml?group=DEFAULT_GROUP&refreshEnabled=true
   cloud:
     nacos:
       discovery:
         server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+        metadata:
+          agent-id: media-agent
+          agent-domains: media
+          agent-runtime-provider: official
+          agent-official-payload-mode: structured
+          agent-card-path: /.well-known/agent.json
+          a2a-path: /a2a
+          a2a-task-create-path: /a2a
+          a2a-task-status-path: /a2a
+          a2a-task-stream-path: /a2a
       config:
         server-addr: ${NACOS_SERVER:127.0.0.1:8848}
         file-extension: yaml

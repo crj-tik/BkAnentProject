@@ -1,7 +1,7 @@
 package com.bkanent.agent.mcp.model;
 
 /**
- * MCP tool metadata exposed by a server.
+ * AgentMcpToolDescriptor 记录类型。
  */
 public record AgentMcpToolDescriptor(
         String serverName,

@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * MCP client abstraction used by agent tools and planner.
+ * AgentMcpClient 客户端。
  */
 public interface AgentMcpClient {
 
