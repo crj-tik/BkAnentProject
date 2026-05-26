@@ -5,6 +5,8 @@ import com.bkanent.agent.mcp.model.AgentMcpToolDescriptor;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.spec.McpSchema;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -17,6 +19,8 @@ import java.util.Map;
  */
 @Component
 public class HttpAgentMcpClient implements AgentMcpClient {
+
+    private static final Logger log = LoggerFactory.getLogger(HttpAgentMcpClient.class);
 
     /**
      * 字段：namedMcpSyncClients。
@@ -43,15 +47,19 @@ public class HttpAgentMcpClient implements AgentMcpClient {
     public List<AgentMcpToolDescriptor> listTools() {
         List<AgentMcpToolDescriptor> descriptors = new ArrayList<>();
         for (NamedMcpSyncClient namedClient : namedMcpSyncClients) {
-            McpSchema.ListToolsResult result = namedClient.client().listTools();
-            for (McpSchema.Tool tool : result.tools()) {
-                descriptors.add(new AgentMcpToolDescriptor(
-                        namedClient.serverName(),
-                        tool.name(),
-                        tool.description(),
-                        writeJson(tool.inputSchema()),
-                        writeJson(tool.outputSchema())
-                ));
+            try {
+                McpSchema.ListToolsResult result = namedClient.client().listTools();
+                for (McpSchema.Tool tool : result.tools()) {
+                    descriptors.add(new AgentMcpToolDescriptor(
+                            namedClient.serverName(),
+                            tool.name(),
+                            tool.description(),
+                            writeJson(tool.inputSchema()),
+                            writeJson(tool.outputSchema())
+                    ));
+                }
+            } catch (Exception exception) {
+                log.warn("Failed to list MCP tools from '{}'", namedClient.serverName(), exception);
             }
         }
         return descriptors;

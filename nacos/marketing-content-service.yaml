@@ -6,6 +6,43 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
   elasticsearch:
     uris: ${ELASTICSEARCH_URIS:http://127.0.0.1:9200}
+  ai:
+    alibaba:
+      a2a:
+        server:
+          version: 1.0.0
+          message-url: /a2a
+          agent-card-url: /.well-known/agent.json
+          card:
+            name: Marketing Agent
+            description: Marketing copy generation agent
+            default-input-modes:
+              - text
+            default-output-modes:
+              - text
+            capabilities:
+              streaming: false
+              push-notifications: false
+              state-transition-history: true
+        nacos:
+          server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+          discovery:
+            enabled: false
+          registry:
+            enabled: true
+  cloud:
+    nacos:
+      discovery:
+        metadata:
+          agent-id: marketing-agent
+          agent-domains: marketing
+          agent-runtime-provider: official
+          agent-official-payload-mode: structured
+          agent-card-path: /.well-known/agent.json
+          a2a-path: /a2a
+          a2a-task-create-path: /a2a
+          a2a-task-status-path: /a2a
+          a2a-task-stream-path: /a2a
 
 management:
   endpoints:

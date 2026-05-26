@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>com.bkanent</groupId>
-        <artifactId>bk-anent-project</artifactId>
+        <artifactId>bk-agent-project</artifactId>
         <version>1.0.0-SNAPSHOT</version>
     </parent>
     <artifactId>agent-service</artifactId>
@@ -40,6 +40,10 @@
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-deepseek</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba.cloud.ai</groupId>
+            <artifactId>spring-ai-alibaba-starter-dashscope</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.ai</groupId>

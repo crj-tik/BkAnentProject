@@ -8,11 +8,15 @@ import io.modelcontextprotocol.json.jackson.JacksonMcpJsonMapper;
 import io.modelcontextprotocol.spec.McpSchema;
 import jakarta.annotation.PreDestroy;
 import org.springframework.ai.mcp.SyncMcpToolCallbackProvider;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -24,7 +28,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 @Configuration
 public class OfficialMcpClientConfiguration {
 
+    private static final Logger log = LoggerFactory.getLogger(OfficialMcpClientConfiguration.class);
+
     private final List<McpSyncClient> closeableClients = new ArrayList<>();
+    private final Map<String, String> initializationFailures = new LinkedHashMap<>();
 
     /**
      * 处理namedMcpSyncClients。
@@ -34,9 +41,14 @@ public class OfficialMcpClientConfiguration {
                                                         ObjectMapper objectMapper) {
         List<NamedMcpSyncClient> clients = new ArrayList<>();
         for (Map.Entry<String, String> entry : agentMcpProperties.getServers().entrySet()) {
-            McpSyncClient client = createClient(entry.getKey(), entry.getValue(), agentMcpProperties, objectMapper);
-            clients.add(new NamedMcpSyncClient(entry.getKey(), entry.getValue(), client));
-            closeableClients.add(client);
+            try {
+                McpSyncClient client = createClient(entry.getKey(), entry.getValue(), agentMcpProperties, objectMapper);
+                clients.add(new NamedMcpSyncClient(entry.getKey(), entry.getValue(), client));
+                closeableClients.add(client);
+            } catch (Exception exception) {
+                initializationFailures.put(entry.getKey(), exception.getMessage());
+                log.warn("Failed to initialize MCP client '{}' at '{}'", entry.getKey(), entry.getValue(), exception);
+            }
         }
         return List.copyOf(clients);
     }
@@ -56,7 +68,22 @@ public class OfficialMcpClientConfiguration {
      */
     @Bean("mcpToolCallbackProvider")
     public ToolCallbackProvider mcpToolCallbackProvider(List<McpSyncClient> mcpSyncClients) {
-        return new SyncMcpToolCallbackProvider(mcpSyncClients);
+        SyncMcpToolCallbackProvider delegate = new SyncMcpToolCallbackProvider(mcpSyncClients);
+        return () -> {
+            try {
+                return delegate.getToolCallbacks();
+            } catch (Exception exception) {
+                log.warn("Failed to resolve MCP tool callbacks", exception);
+                return new ToolCallback[0];
+            }
+        };
+    }
+
+    /**
+     * 获取initializationFailures。
+     */
+    public Map<String, String> initializationFailures() {
+        return Map.copyOf(initializationFailures);
     }
 
     /**

@@ -17,6 +17,55 @@ spring:
           max-idle: ${REDIS_POOL_MAX_IDLE:8}
           min-idle: ${REDIS_POOL_MIN_IDLE:1}
           max-wait: ${REDIS_POOL_MAX_WAIT:3000ms}
+  ai:
+    deepseek:
+      api-key: ${DEEPSEEK_API_KEY:sk-d74e4570e3784f70880f876a152cb2dd}
+      chat:
+        api-key: ${DEEPSEEK_API_KEY:sk-d74e4570e3784f70880f876a152cb2dd}
+    alibaba:
+      a2a:
+        server:
+          enabled: true
+          message-url: /a2a
+          agent-card-url: /.well-known/agent.json
+          card:
+            name: trade-agent
+            description: trade feasibility and risk analysis agent
+            version: 1.0.0
+            url: http://127.0.0.1:${server.port}
+            default-input-modes: text,application/json
+            default-output-modes: text,application/json
+            capabilities:
+              streaming: true
+              push-notifications: false
+              state-transition-history: true
+            skills:
+              - id: trade.analyze
+                name: trade-analyze
+                description: analyze trade feasibility and risk
+                tags: trade,risk
+        nacos:
+          enabled: true
+          server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+          namespace: ${NACOS_NAMESPACE:}
+          group: DEFAULT_GROUP
+          registry:
+            enabled: false
+          discovery:
+            enabled: true
+  cloud:
+    nacos:
+      discovery:
+        metadata:
+          agent-id: trade-agent
+          agent-domains: trade
+          agent-runtime-provider: official
+          agent-official-payload-mode: structured
+          agent-card-path: /.well-known/agent.json
+          a2a-path: /a2a
+          a2a-task-create-path: /a2a
+          a2a-task-status-path: /a2a
+          a2a-task-stream-path: /a2a
 
 management:
   endpoints:
@@ -41,3 +90,17 @@ business:
     enabled: ${BUSINESS_REDIS_ENABLED:true}
     ranking-key-prefix: ${BUSINESS_RANKING_KEY_PREFIX:business:ranking:}
     ranking-ttl-hours: ${BUSINESS_RANKING_TTL_HOURS:24}
+
+trade:
+  agent:
+    model: ${TRADE_AGENT_MODEL:deepseek-chat}
+    temperature: ${TRADE_AGENT_TEMPERATURE:0.2}
+    max-tokens: ${TRADE_AGENT_MAX_TOKENS:2000}
+    system-prompt: |
+      You are a trade feasibility and risk analysis agent for a real estate brokerage platform.
+      Your responsibilities:
+      1. Analyze trade requests based on available business data.
+      2. Assess risk levels (low, medium, high) using KPI data, listing turnover, agent workload, and store dashboard metrics.
+      3. Return a structured JSON assessment with: decision (PROCEED / MANUAL_REVIEW / RISK_ALERT / REJECT), riskLevel, riskFactors (list), supportingData (object), recommendedActions (list), and a summary paragraph.
+      Always call available tools to get real data before making a judgment.
+      If you cannot determine the answer with confidence, set decision to MANUAL_REVIEW.

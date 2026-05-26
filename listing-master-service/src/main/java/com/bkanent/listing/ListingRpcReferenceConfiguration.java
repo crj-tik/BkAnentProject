@@ -4,6 +4,7 @@ import com.bkanent.common.rpc.AgentRpcService;
 import org.apache.dubbo.config.annotation.DubboReference;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
 
 /**
@@ -17,6 +18,7 @@ public class ListingRpcReferenceConfiguration {
     private AgentRpcService agentRpcService;
 
     @Bean
+    @Primary
     public AgentRpcService agentRpcServiceBridge() {
         return agentRpcService;
     }

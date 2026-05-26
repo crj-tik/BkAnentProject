@@ -5,6 +5,7 @@ import com.bkanent.common.rpc.PromotionRpcService;
 import org.apache.dubbo.config.annotation.DubboReference;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
 
 @Configuration
@@ -18,11 +19,13 @@ public class MarketingRpcReferenceConfiguration {
     private PromotionRpcService promotionRpcService;
 
     @Bean
+    @Primary
     public MediaWorkerRpcService mediaWorkerRpcServiceBridge() {
         return mediaWorkerRpcService;
     }
 
     @Bean
+    @Primary
     public PromotionRpcService promotionRpcServiceBridge() {
         return promotionRpcService;
     }

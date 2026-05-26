@@ -51,11 +51,11 @@ public class AgentServiceConfiguration {
     }
 
     /**
-     * 处理localOnlyChatClient。
+     * 处理baseToolChatClient。
      */
-    @Bean("localOnlyChatClient")
-    public ChatClient localOnlyChatClient(ChatModel chatModel,
-                                          @Qualifier("localBaseToolCallbackProvider") ToolCallbackProvider localBaseToolCallbackProvider) {
+    @Bean("baseToolChatClient")
+    public ChatClient baseToolChatClient(ChatModel chatModel,
+                                         @Qualifier("localBaseToolCallbackProvider") ToolCallbackProvider localBaseToolCallbackProvider) {
         return ChatClient.builder(chatModel)
                 .defaultToolCallbacks(localBaseToolCallbackProvider)
                 .build();

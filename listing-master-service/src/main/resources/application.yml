@@ -1,51 +1,24 @@
 server:
   port: 9004
 
+bk:
+  nacos:
+    server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+    namespace: ${NACOS_NAMESPACE:791847cb-c957-4f7b-81d4-3e5bcbc8620c}
+
 spring:
   application:
     name: listing-master-service
   config:
-    import: optional:nacos:${spring.application.name}.yaml?group=DEFAULT_GROUP&refreshEnabled=true
-  ai:
-    alibaba:
-      a2a:
-        server:
-          version: 1.0.0
-          message-url: /a2a
-          agent-card-url: /.well-known/agent.json
-          card:
-            name: Listing Agent
-            description: Listing search, recommendation and summary agent
-            default-input-modes:
-              - text
-            default-output-modes:
-              - text
-            capabilities:
-              streaming: false
-              push-notifications: false
-              state-transition-history: true
-        nacos:
-          server-addr: ${NACOS_SERVER:127.0.0.1:8848}
-          discovery:
-            enabled: false
-          registry:
-            enabled: true
+    import: nacos:${spring.application.name}.yaml?group=DEFAULT_GROUP&refreshEnabled=true
   cloud:
     nacos:
       discovery:
-        server-addr: ${NACOS_SERVER:127.0.0.1:8848}
-        metadata:
-          agent-id: listing-agent
-          agent-domains: listing
-          agent-runtime-provider: official
-          agent-official-payload-mode: plain
-          agent-card-path: /.well-known/agent.json
-          a2a-path: /a2a
-          a2a-task-create-path: /a2a
-          a2a-task-status-path: /a2a
-          a2a-task-stream-path: /a2a
+        server-addr: ${bk.nacos.server-addr}
+        namespace: ${bk.nacos.namespace}
       config:
-        server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+        server-addr: ${bk.nacos.server-addr}
+        namespace: ${bk.nacos.namespace}
         file-extension: yaml
 
 dubbo:
@@ -55,4 +28,4 @@ dubbo:
     name: dubbo
     port: 20884
   registry:
-    address: nacos://${NACOS_SERVER:127.0.0.1:8848}
+    address: nacos://${bk.nacos.server-addr}?namespace=${bk.nacos.namespace}

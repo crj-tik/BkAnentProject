@@ -1,90 +1,25 @@
 server:
   port: 9003
 
+bk:
+  nacos:
+    server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+    namespace: ${NACOS_NAMESPACE:791847cb-c957-4f7b-81d4-3e5bcbc8620c}
+
 spring:
   application:
     name: notification-service
-  ai:
-    alibaba:
-      a2a:
-        server:
-          enabled: true
-          message-url: /a2a
-          agent-card-url: /.well-known/agent.json
-          card:
-            name: notification-agent
-            description: 负责站内信、邮件与机器人通知发送
-            version: 1.0.0
-            url: http://127.0.0.1:${server.port}
-            default-input-modes: text,application/json
-            default-output-modes: text,application/json
-            capabilities:
-              streaming: true
-              push-notifications: false
-              state-transition-history: true
-            skills:
-              - id: notification.send
-                name: 通知发送
-                description: 发送站内信、邮件与机器人通知
-                tags: notification,message
-        nacos:
-          enabled: true
-          server-addr: ${NACOS_SERVER:127.0.0.1:8848}
-          namespace: ${NACOS_NAMESPACE:}
-          group: DEFAULT_GROUP
-          registry:
-            enabled: true
-          discovery:
-            enabled: true
   config:
-    import: optional:nacos:${spring.application.name}.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+    import: nacos:${spring.application.name}.yaml?group=DEFAULT_GROUP&refreshEnabled=true
   cloud:
     nacos:
       discovery:
-        server-addr: ${NACOS_SERVER:127.0.0.1:8848}
-        metadata:
-          agent-id: notification-agent
-          agent-domains: notification
-          agent-runtime-provider: official
-          agent-official-payload-mode: structured
-          agent-card-path: /.well-known/agent.json
-          a2a-path: /a2a
-          a2a-task-create-path: /a2a
-          a2a-task-status-path: /a2a
-          a2a-task-stream-path: /a2a
+        server-addr: ${bk.nacos.server-addr}
+        namespace: ${bk.nacos.namespace}
       config:
-        server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+        server-addr: ${bk.nacos.server-addr}
+        namespace: ${bk.nacos.namespace}
         file-extension: yaml
-  rocketmq:
-    name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
-    producer:
-      group: ${NOTIFICATION_ROCKETMQ_PRODUCER_GROUP:notification-service-producer}
-
-notification:
-  workflow-events:
-    enabled: ${NOTIFICATION_WORKFLOW_EVENTS_ENABLED:true}
-    topic: ${AGENT_STREAM_ROCKETMQ_TOPIC:bk.agent.session.stream}
-    consumer-group: ${NOTIFICATION_WORKFLOW_EVENTS_CONSUMER_GROUP:notification-service-workflow-events}
-    max-attempts: ${NOTIFICATION_WORKFLOW_EVENTS_MAX_ATTEMPTS:3}
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,prometheus
-  endpoint:
-    health:
-      show-details: when_authorized
-    prometheus:
-      access: unrestricted
-  prometheus:
-    metrics:
-      export:
-        enabled: true
-  metrics:
-    tags:
-      application: ${spring.application.name}
-      service: ${spring.application.name}
 
 dubbo:
   application:
@@ -93,4 +28,4 @@ dubbo:
     name: dubbo
     port: 20883
   registry:
-    address: nacos://${NACOS_SERVER:127.0.0.1:8848}
+    address: nacos://${bk.nacos.server-addr}?namespace=${bk.nacos.namespace}

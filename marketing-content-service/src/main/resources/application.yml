@@ -1,73 +1,24 @@
 server:
   port: 9008
 
+bk:
+  nacos:
+    server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+    namespace: ${NACOS_NAMESPACE:791847cb-c957-4f7b-81d4-3e5bcbc8620c}
+
 spring:
   application:
     name: marketing-content-service
-  ai:
-    alibaba:
-      a2a:
-        server:
-          version: 1.0.0
-          message-url: /a2a
-          agent-card-url: /.well-known/agent.json
-          card:
-            name: Marketing Agent
-            description: Marketing copy generation agent
-            default-input-modes:
-              - text
-            default-output-modes:
-              - text
-            capabilities:
-              streaming: false
-              push-notifications: false
-              state-transition-history: true
-        nacos:
-          server-addr: ${NACOS_SERVER:127.0.0.1:8848}
-          discovery:
-            enabled: false
-          registry:
-            enabled: true
-  cloud:
-    discovery:
-      enabled: false
-    service-registry:
-      auto-registration:
-        enabled: false
-    nacos:
-      discovery:
-        enabled: false
-      config:
-        import-check:
-          enabled: false
----
-spring:
   config:
-    activate:
-      on-profile: "!local"
-    import: optional:nacos:${spring.application.name}.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+    import: nacos:${spring.application.name}.yaml?group=DEFAULT_GROUP&refreshEnabled=true
   cloud:
-    discovery:
-      enabled: true
-    service-registry:
-      auto-registration:
-        enabled: true
     nacos:
       discovery:
-        enabled: true
-        server-addr: ${NACOS_SERVER:127.0.0.1:8848}
-        metadata:
-          agent-id: marketing-agent
-          agent-domains: marketing
-          agent-runtime-provider: official
-          agent-official-payload-mode: structured
-          agent-card-path: /.well-known/agent.json
-          a2a-path: /a2a
-          a2a-task-create-path: /a2a
-          a2a-task-status-path: /a2a
-          a2a-task-stream-path: /a2a
+        server-addr: ${bk.nacos.server-addr}
+        namespace: ${bk.nacos.namespace}
       config:
-        server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+        server-addr: ${bk.nacos.server-addr}
+        namespace: ${bk.nacos.namespace}
         file-extension: yaml
 
 dubbo:
@@ -77,4 +28,4 @@ dubbo:
     name: dubbo
     port: 20888
   registry:
-    address: nacos://${NACOS_SERVER:127.0.0.1:8848}
+    address: nacos://${bk.nacos.server-addr}?namespace=${bk.nacos.namespace}

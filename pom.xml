@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.bkanent</groupId>
-    <artifactId>bk-anent-project</artifactId>
+    <artifactId>bk-agent-project</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
@@ -88,6 +88,11 @@
                 <version>${spring.ai.alibaba.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.alibaba.cloud.ai</groupId>
+                <artifactId>spring-ai-alibaba-starter-dashscope</artifactId>
+                <version>${spring.ai.alibaba.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.baomidou</groupId>

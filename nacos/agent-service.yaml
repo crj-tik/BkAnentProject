@@ -6,7 +6,19 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
   ai:
     deepseek:
-      api-key: ${DEEPSEEK_API_KEY:test-key}
+      api-key: ${DEEPSEEK_API_KEY:sk-d74e4570e3784f70880f876a152cb2dd}
+      chat:
+        api-key: ${DEEPSEEK_API_KEY:sk-d74e4570e3784f70880f876a152cb2dd}
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY:}
+      embedding:
+        enabled: true
+        options:
+          model: ${DASHSCOPE_EMBEDDING_MODEL:text-embedding-v3}
+          dimensions: ${DASHSCOPE_EMBEDDING_DIMENSIONS:1024}
+    vectorstore:
+      milvus:
+        initialize-schema: false
 
 management:
   endpoints:

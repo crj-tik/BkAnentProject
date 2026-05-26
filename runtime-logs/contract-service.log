@@ -1,0 +1,4 @@
+[ERROR] java.nio.file.AccessDeniedException: D:\tool\lacalMaven\org\springframework\boot\resolver-status.properties
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.

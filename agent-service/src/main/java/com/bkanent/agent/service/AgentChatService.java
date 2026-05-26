@@ -1,7 +1,6 @@
 package com.bkanent.agent.service;
 
 import com.bkanent.agent.config.AgentChatProperties;
-import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.DefaultChatOptions;
@@ -9,23 +8,28 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 @Service
-@RequiredArgsConstructor
 public class AgentChatService {
 
-    @Qualifier("chatClient")
     private final ChatClient chatClient;
 
-    @Qualifier("localOnlyChatClient")
-    private final ChatClient localOnlyChatClient;
+    private final ChatClient baseToolChatClient;
 
     private final AgentChatProperties agentChatProperties;
+
+    public AgentChatService(@Qualifier("chatClient") ChatClient chatClient,
+                            @Qualifier("baseToolChatClient") ChatClient baseToolChatClient,
+                            AgentChatProperties agentChatProperties) {
+        this.chatClient = chatClient;
+        this.baseToolChatClient = baseToolChatClient;
+        this.agentChatProperties = agentChatProperties;
+    }
 
     public String call(String systemPrompt, String userPrompt) {
         return call(systemPrompt, userPrompt, true);
     }
 
     public String call(String systemPrompt, String userPrompt, boolean allowMcp) {
-        ChatClient client = allowMcp ? chatClient : localOnlyChatClient;
+        ChatClient client = allowMcp ? chatClient : baseToolChatClient;
         return client.prompt()
                 .system(systemPrompt)
                 .user(userPrompt)

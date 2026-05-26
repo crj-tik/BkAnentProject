@@ -40,7 +40,7 @@ public class AgentMcpProperties {
      * 设置servers。
      */
     public void setServers(Map<String, String> servers) {
-        this.servers = servers;
+        this.servers = servers == null ? new LinkedHashMap<>() : servers;
     }
 
     /**

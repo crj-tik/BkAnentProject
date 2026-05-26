@@ -1,37 +1,22 @@
 server:
   port: 9011
 
+bk:
+  nacos:
+    server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+    namespace: ${NACOS_NAMESPACE:791847cb-c957-4f7b-81d4-3e5bcbc8620c}
+
 spring:
   application:
     name: memory-service
-  cloud:
-    discovery:
-      enabled: false
-    service-registry:
-      auto-registration:
-        enabled: false
-    nacos:
-      discovery:
-        enabled: false
-      config:
-        import-check:
-          enabled: false
----
-spring:
   config:
-    activate:
-      on-profile: "!local"
-    import: optional:nacos:${spring.application.name}.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+    import: nacos:${spring.application.name}.yaml?group=DEFAULT_GROUP&refreshEnabled=true
   cloud:
-    discovery:
-      enabled: true
-    service-registry:
-      auto-registration:
-        enabled: true
     nacos:
       discovery:
-        enabled: true
-        server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+        server-addr: ${bk.nacos.server-addr}
+        namespace: ${bk.nacos.namespace}
       config:
-        server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+        server-addr: ${bk.nacos.server-addr}
+        namespace: ${bk.nacos.namespace}
         file-extension: yaml

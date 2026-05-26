@@ -4,6 +4,7 @@ import com.bkanent.common.rpc.AuthPermissionRpcService;
 import org.apache.dubbo.config.annotation.DubboReference;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
 
 @Configuration
@@ -14,6 +15,7 @@ public class AgentPermissionRpcReferenceConfiguration {
     private AuthPermissionRpcService authPermissionRpcService;
 
     @Bean
+    @Primary
     public AuthPermissionRpcService authPermissionRpcServiceBridge() {
         return authPermissionRpcService;
     }
