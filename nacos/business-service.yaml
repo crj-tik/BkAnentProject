@@ -17,6 +17,51 @@ spring:
           max-idle: ${REDIS_POOL_MAX_IDLE:8}
           min-idle: ${REDIS_POOL_MIN_IDLE:1}
           max-wait: ${REDIS_POOL_MAX_WAIT:3000ms}
+  ai:
+    alibaba:
+      a2a:
+        server:
+          enabled: true
+          message-url: /a2a
+          agent-card-url: /.well-known/agent.json
+          card:
+            name: trade-agent
+            description: trade feasibility and risk analysis agent
+            version: 1.0.0
+            url: http://127.0.0.1:${server.port}
+            default-input-modes: text,application/json
+            default-output-modes: text,application/json
+            capabilities:
+              streaming: true
+              push-notifications: false
+              state-transition-history: true
+            skills:
+              - id: trade.analyze
+                name: trade-analyze
+                description: analyze trade feasibility and risk
+                tags: trade,risk
+        nacos:
+          enabled: true
+          server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+          namespace: ${NACOS_NAMESPACE:}
+          group: DEFAULT_GROUP
+          registry:
+            enabled: true
+          discovery:
+            enabled: true
+  cloud:
+    nacos:
+      discovery:
+        metadata:
+          agent-id: trade-agent
+          agent-domains: trade
+          agent-runtime-provider: official
+          agent-official-payload-mode: structured
+          agent-card-path: /.well-known/agent.json
+          a2a-path: /a2a
+          a2a-task-create-path: /a2a
+          a2a-task-status-path: /a2a
+          a2a-task-stream-path: /a2a
 
 management:
   endpoints:

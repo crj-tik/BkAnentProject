@@ -4,6 +4,51 @@ spring:
     username: ${MYSQL_USER:root}
     password: ${MYSQL_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  ai:
+    alibaba:
+      a2a:
+        server:
+          enabled: true
+          message-url: /a2a
+          agent-card-url: /.well-known/agent.json
+          card:
+            name: notification-agent
+            description: notification delivery agent
+            version: 1.0.0
+            url: http://127.0.0.1:${server.port}
+            default-input-modes: text,application/json
+            default-output-modes: text,application/json
+            capabilities:
+              streaming: true
+              push-notifications: false
+              state-transition-history: true
+            skills:
+              - id: notification.send
+                name: notification-send
+                description: send in-app, email and bot notifications
+                tags: notification,message
+        nacos:
+          enabled: true
+          server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+          namespace: ${NACOS_NAMESPACE:}
+          group: DEFAULT_GROUP
+          registry:
+            enabled: true
+          discovery:
+            enabled: true
+  cloud:
+    nacos:
+      discovery:
+        metadata:
+          agent-id: notification-agent
+          agent-domains: notification
+          agent-runtime-provider: official
+          agent-official-payload-mode: structured
+          agent-card-path: /.well-known/agent.json
+          a2a-path: /a2a
+          a2a-task-create-path: /a2a
+          a2a-task-status-path: /a2a
+          a2a-task-stream-path: /a2a
 
 management:
   endpoints:
@@ -24,6 +69,11 @@ management:
       application: ${spring.application.name}
       service: ${spring.application.name}
 
+rocketmq:
+  name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
+  producer:
+    group: ${NOTIFICATION_ROCKETMQ_PRODUCER_GROUP:notification-service-producer}
+
 mybatis-plus:
   mapper-locations: classpath:/mapper/*.xml
   configuration:
@@ -33,3 +83,10 @@ mybatis-plus:
       logic-delete-field: deleted
       logic-delete-value: 1
       logic-not-delete-value: 0
+
+notification:
+  workflow-events:
+    enabled: ${NOTIFICATION_WORKFLOW_EVENTS_ENABLED:true}
+    topic: ${AGENT_STREAM_ROCKETMQ_TOPIC:bk.agent.session.stream}
+    consumer-group: ${NOTIFICATION_WORKFLOW_EVENTS_CONSUMER_GROUP:notification-service-workflow-events}
+    max-attempts: ${NOTIFICATION_WORKFLOW_EVENTS_MAX_ATTEMPTS:3}

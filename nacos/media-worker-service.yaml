@@ -1,3 +1,50 @@
+spring:
+  ai:
+    alibaba:
+      a2a:
+        server:
+          enabled: true
+          message-url: /a2a
+          agent-card-url: /.well-known/agent.json
+          card:
+            name: media-agent
+            description: media task generation and publish preparation agent
+            version: 1.0.0
+            url: http://127.0.0.1:${server.port}
+            default-input-modes: text,application/json
+            default-output-modes: text,application/json
+            capabilities:
+              streaming: true
+              push-notifications: false
+              state-transition-history: true
+            skills:
+              - id: media.generate
+                name: media-generate
+                description: generate media tasks and publish assets
+                tags: media,video,publish
+        nacos:
+          enabled: true
+          server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+          namespace: ${NACOS_NAMESPACE:}
+          group: DEFAULT_GROUP
+          registry:
+            enabled: true
+          discovery:
+            enabled: true
+  cloud:
+    nacos:
+      discovery:
+        metadata:
+          agent-id: media-agent
+          agent-domains: media
+          agent-runtime-provider: official
+          agent-official-payload-mode: structured
+          agent-card-path: /.well-known/agent.json
+          a2a-path: /a2a
+          a2a-task-create-path: /a2a
+          a2a-task-status-path: /a2a
+          a2a-task-stream-path: /a2a
+
 management:
   endpoints:
     web:
@@ -23,7 +70,7 @@ media:
     sync-wait-timeout-ms: ${MEDIA_TASK_SYNC_WAIT_TIMEOUT_MS:15000}
     sync-poll-interval-ms: ${MEDIA_TASK_SYNC_POLL_INTERVAL_MS:200}
     default-angles:
-      - ${MEDIA_TASK_ANGLE_1:客厅视角}
-      - ${MEDIA_TASK_ANGLE_2:卧室视角}
-      - ${MEDIA_TASK_ANGLE_3:阳台视角}
-      - ${MEDIA_TASK_ANGLE_4:海报视角}
+      - ${MEDIA_TASK_ANGLE_1:living-room-view}
+      - ${MEDIA_TASK_ANGLE_2:bedroom-view}
+      - ${MEDIA_TASK_ANGLE_3:balcony-view}
+      - ${MEDIA_TASK_ANGLE_4:poster-view}

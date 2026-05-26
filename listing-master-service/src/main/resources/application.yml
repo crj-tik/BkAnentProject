@@ -6,44 +6,10 @@ spring:
     name: listing-master-service
   config:
     import: optional:nacos:${spring.application.name}.yaml?group=DEFAULT_GROUP&refreshEnabled=true
-  ai:
-    alibaba:
-      a2a:
-        server:
-          version: 1.0.0
-          message-url: /a2a
-          agent-card-url: /.well-known/agent.json
-          card:
-            name: Listing Agent
-            description: Listing search, recommendation and summary agent
-            default-input-modes:
-              - text
-            default-output-modes:
-              - text
-            capabilities:
-              streaming: false
-              push-notifications: false
-              state-transition-history: true
-        nacos:
-          server-addr: ${NACOS_SERVER:127.0.0.1:8848}
-          discovery:
-            enabled: false
-          registry:
-            enabled: true
   cloud:
     nacos:
       discovery:
         server-addr: ${NACOS_SERVER:127.0.0.1:8848}
-        metadata:
-          agent-id: listing-agent
-          agent-domains: listing
-          agent-runtime-provider: official
-          agent-official-payload-mode: plain
-          agent-card-path: /.well-known/agent.json
-          a2a-path: /a2a
-          a2a-task-create-path: /a2a
-          a2a-task-status-path: /a2a
-          a2a-task-stream-path: /a2a
       config:
         server-addr: ${NACOS_SERVER:127.0.0.1:8848}
         file-extension: yaml

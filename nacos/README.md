@@ -19,6 +19,7 @@
 - `spring.config.import`
 - `spring.cloud.nacos.discovery/config.server-addr`
 - `dubbo.application / protocol / registry`
+- 仅用于本地启动的开关，例如 `local` profile 下的 `discovery.enabled=false`
 
 ### 2. Nacos 承载的配置
 
@@ -31,6 +32,9 @@
 - `spring.elasticsearch`
 - `milvus`
 - `spring.ai.deepseek`
+- `spring.ai.alibaba.a2a.*`
+- `spring.cloud.nacos.discovery.metadata`
+- `management.*`
 - 业务运行参数
 
 ### 3. 环境变量约定

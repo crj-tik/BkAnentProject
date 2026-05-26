@@ -4,6 +4,51 @@ spring:
     username: ${MYSQL_USER:root}
     password: ${MYSQL_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  ai:
+    alibaba:
+      a2a:
+        server:
+          enabled: true
+          message-url: /a2a
+          agent-card-url: /.well-known/agent.json
+          card:
+            name: contract-agent
+            description: contract parsing and risk review agent
+            version: 1.0.0
+            url: http://127.0.0.1:${server.port}
+            default-input-modes: text,application/json
+            default-output-modes: text,application/json
+            capabilities:
+              streaming: true
+              push-notifications: false
+              state-transition-history: true
+            skills:
+              - id: contract.review
+                name: contract-review
+                description: review contract content and risks
+                tags: contract,review
+        nacos:
+          enabled: true
+          server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+          namespace: ${NACOS_NAMESPACE:}
+          group: DEFAULT_GROUP
+          registry:
+            enabled: true
+          discovery:
+            enabled: true
+  cloud:
+    nacos:
+      discovery:
+        metadata:
+          agent-id: contract-agent
+          agent-domains: contract
+          agent-runtime-provider: official
+          agent-official-payload-mode: structured
+          agent-card-path: /.well-known/agent.json
+          a2a-path: /a2a
+          a2a-task-create-path: /a2a
+          a2a-task-status-path: /a2a
+          a2a-task-stream-path: /a2a
 
 management:
   endpoints:
@@ -27,17 +72,5 @@ contract:
     pending-sign-days: 3
     pending-sign-cron: 0 30 9 * * ?
   integration:
-    # Supported OCR providers:
-    # - mock-ocr-provider
-    # - vendor-ocr-provider
-    # Legacy aliases still accepted by code:
-    # - mock
-    # - vendor
-    # - third-party-ocr
-    # - dashscope
     ocr-provider: ${CONTRACT_OCR_PROVIDER:mock-ocr-provider}
-    # Supported e-sign providers:
-    # - mock-esign-provider
-    # - esign-cn
-    # - fadada
     esign-provider: ${CONTRACT_ESIGN_PROVIDER:mock-esign-provider}

@@ -6,7 +6,10 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
   ai:
     deepseek:
-      api-key: ${DEEPSEEK_API_KEY:test-key}
+      api-key: ${DEEPSEEK_API_KEY:sk-d74e4570e3784f70880f876a152cb2dd}
+    vectorstore:
+      milvus:
+        initialize-schema: false
 
 management:
   endpoints:

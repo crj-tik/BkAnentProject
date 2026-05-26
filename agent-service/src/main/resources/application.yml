@@ -4,10 +4,6 @@ server:
 spring:
   application:
     name: agent-service
-  ai:
-    vectorstore:
-      milvus:
-        initialize-schema: false
   cloud:
     discovery:
       enabled: false
@@ -20,78 +16,6 @@ spring:
       config:
         import-check:
           enabled: false
-
-agent:
-  memory:
-    base-url: ${MEMORY_SERVICE_BASE_URL:http://127.0.0.1:9011}
-  distributed:
-    supervisor-agent-id: ${SUPERVISOR_AGENT_ID:supervisor-agent}
-    refresh-interval-seconds: ${AGENT_DISCOVERY_REFRESH_INTERVAL_SECONDS:30}
-    a2a:
-      discovery-provider: ${AGENT_A2A_DISCOVERY_PROVIDER:official}
-    catalog:
-      strict-nacos: ${AGENT_CATALOG_STRICT_NACOS:true}
-    rate-limit:
-      enabled: ${AGENT_RATE_LIMIT_ENABLED:true}
-      provider: ${AGENT_RATE_LIMIT_PROVIDER:memory}
-      window-seconds: ${AGENT_RATE_LIMIT_WINDOW_SECONDS:60}
-      default-per-window: ${AGENT_RATE_LIMIT_DEFAULT_PER_WINDOW:60}
-      supervisor-tasks-per-window: ${AGENT_RATE_LIMIT_SUPERVISOR_TASKS_PER_WINDOW:60}
-      supervisor-async-tasks-per-window: ${AGENT_RATE_LIMIT_SUPERVISOR_ASYNC_TASKS_PER_WINDOW:40}
-      supervisor-workflows-per-window: ${AGENT_RATE_LIMIT_SUPERVISOR_WORKFLOWS_PER_WINDOW:30}
-      supervisor-async-workflows-per-window: ${AGENT_RATE_LIMIT_SUPERVISOR_ASYNC_WORKFLOWS_PER_WINDOW:20}
-    gray-release:
-      enabled: ${AGENT_GRAY_RELEASE_ENABLED:false}
-      strategy-version: ${AGENT_GRAY_RELEASE_STRATEGY_VERSION:v2}
-      prefer-async-a2a: ${AGENT_GRAY_RELEASE_PREFER_ASYNC_A2A:false}
-      user-ids: ${AGENT_GRAY_RELEASE_USER_IDS:}
-      session-ids: ${AGENT_GRAY_RELEASE_SESSION_IDS:}
-      domains: ${AGENT_GRAY_RELEASE_DOMAINS:}
-      preferred-agent-ids: ${AGENT_GRAY_RELEASE_PREFERRED_AGENT_IDS:{}}
-      route-override-domains: ${AGENT_GRAY_RELEASE_ROUTE_OVERRIDE_DOMAINS:{}}
-      versioned-preferred-agent-ids: ${AGENT_GRAY_RELEASE_VERSIONED_PREFERRED_AGENT_IDS:{}}
-      versioned-route-override-domains: ${AGENT_GRAY_RELEASE_VERSIONED_ROUTE_OVERRIDE_DOMAINS:{}}
-    event-audit:
-      max-active-events: ${AGENT_EVENT_AUDIT_MAX_ACTIVE_EVENTS:5000}
-      archive-enabled: ${AGENT_EVENT_AUDIT_ARCHIVE_ENABLED:true}
-      max-archived-events: ${AGENT_EVENT_AUDIT_MAX_ARCHIVED_EVENTS:10000}
-      retention-seconds: ${AGENT_EVENT_AUDIT_RETENTION_SECONDS:86400}
-    async-runtime:
-      enabled: ${AGENT_ASYNC_RUNTIME_ENABLED:true}
-      dispatch-interval-ms: ${AGENT_ASYNC_RUNTIME_DISPATCH_INTERVAL_MS:1000}
-      dispatch-batch-size: ${AGENT_ASYNC_RUNTIME_DISPATCH_BATCH_SIZE:10}
-    planning:
-      llm-enabled: ${AGENT_PLANNING_LLM_ENABLED:false}
-      allow-fallback: ${AGENT_PLANNING_ALLOW_FALLBACK:true}
-      strategy: ${AGENT_PLANNING_STRATEGY:rule-first}
-    stream:
-      provider: ${AGENT_STREAM_PROVIDER:memory}
-      rocketmq:
-        topic: ${AGENT_STREAM_ROCKETMQ_TOPIC:bk.agent.session.stream}
-        consumer-group: ${AGENT_STREAM_ROCKETMQ_CONSUMER_GROUP:agent-service-session-stream}
-        producer-group: ${AGENT_STREAM_ROCKETMQ_PRODUCER_GROUP:agent-service-session-stream-producer}
-    discovery-enabled: ${AGENT_DISCOVERY_ENABLED:true}
-    agent-card-path: ${AGENT_CARD_PATH:/.well-known/agent.json}
-    agents: {}
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,prometheus
-  endpoint:
-    health:
-      show-details: when_authorized
-    prometheus:
-      access: unrestricted
-  prometheus:
-    metrics:
-      export:
-        enabled: true
-  metrics:
-    tags:
-      application: ${spring.application.name}
-      service: ${spring.application.name}
 ---
 spring:
   config:
@@ -111,10 +35,6 @@ spring:
       config:
         server-addr: ${NACOS_SERVER:127.0.0.1:8848}
         file-extension: yaml
-  rocketmq:
-    name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
-    producer:
-      group: ${AGENT_STREAM_ROCKETMQ_PRODUCER_GROUP:agent-service-session-stream-producer}
 
 dubbo:
   application:
