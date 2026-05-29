@@ -106,7 +106,8 @@ public class DynamicAgentRegistry implements AgentRegistry {
         if (registration == null || !StringUtils.hasText(resolvedBaseUrl)) {
             return;
         }
-        agentCardDiscoveryClient.fetchAgentCard(resolvedBaseUrl, resolveCardPath(registration))
+        agentCardDiscoveryClient.fetchByAgentName(agentId)
+                .or(() -> agentCardDiscoveryClient.fetchAgentCard(resolvedBaseUrl, resolveCardPath(registration)))
                 .map(card -> buildDiscoveredDescriptor(registration, resolvedBaseUrl, card))
                 .ifPresentOrElse(descriptor -> descriptors.put(agentId, descriptor),
                         () -> descriptors.put(agentId, buildStaticDescriptor(registration, resolvedBaseUrl)));
@@ -147,7 +148,8 @@ public class DynamicAgentRegistry implements AgentRegistry {
             }
             String baseUrl = resolveInstanceBaseUrl(instance);
             String cardPath = resolveCardPath(metadata, registration);
-            RegisteredAgentDescriptor descriptor = agentCardDiscoveryClient.fetchAgentCard(baseUrl, cardPath)
+            RegisteredAgentDescriptor descriptor = agentCardDiscoveryClient.fetchByAgentName(agentId)
+                    .or(() -> agentCardDiscoveryClient.fetchAgentCard(baseUrl, cardPath))
                     .map(card -> buildDiscoveredDescriptor(serviceId, registration, metadata, baseUrl, cardPath, card))
                     .orElseGet(() -> buildMetadataDescriptor(serviceId, registration, metadata, baseUrl, cardPath));
             descriptors.put(agentId, descriptor);

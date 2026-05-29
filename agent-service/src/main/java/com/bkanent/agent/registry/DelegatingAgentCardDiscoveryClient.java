@@ -26,6 +26,23 @@ public class DelegatingAgentCardDiscoveryClient implements AgentCardDiscoveryCli
     }
 
     @Override
+    public Optional<AgentCard> fetchByAgentName(String agentName) {
+        if (!StringUtils.hasText(agentName)) {
+            return Optional.empty();
+        }
+        String provider = Optional.ofNullable(properties.getA2a().getDiscoveryProvider())
+                .orElse("custom")
+                .toLowerCase(Locale.ROOT);
+        if ("official".equals(provider)) {
+            Optional<AgentCard> officialCard = officialAgentCardDiscoveryClient.fetchByAgentName(agentName);
+            if (officialCard.isPresent()) {
+                return officialCard;
+            }
+        }
+        return AgentCardDiscoveryClient.super.fetchByAgentName(agentName);
+    }
+
+    @Override
     public Optional<AgentCard> fetchAgentCard(String baseUrl, String cardPath) {
         if (!StringUtils.hasText(baseUrl)) {
             return Optional.empty();

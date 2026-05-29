@@ -45,12 +45,10 @@ spring:
                 description: analyze trade feasibility and risk
                 tags: trade,risk
         nacos:
-          enabled: true
           server-addr: ${NACOS_SERVER:127.0.0.1:8848}
           namespace: ${NACOS_NAMESPACE:}
-          group: DEFAULT_GROUP
           registry:
-            enabled: false
+            enabled: true
           discovery:
             enabled: true
   cloud:

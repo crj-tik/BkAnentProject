@@ -16,6 +16,15 @@ spring:
         options:
           model: ${DASHSCOPE_EMBEDDING_MODEL:text-embedding-v3}
           dimensions: ${DASHSCOPE_EMBEDDING_DIMENSIONS:1024}
+    alibaba:
+      a2a:
+        nacos:
+          server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+          namespace: ${NACOS_NAMESPACE:}
+          registry:
+            enabled: false
+          discovery:
+            enabled: true
     vectorstore:
       milvus:
         initialize-schema: false
