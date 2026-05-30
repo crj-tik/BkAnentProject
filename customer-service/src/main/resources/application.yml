@@ -24,6 +24,8 @@ spring:
 dubbo:
   application:
     name: customer-service
+    qos-enable: true                  # 开启QoS（默认true）
+    qos-port: 22515                   # 独立端口，避免与默认22222冲突
   protocol:
     name: dubbo
     port: 20885

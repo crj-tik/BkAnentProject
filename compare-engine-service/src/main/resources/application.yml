@@ -24,6 +24,8 @@ spring:
 dubbo:
   application:
     name: compare-engine-service
+    qos-enable: true                  # 开启QoS（默认true）
+    qos-port: 22513                   # 独立端口，避免与默认22222冲突
   protocol:
     name: dubbo
     port: 20886
