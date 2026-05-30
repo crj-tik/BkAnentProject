@@ -28,10 +28,10 @@ public class AgentServiceConfiguration {
 
     @Bean("combinedToolCallbackProvider")
     public ToolCallbackProvider combinedToolCallbackProvider(
-            @Qualifier("localBaseToolCallbackProvider") ToolCallbackProvider localBaseToolCallbackProvider,
+            @Qualifier("localToolCallbackProvider") ToolCallbackProvider localToolCallbackProvider,
             @Qualifier("mcpToolCallbackProvider") ToolCallbackProvider mcpToolCallbackProvider) {
         return () -> {
-            org.springframework.ai.tool.ToolCallback[] localCallbacks = localBaseToolCallbackProvider.getToolCallbacks();
+            org.springframework.ai.tool.ToolCallback[] localCallbacks = localToolCallbackProvider.getToolCallbacks();
             org.springframework.ai.tool.ToolCallback[] mcpCallbacks = mcpToolCallbackProvider.getToolCallbacks();
             org.springframework.ai.tool.ToolCallback[] combined = Arrays.copyOf(localCallbacks, localCallbacks.length + mcpCallbacks.length);
             System.arraycopy(mcpCallbacks, 0, combined, localCallbacks.length, mcpCallbacks.length);
@@ -53,11 +53,11 @@ public class AgentServiceConfiguration {
     /**
      * 处理baseToolChatClient。
      */
-    @Bean("baseToolChatClient")
-    public ChatClient baseToolChatClient(ChatModel chatModel,
-                                         @Qualifier("localBaseToolCallbackProvider") ToolCallbackProvider localBaseToolCallbackProvider) {
+    @Bean("localToolChatClient")
+    public ChatClient localToolChatClient(ChatModel chatModel,
+                                         @Qualifier("localToolCallbackProvider") ToolCallbackProvider localToolCallbackProvider) {
         return ChatClient.builder(chatModel)
-                .defaultToolCallbacks(localBaseToolCallbackProvider)
+                .defaultToolCallbacks(localToolCallbackProvider)
                 .build();
     }
 

@@ -1,11 +1,7 @@
 package com.bkanent.agent.tool;
 
 /**
- * AgentTool 工具类。
+ * Marker interface for agent tools.
  */
 public interface AgentTool {
-
-    default boolean isBaseTool() {
-        return false;
-    }
 }

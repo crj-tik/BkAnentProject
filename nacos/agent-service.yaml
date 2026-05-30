@@ -10,7 +10,7 @@ spring:
       chat:
         api-key: ${DEEPSEEK_API_KEY:sk-d74e4570e3784f70880f876a152cb2dd}
     dashscope:
-      api-key: ${DASHSCOPE_API_KEY:}
+      api-key: ${DASHSCOPE_API_KEY:sk-2b5cfc81166341e188e411892cca3dfa}
       embedding:
         enabled: true
         options:
@@ -20,7 +20,7 @@ spring:
       a2a:
         nacos:
           server-addr: ${NACOS_SERVER:127.0.0.1:8080}
-          namespace: ${NACOS_NAMESPACE:}
+          namespace: ${NACOS_NAMESPACE:1bde955a-3394-4f3e-a754-70e0aee942dd}
           registry:
             enabled: false
           discovery:
@@ -65,7 +65,7 @@ agent:
     model: ${AGENT_CHAT_MODEL:${AGENT_DEEPSEEK_MODEL:deepseek-chat}}
     temperature: ${AGENT_CHAT_TEMPERATURE:${AGENT_DEEPSEEK_TEMPERATURE:0.2}}
     max-tokens: ${AGENT_CHAT_MAX_TOKENS:${AGENT_DEEPSEEK_MAX_TOKENS:1600}}
-    top-p: ${AGENT_CHAT_TOP_P:${AGENT_DEEPSEEK_TOP_P:}}
+    top-p: ${AGENT_CHAT_TOP_P:${AGENT_DEEPSEEK_TOP_P:1.0}}
     default-top-k: ${AGENT_CHAT_DEFAULT_TOP_K:${AGENT_DEEPSEEK_DEFAULT_TOP_K:4}}
     system-prompt: ${AGENT_CHAT_SYSTEM_PROMPT:${AGENT_DEEPSEEK_SYSTEM_PROMPT:}}
   milvus:
@@ -86,7 +86,7 @@ agent:
     keyword-top-k: ${AGENT_RAG_KEYWORD_TOP_K:20}
     vector-top-k: ${AGENT_RAG_VECTOR_TOP_K:20}
     rerank-top-k: ${AGENT_RAG_RERANK_TOP_K:10}
-    vector-similarity-threshold: ${AGENT_RAG_VECTOR_SIMILARITY_THRESHOLD:0.0}
+    vector-similarity-threshold: ${AGENT_RAG_VECTOR_SIMILARITY_THRESHOLD:0.7}
     rerank-endpoint: ${AGENT_RAG_RERANK_ENDPOINT:}
     rerank-api-key: ${AGENT_RAG_RERANK_API_KEY:}
     rerank-model: ${AGENT_RAG_RERANK_MODEL:BAAI/bge-reranker-v2-m3}
@@ -154,7 +154,7 @@ rocketmq:
     group: ${AGENT_STREAM_ROCKETMQ_PRODUCER_GROUP:agent-service-session-stream-producer}
 
 milvus:
-  enabled: ${MILVUS_ENABLED:false}
+  enabled: ${MILVUS_ENABLED:true}
   endpoint: ${MILVUS_ENDPOINT:http://127.0.0.1:19530}
   token: ${MILVUS_TOKEN:root:Milvus}
   database: ${MILVUS_DATABASE:default}

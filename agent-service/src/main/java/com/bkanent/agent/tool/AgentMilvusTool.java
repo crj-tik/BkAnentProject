@@ -3,18 +3,13 @@ package com.bkanent.agent.tool;
 import com.bkanent.agent.config.AgentChatProperties;
 import com.bkanent.agent.milvus.core.model.MilvusSearchResult;
 import com.bkanent.agent.milvus.memory.AgentMemoryMilvusService;
-import com.bkanent.agent.tool.annotation.AgentBaseTool;
 import com.bkanent.agent.tool.context.AgentToolContextHolder;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 
-/**
- * AgentMilvusTool 工具类。
- */
 @Component
-@AgentBaseTool
 public class AgentMilvusTool implements AgentTool {
 
     /**

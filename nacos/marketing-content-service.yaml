@@ -35,7 +35,7 @@ spring:
                 tags: marketing,copy
         nacos:
           server-addr: ${NACOS_SERVER:127.0.0.1:8080}
-          namespace: ${NACOS_NAMESPACE:}
+          namespace: ${NACOS_NAMESPACE:1bde955a-3394-4f3e-a754-70e0aee942dd}
           registry:
             enabled: true
           discovery:

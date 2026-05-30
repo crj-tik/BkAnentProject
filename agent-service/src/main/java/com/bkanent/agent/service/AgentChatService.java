@@ -12,15 +12,15 @@ public class AgentChatService {
 
     private final ChatClient chatClient;
 
-    private final ChatClient baseToolChatClient;
+    private final ChatClient localToolChatClient;
 
     private final AgentChatProperties agentChatProperties;
 
     public AgentChatService(@Qualifier("chatClient") ChatClient chatClient,
-                            @Qualifier("baseToolChatClient") ChatClient baseToolChatClient,
+                            @Qualifier("localToolChatClient") ChatClient localToolChatClient,
                             AgentChatProperties agentChatProperties) {
         this.chatClient = chatClient;
-        this.baseToolChatClient = baseToolChatClient;
+        this.localToolChatClient = localToolChatClient;
         this.agentChatProperties = agentChatProperties;
     }
 
@@ -29,7 +29,7 @@ public class AgentChatService {
     }
 
     public String call(String systemPrompt, String userPrompt, boolean allowMcp) {
-        ChatClient client = allowMcp ? chatClient : baseToolChatClient;
+        ChatClient client = allowMcp ? chatClient : localToolChatClient;
         return client.prompt()
                 .system(systemPrompt)
                 .user(userPrompt)

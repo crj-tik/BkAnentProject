@@ -7,6 +7,10 @@ spring:
   elasticsearch:
     uris: ${ELASTICSEARCH_URIS:http://127.0.0.1:9200}
   ai:
+    deepseek:
+      api-key: ${DEEPSEEK_API_KEY:sk-d74e4570e3784f70880f876a152cb2dd}
+      chat:
+        api-key: ${DEEPSEEK_API_KEY:sk-d74e4570e3784f70880f876a152cb2dd}
     alibaba:
       a2a:
         server:
@@ -31,7 +35,7 @@ spring:
                 tags: listing,search
         nacos:
           server-addr: ${NACOS_SERVER:127.0.0.1:8080}
-          namespace: ${NACOS_NAMESPACE:}
+          namespace: ${NACOS_NAMESPACE:1bde955a-3394-4f3e-a754-70e0aee942dd}
           registry:
             enabled: true
           discovery:
