@@ -1,140 +1,35 @@
 package com.bkanent.marketing.a2a;
 
-import com.alibaba.cloud.ai.graph.KeyStrategy;
-import com.alibaba.cloud.ai.graph.KeyStrategyFactory;
-import com.alibaba.cloud.ai.graph.KeyStrategyFactoryBuilder;
-import com.alibaba.cloud.ai.graph.RunnableConfig;
-import com.alibaba.cloud.ai.graph.StateGraph;
-import com.alibaba.cloud.ai.graph.action.AsyncNodeActionWithConfig;
-import com.alibaba.cloud.ai.graph.action.NodeActionWithConfig;
-import com.alibaba.cloud.ai.graph.agent.BaseAgent;
-import com.alibaba.cloud.ai.graph.exception.GraphStateException;
-import com.alibaba.cloud.ai.graph.internal.node.Node;
-import com.alibaba.cloud.ai.graph.state.strategy.ReplaceStrategy;
-import com.bkanent.common.agent.AgentTaskInvokeRequest;
-import com.bkanent.common.agent.AgentTaskInvokeResponse;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.bkanent.marketing.service.MarketingAgentService;
+import com.alibaba.cloud.ai.graph.agent.ReactAgent;
+import com.bkanent.marketing.config.MarketingAgentProperties;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.tool.ToolCallbackProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
-
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 
 @Component
-public class MarketingOfficialA2aAgent extends BaseAgent {
+public class MarketingOfficialA2aAgent {
 
-    private static final String GRAPH_ID = "marketing-official-a2a-agent";
-    private static final String NODE_GENERATE_COPY = "generate_copy";
-    private static final String KEY_MESSAGES = "messages";
-    private static final String KEY_INPUT = "input";
-    private static final String KEY_OUTPUT = "output";
+    private static final String OUTPUT_KEY = "output";
 
-    private final MarketingAgentService marketingAgentService;
-    private final ObjectMapper objectMapper;
+    private final ReactAgent reactAgent;
 
-    public MarketingOfficialA2aAgent(MarketingAgentService marketingAgentService,
-                                     ObjectMapper objectMapper) {
-        super(
-                "marketing-agent",
-                "负责营销文案生成",
-                false,
-                false,
-                KEY_OUTPUT,
-                new ReplaceStrategy()
-        );
-        this.marketingAgentService = marketingAgentService;
-        this.objectMapper = objectMapper;
-    }
-
-    @Override
-    public Node asNode(boolean includeContents, boolean returnReasoningContents) {
-        throw new UnsupportedOperationException("marketing official a2a agent is exposed as standalone server only");
-    }
-
-    @Override
-    protected StateGraph initGraph() throws GraphStateException {
-        StateGraph stateGraph = new StateGraph(GRAPH_ID, buildKeyStrategyFactory());
-        stateGraph.addNode(NODE_GENERATE_COPY, generateCopyNode());
-        stateGraph.addEdge(StateGraph.START, NODE_GENERATE_COPY);
-        stateGraph.addEdge(NODE_GENERATE_COPY, StateGraph.END);
-        return stateGraph;
-    }
-
-    private KeyStrategyFactory buildKeyStrategyFactory() {
-        Map<String, KeyStrategy> strategies = new LinkedHashMap<>();
-        strategies.put(KEY_MESSAGES, new ReplaceStrategy());
-        strategies.put(KEY_INPUT, new ReplaceStrategy());
-        strategies.put(KEY_OUTPUT, new ReplaceStrategy());
-        return new KeyStrategyFactoryBuilder()
-                .addStrategies(strategies)
+    public MarketingOfficialA2aAgent(ChatModel chatModel,
+                                     MarketingAgentProperties properties,
+                                     @Qualifier("marketingToolCallbackProvider") ToolCallbackProvider toolCallbackProvider) {
+        this.reactAgent = ReactAgent.builder()
+                .name("marketing-agent")
+                .description("Responsible for marketing copy generation, content creation, publish preparation and execution with LLM-driven creativity")
+                .model(chatModel)
+                .systemPrompt(properties.getSystemPrompt())
+                .tools(toolCallbackProvider.getToolCallbacks())
+                .outputKey(OUTPUT_KEY)
                 .build();
     }
 
-    private AsyncNodeActionWithConfig generateCopyNode() {
-        NodeActionWithConfig action = (state, config) -> {
-            String instruction = state.value(KEY_INPUT, (String) null);
-            AgentTaskInvokeResponse response = marketingAgentService.invoke(buildInvokeRequest(instruction, config));
-            return Map.of(KEY_OUTPUT, serializeResponse(response));
-        };
-        return AsyncNodeActionWithConfig.node_async(action);
-    }
-
-    private AgentTaskInvokeRequest buildInvokeRequest(String instruction, RunnableConfig config) {
-        Map<String, Object> metadata = config.metadata().orElse(Map.of());
-        String sessionId = stringMetadata(metadata, "sessionId");
-        String taskId = stringMetadata(metadata, "taskId");
-        String traceId = stringMetadata(metadata, "traceId");
-        String sourceAgentId = stringMetadata(metadata, "sourceAgentId");
-        String targetAgentId = stringMetadata(metadata, "targetAgentId");
-        String intent = stringMetadata(metadata, "intent");
-        String domain = stringMetadata(metadata, "domain");
-        return new AgentTaskInvokeRequest(
-                StringUtils.hasText(sessionId) ? sessionId : UUID.randomUUID().toString(),
-                StringUtils.hasText(taskId) ? taskId : UUID.randomUUID().toString(),
-                null,
-                StringUtils.hasText(traceId) ? traceId : UUID.randomUUID().toString(),
-                StringUtils.hasText(sourceAgentId) ? sourceAgentId : "remote-a2a-client",
-                StringUtils.hasText(targetAgentId) ? targetAgentId : "marketing-agent",
-                StringUtils.hasText(intent) ? intent : "marketing.generate_copy",
-                StringUtils.hasText(domain) ? domain : "marketing",
-                instruction,
-                structuredContext(metadata),
-                List.of(),
-                List.of(),
-                "text",
-                UUID.randomUUID().toString(),
-                false
-        );
-    }
-
-    private Map<String, Object> structuredContext(Map<String, Object> metadata) {
-        Object context = metadata.get("structuredContext");
-        if (context instanceof Map<?, ?> map) {
-            Map<String, Object> casted = new LinkedHashMap<>();
-            map.forEach((key, value) -> casted.put(String.valueOf(key), value));
-            return casted;
-        }
-        return Map.of();
-    }
-
-    private String stringMetadata(Map<String, Object> metadata, String key) {
-        Object value = metadata.get(key);
-        if (value == null) {
-            return null;
-        }
-        String text = String.valueOf(value).trim();
-        return StringUtils.hasText(text) ? text : null;
-    }
-
-    private String serializeResponse(AgentTaskInvokeResponse response) {
-        try {
-            return objectMapper.writeValueAsString(response);
-        } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("failed to serialize marketing agent response", exception);
-        }
+    @Bean
+    public ReactAgent marketingReactAgent() {
+        return reactAgent;
     }
 }

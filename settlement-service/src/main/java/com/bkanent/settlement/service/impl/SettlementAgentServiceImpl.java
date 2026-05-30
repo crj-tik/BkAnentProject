@@ -3,15 +3,18 @@ package com.bkanent.settlement.service.impl;
 import com.bkanent.common.agent.AgentCard;
 import com.bkanent.common.agent.AgentTaskInvokeRequest;
 import com.bkanent.common.agent.AgentTaskInvokeResponse;
-import com.bkanent.settlement.model.SettlementCalculateRequest;
-import com.bkanent.settlement.model.SettlementDetailResponse;
-import com.bkanent.settlement.model.SettlementMonthlySummaryResponse;
+import com.bkanent.settlement.config.SettlementAgentProperties;
 import com.bkanent.settlement.service.SettlementAgentService;
-import com.bkanent.settlement.service.SettlementManagementService;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.prompt.ChatOptions;
+import org.springframework.ai.chat.prompt.DefaultChatOptions;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
 
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,10 +22,18 @@ import java.util.Map;
 @Service
 public class SettlementAgentServiceImpl implements SettlementAgentService {
 
-    private final SettlementManagementService settlementManagementService;
+    private static final Logger log = LoggerFactory.getLogger(SettlementAgentServiceImpl.class);
 
-    public SettlementAgentServiceImpl(SettlementManagementService settlementManagementService) {
-        this.settlementManagementService = settlementManagementService;
+    private final ChatClient settlementChatClient;
+    private final SettlementAgentProperties properties;
+    private final ObjectMapper objectMapper;
+
+    public SettlementAgentServiceImpl(@Qualifier("settlementChatClient") ChatClient settlementChatClient,
+                                      SettlementAgentProperties properties,
+                                      ObjectMapper objectMapper) {
+        this.settlementChatClient = settlementChatClient;
+        this.properties = properties;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -30,8 +41,8 @@ public class SettlementAgentServiceImpl implements SettlementAgentService {
         return new AgentCard(
                 "settlement-agent",
                 "Settlement Agent",
-                "Responsible for settlement calculation, payout preparation and monthly summary analysis",
-                "1.0.0",
+                "Responsible for settlement calculation, commission computation, payout batch preparation, and monthly summary analysis with LLM-driven reasoning",
+                "2.0.0",
                 List.of("settlement-calculate", "settlement-payout-prepare"),
                 List.of("settlement"),
                 true,
@@ -44,31 +55,104 @@ public class SettlementAgentServiceImpl implements SettlementAgentService {
 
     @Override
     public AgentTaskInvokeResponse invoke(AgentTaskInvokeRequest request) {
-        Map<String, Object> context = request.structuredContext() == null ? Map.of() : request.structuredContext();
-        SettlementDetailResponse detail = resolveDetail(context);
-        List<SettlementMonthlySummaryResponse> monthlySummary = resolveMonthlySummary(context);
+        Map<String, Object> context = request.structuredContext() == null
+                ? Map.of() : request.structuredContext();
+        String instruction = request.instruction() == null ? "" : request.instruction().trim();
 
+        if (instruction.isBlank()) {
+            return emptyResponse(request, "No instruction provided");
+        }
+
+        try {
+            String userPrompt = buildUserPrompt(instruction, context);
+            String llmResponse = settlementChatClient.prompt()
+                    .system(properties.getSystemPrompt())
+                    .user(userPrompt)
+                    .options(chatOptions())
+                    .call()
+                    .content();
+
+            Map<String, Object> parsed = parseLlmResponse(llmResponse);
+            return buildResponse(request, parsed);
+
+        } catch (Exception e) {
+            log.error("LLM invocation failed for settlement analysis, falling back to rule-based", e);
+            return fallbackResponse(request, context, instruction);
+        }
+    }
+
+    private String buildUserPrompt(String instruction, Map<String, Object> context) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Analyze the following settlement request:\n\n");
+        sb.append("Instruction: ").append(instruction).append("\n\n");
+        if (!context.isEmpty()) {
+            sb.append("Context:\n");
+            context.forEach((k, v) -> sb.append("  ").append(k).append(": ").append(v).append("\n"));
+            sb.append("\n");
+        }
+        sb.append("""
+                Please use available tools to gather relevant settlement data (settlement details, commission calculations,
+                monthly summaries, payout batches) and produce a structured assessment.
+
+                You MUST respond with a JSON object in this exact format:
+                {
+                  "decision": "PROCEED|MANUAL_REVIEW|HOLD",
+                  "payoutStatus": "PREPARED|BATCHED|PAID|PENDING",
+                  "commissionAmount": 0.0,
+                  "monthlySummaryAvailable": true,
+                  "recommendedActions": ["action1", "action2"],
+                  "summary": "A concise paragraph explaining the reasoning."
+                }
+                """);
+        return sb.toString();
+    }
+
+    private Map<String, Object> parseLlmResponse(String llmResponse) {
+        if (llmResponse == null || llmResponse.isBlank()) {
+            return Map.of("decision", "MANUAL_REVIEW", "payoutStatus", "PENDING",
+                    "summary", "LLM returned empty response");
+        }
+        String json = llmResponse;
+        int start = json.indexOf('{');
+        int end = json.lastIndexOf('}');
+        if (start >= 0 && end > start) {
+            json = json.substring(start, end + 1);
+        }
+        try {
+            return objectMapper.readValue(json,
+                    new TypeReference<LinkedHashMap<String, Object>>() {});
+        } catch (Exception e) {
+            log.warn("Failed to parse LLM response as JSON, using raw text");
+            Map<String, Object> fallback = new LinkedHashMap<>();
+            fallback.put("decision", "MANUAL_REVIEW");
+            fallback.put("payoutStatus", "PENDING");
+            fallback.put("summary", "LLM response could not be parsed as structured JSON");
+            return fallback;
+        }
+    }
+
+    private ChatOptions chatOptions() {
+        DefaultChatOptions options = new DefaultChatOptions();
+        options.setModel(properties.getModel());
+        options.setTemperature(properties.getTemperature());
+        options.setMaxTokens(properties.getMaxTokens());
+        return options;
+    }
+
+    private AgentTaskInvokeResponse buildResponse(AgentTaskInvokeRequest request,
+                                                   Map<String, Object> parsed) {
         Map<String, Object> output = new LinkedHashMap<>();
         output.put("resultType", "settlement_prepare");
+        output.put("decision", parsed.getOrDefault("decision", "MANUAL_REVIEW"));
+        output.put("payoutStatus", parsed.getOrDefault("payoutStatus", "PENDING"));
+        output.put("commissionAmount", parsed.getOrDefault("commissionAmount", 0.0));
+        output.put("monthlySummaryAvailable", parsed.getOrDefault("monthlySummaryAvailable", false));
+        output.put("recommendedActions", parsed.getOrDefault("recommendedActions", List.of()));
+        output.put("summary", parsed.getOrDefault("summary", ""));
         output.put("contentType", "settlement_summary");
-        output.put("artifactTypeHint", "settlement_detail_body");
-        output.put("settlementStatus", detail == null ? "PREPARED" : detail.payoutStatus());
-        output.put("summary", buildSummary(detail, monthlySummary));
-        output.put("detail", detail == null ? Map.of() : Map.of(
-                "settlementId", detail.id(),
-                "contractId", detail.contractId(),
-                "statMonth", detail.statMonth(),
-                "commissionAmount", detail.commissionAmount(),
-                "payoutStatus", detail.payoutStatus()
-        ));
-        output.put("monthlySummary", monthlySummary.stream().map(item -> Map.of(
-                "summaryScope", item.summaryScope(),
-                "statMonth", item.statMonth(),
-                "dealCount", item.dealCount(),
-                "totalCommissionAmount", item.totalCommissionAmount(),
-                "payoutStatus", item.payoutStatus()
-        )).toList());
-        output.put("nextAction", resolveNextAction(detail, context));
+
+        String decision = String.valueOf(output.get("decision"));
+        List<String> nextHints = deriveNextHints(decision);
 
         return new AgentTaskInvokeResponse(
                 request.sessionId(),
@@ -77,103 +161,43 @@ public class SettlementAgentServiceImpl implements SettlementAgentService {
                 "COMPLETED",
                 output,
                 List.of(),
-                List.of("settlement.batch", "notification.send"),
-                String.valueOf(output.get("summary")),
+                nextHints,
+                "Settlement: " + decision + " - " + output.get("summary"),
                 request.traceId()
         );
     }
 
-    private SettlementDetailResponse resolveDetail(Map<String, Object> context) {
-        Long settlementId = asLong(context.get("settlementId"));
-        if (settlementId != null) {
-            return settlementManagementService.getSettlementDetail(settlementId);
-        }
-        if (context.containsKey("dealAmount")) {
-            return settlementManagementService.calculateSettlement(new SettlementCalculateRequest(
-                    asLong(context.get("employeeId")),
-                    text(context.get("employeeName"), "待结算员工"),
-                    text(context.get("teamName"), null),
-                    text(context.get("storeName"), null),
-                    asLong(context.get("contractId")),
-                    asLong(context.get("listingId")),
-                    text(context.get("contractType"), "SECOND_HAND"),
-                    text(context.get("statMonth"), "2026-05"),
-                    asDecimal(context.get("dealAmount"), BigDecimal.ZERO),
-                    asDecimal(context.get("commissionRate"), null),
-                    asDecimal(context.get("storeSplitRatio"), null),
-                    asDecimal(context.get("teamSplitRatio"), null),
-                    text(context.get("ruleCode"), null),
-                    "Generated by settlement-agent"
-            ));
-        }
-        return null;
+    private List<String> deriveNextHints(String decision) {
+        return switch (decision) {
+            case "PROCEED" -> List.of("settlement.batch", "notification.send");
+            case "HOLD" -> List.of("manager.review", "document.request");
+            default -> List.of("manual.review", "settlement.review");
+        };
     }
 
-    private List<SettlementMonthlySummaryResponse> resolveMonthlySummary(Map<String, Object> context) {
-        String month = text(context.get("statMonth"), text(context.get("month"), null));
-        if (!StringUtils.hasText(month)) {
-            return List.of();
-        }
-        return settlementManagementService.summarizeMonthlyCommission(month, text(context.get("summaryScope"), null));
+    private AgentTaskInvokeResponse fallbackResponse(AgentTaskInvokeRequest request,
+                                                      Map<String, Object> context,
+                                                      String instruction) {
+        Map<String, Object> output = new LinkedHashMap<>();
+        output.put("resultType", "settlement_prepare");
+        output.put("decision", "MANUAL_REVIEW");
+        output.put("payoutStatus", "PENDING");
+        output.put("summary", "Fallback rule-based assessment (LLM unavailable)");
+        output.put("contentType", "settlement_summary");
+
+        return new AgentTaskInvokeResponse(
+                request.sessionId(), request.taskId(), "settlement-agent", "COMPLETED",
+                output, List.of(), List.of("settlement.review"),
+                "Settlement finished (fallback) with decision MANUAL_REVIEW",
+                request.traceId()
+        );
     }
 
-    private String buildSummary(SettlementDetailResponse detail, List<SettlementMonthlySummaryResponse> monthlySummary) {
-        if (detail != null) {
-            return "Settlement prepared for contract " + detail.contractId() + ", payout status " + detail.payoutStatus();
-        }
-        if (!monthlySummary.isEmpty()) {
-            SettlementMonthlySummaryResponse first = monthlySummary.get(0);
-            return "Settlement monthly summary ready for " + first.statMonth() + ", payout status " + first.payoutStatus();
-        }
-        return "Settlement preparation finished with contextual estimate.";
-    }
-
-    private String resolveNextAction(SettlementDetailResponse detail, Map<String, Object> context) {
-        if (detail != null && !"PAID".equalsIgnoreCase(detail.payoutStatus())) {
-            return "prepare_payout_batch";
-        }
-        if (Boolean.TRUE.equals(context.get("requireNotification"))) {
-            return "notify_stakeholders";
-        }
-        return "settlement_ready";
-    }
-
-    private Long asLong(Object value) {
-        if (value instanceof Number number) {
-            return number.longValue();
-        }
-        if (value instanceof String text && !text.isBlank()) {
-            try {
-                return Long.parseLong(text);
-            } catch (NumberFormatException ignored) {
-                return null;
-            }
-        }
-        return null;
-    }
-
-    private BigDecimal asDecimal(Object value, BigDecimal defaultValue) {
-        if (value instanceof BigDecimal decimal) {
-            return decimal;
-        }
-        if (value instanceof Number number) {
-            return BigDecimal.valueOf(number.doubleValue());
-        }
-        if (value instanceof String text && !text.isBlank()) {
-            try {
-                return new BigDecimal(text);
-            } catch (NumberFormatException ignored) {
-                return defaultValue;
-            }
-        }
-        return defaultValue;
-    }
-
-    private String text(Object value, String defaultValue) {
-        if (value == null) {
-            return defaultValue;
-        }
-        String text = String.valueOf(value);
-        return text.isBlank() ? defaultValue : text;
+    private AgentTaskInvokeResponse emptyResponse(AgentTaskInvokeRequest request, String reason) {
+        return new AgentTaskInvokeResponse(
+                request.sessionId(), request.taskId(), "settlement-agent", "COMPLETED",
+                Map.of("decision", "MANUAL_REVIEW", "summary", reason),
+                List.of(), List.of(), reason, request.traceId()
+        );
     }
 }

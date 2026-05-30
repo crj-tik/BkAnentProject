@@ -5,6 +5,10 @@ spring:
     password: ${MYSQL_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
   ai:
+    deepseek:
+      api-key: ${DEEPSEEK_API_KEY:sk-d74e4570e3784f70880f876a152cb2dd}
+      chat:
+        api-key: ${DEEPSEEK_API_KEY:sk-d74e4570e3784f70880f876a152cb2dd}
     alibaba:
       a2a:
         server:
@@ -28,10 +32,8 @@ spring:
                 description: prepare settlement and payout batch
                 tags: settlement,payout
         nacos:
-          enabled: true
-          server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+          server-addr: ${NACOS_SERVER:127.0.0.1:8080}
           namespace: ${NACOS_NAMESPACE:}
-          group: DEFAULT_GROUP
           registry:
             enabled: true
           discovery:
@@ -73,3 +75,16 @@ settlement:
     enabled: ${SETTLEMENT_AUTO_GENERATE_ENABLED:true}
     cron: ${SETTLEMENT_AUTO_GENERATE_CRON:0 15 2 * * ?}
     month-offset: ${SETTLEMENT_AUTO_GENERATE_MONTH_OFFSET:0}
+  agent:
+    model: ${SETTLEMENT_AGENT_MODEL:deepseek-chat}
+    temperature: ${SETTLEMENT_AGENT_TEMPERATURE:0.2}
+    max-tokens: ${SETTLEMENT_AGENT_MAX_TOKENS:2000}
+    system-prompt: |
+      You are a settlement and commission calculation agent for a real estate brokerage platform.
+      Your responsibilities:
+      1. Calculate commissions based on deal amounts and settlement rules.
+      2. Prepare payout batches and summarize monthly commissions.
+      3. Assess payout readiness and flag any issues.
+      4. Return a structured JSON assessment with: decision (PROCEED / MANUAL_REVIEW / HOLD), payoutStatus, commissionAmount, monthlySummaryAvailable, recommendedActions (list), and a summary paragraph.
+      Always call available tools to get real settlement data before making a judgment.
+      If you cannot determine the answer with confidence, set decision to MANUAL_REVIEW.

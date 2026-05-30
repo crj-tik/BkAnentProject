@@ -19,7 +19,7 @@ spring:
     alibaba:
       a2a:
         nacos:
-          server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+          server-addr: ${NACOS_SERVER:127.0.0.1:8080}
           namespace: ${NACOS_NAMESPACE:}
           registry:
             enabled: false

@@ -10,25 +10,31 @@ spring:
     alibaba:
       a2a:
         server:
-          version: 1.0.0
+          enabled: true
           message-url: /a2a
           agent-card-url: /.well-known/agent.json
           card:
-            name: Listing Agent
-            description: Listing search, recommendation and summary agent
-            default-input-modes:
-              - text
-            default-output-modes:
-              - text
+            name: listing-agent
+            description: listing search, recommendation and summary agent
+            version: 1.0.0
+            url: http://127.0.0.1:${server.port}
+            default-input-modes: text,application/json
+            default-output-modes: text,application/json
             capabilities:
-              streaming: false
+              streaming: true
               push-notifications: false
               state-transition-history: true
+            skills:
+              - id: listing.search
+                name: listing-search
+                description: search and recommend property listings
+                tags: listing,search
         nacos:
-          server-addr: ${NACOS_SERVER:127.0.0.1:8848}
-          discovery:
-            enabled: false
+          server-addr: ${NACOS_SERVER:127.0.0.1:8080}
+          namespace: ${NACOS_NAMESPACE:}
           registry:
+            enabled: true
+          discovery:
             enabled: true
   cloud:
     nacos:
@@ -37,7 +43,7 @@ spring:
           agent-id: listing-agent
           agent-domains: listing
           agent-runtime-provider: official
-          agent-official-payload-mode: plain
+          agent-official-payload-mode: structured
           agent-card-path: /.well-known/agent.json
           a2a-path: /a2a
           a2a-task-create-path: /a2a

@@ -4,7 +4,7 @@ server:
 bk:
   nacos:
     server-addr: ${NACOS_SERVER:127.0.0.1:8080}
-    namespace: ${NACOS_NAMESPACE:791847cb-c957-4f7b-81d4-3e5bcbc8620c}
+    namespace: ${NACOS_NAMESPACE:1bde955a-3394-4f3e-a754-70e0aee942dd}
 
 spring:
   application:

@@ -1,5 +1,9 @@
 spring:
   ai:
+    deepseek:
+      api-key: ${DEEPSEEK_API_KEY:sk-d74e4570e3784f70880f876a152cb2dd}
+      chat:
+        api-key: ${DEEPSEEK_API_KEY:sk-d74e4570e3784f70880f876a152cb2dd}
     alibaba:
       a2a:
         server:
@@ -23,10 +27,8 @@ spring:
                 description: generate media tasks and publish assets
                 tags: media,video,publish
         nacos:
-          enabled: true
-          server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+          server-addr: ${NACOS_SERVER:127.0.0.1:8080}
           namespace: ${NACOS_NAMESPACE:}
-          group: DEFAULT_GROUP
           registry:
             enabled: true
           discovery:
@@ -74,3 +76,14 @@ media:
       - ${MEDIA_TASK_ANGLE_2:bedroom-view}
       - ${MEDIA_TASK_ANGLE_3:balcony-view}
       - ${MEDIA_TASK_ANGLE_4:poster-view}
+  agent:
+    model: ${MEDIA_AGENT_MODEL:deepseek-chat}
+    temperature: ${MEDIA_AGENT_TEMPERATURE:0.2}
+    max-tokens: ${MEDIA_AGENT_MAX_TOKENS:2000}
+    system-prompt: |
+      You are a media generation agent for a real estate brokerage platform.
+      Your responsibilities:
+      1. Submit video generation tasks for property listings with well-crafted prompts.
+      2. Query task status and results when requested.
+      3. Return a structured JSON with: decision (SUBMITTED / QUERIED / FAILED), taskId, status, publishReady, and a summary paragraph.
+      Always use available tools to submit or query real media tasks rather than inventing results.

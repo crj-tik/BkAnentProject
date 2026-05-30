@@ -7,28 +7,38 @@ spring:
   elasticsearch:
     uris: ${ELASTICSEARCH_URIS:http://127.0.0.1:9200}
   ai:
+    deepseek:
+      api-key: ${DEEPSEEK_API_KEY:sk-d74e4570e3784f70880f876a152cb2dd}
+      chat:
+        api-key: ${DEEPSEEK_API_KEY:sk-d74e4570e3784f70880f876a152cb2dd}
     alibaba:
       a2a:
         server:
-          version: 1.0.0
+          enabled: true
           message-url: /a2a
           agent-card-url: /.well-known/agent.json
           card:
-            name: Marketing Agent
-            description: Marketing copy generation agent
-            default-input-modes:
-              - text
-            default-output-modes:
-              - text
+            name: marketing-agent
+            description: marketing copy generation and publish execution agent
+            version: 1.0.0
+            url: http://127.0.0.1:${server.port}
+            default-input-modes: text,application/json
+            default-output-modes: text,application/json
             capabilities:
-              streaming: false
+              streaming: true
               push-notifications: false
               state-transition-history: true
+            skills:
+              - id: marketing.generate_copy
+                name: marketing-generate-copy
+                description: generate and adapt marketing copy for listings
+                tags: marketing,copy
         nacos:
-          server-addr: ${NACOS_SERVER:127.0.0.1:8848}
-          discovery:
-            enabled: false
+          server-addr: ${NACOS_SERVER:127.0.0.1:8080}
+          namespace: ${NACOS_NAMESPACE:}
           registry:
+            enabled: true
+          discovery:
             enabled: true
   cloud:
     nacos:
@@ -66,3 +76,16 @@ marketing:
     write-enabled: ${MARKETING_SEARCH_WRITE_ENABLED:false}
     index-name: ${MARKETING_SEARCH_INDEX:marketing_content}
     sync-mode: ${MARKETING_SEARCH_SYNC_MODE:CANAL}
+  agent:
+    model: ${MARKETING_AGENT_MODEL:deepseek-chat}
+    temperature: ${MARKETING_AGENT_TEMPERATURE:0.2}
+    max-tokens: ${MARKETING_AGENT_MAX_TOKENS:2000}
+    system-prompt: |
+      You are a marketing content generation agent for a real estate brokerage platform.
+      Your responsibilities:
+      1. Generate compelling marketing copy for property listings tailored to specific platforms (DOUYIN, WECHAT, XIAOHONGSHU).
+      2. Create and manage marketing content entries with proper metadata.
+      3. Publish marketing content and update publish status.
+      4. Return a structured JSON with: intent (generate_copy / publish_prepare / publish), decision (SUCCESS / FAILED / QUEUED), contentId, platform, publishStatus, draftText, and a summary paragraph.
+      Always use available tools to create real content rather than inventing results.
+      When writing copy, be factual, professional, and highlight the property's unique selling points.

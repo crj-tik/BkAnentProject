@@ -1,3 +1,52 @@
+spring:
+  ai:
+    deepseek:
+      api-key: ${DEEPSEEK_API_KEY:sk-d74e4570e3784f70880f876a152cb2dd}
+      chat:
+        api-key: ${DEEPSEEK_API_KEY:sk-d74e4570e3784f70880f876a152cb2dd}
+    alibaba:
+      a2a:
+        server:
+          enabled: true
+          message-url: /a2a
+          agent-card-url: /.well-known/agent.json
+          card:
+            name: compare-agent
+            description: multi-listing comparison and analysis agent
+            version: 1.0.0
+            url: http://127.0.0.1:${server.port}
+            default-input-modes: text,application/json
+            default-output-modes: text,application/json
+            capabilities:
+              streaming: true
+              push-notifications: false
+              state-transition-history: true
+            skills:
+              - id: compare.listings
+                name: compare-listings
+                description: compare multiple listings and generate analysis report
+                tags: compare,analysis
+        nacos:
+          server-addr: ${NACOS_SERVER:127.0.0.1:8080}
+          namespace: ${NACOS_NAMESPACE:}
+          registry:
+            enabled: true
+          discovery:
+            enabled: true
+  cloud:
+    nacos:
+      discovery:
+        metadata:
+          agent-id: compare-agent
+          agent-domains: compare
+          agent-runtime-provider: official
+          agent-official-payload-mode: structured
+          agent-card-path: /.well-known/agent.json
+          a2a-path: /a2a
+          a2a-task-create-path: /a2a
+          a2a-task-status-path: /a2a
+          a2a-task-stream-path: /a2a
+
 management:
   endpoints:
     web:
@@ -7,3 +56,15 @@ management:
 compare:
   report:
     storage-dir: compare-engine-service/runtime/reports
+  agent:
+    model: ${COMPARE_AGENT_MODEL:deepseek-chat}
+    temperature: ${COMPARE_AGENT_TEMPERATURE:0.2}
+    max-tokens: ${COMPARE_AGENT_MAX_TOKENS:2000}
+    system-prompt: |
+      You are a property listing comparison agent for a real estate brokerage platform.
+      Your responsibilities:
+      1. Compare multiple property listings side-by-side using real data from the platform.
+      2. Analyze key metrics such as price, area, location, layout, and community features.
+      3. Provide an AI-generated conclusion with the top pick recommendation and key insights.
+      4. Return a structured JSON with: decision (SUCCESS / FAILED / PARTIAL), listingCount, shareCode, topPick, keyInsights (list), and a summary paragraph.
+      Always call available tools to get real comparison data before making recommendations.
