@@ -6,9 +6,11 @@ import com.bkanent.agent.milvus.core.model.MilvusCollectionInitRequest;
 import com.bkanent.agent.milvus.core.model.MilvusSearchRequest;
 import com.bkanent.agent.milvus.core.model.MilvusSearchResult;
 import com.bkanent.agent.milvus.core.model.MilvusUpsertRequest;
+import com.bkanent.agent.milvus.core.model.MilvusVectorDocument;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * AgentMemoryMilvusService 服务类。
@@ -72,6 +74,17 @@ public class AgentMemoryMilvusService {
      */
     public String defaultMemoryCollection() {
         return agentMilvusProperties.getDefaultCollection();
+    }
+
+    /**
+     * 便捷方法：按 documentId 写入或更新文本内容及元数据。
+     */
+    public void upsertMemory(String collectionName, String documentId, String content, Map<String, Object> metadata) {
+        MilvusVectorDocument doc = new MilvusVectorDocument(
+                documentId, "memory", documentId, content, null,
+                metadata != null ? metadata : Map.of()
+        );
+        upsertMemory(new MilvusUpsertRequest(collectionName, List.of(doc)));
     }
 
     /**

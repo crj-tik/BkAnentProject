@@ -2,9 +2,9 @@ package com.bkanent.settlement.a2a;
 
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.bkanent.settlement.config.SettlementAgentProperties;
+import com.bkanent.settlement.tool.SettlementTools;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.tool.ToolCallbackProvider;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 
@@ -17,13 +17,13 @@ public class SettlementOfficialA2aAgent {
 
     public SettlementOfficialA2aAgent(ChatModel chatModel,
                                       SettlementAgentProperties properties,
-                                      @Qualifier("settlementToolCallbackProvider") ToolCallbackProvider toolCallbackProvider) {
+                                      SettlementTools settlementTools) {
         this.reactAgent = ReactAgent.builder()
                 .name("settlement-agent")
                 .description("Responsible for settlement calculation, commission computation, payout batch preparation, and monthly summary analysis with LLM-driven reasoning")
                 .model(chatModel)
                 .systemPrompt(properties.getSystemPrompt())
-                .tools(toolCallbackProvider.getToolCallbacks())
+                .tools(MethodToolCallbackProvider.builder().toolObjects(settlementTools).build().getToolCallbacks())
                 .outputKey(OUTPUT_KEY)
                 .build();
     }

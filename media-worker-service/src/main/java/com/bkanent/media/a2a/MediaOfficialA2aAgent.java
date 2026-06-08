@@ -2,9 +2,9 @@ package com.bkanent.media.a2a;
 
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.bkanent.media.config.MediaAgentProperties;
+import com.bkanent.media.tool.MediaTools;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.tool.ToolCallbackProvider;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 
@@ -17,13 +17,13 @@ public class MediaOfficialA2aAgent {
 
     public MediaOfficialA2aAgent(ChatModel chatModel,
                                  MediaAgentProperties properties,
-                                 @Qualifier("mediaToolCallbackProvider") ToolCallbackProvider toolCallbackProvider) {
+                                 MediaTools mediaTools) {
         this.reactAgent = ReactAgent.builder()
                 .name("media-agent")
                 .description("Responsible for media task generation, video/cover asset preparation, and publish-ready media references with LLM-driven task routing")
                 .model(chatModel)
                 .systemPrompt(properties.getSystemPrompt())
-                .tools(toolCallbackProvider.getToolCallbacks())
+                .tools(MethodToolCallbackProvider.builder().toolObjects(mediaTools).build().getToolCallbacks())
                 .outputKey(OUTPUT_KEY)
                 .build();
     }

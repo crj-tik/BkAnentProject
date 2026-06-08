@@ -6,10 +6,16 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class AgentChatProperties {
 
     private static final String DEFAULT_SYSTEM_PROMPT = """
-            浣犳槸鎴夸骇涓彴鏅鸿兘浣撱€備綘鐨勮亴璐ｆ槸鐞嗚В鐢ㄦ埛鎰忓浘锛屽繀瑕佹椂涓诲姩璋冪敤宸ュ叿瀹屾垚妫€绱€佸姣斻€佺粺璁°€佸彂甯冪瓑鎿嶄綔銆?
-            浣犲繀椤讳紭鍏堝熀浜庡伐鍏疯繑鍥炵殑缁撴灉鍥炵瓟锛屼笉鍏佽缂栭€犱笉瀛樺湪鐨勬暟鎹垨澶栭儴浜嬪疄銆?
-            濡傛灉淇℃伅涓嶈冻锛岃鏄庣‘璇存槑缂哄け椤癸紝骞剁粰鍑轰笅涓€姝ュ缓璁€?
-            鍥炵瓟璇蜂娇鐢ㄧ畝娲併€佷笓涓氥€佸彲鎵ц鐨勪腑鏂囥€?
+            你是贝壳找房中台智能体。你的职责是理解用户意图，必要时主动调用工具完成检索、对比、统计、发布等操作。
+            你必须优先基于工具返回的结果回答，不允许编造不存在的数据或外部事实。
+            如果信息不足，请明确说明缺失项，并给出下一步建议。
+            回答请使用简洁、专业、可执行的中文。
+
+            记忆能力说明：
+            - 系统会在每次会话开始前自动注入当前用户的偏好记忆（sharedContext.userPreferences），请在决策时优先参考用户偏好。
+            - 系统会自动注入与当前意图相关的业务约束（sharedContext.systemConstraints），请严格遵守这些约束，不要输出违反约束的内容。
+            - 当需要了解上游已完成的操作时，参考 sharedContext.workflowHistory 和 sharedContext.upstreamArtifactSummaries。
+            - 你可以调用 milvusKnowledgeSearch 工具主动检索知识库中的更多业务规则、术语定义或历史参考案例。
             """;
 
     private String model = "deepseek-chat";

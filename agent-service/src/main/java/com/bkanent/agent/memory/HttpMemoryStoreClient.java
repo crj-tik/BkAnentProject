@@ -6,7 +6,11 @@ import com.bkanent.common.agent.ArtifactQueryResponse;
 import com.bkanent.common.agent.AgentHandoffPacket;
 import com.bkanent.common.agent.HandoffRelationQueryResponse;
 import com.bkanent.common.agent.SessionMemoryResponse;
+import com.bkanent.common.agent.SessionMemorySnapshotRequest;
 import com.bkanent.common.agent.SessionMemoryUpsertRequest;
+import com.bkanent.common.agent.SystemConstraintRecord;
+import com.bkanent.common.agent.UserPreferenceRecord;
+import com.bkanent.common.agent.WorkflowHistoryView;
 import com.bkanent.common.model.ApiResponse;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
@@ -120,5 +124,109 @@ public class HttpMemoryStoreClient implements MemoryStoreClient {
                 .body(new ParameterizedTypeReference<ApiResponse<List<HandoffRelationQueryResponse>>>() {
                 });
         return response == null || response.data() == null ? List.of() : response.data();
+    }
+
+    @Override
+    public void upsertUserPreference(UserPreferenceRecord record) {
+        restClient.post()
+                .uri(properties.getUserPreferenceUpsertPath())
+                .body(record)
+                .retrieve()
+                .body(new ParameterizedTypeReference<ApiResponse<Void>>() {
+                });
+    }
+
+    @Override
+    public List<UserPreferenceRecord> getUserPreferences(String userId, String category) {
+        ApiResponse<List<UserPreferenceRecord>> response = restClient.get()
+                .uri(UriComponentsBuilder.fromPath(properties.getUserPreferenceQueryPath())
+                        .queryParam("category", category)
+                        .buildAndExpand(userId)
+                        .toUri())
+                .retrieve()
+                .body(new ParameterizedTypeReference<ApiResponse<List<UserPreferenceRecord>>>() {
+                });
+        return response == null || response.data() == null ? List.of() : response.data();
+    }
+
+    @Override
+    public void decayUserPreferences(String userId, String excludePreferenceKey) {
+        restClient.post()
+                .uri(UriComponentsBuilder.fromPath(properties.getUserPreferenceDecayPath())
+                        .queryParam("excludePreferenceKey", excludePreferenceKey)
+                        .buildAndExpand(userId)
+                        .toUri())
+                .retrieve()
+                .body(new ParameterizedTypeReference<ApiResponse<Void>>() {
+                });
+    }
+
+    @Override
+    public void upsertSystemConstraint(SystemConstraintRecord record) {
+        restClient.post()
+                .uri(properties.getSystemConstraintUpsertPath())
+                .body(record)
+                .retrieve()
+                .body(new ParameterizedTypeReference<ApiResponse<Void>>() {
+                });
+    }
+
+    @Override
+    public List<SystemConstraintRecord> getSystemConstraints(String category) {
+        ApiResponse<List<SystemConstraintRecord>> response = restClient.get()
+                .uri(UriComponentsBuilder.fromPath(properties.getSystemConstraintQueryPath())
+                        .queryParam("category", category)
+                        .build()
+                        .toUri())
+                .retrieve()
+                .body(new ParameterizedTypeReference<ApiResponse<List<SystemConstraintRecord>>>() {
+                });
+        return response == null || response.data() == null ? List.of() : response.data();
+    }
+
+    @Override
+    public List<SystemConstraintRecord> searchSystemConstraints(String tags) {
+        ApiResponse<List<SystemConstraintRecord>> response = restClient.get()
+                .uri(UriComponentsBuilder.fromPath(properties.getSystemConstraintSearchPath())
+                        .queryParam("tags", tags)
+                        .build()
+                        .toUri())
+                .retrieve()
+                .body(new ParameterizedTypeReference<ApiResponse<List<SystemConstraintRecord>>>() {
+                });
+        return response == null || response.data() == null ? List.of() : response.data();
+    }
+
+    @Override
+    public void saveSessionMemorySnapshot(SessionMemorySnapshotRequest request) {
+        restClient.post()
+                .uri(properties.getSessionSnapshotPath())
+                .body(request)
+                .retrieve()
+                .body(new ParameterizedTypeReference<ApiResponse<Void>>() {
+                });
+    }
+
+    @Override
+    public Optional<SessionMemoryResponse> getLatestSessionMemorySnapshot(String sessionId) {
+        ApiResponse<SessionMemoryResponse> response = restClient.get()
+                .uri(properties.getSessionSnapshotQueryPath(), sessionId)
+                .retrieve()
+                .body(new ParameterizedTypeReference<ApiResponse<SessionMemoryResponse>>() {
+                });
+        return response == null ? Optional.empty() : Optional.ofNullable(response.data());
+    }
+
+    @Override
+    public WorkflowHistoryView getWorkflowHistory(String taskId) {
+        ApiResponse<WorkflowHistoryView> response = restClient.get()
+                .uri(properties.getWorkflowHistoryPath(), taskId)
+                .retrieve()
+                .body(new ParameterizedTypeReference<ApiResponse<WorkflowHistoryView>>() {
+                });
+        if (response == null || response.data() == null) {
+            return new WorkflowHistoryView(List.of(), List.of());
+        }
+        return response.data();
     }
 }

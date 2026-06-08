@@ -738,11 +738,12 @@ CREATE TABLE IF NOT EXISTS agent_workflow_checkpoint (
     selected_agent_id VARCHAR(64) NULL,
     pending_approval_id VARCHAR(64) NULL,
     snapshot_json LONGTEXT NOT NULL,
+    checkpoint_version INT NOT NULL DEFAULT 1,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted TINYINT NOT NULL DEFAULT 0,
     PRIMARY KEY (id),
-    UNIQUE KEY uk_agent_workflow_checkpoint_task_id (task_id),
+    UNIQUE KEY uk_agent_workflow_checkpoint_task_version (task_id, checkpoint_version),
     KEY idx_agent_workflow_checkpoint_session_id (session_id),
     KEY idx_agent_workflow_checkpoint_trace_id (trace_id),
     KEY idx_agent_workflow_checkpoint_workflow_status (workflow_status),
@@ -938,4 +939,59 @@ CREATE TABLE IF NOT EXISTS handoff_relation_memory (
     KEY idx_handoff_relation_memory_trace_id (trace_id),
     KEY idx_handoff_relation_memory_from_agent (from_agent),
     KEY idx_handoff_relation_memory_to_agent (to_agent)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS user_preference_memory (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    user_id VARCHAR(64) NOT NULL,
+    preference_key VARCHAR(128) NOT NULL,
+    preference_value VARCHAR(512) NOT NULL,
+    category VARCHAR(64) NULL,
+    confidence DECIMAL(5, 4) NOT NULL DEFAULT 0.5000,
+    evidence VARCHAR(512) NULL,
+    source_session_id VARCHAR(64) NULL,
+    last_observed_at DATETIME NULL,
+    observation_count INT NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_user_preference_memory_user_key (user_id, preference_key),
+    KEY idx_user_preference_memory_user_id (user_id),
+    KEY idx_user_preference_memory_category (category),
+    KEY idx_user_preference_memory_confidence (confidence)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS system_constraint_memory (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    constraint_key VARCHAR(128) NOT NULL,
+    constraint_text TEXT NOT NULL,
+    category VARCHAR(64) NULL,
+    source VARCHAR(64) NOT NULL DEFAULT 'manual',
+    tags VARCHAR(255) NULL,
+    active TINYINT NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_system_constraint_memory_key (constraint_key),
+    KEY idx_system_constraint_memory_category (category),
+    KEY idx_system_constraint_memory_active (active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS session_memory_snapshot (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    session_id VARCHAR(64) NOT NULL,
+    task_id VARCHAR(64) NOT NULL,
+    version INT NOT NULL DEFAULT 1,
+    memory_json LONGTEXT NOT NULL,
+    summary VARCHAR(512) NULL,
+    trace_id VARCHAR(64) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_session_memory_snapshot_task_version (task_id, version),
+    KEY idx_session_memory_snapshot_session_id (session_id),
+    KEY idx_session_memory_snapshot_trace_id (trace_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

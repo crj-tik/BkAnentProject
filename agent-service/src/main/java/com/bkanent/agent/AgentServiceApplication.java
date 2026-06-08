@@ -4,6 +4,7 @@ import com.alibaba.cloud.ai.autoconfigure.dashscope.DashScopeChatAutoConfigurati
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
@@ -11,6 +12,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  */
 @MapperScan("com.bkanent.agent.mapper")
 @EnableScheduling
+@EnableAsync
 @SpringBootApplication(exclude = DashScopeChatAutoConfiguration.class)
 public class AgentServiceApplication {
 

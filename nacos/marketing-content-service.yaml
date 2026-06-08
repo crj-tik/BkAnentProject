@@ -40,6 +40,10 @@ spring:
             enabled: true
           discovery:
             enabled: true
+    mcp:
+      server:
+        name: marketing-mcp-server
+        version: 1.0.0
   cloud:
     nacos:
       discovery:

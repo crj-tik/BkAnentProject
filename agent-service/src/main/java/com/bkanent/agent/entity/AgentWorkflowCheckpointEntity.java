@@ -16,6 +16,7 @@ public class AgentWorkflowCheckpointEntity extends BaseEntity {
     private String selectedAgentId;
     private String pendingApprovalId;
     private String snapshotJson;
+    private Integer checkpointVersion;
 
     public String getTaskId() {
         return taskId;
@@ -71,5 +72,13 @@ public class AgentWorkflowCheckpointEntity extends BaseEntity {
 
     public void setSnapshotJson(String snapshotJson) {
         this.snapshotJson = snapshotJson;
+    }
+
+    public Integer getCheckpointVersion() {
+        return checkpointVersion;
+    }
+
+    public void setCheckpointVersion(Integer checkpointVersion) {
+        this.checkpointVersion = checkpointVersion;
     }
 }

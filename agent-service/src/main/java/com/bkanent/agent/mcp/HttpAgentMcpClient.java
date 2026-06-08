@@ -4,9 +4,11 @@ import com.bkanent.agent.mcp.model.AgentMcpCallResult;
 import com.bkanent.agent.mcp.model.AgentMcpToolDescriptor;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -14,44 +16,29 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * HttpAgentMcpClient 客户端。
- */
 @Component
 public class HttpAgentMcpClient implements AgentMcpClient {
 
     private static final Logger log = LoggerFactory.getLogger(HttpAgentMcpClient.class);
 
-    /**
-     * 字段：namedMcpSyncClients。
-     */
-    private final List<NamedMcpSyncClient> namedMcpSyncClients;
-    /**
-     * 字段：objectMapper。
-     */
+    private final Map<String, McpSyncClient> clientsByName;
     private final ObjectMapper objectMapper;
 
-    /**
-     * 构造 HttpAgentMcpClient 实例。
-     */
-    public HttpAgentMcpClient(List<NamedMcpSyncClient> namedMcpSyncClients,
+    public HttpAgentMcpClient(@Qualifier("mcpClientsByName") Map<String, McpSyncClient> clientsByName,
                               ObjectMapper objectMapper) {
-        this.namedMcpSyncClients = namedMcpSyncClients;
+        this.clientsByName = clientsByName == null ? Map.of() : clientsByName;
         this.objectMapper = objectMapper;
     }
 
-    /**
-     * 查询tools。
-     */
     @Override
     public List<AgentMcpToolDescriptor> listTools() {
         List<AgentMcpToolDescriptor> descriptors = new ArrayList<>();
-        for (NamedMcpSyncClient namedClient : namedMcpSyncClients) {
+        for (Map.Entry<String, McpSyncClient> entry : clientsByName.entrySet()) {
             try {
-                McpSchema.ListToolsResult result = namedClient.client().listTools();
+                McpSchema.ListToolsResult result = entry.getValue().listTools();
                 for (McpSchema.Tool tool : result.tools()) {
                     descriptors.add(new AgentMcpToolDescriptor(
-                            namedClient.serverName(),
+                            entry.getKey(),
                             tool.name(),
                             tool.description(),
                             writeJson(tool.inputSchema()),
@@ -59,19 +46,16 @@ public class HttpAgentMcpClient implements AgentMcpClient {
                     ));
                 }
             } catch (Exception exception) {
-                log.warn("Failed to list MCP tools from '{}'", namedClient.serverName(), exception);
+                log.warn("Failed to list MCP tools from '{}'", entry.getKey(), exception);
             }
         }
         return descriptors;
     }
 
-    /**
-     * 调用tool。
-     */
     @Override
     public AgentMcpCallResult callTool(String serverName, String toolName, Map<String, Object> arguments) {
-        NamedMcpSyncClient namedClient = getRequiredClient(serverName);
-        McpSchema.CallToolResult result = namedClient.client().callTool(new McpSchema.CallToolRequest(toolName, arguments == null ? Map.of() : arguments));
+        McpSyncClient client = getRequiredClient(serverName);
+        McpSchema.CallToolResult result = client.callTool(new McpSchema.CallToolRequest(toolName, arguments == null ? Map.of() : arguments));
         if (Boolean.TRUE.equals(result.isError())) {
             throw new IllegalStateException(extractText(result));
         }
@@ -82,26 +66,18 @@ public class HttpAgentMcpClient implements AgentMcpClient {
         return new AgentMcpCallResult(serverName, toolName, text, payload);
     }
 
-    /**
-     * 处理namedClients。
-     */
-    public List<NamedMcpSyncClient> namedClients() {
-        return namedMcpSyncClients;
+    public Map<String, McpSyncClient> clientsByName() {
+        return clientsByName;
     }
 
-    /**
-     * 获取requiredClient。
-     */
-    private NamedMcpSyncClient getRequiredClient(String serverName) {
-        return namedMcpSyncClients.stream()
-                .filter(client -> client.serverName().equals(serverName))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("MCP server not found: " + serverName));
+    private McpSyncClient getRequiredClient(String serverName) {
+        McpSyncClient client = clientsByName.get(serverName);
+        if (client == null) {
+            throw new IllegalArgumentException("MCP server not found: " + serverName);
+        }
+        return client;
     }
 
-    /**
-     * 读取payload。
-     */
     private Map<String, Object> readPayload(Object structuredContent) {
         if (structuredContent == null) {
             return new LinkedHashMap<>();
@@ -110,9 +86,6 @@ public class HttpAgentMcpClient implements AgentMcpClient {
         });
     }
 
-    /**
-     * 提取text。
-     */
     private String extractText(McpSchema.CallToolResult result) {
         if (result.content() == null || result.content().isEmpty()) {
             return "";
@@ -124,9 +97,6 @@ public class HttpAgentMcpClient implements AgentMcpClient {
         return builder.toString().trim();
     }
 
-    /**
-     * 写入json。
-     */
     private String writeJson(Object value) {
         try {
             return value == null ? null : objectMapper.writeValueAsString(value);

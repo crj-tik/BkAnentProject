@@ -1,0 +1,11 @@
+com.bkanent:agent-service:jar:1.0.0-SNAPSHOT
+\- com.alibaba.nacos:nacos-api:jar:3.1.0:compile
+   +- io.grpc:grpc-netty-shaded:jar:1.75.0:compile
+   |  +- io.grpc:grpc-core:jar:1.75.0:compile
+   |  |  \- io.grpc:grpc-context:jar:1.75.0:runtime
+   |  \- io.grpc:grpc-api:jar:1.75.0:compile
+   +- io.grpc:grpc-protobuf:jar:1.75.0:compile
+   |  \- io.grpc:grpc-protobuf-lite:jar:1.75.0:runtime
+   +- io.grpc:grpc-stub:jar:1.75.0:compile
+   +- io.grpc:grpc-util:jar:1.75.0:compile
+   \- io.grpc:grpc-inprocess:jar:1.75.0:compile

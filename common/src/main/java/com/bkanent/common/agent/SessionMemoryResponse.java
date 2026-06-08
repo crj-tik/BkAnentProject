@@ -10,6 +10,7 @@ public record SessionMemoryResponse(
         String userId,
         Map<String, Object> memory,
         String summary,
-        String traceId
+        String traceId,
+        Integer version
 ) {
 }

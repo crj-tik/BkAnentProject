@@ -16,10 +16,10 @@ import java.util.Arrays;
         MilvusConnectionProperties.class,
         AgentMilvusProperties.class,
         AgentChatProperties.class,
-        AgentMcpProperties.class,
         ListingRagProperties.class,
         DistributedAgentProperties.class,
-        MemoryServiceProperties.class
+        MemoryServiceProperties.class,
+        SystemConstraintBootstrapProperties.class
 })
 /**
  * AgentServiceConfiguration 配置类。
@@ -29,10 +29,10 @@ public class AgentServiceConfiguration {
     @Bean("combinedToolCallbackProvider")
     public ToolCallbackProvider combinedToolCallbackProvider(
             @Qualifier("localToolCallbackProvider") ToolCallbackProvider localToolCallbackProvider,
-            @Qualifier("mcpToolCallbackProvider") ToolCallbackProvider mcpToolCallbackProvider) {
+            @Qualifier("mcpToolCallbacks") ToolCallbackProvider mcpToolCallbacks) {
         return () -> {
             org.springframework.ai.tool.ToolCallback[] localCallbacks = localToolCallbackProvider.getToolCallbacks();
-            org.springframework.ai.tool.ToolCallback[] mcpCallbacks = mcpToolCallbackProvider.getToolCallbacks();
+            org.springframework.ai.tool.ToolCallback[] mcpCallbacks = mcpToolCallbacks.getToolCallbacks();
             org.springframework.ai.tool.ToolCallback[] combined = Arrays.copyOf(localCallbacks, localCallbacks.length + mcpCallbacks.length);
             System.arraycopy(mcpCallbacks, 0, combined, localCallbacks.length, mcpCallbacks.length);
             return combined;

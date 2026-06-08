@@ -1,0 +1,11 @@
+com.bkanent:agent-service:jar:1.0.0-SNAPSHOT
++- com.alibaba.cloud.ai:spring-ai-alibaba-starter-a2a-nacos:jar:1.1.2.0:compile
+|  \- com.alibaba.nacos:nacos-maintainer-client:jar:3.1.0:compile
++- com.alibaba.nacos:nacos-api:jar:3.1.0:compile
+\- com.alibaba.nacos:nacos-client:jar:3.1.0:compile
+   +- com.alibaba.nacos:nacos-client-basic:jar:3.1.0:compile
+   |  \- com.alibaba.nacos:nacos-auth-plugin:jar:3.1.0:compile
+   +- com.alibaba.nacos:nacos-encryption-plugin:jar:3.1.0:compile
+   +- com.alibaba.nacos:nacos-logback-adapter-12:jar:3.1.0:compile
+   +- com.alibaba.nacos:logback-adapter:jar:1.1.4:compile
+   \- com.alibaba.nacos:nacos-log4j2-adapter:jar:3.1.0:compile

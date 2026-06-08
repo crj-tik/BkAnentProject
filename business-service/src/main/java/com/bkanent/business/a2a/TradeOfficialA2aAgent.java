@@ -2,9 +2,9 @@ package com.bkanent.business.a2a;
 
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.bkanent.business.config.TradeAgentProperties;
+import com.bkanent.business.tool.TradeTools;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.tool.ToolCallbackProvider;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 
@@ -17,13 +17,13 @@ public class TradeOfficialA2aAgent {
 
     public TradeOfficialA2aAgent(ChatModel chatModel,
                                   TradeAgentProperties properties,
-                                  @Qualifier("tradeToolCallbackProvider") ToolCallbackProvider toolCallbackProvider) {
+                                  TradeTools tradeTools) {
         this.reactAgent = ReactAgent.builder()
                 .name("trade-agent")
                 .description("Responsible for transaction feasibility analysis and risk reasoning using LLM with business data tools")
                 .model(chatModel)
                 .systemPrompt(properties.getSystemPrompt())
-                .tools(toolCallbackProvider.getToolCallbacks())
+                .tools(MethodToolCallbackProvider.builder().toolObjects(tradeTools).build().getToolCallbacks())
                 .outputKey(OUTPUT_KEY)
                 .build();
     }

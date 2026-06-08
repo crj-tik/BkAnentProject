@@ -41,7 +41,7 @@ public class ListingRagProperties {
     /**
      * 字段：rerankModel。
      */
-    private String rerankModel = "BAAI/bge-reranker-v2-m3";
+    private String rerankModel = "qwen3-rerank";
 
     /**
      * 获取keywordTopK。

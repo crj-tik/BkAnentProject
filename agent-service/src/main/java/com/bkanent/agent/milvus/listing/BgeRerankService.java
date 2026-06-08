@@ -44,16 +44,16 @@ public class BgeRerankService implements ListingRerankService {
             return List.of();
         }
         if (!StringUtils.hasText(listingRagProperties.getRerankEndpoint())) {
-            throw new IllegalStateException("agent.rag.rerank-endpoint must be configured for BGE rerank.");
+            throw new IllegalStateException("agent.rag.rerank-endpoint must be configured for rerank.");
         }
         List<String> documents = candidates.stream()
                 .map(ListingRecallCandidate::getContent)
                 .toList();
-        BgeRerankResponse response = restClient.post()
+        DashScopeRerankResponse response = restClient.post()
                 .uri(listingRagProperties.getRerankEndpoint())
                 .contentType(MediaType.APPLICATION_JSON)
                 .headers(headers -> applyHeaders(headers, listingRagProperties.getRerankApiKey()))
-                .body(new BgeRerankRequest(
+                .body(new DashScopeRerankRequest(
                         listingRagProperties.getRerankModel(),
                         query,
                         documents,
@@ -61,12 +61,12 @@ public class BgeRerankService implements ListingRerankService {
                         true
                 ))
                 .retrieve()
-                .body(BgeRerankResponse.class);
-        if (response == null || response.results() == null) {
+                .body(DashScopeRerankResponse.class);
+        if (response == null || response.output() == null || response.output().results() == null) {
             return List.of();
         }
         List<ListingRecallCandidate> reranked = new ArrayList<>();
-        for (BgeRerankResult result : response.results()) {
+        for (DashScopeRerankResult result : response.output().results()) {
             if (result.index() != null && result.index() >= 0 && result.index() < candidates.size()) {
                 ListingRecallCandidate candidate = candidates.get(result.index());
                 candidate.setRerankScore(result.relevanceScore());
@@ -89,24 +89,28 @@ public class BgeRerankService implements ListingRerankService {
     }
 
     /**
-     * 处理BgeRerankRequest。
+     * DashScope rerank request body.
      */
-    private record BgeRerankRequest(
+    private record DashScopeRerankRequest(
             String model,
-            String query,
-            List<String> documents,
-            int top_n,
-            boolean return_documents
+            Input input,
+            Parameters parameters
     ) {
+        DashScopeRerankRequest(String model, String query, List<String> documents, int topN, boolean returnDocuments) {
+            this(model, new Input(query, documents), new Parameters(topN, returnDocuments));
+        }
+        record Input(String query, List<String> documents) {}
+        record Parameters(int top_n, boolean return_documents) {}
     }
 
     /**
-     * 处理BgeRerankResponse。
+     * DashScope rerank response body.
      */
-    private record BgeRerankResponse(List<BgeRerankResult> results) {
+    private record DashScopeRerankResponse(Output output) {
+        record Output(List<DashScopeRerankResult> results) {}
     }
 
-    private record BgeRerankResult(
+    private record DashScopeRerankResult(
             Integer index,
             @JsonProperty("relevance_score") Double relevanceScore
     ) {

@@ -60,7 +60,8 @@ public class SessionSharedMemoryService {
                 entity.getUserId(),
                 readJsonMap(entity.getMemoryJson()),
                 entity.getSummary(),
-                entity.getTraceId()
+                entity.getTraceId(),
+                null
         ));
     }
 

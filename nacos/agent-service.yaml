@@ -28,6 +28,32 @@ spring:
     vectorstore:
       milvus:
         initialize-schema: false
+    mcp:
+      client:
+        request-timeout: ${AGENT_MCP_REQUEST_TIMEOUT:15s}
+        initialization-timeout: ${AGENT_MCP_INITIALIZATION_TIMEOUT:10s}
+        connections:
+          business-mcp-server:
+            url: ${BUSINESS_MCP_ENDPOINT:http://127.0.0.1:9010/mcp}
+            type: STREAMABLE
+          compare-mcp-server:
+            url: ${COMPARE_MCP_ENDPOINT:http://127.0.0.1:9006/mcp}
+            type: STREAMABLE
+          marketing-mcp-server:
+            url: ${MARKETING_MCP_ENDPOINT:http://127.0.0.1:9008/mcp}
+            type: STREAMABLE
+          contract-mcp-server:
+            url: ${CONTRACT_MCP_ENDPOINT:http://127.0.0.1:9012/mcp}
+            type: STREAMABLE
+          settlement-mcp-server:
+            url: ${SETTLEMENT_MCP_ENDPOINT:http://127.0.0.1:9013/mcp}
+            type: STREAMABLE
+          notification-mcp-server:
+            url: ${NOTIFICATION_MCP_ENDPOINT:http://127.0.0.1:9003/mcp}
+            type: STREAMABLE
+          media-mcp-server:
+            url: ${MEDIA_MCP_ENDPOINT:http://127.0.0.1:9007/mcp}
+            type: STREAMABLE
 
 management:
   endpoints:
@@ -87,17 +113,9 @@ agent:
     vector-top-k: ${AGENT_RAG_VECTOR_TOP_K:20}
     rerank-top-k: ${AGENT_RAG_RERANK_TOP_K:10}
     vector-similarity-threshold: ${AGENT_RAG_VECTOR_SIMILARITY_THRESHOLD:0.7}
-    rerank-endpoint: ${AGENT_RAG_RERANK_ENDPOINT:}
-    rerank-api-key: ${AGENT_RAG_RERANK_API_KEY:}
-    rerank-model: ${AGENT_RAG_RERANK_MODEL:BAAI/bge-reranker-v2-m3}
-  mcp:
-    connect-timeout: ${AGENT_MCP_CONNECT_TIMEOUT:5s}
-    request-timeout: ${AGENT_MCP_REQUEST_TIMEOUT:15s}
-    initialization-timeout: ${AGENT_MCP_INITIALIZATION_TIMEOUT:10s}
-    servers:
-      business-mcp-server: ${BUSINESS_MCP_ENDPOINT:http://127.0.0.1:9010/mcp}
-      compare-mcp-server: ${COMPARE_MCP_ENDPOINT:http://127.0.0.1:9006/mcp}
-      marketing-mcp-server: ${MARKETING_MCP_ENDPOINT:http://127.0.0.1:9008/mcp}
+    rerank-endpoint: ${AGENT_RAG_RERANK_ENDPOINT:https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank}
+    rerank-api-key: ${AGENT_RAG_RERANK_API_KEY:${DASHSCOPE_API_KEY:sk-2b5cfc81166341e188e411892cca3dfa}}
+    rerank-model: ${AGENT_RAG_RERANK_MODEL:qwen3-rerank}
   distributed:
     supervisor-agent-id: ${SUPERVISOR_AGENT_ID:supervisor-agent}
     refresh-interval-seconds: ${AGENT_DISCOVERY_REFRESH_INTERVAL_SECONDS:30}
@@ -115,16 +133,24 @@ agent:
       supervisor-workflows-per-window: ${AGENT_RATE_LIMIT_SUPERVISOR_WORKFLOWS_PER_WINDOW:30}
       supervisor-async-workflows-per-window: ${AGENT_RATE_LIMIT_SUPERVISOR_ASYNC_WORKFLOWS_PER_WINDOW:20}
     gray-release:
-      enabled: ${AGENT_GRAY_RELEASE_ENABLED:false}
-      strategy-version: ${AGENT_GRAY_RELEASE_STRATEGY_VERSION:v2}
-      prefer-async-a2a: ${AGENT_GRAY_RELEASE_PREFER_ASYNC_A2A:false}
-      user-ids: ${AGENT_GRAY_RELEASE_USER_IDS:}
-      session-ids: ${AGENT_GRAY_RELEASE_SESSION_IDS:}
-      domains: ${AGENT_GRAY_RELEASE_DOMAINS:}
-      preferred-agent-ids: ${AGENT_GRAY_RELEASE_PREFERRED_AGENT_IDS:{}}
-      route-override-domains: ${AGENT_GRAY_RELEASE_ROUTE_OVERRIDE_DOMAINS:{}}
-      versioned-preferred-agent-ids: ${AGENT_GRAY_RELEASE_VERSIONED_PREFERRED_AGENT_IDS:{}}
-      versioned-route-override-domains: ${AGENT_GRAY_RELEASE_VERSIONED_ROUTE_OVERRIDE_DOMAINS:{}}
+      enabled: true
+      strategy-version: "v2"
+      prefer-async-a2a: false
+      user-ids:
+        - "test-user-001"        # 只灰度测试用户
+      domains: {}
+      preferred-agent-ids:
+        trade: "trade-agent"
+        compare: "compare-agent"
+      route-override-domains: {}
+      versioned-preferred-agent-ids:
+        v1:
+          trade: "trade-agent-legacy"
+        v2:
+          trade: "trade-agent-v2"
+      versioned-route-override-domains:
+        v1: {}
+        v2: {}
     event-audit:
       max-active-events: ${AGENT_EVENT_AUDIT_MAX_ACTIVE_EVENTS:5000}
       archive-enabled: ${AGENT_EVENT_AUDIT_ARCHIVE_ENABLED:true}

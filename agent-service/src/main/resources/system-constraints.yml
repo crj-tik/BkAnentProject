@@ -1,0 +1,91 @@
+constraints:
+  # --- 业务领域边界（反幻觉）---
+  - key: "ke_no_commercial"
+    text: "贝壳找房平台仅处理住宅类房源交易，不支持商业地产（写字楼、商铺、厂房等）。当用户询问商业地产时，应明确告知不在服务范围内。"
+    category: "domain_rule"
+    tags: "listing,anti_hallucination"
+
+  - key: "ke_service_scope"
+    text: "贝壳找房提供的主要服务包括：房源检索与匹配、房产交易评估、营销内容生成、合同管理、佣金结算。不提供法律咨询、贷款审批、房产过户代办。"
+    category: "domain_rule"
+    tags: "anti_hallucination,service_scope"
+
+  # --- 佣金与结算规则 ---
+  - key: "commission_rate_range"
+    text: "贝壳平台买卖佣金费率范围为成交价的1%至3%，租赁佣金通常为一个月租金。超出此范围需走特殊审批流程。"
+    category: "policy"
+    tags: "settlement,contract,commission"
+
+  - key: "settlement_payout_schedule"
+    text: "佣金结算采用月结制，每月5号生成上月结算单，每月15号统一出款。经纪人可在结算管理后台查看明细。"
+    category: "policy"
+    tags: "settlement,payout"
+
+  # --- 审批规则 ---
+  - key: "approval_threshold_contract"
+    text: "合同金额超过100万人民币（含）的交易，必须走审批流程。审批需经门店经理和区域经理两级确认。"
+    category: "policy"
+    tags: "approval,contract"
+
+  - key: "approval_threshold_marketing"
+    text: "营销内容发布前需审核。涉及价格承诺、优惠宣传的内容必须法务审核。普通房源描述可由门店经理直接审核发布。"
+    category: "policy"
+    tags: "approval,marketing"
+
+  - key: "approval_retry_limit"
+    text: "审批驳回后最多重新生成3次。超过3次后任务自动终止，需人工介入处理。"
+    category: "policy"
+    tags: "approval,workflow"
+
+  # --- 房源相关 ---
+  - key: "listing_status_definition"
+    text: "房源状态说明：在售（可正常交易）、已定（已收定金但未签约）、已售（已完成交易）、暂缓（业主暂停出售）、下架（已从平台移除）。只有'在售'状态的房源才能被搜索和推荐。"
+    category: "vocabulary"
+    tags: "listing"
+
+  - key: "listing_price_unit"
+    text: "房源价格单位：总价默认为'万元'，单价默认为'元/平方米'。除非用户明确指定其他单位。"
+    category: "domain_rule"
+    tags: "listing,anti_hallucination"
+
+  # --- 行业术语 ---
+  - key: "vocab_daikan"
+    text: "带看：指经纪人带领意向客户实地查看房源的过程。带看是房产交易的关键环节，通常需要提前预约。带看后经纪人需在系统中记录带看反馈。"
+    category: "vocabulary"
+    tags: "agent,listing"
+
+  - key: "vocab_panyuan"
+    text: "盘源：指可供交易的房源信息来源。包括业主委托盘、独家代理盘、公盘（对所有经纪人公开）等类型。"
+    category: "vocabulary"
+    tags: "listing"
+
+  - key: "vocab_chengjiao"
+    text: "成交：指买卖双方就房源价格和交易条件达成一致并签署合同的状态。成交后进入后续的合同管理和结算流程。"
+    category: "vocabulary"
+    tags: "contract,settlement"
+
+  - key: "vocab_gongpan"
+    text: "公盘：指在贝壳平台上对所有经纪人公开的房源信息。任何符合条件的经纪人都可以带看和交易公盘房源。"
+    category: "vocabulary"
+    tags: "listing"
+
+  - key: "vocab_zulin"
+    text: "租赁（租房）：指业主将房源出租给租户。租赁交易通常涉及押金（1-2个月租金）、租期（通常1年起）、中介费（通常为1个月租金）。"
+    category: "vocabulary"
+    tags: "listing,contract"
+
+  # --- 工作流编排规则 ---
+  - key: "workflow_listing_to_marketing"
+    text: "营销内容生成依赖于房源信息。必须先完成房源检索步骤，获取listing_id后，才能进行营销内容生成。"
+    category: "workflow"
+    tags: "orchestration,listing,marketing"
+
+  - key: "workflow_contract_to_settlement"
+    text: "佣金结算依赖于已签署的合同。必须先完成合同生成和签署步骤，才能进行佣金计算和结算。"
+    category: "workflow"
+    tags: "orchestration,contract,settlement"
+
+  - key: "workflow_trade_approval_chain"
+    text: "交易评估流程：先由交易评估agent分析可行性 → 如需审批则暂停等待用户确认 → 审批通过后路由至合同agent → 合同完成后可继续到结算agent。"
+    category: "workflow"
+    tags: "orchestration,trade,contract,settlement,approval"

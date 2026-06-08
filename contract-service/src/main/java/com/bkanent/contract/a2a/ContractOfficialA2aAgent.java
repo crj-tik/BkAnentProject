@@ -2,9 +2,9 @@ package com.bkanent.contract.a2a;
 
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.bkanent.contract.config.ContractAgentProperties;
+import com.bkanent.contract.tool.ContractTools;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.tool.ToolCallbackProvider;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 
@@ -17,13 +17,13 @@ public class ContractOfficialA2aAgent {
 
     public ContractOfficialA2aAgent(ChatModel chatModel,
                                     ContractAgentProperties properties,
-                                    @Qualifier("contractToolCallbackProvider") ToolCallbackProvider toolCallbackProvider) {
+                                    ContractTools contractTools) {
         this.reactAgent = ReactAgent.builder()
                 .name("contract-agent")
                 .description("Responsible for contract parsing, risk review, and contract lifecycle management with LLM-driven analysis")
                 .model(chatModel)
                 .systemPrompt(properties.getSystemPrompt())
-                .tools(toolCallbackProvider.getToolCallbacks())
+                .tools(MethodToolCallbackProvider.builder().toolObjects(contractTools).build().getToolCallbacks())
                 .outputKey(OUTPUT_KEY)
                 .build();
     }

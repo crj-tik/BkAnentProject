@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 import java.util.Optional;
 
 /**
- * DbGraphCheckpointStore 数据库版检查点存储。
+ * DbGraphCheckpointStore 数据库版检查点存储，支持多版本 checkpoint（多审批场景）。
  */
 @Primary
 @Component
@@ -31,23 +31,21 @@ public class DbGraphCheckpointStore implements GraphCheckpointStore {
         AgentWorkflowCheckpointEntity entity = checkpointMapper.selectOne(
                 new LambdaQueryWrapper<AgentWorkflowCheckpointEntity>()
                         .eq(AgentWorkflowCheckpointEntity::getTaskId, state.taskId())
+                        .orderByDesc(AgentWorkflowCheckpointEntity::getCheckpointVersion)
                         .last("limit 1")
         );
-        if (entity == null) {
-            entity = new AgentWorkflowCheckpointEntity();
-            entity.setTaskId(state.taskId());
-        }
-        entity.setSessionId(state.sessionId());
-        entity.setTraceId(state.traceId());
-        entity.setWorkflowStatus(state.workflowStatus().name());
-        entity.setSelectedAgentId(state.selectedAgentId());
-        entity.setPendingApprovalId(state.pendingApproval() == null ? null : state.pendingApproval().approvalId());
-        entity.setSnapshotJson(writeJson(state));
-        if (entity.getId() == null) {
-            checkpointMapper.insert(entity);
-            return;
-        }
-        checkpointMapper.updateById(entity);
+        int nextVersion = (entity == null) ? 1 : entity.getCheckpointVersion() + 1;
+
+        AgentWorkflowCheckpointEntity newEntity = new AgentWorkflowCheckpointEntity();
+        newEntity.setTaskId(state.taskId());
+        newEntity.setCheckpointVersion(nextVersion);
+        newEntity.setSessionId(state.sessionId());
+        newEntity.setTraceId(state.traceId());
+        newEntity.setWorkflowStatus(state.workflowStatus().name());
+        newEntity.setSelectedAgentId(state.selectedAgentId());
+        newEntity.setPendingApprovalId(state.pendingApproval() == null ? null : state.pendingApproval().approvalId());
+        newEntity.setSnapshotJson(writeJson(state));
+        checkpointMapper.insert(newEntity);
     }
 
     @Override
@@ -55,6 +53,7 @@ public class DbGraphCheckpointStore implements GraphCheckpointStore {
         AgentWorkflowCheckpointEntity entity = checkpointMapper.selectOne(
                 new LambdaQueryWrapper<AgentWorkflowCheckpointEntity>()
                         .eq(AgentWorkflowCheckpointEntity::getTaskId, taskId)
+                        .orderByDesc(AgentWorkflowCheckpointEntity::getCheckpointVersion)
                         .last("limit 1")
         );
         if (entity == null || entity.getSnapshotJson() == null) {
@@ -68,6 +67,7 @@ public class DbGraphCheckpointStore implements GraphCheckpointStore {
         AgentWorkflowCheckpointEntity entity = checkpointMapper.selectOne(
                 new LambdaQueryWrapper<AgentWorkflowCheckpointEntity>()
                         .eq(AgentWorkflowCheckpointEntity::getTraceId, traceId)
+                        .orderByDesc(AgentWorkflowCheckpointEntity::getCheckpointVersion)
                         .last("limit 1")
         );
         if (entity == null || entity.getSnapshotJson() == null) {
@@ -81,6 +81,7 @@ public class DbGraphCheckpointStore implements GraphCheckpointStore {
         AgentWorkflowCheckpointEntity entity = checkpointMapper.selectOne(
                 new LambdaQueryWrapper<AgentWorkflowCheckpointEntity>()
                         .eq(AgentWorkflowCheckpointEntity::getPendingApprovalId, approvalId)
+                        .orderByDesc(AgentWorkflowCheckpointEntity::getCheckpointVersion)
                         .last("limit 1")
         );
         if (entity == null || entity.getSnapshotJson() == null) {

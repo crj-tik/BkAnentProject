@@ -8,6 +8,7 @@ import com.bkanent.common.agent.AgentTaskInvokeRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,11 +53,30 @@ public class BuildInvokeRequestNode {
                 graphState.userMessage(),
                 context,
                 List.of(),
-                List.of(),
+                buildConstraints(graphState),
                 resolveExpectedOutput(graphState.domain()),
                 A2aInvokeSupport.buildIdempotencyKey(graphState.taskId(), targetAgentId, graphState.intent(), retryCount),
                 Boolean.TRUE.equals(request.stream())
         );
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> buildConstraints(SupervisorGraphState graphState) {
+        List<String> constraints = new ArrayList<>();
+        if (graphState.sharedContext() != null) {
+            Object raw = graphState.sharedContext().get("systemConstraints");
+            if (raw instanceof List<?> list) {
+                for (Object item : list) {
+                    if (item instanceof Map<?, ?> m) {
+                        Object text = m.get("text");
+                        if (text != null) {
+                            constraints.add(String.valueOf(text));
+                        }
+                    }
+                }
+            }
+        }
+        return constraints;
     }
 
     private String resolveExpectedOutput(String domain) {

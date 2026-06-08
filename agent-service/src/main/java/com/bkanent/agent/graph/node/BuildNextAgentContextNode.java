@@ -1,6 +1,10 @@
 package com.bkanent.agent.graph.node;
 
+import com.bkanent.agent.service.WorkflowHistoryService;
 import com.bkanent.agent.workflow.SupervisorWorkflowState;
+import com.bkanent.common.agent.WorkflowHistoryView;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
@@ -9,9 +13,30 @@ import java.util.Map;
 @Component
 public class BuildNextAgentContextNode {
 
+    private static final Logger log = LoggerFactory.getLogger(BuildNextAgentContextNode.class);
+
+    private final WorkflowHistoryService workflowHistoryService;
+
+    public BuildNextAgentContextNode(WorkflowHistoryService workflowHistoryService) {
+        this.workflowHistoryService = workflowHistoryService;
+    }
+
     public Map<String, Object> build(SupervisorWorkflowState state, String nextDomain) {
         Map<String, Object> context = new LinkedHashMap<>(state.sharedContext());
         context.put("domain", nextDomain);
+
+        // 注入工作流历史
+        try {
+            WorkflowHistoryView history = workflowHistoryService.assembleHistory(state.taskId());
+            if (history.steps() != null && !history.steps().isEmpty()) {
+                context.put("workflowHistory", history.steps());
+            }
+            if (history.artifactSummaries() != null && !history.artifactSummaries().isEmpty()) {
+                context.put("upstreamArtifactSummaries", history.artifactSummaries());
+            }
+        } catch (Exception e) {
+            log.debug("Failed to assemble workflow history: {}", e.getMessage());
+        }
         copyIfPresent(state.sharedContext(), context, "requestStream");
         copyIfPresent(state.sharedContext(), context, "forceAsyncA2a");
         copyIfPresent(state.sharedContext(), context, "latestArtifactIds");
