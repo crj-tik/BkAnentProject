@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS user_account (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO user_account (username, password_hash, display_name, role_code, tenant_code, account_status)
-SELECT 'broker01', 'plain-demo-password', 'Broker Demo', 'BROKER', 'store-shanghai-001', 'ACTIVE'
+SELECT 'broker01', '$2a$10$ZmOp25bIZbbJLus780rqTuVZff7jjdcmJ4VqhXgio/t073Q3b5AXC', 'Broker Demo', 'BROKER', 'store-shanghai-001', 'ACTIVE'
 WHERE NOT EXISTS (
     SELECT 1 FROM user_account WHERE username = 'broker01'
 );

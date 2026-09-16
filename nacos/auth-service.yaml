@@ -1,9 +1,16 @@
 spring:
   datasource:
     url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_AUTH:bk_auth}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
-    username: ${MYSQL_USER:root}
-    password: ${MYSQL_PASSWORD:root}
+    username: ${MYSQL_USER}
+    password: ${MYSQL_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
+
+auth:
+  token:
+    secret: ${AUTH_TOKEN_SECRET:}
+    access-ttl-seconds: ${AUTH_ACCESS_TOKEN_TTL_SECONDS:3600}
+    refresh-ttl-seconds: ${AUTH_REFRESH_TOKEN_TTL_SECONDS:604800}
+    allow-random-secret: false
 
 management:
   endpoints:

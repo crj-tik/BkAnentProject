@@ -1,8 +1,8 @@
 mysql:
   host: ${MYSQL_HOST:127.0.0.1}
   port: ${MYSQL_PORT:3306}
-  username: ${MYSQL_USER:root}
-  password: ${MYSQL_PASSWORD:root}
+  username: ${MYSQL_USER}
+  password: ${MYSQL_PASSWORD}
   params: ${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
 
   databases:
@@ -33,6 +33,6 @@ mysql:
 
 spring:
   datasource:
-    username: ${MYSQL_USER:root}
-    password: ${MYSQL_PASSWORD:root}
+    username: ${MYSQL_USER}
+    password: ${MYSQL_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver

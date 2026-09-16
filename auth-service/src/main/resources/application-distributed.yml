@@ -1,0 +1,5 @@
+spring:
+  config:
+    activate:
+      on-profile: distributed
+    import: nacos:${spring.application.name}.yaml?group=DEFAULT_GROUP&refreshEnabled=true

@@ -13,6 +13,13 @@ mvn -pl agent-service -am compile
 
 # Compile with tests skipped
 mvn -pl agent-service -am -DskipTests compile
+
+# Run the local auth smoke profile (build upstream modules first)
+mvn -pl auth-service -am -DskipTests install
+mvn -pl auth-service "-Dspring-boot.run.profiles=local" spring-boot:run
+
+# Run auth-service against the distributed Nacos profile (requires imported config and secrets)
+mvn -pl auth-service "-Dspring-boot.run.profiles=distributed" spring-boot:run
 ```
 
 All modules share parent `bk-agent-project:1.0.0-SNAPSHOT` (root `pom.xml`). Version properties are centralized in the root POM's `<properties>`.

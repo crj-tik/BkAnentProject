@@ -54,3 +54,38 @@ mvn -gs .mvn-settings.xml -s .mvn-settings.xml compile
 ```bash
 mvn -pl agent-service -am compile
 ```
+
+## 本地启动
+
+仓库包含一个不依赖 Nacos 和 MySQL 的 `auth-service` 本地冒烟配置，用于验证 Java、Maven、Spring Boot 和基础认证链路。该配置仅用于开发测试，不代表完整分布式系统已经脱离基础设施依赖。
+
+```powershell
+mvn -pl auth-service -am -DskipTests install
+mvn -pl auth-service "-Dspring-boot.run.profiles=local" spring-boot:run
+```
+
+启动后访问 `http://127.0.0.1:9101/auth/health`。本地演示账号为 `broker01`，密码为 `demo-password`，只用于冒烟测试，生产环境必须替换。
+
+## 分布式环境启动
+
+完整系统启动前需要准备 Nacos 3.x、MySQL、Redis、RocketMQ、Milvus、MinIO 和 Elasticsearch，并将 `nacos/` 下以服务名命名的 YAML 导入 Nacos。每个文件名就是 data ID，例如 `auth-service.yaml`、`agent-service.yaml`、`business-service.yaml`、`compare-engine-service.yaml`、`contract-service.yaml`、`listing-master-service.yaml`、`marketing-content-service.yaml`、`media-worker-service.yaml`、`notification-service.yaml` 和 `settlement-service.yaml`。默认分组为 `DEFAULT_GROUP`；namespace 使用 `NACOS_NAMESPACE` 指定，默认值见各服务的 `application.yml`。
+
+启动前可执行非破坏性的环境检查：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\local\check-environment.ps1 -Mode distributed
+```
+
+分布式部署时还必须为每个 Agent 设置可被其他服务访问的 `A2A_PUBLIC_BASE_URL`，不能使用其他主机上的 `127.0.0.1`。DeepSeek、DashScope、数据库和基础设施凭据必须通过环境变量或密钥管理系统提供。
+
+分布式配置使用显式的 `distributed` profile；该 profile 会从 Nacos 导入配置，缺少 `AUTH_TOKEN_SECRET` 或 `A2A_PUBLIC_BASE_URL` 时应直接补齐环境变量，不要恢复模板中的密钥或 loopback 回退值：
+
+```powershell
+$env:AUTH_TOKEN_SECRET = 'replace-with-a-long-random-value'
+$env:A2A_PUBLIC_BASE_URL = 'http://reachable-host:9002'
+mvn -pl auth-service "-Dspring-boot.run.profiles=distributed" spring-boot:run
+```
+
+旧数据库中的 `user_account.password_hash` 如果仍是明文或原型值，必须先用 BCrypt 重新生成哈希并迁移；新认证流程不会再接受原型明文或 `mock-access-token-*`。
+
+变量名称清单见 [.env.example](.env.example)。

@@ -1,16 +1,16 @@
 spring:
   datasource:
     url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_AGENT:bk_agent}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
-    username: ${MYSQL_USER:root}
-    password: ${MYSQL_PASSWORD:root}
+    username: ${MYSQL_USER}
+    password: ${MYSQL_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
   ai:
     deepseek:
-      api-key: ${DEEPSEEK_API_KEY:sk-d74e4570e3784f70880f876a152cb2dd}
+      api-key: ${DEEPSEEK_API_KEY}
       chat:
-        api-key: ${DEEPSEEK_API_KEY:sk-d74e4570e3784f70880f876a152cb2dd}
+        api-key: ${DEEPSEEK_API_KEY}
     dashscope:
-      api-key: ${DASHSCOPE_API_KEY:sk-2b5cfc81166341e188e411892cca3dfa}
+      api-key: ${DASHSCOPE_API_KEY}
       embedding:
         enabled: true
         options:
@@ -114,7 +114,7 @@ agent:
     rerank-top-k: ${AGENT_RAG_RERANK_TOP_K:10}
     vector-similarity-threshold: ${AGENT_RAG_VECTOR_SIMILARITY_THRESHOLD:0.7}
     rerank-endpoint: ${AGENT_RAG_RERANK_ENDPOINT:https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank}
-    rerank-api-key: ${AGENT_RAG_RERANK_API_KEY:${DASHSCOPE_API_KEY:sk-2b5cfc81166341e188e411892cca3dfa}}
+    rerank-api-key: ${AGENT_RAG_RERANK_API_KEY:${DASHSCOPE_API_KEY}}
     rerank-model: ${AGENT_RAG_RERANK_MODEL:qwen3-rerank}
   distributed:
     supervisor-agent-id: ${SUPERVISOR_AGENT_ID:supervisor-agent}
@@ -182,8 +182,8 @@ rocketmq:
 milvus:
   enabled: ${MILVUS_ENABLED:true}
   endpoint: ${MILVUS_ENDPOINT:http://127.0.0.1:19530}
-  token: ${MILVUS_TOKEN:root:Milvus}
+  token: ${MILVUS_TOKEN}
   database: ${MILVUS_DATABASE:default}
-  username: ${MILVUS_USERNAME:root}
-  password: ${MILVUS_PASSWORD:Milvus}
+  username: ${MILVUS_USERNAME}
+  password: ${MILVUS_PASSWORD}
   uri: ${MILVUS_URI:}

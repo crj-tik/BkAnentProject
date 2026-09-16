@@ -7,10 +7,10 @@ bk:
     namespace: ${NACOS_NAMESPACE:1bde955a-3394-4f3e-a754-70e0aee942dd}
 
 spring:
+  profiles:
+    default: distributed
   application:
     name: auth-service
-  config:
-    import: nacos:${spring.application.name}.yaml?group=DEFAULT_GROUP&refreshEnabled=true
   cloud:
     nacos:
       discovery:

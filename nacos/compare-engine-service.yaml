@@ -1,9 +1,9 @@
 spring:
   ai:
     deepseek:
-      api-key: ${DEEPSEEK_API_KEY:sk-d74e4570e3784f70880f876a152cb2dd}
+      api-key: ${DEEPSEEK_API_KEY}
       chat:
-        api-key: ${DEEPSEEK_API_KEY:sk-d74e4570e3784f70880f876a152cb2dd}
+        api-key: ${DEEPSEEK_API_KEY}
     alibaba:
       a2a:
         server:
@@ -14,7 +14,7 @@ spring:
             name: compare-agent
             description: multi-listing comparison and analysis agent
             version: 1.0.0
-            url: http://127.0.0.1:${server.port}
+            url: ${A2A_PUBLIC_BASE_URL}
             default-input-modes: text,application/json
             default-output-modes: text,application/json
             capabilities:

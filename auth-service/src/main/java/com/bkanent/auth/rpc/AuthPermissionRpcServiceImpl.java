@@ -1,7 +1,11 @@
 package com.bkanent.auth.rpc;
 
+import com.bkanent.auth.entity.UserAccountEntity;
+import com.bkanent.auth.service.AuthTokenService;
+import com.bkanent.auth.service.UserAccountService;
 import com.bkanent.common.rpc.AuthPermissionRpcService;
 import org.apache.dubbo.config.annotation.DubboService;
+import org.springframework.util.StringUtils;
 
 /**
  * AuthPermissionRpcServiceImpl RPC 服务实现类。
@@ -9,14 +13,28 @@ import org.apache.dubbo.config.annotation.DubboService;
 @DubboService
 public class AuthPermissionRpcServiceImpl implements AuthPermissionRpcService {
 
+    private final AuthTokenService authTokenService;
+    private final UserAccountService userAccountService;
+
+    public AuthPermissionRpcServiceImpl(AuthTokenService authTokenService,
+                                        UserAccountService userAccountService) {
+        this.authTokenService = authTokenService;
+        this.userAccountService = userAccountService;
+    }
+
     @Override
     public boolean validateToken(String token) {
-        return token != null && !token.isBlank();
+        return authTokenService.isValidAccessToken(token);
     }
 
     @Override
     public boolean hasPermission(Long userId, String permissionCode) {
-        return userId != null && permissionCode != null;
+        if (userId == null || !StringUtils.hasText(permissionCode)) {
+            return false;
+        }
+        UserAccountEntity account = userAccountService.getById(userId);
+        return account != null && Integer.valueOf(0).equals(account.getDeleted())
+                && "ACTIVE".equalsIgnoreCase(account.getAccountStatus());
     }
 }
 
