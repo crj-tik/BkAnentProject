@@ -4,6 +4,7 @@ import com.bkanent.auth.entity.UserAccountEntity;
 import com.bkanent.auth.service.AuthTokenService;
 import com.bkanent.auth.service.UserAccountService;
 import com.bkanent.common.rpc.AuthPermissionRpcService;
+import com.bkanent.common.rpc.AuthenticatedPrincipal;
 import org.apache.dubbo.config.annotation.DubboService;
 import org.springframework.util.StringUtils;
 
@@ -24,7 +25,20 @@ public class AuthPermissionRpcServiceImpl implements AuthPermissionRpcService {
 
     @Override
     public boolean validateToken(String token) {
-        return authTokenService.isValidAccessToken(token);
+        return resolvePrincipal(token) != null;
+    }
+
+    @Override
+    public AuthenticatedPrincipal resolvePrincipal(String token) {
+        AuthTokenService.TokenPrincipal tokenPrincipal = authTokenService.parse(token);
+        if (tokenPrincipal == null || !"access".equals(tokenPrincipal.tokenType())) {
+            return null;
+        }
+        UserAccountEntity account = userAccountService.getById(tokenPrincipal.userId());
+        if (!isActive(account)) {
+            return null;
+        }
+        return new AuthenticatedPrincipal(tokenPrincipal.userId());
     }
 
     @Override
@@ -33,6 +47,10 @@ public class AuthPermissionRpcServiceImpl implements AuthPermissionRpcService {
             return false;
         }
         UserAccountEntity account = userAccountService.getById(userId);
+        return isActive(account);
+    }
+
+    private boolean isActive(UserAccountEntity account) {
         return account != null && Integer.valueOf(0).equals(account.getDeleted())
                 && "ACTIVE".equalsIgnoreCase(account.getAccountStatus());
     }

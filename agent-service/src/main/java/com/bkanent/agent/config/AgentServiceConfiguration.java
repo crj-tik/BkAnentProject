@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.web.client.RestClient;
 
 import java.util.Arrays;
@@ -64,5 +65,20 @@ public class AgentServiceConfiguration {
     @Bean
     public RestClient.Builder restClientBuilder() {
         return RestClient.builder();
+    }
+
+    @Bean(name = "supervisorAsyncExecutor")
+    public ThreadPoolTaskExecutor supervisorAsyncExecutor(DistributedAgentProperties properties) {
+        DistributedAgentProperties.AsyncRuntimeProperties async = properties.getAsyncRuntime();
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        int maxConcurrency = Math.max(1, async.getMaxConcurrency());
+        executor.setCorePoolSize(maxConcurrency);
+        executor.setMaxPoolSize(maxConcurrency);
+        executor.setQueueCapacity(Math.max(0, async.getQueueCapacity()));
+        executor.setThreadNamePrefix("supervisor-async-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        executor.initialize();
+        return executor;
     }
 }

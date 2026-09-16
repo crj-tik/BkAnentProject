@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * DistributedAgentProperties 分布式 Agent 静态注册配置。
@@ -327,6 +328,12 @@ public class DistributedAgentProperties {
         private boolean enabled = true;
         private long dispatchIntervalMs = 1000L;
         private int dispatchBatchSize = 10;
+        private int maxConcurrency = 4;
+        private int queueCapacity = 32;
+        private long leaseTimeoutSeconds = 300L;
+        private int maxAttempts = 3;
+        private long retryDelaySeconds = 5L;
+        private String workerId = "agent-worker-" + UUID.randomUUID();
 
         public boolean isEnabled() {
             return enabled;
@@ -350,6 +357,54 @@ public class DistributedAgentProperties {
 
         public void setDispatchBatchSize(int dispatchBatchSize) {
             this.dispatchBatchSize = dispatchBatchSize;
+        }
+
+        public int getMaxConcurrency() {
+            return maxConcurrency;
+        }
+
+        public void setMaxConcurrency(int maxConcurrency) {
+            this.maxConcurrency = maxConcurrency;
+        }
+
+        public int getQueueCapacity() {
+            return queueCapacity;
+        }
+
+        public void setQueueCapacity(int queueCapacity) {
+            this.queueCapacity = queueCapacity;
+        }
+
+        public long getLeaseTimeoutSeconds() {
+            return leaseTimeoutSeconds;
+        }
+
+        public void setLeaseTimeoutSeconds(long leaseTimeoutSeconds) {
+            this.leaseTimeoutSeconds = leaseTimeoutSeconds;
+        }
+
+        public int getMaxAttempts() {
+            return maxAttempts;
+        }
+
+        public void setMaxAttempts(int maxAttempts) {
+            this.maxAttempts = maxAttempts;
+        }
+
+        public long getRetryDelaySeconds() {
+            return retryDelaySeconds;
+        }
+
+        public void setRetryDelaySeconds(long retryDelaySeconds) {
+            this.retryDelaySeconds = retryDelaySeconds;
+        }
+
+        public String getWorkerId() {
+            return workerId;
+        }
+
+        public void setWorkerId(String workerId) {
+            this.workerId = workerId;
         }
     }
 

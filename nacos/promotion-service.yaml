@@ -10,6 +10,23 @@ management:
     web:
       exposure:
         include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,dependencyReadiness
+
+service:
+  readiness:
+    mode: ${SERVICE_READINESS_MODE:distributed}
+    required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database}
+    endpoints:
+      nacos: "${NACOS_SERVER:127.0.0.1:8080}"
+      database: "${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}"
 
 mybatis-plus:
   mapper-locations: classpath:/mapper/*.xml
@@ -20,3 +37,7 @@ mybatis-plus:
       logic-delete-field: deleted
       logic-delete-value: 1
       logic-not-delete-value: 0
+
+promotion:
+  integration:
+    mode: ${PROMOTION_INTEGRATION_MODE:unconfigured}

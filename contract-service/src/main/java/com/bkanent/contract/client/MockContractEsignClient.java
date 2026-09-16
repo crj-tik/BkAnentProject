@@ -13,8 +13,7 @@ public class MockContractEsignClient implements ContractEsignClient {
 
     @Override
     public boolean supports(String provider) {
-        return !StringUtils.hasText(provider)
-                || ContractProviderNames.ESIGN_MOCK.equalsIgnoreCase(provider)
+        return ContractProviderNames.ESIGN_MOCK.equalsIgnoreCase(provider)
                 || ContractProviderNames.ALIAS_MOCK.equalsIgnoreCase(provider);
     }
 
@@ -27,7 +26,7 @@ public class MockContractEsignClient implements ContractEsignClient {
                 ContractProviderNames.ESIGN_MOCK,
                 targetUrl,
                 "MOCK-SEAL-" + contract.getId(),
-                "Mock e-sign succeeded"
+                "[SIMULATED] Mock e-sign completed; no real signature was created"
         );
     }
 }

@@ -44,6 +44,22 @@ dubbo:
     name: dubbo
     port: 20881
 
+service:
+  readiness:
+    mode: local
+    required-dependencies: ""
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,dependencyReadiness
+
 auth:
   token:
     allow-random-secret: true

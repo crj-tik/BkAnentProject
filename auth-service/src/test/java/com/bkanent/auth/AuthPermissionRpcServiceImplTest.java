@@ -9,6 +9,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -44,6 +46,16 @@ class AuthPermissionRpcServiceImplTest {
         assertTrue(permissionService.validateToken(accessToken));
         assertFalse(permissionService.validateToken(refreshToken));
         assertFalse(permissionService.validateToken("mock-access-token-7"));
+    }
+
+    @Test
+    void resolvesOnlyActiveAccountPrincipals() {
+        String accessToken = authTokenService.issueAccessToken(activeAccount);
+
+        assertEquals(7L, permissionService.resolvePrincipal(accessToken).userId());
+
+        activeAccount.setAccountStatus("DISABLED");
+        assertNull(permissionService.resolvePrincipal(accessToken));
     }
 
     @Test

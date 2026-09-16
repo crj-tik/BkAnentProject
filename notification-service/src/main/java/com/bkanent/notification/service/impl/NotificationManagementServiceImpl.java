@@ -1,6 +1,7 @@
 package com.bkanent.notification.service.impl;
 
 import com.bkanent.notification.converter.NotificationConverter;
+import com.bkanent.notification.config.NotificationIntegrationProperties;
 import com.bkanent.notification.entity.NotificationRecordEntity;
 import com.bkanent.notification.enums.NotificationChannelEnum;
 import com.bkanent.notification.enums.NotificationReadStatusEnum;
@@ -29,11 +30,14 @@ public class NotificationManagementServiceImpl implements NotificationManagement
 
     private final NotificationRecordDomainService notificationRecordDomainService;
     private final NotificationConverter notificationConverter;
+    private final NotificationIntegrationProperties integrationProperties;
 
     public NotificationManagementServiceImpl(NotificationRecordDomainService notificationRecordDomainService,
-                                             NotificationConverter notificationConverter) {
+                                             NotificationConverter notificationConverter,
+                                             NotificationIntegrationProperties integrationProperties) {
         this.notificationRecordDomainService = notificationRecordDomainService;
         this.notificationConverter = notificationConverter;
+        this.integrationProperties = integrationProperties;
     }
 
     @Override
@@ -60,6 +64,7 @@ public class NotificationManagementServiceImpl implements NotificationManagement
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long sendEmailMessage(NotificationMessageRequest request) {
+        requireLocalSimulationMode("email");
         if (!StringUtils.hasText(request.receiverAddress())) {
             throw new IllegalArgumentException("邮件接收地址不能为空");
         }
@@ -80,6 +85,7 @@ public class NotificationManagementServiceImpl implements NotificationManagement
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long sendRobotMessage(RobotMessageRequest request) {
+        requireLocalSimulationMode("robot");
         if (!NotificationChannelEnum.contains(request.channel())
                 || NotificationChannelEnum.STATION.name().equalsIgnoreCase(request.channel())
                 || NotificationChannelEnum.EMAIL.name().equalsIgnoreCase(request.channel())) {
@@ -171,10 +177,17 @@ public class NotificationManagementServiceImpl implements NotificationManagement
     private void mockSend(NotificationRecordEntity entity, String channelName) {
         entity.setSendStatus(NotificationSendStatusEnum.SENT.name());
         entity.setSendTime(LocalDateTime.now());
-        entity.setExternalMessageId("MOCK-" + entity.getChannel() + "-" + System.currentTimeMillis());
+        entity.setExternalMessageId("SIMULATED-" + entity.getChannel() + "-" + System.currentTimeMillis());
         notificationRecordDomainService.save(entity);
-        log.info("{}消息发送成功，channel={}，notificationId={}，目标={}",
+        log.info("{}模拟消息已记录，channel={}，notificationId={}，目标={}",
                 channelName, entity.getChannel(), entity.getId(),
                 StringUtils.hasText(entity.getReceiverAddress()) ? entity.getReceiverAddress() : entity.getExternalWebhook());
+    }
+
+    private void requireLocalSimulationMode(String channel) {
+        if (!integrationProperties.isLocalMode()) {
+            throw new IllegalStateException("notification " + channel
+                    + " provider is not configured; set notification.integration.mode=local only for simulation");
+        }
     }
 }

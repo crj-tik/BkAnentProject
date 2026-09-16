@@ -1,0 +1,40 @@
+name: Repository Quality Gates
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Set up Node.js for OpenSpec CLI
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install OpenSpec CLI
+        run: npm install --global @fission-ai/openspec@1.8.0
+
+      - name: Validate OpenSpec artifacts
+        run: openspec validate --all --strict --no-interactive
+
+      - name: Scan checked-in configuration for credentials
+        shell: pwsh
+        run: ./scripts/local/check-credentials.ps1
+
+      - name: Compile, test, and package all modules
+        run: mvn -B -s .mvn-settings.xml clean package

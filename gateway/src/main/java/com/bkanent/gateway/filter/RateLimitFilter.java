@@ -2,6 +2,7 @@ package com.bkanent.gateway.filter;
 
 import com.bkanent.gateway.config.GatewayAccessProperties;
 import com.bkanent.gateway.config.GatewayRateLimitProperties;
+import com.bkanent.common.rpc.AuthPrincipalContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -88,7 +89,7 @@ public class RateLimitFilter implements GlobalFilter, Ordered {
     }
 
     private String resolveIdentity(ServerHttpRequest request) {
-        String userId = request.getHeaders().getFirst("X-User-Id");
+        String userId = request.getHeaders().getFirst(AuthPrincipalContext.USER_ID_HEADER);
         if (userId == null || userId.isBlank()) {
             userId = request.getQueryParams().getFirst("userId");
         }

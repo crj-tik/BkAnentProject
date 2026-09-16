@@ -63,6 +63,13 @@ management:
   endpoint:
     health:
       show-details: when_authorized
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,dependencyReadiness
     prometheus:
       access: unrestricted
   prometheus:
@@ -73,6 +80,16 @@ management:
     tags:
       application: ${spring.application.name}
       service: ${spring.application.name}
+
+service:
+  readiness:
+    mode: ${SERVICE_READINESS_MODE:distributed}
+    required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database,redis,rocketmq}
+    endpoints:
+      nacos: "${NACOS_SERVER:127.0.0.1:8080}"
+      database: "${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}"
+      redis: "${REDIS_HOST:127.0.0.1}:${REDIS_PORT:6379}"
+      rocketmq: "${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}"
 
 mybatis-plus:
   mapper-locations: classpath:/mapper/*.xml
@@ -160,6 +177,12 @@ agent:
       enabled: ${AGENT_ASYNC_RUNTIME_ENABLED:true}
       dispatch-interval-ms: ${AGENT_ASYNC_RUNTIME_DISPATCH_INTERVAL_MS:1000}
       dispatch-batch-size: ${AGENT_ASYNC_RUNTIME_DISPATCH_BATCH_SIZE:10}
+      max-concurrency: ${AGENT_ASYNC_RUNTIME_MAX_CONCURRENCY:4}
+      queue-capacity: ${AGENT_ASYNC_RUNTIME_QUEUE_CAPACITY:32}
+      lease-timeout-seconds: ${AGENT_ASYNC_RUNTIME_LEASE_TIMEOUT_SECONDS:300}
+      max-attempts: ${AGENT_ASYNC_RUNTIME_MAX_ATTEMPTS:3}
+      retry-delay-seconds: ${AGENT_ASYNC_RUNTIME_RETRY_DELAY_SECONDS:5}
+      worker-id: ${AGENT_ASYNC_RUNTIME_WORKER_ID:agent-worker}
     planning:
       llm-enabled: ${AGENT_PLANNING_LLM_ENABLED:false}
       allow-fallback: ${AGENT_PLANNING_ALLOW_FALLBACK:true}

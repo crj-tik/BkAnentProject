@@ -1,5 +1,6 @@
 package com.bkanent.media.client;
 
+import com.bkanent.media.config.MediaIntegrationProperties;
 import org.springframework.stereotype.Component;
 
 import javax.imageio.ImageIO;
@@ -19,8 +20,17 @@ import java.util.List;
 @Component
 public class MockStableDiffusionClient implements MediaImageGenerationClient {
 
+    private final MediaIntegrationProperties integrationProperties;
+
+    public MockStableDiffusionClient(MediaIntegrationProperties integrationProperties) {
+        this.integrationProperties = integrationProperties;
+    }
+
     @Override
     public List<GeneratedMediaFile> generateListingImages(Long listingId, String prompt, List<String> angles) {
+        if (!integrationProperties.isLocalMode()) {
+            throw new IllegalStateException("simulated media provider is only available in local integration mode");
+        }
         List<GeneratedMediaFile> files = new ArrayList<>();
         int index = 1;
         for (String angle : angles) {

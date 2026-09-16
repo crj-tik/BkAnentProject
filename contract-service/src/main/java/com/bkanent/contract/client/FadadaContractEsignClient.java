@@ -18,14 +18,6 @@ public class FadadaContractEsignClient implements ContractEsignClient {
 
     @Override
     public ContractEsignResult sealContract(ContractEntity contract, String signedDocumentUrl) {
-        String targetUrl = StringUtils.hasText(signedDocumentUrl)
-                ? signedDocumentUrl
-                : "https://fadada.example.com/contracts/" + contract.getContractNo() + ".pdf";
-        return new ContractEsignResult(
-                ContractProviderNames.ESIGN_FADADA,
-                targetUrl,
-                "FADADA-" + contract.getId(),
-                "Fadada sealing succeeded"
-        );
+        throw new UnsupportedOperationException("真实电子签章服务尚未接入: " + ContractProviderNames.ESIGN_FADADA);
     }
 }

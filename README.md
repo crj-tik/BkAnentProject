@@ -78,6 +78,17 @@ powershell -ExecutionPolicy Bypass -File .\scripts\local\check-environment.ps1 -
 
 分布式部署时还必须为每个 Agent 设置可被其他服务访问的 `A2A_PUBLIC_BASE_URL`，不能使用其他主机上的 `127.0.0.1`。DeepSeek、DashScope、数据库和基础设施凭据必须通过环境变量或密钥管理系统提供。
 
+合同、通知、媒体和推广服务还必须显式设置集成模式：`CONTRACT_INTEGRATION_MODE`、`NOTIFICATION_INTEGRATION_MODE`、`MEDIA_INTEGRATION_MODE`、`PROMOTION_INTEGRATION_MODE`。只有明确的 `local` 模式允许模拟 provider；分布式/生产模式使用 `real`，未接入的真实 provider 会明确报告未实现，不会伪造成功。
+
+分布式服务提供 `/actuator/health/liveness` 和 `/actuator/health/readiness`。readiness 会检查当前模板中声明的 Nacos、数据库、Redis、RocketMQ 或 MinIO 依赖；应用进程存活不代表已经可以接收业务流量。
+
+提交前可执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\local\check-credentials.ps1
+openspec validate --all --strict --no-interactive
+```
+
 分布式配置使用显式的 `distributed` profile；该 profile 会从 Nacos 导入配置，缺少 `AUTH_TOKEN_SECRET` 或 `A2A_PUBLIC_BASE_URL` 时应直接补齐环境变量，不要恢复模板中的密钥或 loopback 回退值：
 
 ```powershell

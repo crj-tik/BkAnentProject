@@ -1,6 +1,7 @@
 package com.bkanent.agent;
 
 import com.bkanent.common.rpc.AuthPermissionRpcService;
+import com.bkanent.common.rpc.AuthenticatedPrincipal;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -15,6 +16,11 @@ public class LocalAuthPermissionConfiguration {
             @Override
             public boolean validateToken(String token) {
                 return token != null && !token.isBlank();
+            }
+
+            @Override
+            public AuthenticatedPrincipal resolvePrincipal(String token) {
+                return validateToken(token) ? new AuthenticatedPrincipal(1L) : null;
             }
 
             @Override

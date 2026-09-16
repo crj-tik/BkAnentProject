@@ -22,11 +22,6 @@ public class VendorContractOcrExtractor implements ContractOcrExtractor {
 
     @Override
     public ContractOcrExtractResult extract(String attachmentType, String fileName, String fileUrl) {
-        String plainText = "Third-party OCR placeholder extracted attachment, type="
-                + attachmentType + ", fileName=" + fileName;
-        String structuredData = "{\"provider\":\"" + ContractProviderNames.OCR_VENDOR
-                + "\",\"attachmentType\":\"" + attachmentType
-                + "\",\"fileName\":\"" + fileName + "\"}";
-        return new ContractOcrExtractResult(ContractProviderNames.OCR_VENDOR, plainText, structuredData);
+        throw new UnsupportedOperationException("真实 OCR 服务尚未接入: " + ContractProviderNames.OCR_VENDOR);
     }
 }

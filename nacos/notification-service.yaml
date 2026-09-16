@@ -64,6 +64,13 @@ management:
   endpoint:
     health:
       show-details: when_authorized
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,dependencyReadiness
     prometheus:
       access: unrestricted
   prometheus:
@@ -74,6 +81,15 @@ management:
     tags:
       application: ${spring.application.name}
       service: ${spring.application.name}
+
+service:
+  readiness:
+    mode: ${SERVICE_READINESS_MODE:distributed}
+    required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database,rocketmq}
+    endpoints:
+      nacos: "${NACOS_SERVER:127.0.0.1:8080}"
+      database: "${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}"
+      rocketmq: "${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}"
 
 rocketmq:
   name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
@@ -91,6 +107,8 @@ mybatis-plus:
       logic-not-delete-value: 0
 
 notification:
+  integration:
+    mode: ${NOTIFICATION_INTEGRATION_MODE:unconfigured}
   workflow-events:
     enabled: ${NOTIFICATION_WORKFLOW_EVENTS_ENABLED:true}
     topic: ${AGENT_STREAM_ROCKETMQ_TOPIC:bk.agent.session.stream}

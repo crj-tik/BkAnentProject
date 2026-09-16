@@ -1,6 +1,7 @@
 package com.bkanent.agent.entity;
 
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.bkanent.common.model.BaseEntity;
 
 @TableName("agent_async_workflow")
@@ -18,6 +19,14 @@ public class AgentAsyncWorkflowEntity extends BaseEntity {
     private Integer cancelRequested;
     private Long startedAtMs;
     private Long finishedAtMs;
+    @TableField("attempt_count")
+    private Integer attemptCount;
+    @TableField("lease_owner")
+    private String leaseOwner;
+    @TableField("lease_until_ms")
+    private Long leaseUntilMs;
+    @TableField("next_attempt_at_ms")
+    private Long nextAttemptAtMs;
 
     public String getAsyncWorkflowId() {
         return asyncWorkflowId;
@@ -113,5 +122,37 @@ public class AgentAsyncWorkflowEntity extends BaseEntity {
 
     public void setFinishedAtMs(Long finishedAtMs) {
         this.finishedAtMs = finishedAtMs;
+    }
+
+    public Integer getAttemptCount() {
+        return attemptCount;
+    }
+
+    public void setAttemptCount(Integer attemptCount) {
+        this.attemptCount = attemptCount;
+    }
+
+    public String getLeaseOwner() {
+        return leaseOwner;
+    }
+
+    public void setLeaseOwner(String leaseOwner) {
+        this.leaseOwner = leaseOwner;
+    }
+
+    public Long getLeaseUntilMs() {
+        return leaseUntilMs;
+    }
+
+    public void setLeaseUntilMs(Long leaseUntilMs) {
+        this.leaseUntilMs = leaseUntilMs;
+    }
+
+    public Long getNextAttemptAtMs() {
+        return nextAttemptAtMs;
+    }
+
+    public void setNextAttemptAtMs(Long nextAttemptAtMs) {
+        this.nextAttemptAtMs = nextAttemptAtMs;
     }
 }

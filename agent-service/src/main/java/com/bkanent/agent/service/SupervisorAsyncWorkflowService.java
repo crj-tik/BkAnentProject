@@ -2,6 +2,7 @@ package com.bkanent.agent.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.bkanent.agent.config.DistributedAgentProperties;
 import com.bkanent.agent.entity.AgentAsyncWorkflowEntity;
 import com.bkanent.agent.mapper.AgentAsyncWorkflowMapper;
 import com.bkanent.agent.model.distributed.SupervisorAsyncWorkflowCreateResponse;
@@ -14,24 +15,17 @@ import com.bkanent.common.agent.SessionStreamEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 
 @Service
 public class SupervisorAsyncWorkflowService {
-
-    private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(runnable -> {
-        Thread thread = new Thread(runnable, "supervisor-async-workflow");
-        thread.setDaemon(true);
-        return thread;
-    });
-
     private final SupervisorWorkflowService supervisorWorkflowService;
     private final SessionStreamService sessionStreamService;
     private final AgentMetricsService agentMetricsService;
@@ -39,6 +33,8 @@ public class SupervisorAsyncWorkflowService {
     private final AgentPermissionService agentPermissionService;
     private final AgentAsyncWorkflowMapper agentAsyncWorkflowMapper;
     private final ObjectMapper objectMapper;
+    private final DistributedAgentProperties distributedAgentProperties;
+    private final ThreadPoolTaskExecutor executor;
 
     public SupervisorAsyncWorkflowService(SupervisorWorkflowService supervisorWorkflowService,
                                           SessionStreamService sessionStreamService,
@@ -46,7 +42,9 @@ public class SupervisorAsyncWorkflowService {
                                           SupervisorGovernanceService supervisorGovernanceService,
                                           AgentPermissionService agentPermissionService,
                                           AgentAsyncWorkflowMapper agentAsyncWorkflowMapper,
-                                          ObjectMapper objectMapper) {
+                                          ObjectMapper objectMapper,
+                                          DistributedAgentProperties distributedAgentProperties,
+                                          ThreadPoolTaskExecutor supervisorAsyncExecutor) {
         this.supervisorWorkflowService = supervisorWorkflowService;
         this.sessionStreamService = sessionStreamService;
         this.agentMetricsService = agentMetricsService;
@@ -54,17 +52,25 @@ public class SupervisorAsyncWorkflowService {
         this.agentPermissionService = agentPermissionService;
         this.agentAsyncWorkflowMapper = agentAsyncWorkflowMapper;
         this.objectMapper = objectMapper;
+        this.distributedAgentProperties = distributedAgentProperties;
+        this.executor = supervisorAsyncExecutor;
     }
 
     @PostConstruct
     public void reconcilePendingWorkflows() {
+        long now = System.currentTimeMillis();
         agentAsyncWorkflowMapper.update(
                 null,
                 new LambdaUpdateWrapper<AgentAsyncWorkflowEntity>()
-                        .in(AgentAsyncWorkflowEntity::getStatus, "ACCEPTED", "RUNNING")
-                        .set(AgentAsyncWorkflowEntity::getStatus, "FAILED")
-                        .set(AgentAsyncWorkflowEntity::getErrorMessage, "supervisor restarted before async workflow completed")
-                        .set(AgentAsyncWorkflowEntity::getFinishedAtMs, System.currentTimeMillis())
+                        .eq(AgentAsyncWorkflowEntity::getStatus, "RUNNING")
+                        .and(wrapper -> wrapper.isNull(AgentAsyncWorkflowEntity::getLeaseUntilMs)
+                                .or().le(AgentAsyncWorkflowEntity::getLeaseUntilMs, now))
+                        .set(AgentAsyncWorkflowEntity::getStatus, "ACCEPTED")
+                        .set(AgentAsyncWorkflowEntity::getErrorMessage, "RECOVERED_AFTER_WORKER_RESTART")
+                        .set(AgentAsyncWorkflowEntity::getLeaseOwner, null)
+                        .set(AgentAsyncWorkflowEntity::getLeaseUntilMs, null)
+                        .set(AgentAsyncWorkflowEntity::getNextAttemptAtMs, now)
+                        .set(AgentAsyncWorkflowEntity::getFinishedAtMs, null)
         );
     }
 
@@ -97,6 +103,9 @@ public class SupervisorAsyncWorkflowService {
         entity.setUserId(normalizedRequest.userId());
         entity.setStatus("ACCEPTED");
         entity.setOriginalRequestJson(writeJson(normalizedRequest));
+        entity.setCancelRequested(0);
+        entity.setAttemptCount(0);
+        entity.setNextAttemptAtMs(System.currentTimeMillis());
         agentAsyncWorkflowMapper.insert(entity);
         publish(sessionId, taskId, "supervisor-agent", "supervisor.workflow_async.accepted", withGovernanceMetadata(Map.of(
                 "asyncWorkflowId", asyncWorkflowId,
@@ -163,11 +172,27 @@ public class SupervisorAsyncWorkflowService {
         if (isTerminal(entity.getStatus())) {
             return toStatusResponse(entity);
         }
+        long now = System.currentTimeMillis();
+        int updated = agentAsyncWorkflowMapper.update(
+                null,
+                new LambdaUpdateWrapper<AgentAsyncWorkflowEntity>()
+                        .eq(AgentAsyncWorkflowEntity::getId, entity.getId())
+                        .in(AgentAsyncWorkflowEntity::getStatus, "ACCEPTED", "RUNNING")
+                        .set(AgentAsyncWorkflowEntity::getCancelRequested, 1)
+                        .set(AgentAsyncWorkflowEntity::getStatus, "CANCELLED")
+                        .set(AgentAsyncWorkflowEntity::getErrorMessage, "workflow cancelled by user")
+                        .set(AgentAsyncWorkflowEntity::getFinishedAtMs, now)
+                        .set(AgentAsyncWorkflowEntity::getLeaseOwner, null)
+                        .set(AgentAsyncWorkflowEntity::getLeaseUntilMs, null)
+        );
+        if (updated == 0) {
+            entity = findEntity(asyncWorkflowId);
+            return entity == null ? null : toStatusResponse(entity);
+        }
         entity.setCancelRequested(1);
         entity.setStatus("CANCELLED");
         entity.setErrorMessage("workflow cancelled by user");
-        entity.setFinishedAtMs(System.currentTimeMillis());
-        agentAsyncWorkflowMapper.updateById(entity);
+        entity.setFinishedAtMs(now);
         publish(entity.getSessionId(), entity.getTaskId(), "supervisor-agent", "supervisor.workflow_async.cancelled", Map.of(
                 "asyncWorkflowId", entity.getAsyncWorkflowId(),
                 "status", entity.getStatus(),
@@ -238,6 +263,10 @@ public class SupervisorAsyncWorkflowService {
         java.util.List<AgentAsyncWorkflowEntity> pending = agentAsyncWorkflowMapper.selectList(
                 new LambdaQueryWrapper<AgentAsyncWorkflowEntity>()
                         .eq(AgentAsyncWorkflowEntity::getStatus, "ACCEPTED")
+                        .and(wrapper -> wrapper.isNull(AgentAsyncWorkflowEntity::getCancelRequested)
+                                .or().eq(AgentAsyncWorkflowEntity::getCancelRequested, 0))
+                        .and(wrapper -> wrapper.isNull(AgentAsyncWorkflowEntity::getNextAttemptAtMs)
+                                .or().le(AgentAsyncWorkflowEntity::getNextAttemptAtMs, System.currentTimeMillis()))
                         .orderByAsc(AgentAsyncWorkflowEntity::getCreatedAt)
                         .last("limit " + Math.max(1, batchSize))
         );
@@ -245,7 +274,11 @@ public class SupervisorAsyncWorkflowService {
             if (!claimWorkflow(pendingEntity.getId())) {
                 continue;
             }
-            EXECUTOR.execute(() -> runClaimedWorkflow(pendingEntity.getAsyncWorkflowId()));
+            try {
+                executor.execute(() -> runClaimedWorkflow(pendingEntity.getAsyncWorkflowId()));
+            } catch (RejectedExecutionException exception) {
+                releaseClaim(pendingEntity.getId());
+            }
         }
     }
 
@@ -257,7 +290,6 @@ public class SupervisorAsyncWorkflowService {
         if (!"RUNNING".equalsIgnoreCase(entity.getStatus())) {
             return;
         }
-        SupervisorTaskRequest request = readRequest(entity.getOriginalRequestJson());
         publish(entity.getSessionId(), entity.getTaskId(), "supervisor-agent", "supervisor.workflow_async.status", Map.of(
                 "asyncWorkflowId", entity.getAsyncWorkflowId(),
                 "status", entity.getStatus(),
@@ -266,6 +298,7 @@ public class SupervisorAsyncWorkflowService {
                 "durationMs", elapsed(entity)
         ), entity.getTraceId());
         try {
+            SupervisorTaskRequest request = readRequest(entity.getOriginalRequestJson());
             SupervisorTaskResponse result = supervisorWorkflowService.startWorkflow(request);
             entity = findEntity(asyncWorkflowId);
             if (entity == null || Integer.valueOf(1).equals(entity.getCancelRequested())) {
@@ -275,7 +308,11 @@ public class SupervisorAsyncWorkflowService {
             entity.setStatus(result.status());
             entity.setFinishedAtMs(System.currentTimeMillis());
             entity.setErrorMessage(null);
-            agentAsyncWorkflowMapper.updateById(entity);
+            entity.setLeaseOwner(null);
+            entity.setLeaseUntilMs(null);
+            if (!completeWorkflow(entity)) {
+                return;
+            }
             publish(entity.getSessionId(), entity.getTaskId(), "supervisor-agent", "supervisor.workflow_async.completed", Map.of(
                     "asyncWorkflowId", entity.getAsyncWorkflowId(),
                     "status", entity.getStatus(),
@@ -289,11 +326,12 @@ public class SupervisorAsyncWorkflowService {
             if (entity == null || Integer.valueOf(1).equals(entity.getCancelRequested())) {
                 return;
             }
-            entity.setStatus("FAILED");
-            entity.setErrorMessage(exception.getMessage());
-            entity.setFinishedAtMs(System.currentTimeMillis());
-            agentAsyncWorkflowMapper.updateById(entity);
-            publish(entity.getSessionId(), entity.getTaskId(), "supervisor-agent", "supervisor.workflow_async.failed", Map.of(
+            if (!retryOrFail(entity, exception)) {
+                return;
+            }
+            boolean retry = "ACCEPTED".equalsIgnoreCase(entity.getStatus());
+            String eventType = retry ? "supervisor.workflow_async.retry_scheduled" : "supervisor.workflow_async.failed";
+            publish(entity.getSessionId(), entity.getTaskId(), "supervisor-agent", eventType, Map.of(
                     "asyncWorkflowId", entity.getAsyncWorkflowId(),
                     "status", entity.getStatus(),
                     "errorMessage", entity.getErrorMessage() == null ? "" : entity.getErrorMessage(),
@@ -301,8 +339,51 @@ public class SupervisorAsyncWorkflowService {
                     "stage", "async_workflow",
                     "durationMs", elapsed(entity)
             ), entity.getTraceId());
-            agentMetricsService.recordAsyncWorkflow("FAILED", elapsed(entity));
+            if (!retry) {
+                agentMetricsService.recordAsyncWorkflow("FAILED", elapsed(entity));
+            }
         }
+    }
+
+    private boolean completeWorkflow(AgentAsyncWorkflowEntity entity) {
+        String workerId = distributedAgentProperties.getAsyncRuntime().getWorkerId();
+        return agentAsyncWorkflowMapper.update(
+                null,
+                new LambdaUpdateWrapper<AgentAsyncWorkflowEntity>()
+                        .eq(AgentAsyncWorkflowEntity::getId, entity.getId())
+                        .eq(AgentAsyncWorkflowEntity::getStatus, "RUNNING")
+                        .eq(AgentAsyncWorkflowEntity::getLeaseOwner, workerId)
+                        .set(AgentAsyncWorkflowEntity::getStatus, entity.getStatus())
+                        .set(AgentAsyncWorkflowEntity::getResultJson, entity.getResultJson())
+                        .set(AgentAsyncWorkflowEntity::getErrorMessage, null)
+                        .set(AgentAsyncWorkflowEntity::getFinishedAtMs, entity.getFinishedAtMs())
+                        .set(AgentAsyncWorkflowEntity::getLeaseOwner, null)
+                        .set(AgentAsyncWorkflowEntity::getLeaseUntilMs, null)
+        ) > 0;
+    }
+
+    private boolean retryOrFail(AgentAsyncWorkflowEntity entity, Exception exception) {
+        DistributedAgentProperties.AsyncRuntimeProperties properties = distributedAgentProperties.getAsyncRuntime();
+        int attempts = entity.getAttemptCount() == null ? 1 : entity.getAttemptCount();
+        boolean retry = AsyncRuntimePolicy.shouldRetry(attempts, properties.getMaxAttempts(), exception);
+        long now = System.currentTimeMillis();
+        entity.setStatus(retry ? "ACCEPTED" : "FAILED");
+        entity.setErrorMessage(AsyncRuntimePolicy.failureCode(exception));
+        entity.setFinishedAtMs(retry ? null : now);
+        entity.setLeaseOwner(null);
+        entity.setLeaseUntilMs(null);
+        entity.setNextAttemptAtMs(retry ? now + Math.max(0L, properties.getRetryDelaySeconds()) * 1000L : null);
+        LambdaUpdateWrapper<AgentAsyncWorkflowEntity> update = new LambdaUpdateWrapper<AgentAsyncWorkflowEntity>()
+                .eq(AgentAsyncWorkflowEntity::getId, entity.getId())
+                .eq(AgentAsyncWorkflowEntity::getStatus, "RUNNING")
+                .eq(AgentAsyncWorkflowEntity::getLeaseOwner, properties.getWorkerId())
+                .set(AgentAsyncWorkflowEntity::getStatus, entity.getStatus())
+                .set(AgentAsyncWorkflowEntity::getErrorMessage, entity.getErrorMessage())
+                .set(AgentAsyncWorkflowEntity::getFinishedAtMs, entity.getFinishedAtMs())
+                .set(AgentAsyncWorkflowEntity::getLeaseOwner, null)
+                .set(AgentAsyncWorkflowEntity::getLeaseUntilMs, null)
+                .set(AgentAsyncWorkflowEntity::getNextAttemptAtMs, entity.getNextAttemptAtMs());
+        return agentAsyncWorkflowMapper.update(null, update) > 0;
     }
 
     private long elapsed(AgentAsyncWorkflowEntity entity) {
@@ -342,14 +423,40 @@ public class SupervisorAsyncWorkflowService {
     }
 
     private boolean claimWorkflow(Long id) {
+        long now = System.currentTimeMillis();
+        DistributedAgentProperties.AsyncRuntimeProperties properties = distributedAgentProperties.getAsyncRuntime();
         return agentAsyncWorkflowMapper.update(
                 null,
                 new LambdaUpdateWrapper<AgentAsyncWorkflowEntity>()
                         .eq(AgentAsyncWorkflowEntity::getId, id)
                         .eq(AgentAsyncWorkflowEntity::getStatus, "ACCEPTED")
+                        .and(wrapper -> wrapper.isNull(AgentAsyncWorkflowEntity::getCancelRequested)
+                                .or().eq(AgentAsyncWorkflowEntity::getCancelRequested, 0))
+                        .and(wrapper -> wrapper.isNull(AgentAsyncWorkflowEntity::getNextAttemptAtMs)
+                                .or().le(AgentAsyncWorkflowEntity::getNextAttemptAtMs, now))
                         .set(AgentAsyncWorkflowEntity::getStatus, "RUNNING")
-                        .set(AgentAsyncWorkflowEntity::getStartedAtMs, System.currentTimeMillis())
+                        .set(AgentAsyncWorkflowEntity::getStartedAtMs, now)
+                        .set(AgentAsyncWorkflowEntity::getLeaseOwner, properties.getWorkerId())
+                        .set(AgentAsyncWorkflowEntity::getLeaseUntilMs,
+                                now + Math.max(1L, properties.getLeaseTimeoutSeconds()) * 1000L)
+                        .setSql("attempt_count = COALESCE(attempt_count, 0) + 1")
         ) > 0;
+    }
+
+    private void releaseClaim(Long id) {
+        DistributedAgentProperties.AsyncRuntimeProperties properties = distributedAgentProperties.getAsyncRuntime();
+        agentAsyncWorkflowMapper.update(
+                null,
+                new LambdaUpdateWrapper<AgentAsyncWorkflowEntity>()
+                        .eq(AgentAsyncWorkflowEntity::getId, id)
+                        .eq(AgentAsyncWorkflowEntity::getStatus, "RUNNING")
+                        .eq(AgentAsyncWorkflowEntity::getLeaseOwner, properties.getWorkerId())
+                        .set(AgentAsyncWorkflowEntity::getStatus, "ACCEPTED")
+                        .set(AgentAsyncWorkflowEntity::getLeaseOwner, null)
+                        .set(AgentAsyncWorkflowEntity::getLeaseUntilMs, null)
+                        .set(AgentAsyncWorkflowEntity::getNextAttemptAtMs, System.currentTimeMillis())
+                        .setSql("attempt_count = GREATEST(COALESCE(attempt_count, 0) - 1, 0)")
+        );
     }
 
     private SupervisorAsyncWorkflowCreateResponse toCreateResponse(AgentAsyncWorkflowEntity entity) {

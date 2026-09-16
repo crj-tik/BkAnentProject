@@ -3,6 +3,7 @@ package com.bkanent.agent.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.bkanent.agent.client.A2aAgentClient;
+import com.bkanent.agent.config.DistributedAgentProperties;
 import com.bkanent.agent.entity.AgentAsyncTaskEntity;
 import com.bkanent.agent.graph.SupervisorGraphPlanner;
 import com.bkanent.agent.graph.SupervisorGraphState;
@@ -23,6 +24,7 @@ import com.bkanent.common.agent.SessionStreamEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.util.StringUtils;
 
 import java.util.LinkedHashMap;
@@ -30,18 +32,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 
 @Service
 public class SupervisorAsyncTaskService {
-
-    private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool(runnable -> {
-        Thread thread = new Thread(runnable, "supervisor-async-task");
-        thread.setDaemon(true);
-        return thread;
-    });
-
     private final AgentRegistry agentRegistry;
     private final A2aAgentClient a2aAgentClient;
     private final SupervisorTaskService supervisorTaskService;
@@ -54,6 +48,8 @@ public class SupervisorAsyncTaskService {
     private final AgentAsyncTaskMapper agentAsyncTaskMapper;
     private final ObjectMapper objectMapper;
     private final SupervisorAgentRoutingService supervisorAgentRoutingService;
+    private final DistributedAgentProperties distributedAgentProperties;
+    private final ThreadPoolTaskExecutor executor;
 
     public SupervisorAsyncTaskService(AgentRegistry agentRegistry,
                                       A2aAgentClient a2aAgentClient,
@@ -66,7 +62,9 @@ public class SupervisorAsyncTaskService {
                                       AgentPermissionService agentPermissionService,
                                       AgentAsyncTaskMapper agentAsyncTaskMapper,
                                       ObjectMapper objectMapper,
-                                      SupervisorAgentRoutingService supervisorAgentRoutingService) {
+                                      SupervisorAgentRoutingService supervisorAgentRoutingService,
+                                      DistributedAgentProperties distributedAgentProperties,
+                                      ThreadPoolTaskExecutor supervisorAsyncExecutor) {
         this.agentRegistry = agentRegistry;
         this.a2aAgentClient = a2aAgentClient;
         this.supervisorTaskService = supervisorTaskService;
@@ -79,18 +77,26 @@ public class SupervisorAsyncTaskService {
         this.agentAsyncTaskMapper = agentAsyncTaskMapper;
         this.objectMapper = objectMapper;
         this.supervisorAgentRoutingService = supervisorAgentRoutingService;
+        this.distributedAgentProperties = distributedAgentProperties;
+        this.executor = supervisorAsyncExecutor;
     }
 
     @PostConstruct
     public void reconcilePendingLocalTasks() {
+        long now = System.currentTimeMillis();
         agentAsyncTaskMapper.update(
                 null,
                 new LambdaUpdateWrapper<AgentAsyncTaskEntity>()
                         .ne(AgentAsyncTaskEntity::getMode, "CHILD_AGENT")
-                        .in(AgentAsyncTaskEntity::getStatus, List.of("ACCEPTED", "RUNNING"))
-                        .set(AgentAsyncTaskEntity::getStatus, "FAILED")
-                        .set(AgentAsyncTaskEntity::getErrorMessage, "supervisor restarted before async task completed")
-                        .set(AgentAsyncTaskEntity::getFinishedAtMs, System.currentTimeMillis())
+                        .eq(AgentAsyncTaskEntity::getStatus, "RUNNING")
+                        .and(wrapper -> wrapper.isNull(AgentAsyncTaskEntity::getLeaseUntilMs)
+                                .or().le(AgentAsyncTaskEntity::getLeaseUntilMs, now))
+                        .set(AgentAsyncTaskEntity::getStatus, "ACCEPTED")
+                        .set(AgentAsyncTaskEntity::getErrorMessage, "RECOVERED_AFTER_WORKER_RESTART")
+                        .set(AgentAsyncTaskEntity::getLeaseOwner, null)
+                        .set(AgentAsyncTaskEntity::getLeaseUntilMs, null)
+                        .set(AgentAsyncTaskEntity::getNextAttemptAtMs, now)
+                        .set(AgentAsyncTaskEntity::getFinishedAtMs, null)
         );
     }
 
@@ -261,7 +267,8 @@ public class SupervisorAsyncTaskService {
         entity.setMode(mode);
         entity.setStatus("ACCEPTED");
         entity.setOriginalRequestJson(writeJson(request));
-        entity.setStartedAtMs(System.currentTimeMillis());
+        entity.setAttemptCount(0);
+        entity.setNextAttemptAtMs(System.currentTimeMillis());
         agentAsyncTaskMapper.insert(entity);
         publish(sessionId, taskId, selectedAgentId, "supervisor.async.accepted", withGovernanceMetadata(Map.of(
                 "asyncTaskId", asyncTaskId,
@@ -279,6 +286,8 @@ public class SupervisorAsyncTaskService {
                 new LambdaQueryWrapper<AgentAsyncTaskEntity>()
                         .ne(AgentAsyncTaskEntity::getMode, "CHILD_AGENT")
                         .eq(AgentAsyncTaskEntity::getStatus, "ACCEPTED")
+                        .and(wrapper -> wrapper.isNull(AgentAsyncTaskEntity::getNextAttemptAtMs)
+                                .or().le(AgentAsyncTaskEntity::getNextAttemptAtMs, System.currentTimeMillis()))
                         .orderByAsc(AgentAsyncTaskEntity::getCreatedAt)
                         .last("limit " + Math.max(1, batchSize))
         );
@@ -286,7 +295,11 @@ public class SupervisorAsyncTaskService {
             if (!claimTask(pendingEntity.getId())) {
                 continue;
             }
-            EXECUTOR.execute(() -> runClaimedLocal(pendingEntity.getAsyncTaskId()));
+            try {
+                executor.execute(() -> runClaimedLocal(pendingEntity.getAsyncTaskId()));
+            } catch (RejectedExecutionException exception) {
+                releaseClaim(pendingEntity.getId());
+            }
         }
     }
 
@@ -295,7 +308,6 @@ public class SupervisorAsyncTaskService {
         if (entity == null || !"RUNNING".equalsIgnoreCase(entity.getStatus())) {
             return;
         }
-        SupervisorTaskRequest request = readRequest(entity.getOriginalRequestJson());
         publish(entity.getSessionId(), entity.getTaskId(), entity.getSelectedAgentId(), "supervisor.async.status", Map.of(
                 "asyncTaskId", entity.getAsyncTaskId(),
                 "mode", entity.getMode(),
@@ -305,12 +317,17 @@ public class SupervisorAsyncTaskService {
                 "durationMs", elapsed(entity)
         ), entity.getTraceId());
         try {
+            SupervisorTaskRequest request = readRequest(entity.getOriginalRequestJson());
             SupervisorTaskResponse result = supervisorTaskService.submitTask(request);
             entity.setResultJson(writeJson(result));
             entity.setStatus(result.status());
             entity.setFinishedAtMs(System.currentTimeMillis());
             entity.setErrorMessage(null);
-            agentAsyncTaskMapper.updateById(entity);
+            entity.setLeaseOwner(null);
+            entity.setLeaseUntilMs(null);
+            if (!completeTask(entity)) {
+                return;
+            }
             publish(entity.getSessionId(), entity.getTaskId(), entity.getSelectedAgentId(), "supervisor.async.completed", Map.of(
                     "asyncTaskId", entity.getAsyncTaskId(),
                     "mode", entity.getMode(),
@@ -321,11 +338,12 @@ public class SupervisorAsyncTaskService {
             ), entity.getTraceId());
             agentMetricsService.recordAsyncTask(entity.getMode(), entity.getStatus(), elapsed(entity));
         } catch (Exception exception) {
-            entity.setStatus("FAILED");
-            entity.setErrorMessage(exception.getMessage());
-            entity.setFinishedAtMs(System.currentTimeMillis());
-            agentAsyncTaskMapper.updateById(entity);
-            publish(entity.getSessionId(), entity.getTaskId(), entity.getSelectedAgentId(), "supervisor.async.failed", Map.of(
+            if (!retryOrFail(entity, exception)) {
+                return;
+            }
+            boolean retry = "ACCEPTED".equalsIgnoreCase(entity.getStatus());
+            String eventType = retry ? "supervisor.async.retry_scheduled" : "supervisor.async.failed";
+            publish(entity.getSessionId(), entity.getTaskId(), entity.getSelectedAgentId(), eventType, Map.of(
                     "asyncTaskId", entity.getAsyncTaskId(),
                     "mode", entity.getMode(),
                     "status", entity.getStatus(),
@@ -334,8 +352,50 @@ public class SupervisorAsyncTaskService {
                     "stage", "async_task",
                     "durationMs", elapsed(entity)
             ), entity.getTraceId());
-            agentMetricsService.recordAsyncTask(entity.getMode(), "FAILED", elapsed(entity));
+            if (!retry) {
+                agentMetricsService.recordAsyncTask(entity.getMode(), "FAILED", elapsed(entity));
+            }
         }
+    }
+
+    private boolean completeTask(AgentAsyncTaskEntity entity) {
+        String workerId = distributedAgentProperties.getAsyncRuntime().getWorkerId();
+        return agentAsyncTaskMapper.update(
+                null,
+                new LambdaUpdateWrapper<AgentAsyncTaskEntity>()
+                        .eq(AgentAsyncTaskEntity::getId, entity.getId())
+                        .eq(AgentAsyncTaskEntity::getStatus, "RUNNING")
+                        .eq(AgentAsyncTaskEntity::getLeaseOwner, workerId)
+                        .set(AgentAsyncTaskEntity::getStatus, entity.getStatus())
+                        .set(AgentAsyncTaskEntity::getResultJson, entity.getResultJson())
+                        .set(AgentAsyncTaskEntity::getErrorMessage, null)
+                        .set(AgentAsyncTaskEntity::getFinishedAtMs, entity.getFinishedAtMs())
+                        .set(AgentAsyncTaskEntity::getLeaseUntilMs, null)
+        ) > 0;
+    }
+
+    private boolean retryOrFail(AgentAsyncTaskEntity entity, Exception exception) {
+        DistributedAgentProperties.AsyncRuntimeProperties properties = distributedAgentProperties.getAsyncRuntime();
+        int attempts = entity.getAttemptCount() == null ? 1 : entity.getAttemptCount();
+        boolean retry = AsyncRuntimePolicy.shouldRetry(attempts, properties.getMaxAttempts(), exception);
+        long now = System.currentTimeMillis();
+        entity.setStatus(retry ? "ACCEPTED" : "FAILED");
+        entity.setErrorMessage(AsyncRuntimePolicy.failureCode(exception));
+        entity.setFinishedAtMs(retry ? null : now);
+        entity.setLeaseOwner(null);
+        entity.setLeaseUntilMs(null);
+        entity.setNextAttemptAtMs(retry ? now + Math.max(0L, properties.getRetryDelaySeconds()) * 1000L : null);
+        LambdaUpdateWrapper<AgentAsyncTaskEntity> update = new LambdaUpdateWrapper<AgentAsyncTaskEntity>()
+                .eq(AgentAsyncTaskEntity::getId, entity.getId())
+                .eq(AgentAsyncTaskEntity::getStatus, "RUNNING")
+                .eq(AgentAsyncTaskEntity::getLeaseOwner, properties.getWorkerId())
+                .set(AgentAsyncTaskEntity::getStatus, entity.getStatus())
+                .set(AgentAsyncTaskEntity::getErrorMessage, entity.getErrorMessage())
+                .set(AgentAsyncTaskEntity::getFinishedAtMs, entity.getFinishedAtMs())
+                .set(AgentAsyncTaskEntity::getLeaseOwner, null)
+                .set(AgentAsyncTaskEntity::getLeaseUntilMs, null)
+                .set(AgentAsyncTaskEntity::getNextAttemptAtMs, entity.getNextAttemptAtMs());
+        return agentAsyncTaskMapper.update(null, update) > 0;
     }
 
     private long elapsed(AgentAsyncTaskEntity entity) {
@@ -397,14 +457,38 @@ public class SupervisorAsyncTaskService {
     }
 
     private boolean claimTask(Long id) {
+        long now = System.currentTimeMillis();
+        DistributedAgentProperties.AsyncRuntimeProperties properties = distributedAgentProperties.getAsyncRuntime();
         return agentAsyncTaskMapper.update(
                 null,
                 new LambdaUpdateWrapper<AgentAsyncTaskEntity>()
                         .eq(AgentAsyncTaskEntity::getId, id)
                         .eq(AgentAsyncTaskEntity::getStatus, "ACCEPTED")
+                        .and(wrapper -> wrapper.isNull(AgentAsyncTaskEntity::getNextAttemptAtMs)
+                                .or().le(AgentAsyncTaskEntity::getNextAttemptAtMs, now))
                         .set(AgentAsyncTaskEntity::getStatus, "RUNNING")
-                        .set(AgentAsyncTaskEntity::getStartedAtMs, System.currentTimeMillis())
+                        .set(AgentAsyncTaskEntity::getStartedAtMs, now)
+                        .set(AgentAsyncTaskEntity::getLeaseOwner, properties.getWorkerId())
+                        .set(AgentAsyncTaskEntity::getLeaseUntilMs,
+                                now + Math.max(1L, properties.getLeaseTimeoutSeconds()) * 1000L)
+                        .setSql("attempt_count = COALESCE(attempt_count, 0) + 1")
         ) > 0;
+    }
+
+    private void releaseClaim(Long id) {
+        DistributedAgentProperties.AsyncRuntimeProperties properties = distributedAgentProperties.getAsyncRuntime();
+        agentAsyncTaskMapper.update(
+                null,
+                new LambdaUpdateWrapper<AgentAsyncTaskEntity>()
+                        .eq(AgentAsyncTaskEntity::getId, id)
+                        .eq(AgentAsyncTaskEntity::getStatus, "RUNNING")
+                        .eq(AgentAsyncTaskEntity::getLeaseOwner, properties.getWorkerId())
+                        .set(AgentAsyncTaskEntity::getStatus, "ACCEPTED")
+                        .set(AgentAsyncTaskEntity::getLeaseOwner, null)
+                        .set(AgentAsyncTaskEntity::getLeaseUntilMs, null)
+                        .set(AgentAsyncTaskEntity::getNextAttemptAtMs, System.currentTimeMillis())
+                        .setSql("attempt_count = GREATEST(COALESCE(attempt_count, 0) - 1, 0)")
+        );
     }
 
     private SupervisorAsyncTaskCreateResponse toCreateResponse(AgentAsyncTaskEntity entity) {

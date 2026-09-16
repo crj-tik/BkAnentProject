@@ -787,6 +787,10 @@ CREATE TABLE IF NOT EXISTS agent_async_task (
     original_request_json LONGTEXT NULL,
     started_at_ms BIGINT NULL,
     finished_at_ms BIGINT NULL,
+    attempt_count INT NOT NULL DEFAULT 0,
+    lease_owner VARCHAR(128) NULL,
+    lease_until_ms BIGINT NULL,
+    next_attempt_at_ms BIGINT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted TINYINT NOT NULL DEFAULT 0,
@@ -796,7 +800,8 @@ CREATE TABLE IF NOT EXISTS agent_async_task (
     KEY idx_agent_async_task_session_id (session_id),
     KEY idx_agent_async_task_trace_id (trace_id),
     KEY idx_agent_async_task_selected_agent_id (selected_agent_id),
-    KEY idx_agent_async_task_status (status)
+    KEY idx_agent_async_task_status (status),
+    KEY idx_agent_async_task_dispatch (status, next_attempt_at_ms, lease_until_ms)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS agent_async_workflow (
@@ -813,6 +818,10 @@ CREATE TABLE IF NOT EXISTS agent_async_workflow (
     cancel_requested TINYINT NOT NULL DEFAULT 0,
     started_at_ms BIGINT NULL,
     finished_at_ms BIGINT NULL,
+    attempt_count INT NOT NULL DEFAULT 0,
+    lease_owner VARCHAR(128) NULL,
+    lease_until_ms BIGINT NULL,
+    next_attempt_at_ms BIGINT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted TINYINT NOT NULL DEFAULT 0,
@@ -821,7 +830,8 @@ CREATE TABLE IF NOT EXISTS agent_async_workflow (
     KEY idx_agent_async_workflow_task_id (task_id),
     KEY idx_agent_async_workflow_session_id (session_id),
     KEY idx_agent_async_workflow_trace_id (trace_id),
-    KEY idx_agent_async_workflow_status (status)
+    KEY idx_agent_async_workflow_status (status),
+    KEY idx_agent_async_workflow_dispatch (status, next_attempt_at_ms, lease_until_ms)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS agent_governance_override (

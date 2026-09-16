@@ -12,8 +12,7 @@ public class MockContractOcrExtractor implements ContractOcrExtractor {
 
     @Override
     public boolean supports(String provider) {
-        return !StringUtils.hasText(provider)
-                || ContractProviderNames.OCR_MOCK.equalsIgnoreCase(provider)
+        return ContractProviderNames.OCR_MOCK.equalsIgnoreCase(provider)
                 || ContractProviderNames.ALIAS_MOCK.equalsIgnoreCase(provider);
     }
 
@@ -29,7 +28,7 @@ public class MockContractOcrExtractor implements ContractOcrExtractor {
         } else {
             structuredData = "{\"fileName\":\"" + fileName + "\",\"fileUrl\":\"" + fileUrl + "\"}";
         }
-        String plainText = "已识别附件，类型=" + attachmentType + "，文件名=" + fileName;
+        String plainText = "[SIMULATED] 已识别附件，类型=" + attachmentType + "，文件名=" + fileName;
         return new ContractOcrExtractResult(ContractProviderNames.OCR_MOCK, plainText, structuredData);
     }
 }

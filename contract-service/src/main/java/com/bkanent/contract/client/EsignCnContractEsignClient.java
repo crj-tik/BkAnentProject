@@ -19,14 +19,6 @@ public class EsignCnContractEsignClient implements ContractEsignClient {
 
     @Override
     public ContractEsignResult sealContract(ContractEntity contract, String signedDocumentUrl) {
-        String targetUrl = StringUtils.hasText(signedDocumentUrl)
-                ? signedDocumentUrl
-                : "https://esign.example.com/contracts/" + contract.getContractNo() + ".pdf";
-        return new ContractEsignResult(
-                ContractProviderNames.ESIGN_CN,
-                targetUrl,
-                "ESIGN-" + contract.getId(),
-                "E-Sign CN sealing succeeded"
-        );
+        throw new UnsupportedOperationException("真实电子签章服务尚未接入: " + ContractProviderNames.ESIGN_CN);
     }
 }

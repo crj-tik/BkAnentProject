@@ -8,9 +8,23 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "contract.integration")
 public class ContractIntegrationProperties {
 
+    private String mode = "local";
+
     private String ocrProvider = ContractProviderNames.OCR_MOCK;
 
     private String esignProvider = ContractProviderNames.ESIGN_MOCK;
+
+    public String getMode() {
+        return mode;
+    }
+
+    public void setMode(String mode) {
+        this.mode = mode;
+    }
+
+    public boolean isLocalMode() {
+        return "local".equalsIgnoreCase(mode);
+    }
 
     public String getOcrProvider() {
         return ocrProvider;
