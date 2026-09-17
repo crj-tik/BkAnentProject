@@ -88,12 +88,17 @@ services:
     environment:
       MODE: standalone
       NACOS_AUTH_ENABLE: "false"
+      # Nacos 3.x requires a Base64 token even when auth is disabled.
+      # This value is for local development only; replace it in secured environments.
+      NACOS_AUTH_TOKEN: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+      NACOS_AUTH_IDENTITY_KEY: "bk-anent-local"
+      NACOS_AUTH_IDENTITY_VALUE: "bk-anent-local"
       PREFER_HOST_MODE: hostname
       TZ: Asia/Shanghai
     ports:
       - "${NACOS_EXPOSED_PORT:-8848}:8848"
     healthcheck:
-      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8848/nacos/actuator/health >/dev/null"]
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/v3/console/health/readiness >/dev/null"]
       interval: 10s
       timeout: 5s
       retries: 30
@@ -106,15 +111,16 @@ services:
       nacos:
         condition: service_healthy
     entrypoint: ["/bin/sh", "-ec"]
-    command: |
-      for config in /config/*.yaml; do
-        data_id=$$(basename "$${config}")
-        echo "Uploading $${data_id} to Nacos public namespace"
-        curl --fail --silent --show-error --retry 10 --retry-delay 2 \
-          -X POST "http://nacos:8848/nacos/v1/cs/configs?dataId=$${data_id}&group=DEFAULT_GROUP&type=yaml" \
-          --data-urlencode "content@$${config}"
-      done
-      echo "Nacos configuration upload completed"
+    command:
+      - |
+        for config_file in /config/*.yaml; do
+          data_id=$$(basename "$${config_file}")
+          echo "Uploading $${data_id} to Nacos public namespace"
+          curl --fail --silent --show-error --retry 10 --retry-delay 2 \
+            -X POST "http://nacos:8848/nacos/v1/cs/configs?dataId=$${data_id}&group=DEFAULT_GROUP&type=yaml" \
+            --data-urlencode "content@$${config_file}"
+        done
+        echo "Nacos configuration upload completed"
     volumes:
       - ./nacos:/config:ro
     networks: [bk]
