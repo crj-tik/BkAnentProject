@@ -33,7 +33,7 @@ spring:
                 tags: settlement,payout
         nacos:
           server-addr: ${NACOS_SERVER:127.0.0.1:8848}
-          namespace: ${NACOS_NAMESPACE:1bde955a-3394-4f3e-a754-70e0aee942dd}
+          namespace: ${NACOS_NAMESPACE:}
           registry:
             enabled: true
           discovery:
