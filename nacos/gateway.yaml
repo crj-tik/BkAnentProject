@@ -67,7 +67,7 @@ service:
     mode: ${SERVICE_READINESS_MODE:distributed}
     required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos}
     endpoints:
-      nacos: "${NACOS_SERVER:127.0.0.1:8080}"
+      nacos: "${NACOS_SERVER:127.0.0.1:8848}"
 
 gateway:
   access:

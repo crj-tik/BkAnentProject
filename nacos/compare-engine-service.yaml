@@ -27,7 +27,7 @@ spring:
                 description: compare multiple listings and generate analysis report
                 tags: compare,analysis
         nacos:
-          server-addr: ${NACOS_SERVER:127.0.0.1:8080}
+          server-addr: ${NACOS_SERVER:127.0.0.1:8848}
           namespace: ${NACOS_NAMESPACE:1bde955a-3394-4f3e-a754-70e0aee942dd}
           registry:
             enabled: true
@@ -71,7 +71,7 @@ service:
     mode: ${SERVICE_READINESS_MODE:distributed}
     required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database}
     endpoints:
-      nacos: "${NACOS_SERVER:127.0.0.1:8080}"
+      nacos: "${NACOS_SERVER:127.0.0.1:8848}"
       database: "${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}"
 
 compare:

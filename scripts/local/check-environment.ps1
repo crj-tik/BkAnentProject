@@ -67,7 +67,7 @@ if ($Mode -eq 'local-auth') {
     })
     Write-Host 'local-auth uses embedded H2 and does not require Nacos, MySQL, Redis, or other remote services.'
 } else {
-    $nacosEndpoint = Get-EndpointParts (Get-EnvironmentValue 'NACOS_SERVER' '127.0.0.1:8080')
+    $nacosEndpoint = Get-EndpointParts (Get-EnvironmentValue 'NACOS_SERVER' '127.0.0.1:8848')
     $dependencies = @(
         [pscustomobject]@{ Name = 'Nacos'; Host = $nacosEndpoint.Host; Port = $nacosEndpoint.Port },
         [pscustomobject]@{ Name = 'MySQL'; Host = (Get-EnvironmentValue 'MYSQL_HOST' '127.0.0.1'); Port = [int](Get-EnvironmentValue 'MYSQL_PORT' '3306') },

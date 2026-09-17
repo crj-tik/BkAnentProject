@@ -32,7 +32,7 @@ spring:
                 description: send in-app, email and bot notifications
                 tags: notification,message
         nacos:
-          server-addr: ${NACOS_SERVER:127.0.0.1:8080}
+          server-addr: ${NACOS_SERVER:127.0.0.1:8848}
           namespace: ${NACOS_NAMESPACE:1bde955a-3394-4f3e-a754-70e0aee942dd}
           registry:
             enabled: true
@@ -87,7 +87,7 @@ service:
     mode: ${SERVICE_READINESS_MODE:distributed}
     required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database,rocketmq}
     endpoints:
-      nacos: "${NACOS_SERVER:127.0.0.1:8080}"
+      nacos: "${NACOS_SERVER:127.0.0.1:8848}"
       database: "${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}"
       rocketmq: "${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}"
 
