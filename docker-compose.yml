@@ -77,7 +77,7 @@ services:
       - mysql-data:/var/lib/mysql
       - ./sql/mysql-init.sql:/docker-entrypoint-initdb.d/001-mysql-init.sql:ro
     ports:
-      - "${MYSQL_EXPOSED_PORT:-3306}:3306"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${MYSQL_EXPOSED_PORT:-3306}:3306"
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
       interval: 5s
@@ -99,10 +99,10 @@ services:
       PREFER_HOST_MODE: hostname
       TZ: Asia/Shanghai
     ports:
-      - "${NACOS_EXPOSED_PORT:-8848}:8848"
-      - "${NACOS_CONSOLE_EXPOSED_PORT:-18080}:8080"
-      - "${NACOS_GRPC_EXPOSED_PORT:-9848}:9848"
-      - "${NACOS_GRPC_TLS_EXPOSED_PORT:-9849}:9849"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${NACOS_EXPOSED_PORT:-8848}:8848"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${NACOS_CONSOLE_EXPOSED_PORT:-18080}:8080"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${NACOS_GRPC_EXPOSED_PORT:-9848}:9848"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${NACOS_GRPC_TLS_EXPOSED_PORT:-9849}:9849"
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/v3/console/health/readiness >/dev/null"]
       interval: 10s
@@ -140,7 +140,7 @@ services:
     volumes:
       - redis-data:/data
     ports:
-      - "${REDIS_EXPOSED_PORT:-6379}:6379"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${REDIS_EXPOSED_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -154,7 +154,7 @@ services:
     restart: unless-stopped
     command: ["sh", "mqnamesrv"]
     ports:
-      - "${ROCKETMQ_NAMESRV_EXPOSED_PORT:-9876}:9876"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${ROCKETMQ_NAMESRV_EXPOSED_PORT:-9876}:9876"
     networks: [bk]
 
   rocketmq-broker:
@@ -167,8 +167,8 @@ services:
     environment:
       NAMESRV_ADDR: rocketmq-namesrv:9876
     ports:
-      - "${ROCKETMQ_BROKER_EXPOSED_PORT:-10911}:10911"
-      - "${ROCKETMQ_BROKER_VIP_EXPOSED_PORT:-10909}:10909"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${ROCKETMQ_BROKER_EXPOSED_PORT:-10911}:10911"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${ROCKETMQ_BROKER_VIP_EXPOSED_PORT:-10909}:10909"
     volumes:
       - rocketmq-broker-data:/home/rocketmq/store
     networks: [bk]
@@ -184,8 +184,8 @@ services:
     volumes:
       - minio-data:/data
     ports:
-      - "${MINIO_EXPOSED_PORT:-19000}:9000"
-      - "${MINIO_CONSOLE_EXPOSED_PORT:-19001}:9001"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${MINIO_EXPOSED_PORT:-19000}:9000"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${MINIO_CONSOLE_EXPOSED_PORT:-19001}:9001"
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:9000/minio/health/live >/dev/null"]
       interval: 10s
@@ -225,7 +225,7 @@ services:
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
     ports:
-      - "${ELASTICSEARCH_EXPOSED_PORT:-9200}:9200"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${ELASTICSEARCH_EXPOSED_PORT:-9200}:9200"
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow >/dev/null"]
       interval: 10s
@@ -273,7 +273,7 @@ services:
     volumes:
       - milvus-etcd-data:/etcd
     ports:
-      - "${MILVUS_ETCD_EXPOSED_PORT:-2379}:2379"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${MILVUS_ETCD_EXPOSED_PORT:-2379}:2379"
     healthcheck:
       test: ["CMD-SHELL", "ETCDCTL_API=3 etcdctl endpoint health --endpoints=http://127.0.0.1:2379"]
       interval: 10s
@@ -315,8 +315,8 @@ services:
     volumes:
       - milvus-data:/var/lib/milvus
     ports:
-      - "${MILVUS_EXPOSED_PORT:-19530}:19530"
-      - "${MILVUS_HEALTH_EXPOSED_PORT:-9091}:9091"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${MILVUS_EXPOSED_PORT:-19530}:19530"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${MILVUS_HEALTH_EXPOSED_PORT:-9091}:9091"
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:9091/healthz >/dev/null"]
       interval: 10s
@@ -332,7 +332,7 @@ services:
       SERVICE_ARTIFACT: auth-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://auth-service:9101
     ports:
-      - "${AUTH_EXPOSED_PORT:-9101}:9101"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${AUTH_EXPOSED_PORT:-9101}:9101"
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:9101/actuator/health/readiness | grep -q 'UP'"]
       interval: 10s
@@ -352,7 +352,7 @@ services:
       SERVICE_ARTIFACT: gateway-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://gateway:5010
     ports:
-      - "${GATEWAY_EXPOSED_PORT:-5010}:5010"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${GATEWAY_EXPOSED_PORT:-5010}:5010"
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:5010/actuator/health/readiness | grep -q 'UP'"]
       interval: 10s
