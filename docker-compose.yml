@@ -100,6 +100,7 @@ services:
       TZ: Asia/Shanghai
     ports:
       - "${NACOS_EXPOSED_PORT:-8848}:8848"
+      - "${NACOS_CONSOLE_EXPOSED_PORT:-18080}:8080"
       - "${NACOS_GRPC_EXPOSED_PORT:-9848}:9848"
       - "${NACOS_GRPC_TLS_EXPOSED_PORT:-9849}:9849"
     healthcheck:

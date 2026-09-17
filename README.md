@@ -114,7 +114,7 @@ docker compose ps
 docker compose --profile full up -d --build
 ```
 
-开发环境基础设施对宿主机 `127.0.0.1` 的入口为：MySQL `3306`、Nacos API `8848`（gRPC `9848/9849`）、Redis `6379`、RocketMQ NameServer `9876`、Broker `10911/10909`、MinIO API/控制台 `19000/19001`、Elasticsearch `9200`、Milvus gRPC/健康检查 `19530/9091`。容器内部仍使用服务名和标准端口互联。
+开发环境基础设施对宿主机 `127.0.0.1` 的入口为：MySQL `3306`、Nacos API `8848`、Nacos 控制台/健康接口 `18080`（gRPC `9848/9849`）、Redis `6379`、RocketMQ NameServer `9876`、Broker `10911/10909`、MinIO API/控制台 `19000/19001`、Elasticsearch `9200`、Milvus gRPC/健康检查 `19530/9091`。容器内部仍使用服务名和标准端口互联。
 
 Docker 编排默认只用于开发演示：full profile 会启用 Milvus 和 Elasticsearch 搜索；MySQL 使用 `sql/mysql-init.sql` 初始化业务库和表，MinIO 创建 `generated-assets` bucket，Elasticsearch 创建 `listing_info`、`marketing_content` 索引。Redis、Elasticsearch、Milvus 开发模式不创建业务表空间或独立账号，MinIO 使用 root 开发账号；生产部署前必须通过环境变量或密钥管理系统提供 `MYSQL_ROOT_PASSWORD`、`AUTH_TOKEN_SECRET`、模型/API 密钥和独立的基础设施凭据，并接入真实 Provider。停止并删除容器（保留数据卷）使用 `docker compose down`，清理数据卷前请确认数据已备份。
 
