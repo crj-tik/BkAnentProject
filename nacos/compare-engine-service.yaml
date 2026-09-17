@@ -76,7 +76,7 @@ service:
 
 compare:
   report:
-    storage-dir: compare-engine-service/runtime/reports
+    storage-dir: ${COMPARE_REPORT_STORAGE_DIR:/app/runtime/reports}
   agent:
     model: ${COMPARE_AGENT_MODEL:deepseek-chat}
     temperature: ${COMPARE_AGENT_TEMPERATURE:0.2}

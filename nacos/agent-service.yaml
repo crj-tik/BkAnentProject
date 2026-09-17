@@ -84,12 +84,14 @@ management:
 service:
   readiness:
     mode: ${SERVICE_READINESS_MODE:distributed}
-    required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database,redis,rocketmq}
+    required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database,redis,rocketmq,milvus,memory}
     endpoints:
       nacos: "${NACOS_SERVER:127.0.0.1:8848}"
       database: "${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}"
       redis: "${REDIS_HOST:127.0.0.1}:${REDIS_PORT:6379}"
       rocketmq: "${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}"
+      milvus: "${MILVUS_ENDPOINT:http://127.0.0.1:19530}"
+      memory: "${MEMORY_SERVICE_BASE_URL:http://127.0.0.1:9011}"
 
 mybatis-plus:
   mapper-locations: classpath:/mapper/*.xml

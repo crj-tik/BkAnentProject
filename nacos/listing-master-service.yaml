@@ -72,10 +72,11 @@ management:
 service:
   readiness:
     mode: ${SERVICE_READINESS_MODE:distributed}
-    required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database}
+    required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database,elasticsearch}
     endpoints:
       nacos: "${NACOS_SERVER:127.0.0.1:8848}"
       database: "${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}"
+      elasticsearch: "${ELASTICSEARCH_URIS:http://127.0.0.1:9200}"
 
 mybatis-plus:
   mapper-locations: classpath:/mapper/*.xml

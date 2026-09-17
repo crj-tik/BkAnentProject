@@ -21,7 +21,7 @@ x-app-environment: &app-environment
   MINIO_ENDPOINT: http://minio:9000
   MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
   MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
-  MINIO_PUBLIC_BASE_URL: http://localhost:9000
+  MINIO_PUBLIC_BASE_URL: http://127.0.0.1:19000
   MILVUS_HOST: milvus
   MILVUS_PORT: "19530"
   MILVUS_ENDPOINT: http://milvus:19530
@@ -32,20 +32,23 @@ x-app-environment: &app-environment
   ES_PORT: "9200"
   ELASTICSEARCH_URIS: http://elasticsearch:9200
   AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:-local-docker-auth-secret-change-before-production-please}
-  DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
-  DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
-  AGENT_RAG_RERANK_API_KEY: ${AGENT_RAG_RERANK_API_KEY:-}
+  # Spring AI validates provider keys during bean creation. The placeholders
+  # only keep local containers bootable; real AI calls still require keys.
+  DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-local-dev-placeholder}
+  DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-local-dev-placeholder}
+  AGENT_RAG_RERANK_API_KEY: ${AGENT_RAG_RERANK_API_KEY:-local-dev-placeholder}
   A2A_PUBLIC_BASE_URL: http://localhost
   SERVICE_READINESS_MODE: distributed
   CONTRACT_INTEGRATION_MODE: local
   NOTIFICATION_INTEGRATION_MODE: local
   MEDIA_INTEGRATION_MODE: local
   PROMOTION_INTEGRATION_MODE: local
-  LISTING_SEARCH_USE_ES: "false"
-  MARKETING_SEARCH_USE_ES: "false"
   BUSINESS_RANKING_USE_REDIS: "true"
   AGENT_STREAM_PROVIDER: memory
-  MILVUS_ENABLED: "false"
+  MILVUS_ENABLED: "true"
+  MILVUS_DATABASE: default
+  LISTING_SEARCH_USE_ES: "true"
+  MARKETING_SEARCH_USE_ES: "true"
 
 x-app-service: &app-service
   image: bk-anent-services:dev
@@ -97,6 +100,8 @@ services:
       TZ: Asia/Shanghai
     ports:
       - "${NACOS_EXPOSED_PORT:-8848}:8848"
+      - "${NACOS_GRPC_EXPOSED_PORT:-9848}:9848"
+      - "${NACOS_GRPC_TLS_EXPOSED_PORT:-9849}:9849"
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8080/v3/console/health/readiness >/dev/null"]
       interval: 10s
@@ -178,13 +183,145 @@ services:
     volumes:
       - minio-data:/data
     ports:
-      - "${MINIO_EXPOSED_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_EXPOSED_PORT:-9001}:9001"
+      - "${MINIO_EXPOSED_PORT:-19000}:9000"
+      - "${MINIO_CONSOLE_EXPOSED_PORT:-19001}:9001"
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:9000/minio/health/live >/dev/null"]
       interval: 10s
       timeout: 5s
       retries: 20
+    networks: [bk]
+
+  minio-init:
+    image: minio/mc:latest
+    profiles: [full]
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
+        mc mb --ignore-existing "local/$${MINIO_BUCKET}"
+        echo "MinIO bucket $${MINIO_BUCKET} is ready"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-generated-assets}
+    networks: [bk]
+    restart: "no"
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    profiles: [full]
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      xpack.security.enrollment.enabled: "false"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+      TZ: Asia/Shanghai
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    ports:
+      - "${ELASTICSEARCH_EXPOSED_PORT:-9200}:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks: [bk]
+
+  elasticsearch-init:
+    image: curlimages/curl:8.10.1
+    profiles: [full]
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        for index_name in listing_info marketing_content; do
+          http_code=$$(curl --silent --show-error -o /dev/null -w "%{http_code}" \
+            -X PUT "http://elasticsearch:9200/$${index_name}" \
+            -H "Content-Type: application/json" \
+            -d '{"settings":{"number_of_shards":1,"number_of_replicas":0}}')
+          case "$${http_code}" in
+            200|201|400) echo "Elasticsearch index $${index_name} is ready" ;;
+            *) echo "Failed to initialize Elasticsearch index $${index_name}: HTTP $${http_code}"; exit 1 ;;
+          esac
+        done
+    networks: [bk]
+    restart: "no"
+
+  milvus-etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    profiles: [full]
+    restart: unless-stopped
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+    command: >-
+      etcd
+      --advertise-client-urls=http://milvus-etcd:2379
+      --listen-client-urls=http://0.0.0.0:2379
+      --data-dir=/etcd
+    volumes:
+      - milvus-etcd-data:/etcd
+    ports:
+      - "${MILVUS_ETCD_EXPOSED_PORT:-2379}:2379"
+    healthcheck:
+      test: ["CMD-SHELL", "ETCDCTL_API=3 etcdctl endpoint health --endpoints=http://127.0.0.1:2379"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks: [bk]
+
+  milvus-minio:
+    image: minio/minio:latest
+    profiles: [full]
+    restart: unless-stopped
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: ${MILVUS_MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MILVUS_MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - milvus-minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:9000/minio/health/live >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks: [bk]
+
+  milvus:
+    image: milvusdb/milvus:v2.4.17
+    profiles: [full]
+    restart: unless-stopped
+    command: ["milvus", "run", "standalone"]
+    depends_on:
+      milvus-etcd:
+        condition: service_healthy
+      milvus-minio:
+        condition: service_healthy
+    environment:
+      ETCD_ENDPOINTS: milvus-etcd:2379
+      MINIO_ADDRESS: milvus-minio:9000
+      COMMON_STORAGETYPE: local
+    volumes:
+      - milvus-data:/var/lib/milvus
+    ports:
+      - "${MILVUS_EXPOSED_PORT:-19530}:19530"
+      - "${MILVUS_HEALTH_EXPOSED_PORT:-9091}:9091"
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:9091/healthz >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
     networks: [bk]
 
   auth-service:
@@ -225,16 +362,44 @@ services:
   agent-service:
     <<: *app-service
     profiles: [full]
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rocketmq-namesrv:
+        condition: service_started
+      milvus:
+        condition: service_healthy
+      memory-service:
+        condition: service_started
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: agent-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://agent-service:9002
-      SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,redis,rocketmq
-      MILVUS_ENABLED: "false"
+      SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,redis,rocketmq,milvus,memory
+      MEMORY_SERVICE_BASE_URL: http://memory-service:9011
+      BUSINESS_MCP_ENDPOINT: http://business-service:9010/mcp
+      COMPARE_MCP_ENDPOINT: http://compare-engine-service:9006/mcp
+      MARKETING_MCP_ENDPOINT: http://marketing-content-service:9008/mcp
+      CONTRACT_MCP_ENDPOINT: http://contract-service:9012/mcp
+      SETTLEMENT_MCP_ENDPOINT: http://settlement-service:9013/mcp
+      NOTIFICATION_MCP_ENDPOINT: http://notification-service:9003/mcp
+      MEDIA_MCP_ENDPOINT: http://media-worker-service:9007/mcp
+      MILVUS_ENABLED: "true"
 
   notification-service:
     <<: *app-service
     profiles: [full]
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+      rocketmq-namesrv:
+        condition: service_started
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: notification-service-1.0.0-SNAPSHOT.jar
@@ -244,11 +409,19 @@ services:
   listing-master-service:
     <<: *app-service
     profiles: [full]
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+      elasticsearch-init:
+        condition: service_completed_successfully
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: listing-master-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://listing-master-service:9004
-      LISTING_SEARCH_USE_ES: "false"
+      LISTING_SEARCH_USE_ES: "true"
+      SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,elasticsearch
 
   customer-service:
     <<: *app-service
@@ -261,14 +434,26 @@ services:
   compare-engine-service:
     <<: *app-service
     profiles: [full]
+    volumes:
+      - compare-report-data:/app/runtime
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: compare-engine-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://compare-engine-service:9006
+      COMPARE_REPORT_STORAGE_DIR: /app/runtime/reports
 
   media-worker-service:
     <<: *app-service
     profiles: [full]
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+      rocketmq-namesrv:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: media-worker-service-1.0.0-SNAPSHOT.jar
@@ -278,11 +463,19 @@ services:
   marketing-content-service:
     <<: *app-service
     profiles: [full]
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+      elasticsearch-init:
+        condition: service_completed_successfully
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: marketing-content-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://marketing-content-service:9008
-      MARKETING_SEARCH_USE_ES: "false"
+      MARKETING_SEARCH_USE_ES: "true"
+      SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,elasticsearch
 
   promotion-service:
     <<: *app-service
@@ -295,10 +488,18 @@ services:
   business-service:
     <<: *app-service
     profiles: [full]
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: business-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://business-service:9010
+      SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,redis
 
   memory-service:
     <<: *app-service
@@ -329,6 +530,11 @@ volumes:
   redis-data:
   rocketmq-broker-data:
   minio-data:
+  elasticsearch-data:
+  milvus-etcd-data:
+  milvus-minio-data:
+  milvus-data:
+  compare-report-data:
 
 networks:
   bk:

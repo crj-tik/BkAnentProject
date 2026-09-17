@@ -28,7 +28,6 @@ public class MarketingMcpTools implements McpTool {
         this.promotionRpcService = promotionRpcServiceProvider.getIfAvailable();
     }
 
-    @org.springaicommunity.mcp.annotation.McpTool
     @Tool(description = "生成营销内容并分发到指定平台。为每个平台创建内容条目并提交发布。")
     public String publishMarketingContent(
             @ToolParam(description = "Listing ID") Long listingId,

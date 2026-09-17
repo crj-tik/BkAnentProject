@@ -101,7 +101,7 @@ mvn -pl auth-service "-Dspring-boot.run.profiles=distributed" spring-boot:run
 
 ### Docker 开发部署
 
-仓库提供了 Docker Compose 开发编排。默认启动 MySQL、Nacos、配置导入、认证服务和网关；`full` profile 会额外启动 Redis、RocketMQ、MinIO 及其余业务服务。首次启动会在镜像构建阶段执行完整 Maven 打包，并自动把 `nacos/` 下的 YAML 导入 Nacos 公共命名空间。
+仓库提供了 Docker Compose 开发编排。默认启动 MySQL、Nacos、配置导入、认证服务和网关；`full` profile 会额外启动 Redis、RocketMQ、MinIO、Elasticsearch、Milvus（含 etcd 和内部 MinIO）及其余业务服务。首次启动会在镜像构建阶段执行完整 Maven 打包，并自动把 `nacos/` 下的 YAML 导入 Nacos 公共命名空间，同时初始化 MinIO bucket 和两个 Elasticsearch 索引。
 
 ```powershell
 docker compose up -d --build
@@ -114,6 +114,8 @@ docker compose ps
 docker compose --profile full up -d --build
 ```
 
-Docker 编排默认只用于开发演示，使用本地模拟 Provider、演示数据库密码和关闭 Milvus/Elasticsearch 搜索。生产部署前必须通过环境变量或密钥管理系统提供 `MYSQL_ROOT_PASSWORD`、`AUTH_TOKEN_SECRET`、模型/API 密钥，并接入真实 Provider；停止并删除容器（保留数据卷）使用 `docker compose down`，清理数据卷前请确认数据已备份。
+开发环境基础设施对宿主机 `127.0.0.1` 的入口为：MySQL `3306`、Nacos API `8848`（gRPC `9848/9849`）、Redis `6379`、RocketMQ NameServer `9876`、Broker `10911/10909`、MinIO API/控制台 `19000/19001`、Elasticsearch `9200`、Milvus gRPC/健康检查 `19530/9091`。容器内部仍使用服务名和标准端口互联。
+
+Docker 编排默认只用于开发演示：full profile 会启用 Milvus 和 Elasticsearch 搜索；MySQL 使用 `sql/mysql-init.sql` 初始化业务库和表，MinIO 创建 `generated-assets` bucket，Elasticsearch 创建 `listing_info`、`marketing_content` 索引。Redis、Elasticsearch、Milvus 开发模式不创建业务表空间或独立账号，MinIO 使用 root 开发账号；生产部署前必须通过环境变量或密钥管理系统提供 `MYSQL_ROOT_PASSWORD`、`AUTH_TOKEN_SECRET`、模型/API 密钥和独立的基础设施凭据，并接入真实 Provider。停止并删除容器（保留数据卷）使用 `docker compose down`，清理数据卷前请确认数据已备份。
 
 变量名称清单见 [.env.example](.env.example)。
