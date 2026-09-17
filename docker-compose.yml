@@ -1,0 +1,329 @@
+name: bk-anent-dev
+
+x-app-environment: &app-environment
+  SPRING_PROFILES_ACTIVE: distributed
+  NACOS_SERVER: nacos:8848
+  NACOS_NAMESPACE: ""
+  NACOS_USERNAME: nacos
+  NACOS_PASSWORD: ""
+  MYSQL_HOST: mysql
+  MYSQL_PORT: "3306"
+  MYSQL_USER: root
+  MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-bk_dev_password}
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: ""
+  ROCKETMQ_NAME_SERVER: rocketmq-namesrv:9876
+  ROCKETMQ_NAMESRV_HOST: rocketmq-namesrv
+  ROCKETMQ_NAMESRV_PORT: "9876"
+  MINIO_HOST: minio
+  MINIO_PORT: "9000"
+  MINIO_ENDPOINT: http://minio:9000
+  MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+  MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+  MINIO_PUBLIC_BASE_URL: http://localhost:9000
+  MILVUS_HOST: milvus
+  MILVUS_PORT: "19530"
+  MILVUS_ENDPOINT: http://milvus:19530
+  MILVUS_TOKEN: ""
+  MILVUS_USERNAME: ""
+  MILVUS_PASSWORD: ""
+  ES_HOST: elasticsearch
+  ES_PORT: "9200"
+  ELASTICSEARCH_URIS: http://elasticsearch:9200
+  AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:-local-docker-auth-secret-change-before-production-please}
+  DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+  DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+  AGENT_RAG_RERANK_API_KEY: ${AGENT_RAG_RERANK_API_KEY:-}
+  A2A_PUBLIC_BASE_URL: http://localhost
+  SERVICE_READINESS_MODE: distributed
+  CONTRACT_INTEGRATION_MODE: local
+  NOTIFICATION_INTEGRATION_MODE: local
+  MEDIA_INTEGRATION_MODE: local
+  PROMOTION_INTEGRATION_MODE: local
+  LISTING_SEARCH_USE_ES: "false"
+  MARKETING_SEARCH_USE_ES: "false"
+  BUSINESS_RANKING_USE_REDIS: "true"
+  AGENT_STREAM_PROVIDER: memory
+  MILVUS_ENABLED: "false"
+
+x-app-service: &app-service
+  image: bk-anent-services:dev
+  build:
+    context: .
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  depends_on:
+    config-init:
+      condition: service_completed_successfully
+    mysql:
+      condition: service_healthy
+  networks: [bk]
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-bk_dev_password}
+      TZ: Asia/Shanghai
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./sql/mysql-init.sql:/docker-entrypoint-initdb.d/001-mysql-init.sql:ro
+    ports:
+      - "${MYSQL_EXPOSED_PORT:-3306}:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    networks: [bk]
+
+  nacos:
+    image: nacos/nacos-server:v3.0.3
+    restart: unless-stopped
+    environment:
+      MODE: standalone
+      NACOS_AUTH_ENABLE: "false"
+      PREFER_HOST_MODE: hostname
+      TZ: Asia/Shanghai
+    ports:
+      - "${NACOS_EXPOSED_PORT:-8848}:8848"
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:8848/nacos/actuator/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks: [bk]
+
+  config-init:
+    image: curlimages/curl:8.10.1
+    depends_on:
+      nacos:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-ec"]
+    command: |
+      for config in /config/*.yaml; do
+        data_id=$$(basename "$${config}")
+        echo "Uploading $${data_id} to Nacos public namespace"
+        curl --fail --silent --show-error --retry 10 --retry-delay 2 \
+          -X POST "http://nacos:8848/nacos/v1/cs/configs?dataId=$${data_id}&group=DEFAULT_GROUP&type=yaml" \
+          --data-urlencode "content@$${config}"
+      done
+      echo "Nacos configuration upload completed"
+    volumes:
+      - ./nacos:/config:ro
+    networks: [bk]
+    restart: "no"
+
+  redis:
+    image: redis:7.4-alpine
+    profiles: [full]
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    ports:
+      - "${REDIS_EXPOSED_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [bk]
+
+  rocketmq-namesrv:
+    image: apache/rocketmq:5.3.1
+    profiles: [full]
+    restart: unless-stopped
+    command: ["sh", "mqnamesrv"]
+    ports:
+      - "${ROCKETMQ_NAMESRV_EXPOSED_PORT:-9876}:9876"
+    networks: [bk]
+
+  rocketmq-broker:
+    image: apache/rocketmq:5.3.1
+    profiles: [full]
+    restart: unless-stopped
+    depends_on:
+      - rocketmq-namesrv
+    command: ["sh", "mqbroker", "-n", "rocketmq-namesrv:9876", "-c", "/home/rocketmq/rocketmq-5.3.1/conf/broker.conf"]
+    environment:
+      NAMESRV_ADDR: rocketmq-namesrv:9876
+    ports:
+      - "${ROCKETMQ_BROKER_EXPOSED_PORT:-10911}:10911"
+      - "${ROCKETMQ_BROKER_VIP_EXPOSED_PORT:-10909}:10909"
+    volumes:
+      - rocketmq-broker-data:/home/rocketmq/store
+    networks: [bk]
+
+  minio:
+    image: minio/minio:latest
+    profiles: [full]
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio-data:/data
+    ports:
+      - "${MINIO_EXPOSED_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_EXPOSED_PORT:-9001}:9001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:9000/minio/health/live >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    networks: [bk]
+
+  auth-service:
+    <<: *app-service
+    environment:
+      <<: *app-environment
+      SERVICE_ARTIFACT: auth-service-1.0.0-SNAPSHOT.jar
+      A2A_PUBLIC_BASE_URL: http://auth-service:9101
+    ports:
+      - "${AUTH_EXPOSED_PORT:-9101}:9101"
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:9101/actuator/health/readiness | grep -q 'UP'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  gateway:
+    <<: *app-service
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
+      auth-service:
+        condition: service_healthy
+    environment:
+      <<: *app-environment
+      SERVICE_ARTIFACT: gateway-1.0.0-SNAPSHOT.jar
+      A2A_PUBLIC_BASE_URL: http://gateway:5010
+    ports:
+      - "${GATEWAY_EXPOSED_PORT:-5010}:5010"
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:5010/actuator/health/readiness | grep -q 'UP'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  agent-service:
+    <<: *app-service
+    profiles: [full]
+    environment:
+      <<: *app-environment
+      SERVICE_ARTIFACT: agent-service-1.0.0-SNAPSHOT.jar
+      A2A_PUBLIC_BASE_URL: http://agent-service:9002
+      SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,redis,rocketmq
+      MILVUS_ENABLED: "false"
+
+  notification-service:
+    <<: *app-service
+    profiles: [full]
+    environment:
+      <<: *app-environment
+      SERVICE_ARTIFACT: notification-service-1.0.0-SNAPSHOT.jar
+      A2A_PUBLIC_BASE_URL: http://notification-service:9003
+      SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,rocketmq
+
+  listing-master-service:
+    <<: *app-service
+    profiles: [full]
+    environment:
+      <<: *app-environment
+      SERVICE_ARTIFACT: listing-master-service-1.0.0-SNAPSHOT.jar
+      A2A_PUBLIC_BASE_URL: http://listing-master-service:9004
+      LISTING_SEARCH_USE_ES: "false"
+
+  customer-service:
+    <<: *app-service
+    profiles: [full]
+    environment:
+      <<: *app-environment
+      SERVICE_ARTIFACT: customer-service-1.0.0-SNAPSHOT.jar
+      A2A_PUBLIC_BASE_URL: http://customer-service:9005
+
+  compare-engine-service:
+    <<: *app-service
+    profiles: [full]
+    environment:
+      <<: *app-environment
+      SERVICE_ARTIFACT: compare-engine-service-1.0.0-SNAPSHOT.jar
+      A2A_PUBLIC_BASE_URL: http://compare-engine-service:9006
+
+  media-worker-service:
+    <<: *app-service
+    profiles: [full]
+    environment:
+      <<: *app-environment
+      SERVICE_ARTIFACT: media-worker-service-1.0.0-SNAPSHOT.jar
+      A2A_PUBLIC_BASE_URL: http://media-worker-service:9007
+      SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,rocketmq,minio
+
+  marketing-content-service:
+    <<: *app-service
+    profiles: [full]
+    environment:
+      <<: *app-environment
+      SERVICE_ARTIFACT: marketing-content-service-1.0.0-SNAPSHOT.jar
+      A2A_PUBLIC_BASE_URL: http://marketing-content-service:9008
+      MARKETING_SEARCH_USE_ES: "false"
+
+  promotion-service:
+    <<: *app-service
+    profiles: [full]
+    environment:
+      <<: *app-environment
+      SERVICE_ARTIFACT: promotion-service-1.0.0-SNAPSHOT.jar
+      A2A_PUBLIC_BASE_URL: http://promotion-service:9009
+
+  business-service:
+    <<: *app-service
+    profiles: [full]
+    environment:
+      <<: *app-environment
+      SERVICE_ARTIFACT: business-service-1.0.0-SNAPSHOT.jar
+      A2A_PUBLIC_BASE_URL: http://business-service:9010
+
+  memory-service:
+    <<: *app-service
+    profiles: [full]
+    environment:
+      <<: *app-environment
+      SERVICE_ARTIFACT: memory-service-1.0.0-SNAPSHOT.jar
+      A2A_PUBLIC_BASE_URL: http://memory-service:9011
+
+  contract-service:
+    <<: *app-service
+    profiles: [full]
+    environment:
+      <<: *app-environment
+      SERVICE_ARTIFACT: contract-service-1.0.0-SNAPSHOT.jar
+      A2A_PUBLIC_BASE_URL: http://contract-service:9012
+
+  settlement-service:
+    <<: *app-service
+    profiles: [full]
+    environment:
+      <<: *app-environment
+      SERVICE_ARTIFACT: settlement-service-1.0.0-SNAPSHOT.jar
+      A2A_PUBLIC_BASE_URL: http://settlement-service:9013
+
+volumes:
+  mysql-data:
+  redis-data:
+  rocketmq-broker-data:
+  minio-data:
+
+networks:
+  bk:
+    driver: bridge

@@ -1,0 +1,10 @@
+.git
+.idea
+.agents
+.codegraph
+.mvn-local
+runtime-logs
+**/target
+*.iml
+.codex-temp-*
+

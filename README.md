@@ -99,4 +99,21 @@ mvn -pl auth-service "-Dspring-boot.run.profiles=distributed" spring-boot:run
 
 旧数据库中的 `user_account.password_hash` 如果仍是明文或原型值，必须先用 BCrypt 重新生成哈希并迁移；新认证流程不会再接受原型明文或 `mock-access-token-*`。
 
+### Docker 开发部署
+
+仓库提供了 Docker Compose 开发编排。默认启动 MySQL、Nacos、配置导入、认证服务和网关；`full` profile 会额外启动 Redis、RocketMQ、MinIO 及其余业务服务。首次启动会在镜像构建阶段执行完整 Maven 打包，并自动把 `nacos/` 下的 YAML 导入 Nacos 公共命名空间。
+
+```powershell
+docker compose up -d --build
+docker compose ps
+```
+
+验证入口：`http://127.0.0.1:5010/gateway/health`；认证服务直连地址为 `http://127.0.0.1:9101/auth/health`。启动全部业务服务：
+
+```powershell
+docker compose --profile full up -d --build
+```
+
+Docker 编排默认只用于开发演示，使用本地模拟 Provider、演示数据库密码和关闭 Milvus/Elasticsearch 搜索。生产部署前必须通过环境变量或密钥管理系统提供 `MYSQL_ROOT_PASSWORD`、`AUTH_TOKEN_SECRET`、模型/API 密钥，并接入真实 Provider；停止并删除容器（保留数据卷）使用 `docker compose down`，清理数据卷前请确认数据已备份。
+
 变量名称清单见 [.env.example](.env.example)。
