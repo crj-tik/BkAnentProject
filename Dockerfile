@@ -3,7 +3,12 @@ FROM maven:3.9.9-eclipse-temurin-17 AS build
 WORKDIR /workspace
 COPY . .
 
-RUN mvn -B -s .mvn-settings.xml -DskipTests package
+ARG MAVEN_MODULES=""
+RUN if [ -n "$MAVEN_MODULES" ]; then \
+      mvn -B -s .mvn-settings.xml -DskipTests -pl "$MAVEN_MODULES" -am package; \
+    else \
+      mvn -B -s .mvn-settings.xml -DskipTests package; \
+    fi
 
 FROM eclipse-temurin:17-jre-jammy
 

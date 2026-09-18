@@ -63,6 +63,15 @@ x-app-service: &app-service
       condition: service_healthy
   networks: [bk]
 
+x-minimal-app-service: &minimal-app-service
+  <<: *app-service
+  image: bk-anent-services:minimal
+  build:
+    context: .
+    dockerfile: Dockerfile
+    args:
+      MAVEN_MODULES: common,gateway,auth-service
+
 services:
   mysql:
     image: mysql:8.4
@@ -326,7 +335,7 @@ services:
     networks: [bk]
 
   auth-service:
-    <<: *app-service
+    <<: *minimal-app-service
     profiles: [minimal, full]
     environment:
       <<: *app-environment
@@ -342,7 +351,7 @@ services:
       start_period: 30s
 
   gateway:
-    <<: *app-service
+    <<: *minimal-app-service
     profiles: [minimal, full]
     depends_on:
       config-init:
