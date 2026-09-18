@@ -39,6 +39,9 @@ public final class OfficialSupervisorGraphKeys {
     public static final String APPROVAL_VERSION = "approvalVersion";
     public static final String EVENT_REFERENCES = "eventReferences";
     public static final String RESUME_IDEMPOTENCY_KEY = "resumeIdempotencyKey";
+    public static final String PARALLEL_RUN_ID = "parallelRunId";
+    public static final String PARALLEL_BRANCH_RESULTS = "parallelBranchResults";
+    public static final String PARALLEL_AGGREGATION_STRATEGY = "parallelAggregationStrategy";
 
     private OfficialSupervisorGraphKeys() {
     }

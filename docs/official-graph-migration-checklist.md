@@ -48,11 +48,17 @@
 - `DatabaseCheckpointSaver` 已接入现有 `agent_workflow_checkpoint` 表
 - `SupervisorTaskService`、`SupervisorWorkflowService` 和新的异步提交路径已退化为 Graph 门面/任务调度
 
+### 本轮已补齐的官方 Graph 能力
+
+- 顶层 Graph 已使用 `addParallelConditionalEdges` 建立固定领域白名单的原生 fan-out，并通过统一 `PARALLEL_AGGREGATE` 节点执行 all-of fan-in；旧 `ParallelAgentSubgraph` 仅保留为兼容适配器
+- `DatabaseCheckpointSaver` 可以识别原始 `SupervisorWorkflowState` 和没有 `graphName` 的旧 envelope，恢复时补齐官方状态并写入带 `migratedFromId` 的新 envelope
+- 审批恢复增加 `agent_workflow_approval_claim` 唯一约束和数据库 claim store；相同 `approvalId` 在多实例竞争下只有一个实例获得 PROCESSING 权，完成回调重放已保存结果
+- MCP/A2A 已完成最小真实容器 smoke：A2A Agent Card、JSON-RPC `/a2a`、MCP SSE `/sse` 和 session message endpoint 均已验证
+
 ### 仍需补齐的官方 Graph 能力
 
-- 目前并行 Agent 仍由现有聚合适配器调用，尚未迁移为 Graph 原生 fan-out/fan-in 分支
-- 旧 `GraphCheckpointStore` 行格式目前只保留兼容查询，尚未自动迁移为官方 envelope
-- 多实例审批回调还需要数据库级 claim/version 条件更新；当前代码提供同 JVM 锁和 checkpoint 幂等键
+- 需要在包含真实旧 checkpoint 的环境执行一次完整的服务重启恢复演练，确认迁移后从待执行节点继续且不重复调用 Agent
+- `any-of` 聚合策略还需要作为独立业务场景接入；当前 Supervisor 受保护业务默认使用 all-of
 - Skill 匹配失败和非法 WorkflowPlan 的失败事件还需要专门的端到端回归覆盖
 
 ## 4. 改造原则
@@ -176,7 +182,7 @@ Graph checkpoint 和业务 memory 继续严格分层：
 - 并行调用迁移到官方 Graph 并行分支
 - 汇聚后继续走 route decision
 
-状态：进行中（当前仍由并行适配器聚合，原生 fan-out/fan-in 待后续变更）
+状态：已完成第一版（固定领域白名单的原生 fan-out/fan-in，默认 all-of，统一聚合节点负责缺失分支和失败处理）
 
 ### P0-8 Handoff 子图切换
 
@@ -194,7 +200,7 @@ Graph checkpoint 和业务 memory 继续严格分层：
 - 以官方 Graph `Checkpointer` 接管当前 checkpoint 逻辑
 - 当前自定义 `GraphCheckpointStore` 逐步退为兼容层或查询层
 
-状态：已完成第一版（数据库 envelope + 每 Graph 独立 saver 实例）
+状态：已完成第一版（数据库 envelope + 每 Graph 独立 saver 实例 + 旧格式自动迁移）
 
 ### P1-1 Graph 化完成后再继续的功能
 
@@ -239,12 +245,22 @@ Graph 稳定后再继续：
 ## 7. 当前审批恢复协议
 
 1. 入口请求由 `DefaultOfficialSupervisorGraphFacade` 生成或规范化 `sessionId`、`taskId`、`traceId`，并使用 `taskId` 作为 Graph `threadId`。
-2. 顶层 Graph 根据受控计划进入 `SINGLE_AGENT`、`PARALLEL_AGENTS` 或 `APPROVAL_GATE`，不会接受请求或 LLM 直接注入节点名。
+2. 顶层 Graph 根据受控计划进入 `SINGLE_AGENT`、`PARALLEL_FAN_OUT` 或 `APPROVAL_GATE`，不会接受请求或 LLM 直接注入节点名。
 3. `APPROVAL_GATE` 创建 `ApprovalRequest`，写入待执行节点、批准/拒绝/终止候选动作、审批版本和重试信息，然后以 `WAITING_USER_APPROVAL` 状态中断。
 4. 回调校验 `approvalId`、`taskId`、可选 `sessionId` 和 `approvalVersion`。批准、拒绝和终止分别由 Graph 条件边进入执行、重生成或取消节点。
-5. 重复回调由 `latestApprovalDecision` 和 `resumeIdempotencyKey` 识别，不再次调用下游 Agent；同一 JVM 内还按 taskId 串行化恢复操作。
+5. 重复回调先由数据库唯一 `approvalId` claim 取得处理权；已完成回调重放数据库保存的 `SupervisorTaskResponse`，处理中回调不会再次调用下游 Agent。同一 JVM 内仍按 taskId 串行化恢复操作，作为减少本地竞争的优化而不是一致性保障。
 
-## 8. 第一批改造范围
+## 8.1 最小运行与协议 smoke
+
+当前最小可验证拓扑只启动 MySQL、Nacos、认证服务、网关和一个业务 Agent，不启动完整业务集群：
+
+- listing Agent：`/.well-known/agent.json` 返回有效 Agent Card，`/a2a` 接受官方 A2A JSON-RPC；占位模型 Key 会在业务调用阶段返回 401，这是外部模型配置问题，不影响协议链路
+- business Agent：`/actuator/health/readiness` 返回 `UP`，`GET /sse` 返回 MCP session endpoint，随后向 `/mcp/message?sessionId=...` 发送 `initialize` 得到 HTTP 200
+- 当前 Nacos `3.0.3` 不支持 Spring AI Alibaba A2A Agent Card registry，服务启动日志会记录 `Request Nacos server version is too low`；直连 Agent Card 和 A2A endpoint 可用，生产环境需升级到支持 Agent registry 的 Nacos 版本后再验收 Nacos 发现
+- Spring AI MCP SSE 默认入口是 `/sse`，消息入口是 `/mcp/message`；只有显式设置 `spring.ai.mcp.server.protocol=STREAMABLE` 时才使用 `/mcp`
+- Spring AI Alibaba `2.0.0-M1.1` 不在本次迁移范围内，必须另开变更分支单独评估 Graph API、MCP/A2A starter、Nacos registry 和 checkpoint 兼容性
+
+## 9. 第一批改造范围
 
 本轮先做：
 
@@ -258,21 +274,23 @@ Graph 稳定后再继续：
 - 一次性把所有流程切到官方 Graph
 - 一次性替换审批、并行、handoff 全链路
 
-## 9. 验收标准
+## 10. 验收标准
 
 当前已验证：
 
 - `agent-service` 已引入官方 Graph 依赖并完成 Spring AI 依赖树检查
 - 官方 Graph 状态模型、顶层 Graph 门面和数据库 checkpoint 适配器已入库
 - 审批暂停/恢复最小 Graph 集成测试通过
-- `mvn -pl agent-service test` 通过（23 项）
+- `mvn -pl agent-service -am test` 通过（agent-service 30 项；未配置真实 DB 时 opt-in 并发测试跳过，已单独使用 MySQL 复核通过）
 - `mvn -pl agent-service -am -DskipTests compile` 通过
 - `openspec validate migrate-supervisor-graph-approval-routing --strict` 通过
+- 真实 MySQL 并发 claim 测试通过：两个连接竞争同一 `approvalId`，严格一成功一唯一键冲突
+- 最小 listing/business 容器启动和 A2A/MCP 协议 smoke 已执行
 
 后续验收：
 
-- 原生并行 fan-out/fan-in 与 all-of/any-of 策略
-- 旧 checkpoint envelope 自动迁移、服务重启恢复和多实例数据库幂等
+- 旧 checkpoint envelope 自动迁移的真实重启恢复演练
+- `any-of` 聚合策略的业务化接入
 - SkillMatch/WorkflowPlan 非法输入的失败分支和端到端测试
 - MCP/A2A smoke test 与带 Nacos/数据库的最小微服务启动
 

@@ -30,13 +30,16 @@ public class DefaultOfficialSupervisorGraphFacade implements OfficialSupervisorG
 
     private final OfficialSupervisorGraphHolder graphHolder;
     private final OfficialSupervisorGraphMigrationFacade migrationFacade;
+    private final ApprovalResumeClaimStore approvalResumeClaimStore;
     private final ObjectMapper objectMapper;
 
     public DefaultOfficialSupervisorGraphFacade(OfficialSupervisorGraphHolder graphHolder,
                                                 OfficialSupervisorGraphMigrationFacade migrationFacade,
+                                                ApprovalResumeClaimStore approvalResumeClaimStore,
                                                 ObjectMapper objectMapper) {
         this.graphHolder = graphHolder;
         this.migrationFacade = migrationFacade;
+        this.approvalResumeClaimStore = approvalResumeClaimStore;
         this.objectMapper = objectMapper;
     }
 
@@ -117,6 +120,11 @@ public class DefaultOfficialSupervisorGraphFacade implements OfficialSupervisorG
             throw new IllegalStateException("Official graph checkpoint has no checkpoint id");
         }
 
+        ApprovalResumeClaimStore.ClaimResult claim = approvalResumeClaimStore.claim(request);
+        if (!claim.acquired()) {
+            return claim.replayedResponse();
+        }
+
         ApprovalDecision decision = new ApprovalDecision(
                 request.approvalId(),
                 request.status(),
@@ -134,11 +142,20 @@ public class DefaultOfficialSupervisorGraphFacade implements OfficialSupervisorG
         try {
             resumedConfig = graph.updateState(checkpointConfig, updates).withResume();
         } catch (Exception exception) {
+            approvalResumeClaimStore.fail(request.approvalId(), exception);
             throw new IllegalStateException("Failed to update official supervisor checkpoint", exception);
         }
-        OverAllState output = graph.invoke(Map.of(), resumedConfig)
-                .orElseThrow(() -> new IllegalStateException("Official supervisor graph resume returned empty state"));
-        return responseOf(output, null);
+        try {
+            OverAllState output = graph.invoke(Map.of(), resumedConfig)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Official supervisor graph resume returned empty state"));
+            SupervisorTaskResponse response = responseOf(output, null);
+            approvalResumeClaimStore.complete(request.approvalId(), response);
+            return response;
+        } catch (Exception exception) {
+            approvalResumeClaimStore.fail(request.approvalId(), exception);
+            throw exception;
+        }
     }
 
     private void validateCallback(SupervisorWorkflowState state, ApprovalCallbackRequest request) {

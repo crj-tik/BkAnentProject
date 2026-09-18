@@ -7,15 +7,19 @@ import com.alibaba.cloud.ai.graph.KeyStrategyFactoryBuilder;
 import com.alibaba.cloud.ai.graph.OverAllState;
 import com.alibaba.cloud.ai.graph.StateGraph;
 import com.alibaba.cloud.ai.graph.action.AsyncEdgeAction;
+import com.alibaba.cloud.ai.graph.action.AsyncMultiCommandAction;
 import com.alibaba.cloud.ai.graph.action.AsyncNodeAction;
+import com.alibaba.cloud.ai.graph.action.MultiCommand;
 import com.alibaba.cloud.ai.graph.action.NodeAction;
 import com.alibaba.cloud.ai.graph.checkpoint.config.SaverConfig;
-import com.bkanent.agent.graph.ParallelAgentSubgraph;
 import com.bkanent.agent.graph.SingleAgentSubgraph;
 import com.bkanent.agent.graph.SupervisorGraphPlanner;
 import com.bkanent.agent.graph.SupervisorGraphState;
 import com.bkanent.agent.graph.CompletionSubgraph;
 import com.bkanent.agent.graph.node.BuildApprovalRequestNode;
+import com.bkanent.agent.graph.node.MergeParallelResultNode;
+import com.bkanent.agent.graph.node.ParallelInvokeNode;
+import com.bkanent.agent.graph.node.PersistParallelArtifactsNode;
 import com.bkanent.agent.model.distributed.SupervisorTaskRequest;
 import com.bkanent.agent.model.distributed.SupervisorTaskResponse;
 import com.bkanent.agent.registry.AgentRegistry;
@@ -25,6 +29,7 @@ import com.bkanent.agent.workflow.SupervisorWorkflowState;
 import com.bkanent.common.agent.ApprovalDecision;
 import com.bkanent.common.agent.ApprovalRequest;
 import com.bkanent.common.agent.ApprovalStatus;
+import com.bkanent.common.agent.AgentTaskInvokeResponse;
 import com.bkanent.common.agent.SessionStreamEvent;
 import com.bkanent.common.agent.WorkflowStatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -32,8 +37,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * The single top-level Supervisor workflow. Domain services are invoked by
@@ -42,13 +50,25 @@ import java.util.Map;
 @Component
 public class OfficialSupervisorGraphFactory {
 
+    private static final Map<String, String> PARALLEL_DOMAIN_NODES = Map.of(
+            "listing", OfficialSupervisorGraphNodeNames.PARALLEL_LISTING,
+            "marketing", OfficialSupervisorGraphNodeNames.PARALLEL_MARKETING,
+            "media", OfficialSupervisorGraphNodeNames.PARALLEL_MEDIA,
+            "trade", OfficialSupervisorGraphNodeNames.PARALLEL_TRADE,
+            "contract", OfficialSupervisorGraphNodeNames.PARALLEL_CONTRACT,
+            "settlement", OfficialSupervisorGraphNodeNames.PARALLEL_SETTLEMENT,
+            "notification", OfficialSupervisorGraphNodeNames.PARALLEL_NOTIFICATION
+    );
+
     private final OfficialSupervisorGraphSchema graphSchema;
     private final DatabaseCheckpointSaverFactory checkpointSaverFactory;
     private final SupervisorGraphPlanner supervisorGraphPlanner;
     private final SingleAgentSubgraph singleAgentSubgraph;
-    private final ParallelAgentSubgraph parallelAgentSubgraph;
     private final CompletionSubgraph completionSubgraph;
     private final BuildApprovalRequestNode buildApprovalRequestNode;
+    private final ParallelInvokeNode parallelInvokeNode;
+    private final MergeParallelResultNode mergeParallelResultNode;
+    private final PersistParallelArtifactsNode persistParallelArtifactsNode;
     private final AgentRegistry agentRegistry;
     private final ObjectMapper objectMapper;
     private final SessionStreamService sessionStreamService;
@@ -57,9 +77,11 @@ public class OfficialSupervisorGraphFactory {
                                           DatabaseCheckpointSaverFactory checkpointSaverFactory,
                                           SupervisorGraphPlanner supervisorGraphPlanner,
                                           SingleAgentSubgraph singleAgentSubgraph,
-                                          ParallelAgentSubgraph parallelAgentSubgraph,
                                           CompletionSubgraph completionSubgraph,
                                           BuildApprovalRequestNode buildApprovalRequestNode,
+                                          ParallelInvokeNode parallelInvokeNode,
+                                          MergeParallelResultNode mergeParallelResultNode,
+                                          PersistParallelArtifactsNode persistParallelArtifactsNode,
                                           AgentRegistry agentRegistry,
                                           ObjectMapper objectMapper,
                                           SessionStreamService sessionStreamService) {
@@ -67,9 +89,11 @@ public class OfficialSupervisorGraphFactory {
         this.checkpointSaverFactory = checkpointSaverFactory;
         this.supervisorGraphPlanner = supervisorGraphPlanner;
         this.singleAgentSubgraph = singleAgentSubgraph;
-        this.parallelAgentSubgraph = parallelAgentSubgraph;
         this.completionSubgraph = completionSubgraph;
         this.buildApprovalRequestNode = buildApprovalRequestNode;
+        this.parallelInvokeNode = parallelInvokeNode;
+        this.mergeParallelResultNode = mergeParallelResultNode;
+        this.persistParallelArtifactsNode = persistParallelArtifactsNode;
         this.agentRegistry = agentRegistry;
         this.objectMapper = objectMapper;
         this.sessionStreamService = sessionStreamService;
@@ -85,7 +109,22 @@ public class OfficialSupervisorGraphFactory {
         stateGraph.addNode(OfficialSupervisorGraphNodeNames.APPROVAL_GATE, approvalGate());
         stateGraph.addNode(OfficialSupervisorGraphNodeNames.RESUME_DECISION, resumeDecision());
         stateGraph.addNode(OfficialSupervisorGraphNodeNames.SINGLE_AGENT, singleAgent());
-        stateGraph.addNode(OfficialSupervisorGraphNodeNames.PARALLEL_AGENTS, parallelAgents());
+        stateGraph.addNode(OfficialSupervisorGraphNodeNames.PARALLEL_FAN_OUT, parallelFanOut());
+        stateGraph.addNode(OfficialSupervisorGraphNodeNames.PARALLEL_LISTING,
+                parallelBranch("listing", OfficialSupervisorGraphNodeNames.PARALLEL_LISTING));
+        stateGraph.addNode(OfficialSupervisorGraphNodeNames.PARALLEL_MARKETING,
+                parallelBranch("marketing", OfficialSupervisorGraphNodeNames.PARALLEL_MARKETING));
+        stateGraph.addNode(OfficialSupervisorGraphNodeNames.PARALLEL_MEDIA,
+                parallelBranch("media", OfficialSupervisorGraphNodeNames.PARALLEL_MEDIA));
+        stateGraph.addNode(OfficialSupervisorGraphNodeNames.PARALLEL_TRADE,
+                parallelBranch("trade", OfficialSupervisorGraphNodeNames.PARALLEL_TRADE));
+        stateGraph.addNode(OfficialSupervisorGraphNodeNames.PARALLEL_CONTRACT,
+                parallelBranch("contract", OfficialSupervisorGraphNodeNames.PARALLEL_CONTRACT));
+        stateGraph.addNode(OfficialSupervisorGraphNodeNames.PARALLEL_SETTLEMENT,
+                parallelBranch("settlement", OfficialSupervisorGraphNodeNames.PARALLEL_SETTLEMENT));
+        stateGraph.addNode(OfficialSupervisorGraphNodeNames.PARALLEL_NOTIFICATION,
+                parallelBranch("notification", OfficialSupervisorGraphNodeNames.PARALLEL_NOTIFICATION));
+        stateGraph.addNode(OfficialSupervisorGraphNodeNames.PARALLEL_AGGREGATE, parallelAggregate());
         stateGraph.addNode(OfficialSupervisorGraphNodeNames.REGENERATE, regenerate());
         stateGraph.addNode(OfficialSupervisorGraphNodeNames.COMPLETE, complete());
         stateGraph.addNode(OfficialSupervisorGraphNodeNames.CANCEL, cancel());
@@ -99,7 +138,7 @@ public class OfficialSupervisorGraphFactory {
                 Map.of(
                         "approval", OfficialSupervisorGraphNodeNames.APPROVAL_GATE,
                         "single", OfficialSupervisorGraphNodeNames.SINGLE_AGENT,
-                        "parallel", OfficialSupervisorGraphNodeNames.PARALLEL_AGENTS,
+                        "parallel", OfficialSupervisorGraphNodeNames.PARALLEL_FAN_OUT,
                         "fail", OfficialSupervisorGraphNodeNames.FAIL
                 )
         );
@@ -110,7 +149,7 @@ public class OfficialSupervisorGraphFactory {
                 AsyncEdgeAction.edge_async(this::resumeTarget),
                 Map.of(
                         "single", OfficialSupervisorGraphNodeNames.SINGLE_AGENT,
-                        "parallel", OfficialSupervisorGraphNodeNames.PARALLEL_AGENTS,
+                        "parallel", OfficialSupervisorGraphNodeNames.PARALLEL_FAN_OUT,
                         "regenerate", OfficialSupervisorGraphNodeNames.REGENERATE,
                         "cancel", OfficialSupervisorGraphNodeNames.CANCEL,
                         "fail", OfficialSupervisorGraphNodeNames.FAIL
@@ -118,7 +157,28 @@ public class OfficialSupervisorGraphFactory {
         );
         stateGraph.addEdge(OfficialSupervisorGraphNodeNames.REGENERATE, OfficialSupervisorGraphNodeNames.PLAN);
         stateGraph.addEdge(OfficialSupervisorGraphNodeNames.SINGLE_AGENT, OfficialSupervisorGraphNodeNames.COMPLETE);
-        stateGraph.addEdge(OfficialSupervisorGraphNodeNames.PARALLEL_AGENTS, OfficialSupervisorGraphNodeNames.COMPLETE);
+        stateGraph.addParallelConditionalEdges(
+                OfficialSupervisorGraphNodeNames.PARALLEL_FAN_OUT,
+                AsyncMultiCommandAction.node_async(this::parallelTargets),
+                parallelEdgeMappings()
+        );
+        stateGraph.addEdge(List.of(
+                OfficialSupervisorGraphNodeNames.PARALLEL_LISTING,
+                OfficialSupervisorGraphNodeNames.PARALLEL_MARKETING,
+                OfficialSupervisorGraphNodeNames.PARALLEL_MEDIA,
+                OfficialSupervisorGraphNodeNames.PARALLEL_TRADE,
+                OfficialSupervisorGraphNodeNames.PARALLEL_CONTRACT,
+                OfficialSupervisorGraphNodeNames.PARALLEL_SETTLEMENT,
+                OfficialSupervisorGraphNodeNames.PARALLEL_NOTIFICATION
+        ), OfficialSupervisorGraphNodeNames.PARALLEL_AGGREGATE);
+        stateGraph.addConditionalEdges(
+                OfficialSupervisorGraphNodeNames.PARALLEL_AGGREGATE,
+                AsyncEdgeAction.edge_async(state -> StringUtils.hasText(
+                        state.value(OfficialSupervisorGraphKeys.ERROR_CODE, (String) null))
+                        ? "fail" : "complete"),
+                Map.of("complete", OfficialSupervisorGraphNodeNames.COMPLETE,
+                        "fail", OfficialSupervisorGraphNodeNames.FAIL)
+        );
         stateGraph.addEdge(OfficialSupervisorGraphNodeNames.COMPLETE, StateGraph.END);
         stateGraph.addEdge(OfficialSupervisorGraphNodeNames.CANCEL, StateGraph.END);
         stateGraph.addEdge(OfficialSupervisorGraphNodeNames.FAIL, StateGraph.END);
@@ -169,7 +229,7 @@ public class OfficialSupervisorGraphFactory {
             SupervisorWorkflowState workflowState = OfficialGraphStateAdapters.toWorkflowState(state, objectMapper);
             ApprovalRequest base = buildApprovalRequestNode.build(workflowState, graphState.sharedContext());
             String nextNode = graphState.parallelDomains().size() > 1
-                    ? OfficialSupervisorGraphNodeNames.PARALLEL_AGENTS
+                    ? OfficialSupervisorGraphNodeNames.PARALLEL_FAN_OUT
                     : OfficialSupervisorGraphNodeNames.SINGLE_AGENT;
             int approvalVersion = state.value(OfficialSupervisorGraphKeys.APPROVAL_VERSION, 0) + 1;
             ApprovalRequest approval = new ApprovalRequest(
@@ -255,19 +315,143 @@ public class OfficialSupervisorGraphFactory {
         return AsyncNodeAction.node_async(action);
     }
 
-    private AsyncNodeAction parallelAgents() {
+    private AsyncNodeAction parallelFanOut() {
+        NodeAction action = state -> {
+            return Map.of(OfficialSupervisorGraphKeys.CURRENT_NODE,
+                    OfficialSupervisorGraphNodeNames.PARALLEL_FAN_OUT);
+        };
+        return AsyncNodeAction.node_async(action);
+    }
+
+    private AsyncNodeAction parallelBranch(String domain, String nodeName) {
         NodeAction action = state -> {
             SupervisorGraphState graphState = OfficialGraphStateAdapters.toSupervisorGraphState(state);
-            ParallelAgentSubgraph.ExecutionResult execution = parallelAgentSubgraph.execute(
-                    requestOf(state), graphState);
+            AgentTaskInvokeResponse response;
+            try {
+                response = parallelInvokeNode.invokeDomain(requestOf(state), graphState, domain);
+            } catch (Exception exception) {
+                String message = exception.getMessage() == null
+                        ? exception.getClass().getSimpleName() : exception.getMessage();
+                response = failedParallelResponse(graphState, domain, message);
+            }
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("runId", state.value(OfficialSupervisorGraphKeys.PARALLEL_RUN_ID, ""));
+            result.put("domain", domain);
+            result.put("response", response);
+            return Map.of(
+                    OfficialSupervisorGraphKeys.PARALLEL_BRANCH_RESULTS, List.of(result),
+                    OfficialSupervisorGraphKeys.CURRENT_NODE, nodeName
+            );
+        };
+        return AsyncNodeAction.node_async(action);
+    }
+
+    private AsyncNodeAction parallelAggregate() {
+        NodeAction action = state -> {
+            SupervisorGraphState graphState = OfficialGraphStateAdapters.toSupervisorGraphState(state);
+            String runId = state.value(OfficialSupervisorGraphKeys.PARALLEL_RUN_ID, "");
+            List<Map<String, Object>> branchResults = branchResults(state.value(
+                    OfficialSupervisorGraphKeys.PARALLEL_BRANCH_RESULTS, List.of()));
+            Map<String, AgentTaskInvokeResponse> responsesByDomain = new HashMap<>();
+            for (Map<String, Object> result : branchResults) {
+                if (!runId.equals(String.valueOf(result.get("runId")))) {
+                    continue;
+                }
+                String domain = String.valueOf(result.get("domain"));
+                responsesByDomain.put(domain, convert(result.get("response"), AgentTaskInvokeResponse.class));
+            }
+            List<String> domains = graphState.parallelDomains();
+            List<AgentTaskInvokeResponse> responses = domains.stream()
+                    .map(responsesByDomain::get)
+                    .toList();
+            if (responses.stream().anyMatch(java.util.Objects::isNull)) {
+                return error("PARALLEL_FAN_IN_INCOMPLETE",
+                        "Native parallel fan-in did not receive every branch result");
+            }
+            AgentTaskInvokeResponse merged = parallelInvokeNode.mergeResponses(
+                    graphState.sessionId(), graphState.taskId(), graphState.traceId(), domains, responses);
+            if (!"COMPLETED".equalsIgnoreCase(merged.status())
+                    && !"SUCCESS".equalsIgnoreCase(merged.status())) {
+                return error("PARALLEL_BRANCH_FAILED",
+                        merged.summary() == null ? "One or more parallel branches failed" : merged.summary());
+            }
+            List<String> artifactIds = persistParallelArtifactsNode.persist(
+                    graphState.taskId(), graphState.sessionId(), graphState.userId(),
+                    graphState.traceId(), domains, merged);
             SupervisorWorkflowState previous = OfficialGraphStateAdapters.toWorkflowState(state, objectMapper);
+            SupervisorWorkflowState mergedState = mergeParallelResultNode.merge(
+                    graphState, artifactIds, merged);
             Map<String, Object> updates = new LinkedHashMap<>(
-                    OfficialGraphStateAdapters.toDeltaMap(previous, execution.workflowState()));
-            updates.put(OfficialSupervisorGraphKeys.LATEST_AGENT_RESPONSE, execution.response());
-            updates.put(OfficialSupervisorGraphKeys.CURRENT_NODE, OfficialSupervisorGraphNodeNames.PARALLEL_AGENTS);
+                    OfficialGraphStateAdapters.toDeltaMap(previous, mergedState));
+            updates.put(OfficialSupervisorGraphKeys.LATEST_AGENT_RESPONSE, merged);
+            updates.put(OfficialSupervisorGraphKeys.CURRENT_NODE,
+                    OfficialSupervisorGraphNodeNames.PARALLEL_AGGREGATE);
             return updates;
         };
         return AsyncNodeAction.node_async(action);
+    }
+
+    private MultiCommand parallelTargets(OverAllState state,
+                                          com.alibaba.cloud.ai.graph.RunnableConfig config) {
+        List<String> domains = castList(state.value(OfficialSupervisorGraphKeys.PARALLEL_DOMAINS, List.of()));
+        List<String> branchNodes = domains.stream().map(PARALLEL_DOMAIN_NODES::get).toList();
+        if (domains.size() < 2 || branchNodes.size() != domains.size()
+                || branchNodes.stream().anyMatch(java.util.Objects::isNull)
+                || Set.copyOf(domains).size() != domains.size()) {
+            return new MultiCommand(
+                    List.of("fail"),
+                    Map.of(
+                            OfficialSupervisorGraphKeys.ERROR_CODE, "INVALID_PARALLEL_PLAN",
+                            OfficialSupervisorGraphKeys.ERROR_MESSAGE,
+                            "parallelDomains must contain at least two distinct supported domains"
+                    )
+            );
+        }
+        return new MultiCommand(
+                domains,
+                Map.of(
+                        OfficialSupervisorGraphKeys.PARALLEL_RUN_ID, UUID.randomUUID().toString(),
+                        OfficialSupervisorGraphKeys.PARALLEL_AGGREGATION_STRATEGY, "ALL_OF",
+                        OfficialSupervisorGraphKeys.CURRENT_NODE, OfficialSupervisorGraphNodeNames.PARALLEL_FAN_OUT
+                )
+        );
+    }
+
+    private Map<String, String> parallelEdgeMappings() {
+        Map<String, String> mappings = new LinkedHashMap<>(PARALLEL_DOMAIN_NODES);
+        mappings.put("fail", OfficialSupervisorGraphNodeNames.FAIL);
+        return mappings;
+    }
+
+    private AgentTaskInvokeResponse failedParallelResponse(SupervisorGraphState state,
+                                                            String domain,
+                                                            String message) {
+        return new AgentTaskInvokeResponse(
+                state.sessionId(),
+                state.taskId(),
+                domain + "-agent",
+                "FAILED",
+                Map.of("domain", domain, "error", message),
+                List.of(),
+                List.of(),
+                message,
+                state.traceId()
+        );
+    }
+
+    private List<Map<String, Object>> branchResults(Object value) {
+        if (!(value instanceof List<?> list)) {
+            return List.of();
+        }
+        return list.stream()
+                .filter(Map.class::isInstance)
+                .map(entry -> {
+                    Map<?, ?> source = (Map<?, ?>) entry;
+                    Map<String, Object> result = new LinkedHashMap<>();
+                    source.forEach((key, item) -> result.put(String.valueOf(key), item));
+                    return result;
+                })
+                .toList();
     }
 
     private AsyncNodeAction regenerate() {
@@ -380,7 +564,8 @@ public class OfficialSupervisorGraphFactory {
     private String allowedNextNode(String requested, String fallback) {
         return switch (requested == null ? "" : requested) {
             case OfficialSupervisorGraphNodeNames.SINGLE_AGENT -> "single";
-            case OfficialSupervisorGraphNodeNames.PARALLEL_AGENTS -> "parallel";
+            case OfficialSupervisorGraphNodeNames.PARALLEL_AGENTS,
+                    OfficialSupervisorGraphNodeNames.PARALLEL_FAN_OUT -> "parallel";
             default -> fallback;
         };
     }

@@ -41,36 +41,45 @@ public class ParallelInvokeNode {
                                           com.bkanent.agent.graph.SupervisorGraphState graphState) {
         List<String> parallelDomains = graphState.parallelDomains();
         List<CompletableFuture<AgentTaskInvokeResponse>> futures = parallelDomains.stream()
-                .map(domain -> CompletableFuture.supplyAsync(() -> {
-                    RegisteredAgentDescriptor descriptor = selectAgent(domain, request.userMessage(), graphState.sharedContext());
-                    publish(graphState.sessionId(), graphState.taskId(), descriptor.agentId(),
-                            "handoff.started", "Invoking child agent in parallel",
-                            Map.of("domain", domain), graphState.traceId());
-                    AgentTaskInvokeRequest invokeRequest = buildInvokeRequestNode.build(
-                            withDomain(request, domain),
-                            graphState.withIntent(resolveIntent(domain), domain, "parallel"),
-                            descriptor.agentId(),
-                            null,
-                            0
-                    );
-                    AgentTaskInvokeResponse response = a2aExecutionService.execute(
-                            descriptor,
-                            invokeRequest,
-                            "parallel_agent",
-                            Map.of("domain", domain, "targetAgentId", descriptor.agentId())
-                    );
-                    publish(graphState.sessionId(), graphState.taskId(), descriptor.agentId(),
-                            "handoff.completed", "Parallel child agent returned",
-                            Map.of(
-                                    "domain", domain,
-                                    "status", response.status(),
-                                    "userId", graphState.userId() == null ? "" : graphState.userId()
-                            ), graphState.traceId());
-                    return response;
-                }))
+                .map(domain -> CompletableFuture.supplyAsync(() -> invokeDomain(request, graphState, domain)))
                 .toList();
         List<AgentTaskInvokeResponse> responses = futures.stream().map(CompletableFuture::join).toList();
-        return mergeParallelResponses(graphState.sessionId(), graphState.taskId(), graphState.traceId(), parallelDomains, responses);
+        return mergeResponses(graphState.sessionId(), graphState.taskId(), graphState.traceId(), parallelDomains, responses);
+    }
+
+    /**
+     * Invokes exactly one domain. The top-level official graph uses this method
+     * from one native Graph branch per domain; the legacy node-level parallel
+     * implementation delegates here for compatibility.
+     */
+    public AgentTaskInvokeResponse invokeDomain(SupervisorTaskRequest request,
+                                                com.bkanent.agent.graph.SupervisorGraphState graphState,
+                                                String domain) {
+        RegisteredAgentDescriptor descriptor = selectAgent(domain, request.userMessage(), graphState.sharedContext());
+        publish(graphState.sessionId(), graphState.taskId(), descriptor.agentId(),
+                "handoff.started", "Invoking child agent in parallel",
+                Map.of("domain", domain), graphState.traceId());
+        AgentTaskInvokeRequest invokeRequest = buildInvokeRequestNode.build(
+                withDomain(request, domain),
+                graphState.withIntent(resolveIntent(domain), domain, "parallel"),
+                descriptor.agentId(),
+                null,
+                0
+        );
+        AgentTaskInvokeResponse response = a2aExecutionService.execute(
+                descriptor,
+                invokeRequest,
+                "parallel_agent",
+                Map.of("domain", domain, "targetAgentId", descriptor.agentId())
+        );
+        publish(graphState.sessionId(), graphState.taskId(), descriptor.agentId(),
+                "handoff.completed", "Parallel child agent returned",
+                Map.of(
+                        "domain", domain,
+                        "status", response.status(),
+                        "userId", graphState.userId() == null ? "" : graphState.userId()
+                ), graphState.traceId());
+        return response;
     }
 
     private SupervisorTaskRequest withDomain(SupervisorTaskRequest request, String domain) {
@@ -92,11 +101,11 @@ public class ParallelInvokeNode {
         return supervisorAgentRoutingService.selectAgent(domain, message, context);
     }
 
-    private AgentTaskInvokeResponse mergeParallelResponses(String sessionId,
-                                                           String taskId,
-                                                           String traceId,
-                                                           List<String> parallelDomains,
-                                                           List<AgentTaskInvokeResponse> responses) {
+    public AgentTaskInvokeResponse mergeResponses(String sessionId,
+                                                  String taskId,
+                                                  String traceId,
+                                                  List<String> parallelDomains,
+                                                  List<AgentTaskInvokeResponse> responses) {
         Map<String, Object> mergedOutput = new LinkedHashMap<>();
         List<String> artifactIds = new ArrayList<>();
         List<String> nextHints = new ArrayList<>();
@@ -121,11 +130,14 @@ public class ParallelInvokeNode {
         mergedOutput.put("parallelDomains", parallelDomains);
         mergedOutput.put("contentType", "parallel_result");
         mergedOutput.put("mergeSummary", buildMergeSummary(parallelDomains, responses));
+        boolean failed = responses.stream().anyMatch(response -> response == null
+                || (!"COMPLETED".equalsIgnoreCase(response.status())
+                && !"SUCCESS".equalsIgnoreCase(response.status())));
         return new AgentTaskInvokeResponse(
                 sessionId,
                 taskId,
                 "parallel-supervisor",
-                "COMPLETED",
+                failed ? "FAILED" : "COMPLETED",
                 mergedOutput,
                 List.copyOf(new LinkedHashSet<>(artifactIds)),
                 List.copyOf(new LinkedHashSet<>(nextHints)),

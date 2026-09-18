@@ -51,7 +51,7 @@ public class DatabaseCheckpointSaver extends MemorySaver {
                         .orderByAsc(AgentWorkflowCheckpointEntity::getCheckpointVersion)
         );
         entities.stream()
-                .map(this::readCheckpoint)
+                .map(entity -> readCheckpoint(entity, entities))
                 .filter(java.util.Objects::nonNull)
                 .forEach(checkpoints::add);
         return checkpoints;
@@ -90,7 +90,7 @@ public class DatabaseCheckpointSaver extends MemorySaver {
         entity.setWorkflowStatus(text(state.get(OfficialSupervisorGraphKeys.WORKFLOW_STATUS), "RUNNING"));
         entity.setSelectedAgentId(text(state.get(OfficialSupervisorGraphKeys.SELECTED_AGENT_ID), null));
         entity.setPendingApprovalId(pendingApprovalId(state.get(OfficialSupervisorGraphKeys.PENDING_APPROVAL)));
-        entity.setSnapshotJson(writeEnvelope(checkpoint));
+        entity.setSnapshotJson(writeEnvelope(checkpoint, null));
         checkpointMapper.insert(entity);
     }
 
@@ -105,27 +105,31 @@ public class DatabaseCheckpointSaver extends MemorySaver {
                 ? 1 : latest.getCheckpointVersion() + 1;
     }
 
-    private Checkpoint readCheckpoint(AgentWorkflowCheckpointEntity entity) {
-        try {
-            PersistedCheckpoint envelope = objectMapper.readValue(
-                    entity.getSnapshotJson(), PersistedCheckpoint.class);
-            if (!graphName.equals(envelope.graphName())) {
-                return null;
-            }
-            return Checkpoint.builder()
-                    .id(envelope.id())
-                    .nodeId(envelope.nodeId())
-                    .nextNodeId(envelope.nextNodeId())
-                    .state(envelope.state())
-                    .build();
-        } catch (Exception ignored) {
-            // Older rows contain SupervisorWorkflowState rather than an official
-            // checkpoint envelope. They remain readable through GraphCheckpointStore.
+    private Checkpoint readCheckpoint(AgentWorkflowCheckpointEntity entity,
+                                      List<AgentWorkflowCheckpointEntity> allEntities) {
+        OfficialCheckpointMigration.ReadResult result = OfficialCheckpointMigration.read(
+                entity.getSnapshotJson(), graphName,
+                String.valueOf(entity.getId()), objectMapper);
+        if (result.checkpoint() == null) {
             return null;
         }
+        if (result.migrated() && !alreadyMigrated(allEntities, result.migratedFromId())) {
+            AgentWorkflowCheckpointEntity migrated = new AgentWorkflowCheckpointEntity();
+            Map<String, Object> state = result.checkpoint().getState();
+            migrated.setTaskId(text(state.get(OfficialSupervisorGraphKeys.TASK_ID), entity.getTaskId()));
+            migrated.setCheckpointVersion(nextVersion(migrated.getTaskId()));
+            migrated.setSessionId(text(state.get(OfficialSupervisorGraphKeys.SESSION_ID), entity.getSessionId()));
+            migrated.setTraceId(text(state.get(OfficialSupervisorGraphKeys.TRACE_ID), entity.getTraceId()));
+            migrated.setWorkflowStatus(text(state.get(OfficialSupervisorGraphKeys.WORKFLOW_STATUS), entity.getWorkflowStatus()));
+            migrated.setSelectedAgentId(text(state.get(OfficialSupervisorGraphKeys.SELECTED_AGENT_ID), entity.getSelectedAgentId()));
+            migrated.setPendingApprovalId(pendingApprovalId(state.get(OfficialSupervisorGraphKeys.PENDING_APPROVAL)));
+            migrated.setSnapshotJson(writeEnvelope(result.checkpoint(), result.migratedFromId()));
+            checkpointMapper.insert(migrated);
+        }
+        return result.checkpoint();
     }
 
-    private String writeEnvelope(Checkpoint checkpoint) {
+    private String writeEnvelope(Checkpoint checkpoint, String migratedFromId) {
         try {
             return objectMapper.writeValueAsString(new PersistedCheckpoint(
                     ENVELOPE_VERSION,
@@ -133,11 +137,23 @@ public class DatabaseCheckpointSaver extends MemorySaver {
                     checkpoint.getId(),
                     checkpoint.getNodeId(),
                     checkpoint.getNextNodeId(),
-                    checkpoint.getState()
+                    checkpoint.getState(),
+                    migratedFromId
             ));
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Failed to serialize official graph checkpoint", exception);
         }
+    }
+
+    private boolean alreadyMigrated(List<AgentWorkflowCheckpointEntity> entities,
+                                    String sourceId) {
+        if (sourceId == null) {
+            return true;
+        }
+        return entities.stream().anyMatch(entity -> {
+            return sourceId.equals(OfficialCheckpointMigration.migratedFromId(
+                    entity.getSnapshotJson(), objectMapper));
+        });
     }
 
     private String pendingApprovalId(Object value) {
@@ -163,6 +179,7 @@ public class DatabaseCheckpointSaver extends MemorySaver {
                                        String id,
                                        String nodeId,
                                        String nextNodeId,
-                                       Map<String, Object> state) {
+                                       Map<String, Object> state,
+                                       String migratedFromId) {
     }
 }

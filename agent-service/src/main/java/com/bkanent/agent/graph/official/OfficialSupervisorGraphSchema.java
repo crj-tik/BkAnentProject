@@ -52,6 +52,9 @@ public class OfficialSupervisorGraphSchema {
             strategies.put(OfficialSupervisorGraphKeys.APPROVAL_VERSION, new ReplaceStrategy());
             strategies.put(OfficialSupervisorGraphKeys.EVENT_REFERENCES, new AppendStrategy());
             strategies.put(OfficialSupervisorGraphKeys.RESUME_IDEMPOTENCY_KEY, new ReplaceStrategy());
+            strategies.put(OfficialSupervisorGraphKeys.PARALLEL_RUN_ID, new ReplaceStrategy());
+            strategies.put(OfficialSupervisorGraphKeys.PARALLEL_BRANCH_RESULTS, new AppendStrategy());
+            strategies.put(OfficialSupervisorGraphKeys.PARALLEL_AGGREGATION_STRATEGY, new ReplaceStrategy());
             return strategies;
         };
     }

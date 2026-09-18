@@ -53,8 +53,12 @@ spring:
             enabled: true
     mcp:
       server:
+        enabled: ${MCP_SERVER_ENABLED:true}
+        protocol: ${MCP_SERVER_PROTOCOL:SSE}
         name: business-mcp-server
-        version: 1.0.0
+        version: ${MCP_SERVER_VERSION:1.0.0}
+        sse-endpoint: ${MCP_SERVER_SSE_ENDPOINT:/sse}
+        sse-message-endpoint: ${MCP_SERVER_SSE_MESSAGE_ENDPOINT:/mcp/message}
   cloud:
     nacos:
       discovery:
