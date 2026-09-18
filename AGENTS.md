@@ -26,5 +26,8 @@ New business logic should add tests under `src/test/java` in the owning module. 
 ## Commit & Pull Request Guidelines
 The repository has no commit history yet, so adopt short imperative commit messages such as `feat: add listing rag indexing` or `fix: handle empty Milvus search response`. Keep one logical change per commit. Pull requests should include scope, affected modules, config or schema changes, verification commands, and sample requests/responses for API changes.
 
+## 项目提交与推送规则
+每次修改完成并验证通过后，必须立即创建 commit 并 push 到当前对应的远程分支。commit message 必须使用中文，内容应简洁准确地概括本次修改。
+
 ## Security & Configuration Tips
 Do not hardcode secrets. Supply MySQL, Nacos, DeepSeek, DashScope, token, and Milvus values through environment variables or a secret manager. Review `sql/mysql-init.sql` before applying it to shared environments; existing plaintext auth rows require a BCrypt migration.
