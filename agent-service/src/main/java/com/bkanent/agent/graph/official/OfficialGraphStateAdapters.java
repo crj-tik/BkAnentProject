@@ -9,6 +9,7 @@ import com.bkanent.common.agent.AgentTaskInvokeResponse;
 import com.bkanent.common.agent.ApprovalDecision;
 import com.bkanent.common.agent.ApprovalRequest;
 import com.bkanent.common.agent.WorkflowStatus;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -65,6 +66,44 @@ public final class OfficialGraphStateAdapters {
         return mapped;
     }
 
+    /**
+     * Converts a graph result to an update map without re-appending collection
+     * values that were already present in the parent graph state.
+     */
+    public static Map<String, Object> toDeltaMap(SupervisorGraphState previous,
+                                                  SupervisorGraphState next) {
+        Map<String, Object> mapped = toMap(next);
+        mapped.put(OfficialSupervisorGraphKeys.ARTIFACT_IDS,
+                delta(previous.artifactIds(), next.artifactIds()));
+        mapped.put(OfficialSupervisorGraphKeys.HANDOFF_HISTORY,
+                delta(previous.handoffHistory(), next.handoffHistory()));
+        return mapped;
+    }
+
+    /**
+     * Converts a workflow result to an update map using append-only deltas for
+     * artifact and handoff history keys.
+     */
+    public static Map<String, Object> toDeltaMap(SupervisorWorkflowState previous,
+                                                  SupervisorWorkflowState next) {
+        Map<String, Object> mapped = toMap(next);
+        mapped.put(OfficialSupervisorGraphKeys.ARTIFACT_IDS,
+                delta(previous.artifactIds(), next.artifactIds()));
+        mapped.put(OfficialSupervisorGraphKeys.HANDOFF_HISTORY,
+                delta(previous.handoffHistory(), next.handoffHistory()));
+        return mapped;
+    }
+
+    public static <T> List<T> delta(List<T> previous, List<T> next) {
+        if (next == null || next.isEmpty()) {
+            return List.of();
+        }
+        List<T> existing = previous == null ? List.of() : previous;
+        return next.stream()
+                .filter(value -> !existing.contains(value))
+                .toList();
+    }
+
     public static Map<String, Object> toMap(SupervisorWorkflowState state) {
         Map<String, Object> mapped = new LinkedHashMap<>();
         mapped.put(OfficialSupervisorGraphKeys.SESSION_ID, state.sessionId());
@@ -106,6 +145,37 @@ public final class OfficialGraphStateAdapters {
         );
     }
 
+    /**
+     * Rehydrates records loaded from the database checkpoint envelope. Jackson
+     * stores nested records as maps, while an in-process graph stores the record
+     * instances directly, so both representations must be accepted here.
+     */
+    public static SupervisorWorkflowState toWorkflowState(OverAllState state,
+                                                           ObjectMapper objectMapper) {
+        return new SupervisorWorkflowState(
+                state.value(OfficialSupervisorGraphKeys.SESSION_ID, (String) null),
+                state.value(OfficialSupervisorGraphKeys.TASK_ID, (String) null),
+                state.value(OfficialSupervisorGraphKeys.TRACE_ID, (String) null),
+                state.value(OfficialSupervisorGraphKeys.USER_ID, (String) null),
+                state.value(OfficialSupervisorGraphKeys.USER_MESSAGE, (String) null),
+                WorkflowStatus.valueOf(state.value(
+                        OfficialSupervisorGraphKeys.WORKFLOW_STATUS,
+                        WorkflowStatus.RUNNING.name()
+                )),
+                state.value(OfficialSupervisorGraphKeys.SELECTED_AGENT_ID, (String) null),
+                castMap(state.value(OfficialSupervisorGraphKeys.SHARED_CONTEXT, Map.of())),
+                castHistory(state.value(OfficialSupervisorGraphKeys.HANDOFF_HISTORY, List.of())),
+                castList(state.value(OfficialSupervisorGraphKeys.ARTIFACT_IDS, List.of())),
+                convert(state.value(OfficialSupervisorGraphKeys.LATEST_AGENT_RESPONSE, Object.class).orElse(null),
+                        AgentTaskInvokeResponse.class, objectMapper),
+                convert(state.value(OfficialSupervisorGraphKeys.PENDING_APPROVAL, Object.class).orElse(null),
+                        ApprovalRequest.class, objectMapper),
+                convert(state.value(OfficialSupervisorGraphKeys.LATEST_APPROVAL_DECISION, Object.class).orElse(null),
+                        ApprovalDecision.class, objectMapper),
+                state.value(OfficialSupervisorGraphKeys.FINAL_ANSWER, (String) null)
+        );
+    }
+
     public static AgentTaskInvokeResponse latestResponse(OverAllState state) {
         return state.value(OfficialSupervisorGraphKeys.LATEST_AGENT_RESPONSE, AgentTaskInvokeResponse.class).orElse(null);
     }
@@ -135,5 +205,15 @@ public final class OfficialGraphStateAdapters {
     @SuppressWarnings("unchecked")
     private static List<Map<String, Object>> castHistory(Object value) {
         return value instanceof List<?> list ? (List<Map<String, Object>>) list : List.of();
+    }
+
+    private static <T> T convert(Object value, Class<T> type, ObjectMapper objectMapper) {
+        if (value == null) {
+            return null;
+        }
+        if (type.isInstance(value)) {
+            return type.cast(value);
+        }
+        return objectMapper.convertValue(value, type);
     }
 }

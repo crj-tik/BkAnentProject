@@ -8,13 +8,13 @@ import com.alibaba.cloud.ai.graph.StateGraph;
 import com.alibaba.cloud.ai.graph.action.AsyncNodeAction;
 import com.alibaba.cloud.ai.graph.action.NodeAction;
 import com.alibaba.cloud.ai.graph.checkpoint.config.SaverConfig;
-import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.bkanent.agent.graph.node.LoadSessionNode;
 import com.bkanent.agent.graph.node.LlmIntentPlanNode;
 import com.bkanent.agent.graph.node.ParseIntentNode;
 import com.bkanent.agent.graph.node.PlanValidationNode;
 import com.bkanent.agent.graph.node.PlanTaskNode;
 import com.bkanent.agent.graph.node.SelectAgentNode;
+import com.bkanent.agent.graph.node.SkillMatchNode;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -27,6 +27,8 @@ public class OfficialPlanningGraphFactory {
     private final ParseIntentNode parseIntentNode;
     private final PlanTaskNode planTaskNode;
     private final SelectAgentNode selectAgentNode;
+    private final SkillMatchNode skillMatchNode;
+    private final DatabaseCheckpointSaverFactory checkpointSaverFactory;
 
     public OfficialPlanningGraphFactory(OfficialSupervisorGraphSchema graphSchema,
                                         LoadSessionNode loadSessionNode,
@@ -34,7 +36,9 @@ public class OfficialPlanningGraphFactory {
                                         PlanValidationNode planValidationNode,
                                         ParseIntentNode parseIntentNode,
                                         PlanTaskNode planTaskNode,
-                                        SelectAgentNode selectAgentNode) {
+                                        SelectAgentNode selectAgentNode,
+                                        SkillMatchNode skillMatchNode,
+                                        DatabaseCheckpointSaverFactory checkpointSaverFactory) {
         this.graphSchema = graphSchema;
         this.loadSessionNode = loadSessionNode;
         this.llmIntentPlanNode = llmIntentPlanNode;
@@ -42,6 +46,8 @@ public class OfficialPlanningGraphFactory {
         this.parseIntentNode = parseIntentNode;
         this.planTaskNode = planTaskNode;
         this.selectAgentNode = selectAgentNode;
+        this.skillMatchNode = skillMatchNode;
+        this.checkpointSaverFactory = checkpointSaverFactory;
     }
 
     public CompiledGraph create() throws Exception {
@@ -50,20 +56,23 @@ public class OfficialPlanningGraphFactory {
                 .build();
         StateGraph stateGraph = new StateGraph("official-supervisor-planning", keyStrategyFactory);
         stateGraph.addNode(OfficialGraphNodeNames.LOAD_SESSION, adapt(loadSessionNode));
+        stateGraph.addNode("skill_match", adapt(skillMatchNode));
         stateGraph.addNode(OfficialGraphNodeNames.LLM_INTENT_PLAN, adapt(llmIntentPlanNode));
         stateGraph.addNode(OfficialGraphNodeNames.PLAN_VALIDATION, adapt(planValidationNode));
         stateGraph.addNode(OfficialGraphNodeNames.PARSE_INTENT, adapt(parseIntentNode));
         stateGraph.addNode(OfficialGraphNodeNames.PLAN_TASK, adapt(planTaskNode));
         stateGraph.addNode(OfficialGraphNodeNames.SELECT_AGENT, adapt(selectAgentNode));
         stateGraph.addEdge(StateGraph.START, OfficialGraphNodeNames.LOAD_SESSION);
-        stateGraph.addEdge(OfficialGraphNodeNames.LOAD_SESSION, OfficialGraphNodeNames.LLM_INTENT_PLAN);
+        stateGraph.addEdge(OfficialGraphNodeNames.LOAD_SESSION, "skill_match");
+        stateGraph.addEdge("skill_match", OfficialGraphNodeNames.LLM_INTENT_PLAN);
         stateGraph.addEdge(OfficialGraphNodeNames.LLM_INTENT_PLAN, OfficialGraphNodeNames.PLAN_VALIDATION);
         stateGraph.addEdge(OfficialGraphNodeNames.PLAN_VALIDATION, OfficialGraphNodeNames.PARSE_INTENT);
         stateGraph.addEdge(OfficialGraphNodeNames.PARSE_INTENT, OfficialGraphNodeNames.PLAN_TASK);
         stateGraph.addEdge(OfficialGraphNodeNames.PLAN_TASK, OfficialGraphNodeNames.SELECT_AGENT);
         stateGraph.addEdge(OfficialGraphNodeNames.SELECT_AGENT, StateGraph.END);
         return stateGraph.compile(CompileConfig.builder()
-                .saverConfig(SaverConfig.builder().register(new MemorySaver()).build())
+                .saverConfig(SaverConfig.builder().register(
+                        checkpointSaverFactory.create("official-supervisor-planning")).build())
                 .build());
     }
 

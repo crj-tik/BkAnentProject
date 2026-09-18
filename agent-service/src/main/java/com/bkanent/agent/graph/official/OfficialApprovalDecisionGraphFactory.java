@@ -8,7 +8,6 @@ import com.alibaba.cloud.ai.graph.StateGraph;
 import com.alibaba.cloud.ai.graph.action.AsyncNodeAction;
 import com.alibaba.cloud.ai.graph.action.NodeAction;
 import com.alibaba.cloud.ai.graph.checkpoint.config.SaverConfig;
-import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.bkanent.common.agent.ApprovalDecision;
 import com.bkanent.common.agent.ApprovalRequest;
 import com.bkanent.common.agent.ApprovalStatus;
@@ -22,9 +21,12 @@ import java.util.Map;
 public class OfficialApprovalDecisionGraphFactory {
 
     private final OfficialSupervisorGraphSchema graphSchema;
+    private final DatabaseCheckpointSaverFactory checkpointSaverFactory;
 
-    public OfficialApprovalDecisionGraphFactory(OfficialSupervisorGraphSchema graphSchema) {
+    public OfficialApprovalDecisionGraphFactory(OfficialSupervisorGraphSchema graphSchema,
+                                                DatabaseCheckpointSaverFactory checkpointSaverFactory) {
         this.graphSchema = graphSchema;
+        this.checkpointSaverFactory = checkpointSaverFactory;
     }
 
     public CompiledGraph create() throws Exception {
@@ -36,7 +38,8 @@ public class OfficialApprovalDecisionGraphFactory {
         stateGraph.addEdge(StateGraph.START, OfficialApprovalDecisionGraphNodeNames.APPLY_APPROVAL_DECISION);
         stateGraph.addEdge(OfficialApprovalDecisionGraphNodeNames.APPLY_APPROVAL_DECISION, StateGraph.END);
         return stateGraph.compile(CompileConfig.builder()
-                .saverConfig(SaverConfig.builder().register(new MemorySaver()).build())
+                .saverConfig(SaverConfig.builder().register(
+                        checkpointSaverFactory.create("official-approval-decision")).build())
                 .build());
     }
 

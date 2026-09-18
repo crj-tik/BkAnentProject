@@ -57,6 +57,30 @@ public record OfficialSupervisorGraphState(OverAllState delegate) {
         return delegate.value(OfficialSupervisorGraphKeys.REQUIRE_APPROVAL);
     }
 
+    public Optional<String> currentNode() {
+        return delegate.value(OfficialSupervisorGraphKeys.CURRENT_NODE);
+    }
+
+    public Optional<String> nextNode() {
+        return delegate.value(OfficialSupervisorGraphKeys.NEXT_NODE);
+    }
+
+    public Optional<String> errorCode() {
+        return delegate.value(OfficialSupervisorGraphKeys.ERROR_CODE);
+    }
+
+    public Optional<String> errorMessage() {
+        return delegate.value(OfficialSupervisorGraphKeys.ERROR_MESSAGE);
+    }
+
+    public Optional<Integer> retryCount() {
+        return delegate.value(OfficialSupervisorGraphKeys.RETRY_COUNT);
+    }
+
+    public Optional<Integer> maxRetryCount() {
+        return delegate.value(OfficialSupervisorGraphKeys.MAX_RETRY_COUNT);
+    }
+
     public Optional<String> selectedAgentId() {
         return delegate.value(OfficialSupervisorGraphKeys.SELECTED_AGENT_ID);
     }

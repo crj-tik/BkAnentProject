@@ -8,7 +8,6 @@ import com.alibaba.cloud.ai.graph.StateGraph;
 import com.alibaba.cloud.ai.graph.action.AsyncNodeAction;
 import com.alibaba.cloud.ai.graph.action.NodeAction;
 import com.alibaba.cloud.ai.graph.checkpoint.config.SaverConfig;
-import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.bkanent.agent.graph.WorkflowResumeSupport;
 import org.springframework.stereotype.Component;
 
@@ -19,11 +18,14 @@ public class OfficialRouteGraphFactory {
 
     private final OfficialSupervisorGraphSchema graphSchema;
     private final WorkflowResumeSupport workflowResumeSupport;
+    private final DatabaseCheckpointSaverFactory checkpointSaverFactory;
 
     public OfficialRouteGraphFactory(OfficialSupervisorGraphSchema graphSchema,
-                                     WorkflowResumeSupport workflowResumeSupport) {
+                                     WorkflowResumeSupport workflowResumeSupport,
+                                     DatabaseCheckpointSaverFactory checkpointSaverFactory) {
         this.graphSchema = graphSchema;
         this.workflowResumeSupport = workflowResumeSupport;
+        this.checkpointSaverFactory = checkpointSaverFactory;
     }
 
     public CompiledGraph create() throws Exception {
@@ -35,7 +37,8 @@ public class OfficialRouteGraphFactory {
         stateGraph.addEdge(StateGraph.START, OfficialRouteGraphNodeNames.ROUTE_AFTER_PARALLEL);
         stateGraph.addEdge(OfficialRouteGraphNodeNames.ROUTE_AFTER_PARALLEL, StateGraph.END);
         return stateGraph.compile(CompileConfig.builder()
-                .saverConfig(SaverConfig.builder().register(new MemorySaver()).build())
+                .saverConfig(SaverConfig.builder().register(
+                        checkpointSaverFactory.create("official-route")).build())
                 .build());
     }
 

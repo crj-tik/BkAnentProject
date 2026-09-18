@@ -8,7 +8,6 @@ import com.alibaba.cloud.ai.graph.StateGraph;
 import com.alibaba.cloud.ai.graph.action.AsyncNodeAction;
 import com.alibaba.cloud.ai.graph.action.NodeAction;
 import com.alibaba.cloud.ai.graph.checkpoint.config.SaverConfig;
-import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.bkanent.agent.graph.node.BuildNextAgentContextNode;
 import com.bkanent.agent.graph.node.HandoffNode;
 import com.bkanent.agent.workflow.SupervisorWorkflowState;
@@ -22,15 +21,18 @@ import java.util.Map;
 public class OfficialHandoffGraphFactory {
 
     private final OfficialSupervisorGraphSchema graphSchema;
+    private final DatabaseCheckpointSaverFactory checkpointSaverFactory;
     private final BuildNextAgentContextNode buildNextAgentContextNode;
     private final HandoffNode handoffNode;
 
     public OfficialHandoffGraphFactory(OfficialSupervisorGraphSchema graphSchema,
                                        BuildNextAgentContextNode buildNextAgentContextNode,
-                                       HandoffNode handoffNode) {
+                                       HandoffNode handoffNode,
+                                       DatabaseCheckpointSaverFactory checkpointSaverFactory) {
         this.graphSchema = graphSchema;
         this.buildNextAgentContextNode = buildNextAgentContextNode;
         this.handoffNode = handoffNode;
+        this.checkpointSaverFactory = checkpointSaverFactory;
     }
 
     public CompiledGraph create() throws Exception {
@@ -44,7 +46,8 @@ public class OfficialHandoffGraphFactory {
         stateGraph.addEdge(OfficialHandoffGraphNodeNames.BUILD_NEXT_AGENT_CONTEXT, OfficialHandoffGraphNodeNames.HANDOFF_INVOKE);
         stateGraph.addEdge(OfficialHandoffGraphNodeNames.HANDOFF_INVOKE, StateGraph.END);
         return stateGraph.compile(CompileConfig.builder()
-                .saverConfig(SaverConfig.builder().register(new MemorySaver()).build())
+                .saverConfig(SaverConfig.builder().register(
+                        checkpointSaverFactory.create("official-handoff")).build())
                 .build());
     }
 
@@ -72,8 +75,10 @@ public class OfficialHandoffGraphFactory {
             updates.put(OfficialSupervisorGraphKeys.WORKFLOW_STATUS, WorkflowStatus.RUNNING.name());
             updates.put(OfficialSupervisorGraphKeys.SELECTED_AGENT_ID, nextState.selectedAgentId());
             updates.put(OfficialSupervisorGraphKeys.SHARED_CONTEXT, nextState.sharedContext());
-            updates.put(OfficialSupervisorGraphKeys.HANDOFF_HISTORY, nextState.handoffHistory());
-            updates.put(OfficialSupervisorGraphKeys.ARTIFACT_IDS, nextState.artifactIds());
+            updates.put(OfficialSupervisorGraphKeys.HANDOFF_HISTORY,
+                    OfficialGraphStateAdapters.delta(workflowState.handoffHistory(), nextState.handoffHistory()));
+            updates.put(OfficialSupervisorGraphKeys.ARTIFACT_IDS,
+                    OfficialGraphStateAdapters.delta(workflowState.artifactIds(), nextState.artifactIds()));
             updates.put(OfficialSupervisorGraphKeys.LATEST_AGENT_RESPONSE, nextState.latestAgentResponse());
             return updates;
         };

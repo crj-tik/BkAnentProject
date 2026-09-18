@@ -42,6 +42,16 @@ public class OfficialSupervisorGraphSchema {
             strategies.put(OfficialSupervisorGraphKeys.APPROVAL_RESUME_ACTION, new ReplaceStrategy());
             strategies.put(OfficialSupervisorGraphKeys.RESUME_FEEDBACK, new ReplaceStrategy());
             strategies.put(OfficialSupervisorGraphKeys.SUPERVISOR_RESPONSE, new ReplaceStrategy());
+            strategies.put(OfficialSupervisorGraphKeys.CURRENT_NODE, new ReplaceStrategy());
+            strategies.put(OfficialSupervisorGraphKeys.NEXT_NODE, new ReplaceStrategy());
+            strategies.put(OfficialSupervisorGraphKeys.ERROR_CODE, new ReplaceStrategy());
+            strategies.put(OfficialSupervisorGraphKeys.ERROR_MESSAGE, new ReplaceStrategy());
+            strategies.put(OfficialSupervisorGraphKeys.RETRY_COUNT, new ReplaceStrategy());
+            strategies.put(OfficialSupervisorGraphKeys.MAX_RETRY_COUNT, new ReplaceStrategy());
+            strategies.put(OfficialSupervisorGraphKeys.PLAN_VERSION, new ReplaceStrategy());
+            strategies.put(OfficialSupervisorGraphKeys.APPROVAL_VERSION, new ReplaceStrategy());
+            strategies.put(OfficialSupervisorGraphKeys.EVENT_REFERENCES, new AppendStrategy());
+            strategies.put(OfficialSupervisorGraphKeys.RESUME_IDEMPOTENCY_KEY, new ReplaceStrategy());
             return strategies;
         };
     }

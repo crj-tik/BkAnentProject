@@ -10,10 +10,11 @@
 - `RocketMQ` 事件总线已接入
 - 审批、并行、handoff、checkpoint 已跑通
 
-因此当前优先级应切换为：
+因此当前优先级已切换为：
 
-1. 主 Agent 改造为官方 Spring AI Alibaba Graph
-2. 再继续补 `distributed-multi-agent-*.md` 中剩余业务功能
+1. 完成 Supervisor 主流程的官方 Spring AI Alibaba Graph 迁移
+2. 补齐数据库 checkpoint 的旧格式迁移、多实例幂等和原生并行分支
+3. 再继续补 `distributed-multi-agent-*.md` 中剩余业务功能
 
 如果此时继续补 `settlement / notification / publish` 等业务点，本质上是在继续投资自定义 Graph 骨架，后续切官方 Graph 的迁移范围会被放大。
 
@@ -40,19 +41,19 @@
 
 ### 已有能力
 
-- 自定义 `SupervisorGraphPlanner`
-- 自定义 `SingleAgentSubgraph`
-- 自定义 `ParallelAgentSubgraph`
-- 自定义 `ApprovalSubgraphService`
-- 自定义 `GraphCheckpointStore`
-- `SupervisorWorkflowService` 统一控制审批、并行、handoff
+- 官方 `StateGraph + OverAllState + ConditionalEdges` 已用于 Supervisor 顶层编排
+- `SingleAgentSubgraph`、`ParallelAgentSubgraph` 和 `CompletionSubgraph` 已作为顶层 Graph 节点适配器
+- 审批网关在 `WAITING_USER_APPROVAL` 后通过 `interruptAfter` 停止下游节点
+- `ApprovalCallbackRequest` 通过 `updateState(...).withResume()` 恢复官方 Graph
+- `DatabaseCheckpointSaver` 已接入现有 `agent_workflow_checkpoint` 表
+- `SupervisorTaskService`、`SupervisorWorkflowService` 和新的异步提交路径已退化为 Graph 门面/任务调度
 
-### 与官方 Graph 的核心差异
+### 仍需补齐的官方 Graph 能力
 
-- 当前不是官方 `StateGraph`
-- 当前审批不是官方可恢复 `Subgraph`
-- 当前 checkpoint 不是官方 Graph runtime 的 `Checkpointer`
-- 当前节点虽然已经拆分，但仍大量依赖 service 手工串接
+- 目前并行 Agent 仍由现有聚合适配器调用，尚未迁移为 Graph 原生 fan-out/fan-in 分支
+- 旧 `GraphCheckpointStore` 行格式目前只保留兼容查询，尚未自动迁移为官方 envelope
+- 多实例审批回调还需要数据库级 claim/version 条件更新；当前代码提供同 JVM 锁和 checkpoint 幂等键
+- Skill 匹配失败和非法 WorkflowPlan 的失败事件还需要专门的端到端回归覆盖
 
 ## 4. 改造原则
 
@@ -100,7 +101,7 @@ Graph checkpoint 和业务 memory 继续严格分层：
 - 新增官方 Graph 状态类
 - 新增 Graph 线程配置类
 
-状态：进行中
+状态：已完成（Spring AI 1.1.2 与 Spring AI Alibaba 1.1.2.3 对齐）
 
 ### P0-2 建立官方 Graph 状态模型
 
@@ -115,7 +116,7 @@ Graph checkpoint 和业务 memory 继续严格分层：
 - 新增 `OfficialSupervisorGraphKeys`
 - 新增 `OfficialSupervisorGraphSchema`
 
-状态：待完成
+状态：已完成
 
 ### P0-3 建立官方 Graph 编译入口
 
@@ -129,7 +130,7 @@ Graph checkpoint 和业务 memory 继续严格分层：
 - 新增 `OfficialSupervisorGraphFactory`
 - 新增 `OfficialCompiledSupervisorGraphHolder`
 
-状态：待完成
+状态：已完成（顶层 Graph 已编译并由 Graph 门面持有）
 
 ### P0-4 节点适配
 
@@ -148,7 +149,7 @@ Graph checkpoint 和业务 memory 继续严格分层：
 - `PersistArtifactsNode`
 - `PersistSessionNode`
 
-状态：待完成
+状态：已完成（保留子图作为兼容适配器）
 
 ### P0-5 单 Agent 主链切换
 
@@ -157,7 +158,7 @@ Graph checkpoint 和业务 memory 继续严格分层：
 - `SupervisorWorkflowService.startWorkflow` 单链路改走官方 Graph
 - `SupervisorTaskService.submitTask` 单链路改走同一个官方 Graph 门面
 
-状态：待完成
+状态：已完成（同步、工作流和异步本地任务统一进入 Graph）
 
 ### P0-6 审批子图切换
 
@@ -166,7 +167,7 @@ Graph checkpoint 和业务 memory 继续严格分层：
 - `ApprovalSubgraphService` 迁移为官方可恢复子图
 - 用 `threadId + checkpointer` 驱动暂停与恢复
 
-状态：待完成
+状态：已完成第一版（审批网关、Graph interrupt、人工回调恢复已接入）
 
 ### P0-7 并行子图切换
 
@@ -175,7 +176,7 @@ Graph checkpoint 和业务 memory 继续严格分层：
 - 并行调用迁移到官方 Graph 并行分支
 - 汇聚后继续走 route decision
 
-状态：待完成
+状态：进行中（当前仍由并行适配器聚合，原生 fan-out/fan-in 待后续变更）
 
 ### P0-8 Handoff 子图切换
 
@@ -184,7 +185,7 @@ Graph checkpoint 和业务 memory 继续严格分层：
 - handoff 迁移为显式图节点流转
 - 保留 `memory-service` handoff relation 落点
 
-状态：待完成
+状态：进行中（保留既有 handoff 服务适配器，后续改成顶层显式节点）
 
 ### P0-9 Checkpointer 适配
 
@@ -193,7 +194,7 @@ Graph checkpoint 和业务 memory 继续严格分层：
 - 以官方 Graph `Checkpointer` 接管当前 checkpoint 逻辑
 - 当前自定义 `GraphCheckpointStore` 逐步退为兼容层或查询层
 
-状态：待完成
+状态：已完成第一版（数据库 envelope + 每 Graph 独立 saver 实例）
 
 ### P1-1 Graph 化完成后再继续的功能
 
@@ -235,7 +236,15 @@ Graph 稳定后再继续：
 
 - `SupervisorWorkflowService` 中仍存在的手工流程拼接逻辑
 
-## 7. 第一批改造范围
+## 7. 当前审批恢复协议
+
+1. 入口请求由 `DefaultOfficialSupervisorGraphFacade` 生成或规范化 `sessionId`、`taskId`、`traceId`，并使用 `taskId` 作为 Graph `threadId`。
+2. 顶层 Graph 根据受控计划进入 `SINGLE_AGENT`、`PARALLEL_AGENTS` 或 `APPROVAL_GATE`，不会接受请求或 LLM 直接注入节点名。
+3. `APPROVAL_GATE` 创建 `ApprovalRequest`，写入待执行节点、批准/拒绝/终止候选动作、审批版本和重试信息，然后以 `WAITING_USER_APPROVAL` 状态中断。
+4. 回调校验 `approvalId`、`taskId`、可选 `sessionId` 和 `approvalVersion`。批准、拒绝和终止分别由 Graph 条件边进入执行、重生成或取消节点。
+5. 重复回调由 `latestApprovalDecision` 和 `resumeIdempotencyKey` 识别，不再次调用下游 Agent；同一 JVM 内还按 taskId 串行化恢复操作。
+
+## 8. 第一批改造范围
 
 本轮先做：
 
@@ -249,17 +258,21 @@ Graph 稳定后再继续：
 - 一次性把所有流程切到官方 Graph
 - 一次性替换审批、并行、handoff 全链路
 
-## 8. 验收标准
+## 9. 验收标准
 
-第一批验收只看：
+当前已验证：
 
-- `agent-service` 已引入官方 Graph 依赖
-- 官方 Graph 状态模型已入库代码结构
-- 单链路改造入口已经具备可继续迁移的代码骨架
-- 全项目编译通过
+- `agent-service` 已引入官方 Graph 依赖并完成 Spring AI 依赖树检查
+- 官方 Graph 状态模型、顶层 Graph 门面和数据库 checkpoint 适配器已入库
+- 审批暂停/恢复最小 Graph 集成测试通过
+- `mvn -pl agent-service test` 通过（23 项）
+- `mvn -pl agent-service -am -DskipTests compile` 通过
+- `openspec validate migrate-supervisor-graph-approval-routing --strict` 通过
 
-第二批验收再看：
+后续验收：
 
-- 单 Agent 主链正式切换到官方 Graph
-- 审批恢复正式切到官方 Graph Checkpointer
+- 原生并行 fan-out/fan-in 与 all-of/any-of 策略
+- 旧 checkpoint envelope 自动迁移、服务重启恢复和多实例数据库幂等
+- SkillMatch/WorkflowPlan 非法输入的失败分支和端到端测试
+- MCP/A2A smoke test 与带 Nacos/数据库的最小微服务启动
 

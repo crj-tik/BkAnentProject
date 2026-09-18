@@ -29,6 +29,16 @@ public final class OfficialSupervisorGraphKeys {
     public static final String APPROVAL_RESUME_ACTION = "approvalResumeAction";
     public static final String RESUME_FEEDBACK = "resumeFeedback";
     public static final String SUPERVISOR_RESPONSE = "supervisorResponse";
+    public static final String CURRENT_NODE = "currentNode";
+    public static final String NEXT_NODE = "nextNode";
+    public static final String ERROR_CODE = "errorCode";
+    public static final String ERROR_MESSAGE = "errorMessage";
+    public static final String RETRY_COUNT = "retryCount";
+    public static final String MAX_RETRY_COUNT = "maxRetryCount";
+    public static final String PLAN_VERSION = "planVersion";
+    public static final String APPROVAL_VERSION = "approvalVersion";
+    public static final String EVENT_REFERENCES = "eventReferences";
+    public static final String RESUME_IDEMPOTENCY_KEY = "resumeIdempotencyKey";
 
     private OfficialSupervisorGraphKeys() {
     }

@@ -8,7 +8,6 @@ import com.alibaba.cloud.ai.graph.StateGraph;
 import com.alibaba.cloud.ai.graph.action.AsyncNodeAction;
 import com.alibaba.cloud.ai.graph.action.NodeAction;
 import com.alibaba.cloud.ai.graph.checkpoint.config.SaverConfig;
-import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.bkanent.agent.graph.SupervisorGraphState;
 import com.bkanent.agent.graph.node.BuildInvokeRequestNode;
 import com.bkanent.agent.graph.node.InvokeAgentNode;
@@ -30,6 +29,7 @@ import java.util.Map;
 public class OfficialSingleAgentGraphFactory {
 
     private final OfficialSupervisorGraphSchema graphSchema;
+    private final DatabaseCheckpointSaverFactory checkpointSaverFactory;
     private final BuildInvokeRequestNode buildInvokeRequestNode;
     private final InvokeAgentNode invokeAgentNode;
     private final PersistArtifactsNode persistArtifactsNode;
@@ -41,13 +41,15 @@ public class OfficialSingleAgentGraphFactory {
                                            InvokeAgentNode invokeAgentNode,
                                            PersistArtifactsNode persistArtifactsNode,
                                            MergeAgentResultNode mergeAgentResultNode,
-                                           AgentRegistry agentRegistry) {
+                                           AgentRegistry agentRegistry,
+                                           DatabaseCheckpointSaverFactory checkpointSaverFactory) {
         this.graphSchema = graphSchema;
         this.buildInvokeRequestNode = buildInvokeRequestNode;
         this.invokeAgentNode = invokeAgentNode;
         this.persistArtifactsNode = persistArtifactsNode;
         this.mergeAgentResultNode = mergeAgentResultNode;
         this.agentRegistry = agentRegistry;
+        this.checkpointSaverFactory = checkpointSaverFactory;
     }
 
     public CompiledGraph create() throws Exception {
@@ -65,7 +67,8 @@ public class OfficialSingleAgentGraphFactory {
         stateGraph.addEdge(OfficialSingleAgentGraphNodeNames.PERSIST_ARTIFACTS, OfficialSingleAgentGraphNodeNames.MERGE_RESULT);
         stateGraph.addEdge(OfficialSingleAgentGraphNodeNames.MERGE_RESULT, StateGraph.END);
         return stateGraph.compile(CompileConfig.builder()
-                .saverConfig(SaverConfig.builder().register(new MemorySaver()).build())
+                .saverConfig(SaverConfig.builder().register(
+                        checkpointSaverFactory.create("official-supervisor-single-agent")).build())
                 .build());
     }
 
@@ -110,7 +113,10 @@ public class OfficialSingleAgentGraphFactory {
             String userId = state.value(OfficialSupervisorGraphKeys.USER_ID, (String) null);
             String traceId = state.value(OfficialSupervisorGraphKeys.TRACE_ID, (String) null);
             List<String> artifactIds = persistArtifactsNode.persistSingle(taskId, sessionId, agentId, userId, traceId, response);
-            return Map.of(OfficialSupervisorGraphKeys.ARTIFACT_IDS, artifactIds);
+            List<String> previousArtifactIds = castArtifactIds(
+                    state.value(OfficialSupervisorGraphKeys.ARTIFACT_IDS, List.of()));
+            return Map.of(OfficialSupervisorGraphKeys.ARTIFACT_IDS,
+                    OfficialGraphStateAdapters.delta(previousArtifactIds, artifactIds));
         };
         return AsyncNodeAction.node_async(action);
     }
@@ -124,8 +130,8 @@ public class OfficialSingleAgentGraphFactory {
             var workflowState = mergeAgentResultNode.mergeSingle(graphState, selectedAgentId, artifactIds, response);
             Map<String, Object> updates = new LinkedHashMap<>();
             updates.put(OfficialSupervisorGraphKeys.WORKFLOW_STATUS, WorkflowStatus.RUNNING.name());
-            updates.put(OfficialSupervisorGraphKeys.HANDOFF_HISTORY, workflowState.handoffHistory());
-            updates.put(OfficialSupervisorGraphKeys.ARTIFACT_IDS, workflowState.artifactIds());
+            updates.put(OfficialSupervisorGraphKeys.HANDOFF_HISTORY,
+                    OfficialGraphStateAdapters.delta(graphState.handoffHistory(), workflowState.handoffHistory()));
             updates.put(OfficialSupervisorGraphKeys.LATEST_AGENT_RESPONSE, workflowState.latestAgentResponse());
             return updates;
         };

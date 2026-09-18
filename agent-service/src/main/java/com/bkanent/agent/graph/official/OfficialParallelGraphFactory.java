@@ -8,7 +8,6 @@ import com.alibaba.cloud.ai.graph.StateGraph;
 import com.alibaba.cloud.ai.graph.action.AsyncNodeAction;
 import com.alibaba.cloud.ai.graph.action.NodeAction;
 import com.alibaba.cloud.ai.graph.checkpoint.config.SaverConfig;
-import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.bkanent.agent.graph.SupervisorGraphState;
 import com.bkanent.agent.graph.node.MergeParallelResultNode;
 import com.bkanent.agent.graph.node.ParallelInvokeNode;
@@ -26,6 +25,7 @@ import java.util.Map;
 public class OfficialParallelGraphFactory {
 
     private final OfficialSupervisorGraphSchema graphSchema;
+    private final DatabaseCheckpointSaverFactory checkpointSaverFactory;
     private final ParallelInvokeNode parallelInvokeNode;
     private final PersistParallelArtifactsNode persistParallelArtifactsNode;
     private final MergeParallelResultNode mergeParallelResultNode;
@@ -33,11 +33,13 @@ public class OfficialParallelGraphFactory {
     public OfficialParallelGraphFactory(OfficialSupervisorGraphSchema graphSchema,
                                         ParallelInvokeNode parallelInvokeNode,
                                         PersistParallelArtifactsNode persistParallelArtifactsNode,
-                                        MergeParallelResultNode mergeParallelResultNode) {
+                                        MergeParallelResultNode mergeParallelResultNode,
+                                        DatabaseCheckpointSaverFactory checkpointSaverFactory) {
         this.graphSchema = graphSchema;
         this.parallelInvokeNode = parallelInvokeNode;
         this.persistParallelArtifactsNode = persistParallelArtifactsNode;
         this.mergeParallelResultNode = mergeParallelResultNode;
+        this.checkpointSaverFactory = checkpointSaverFactory;
     }
 
     public CompiledGraph create() throws Exception {
@@ -53,7 +55,8 @@ public class OfficialParallelGraphFactory {
         stateGraph.addEdge(OfficialParallelGraphNodeNames.PERSIST_PARALLEL_ARTIFACTS, OfficialParallelGraphNodeNames.MERGE_PARALLEL_RESULT);
         stateGraph.addEdge(OfficialParallelGraphNodeNames.MERGE_PARALLEL_RESULT, StateGraph.END);
         return stateGraph.compile(CompileConfig.builder()
-                .saverConfig(SaverConfig.builder().register(new MemorySaver()).build())
+                .saverConfig(SaverConfig.builder().register(
+                        checkpointSaverFactory.create("official-supervisor-parallel")).build())
                 .build());
     }
 
@@ -85,7 +88,10 @@ public class OfficialParallelGraphFactory {
             String traceId = state.value(OfficialSupervisorGraphKeys.TRACE_ID, (String) null);
             List<String> parallelDomains = castDomains(state.value(OfficialSupervisorGraphKeys.PARALLEL_DOMAINS, List.of()));
             List<String> artifactIds = persistParallelArtifactsNode.persist(taskId, sessionId, userId, traceId, parallelDomains, response);
-            return Map.of(OfficialSupervisorGraphKeys.ARTIFACT_IDS, artifactIds);
+            List<String> previousArtifactIds = castDomains(
+                    state.value(OfficialSupervisorGraphKeys.ARTIFACT_IDS, List.of()));
+            return Map.of(OfficialSupervisorGraphKeys.ARTIFACT_IDS,
+                    OfficialGraphStateAdapters.delta(previousArtifactIds, artifactIds));
         };
         return AsyncNodeAction.node_async(action);
     }
@@ -100,8 +106,8 @@ public class OfficialParallelGraphFactory {
             updates.put(OfficialSupervisorGraphKeys.WORKFLOW_STATUS, WorkflowStatus.RUNNING.name());
             updates.put(OfficialSupervisorGraphKeys.SELECTED_AGENT_ID, workflowState.selectedAgentId());
             updates.put(OfficialSupervisorGraphKeys.SHARED_CONTEXT, workflowState.sharedContext());
-            updates.put(OfficialSupervisorGraphKeys.HANDOFF_HISTORY, workflowState.handoffHistory());
-            updates.put(OfficialSupervisorGraphKeys.ARTIFACT_IDS, workflowState.artifactIds());
+            updates.put(OfficialSupervisorGraphKeys.HANDOFF_HISTORY,
+                    OfficialGraphStateAdapters.delta(graphState.handoffHistory(), workflowState.handoffHistory()));
             updates.put(OfficialSupervisorGraphKeys.LATEST_AGENT_RESPONSE, workflowState.latestAgentResponse());
             return updates;
         };

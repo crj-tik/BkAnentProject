@@ -35,7 +35,7 @@
         <spring.cloud.version>2025.0.0</spring.cloud.version>
         <spring.cloud.alibaba.version>2025.0.0.0</spring.cloud.alibaba.version>
         <dubbo.version>3.2.15</dubbo.version>
-        <spring.ai.version>1.1.7</spring.ai.version>
+        <spring.ai.version>1.1.2</spring.ai.version>
         <spring.ai.alibaba.version>1.1.2.3</spring.ai.alibaba.version>
         <mybatis.plus.version>3.5.7</mybatis.plus.version>
         <mysql.version>8.4.0</mysql.version>

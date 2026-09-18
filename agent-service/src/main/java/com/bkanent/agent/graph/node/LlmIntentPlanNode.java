@@ -19,21 +19,17 @@ public class LlmIntentPlanNode implements SupervisorGraphNode {
 
     @Override
     public SupervisorGraphState apply(SupervisorGraphState state) {
-        try {
-            WorkflowPlan workflowPlan = supervisorIntentPlanningService.tryPlan(
-                    state.userMessage(),
-                    state.sharedContext()
-            );
-            if (workflowPlan == null) {
-                return state;
-            }
-            Map<String, Object> nextContext = supervisorIntentPlanningService.enrichContext(
-                    state.sharedContext(),
-                    workflowPlan
-            );
-            return state.withSharedContext(nextContext);
-        } catch (Exception ignored) {
+        WorkflowPlan workflowPlan = supervisorIntentPlanningService.tryPlan(
+                state.userMessage(),
+                state.sharedContext()
+        );
+        if (workflowPlan == null) {
             return state;
         }
+        Map<String, Object> nextContext = supervisorIntentPlanningService.enrichContext(
+                state.sharedContext(),
+                workflowPlan
+        );
+        return state.withSharedContext(nextContext);
     }
 }

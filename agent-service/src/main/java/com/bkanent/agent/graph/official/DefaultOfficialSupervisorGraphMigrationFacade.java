@@ -36,6 +36,12 @@ public class DefaultOfficialSupervisorGraphMigrationFacade implements OfficialSu
         state.put(OfficialSupervisorGraphKeys.PARALLEL_DOMAINS, List.of());
         state.put(OfficialSupervisorGraphKeys.ARTIFACT_IDS, List.of());
         state.put(OfficialSupervisorGraphKeys.HANDOFF_HISTORY, List.of());
+        state.put(OfficialSupervisorGraphKeys.CURRENT_NODE, "load-session");
+        state.put(OfficialSupervisorGraphKeys.RETRY_COUNT, 0);
+        state.put(OfficialSupervisorGraphKeys.MAX_RETRY_COUNT, 3);
+        state.put(OfficialSupervisorGraphKeys.PLAN_VERSION, 1);
+        state.put(OfficialSupervisorGraphKeys.APPROVAL_VERSION, 0);
+        state.put(OfficialSupervisorGraphKeys.EVENT_REFERENCES, List.of());
         return state;
     }
 
