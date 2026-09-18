@@ -48,6 +48,19 @@ public class HandoffNode {
                                            String nextDomain,
                                            Map<String, Object> context,
                                            String handoffType) {
+        return handoff(state, nextDomain, context, handoffType, 0);
+    }
+
+    /**
+     * Executes a graph-owned handoff with a stable attempt number. The
+     * attempt is part of the A2A idempotency key so a checkpoint retry does
+     * not create a second downstream task for the same handoff transition.
+     */
+    public SupervisorWorkflowState handoff(SupervisorWorkflowState state,
+                                           String nextDomain,
+                                           Map<String, Object> context,
+                                           String handoffType,
+                                           int attempt) {
         RegisteredAgentDescriptor nextAgent = selectAgent(nextDomain, state.userMessage(), context);
         String nextIntent = resolveIntent(nextDomain, context);
         Map<String, Object> downstreamContext = sanitizeHandoffContext(context, state.userId());
@@ -69,7 +82,8 @@ public class HandoffNode {
                         state.artifactIds(),
                         List.of(),
                         resolveExpectedOutput(nextDomain, nextIntent),
-                        A2aInvokeSupport.buildIdempotencyKey(state.taskId(), nextAgent.agentId(), nextIntent, 0),
+                        A2aInvokeSupport.buildIdempotencyKey(
+                                state.taskId(), nextAgent.agentId(), nextIntent, Math.max(0, attempt)),
                         Boolean.TRUE.equals(downstreamContext.get("requestStream"))
                 );
         AgentTaskInvokeResponse response = a2aExecutionService.execute(

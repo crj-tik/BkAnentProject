@@ -42,6 +42,8 @@ public final class OfficialSupervisorGraphKeys {
     public static final String PARALLEL_RUN_ID = "parallelRunId";
     public static final String PARALLEL_BRANCH_RESULTS = "parallelBranchResults";
     public static final String PARALLEL_AGGREGATION_STRATEGY = "parallelAggregationStrategy";
+    public static final String HANDOFF_COUNT = "handoffCount";
+    public static final String MAX_HANDOFF_COUNT = "maxHandoffCount";
 
     private OfficialSupervisorGraphKeys() {
     }

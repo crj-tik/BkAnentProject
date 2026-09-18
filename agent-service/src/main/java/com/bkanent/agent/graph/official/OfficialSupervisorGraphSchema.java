@@ -55,6 +55,8 @@ public class OfficialSupervisorGraphSchema {
             strategies.put(OfficialSupervisorGraphKeys.PARALLEL_RUN_ID, new ReplaceStrategy());
             strategies.put(OfficialSupervisorGraphKeys.PARALLEL_BRANCH_RESULTS, new AppendStrategy());
             strategies.put(OfficialSupervisorGraphKeys.PARALLEL_AGGREGATION_STRATEGY, new ReplaceStrategy());
+            strategies.put(OfficialSupervisorGraphKeys.HANDOFF_COUNT, new ReplaceStrategy());
+            strategies.put(OfficialSupervisorGraphKeys.MAX_HANDOFF_COUNT, new ReplaceStrategy());
             return strategies;
         };
     }

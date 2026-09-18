@@ -72,6 +72,9 @@ public class ParallelInvokeNode {
                 "parallel_agent",
                 Map.of("domain", domain, "targetAgentId", descriptor.agentId())
         );
+        if (response == null) {
+            throw new IllegalStateException("Parallel child agent returned no response for domain " + domain);
+        }
         publish(graphState.sessionId(), graphState.taskId(), descriptor.agentId(),
                 "handoff.completed", "Parallel child agent returned",
                 Map.of(
@@ -113,6 +116,10 @@ public class ParallelInvokeNode {
         for (int index = 0; index < parallelDomains.size(); index++) {
             String domain = parallelDomains.get(index);
             AgentTaskInvokeResponse response = responses.get(index);
+            if (response == null) {
+                mergedOutput.put(domain + "Output", Map.of("status", "FAILED"));
+                continue;
+            }
             mergedOutput.put(domain + "Output", response.structuredOutput());
             if (response.structuredOutput() != null) {
                 mergedOutput.putAll(extractNamespacedScalars(domain, response.structuredOutput()));
@@ -162,13 +169,14 @@ public class ParallelInvokeNode {
         List<Map<String, Object>> mergedChildren = new ArrayList<>();
         for (int index = 0; index < parallelDomains.size(); index++) {
             AgentTaskInvokeResponse response = responses.get(index);
-            mergedChildren.add(Map.of(
-                    "domain", parallelDomains.get(index),
-                    "agentId", response.agentId(),
-                    "status", response.status(),
-                    "summary", response.summary() == null ? "" : response.summary(),
-                    "artifactCount", response.artifactIds() == null ? 0 : response.artifactIds().size()
-            ));
+            Map<String, Object> child = new LinkedHashMap<>();
+            child.put("domain", parallelDomains.get(index));
+            child.put("agentId", response == null ? "" : response.agentId());
+            child.put("status", response == null ? "FAILED" : response.status());
+            child.put("summary", response == null || response.summary() == null ? "" : response.summary());
+            child.put("artifactCount", response == null || response.artifactIds() == null
+                    ? 0 : response.artifactIds().size());
+            mergedChildren.add(child);
         }
         return Map.of(
                 "type", "parallel_merge",

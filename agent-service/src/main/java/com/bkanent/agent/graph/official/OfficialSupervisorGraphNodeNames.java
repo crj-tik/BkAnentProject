@@ -17,8 +17,11 @@ public final class OfficialSupervisorGraphNodeNames {
     public static final String PARALLEL_SETTLEMENT = "parallel_settlement";
     public static final String PARALLEL_NOTIFICATION = "parallel_notification";
     public static final String PARALLEL_AGGREGATE = "parallel_aggregate";
+    public static final String ROUTE_AFTER_EXECUTION = "route_after_execution";
+    public static final String HANDOFF = "handoff";
     public static final String REGENERATE = "regenerate";
     public static final String COMPLETE = "complete";
+    public static final String COMPLETE_END = "complete_end";
     public static final String CANCEL = "cancel";
     public static final String FAIL = "fail";
 

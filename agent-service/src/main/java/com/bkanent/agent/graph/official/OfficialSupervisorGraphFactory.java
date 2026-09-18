@@ -17,9 +17,12 @@ import com.bkanent.agent.graph.SupervisorGraphPlanner;
 import com.bkanent.agent.graph.SupervisorGraphState;
 import com.bkanent.agent.graph.CompletionSubgraph;
 import com.bkanent.agent.graph.node.BuildApprovalRequestNode;
+import com.bkanent.agent.graph.node.BuildNextAgentContextNode;
+import com.bkanent.agent.graph.node.HandoffNode;
 import com.bkanent.agent.graph.node.MergeParallelResultNode;
 import com.bkanent.agent.graph.node.ParallelInvokeNode;
 import com.bkanent.agent.graph.node.PersistParallelArtifactsNode;
+import com.bkanent.agent.graph.node.RouteDecisionNode;
 import com.bkanent.agent.model.distributed.SupervisorTaskRequest;
 import com.bkanent.agent.model.distributed.SupervisorTaskResponse;
 import com.bkanent.agent.registry.AgentRegistry;
@@ -72,6 +75,9 @@ public class OfficialSupervisorGraphFactory {
     private final AgentRegistry agentRegistry;
     private final ObjectMapper objectMapper;
     private final SessionStreamService sessionStreamService;
+    private final BuildNextAgentContextNode buildNextAgentContextNode;
+    private final HandoffNode handoffNode;
+    private final RouteDecisionNode routeDecisionNode;
 
     public OfficialSupervisorGraphFactory(OfficialSupervisorGraphSchema graphSchema,
                                           DatabaseCheckpointSaverFactory checkpointSaverFactory,
@@ -84,7 +90,10 @@ public class OfficialSupervisorGraphFactory {
                                           PersistParallelArtifactsNode persistParallelArtifactsNode,
                                           AgentRegistry agentRegistry,
                                           ObjectMapper objectMapper,
-                                          SessionStreamService sessionStreamService) {
+                                          SessionStreamService sessionStreamService,
+                                          BuildNextAgentContextNode buildNextAgentContextNode,
+                                          HandoffNode handoffNode,
+                                          RouteDecisionNode routeDecisionNode) {
         this.graphSchema = graphSchema;
         this.checkpointSaverFactory = checkpointSaverFactory;
         this.supervisorGraphPlanner = supervisorGraphPlanner;
@@ -97,6 +106,9 @@ public class OfficialSupervisorGraphFactory {
         this.agentRegistry = agentRegistry;
         this.objectMapper = objectMapper;
         this.sessionStreamService = sessionStreamService;
+        this.buildNextAgentContextNode = buildNextAgentContextNode;
+        this.handoffNode = handoffNode;
+        this.routeDecisionNode = routeDecisionNode;
     }
 
     public CompiledGraph create() throws Exception {
@@ -109,6 +121,8 @@ public class OfficialSupervisorGraphFactory {
         stateGraph.addNode(OfficialSupervisorGraphNodeNames.APPROVAL_GATE, approvalGate());
         stateGraph.addNode(OfficialSupervisorGraphNodeNames.RESUME_DECISION, resumeDecision());
         stateGraph.addNode(OfficialSupervisorGraphNodeNames.SINGLE_AGENT, singleAgent());
+        stateGraph.addNode(OfficialSupervisorGraphNodeNames.ROUTE_AFTER_EXECUTION, routeAfterExecution());
+        stateGraph.addNode(OfficialSupervisorGraphNodeNames.HANDOFF, handoff());
         stateGraph.addNode(OfficialSupervisorGraphNodeNames.PARALLEL_FAN_OUT, parallelFanOut());
         stateGraph.addNode(OfficialSupervisorGraphNodeNames.PARALLEL_LISTING,
                 parallelBranch("listing", OfficialSupervisorGraphNodeNames.PARALLEL_LISTING));
@@ -127,6 +141,7 @@ public class OfficialSupervisorGraphFactory {
         stateGraph.addNode(OfficialSupervisorGraphNodeNames.PARALLEL_AGGREGATE, parallelAggregate());
         stateGraph.addNode(OfficialSupervisorGraphNodeNames.REGENERATE, regenerate());
         stateGraph.addNode(OfficialSupervisorGraphNodeNames.COMPLETE, complete());
+        stateGraph.addNode(OfficialSupervisorGraphNodeNames.COMPLETE_END, completeEnd());
         stateGraph.addNode(OfficialSupervisorGraphNodeNames.CANCEL, cancel());
         stateGraph.addNode(OfficialSupervisorGraphNodeNames.FAIL, fail());
 
@@ -156,7 +171,8 @@ public class OfficialSupervisorGraphFactory {
                 )
         );
         stateGraph.addEdge(OfficialSupervisorGraphNodeNames.REGENERATE, OfficialSupervisorGraphNodeNames.PLAN);
-        stateGraph.addEdge(OfficialSupervisorGraphNodeNames.SINGLE_AGENT, OfficialSupervisorGraphNodeNames.COMPLETE);
+        stateGraph.addEdge(OfficialSupervisorGraphNodeNames.SINGLE_AGENT,
+                OfficialSupervisorGraphNodeNames.ROUTE_AFTER_EXECUTION);
         stateGraph.addParallelConditionalEdges(
                 OfficialSupervisorGraphNodeNames.PARALLEL_FAN_OUT,
                 AsyncMultiCommandAction.node_async(this::parallelTargets),
@@ -171,15 +187,28 @@ public class OfficialSupervisorGraphFactory {
                 OfficialSupervisorGraphNodeNames.PARALLEL_SETTLEMENT,
                 OfficialSupervisorGraphNodeNames.PARALLEL_NOTIFICATION
         ), OfficialSupervisorGraphNodeNames.PARALLEL_AGGREGATE);
+        stateGraph.addEdge(OfficialSupervisorGraphNodeNames.PARALLEL_AGGREGATE,
+                OfficialSupervisorGraphNodeNames.ROUTE_AFTER_EXECUTION);
         stateGraph.addConditionalEdges(
-                OfficialSupervisorGraphNodeNames.PARALLEL_AGGREGATE,
+                OfficialSupervisorGraphNodeNames.ROUTE_AFTER_EXECUTION,
+                AsyncEdgeAction.edge_async(this::executionTarget),
+                Map.of(
+                        "handoff", OfficialSupervisorGraphNodeNames.HANDOFF,
+                        "complete", OfficialSupervisorGraphNodeNames.COMPLETE,
+                        "fail", OfficialSupervisorGraphNodeNames.FAIL
+                )
+        );
+        stateGraph.addEdge(OfficialSupervisorGraphNodeNames.HANDOFF,
+                OfficialSupervisorGraphNodeNames.ROUTE_AFTER_EXECUTION);
+        stateGraph.addConditionalEdges(
+                OfficialSupervisorGraphNodeNames.COMPLETE,
                 AsyncEdgeAction.edge_async(state -> StringUtils.hasText(
                         state.value(OfficialSupervisorGraphKeys.ERROR_CODE, (String) null))
-                        ? "fail" : "complete"),
-                Map.of("complete", OfficialSupervisorGraphNodeNames.COMPLETE,
+                        ? "fail" : "end"),
+                Map.of("end", OfficialSupervisorGraphNodeNames.COMPLETE_END,
                         "fail", OfficialSupervisorGraphNodeNames.FAIL)
         );
-        stateGraph.addEdge(OfficialSupervisorGraphNodeNames.COMPLETE, StateGraph.END);
+        stateGraph.addEdge(OfficialSupervisorGraphNodeNames.COMPLETE_END, StateGraph.END);
         stateGraph.addEdge(OfficialSupervisorGraphNodeNames.CANCEL, StateGraph.END);
         stateGraph.addEdge(OfficialSupervisorGraphNodeNames.FAIL, StateGraph.END);
 
@@ -226,12 +255,24 @@ public class OfficialSupervisorGraphFactory {
     private AsyncNodeAction approvalGate() {
         NodeAction action = state -> {
             SupervisorGraphState graphState = OfficialGraphStateAdapters.toSupervisorGraphState(state);
+            if (graphState.parallelDomains().size() > 1
+                    && !validParallelDomains(graphState.parallelDomains())) {
+                return error("INVALID_PARALLEL_PLAN",
+                        "parallelDomains must contain distinct supported domains");
+            }
             SupervisorWorkflowState workflowState = OfficialGraphStateAdapters.toWorkflowState(state, objectMapper);
             ApprovalRequest base = buildApprovalRequestNode.build(workflowState, graphState.sharedContext());
+            if (base == null) {
+                return error("APPROVAL_REQUEST_FAILED", "Approval request builder returned no request");
+            }
             String nextNode = graphState.parallelDomains().size() > 1
                     ? OfficialSupervisorGraphNodeNames.PARALLEL_FAN_OUT
                     : OfficialSupervisorGraphNodeNames.SINGLE_AGENT;
             int approvalVersion = state.value(OfficialSupervisorGraphKeys.APPROVAL_VERSION, 0) + 1;
+            int retryCount = state.value(OfficialSupervisorGraphKeys.RETRY_COUNT, 0);
+            int maxRetryCount = base.maxRetryCount() == null
+                    ? state.value(OfficialSupervisorGraphKeys.MAX_RETRY_COUNT, 3)
+                    : base.maxRetryCount();
             ApprovalRequest approval = new ApprovalRequest(
                     base.approvalId(),
                     base.taskId(),
@@ -246,8 +287,8 @@ public class OfficialSupervisorGraphFactory {
                     nextNode,
                     "regenerate",
                     "cancel",
-                    base.retryCount(),
-                    base.maxRetryCount(),
+                    retryCount,
+                    maxRetryCount,
                     base.traceId()
             );
             publish(workflowState, "task.waiting_approval", approval.summary(),
@@ -281,18 +322,35 @@ public class OfficialSupervisorGraphFactory {
             Map<String, Object> updates = new LinkedHashMap<>();
             updates.put(OfficialSupervisorGraphKeys.LATEST_APPROVAL_DECISION, decision);
             updates.put(OfficialSupervisorGraphKeys.RESUME_IDEMPOTENCY_KEY, decision.approvalId());
+            updates.put(OfficialSupervisorGraphKeys.PENDING_APPROVAL, null);
+            updates.put(OfficialSupervisorGraphKeys.RESUME_FEEDBACK,
+                    decision.feedback() == null ? "" : decision.feedback());
+            if (decision.status() == ApprovalStatus.REJECTED) {
+                int retryCount = state.value(OfficialSupervisorGraphKeys.RETRY_COUNT, 0) + 1;
+                int maxRetryCount = pending.maxRetryCount() == null
+                        ? state.value(OfficialSupervisorGraphKeys.MAX_RETRY_COUNT, 3)
+                        : pending.maxRetryCount();
+                updates.put(OfficialSupervisorGraphKeys.RETRY_COUNT, retryCount);
+                if (retryCount > maxRetryCount) {
+                    actionName = "fail";
+                    updates.put(OfficialSupervisorGraphKeys.ERROR_CODE,
+                            "APPROVAL_RETRY_LIMIT_EXCEEDED");
+                    updates.put(OfficialSupervisorGraphKeys.ERROR_MESSAGE,
+                            "Approval rejection exceeded the retry limit");
+                }
+            } else if (decision.status() == ApprovalStatus.PENDING) {
+                updates.put(OfficialSupervisorGraphKeys.ERROR_CODE, "INVALID_APPROVAL_DECISION");
+                updates.put(OfficialSupervisorGraphKeys.ERROR_MESSAGE,
+                        "PENDING is not a valid approval decision");
+            }
             updates.put(OfficialSupervisorGraphKeys.APPROVAL_RESUME_ACTION, actionName);
             updates.put(OfficialSupervisorGraphKeys.WORKFLOW_STATUS,
-                    decision.status() == ApprovalStatus.TERMINATED
+                    actionName.equals("fail")
+                            ? WorkflowStatus.FAILED.name()
+                            : decision.status() == ApprovalStatus.TERMINATED
                             ? WorkflowStatus.CANCELED.name() : WorkflowStatus.RUNNING.name());
             updates.put(OfficialSupervisorGraphKeys.CURRENT_NODE, OfficialSupervisorGraphNodeNames.RESUME_DECISION);
             updates.put(OfficialSupervisorGraphKeys.NEXT_NODE, actionName);
-            if (decision.status() == ApprovalStatus.REJECTED) {
-                updates.put(OfficialSupervisorGraphKeys.RETRY_COUNT,
-                        (pending.retryCount() == null ? 0 : pending.retryCount()) + 1);
-                updates.put(OfficialSupervisorGraphKeys.RESUME_FEEDBACK,
-                        decision.feedback() == null ? "" : decision.feedback());
-            }
             return updates;
         };
         return AsyncNodeAction.node_async(action);
@@ -300,19 +358,211 @@ public class OfficialSupervisorGraphFactory {
 
     private AsyncNodeAction singleAgent() {
         NodeAction action = state -> {
-            SupervisorGraphState graphState = OfficialGraphStateAdapters.toSupervisorGraphState(state);
-            RegisteredAgentDescriptor descriptor = agentRegistry.getByAgentId(graphState.selectedAgentId())
-                    .orElseGet(() -> selectAgent(graphState.domain(), graphState.userMessage()));
-            SingleAgentSubgraph.ExecutionResult execution = singleAgentSubgraph.execute(
-                    requestOf(state), graphState, descriptor);
-            SupervisorWorkflowState previous = OfficialGraphStateAdapters.toWorkflowState(state, objectMapper);
-            Map<String, Object> updates = new LinkedHashMap<>(
-                    OfficialGraphStateAdapters.toDeltaMap(previous, execution.workflowState()));
-            updates.put(OfficialSupervisorGraphKeys.LATEST_AGENT_RESPONSE, execution.response());
-            updates.put(OfficialSupervisorGraphKeys.CURRENT_NODE, OfficialSupervisorGraphNodeNames.SINGLE_AGENT);
-            return updates;
+            try {
+                SupervisorGraphState graphState = OfficialGraphStateAdapters.toSupervisorGraphState(state);
+                RegisteredAgentDescriptor descriptor = StringUtils.hasText(graphState.selectedAgentId())
+                        ? agentRegistry.getByAgentId(graphState.selectedAgentId())
+                        .orElseGet(() -> selectAgent(graphState.domain(), graphState.userMessage()))
+                        : selectAgent(graphState.domain(), graphState.userMessage());
+                SingleAgentSubgraph.ExecutionResult execution = singleAgentSubgraph.execute(
+                        requestOf(state), graphState, descriptor);
+                if (execution == null || execution.response() == null
+                        || isFailedResponse(execution.response())) {
+                    String message = execution == null || execution.response() == null
+                            ? "Single agent returned no response" : failureMessage(execution.response());
+                    Map<String, Object> failed = new LinkedHashMap<>(error(
+                            "SINGLE_AGENT_FAILED", message));
+                    if (execution != null && execution.response() != null) {
+                        failed.put(OfficialSupervisorGraphKeys.LATEST_AGENT_RESPONSE, execution.response());
+                    }
+                    failed.put(OfficialSupervisorGraphKeys.CURRENT_NODE,
+                            OfficialSupervisorGraphNodeNames.SINGLE_AGENT);
+                    return failed;
+                }
+                SupervisorWorkflowState previous = OfficialGraphStateAdapters.toWorkflowState(state, objectMapper);
+                Map<String, Object> updates = new LinkedHashMap<>(
+                        OfficialGraphStateAdapters.toDeltaMap(previous, execution.workflowState()));
+                updates.put(OfficialSupervisorGraphKeys.LATEST_AGENT_RESPONSE, execution.response());
+                updates.put(OfficialSupervisorGraphKeys.CURRENT_NODE, OfficialSupervisorGraphNodeNames.SINGLE_AGENT);
+                return updates;
+            } catch (Exception exception) {
+                return error("SINGLE_AGENT_FAILED", messageOf(exception));
+            }
         };
         return AsyncNodeAction.node_async(action);
+    }
+
+    /**
+     * Decides what happens after a completed Agent invocation. This keeps
+     * next-hint and parallel route decisions inside the Supervisor Graph;
+     * completion is no longer allowed to invoke a legacy service workflow.
+     */
+    private AsyncNodeAction routeAfterExecution() {
+        NodeAction action = state -> {
+            try {
+                if (StringUtils.hasText(state.value(OfficialSupervisorGraphKeys.ERROR_CODE, (String) null))) {
+                    return Map.of(OfficialSupervisorGraphKeys.CURRENT_NODE,
+                            OfficialSupervisorGraphNodeNames.ROUTE_AFTER_EXECUTION);
+                }
+                AgentTaskInvokeResponse response = convert(
+                        state.value(OfficialSupervisorGraphKeys.LATEST_AGENT_RESPONSE, Object.class).orElse(null),
+                        AgentTaskInvokeResponse.class);
+                if (response == null) {
+                    return error("MISSING_AGENT_RESPONSE", "Supervisor execution produced no Agent response");
+                }
+                if (isFailedResponse(response)) {
+                    return error("AGENT_EXECUTION_FAILED", failureMessage(response));
+                }
+
+                HandoffTarget target = resolveHandoffTarget(state, response);
+                if (target == null) {
+                    Map<String, Object> updates = new LinkedHashMap<>();
+                    updates.put(OfficialSupervisorGraphKeys.NEXT_DOMAIN, null);
+                    updates.put(OfficialSupervisorGraphKeys.HANDOFF_TYPE, null);
+                    updates.put(OfficialSupervisorGraphKeys.NEXT_NODE,
+                            OfficialSupervisorGraphNodeNames.COMPLETE);
+                    updates.put(OfficialSupervisorGraphKeys.CURRENT_NODE,
+                            OfficialSupervisorGraphNodeNames.ROUTE_AFTER_EXECUTION);
+                    return updates;
+                }
+
+                int handoffCount = state.value(OfficialSupervisorGraphKeys.HANDOFF_COUNT, 0);
+                int maxHandoffCount = state.value(OfficialSupervisorGraphKeys.MAX_HANDOFF_COUNT, 5);
+                if (handoffCount >= maxHandoffCount) {
+                    return error("HANDOFF_LIMIT_EXCEEDED",
+                            "Supervisor handoff count exceeded the configured limit");
+                }
+                Map<String, Object> context = new LinkedHashMap<>(
+                        OfficialGraphStateAdapters.sharedContext(state));
+                context.put("nextDomain", target.domain());
+                context.put("nextIntent", target.intent());
+                context.put("routeDecision", target.reason());
+                Map<String, Object> updates = new LinkedHashMap<>();
+                updates.put(OfficialSupervisorGraphKeys.SHARED_CONTEXT, context);
+                updates.put(OfficialSupervisorGraphKeys.NEXT_DOMAIN, target.domain());
+                updates.put(OfficialSupervisorGraphKeys.HANDOFF_TYPE, target.type());
+                updates.put(OfficialSupervisorGraphKeys.NEXT_NODE, OfficialSupervisorGraphNodeNames.HANDOFF);
+                updates.put(OfficialSupervisorGraphKeys.CURRENT_NODE,
+                        OfficialSupervisorGraphNodeNames.ROUTE_AFTER_EXECUTION);
+                return updates;
+            } catch (Exception exception) {
+                return error("ROUTE_AFTER_EXECUTION_FAILED", messageOf(exception));
+            }
+        };
+        return AsyncNodeAction.node_async(action);
+    }
+
+    private AsyncNodeAction handoff() {
+        NodeAction action = state -> {
+            try {
+                String nextDomain = state.value(OfficialSupervisorGraphKeys.NEXT_DOMAIN, (String) null);
+                if (!StringUtils.hasText(nextDomain)) {
+                    return error("INVALID_HANDOFF_TARGET", "Handoff target domain is missing");
+                }
+                SupervisorWorkflowState current = OfficialGraphStateAdapters.toWorkflowState(state, objectMapper);
+                Map<String, Object> context = buildNextAgentContextNode.build(current, nextDomain);
+                String handoffType = state.value(OfficialSupervisorGraphKeys.HANDOFF_TYPE, "next_hint");
+                int handoffCount = state.value(OfficialSupervisorGraphKeys.HANDOFF_COUNT, 0);
+                SupervisorWorkflowState next = handoffNode.handoff(
+                        current, nextDomain, context, handoffType, handoffCount);
+                Map<String, Object> updates = new LinkedHashMap<>(
+                        OfficialGraphStateAdapters.toDeltaMap(current, next));
+                updates.put(OfficialSupervisorGraphKeys.HANDOFF_COUNT, handoffCount + 1);
+                updates.put(OfficialSupervisorGraphKeys.CURRENT_NODE,
+                        OfficialSupervisorGraphNodeNames.HANDOFF);
+                updates.put(OfficialSupervisorGraphKeys.NEXT_NODE,
+                        OfficialSupervisorGraphNodeNames.ROUTE_AFTER_EXECUTION);
+                return updates;
+            } catch (Exception exception) {
+                return error("HANDOFF_FAILED", messageOf(exception));
+            }
+        };
+        return AsyncNodeAction.node_async(action);
+    }
+
+    private String executionTarget(OverAllState state) {
+        if (StringUtils.hasText(state.value(OfficialSupervisorGraphKeys.ERROR_CODE, (String) null))) {
+            return "fail";
+        }
+        return StringUtils.hasText(state.value(OfficialSupervisorGraphKeys.NEXT_DOMAIN, (String) null))
+                ? "handoff" : "complete";
+    }
+
+    private HandoffTarget resolveHandoffTarget(OverAllState state,
+                                               AgentTaskInvokeResponse response) {
+        if (response.nextHints() != null) {
+            for (String nextHint : response.nextHints()) {
+                HandoffTarget target = mapNextHint(nextHint);
+                if (target != null) {
+                    return target;
+                }
+            }
+        }
+        List<String> parallelDomains = castList(state.value(
+                OfficialSupervisorGraphKeys.PARALLEL_DOMAINS, List.of()));
+        if (parallelDomains.size() > 1) {
+            RouteDecisionNode.RouteDecision decision = routeDecisionNode.evaluate(
+                    OfficialGraphStateAdapters.sharedContext(state), response);
+            if (decision != null && StringUtils.hasText(decision.nextDomain())
+                    && PARALLEL_DOMAIN_NODES.containsKey(decision.nextDomain())) {
+                return new HandoffTarget(
+                        decision.nextDomain(),
+                        "".equals(decision.nextDomain()) ? null : resolveIntent(decision.nextDomain()),
+                        "route_decision",
+                        decision.asMap());
+            }
+        }
+        return null;
+    }
+
+    private HandoffTarget mapNextHint(String nextHint) {
+        if (!StringUtils.hasText(nextHint)) {
+            return null;
+        }
+        return switch (nextHint) {
+            case "marketing.publish_prepare", "marketing.publish" ->
+                    new HandoffTarget("marketing", nextHint, "next_hint", nextHint);
+            case "notification.send" ->
+                    new HandoffTarget("notification", nextHint, "next_hint", nextHint);
+            case "settlement.prepare", "settlement.batch" ->
+                    new HandoffTarget("settlement", "settlement.prepare", "next_hint", nextHint);
+            default -> null;
+        };
+    }
+
+    private String resolveIntent(String domain) {
+        return switch (domain) {
+            case "marketing" -> "marketing.generate_copy";
+            case "media" -> "media.generate_video_task";
+            case "trade" -> "trade.feasibility_analysis";
+            case "contract" -> "contract.risk_review";
+            case "notification" -> "notification.send";
+            case "settlement" -> "settlement.prepare";
+            default -> "listing.search";
+        };
+    }
+
+    private boolean isFailedResponse(AgentTaskInvokeResponse response) {
+        return response == null || (!"COMPLETED".equalsIgnoreCase(response.status())
+                && !"SUCCESS".equalsIgnoreCase(response.status()));
+    }
+
+    private String failureMessage(AgentTaskInvokeResponse response) {
+        if (response == null) {
+            return "Agent response is missing";
+        }
+        if (StringUtils.hasText(response.summary())) {
+            return response.summary();
+        }
+        return "Agent returned status " + response.status();
+    }
+
+    private String messageOf(Exception exception) {
+        return exception.getMessage() == null
+                ? exception.getClass().getSimpleName() : exception.getMessage();
+    }
+
+    private record HandoffTarget(String domain, String intent, String type, Object reason) {
     }
 
     private AsyncNodeAction parallelFanOut() {
@@ -348,45 +598,50 @@ public class OfficialSupervisorGraphFactory {
 
     private AsyncNodeAction parallelAggregate() {
         NodeAction action = state -> {
-            SupervisorGraphState graphState = OfficialGraphStateAdapters.toSupervisorGraphState(state);
-            String runId = state.value(OfficialSupervisorGraphKeys.PARALLEL_RUN_ID, "");
-            List<Map<String, Object>> branchResults = branchResults(state.value(
-                    OfficialSupervisorGraphKeys.PARALLEL_BRANCH_RESULTS, List.of()));
-            Map<String, AgentTaskInvokeResponse> responsesByDomain = new HashMap<>();
-            for (Map<String, Object> result : branchResults) {
-                if (!runId.equals(String.valueOf(result.get("runId")))) {
-                    continue;
+            try {
+                SupervisorGraphState graphState = OfficialGraphStateAdapters.toSupervisorGraphState(state);
+                String runId = state.value(OfficialSupervisorGraphKeys.PARALLEL_RUN_ID, "");
+                List<Map<String, Object>> branchResults = branchResults(state.value(
+                        OfficialSupervisorGraphKeys.PARALLEL_BRANCH_RESULTS, List.of()));
+                Map<String, AgentTaskInvokeResponse> responsesByDomain = new HashMap<>();
+                for (Map<String, Object> result : branchResults) {
+                    if (!runId.equals(String.valueOf(result.get("runId")))) {
+                        continue;
+                    }
+                    String domain = String.valueOf(result.get("domain"));
+                    responsesByDomain.put(domain,
+                            convert(result.get("response"), AgentTaskInvokeResponse.class));
                 }
-                String domain = String.valueOf(result.get("domain"));
-                responsesByDomain.put(domain, convert(result.get("response"), AgentTaskInvokeResponse.class));
+                List<String> domains = graphState.parallelDomains();
+                List<AgentTaskInvokeResponse> responses = domains.stream()
+                        .map(responsesByDomain::get)
+                        .toList();
+                if (responses.stream().anyMatch(java.util.Objects::isNull)) {
+                    return error("PARALLEL_FAN_IN_INCOMPLETE",
+                            "Native parallel fan-in did not receive every branch result");
+                }
+                AgentTaskInvokeResponse merged = parallelInvokeNode.mergeResponses(
+                        graphState.sessionId(), graphState.taskId(), graphState.traceId(), domains, responses);
+                if (!"COMPLETED".equalsIgnoreCase(merged.status())
+                        && !"SUCCESS".equalsIgnoreCase(merged.status())) {
+                    return error("PARALLEL_BRANCH_FAILED",
+                            merged.summary() == null ? "One or more parallel branches failed" : merged.summary());
+                }
+                List<String> artifactIds = persistParallelArtifactsNode.persist(
+                        graphState.taskId(), graphState.sessionId(), graphState.userId(),
+                        graphState.traceId(), domains, merged);
+                SupervisorWorkflowState previous = OfficialGraphStateAdapters.toWorkflowState(state, objectMapper);
+                SupervisorWorkflowState mergedState = mergeParallelResultNode.merge(
+                        graphState, artifactIds, merged);
+                Map<String, Object> updates = new LinkedHashMap<>(
+                        OfficialGraphStateAdapters.toDeltaMap(previous, mergedState));
+                updates.put(OfficialSupervisorGraphKeys.LATEST_AGENT_RESPONSE, merged);
+                updates.put(OfficialSupervisorGraphKeys.CURRENT_NODE,
+                        OfficialSupervisorGraphNodeNames.PARALLEL_AGGREGATE);
+                return updates;
+            } catch (Exception exception) {
+                return error("PARALLEL_AGGREGATE_FAILED", messageOf(exception));
             }
-            List<String> domains = graphState.parallelDomains();
-            List<AgentTaskInvokeResponse> responses = domains.stream()
-                    .map(responsesByDomain::get)
-                    .toList();
-            if (responses.stream().anyMatch(java.util.Objects::isNull)) {
-                return error("PARALLEL_FAN_IN_INCOMPLETE",
-                        "Native parallel fan-in did not receive every branch result");
-            }
-            AgentTaskInvokeResponse merged = parallelInvokeNode.mergeResponses(
-                    graphState.sessionId(), graphState.taskId(), graphState.traceId(), domains, responses);
-            if (!"COMPLETED".equalsIgnoreCase(merged.status())
-                    && !"SUCCESS".equalsIgnoreCase(merged.status())) {
-                return error("PARALLEL_BRANCH_FAILED",
-                        merged.summary() == null ? "One or more parallel branches failed" : merged.summary());
-            }
-            List<String> artifactIds = persistParallelArtifactsNode.persist(
-                    graphState.taskId(), graphState.sessionId(), graphState.userId(),
-                    graphState.traceId(), domains, merged);
-            SupervisorWorkflowState previous = OfficialGraphStateAdapters.toWorkflowState(state, objectMapper);
-            SupervisorWorkflowState mergedState = mergeParallelResultNode.merge(
-                    graphState, artifactIds, merged);
-            Map<String, Object> updates = new LinkedHashMap<>(
-                    OfficialGraphStateAdapters.toDeltaMap(previous, mergedState));
-            updates.put(OfficialSupervisorGraphKeys.LATEST_AGENT_RESPONSE, merged);
-            updates.put(OfficialSupervisorGraphKeys.CURRENT_NODE,
-                    OfficialSupervisorGraphNodeNames.PARALLEL_AGGREGATE);
-            return updates;
         };
         return AsyncNodeAction.node_async(action);
     }
@@ -395,17 +650,9 @@ public class OfficialSupervisorGraphFactory {
                                           com.alibaba.cloud.ai.graph.RunnableConfig config) {
         List<String> domains = castList(state.value(OfficialSupervisorGraphKeys.PARALLEL_DOMAINS, List.of()));
         List<String> branchNodes = domains.stream().map(PARALLEL_DOMAIN_NODES::get).toList();
-        if (domains.size() < 2 || branchNodes.size() != domains.size()
-                || branchNodes.stream().anyMatch(java.util.Objects::isNull)
-                || Set.copyOf(domains).size() != domains.size()) {
-            return new MultiCommand(
-                    List.of("fail"),
-                    Map.of(
-                            OfficialSupervisorGraphKeys.ERROR_CODE, "INVALID_PARALLEL_PLAN",
-                            OfficialSupervisorGraphKeys.ERROR_MESSAGE,
-                            "parallelDomains must contain at least two distinct supported domains"
-                    )
-            );
+        if (!validParallelDomains(domains) || branchNodes.stream().anyMatch(java.util.Objects::isNull)) {
+            throw new IllegalStateException(
+                    "parallelDomains must contain at least two distinct supported domains");
         }
         return new MultiCommand(
                 domains,
@@ -418,9 +665,7 @@ public class OfficialSupervisorGraphFactory {
     }
 
     private Map<String, String> parallelEdgeMappings() {
-        Map<String, String> mappings = new LinkedHashMap<>(PARALLEL_DOMAIN_NODES);
-        mappings.put("fail", OfficialSupervisorGraphNodeNames.FAIL);
-        return mappings;
+        return new LinkedHashMap<>(PARALLEL_DOMAIN_NODES);
     }
 
     private AgentTaskInvokeResponse failedParallelResponse(SupervisorGraphState state,
@@ -471,14 +716,27 @@ public class OfficialSupervisorGraphFactory {
 
     private AsyncNodeAction complete() {
         NodeAction action = state -> {
-            SupervisorTaskResponse response = completionSubgraph.execute(
-                    OfficialGraphStateAdapters.toWorkflowState(state, objectMapper));
-            Map<String, Object> updates = new LinkedHashMap<>();
-            updates.put(OfficialSupervisorGraphKeys.SUPERVISOR_RESPONSE, response);
-            updates.put(OfficialSupervisorGraphKeys.WORKFLOW_STATUS, response.status());
-            updates.put(OfficialSupervisorGraphKeys.FINAL_ANSWER, response.finalAnswer());
-            updates.put(OfficialSupervisorGraphKeys.CURRENT_NODE, OfficialSupervisorGraphNodeNames.COMPLETE);
-            return updates;
+            try {
+                SupervisorTaskResponse response = completionSubgraph.execute(
+                        OfficialGraphStateAdapters.toWorkflowState(state, objectMapper));
+                if (response == null || !WorkflowStatus.COMPLETED.name().equalsIgnoreCase(response.status())) {
+                    return error("COMPLETION_FAILED", response == null
+                            ? "Completion graph returned no response"
+                            : "Completion graph returned status " + response.status());
+                }
+                Map<String, Object> updates = new LinkedHashMap<>();
+                updates.put(OfficialSupervisorGraphKeys.SUPERVISOR_RESPONSE, response);
+                updates.put(OfficialSupervisorGraphKeys.WORKFLOW_STATUS, response.status());
+                updates.put(OfficialSupervisorGraphKeys.FINAL_ANSWER, response.finalAnswer());
+                updates.put(OfficialSupervisorGraphKeys.CURRENT_NODE, OfficialSupervisorGraphNodeNames.COMPLETE);
+                return updates;
+            } catch (Exception exception) {
+                Map<String, Object> failed = new LinkedHashMap<>(
+                        error("COMPLETION_FAILED", messageOf(exception)));
+                failed.put(OfficialSupervisorGraphKeys.CURRENT_NODE,
+                        OfficialSupervisorGraphNodeNames.COMPLETE);
+                return failed;
+            }
         };
         return AsyncNodeAction.node_async(action);
     }
@@ -493,6 +751,13 @@ public class OfficialSupervisorGraphFactory {
                     OfficialSupervisorGraphKeys.CURRENT_NODE, OfficialSupervisorGraphNodeNames.CANCEL
             );
         };
+        return AsyncNodeAction.node_async(action);
+    }
+
+    private AsyncNodeAction completeEnd() {
+        NodeAction action = state -> Map.of(
+                OfficialSupervisorGraphKeys.CURRENT_NODE, OfficialSupervisorGraphNodeNames.COMPLETE_END
+        );
         return AsyncNodeAction.node_async(action);
     }
 
@@ -519,7 +784,10 @@ public class OfficialSupervisorGraphFactory {
         }
         List<String> parallelDomains = castList(state.value(
                 OfficialSupervisorGraphKeys.PARALLEL_DOMAINS, List.of()));
-        return parallelDomains.size() > 1 ? "parallel" : "single";
+        if (parallelDomains.size() > 1) {
+            return validParallelDomains(parallelDomains) ? "parallel" : "fail";
+        }
+        return "single";
     }
 
     private String resumeTarget(OverAllState state) {
@@ -629,6 +897,12 @@ public class OfficialSupervisorGraphFactory {
     @SuppressWarnings("unchecked")
     private List<String> castList(Object value) {
         return value instanceof List<?> list ? (List<String>) list : List.of();
+    }
+
+    private boolean validParallelDomains(List<String> domains) {
+        return domains.size() >= 2
+                && domains.stream().allMatch(domain -> domain != null && PARALLEL_DOMAIN_NODES.containsKey(domain))
+                && domains.stream().distinct().count() == domains.size();
     }
 
     private boolean containsListingIntent(String message) {

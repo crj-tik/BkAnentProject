@@ -37,7 +37,8 @@ public class PersistParallelArtifactsNode {
                 "parallel_result",
                 1,
                 mergedResponse.structuredOutput(),
-                Map.of("parallelDomains", parallelDomains, "summary", mergedResponse.summary()),
+                Map.of("parallelDomains", parallelDomains,
+                        "summary", mergedResponse.summary() == null ? "" : mergedResponse.summary()),
                 traceId
         );
         sessionStreamService.publish(new SessionStreamEvent(

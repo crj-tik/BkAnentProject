@@ -44,6 +44,8 @@ public class DefaultOfficialSupervisorGraphMigrationFacade implements OfficialSu
         state.put(OfficialSupervisorGraphKeys.EVENT_REFERENCES, List.of());
         state.put(OfficialSupervisorGraphKeys.PARALLEL_BRANCH_RESULTS, List.of());
         state.put(OfficialSupervisorGraphKeys.PARALLEL_AGGREGATION_STRATEGY, "ALL_OF");
+        state.put(OfficialSupervisorGraphKeys.HANDOFF_COUNT, 0);
+        state.put(OfficialSupervisorGraphKeys.MAX_HANDOFF_COUNT, 5);
         return state;
     }
 

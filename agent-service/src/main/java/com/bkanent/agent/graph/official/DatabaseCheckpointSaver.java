@@ -34,7 +34,10 @@ public class DatabaseCheckpointSaver extends MemorySaver {
                                    ObjectMapper objectMapper,
                                    String graphName) {
         this.checkpointMapper = checkpointMapper;
-        this.objectMapper = objectMapper;
+        // Checkpoint state contains approval timestamps and other Java time
+        // values. Keep the saver independent from the caller's mapper setup;
+        // graph instances can also be created directly in tests or tooling.
+        this.objectMapper = objectMapper.copy().findAndRegisterModules();
         this.graphName = graphName;
     }
 

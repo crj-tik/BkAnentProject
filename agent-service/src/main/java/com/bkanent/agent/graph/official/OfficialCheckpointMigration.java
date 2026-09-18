@@ -24,8 +24,11 @@ public final class OfficialCheckpointMigration {
             OfficialSupervisorGraphNodeNames.PARALLEL_AGENTS,
             OfficialSupervisorGraphNodeNames.PARALLEL_FAN_OUT,
             OfficialSupervisorGraphNodeNames.PARALLEL_AGGREGATE,
+            OfficialSupervisorGraphNodeNames.ROUTE_AFTER_EXECUTION,
+            OfficialSupervisorGraphNodeNames.HANDOFF,
             OfficialSupervisorGraphNodeNames.REGENERATE,
             OfficialSupervisorGraphNodeNames.COMPLETE,
+            OfficialSupervisorGraphNodeNames.COMPLETE_END,
             OfficialSupervisorGraphNodeNames.CANCEL,
             OfficialSupervisorGraphNodeNames.FAIL
     );
@@ -124,6 +127,8 @@ public final class OfficialCheckpointMigration {
         state.putIfAbsent(OfficialSupervisorGraphKeys.APPROVAL_VERSION,
                 approvalVersion(state.get(OfficialSupervisorGraphKeys.PENDING_APPROVAL)));
         state.putIfAbsent(OfficialSupervisorGraphKeys.PARALLEL_AGGREGATION_STRATEGY, "ALL_OF");
+        state.putIfAbsent(OfficialSupervisorGraphKeys.HANDOFF_COUNT, 0);
+        state.putIfAbsent(OfficialSupervisorGraphKeys.MAX_HANDOFF_COUNT, 5);
         state.putIfAbsent(OfficialSupervisorGraphKeys.CURRENT_NODE, inferCurrentNode(state));
         state.putIfAbsent(OfficialSupervisorGraphKeys.NEXT_NODE, inferNextNode(state));
         state.putIfAbsent(OfficialSupervisorGraphKeys.REQUIRE_PARALLEL,

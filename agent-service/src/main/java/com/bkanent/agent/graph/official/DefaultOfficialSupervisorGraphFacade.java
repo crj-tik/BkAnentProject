@@ -60,16 +60,29 @@ public class DefaultOfficialSupervisorGraphFacade implements OfficialSupervisorG
                 request.channel(),
                 request.stream()
         );
+        RunnableConfig graphConfig = migrationFacade.runnableConfig(sessionId, taskId);
+        StateSnapshot existing = graphHolder.compiledGraph().lastStateOf(graphConfig).orElse(null);
+        if (existing != null) {
+            // A repeated submission with the same task/thread must not restart
+            // planning or invoke a child Agent a second time. Recovery of a
+            // non-terminal RUNNING state is handled by the worker/recovery
+            // path, while this API remains idempotent.
+            return responseOf(existing.state(), normalized);
+        }
         Map<String, Object> initialState = migrationFacade.initializeState(
                 normalized, sessionId, taskId, traceId);
         OverAllState output = graphHolder.compiledGraph()
-                .invoke(initialState, migrationFacade.runnableConfig(sessionId, taskId))
+                .invoke(initialState, graphConfig)
                 .orElseThrow(() -> new IllegalStateException("Official supervisor graph returned empty state"));
         return responseOf(output, normalized);
     }
 
     @Override
     public SupervisorTaskResponse resume(ApprovalCallbackRequest request) {
+        if (request == null || !StringUtils.hasText(request.taskId())
+                || !StringUtils.hasText(request.approvalId())) {
+            throw new IllegalArgumentException("taskId and approvalId are required");
+        }
         String lockKey = StringUtils.hasText(request.taskId()) ? request.taskId() : request.approvalId();
         Object lock = RESUME_LOCKS.computeIfAbsent(lockKey, ignored -> new Object());
         synchronized (lock) {
@@ -159,7 +172,8 @@ public class DefaultOfficialSupervisorGraphFacade implements OfficialSupervisorG
     }
 
     private void validateCallback(SupervisorWorkflowState state, ApprovalCallbackRequest request) {
-        if (!StringUtils.hasText(state.taskId()) || !request.taskId().equals(state.taskId())) {
+        if (!StringUtils.hasText(state.taskId()) || !StringUtils.hasText(request.taskId())
+                || !request.taskId().equals(state.taskId())) {
             throw new IllegalArgumentException("Approval taskId does not match graph thread");
         }
         if (StringUtils.hasText(request.sessionId()) && !request.sessionId().equals(state.sessionId())) {
