@@ -327,6 +327,7 @@ services:
 
   auth-service:
     <<: *app-service
+    profiles: [minimal, full]
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: auth-service-1.0.0-SNAPSHOT.jar
@@ -342,6 +343,7 @@ services:
 
   gateway:
     <<: *app-service
+    profiles: [minimal, full]
     depends_on:
       config-init:
         condition: service_completed_successfully
@@ -351,6 +353,7 @@ services:
       <<: *app-environment
       SERVICE_ARTIFACT: gateway-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://gateway:5010
+      AUTH_ROUTE_URI: http://auth-service:9101
     ports:
       - "${HOST_BIND_ADDRESS:-127.0.0.1}:${GATEWAY_EXPOSED_PORT:-5010}:5010"
     healthcheck:

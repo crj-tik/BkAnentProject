@@ -14,6 +14,7 @@ public class GatewayAccessProperties {
     private List<String> whitelistPrefixes = new ArrayList<>(List.of(
             "/auth/login",
             "/auth/logout",
+            "/auth/health",
             "/actuator",
             "/gateway/health"
     ));

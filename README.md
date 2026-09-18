@@ -101,17 +101,23 @@ mvn -pl auth-service "-Dspring-boot.run.profiles=distributed" spring-boot:run
 
 ### Docker 开发部署
 
-仓库提供了 Docker Compose 开发编排。默认启动 MySQL、Nacos、配置导入、认证服务和网关；`full` profile 会额外启动 Redis、RocketMQ、MinIO、Elasticsearch、Milvus（含 etcd 和内部 MinIO）及其余业务服务。首次启动会在镜像构建阶段执行完整 Maven 打包，并自动把 `nacos/` 下的 YAML 导入 Nacos 公共命名空间，同时初始化 MinIO bucket 和两个 Elasticsearch 索引。
+仓库提供了 Docker Compose 开发编排。`minimal` profile 只启动 MySQL、Nacos、配置导入、认证服务和网关，适合接口、认证和基础链路测试；`full` profile 会额外启动 Redis、RocketMQ、MinIO、Elasticsearch、Milvus（含 etcd 和内部 MinIO）及其余业务服务。首次启动会在镜像构建阶段执行完整 Maven 打包，并自动把 `nacos/` 下的 YAML 导入 Nacos 公共命名空间，同时初始化 MinIO bucket 和两个 Elasticsearch 索引。
 
 ```powershell
-docker compose up -d --build
-docker compose ps
+docker compose --profile minimal up -d --build
+docker compose --profile minimal ps
 ```
 
 验证入口：`http://127.0.0.1:5010/gateway/health`；认证服务直连地址为 `http://127.0.0.1:9101/auth/health`。启动全部业务服务：
 
 ```powershell
 docker compose --profile full up -d --build
+```
+
+停止最小测试环境但保留容器和数据卷：
+
+```powershell
+docker compose --profile minimal stop
 ```
 
 开发环境基础设施对宿主机 `127.0.0.1` 的入口为：MySQL `3306`、Nacos API `8848`、Nacos 控制台/健康接口 `18080`（gRPC `9848/9849`）、Redis `6379`、RocketMQ NameServer `9876`、Broker `10911/10909`、MinIO API/控制台 `19000/19001`、Elasticsearch `9200`、Milvus gRPC/健康检查 `19530/9091`。Compose 默认只绑定 `127.0.0.1`，如需局域网访问可在 `.env` 中修改 `HOST_BIND_ADDRESS`。容器内部仍使用服务名和标准端口互联。
