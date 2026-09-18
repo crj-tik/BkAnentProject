@@ -23,8 +23,12 @@ import io.a2a.spec.Message;
 import io.a2a.spec.MessageSendConfiguration;
 import io.a2a.spec.MessageSendParams;
 import io.a2a.spec.SendMessageResponse;
+import io.a2a.spec.JSONRPCError;
+import io.a2a.spec.StreamingEventKind;
 import io.a2a.spec.Task;
+import io.a2a.spec.TaskArtifactUpdateEvent;
 import io.a2a.spec.TaskState;
+import io.a2a.spec.TaskStatusUpdateEvent;
 import io.a2a.spec.TextPart;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -36,6 +40,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 @Component
 public class OfficialA2aAgentClient implements A2aAgentClient {
@@ -46,6 +54,7 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
     private final ObjectMapper objectMapper;
     private final ConcurrentMap<String, A2aRemoteAgent> remoteAgents = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, A2AClient> officialClients = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, A2AClient> streamingClients = new ConcurrentHashMap<>();
 
     public OfficialA2aAgentClient(OfficialSupervisorGraphThreadResolver threadResolver,
                                   ObjectMapper objectMapper) {
@@ -85,6 +94,168 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
                 output,
                 request.traceId()
         );
+    }
+
+    @Override
+    public boolean supportsStreaming(RegisteredAgentDescriptor descriptor, AgentTaskInvokeRequest request) {
+        return descriptor != null
+                && descriptor.agentCard() != null
+                && Boolean.TRUE.equals(descriptor.agentCard().supportsStreaming());
+    }
+
+    @Override
+    public AgentTaskInvokeResponse stream(RegisteredAgentDescriptor descriptor,
+                                          AgentTaskInvokeRequest request,
+                                          Consumer<ChildAgentStreamEvent> eventConsumer) {
+        if (!supportsStreaming(descriptor, request)) {
+            throw new UnsupportedOperationException("child agent does not advertise streaming: " + descriptor.agentId());
+        }
+        CompletableFuture<AgentTaskInvokeResponse> result = new CompletableFuture<>();
+        StringBuilder output = new StringBuilder();
+        AtomicBoolean completed = new AtomicBoolean();
+        A2AClient client = streamingClients.computeIfAbsent(
+                descriptor.agentId(), ignored -> new A2AClient(descriptor.baseUrl() + descriptor.a2aTaskStreamPath()));
+        try {
+            client.sendStreamingMessage(
+                    buildMessageSendParams(request, false),
+                    event -> handleStreamingEvent(descriptor, request, eventConsumer, result, output, completed, event),
+                    error -> result.completeExceptionally(new IllegalStateException(
+                            "official a2a streaming error for " + descriptor.agentId() + ": " + error)),
+                    () -> result.completeExceptionally(new IllegalStateException(
+                            "official a2a streaming connection failed for " + descriptor.agentId()))
+            );
+        } catch (A2AServerException exception) {
+            result.completeExceptionally(new IllegalStateException(
+                    "official a2a streaming invoke failed for " + descriptor.agentId(), exception));
+        }
+        try {
+            return result.join();
+        } catch (CompletionException exception) {
+            Throwable cause = exception.getCause() == null ? exception : exception.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new IllegalStateException("official a2a streaming invoke failed", cause);
+        }
+    }
+
+    private void handleStreamingEvent(RegisteredAgentDescriptor descriptor,
+                                      AgentTaskInvokeRequest request,
+                                      Consumer<ChildAgentStreamEvent> eventConsumer,
+                                      CompletableFuture<AgentTaskInvokeResponse> result,
+                                      StringBuilder output,
+                                      AtomicBoolean completed,
+                                      StreamingEventKind event) {
+        if (event instanceof Message message) {
+            String text = extractMessageText(message);
+            appendOutput(output, text);
+            emit(eventConsumer, "agent.delta", text, Map.of("source", "a2a.message"), false, null);
+            return;
+        }
+        if (event instanceof TaskArtifactUpdateEvent artifactUpdate) {
+            String text = extractArtifactText(artifactUpdate.getArtifact());
+            if (Boolean.FALSE.equals(artifactUpdate.isAppend())) {
+                output.setLength(0);
+            }
+            appendOutput(output, text);
+            Map<String, Object> metadata = new LinkedHashMap<>();
+            metadata.put("source", "a2a.artifact");
+            metadata.put("artifactId", artifactUpdate.getArtifact().artifactId());
+            if (artifactUpdate.isAppend() != null) {
+                metadata.put("append", artifactUpdate.isAppend());
+            }
+            if (artifactUpdate.isLastChunk() != null) {
+                metadata.put("lastChunk", artifactUpdate.isLastChunk());
+            }
+            emit(eventConsumer, "agent.delta", text, metadata, false, null);
+            return;
+        }
+        if (event instanceof TaskStatusUpdateEvent statusUpdate) {
+            String status = mapTaskState(statusUpdate.getStatus() == null ? null : statusUpdate.getStatus().state());
+            String statusText = statusUpdate.getStatus() == null
+                    ? "Child agent status updated"
+                    : extractMessageText(statusUpdate.getStatus().message());
+            Map<String, Object> metadata = new LinkedHashMap<>();
+            metadata.put("source", "a2a.status");
+            metadata.put("childTaskId", statusUpdate.getTaskId());
+            metadata.put("status", status);
+            emit(eventConsumer, "agent.progress", statusText, metadata, false, null);
+            if (statusUpdate.isFinal()) {
+                completeFromStatus(descriptor, request, eventConsumer, result, output, completed, status);
+            }
+            return;
+        }
+        if (event instanceof Task task) {
+            String taskOutput = extractTaskOutput(task);
+            if (StringUtils.hasText(taskOutput)) {
+                output.setLength(0);
+                output.append(taskOutput);
+            }
+            String status = mapTaskState(task.getStatus() == null ? null : task.getStatus().state());
+            emit(eventConsumer, "agent.progress", "Child agent task update", Map.of(
+                    "source", "a2a.task", "childTaskId", task.getId(), "status", status), false, null);
+            if ("COMPLETED".equalsIgnoreCase(status)
+                    || "FAILED".equalsIgnoreCase(status)
+                    || "CANCELLED".equalsIgnoreCase(status)
+                    || "REJECTED".equalsIgnoreCase(status)) {
+                completeFromStatus(descriptor, request, eventConsumer, result, output, completed, status);
+            }
+        }
+    }
+
+    private void completeFromStatus(RegisteredAgentDescriptor descriptor,
+                                    AgentTaskInvokeRequest request,
+                                    Consumer<ChildAgentStreamEvent> eventConsumer,
+                                    CompletableFuture<AgentTaskInvokeResponse> result,
+                                    StringBuilder output,
+                                    AtomicBoolean completed,
+                                    String status) {
+        if (!completed.compareAndSet(false, true)) {
+            return;
+        }
+        if (!"COMPLETED".equalsIgnoreCase(status)) {
+            result.completeExceptionally(new IllegalStateException(
+                    "official a2a child task ended with status " + status));
+            return;
+        }
+        AgentTaskInvokeResponse finalResponse = parseStructuredResponse(descriptor, output.toString(), request.taskId());
+        emit(eventConsumer, "agent.completed", "Child agent stream completed", Map.of(
+                "source", "a2a.status", "status", status), true, finalResponse);
+        result.complete(finalResponse);
+    }
+
+    private void emit(Consumer<ChildAgentStreamEvent> eventConsumer,
+                      String eventType,
+                      String content,
+                      Map<String, Object> metadata,
+                      boolean terminal,
+                      AgentTaskInvokeResponse result) {
+        eventConsumer.accept(new ChildAgentStreamEvent(
+                eventType,
+                content == null ? "" : content,
+                metadata == null ? Map.of() : Map.copyOf(metadata),
+                terminal,
+                result
+        ));
+    }
+
+    private void appendOutput(StringBuilder output, String text) {
+        if (StringUtils.hasText(text)) {
+            output.append(text);
+        }
+    }
+
+    private String extractArtifactText(Artifact artifact) {
+        if (artifact == null || artifact.parts() == null) {
+            return "";
+        }
+        List<String> parts = new ArrayList<>();
+        artifact.parts().forEach(part -> {
+            if (part instanceof TextPart textPart && StringUtils.hasText(textPart.getText())) {
+                parts.add(textPart.getText());
+            }
+        });
+        return String.join(System.lineSeparator(), parts);
     }
 
     @Override

@@ -9,6 +9,8 @@ import com.bkanent.common.agent.AgentTaskInvokeResponse;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
+import java.util.function.Consumer;
+
 @Primary
 @Component
 public class DelegatingA2aAgentClient implements A2aAgentClient {
@@ -28,6 +30,22 @@ public class DelegatingA2aAgentClient implements A2aAgentClient {
             return officialA2aAgentClient.invoke(descriptor, request);
         }
         return httpA2aAgentClient.invoke(descriptor, request);
+    }
+
+    @Override
+    public boolean supportsStreaming(RegisteredAgentDescriptor descriptor, AgentTaskInvokeRequest request) {
+        return shouldUseOfficial(descriptor)
+                && officialA2aAgentClient.supportsStreaming(descriptor, request);
+    }
+
+    @Override
+    public AgentTaskInvokeResponse stream(RegisteredAgentDescriptor descriptor,
+                                          AgentTaskInvokeRequest request,
+                                          Consumer<ChildAgentStreamEvent> eventConsumer) {
+        if (shouldUseOfficial(descriptor)) {
+            return officialA2aAgentClient.stream(descriptor, request, eventConsumer);
+        }
+        return httpA2aAgentClient.stream(descriptor, request, eventConsumer);
     }
 
     @Override

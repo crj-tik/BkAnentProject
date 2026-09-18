@@ -56,6 +56,7 @@ import com.bkanent.common.model.PublishRequest;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -370,8 +371,12 @@ public class AgentController {
 
     @GetMapping("/supervisor/workflows/async/stream")
     public SseEmitter streamSupervisorAsyncWorkflow(@RequestParam String asyncWorkflowId,
-                                                    @RequestParam String userId) {
-        return supervisorAsyncWorkflowService.subscribeWorkflowStream(asyncWorkflowId, userId);
+                                                    @RequestParam String userId,
+                                                    @RequestParam(required = false) String afterEventId,
+                                                    @RequestParam(required = false) Long afterSequence,
+                                                    @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId) {
+        return supervisorAsyncWorkflowService.subscribeWorkflowStream(
+                asyncWorkflowId, userId, firstNonBlank(afterEventId, lastEventId), afterSequence);
     }
 
     @PostMapping("/supervisor/workflows/async/cancel")
@@ -493,8 +498,16 @@ public class AgentController {
     }
 
     @GetMapping("/supervisor/stream")
-    public SseEmitter subscribeSupervisorStream(@RequestParam String sessionId) {
-        return sessionStreamService.subscribe(sessionId);
+    public SseEmitter subscribeSupervisorStream(@RequestParam String sessionId,
+                                                @RequestParam(required = false) String taskId,
+                                                @RequestParam(required = false) String afterEventId,
+                                                @RequestParam(required = false) Long afterSequence,
+                                                @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId) {
+        return sessionStreamService.subscribe(sessionId, taskId, firstNonBlank(afterEventId, lastEventId), afterSequence);
+    }
+
+    private String firstNonBlank(String first, String second) {
+        return first == null || first.isBlank() ? second : first;
     }
 
     /**

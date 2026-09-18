@@ -6,6 +6,7 @@ import com.bkanent.common.model.BaseEntity;
 @TableName("agent_event_audit")
 public class AgentEventAuditEntity extends BaseEntity {
 
+    private String eventId;
     private String sessionId;
     private String taskId;
     private String agentId;
@@ -22,6 +23,14 @@ public class AgentEventAuditEntity extends BaseEntity {
     private Long eventTimestamp;
     private Integer archived;
     private Long archivedAtMs;
+
+    public String getEventId() {
+        return eventId;
+    }
+
+    public void setEventId(String eventId) {
+        this.eventId = eventId;
+    }
 
     public String getSessionId() {
         return sessionId;

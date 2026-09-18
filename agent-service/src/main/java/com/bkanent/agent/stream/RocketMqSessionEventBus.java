@@ -50,13 +50,17 @@ public class RocketMqSessionEventBus implements SessionEventBus, RocketMQListene
 
     @Override
     public void publish(SessionStreamEvent event) {
-        sessionEventAuditService.record(event);
         rocketMQTemplate.convertAndSend(topic + ":" + SessionEventTags.resolveTag(event.eventType()), event);
     }
 
     @Override
     public void onMessage(SessionStreamEvent event) {
-        subscriberRegistry.publishLocal(event);
+        SessionStreamEvent normalized = event == null || (event.eventId() != null && event.sequence() != null)
+                ? event
+                : sessionEventAuditService.recordAndEnrich(event);
+        if (normalized != null) {
+            subscriberRegistry.publishLocal(normalized);
+        }
     }
 
 }

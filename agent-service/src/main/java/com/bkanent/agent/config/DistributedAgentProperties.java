@@ -25,6 +25,7 @@ public class DistributedAgentProperties {
     private final RateLimitProperties rateLimit = new RateLimitProperties();
     private final GrayReleaseProperties grayRelease = new GrayReleaseProperties();
     private final EventAuditProperties eventAudit = new EventAuditProperties();
+    private final StreamingProperties streaming = new StreamingProperties();
     private final AsyncRuntimeProperties asyncRuntime = new AsyncRuntimeProperties();
     private final PlanningProperties planning = new PlanningProperties();
     private final Map<String, AgentRegistration> agents = new LinkedHashMap<>();
@@ -79,6 +80,10 @@ public class DistributedAgentProperties {
 
     public EventAuditProperties getEventAudit() {
         return eventAudit;
+    }
+
+    public StreamingProperties getStreaming() {
+        return streaming;
     }
 
     public AsyncRuntimeProperties getAsyncRuntime() {
@@ -405,6 +410,45 @@ public class DistributedAgentProperties {
 
         public void setWorkerId(String workerId) {
             this.workerId = workerId;
+        }
+    }
+
+    public static class StreamingProperties {
+        private boolean enabled = true;
+        private int maxDeltaChars = 4096;
+        private int maxDeltaEventsPerSecond = 50;
+        private int maxMetadataChars = 4096;
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getMaxDeltaChars() {
+            return maxDeltaChars;
+        }
+
+        public void setMaxDeltaChars(int maxDeltaChars) {
+            this.maxDeltaChars = maxDeltaChars;
+        }
+
+        public int getMaxDeltaEventsPerSecond() {
+            return maxDeltaEventsPerSecond;
+        }
+
+        public void setMaxDeltaEventsPerSecond(int maxDeltaEventsPerSecond) {
+            this.maxDeltaEventsPerSecond = maxDeltaEventsPerSecond;
+        }
+
+        public int getMaxMetadataChars() {
+            return maxMetadataChars;
+        }
+
+        public void setMaxMetadataChars(int maxMetadataChars) {
+            this.maxMetadataChars = maxMetadataChars;
         }
     }
 

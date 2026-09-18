@@ -242,6 +242,13 @@ public class SupervisorAsyncWorkflowService {
     }
 
     public SseEmitter subscribeWorkflowStream(String asyncWorkflowId, String userId) {
+        return subscribeWorkflowStream(asyncWorkflowId, userId, null, null);
+    }
+
+    public SseEmitter subscribeWorkflowStream(String asyncWorkflowId,
+                                              String userId,
+                                              String afterEventId,
+                                              Long afterSequence) {
         AgentAsyncWorkflowEntity entity = findEntity(asyncWorkflowId);
         if (entity == null) {
             SseEmitter emitter = new SseEmitter(0L);
@@ -256,7 +263,7 @@ public class SupervisorAsyncWorkflowService {
                 entity.getTraceId(),
                 "async workflow stream subscribe"
         );
-        return sessionStreamService.subscribe(entity.getSessionId());
+        return sessionStreamService.subscribe(entity.getSessionId(), entity.getTaskId(), afterEventId, afterSequence);
     }
 
     public void dispatchPendingWorkflows(int batchSize) {

@@ -175,6 +175,11 @@ agent:
       archive-enabled: ${AGENT_EVENT_AUDIT_ARCHIVE_ENABLED:true}
       max-archived-events: ${AGENT_EVENT_AUDIT_MAX_ARCHIVED_EVENTS:10000}
       retention-seconds: ${AGENT_EVENT_AUDIT_RETENTION_SECONDS:86400}
+    streaming:
+      enabled: ${AGENT_SUPERVISOR_STREAMING_ENABLED:true}
+      max-delta-chars: ${AGENT_SUPERVISOR_STREAMING_MAX_DELTA_CHARS:4096}
+      max-delta-events-per-second: ${AGENT_SUPERVISOR_STREAMING_MAX_DELTA_EVENTS_PER_SECOND:50}
+      max-metadata-chars: ${AGENT_SUPERVISOR_STREAMING_MAX_METADATA_CHARS:4096}
     async-runtime:
       enabled: ${AGENT_ASYNC_RUNTIME_ENABLED:true}
       dispatch-interval-ms: ${AGENT_ASYNC_RUNTIME_DISPATCH_INTERVAL_MS:1000}

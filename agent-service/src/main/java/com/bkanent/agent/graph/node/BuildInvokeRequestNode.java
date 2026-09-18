@@ -12,6 +12,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 
 @Component
 public class BuildInvokeRequestNode {
@@ -31,6 +33,9 @@ public class BuildInvokeRequestNode {
         if (graphState.sharedContext() != null) {
             context.putAll(graphState.sharedContext());
         }
+        if (request.context() != null) {
+            context.putAll(request.context());
+        }
         context.putIfAbsent("userId", request.userId());
         context.putIfAbsent("keyword", request.userMessage());
         context.putIfAbsent("topK", 5);
@@ -38,13 +43,25 @@ public class BuildInvokeRequestNode {
         context.put("retryCount", retryCount);
         context.put("requestStream", Boolean.TRUE.equals(request.stream()));
         context.put("forceAsyncA2a", Boolean.TRUE.equals(request.stream()));
+        String branchId = StringUtils.hasText(String.valueOf(context.get("branchId")))
+                && !"null".equalsIgnoreCase(String.valueOf(context.get("branchId")))
+                ? String.valueOf(context.get("branchId"))
+                : "single:" + targetAgentId;
+        String childRunId = StringUtils.hasText(String.valueOf(context.get("childRunId")))
+                && !"null".equalsIgnoreCase(String.valueOf(context.get("childRunId")))
+                ? String.valueOf(context.get("childRunId"))
+                : UUID.nameUUIDFromBytes((graphState.taskId() + "|" + targetAgentId + "|"
+                + graphState.intent() + "|" + retryCount + "|" + branchId).getBytes(StandardCharsets.UTF_8)).toString();
+        context.put("childRunId", childRunId);
+        context.put("parentTaskId", graphState.taskId());
+        context.put("branchId", branchId);
         if (StringUtils.hasText(feedback)) {
             context.put("approvalFeedback", feedback);
         }
         return new AgentTaskInvokeRequest(
                 graphState.sessionId(),
                 graphState.taskId(),
-                null,
+                graphState.taskId(),
                 graphState.traceId(),
                 distributedAgentProperties.getSupervisorAgentId(),
                 targetAgentId,

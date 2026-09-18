@@ -13,12 +13,9 @@ import java.util.function.Consumer;
 public class LocalSessionEventBus implements SessionEventBus {
 
     private final SessionSubscriberRegistry subscriberRegistry;
-    private final SessionEventAuditService sessionEventAuditService;
 
-    public LocalSessionEventBus(SessionSubscriberRegistry subscriberRegistry,
-                                SessionEventAuditService sessionEventAuditService) {
+    public LocalSessionEventBus(SessionSubscriberRegistry subscriberRegistry) {
         this.subscriberRegistry = subscriberRegistry;
-        this.sessionEventAuditService = sessionEventAuditService;
     }
 
     @Override
@@ -33,7 +30,6 @@ public class LocalSessionEventBus implements SessionEventBus {
 
     @Override
     public void publish(SessionStreamEvent event) {
-        sessionEventAuditService.record(event);
         subscriberRegistry.publishLocal(event);
     }
 }

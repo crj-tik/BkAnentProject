@@ -8,12 +8,15 @@ import com.bkanent.agent.graph.official.OfficialSupervisorGraphKeys;
 import com.bkanent.agent.graph.official.OfficialSupervisorGraphMigrationFacade;
 import com.bkanent.agent.model.distributed.SupervisorTaskRequest;
 import com.bkanent.agent.registry.RegisteredAgentDescriptor;
+import com.bkanent.agent.stream.SessionStreamService;
 import com.bkanent.agent.workflow.SupervisorWorkflowState;
 import com.bkanent.common.agent.AgentTaskInvokeResponse;
+import com.bkanent.common.agent.SessionStreamEvent;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Component
 public class SingleAgentSubgraph {
@@ -23,13 +26,16 @@ public class SingleAgentSubgraph {
     private final OfficialSingleAgentGraphHolder officialSingleAgentGraphHolder;
     private final OfficialSupervisorGraphMigrationFacade migrationFacade;
     private final GraphAuditService graphAuditService;
+    private final SessionStreamService sessionStreamService;
 
     public SingleAgentSubgraph(OfficialSingleAgentGraphHolder officialSingleAgentGraphHolder,
                                OfficialSupervisorGraphMigrationFacade migrationFacade,
-                               GraphAuditService graphAuditService) {
+                               GraphAuditService graphAuditService,
+                               SessionStreamService sessionStreamService) {
         this.officialSingleAgentGraphHolder = officialSingleAgentGraphHolder;
         this.migrationFacade = migrationFacade;
         this.graphAuditService = graphAuditService;
+        this.sessionStreamService = sessionStreamService;
     }
 
     public ExecutionResult execute(SupervisorTaskRequest request,
@@ -46,10 +52,42 @@ public class SingleAgentSubgraph {
         state.put(OfficialSupervisorGraphKeys.SELECTED_AGENT_ID, descriptor.agentId());
         try {
             CompiledGraph compiledGraph = officialSingleAgentGraphHolder.compiledGraph();
-            OverAllState output = compiledGraph.invoke(
-                    state,
-                    migrationFacade.runnableConfig(graphState.sessionId(), graphState.taskId())
-            ).orElseThrow(() -> new IllegalStateException("Official single agent graph returned empty state"));
+            OverAllState output;
+            if (Boolean.TRUE.equals(request.stream())) {
+                AtomicReference<OverAllState> latestState = new AtomicReference<>();
+                compiledGraph.stream(
+                                state,
+                                migrationFacade.runnableConfig(graphState.sessionId(), graphState.taskId()))
+                        .doOnNext(nodeOutput -> {
+                            latestState.set(nodeOutput.state());
+                            sessionStreamService.publish(new SessionStreamEvent(
+                                    graphState.sessionId(),
+                                    graphState.taskId(),
+                                    descriptor.agentId(),
+                                    "agent.progress",
+                                    "Local child graph node completed",
+                                    Map.of(
+                                            "phase", "local_child_graph",
+                                            "node", nodeOutput.node(),
+                                            "agent", nodeOutput.agent() == null ? "" : nodeOutput.agent(),
+                                            "visibility", "progress",
+                                            "terminal", false
+                                    ),
+                                    graphState.traceId(),
+                                    System.currentTimeMillis()
+                            ));
+                        })
+                        .blockLast();
+                output = latestState.get();
+                if (output == null) {
+                    throw new IllegalStateException("Official single agent graph stream returned empty state");
+                }
+            } else {
+                output = compiledGraph.invoke(
+                        state,
+                        migrationFacade.runnableConfig(graphState.sessionId(), graphState.taskId())
+                ).orElseThrow(() -> new IllegalStateException("Official single agent graph returned empty state"));
+            }
             AgentTaskInvokeResponse response = OfficialGraphStateAdapters.latestResponse(output);
             SupervisorWorkflowState workflowState = OfficialGraphStateAdapters.toWorkflowState(output);
             graphAuditService.markCompleted(

@@ -19,6 +19,8 @@ import org.springframework.util.StringUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 
 @Component
 public class HandoffNode {
@@ -64,14 +66,24 @@ public class HandoffNode {
         RegisteredAgentDescriptor nextAgent = selectAgent(nextDomain, state.userMessage(), context);
         String nextIntent = resolveIntent(nextDomain, context);
         Map<String, Object> downstreamContext = sanitizeHandoffContext(context, state.userId());
+        String branchId = textOrDefault(downstreamContext.get("branchId"), "handoff:" + nextDomain);
+        String childRunId = textOrDefault(
+                downstreamContext.get("childRunId"),
+                UUID.nameUUIDFromBytes((state.taskId() + "|" + nextAgent.agentId() + "|"
+                        + nextIntent + "|" + attempt + "|" + branchId).getBytes(StandardCharsets.UTF_8)).toString()
+        );
+        downstreamContext.put("parentTaskId", state.taskId());
+        downstreamContext.put("branchId", branchId);
+        downstreamContext.put("childRunId", childRunId);
         publish(state.sessionId(), state.taskId(), nextAgent.agentId(),
                 "handoff.started", "Invoking next agent",
-                Map.of("nextDomain", nextDomain, "nextIntent", nextIntent, "handoffType", handoffType), state.traceId());
+                Map.of("nextDomain", nextDomain, "nextIntent", nextIntent, "handoffType", handoffType,
+                        "childRunId", childRunId, "parentTaskId", state.taskId(), "branchId", branchId), state.traceId());
 
         AgentTaskInvokeRequest handoffRequest = new AgentTaskInvokeRequest(
                         state.sessionId(),
                         state.taskId(),
-                        null,
+                        state.taskId(),
                         state.traceId(),
                         distributedAgentProperties.getSupervisorAgentId(),
                         nextAgent.agentId(),
@@ -121,6 +133,9 @@ public class HandoffNode {
                         "nextDomain", nextDomain,
                         "nextIntent", nextIntent,
                         "handoffType", handoffType,
+                        "childRunId", childRunId,
+                        "parentTaskId", state.taskId(),
+                        "branchId", branchId,
                         "status", response.status(),
                         "userId", state.userId() == null ? "" : state.userId()
                 ),
@@ -157,6 +172,9 @@ public class HandoffNode {
         copyIfPresent(context, sanitized, "nextIntent");
         copyIfPresent(context, sanitized, "requestStream");
         copyIfPresent(context, sanitized, "forceAsyncA2a");
+        copyIfPresent(context, sanitized, "childRunId");
+        copyIfPresent(context, sanitized, "parentTaskId");
+        copyIfPresent(context, sanitized, "branchId");
         copyIfPresent(context, sanitized, "grayRelease");
         copyIfPresent(context, sanitized, "grayStrategyVersion");
         copyIfPresent(context, sanitized, "preferredAgentIds");
@@ -215,6 +233,12 @@ public class HandoffNode {
         if (value != null) {
             target.put(key, value);
         }
+    }
+
+    private String textOrDefault(Object value, String fallback) {
+        return value == null || !StringUtils.hasText(String.valueOf(value))
+                ? fallback
+                : String.valueOf(value);
     }
 
     private List<Map<String, Object>> appendHandoffHistory(List<Map<String, Object>> current,

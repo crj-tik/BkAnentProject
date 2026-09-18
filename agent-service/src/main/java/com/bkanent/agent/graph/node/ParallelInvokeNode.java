@@ -56,9 +56,6 @@ public class ParallelInvokeNode {
                                                 com.bkanent.agent.graph.SupervisorGraphState graphState,
                                                 String domain) {
         RegisteredAgentDescriptor descriptor = selectAgent(domain, request.userMessage(), graphState.sharedContext());
-        publish(graphState.sessionId(), graphState.taskId(), descriptor.agentId(),
-                "handoff.started", "Invoking child agent in parallel",
-                Map.of("domain", domain), graphState.traceId());
         AgentTaskInvokeRequest invokeRequest = buildInvokeRequestNode.build(
                 withDomain(request, domain),
                 graphState.withIntent(resolveIntent(domain), domain, "parallel"),
@@ -66,6 +63,15 @@ public class ParallelInvokeNode {
                 null,
                 0
         );
+        Map<String, Object> correlation = Map.of(
+                "domain", domain,
+                "branchId", invokeRequest.structuredContext().get("branchId"),
+                "childRunId", invokeRequest.structuredContext().get("childRunId"),
+                "parentTaskId", invokeRequest.parentTaskId()
+        );
+        publish(graphState.sessionId(), graphState.taskId(), descriptor.agentId(),
+                "handoff.started", "Invoking child agent in parallel",
+                correlation, graphState.traceId());
         AgentTaskInvokeResponse response = a2aExecutionService.execute(
                 descriptor,
                 invokeRequest,
@@ -79,6 +85,8 @@ public class ParallelInvokeNode {
                 "handoff.completed", "Parallel child agent returned",
                 Map.of(
                         "domain", domain,
+                        "branchId", invokeRequest.structuredContext().get("branchId"),
+                        "childRunId", invokeRequest.structuredContext().get("childRunId"),
                         "status", response.status(),
                         "userId", graphState.userId() == null ? "" : graphState.userId()
                 ), graphState.traceId());
@@ -88,6 +96,7 @@ public class ParallelInvokeNode {
     private SupervisorTaskRequest withDomain(SupervisorTaskRequest request, String domain) {
         Map<String, Object> context = new LinkedHashMap<>(request.context() == null ? Map.of() : request.context());
         context.put("domain", domain);
+        context.put("branchId", "parallel:" + domain);
         return new SupervisorTaskRequest(
                 request.sessionId(),
                 request.userId(),

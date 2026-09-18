@@ -869,6 +869,7 @@ CREATE TABLE IF NOT EXISTS agent_governance_override (
 
 CREATE TABLE IF NOT EXISTS agent_event_audit (
     id BIGINT NOT NULL AUTO_INCREMENT,
+    event_id VARCHAR(64) NULL,
     session_id VARCHAR(64) NOT NULL,
     task_id VARCHAR(64) NULL,
     agent_id VARCHAR(64) NOT NULL,
@@ -889,6 +890,9 @@ CREATE TABLE IF NOT EXISTS agent_event_audit (
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted TINYINT NOT NULL DEFAULT 0,
     PRIMARY KEY (id),
+    UNIQUE KEY uk_agent_event_audit_event_id (event_id),
+    KEY idx_agent_event_audit_session_sequence (session_id, id),
+    KEY idx_agent_event_audit_session_task_sequence (session_id, task_id, id),
     KEY idx_agent_event_audit_task_id (task_id),
     KEY idx_agent_event_audit_trace_id (trace_id),
     KEY idx_agent_event_audit_event_type (event_type),

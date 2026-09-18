@@ -7,5 +7,12 @@ public interface SessionStreamService {
 
     SseEmitter subscribe(String sessionId);
 
+    default SseEmitter subscribe(String sessionId,
+                                 String taskId,
+                                 String afterEventId,
+                                 Long afterSequence) {
+        return subscribe(sessionId);
+    }
+
     void publish(SessionStreamEvent event);
 }
