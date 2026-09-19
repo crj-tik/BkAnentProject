@@ -2,7 +2,7 @@
 
 2026-09-20，根据当前工作区源码生成，包含生成前已存在的未提交代码。描述实现结构，不表示已部署或端到端验收。
 
-打开 [图集浏览页](index.html) 查看全部图片。PNG 适合分享，SVG 适合放大与编辑。
+打开 [图集浏览页](index.html) 查看全部图片。高清分层架构图：[PNG](architecture-overview.png) · [JPG](architecture-overview.jpg)。PNG 适合分享，SVG 适合放大与编辑。
 
 | 图 | 位图 | 矢量图 |
 |---|---|---|
