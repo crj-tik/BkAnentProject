@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1220" viewBox="0 0 1800 1220">
+<rect width="1800" height="1220" fill="#f3f6fa"/>
+<rect x="60" y="48" width="8" height="98" rx="3" fill="#336ddd" stroke="#336ddd" stroke-width="2"/>
+<text x="90" y="91" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="43" font-weight="700">审批与恢复｜暂停、决策、继续</text>
+<text x="90" y="140" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400">审批是 Supervisor Graph 的控制节点；与外部业务 Provider 的执行状态分开</text>
+<polyline points="560,320 665,320" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="665,320 653.2941876694152,325.654551943446 653.2941876694152,314.345448056554" fill="#52677d"/>
+<polyline points="1135,320 1240,320" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="1240,320 1228.2941876694151,325.654551943446 1228.2941876694151,314.345448056554" fill="#52677d"/>
+<rect x="1164.5" y="293.0" width="46.0" height="26.0" rx="3" fill="#f3f6fa" stroke="#f3f6fa" stroke-width="2"/>
+<text x="1170.5" y="310.0" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">等待</text>
+<polyline points="1475,410 1475,500" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="1475,500 1469.345448056554,488.2941876694152 1480.654551943446,488.2941876694152" fill="#52677d"/>
+<polyline points="1240,590 1135,590" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="1135,590 1146.7058123305849,584.345448056554 1146.7058123305849,595.654551943446" fill="#52677d"/>
+<polyline points="665,590 560,590" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="560,590 571.7058123305848,584.345448056554 571.7058123305848,595.654551943446" fill="#52677d"/>
+<rect x="589.5" y="563.0" width="46.0" height="26.0" rx="3" fill="#f3f6fa" stroke="#f3f6fa" stroke-width="2"/>
+<text x="595.5" y="580.0" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">继续</text>
+<polyline points="900,680 900,770" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="900,770 894.345448056554,758.2941876694152 905.654551943446,758.2941876694152" fill="#52677d"/>
+<rect x="851.5" y="698.0" width="97.0" height="26.0" rx="3" fill="#f3f6fa" stroke="#f3f6fa" stroke-width="2"/>
+<text x="857.5" y="715.0" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">终止 / 失败</text>
+<polyline points="900,680 900,735 325,735 325,770" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="325,770 319.345448056554,758.2941876694152 330.654551943446,758.2941876694152" fill="#52677d"/>
+<rect x="572.5" y="708.0" width="80.0" height="26.0" rx="3" fill="#f3f6fa" stroke="#f3f6fa" stroke-width="2"/>
+<text x="578.5" y="725.0" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">重新规划</text>
+<polyline points="1135,860 1240,860" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="1240,860 1228.2941876694151,865.654551943446 1228.2941876694151,854.345448056554" fill="#52677d"/>
+<rect x="1164.5" y="833.0" width="46.0" height="26.0" rx="3" fill="#f3f6fa" stroke="#f3f6fa" stroke-width="2"/>
+<text x="1170.5" y="850.0" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">写回</text>
+<rect x="90" y="230" width="470" height="180" rx="16" fill="#f1eaff" stroke="#8652be" stroke-width="2"/>
+<text x="112" y="274" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">ROUTE 判定需审批</text>
+<text x="112" y="317" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">规划结果 requireApproval</text>
+<text x="112" y="343" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">进入 APPROVAL_GATE</text>
+<rect x="665" y="230" width="470" height="180" rx="16" fill="#e5f5ef" stroke="#168568" stroke-width="2"/>
+<text x="687" y="274" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">构造审批与检查点</text>
+<text x="687" y="317" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">记录 pendingApproval 与图状态</text>
+<text x="687" y="343" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">等待用户决策</text>
+<rect x="1240" y="230" width="470" height="180" rx="16" fill="#fff1dc" stroke="#bd7a19" stroke-width="2"/>
+<text x="1262" y="274" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">审批回调</text>
+<text x="1262" y="317" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">/supervisor/approvals/callback</text>
+<text x="1262" y="343" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">approved / rejected / terminated</text>
+<rect x="1240" y="500" width="470" height="180" rx="16" fill="#eaf1ff" stroke="#336ddd" stroke-width="2"/>
+<text x="1262" y="544" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">校验与决策写回</text>
+<text x="1262" y="587" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">检查待审批工作流与决策</text>
+<text x="1262" y="613" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">审批 claim / 防重复恢复</text>
+<rect x="665" y="500" width="470" height="180" rx="16" fill="#f1eaff" stroke="#8652be" stroke-width="2"/>
+<text x="687" y="544" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">RESUME_DECISION</text>
+<text x="687" y="587" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">根据恢复动作选择分支</text>
+<text x="687" y="613" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">不重新盲目执行已完成步骤</text>
+<rect x="90" y="500" width="470" height="180" rx="16" fill="#eaf1ff" stroke="#336ddd" stroke-width="2"/>
+<text x="112" y="544" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">继续执行</text>
+<text x="112" y="587" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">single / parallel</text>
+<text x="112" y="613" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">恢复对应执行路径</text>
+<rect x="90" y="770" width="470" height="180" rx="16" fill="#fff1dc" stroke="#bd7a19" stroke-width="2"/>
+<text x="112" y="814" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">重新规划</text>
+<text x="112" y="857" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">regenerate → PLAN</text>
+<text x="112" y="883" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">携带审批反馈重新生成计划</text>
+<rect x="665" y="770" width="470" height="180" rx="16" fill="#fff1dc" stroke="#bd7a19" stroke-width="2"/>
+<text x="687" y="814" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">终止或失败</text>
+<text x="687" y="857" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">cancel → CANCELED</text>
+<text x="687" y="883" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">无效恢复动作 → FAILED</text>
+<rect x="1240" y="770" width="470" height="180" rx="16" fill="#e5f5ef" stroke="#168568" stroke-width="2"/>
+<text x="1262" y="814" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">结果持久化与反馈</text>
+<text x="1262" y="857" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">检查点 / 审计 / 工作流状态</text>
+<text x="1262" y="883" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">通过查询或 SSE 呈现</text>
+<rect x="90" y="1010" width="1620" height="140" rx="14" fill="#ffffff" stroke="#ffffff" stroke-width="2"/>
+<text x="112" y="1046" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="700">阅读说明 / 实现边界</text>
+<text x="112" y="1080" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400">• 中间决策向不同分支跳转：继续、重新规划、终止/失败；不是顺序执行三个分支。</text>
+<text x="112" y="1107" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400">• 图展示已有控制结构，不代表所有写操作都自动触发审批；是否审批取决于规划和路由结果。</text>
+<text x="90" y="1188" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">BK AGENT  /  CURRENT CODE ARCHITECTURE  /  2026-09-20</text>
+<text x="1475" y="1188" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">11 / 16</text>
+</svg>

@@ -1,0 +1,1667 @@
+{
+  "basis": "Current working tree, including pre-existing uncommitted source changes; static code review, not deployment verification.",
+  "head": "9ad11c1d0ddd8ca31df3222b64cff8e32a8c6f26",
+  "diagrams": [
+    {
+      "slug": "01-service-architecture",
+      "title": "服务架构｜模块与职责",
+      "subtitle": "16 个 Maven 模块 · 8 个官方 A2A 子 Agent · 以当前工作区源码为准",
+      "nodes": [
+        [
+          "访问入口",
+          "业务前端 / API 调用方\nHTTP 请求与 SSE 订阅",
+          "blue"
+        ],
+        [
+          "gateway + auth-service",
+          "统一路由与认证权限\n业务 API / Agent API",
+          "blue"
+        ],
+        [
+          "agent-service",
+          "Supervisor · 官方 Graph\nA2A 客户端 / MCP / RAG",
+          "purple"
+        ],
+        [
+          "8 个领域 Agent",
+          "listing / compare / marketing / media\ntrade / contract / settlement / notification",
+          "purple"
+        ],
+        [
+          "本地工具与领域服务",
+          "ReactAgent → 本地 @Tool\nREST / MCP / Dubbo 为其他入口",
+          "blue"
+        ],
+        [
+          "业务存储与外部接口",
+          "MySQL · ES · MinIO\n媒体 / 邮件 / 签章 / 发布 Provider",
+          "green"
+        ],
+        [
+          "其他业务与共享模块",
+          "customer-service / promotion-service\ncommon：DTO、RPC 契约",
+          "blue"
+        ],
+        [
+          "状态与公共配置",
+          "memory-service：共享记忆\ncommon-config-manager：配置支持",
+          "green"
+        ],
+        [
+          "基础设施与模型",
+          "Nacos / Redis / RocketMQ / Milvus\nDeepSeek / DashScope",
+          "green"
+        ]
+      ],
+      "notes": [
+        "箭头表示主调用方向；底部为配套能力，基础设施按各服务实际配置接入。",
+        "图表示代码结构，不表示所有服务已启动；外部 Provider 是否可用取决于集成模式。"
+      ],
+      "sources": [
+        "pom.xml",
+        "gateway/src/main/resources/application.yml",
+        "nacos/agent-service.yaml"
+      ],
+      "edges": [
+        [
+          0,
+          1,
+          "HTTP"
+        ],
+        [
+          1,
+          2,
+          "Agent API"
+        ],
+        [
+          2,
+          3,
+          "A2A"
+        ],
+        [
+          3,
+          4,
+          "进程内"
+        ],
+        [
+          4,
+          5,
+          "读写 / 调用"
+        ],
+        [
+          6,
+          5,
+          "业务数据"
+        ],
+        [
+          7,
+          8,
+          "按配置接入"
+        ]
+      ],
+      "loop": false
+    },
+    {
+      "slug": "02-supervisor-flow",
+      "title": "Supervisor｜规划、路由与执行",
+      "subtitle": "官方 Spring AI Alibaba Graph 主链路；审批详细分支见图 11",
+      "nodes": [
+        [
+          "请求与访问控制",
+          "任务 / 工作流 / 异步入口\nuserId、sessionId、taskId、traceId",
+          "blue"
+        ],
+        [
+          "PLAN：规划",
+          "加载上下文、匹配 Skills\n规则优先；可选 LLM 规划",
+          "purple"
+        ],
+        [
+          "ROUTE：路由决策",
+          "选择领域与 Agent\n审批 / 单 Agent / 并行 / 失败",
+          "purple"
+        ],
+        [
+          "执行分支",
+          "SINGLE_AGENT 或 PARALLEL_FAN_OUT\n需审批时先进入 APPROVAL_GATE",
+          "orange"
+        ],
+        [
+          "官方 A2A 调用",
+          "权限检查 → Agent Card / 实例\nMessage / Task / 流式事件",
+          "blue"
+        ],
+        [
+          "结果汇合",
+          "单次结果或 PARALLEL_AGGREGATE\n合并共享上下文与产物引用",
+          "green"
+        ],
+        [
+          "ROUTE_AFTER_EXECUTION",
+          "handoff / complete / fail\n由图决定后续执行",
+          "purple"
+        ],
+        [
+          "HANDOFF 或 COMPLETE",
+          "交接后再次路由；完成则汇总\n更新记忆、产物与事件",
+          "blue"
+        ],
+        [
+          "最终状态",
+          "COMPLETED / FAILED / CANCELED\n审批暂停时返回等待状态",
+          "green"
+        ]
+      ],
+      "notes": [
+        "官方并行节点覆盖 7 个领域：listing、marketing、media、trade、contract、settlement、notification。",
+        "compare 已有 A2A Provider，但未列入主图的并行节点映射；单次路由能力与并行能力应区分。"
+      ],
+      "sources": [
+        "agent-service/src/main/java/com/bkanent/agent/graph/official/OfficialSupervisorGraphFactory.java",
+        "agent-service/src/main/java/com/bkanent/agent/service/A2aExecutionService.java",
+        "nacos/agent-service.yaml"
+      ],
+      "edges": [
+        [
+          0,
+          1,
+          ""
+        ],
+        [
+          1,
+          2,
+          ""
+        ],
+        [
+          2,
+          3,
+          ""
+        ],
+        [
+          3,
+          4,
+          ""
+        ],
+        [
+          4,
+          5,
+          ""
+        ],
+        [
+          5,
+          6,
+          ""
+        ],
+        [
+          6,
+          7,
+          ""
+        ],
+        [
+          7,
+          8,
+          ""
+        ]
+      ],
+      "loop": false
+    },
+    {
+      "slug": "03-listing-agent",
+      "title": "房源 Agent｜执行流程",
+      "subtitle": "listing-agent  ·  listing-master-service  ·  官方 A2A Provider",
+      "nodes": [
+        [
+          "01  接收子任务",
+          "关键词 / 房源 ID / topK\n上游需求与结构化上下文",
+          "blue"
+        ],
+        [
+          "02  A2A 上下文注入",
+          "Supervisor metadata → 模型上下文\n任务 / 会话 / 追踪 / 约束 / 预期输出",
+          "blue"
+        ],
+        [
+          "03  ReactAgent 推理",
+          "ChatModel + 领域 systemPrompt\n决定直接回答或调用本地工具",
+          "purple"
+        ],
+        [
+          "04  选择工具",
+          "详情、摘要、关键词检索\ngetListingDetail / searchListingSummaries\nsearchListingsByKeyword / getListingSummary",
+          "purple"
+        ],
+        [
+          "05  领域服务",
+          "ListingManagementService\n按所选工具读取详情或查询摘要",
+          "blue"
+        ],
+        [
+          "06  数据与执行",
+          "MySQL 房源与关联资产\n关键词检索可走 ES BM25\nES 关闭或异常时回退 MySQL",
+          "green"
+        ],
+        [
+          "07  工具结果返回",
+          "候选房源 / 分数 / 房源详情\n由模型整理为当前任务回答",
+          "green"
+        ],
+        [
+          "08  整理最终输出",
+          "工具结果回填模型，可继续调用\n满足任务要求后生成 output",
+          "blue"
+        ],
+        [
+          "09  返回 Supervisor",
+          "官方 A2A 响应 / 任务 / 流\n客户端适配后合并工作流状态",
+          "blue"
+        ]
+      ],
+      "notes": [
+        "房源工具未直接调用 Milvus；向量混合检索是 agent-service 的独立 RAG 能力。",
+        "虚线表示可多轮工具推理；模型也可直接回答。图中工具是可选分支，不代表每次全部执行。"
+      ],
+      "sources": [
+        "listing-master-service/src/main/java/com/bkanent/listing/a2a/ListingOfficialA2aAgent.java",
+        "listing-master-service/src/main/java/com/bkanent/listing/a2a/A2aSupervisorContextInterceptor.java",
+        "listing-master-service/src/main/java/com/bkanent/listing/tool/ListingTools.java"
+      ],
+      "edges": [
+        [
+          0,
+          1,
+          ""
+        ],
+        [
+          1,
+          2,
+          ""
+        ],
+        [
+          2,
+          3,
+          ""
+        ],
+        [
+          3,
+          4,
+          ""
+        ],
+        [
+          4,
+          5,
+          ""
+        ],
+        [
+          5,
+          6,
+          ""
+        ],
+        [
+          6,
+          7,
+          ""
+        ],
+        [
+          7,
+          8,
+          ""
+        ]
+      ],
+      "loop": true
+    },
+    {
+      "slug": "04-compare-agent",
+      "title": "房源对比 Agent｜执行流程",
+      "subtitle": "compare-agent  ·  compare-engine-service  ·  官方 A2A Provider",
+      "nodes": [
+        [
+          "01  接收子任务",
+          "多个房源 ID 或 shareCode\n目标对比维度与上下文",
+          "blue"
+        ],
+        [
+          "02  A2A 上下文注入",
+          "Supervisor metadata → 模型上下文\n任务 / 会话 / 追踪 / 约束 / 预期输出",
+          "blue"
+        ],
+        [
+          "03  ReactAgent 推理",
+          "ChatModel + 领域 systemPrompt\n决定直接回答或调用本地工具",
+          "purple"
+        ],
+        [
+          "04  选择工具",
+          "compareListings\ngetSharedReport\n两条工具路径按需选择",
+          "purple"
+        ],
+        [
+          "05  领域服务",
+          "CompareAnalysisService\n报告缓存命中则复用\n未命中时通过 Dubbo 读取房源",
+          "blue"
+        ],
+        [
+          "06  数据与执行",
+          "listing-master-service 房源数据\n报告：内存索引 + 本地持久化\n分享码 / PDF 能力由报告服务提供",
+          "green"
+        ],
+        [
+          "07  工具结果返回",
+          "对比指标、Markdown 表格、结论\n模型可进一步解读报告",
+          "green"
+        ],
+        [
+          "08  整理最终输出",
+          "工具结果回填模型，可继续调用\n满足任务要求后生成 output",
+          "blue"
+        ],
+        [
+          "09  返回 Supervisor",
+          "官方 A2A 响应 / 任务 / 流\n客户端适配后合并工作流状态",
+          "blue"
+        ]
+      ],
+      "notes": [
+        "报告服务的 generateAiConclusion 为代码规则生成；外层 ReactAgent 的模型解读是另一层。",
+        "虚线表示可多轮工具推理；模型也可直接回答。图中工具是可选分支，不代表每次全部执行。"
+      ],
+      "sources": [
+        "compare-engine-service/src/main/java/com/bkanent/compare/a2a/CompareOfficialA2aAgent.java",
+        "compare-engine-service/src/main/java/com/bkanent/compare/a2a/A2aSupervisorContextInterceptor.java",
+        "compare-engine-service/src/main/java/com/bkanent/compare/tool/CompareTools.java"
+      ],
+      "edges": [
+        [
+          0,
+          1,
+          ""
+        ],
+        [
+          1,
+          2,
+          ""
+        ],
+        [
+          2,
+          3,
+          ""
+        ],
+        [
+          3,
+          4,
+          ""
+        ],
+        [
+          4,
+          5,
+          ""
+        ],
+        [
+          5,
+          6,
+          ""
+        ],
+        [
+          6,
+          7,
+          ""
+        ],
+        [
+          7,
+          8,
+          ""
+        ]
+      ],
+      "loop": true
+    },
+    {
+      "slug": "05-marketing-agent",
+      "title": "营销内容 Agent｜执行流程",
+      "subtitle": "marketing-agent  ·  marketing-content-service  ·  官方 A2A Provider",
+      "nodes": [
+        [
+          "01  接收子任务",
+          "房源 / 文案需求 / 平台\n可选图片与视频 URL",
+          "blue"
+        ],
+        [
+          "02  A2A 上下文注入",
+          "Supervisor metadata → 模型上下文\n任务 / 会话 / 追踪 / 约束 / 预期输出",
+          "blue"
+        ],
+        [
+          "03  ReactAgent 推理",
+          "ChatModel + 领域 systemPrompt\n决定直接回答或调用本地工具",
+          "purple"
+        ],
+        [
+          "04  选择工具",
+          "createMarketingContent\nsearchContents / publishContent\n创建、检索或更新发布状态",
+          "purple"
+        ],
+        [
+          "05  领域服务",
+          "MarketingAssetService\n文案由模型生成后作为工具参数\n维护内容记录与发布状态",
+          "blue"
+        ],
+        [
+          "06  数据与执行",
+          "MySQL 内容与素材关联\n检索可用 Elasticsearch\nES 异常或关闭可回退 MySQL",
+          "green"
+        ],
+        [
+          "07  工具结果返回",
+          "contentId / 内容详情 / 状态\n回传任务结果供后续步骤使用",
+          "green"
+        ],
+        [
+          "08  整理最终输出",
+          "工具结果回填模型，可继续调用\n满足任务要求后生成 output",
+          "blue"
+        ],
+        [
+          "09  返回 Supervisor",
+          "官方 A2A 响应 / 任务 / 流\n客户端适配后合并工作流状态",
+          "blue"
+        ]
+      ],
+      "notes": [
+        "publishContent 仅更新本地状态，不调用真实发布平台；promotion-service 发布通道是独立能力。",
+        "虚线表示可多轮工具推理；模型也可直接回答。图中工具是可选分支，不代表每次全部执行。"
+      ],
+      "sources": [
+        "marketing-content-service/src/main/java/com/bkanent/marketing/a2a/MarketingOfficialA2aAgent.java",
+        "marketing-content-service/src/main/java/com/bkanent/marketing/a2a/A2aSupervisorContextInterceptor.java",
+        "marketing-content-service/src/main/java/com/bkanent/marketing/tool/MarketingTools.java"
+      ],
+      "edges": [
+        [
+          0,
+          1,
+          ""
+        ],
+        [
+          1,
+          2,
+          ""
+        ],
+        [
+          2,
+          3,
+          ""
+        ],
+        [
+          3,
+          4,
+          ""
+        ],
+        [
+          4,
+          5,
+          ""
+        ],
+        [
+          5,
+          6,
+          ""
+        ],
+        [
+          6,
+          7,
+          ""
+        ],
+        [
+          7,
+          8,
+          ""
+        ]
+      ],
+      "loop": true
+    },
+    {
+      "slug": "06-media-agent",
+      "title": "媒体素材 Agent｜执行流程",
+      "subtitle": "media-agent  ·  media-worker-service  ·  官方 A2A Provider",
+      "nodes": [
+        [
+          "01  接收子任务",
+          "listingId + prompt\n或已有媒体 taskId",
+          "blue"
+        ],
+        [
+          "02  A2A 上下文注入",
+          "Supervisor metadata → 模型上下文\n任务 / 会话 / 追踪 / 约束 / 预期输出",
+          "blue"
+        ],
+        [
+          "03  ReactAgent 推理",
+          "ChatModel + 领域 systemPrompt\n决定直接回答或调用本地工具",
+          "purple"
+        ],
+        [
+          "04  选择工具",
+          "submitMediaTask / getTaskResult\n提交任务或查询结果\n提交后返回可跟踪的任务 ID",
+          "purple"
+        ],
+        [
+          "05  领域服务",
+          "MediaGenerationTaskService\n校验 → 创建 QUEUED 任务\n发送 RocketMQ 生成消息",
+          "blue"
+        ],
+        [
+          "06  数据与执行",
+          "消费者 → 图片生成 Provider\n上传 MinIO → 记录成功 / 失败\ncontentId 存在时 Dubbo 回写素材",
+          "green"
+        ],
+        [
+          "07  工具结果返回",
+          "查询任务状态与 assetUrls\n未完成时不等同于素材已生成",
+          "green"
+        ],
+        [
+          "08  整理最终输出",
+          "工具结果回填模型，可继续调用\n满足任务要求后生成 output",
+          "blue"
+        ],
+        [
+          "09  返回 Supervisor",
+          "官方 A2A 响应 / 任务 / 流\n客户端适配后合并工作流状态",
+          "blue"
+        ]
+      ],
+      "notes": [
+        "当前消费者调用 generateListingImages，成功结果 videoUrl 为 null；不能画成已实现的视频流水线。",
+        "虚线表示可多轮工具推理；模型也可直接回答。图中工具是可选分支，不代表每次全部执行。"
+      ],
+      "sources": [
+        "media-worker-service/src/main/java/com/bkanent/media/a2a/MediaOfficialA2aAgent.java",
+        "media-worker-service/src/main/java/com/bkanent/media/a2a/A2aSupervisorContextInterceptor.java",
+        "media-worker-service/src/main/java/com/bkanent/media/tool/MediaTools.java"
+      ],
+      "edges": [
+        [
+          0,
+          1,
+          ""
+        ],
+        [
+          1,
+          2,
+          ""
+        ],
+        [
+          2,
+          3,
+          ""
+        ],
+        [
+          3,
+          4,
+          ""
+        ],
+        [
+          4,
+          5,
+          ""
+        ],
+        [
+          5,
+          6,
+          ""
+        ],
+        [
+          6,
+          7,
+          ""
+        ],
+        [
+          7,
+          8,
+          ""
+        ]
+      ],
+      "loop": true
+    },
+    {
+      "slug": "07-trade-agent",
+      "title": "经营分析 Agent｜执行流程",
+      "subtitle": "trade-agent  ·  business-service  ·  官方 A2A Provider",
+      "nodes": [
+        [
+          "01  接收子任务",
+          "月份 / 门店 / 日期 / 排名范围\n经营问题与分析目标",
+          "blue"
+        ],
+        [
+          "02  A2A 上下文注入",
+          "Supervisor metadata → 模型上下文\n任务 / 会话 / 追踪 / 约束 / 预期输出",
+          "blue"
+        ],
+        [
+          "03  ReactAgent 推理",
+          "ChatModel + 领域 systemPrompt\n决定直接回答或调用本地工具",
+          "purple"
+        ],
+        [
+          "04  选择工具",
+          "月度 KPI / 周转 / 门店看板\nKPI 考核 / 业绩排名 / 日工作量\n共 6 个本地工具",
+          "purple"
+        ],
+        [
+          "05  领域服务",
+          "BusinessAnalyticsService\n读取业务统计并执行指标计算",
+          "blue"
+        ],
+        [
+          "06  数据与执行",
+          "MySQL：KPI 与员工工作量\n房源周转、门店快照等统计数据",
+          "green"
+        ],
+        [
+          "07  工具结果返回",
+          "统计 DTO / 看板 / 排名\nReactAgent 生成经营分析回答",
+          "green"
+        ],
+        [
+          "08  整理最终输出",
+          "工具结果回填模型，可继续调用\n满足任务要求后生成 output",
+          "blue"
+        ],
+        [
+          "09  返回 Supervisor",
+          "官方 A2A 响应 / 任务 / 流\n客户端适配后合并工作流状态",
+          "blue"
+        ]
+      ],
+      "notes": [
+        "trade-agent 的当前官方工具是经营统计；旧 AgentService 的交易可行性逻辑并非官方 Provider 入口。",
+        "虚线表示可多轮工具推理；模型也可直接回答。图中工具是可选分支，不代表每次全部执行。"
+      ],
+      "sources": [
+        "business-service/src/main/java/com/bkanent/business/a2a/TradeOfficialA2aAgent.java",
+        "business-service/src/main/java/com/bkanent/business/a2a/A2aSupervisorContextInterceptor.java",
+        "business-service/src/main/java/com/bkanent/business/tool/TradeTools.java"
+      ],
+      "edges": [
+        [
+          0,
+          1,
+          ""
+        ],
+        [
+          1,
+          2,
+          ""
+        ],
+        [
+          2,
+          3,
+          ""
+        ],
+        [
+          3,
+          4,
+          ""
+        ],
+        [
+          4,
+          5,
+          ""
+        ],
+        [
+          5,
+          6,
+          ""
+        ],
+        [
+          6,
+          7,
+          ""
+        ],
+        [
+          7,
+          8,
+          ""
+        ]
+      ],
+      "loop": true
+    },
+    {
+      "slug": "08-contract-agent",
+      "title": "合同审查 Agent｜执行流程",
+      "subtitle": "contract-agent  ·  contract-service  ·  官方 A2A Provider",
+      "nodes": [
+        [
+          "01  接收子任务",
+          "contractId 或类型 / 状态\n合同审查问题与约束",
+          "blue"
+        ],
+        [
+          "02  A2A 上下文注入",
+          "Supervisor metadata → 模型上下文\n任务 / 会话 / 追踪 / 约束 / 预期输出",
+          "blue"
+        ],
+        [
+          "03  ReactAgent 推理",
+          "ChatModel + 领域 systemPrompt\n决定直接回答或调用本地工具",
+          "purple"
+        ],
+        [
+          "04  选择工具",
+          "getContractDetail / listContracts\nreviewContractRisks\n读取合同与规则风险检查",
+          "purple"
+        ],
+        [
+          "05  领域服务",
+          "ContractManagementService\n获取状态、附件、OCR 摘要\n工具层检查盖章、归档等风险",
+          "blue"
+        ],
+        [
+          "06  数据与执行",
+          "MySQL：合同与附件记录\n风险依据：印章 / 归档 / OCR\n以及附件数量",
+          "green"
+        ],
+        [
+          "07  工具结果返回",
+          "风险标记与合同详情\nReactAgent 给出解释与建议",
+          "green"
+        ],
+        [
+          "08  整理最终输出",
+          "工具结果回填模型，可继续调用\n满足任务要求后生成 output",
+          "blue"
+        ],
+        [
+          "09  返回 Supervisor",
+          "官方 A2A 响应 / 任务 / 流\n客户端适配后合并工作流状态",
+          "blue"
+        ]
+      ],
+      "notes": [
+        "官方 ContractTools 没有签章工具；电子签章 Provider 属于合同管理 API 的其他业务能力。",
+        "虚线表示可多轮工具推理；模型也可直接回答。图中工具是可选分支，不代表每次全部执行。"
+      ],
+      "sources": [
+        "contract-service/src/main/java/com/bkanent/contract/a2a/ContractOfficialA2aAgent.java",
+        "contract-service/src/main/java/com/bkanent/contract/a2a/A2aSupervisorContextInterceptor.java",
+        "contract-service/src/main/java/com/bkanent/contract/tool/ContractTools.java"
+      ],
+      "edges": [
+        [
+          0,
+          1,
+          ""
+        ],
+        [
+          1,
+          2,
+          ""
+        ],
+        [
+          2,
+          3,
+          ""
+        ],
+        [
+          3,
+          4,
+          ""
+        ],
+        [
+          4,
+          5,
+          ""
+        ],
+        [
+          5,
+          6,
+          ""
+        ],
+        [
+          6,
+          7,
+          ""
+        ],
+        [
+          7,
+          8,
+          ""
+        ]
+      ],
+      "loop": true
+    },
+    {
+      "slug": "09-settlement-agent",
+      "title": "佣金结算 Agent｜执行流程",
+      "subtitle": "settlement-agent  ·  settlement-service  ·  官方 A2A Provider",
+      "nodes": [
+        [
+          "01  接收子任务",
+          "员工 / 合同 / 房源 / 成交金额\n月份与汇总范围",
+          "blue"
+        ],
+        [
+          "02  A2A 上下文注入",
+          "Supervisor metadata → 模型上下文\n任务 / 会话 / 追踪 / 约束 / 预期输出",
+          "blue"
+        ],
+        [
+          "03  ReactAgent 推理",
+          "ChatModel + 领域 systemPrompt\n决定直接回答或调用本地工具",
+          "purple"
+        ],
+        [
+          "04  选择工具",
+          "getSettlementDetail\ncalculateSettlement / getMonthlySummary\ncreatePayoutBatch",
+          "purple"
+        ],
+        [
+          "05  领域服务",
+          "SettlementManagementService\n佣金计算、分佣、月度汇总\n或创建发放批次",
+          "blue"
+        ],
+        [
+          "06  数据与执行",
+          "MySQL：规则与阶梯\n结算、分佣、月汇总、发放批次",
+          "green"
+        ],
+        [
+          "07  工具结果返回",
+          "结算明细 / 汇总 / 批次结果\n模型解释计算与处理结果",
+          "green"
+        ],
+        [
+          "08  整理最终输出",
+          "工具结果回填模型，可继续调用\n满足任务要求后生成 output",
+          "blue"
+        ],
+        [
+          "09  返回 Supervisor",
+          "官方 A2A 响应 / 任务 / 流\n客户端适配后合并工作流状态",
+          "blue"
+        ]
+      ],
+      "notes": [
+        "创建发放批次不等于完成真实银行付款；审批由 Supervisor 的规划与审批路径负责。",
+        "虚线表示可多轮工具推理；模型也可直接回答。图中工具是可选分支，不代表每次全部执行。"
+      ],
+      "sources": [
+        "settlement-service/src/main/java/com/bkanent/settlement/a2a/SettlementOfficialA2aAgent.java",
+        "settlement-service/src/main/java/com/bkanent/settlement/a2a/A2aSupervisorContextInterceptor.java",
+        "settlement-service/src/main/java/com/bkanent/settlement/tool/SettlementTools.java"
+      ],
+      "edges": [
+        [
+          0,
+          1,
+          ""
+        ],
+        [
+          1,
+          2,
+          ""
+        ],
+        [
+          2,
+          3,
+          ""
+        ],
+        [
+          3,
+          4,
+          ""
+        ],
+        [
+          4,
+          5,
+          ""
+        ],
+        [
+          5,
+          6,
+          ""
+        ],
+        [
+          6,
+          7,
+          ""
+        ],
+        [
+          7,
+          8,
+          ""
+        ]
+      ],
+      "loop": true
+    },
+    {
+      "slug": "10-notification-agent",
+      "title": "消息通知 Agent｜执行流程",
+      "subtitle": "notification-agent  ·  notification-service  ·  官方 A2A Provider",
+      "nodes": [
+        [
+          "01  接收子任务",
+          "收件用户 / 标题 / 内容\n邮件还需要 receiverAddress",
+          "blue"
+        ],
+        [
+          "02  A2A 上下文注入",
+          "Supervisor metadata → 模型上下文\n任务 / 会话 / 追踪 / 约束 / 预期输出",
+          "blue"
+        ],
+        [
+          "03  ReactAgent 推理",
+          "ChatModel + 领域 systemPrompt\n决定直接回答或调用本地工具",
+          "purple"
+        ],
+        [
+          "04  选择工具",
+          "sendStationMessage / sendEmailMessage\nlistUserMessages / countUnreadMessages\n发送、查询或统计",
+          "purple"
+        ],
+        [
+          "05  领域服务",
+          "NotificationManagementService\n按站内信 / 邮件通道分发\n返回消息 ID 或查询结果",
+          "blue"
+        ],
+        [
+          "06  数据与执行",
+          "MySQL 通知记录\n邮件：按集成模式选择 Provider\n真实发送依赖外部接口配置",
+          "green"
+        ],
+        [
+          "07  工具结果返回",
+          "消息 ID / 消息列表 / 未读数\n由 ReactAgent 回传结果",
+          "green"
+        ],
+        [
+          "08  整理最终输出",
+          "工具结果回填模型，可继续调用\n满足任务要求后生成 output",
+          "blue"
+        ],
+        [
+          "09  返回 Supervisor",
+          "官方 A2A 响应 / 任务 / 流\n客户端适配后合并工作流状态",
+          "blue"
+        ]
+      ],
+      "notes": [
+        "另有独立 RocketMQ 工作流事件消费者：筛选、去重、重试、死信；这条链不经过 ReactAgent。",
+        "虚线表示可多轮工具推理；模型也可直接回答。图中工具是可选分支，不代表每次全部执行。"
+      ],
+      "sources": [
+        "notification-service/src/main/java/com/bkanent/notification/a2a/NotificationOfficialA2aAgent.java",
+        "notification-service/src/main/java/com/bkanent/notification/a2a/A2aSupervisorContextInterceptor.java",
+        "notification-service/src/main/java/com/bkanent/notification/tool/NotificationTools.java"
+      ],
+      "edges": [
+        [
+          0,
+          1,
+          ""
+        ],
+        [
+          1,
+          2,
+          ""
+        ],
+        [
+          2,
+          3,
+          ""
+        ],
+        [
+          3,
+          4,
+          ""
+        ],
+        [
+          4,
+          5,
+          ""
+        ],
+        [
+          5,
+          6,
+          ""
+        ],
+        [
+          6,
+          7,
+          ""
+        ],
+        [
+          7,
+          8,
+          ""
+        ]
+      ],
+      "loop": true
+    },
+    {
+      "slug": "11-approval-resume",
+      "title": "审批与恢复｜暂停、决策、继续",
+      "subtitle": "审批是 Supervisor Graph 的控制节点；与外部业务 Provider 的执行状态分开",
+      "nodes": [
+        [
+          "ROUTE 判定需审批",
+          "规划结果 requireApproval\n进入 APPROVAL_GATE",
+          "purple"
+        ],
+        [
+          "构造审批与检查点",
+          "记录 pendingApproval 与图状态\n等待用户决策",
+          "green"
+        ],
+        [
+          "审批回调",
+          "/supervisor/approvals/callback\napproved / rejected / terminated",
+          "orange"
+        ],
+        [
+          "校验与决策写回",
+          "检查待审批工作流与决策\n审批 claim / 防重复恢复",
+          "blue"
+        ],
+        [
+          "RESUME_DECISION",
+          "根据恢复动作选择分支\n不重新盲目执行已完成步骤",
+          "purple"
+        ],
+        [
+          "继续执行",
+          "single / parallel\n恢复对应执行路径",
+          "blue"
+        ],
+        [
+          "重新规划",
+          "regenerate → PLAN\n携带审批反馈重新生成计划",
+          "orange"
+        ],
+        [
+          "终止或失败",
+          "cancel → CANCELED\n无效恢复动作 → FAILED",
+          "orange"
+        ],
+        [
+          "结果持久化与反馈",
+          "检查点 / 审计 / 工作流状态\n通过查询或 SSE 呈现",
+          "green"
+        ]
+      ],
+      "notes": [
+        "中间决策向不同分支跳转：继续、重新规划、终止/失败；不是顺序执行三个分支。",
+        "图展示已有控制结构，不代表所有写操作都自动触发审批；是否审批取决于规划和路由结果。"
+      ],
+      "sources": [
+        "agent-service/src/main/java/com/bkanent/agent/graph/official/OfficialSupervisorGraphFactory.java",
+        "agent-service/src/main/java/com/bkanent/agent/graph/official/OfficialApprovalDecisionGraphFactory.java",
+        "sql/migrations/20260918_agent_workflow_approval_claim.sql"
+      ],
+      "edges": [
+        [
+          0,
+          1,
+          ""
+        ],
+        [
+          1,
+          2,
+          "等待"
+        ],
+        [
+          2,
+          3,
+          ""
+        ],
+        [
+          3,
+          4,
+          ""
+        ],
+        [
+          4,
+          5,
+          "继续"
+        ],
+        [
+          4,
+          7,
+          "终止 / 失败"
+        ],
+        [
+          4,
+          6,
+          "重新规划"
+        ],
+        [
+          7,
+          8,
+          "写回"
+        ]
+      ],
+      "loop": false
+    },
+    {
+      "slug": "12-data-flow",
+      "title": "数据流｜请求、上下文、产物与记忆",
+      "subtitle": "关联主键：userId · sessionId · taskId · traceId · artifactId",
+      "nodes": [
+        [
+          "用户请求",
+          "消息、业务参数与身份\nController 校验及权限控制",
+          "blue"
+        ],
+        [
+          "Supervisor 上下文",
+          "读取会话 / 偏好 / 约束\n合成计划与共享工作流状态",
+          "purple"
+        ],
+        [
+          "A2A 子任务载荷",
+          "用户消息 + metadata\n上下文、约束、预期输出",
+          "blue"
+        ],
+        [
+          "领域 Agent 与工具",
+          "模型选择本地工具\n工具参数 → 业务操作",
+          "blue"
+        ],
+        [
+          "业务数据库 / 外部接口",
+          "结构化实体与业务 DTO\n媒体文件进入对象存储",
+          "green"
+        ],
+        [
+          "官方 A2A 返回",
+          "Message / Task / Artifact / 事件\n客户端映射内部调用结果",
+          "blue"
+        ],
+        [
+          "Supervisor 合并",
+          "结构化输出与产物引用\n为下一 Agent 构造最小上下文",
+          "purple"
+        ],
+        [
+          "状态与共享记忆",
+          "agent DB：检查点、异步、审计\nmemory-service：会话、产物、交接",
+          "green"
+        ],
+        [
+          "用户输出 / 下一步骤",
+          "最终回答、产物引用、状态\n查询 API / SSE / handoff",
+          "blue"
+        ]
+      ],
+      "notes": [
+        "memory-service 通过 HTTP 接入，实体由 MyBatis 写入 MySQL；向量记忆属于独立 Milvus 能力。",
+        "产物 ID 与业务内容 ID、媒体 taskId 是不同标识；上游 handoff 可优先携带产物引用。"
+      ],
+      "sources": [
+        "agent-service/src/main/java/com/bkanent/agent/client/OfficialA2aAgentClient.java",
+        "agent-service/src/main/java/com/bkanent/agent/memory/HttpMemoryStoreClient.java",
+        "memory-service/src/main/java/com/bkanent/memory/controller/MemoryController.java"
+      ],
+      "edges": [
+        [
+          0,
+          1,
+          ""
+        ],
+        [
+          1,
+          2,
+          ""
+        ],
+        [
+          2,
+          3,
+          ""
+        ],
+        [
+          3,
+          4,
+          ""
+        ],
+        [
+          4,
+          5,
+          ""
+        ],
+        [
+          5,
+          6,
+          ""
+        ],
+        [
+          6,
+          7,
+          ""
+        ],
+        [
+          7,
+          8,
+          ""
+        ]
+      ],
+      "loop": false
+    },
+    {
+      "slug": "13-rag-flow",
+      "title": "RAG｜房源索引与混合检索",
+      "subtitle": "agent-service 独立检索能力；并非 Listing ReactAgent 每次必经路径",
+      "nodes": [
+        [
+          "索引入口",
+          "POST /agent/rag/listings/index\n按房源 ID 读取权威数据",
+          "blue"
+        ],
+        [
+          "文档与向量",
+          "ListingMasterRpcService → 文本\nEmbedding 模型生成向量",
+          "blue"
+        ],
+        [
+          "Milvus 房源集合",
+          "房源文本 / sourceId / metadata\n向量索引持久化",
+          "green"
+        ],
+        [
+          "查询入口",
+          "POST /agent/rag/listings/query\n查询文本、结构化过滤与 topK",
+          "blue"
+        ],
+        [
+          "双路召回",
+          "关键词：Dubbo → ES / MySQL\n向量：Embedding → Milvus",
+          "purple"
+        ],
+        [
+          "候选合并与过滤",
+          "以房源 ID 合并候选\n结构化条件与相似度阈值",
+          "blue"
+        ],
+        [
+          "Rerank 重排",
+          "ListingRerankService\n按配置调用重排模型",
+          "purple"
+        ],
+        [
+          "构建证据上下文",
+          "排序后的房源与分数\n拼接 context 和 matches",
+          "blue"
+        ],
+        [
+          "返回 RAG 响应",
+          "检索结果供调用方使用\n回答生成由上层入口决定",
+          "blue"
+        ]
+      ],
+      "notes": [
+        "上排为索引写入链；第二、三排为查询链。查询读 Milvus，不要求每次先重新索引。",
+        "当前 Nacos 模板重排模型默认 qwen3-rerank；具体模型和降级行为由配置与实现决定。"
+      ],
+      "sources": [
+        "agent-service/src/main/java/com/bkanent/agent/milvus/listing/ListingMilvusService.java",
+        "agent-service/src/main/java/com/bkanent/agent/milvus/listing/BgeRerankService.java",
+        "nacos/agent-service.yaml"
+      ],
+      "edges": [
+        [
+          0,
+          1,
+          ""
+        ],
+        [
+          1,
+          2,
+          "写入"
+        ],
+        [
+          3,
+          4,
+          "查询"
+        ],
+        [
+          4,
+          5,
+          "合并"
+        ],
+        [
+          5,
+          6,
+          ""
+        ],
+        [
+          6,
+          7,
+          ""
+        ],
+        [
+          7,
+          8,
+          ""
+        ]
+      ],
+      "loop": false
+    },
+    {
+      "slug": "14-async-events",
+      "title": "异步与事件｜任务执行、流式反馈、通知",
+      "subtitle": "三种异步机制分别承担：Supervisor 调度、会话事件、媒体任务",
+      "nodes": [
+        [
+          "Supervisor 异步请求",
+          "创建 task / workflow\n立即返回标识供查询",
+          "blue"
+        ],
+        [
+          "数据库任务队列",
+          "持久化状态、attempt、lease\nDispatcher 领取与并发限制",
+          "green"
+        ],
+        [
+          "执行官方 Graph / A2A",
+          "完成、失败、重试或取消\n更新异步任务与工作流状态",
+          "purple"
+        ],
+        [
+          "SessionStreamEvent",
+          "任务进度 / 审批 / 产物 / 完成\n附带 sessionId、taskId、traceId",
+          "blue"
+        ],
+        [
+          "会话事件总线",
+          "默认 memory；可选 RocketMQ\n跨实例行为依 provider 配置",
+          "orange"
+        ],
+        [
+          "用户 SSE 与事件审计",
+          "订阅会话 / 异步任务事件\n保留诊断与审计信息",
+          "blue"
+        ],
+        [
+          "通知事件消费",
+          "RocketMQ 工作流事件\n事件筛选、去重、重试、死信",
+          "blue"
+        ],
+        [
+          "站内通知持久化",
+          "NotificationManagementService\n通知记录与消费结果",
+          "green"
+        ],
+        [
+          "独立媒体队列",
+          "media_generate_task → Worker\n图片 Provider → MinIO → 状态",
+          "green"
+        ]
+      ],
+      "notes": [
+        "默认 stream.provider=memory；不能把跨服务 RocketMQ 通知画成所有环境默认启用。",
+        "媒体队列独立于 Supervisor 数据库调度；媒体执行细节见图 06。"
+      ],
+      "sources": [
+        "agent-service/src/main/java/com/bkanent/agent/service/SupervisorAsyncRuntimeDispatcher.java",
+        "agent-service/src/main/java/com/bkanent/agent/stream/RocketMqSessionEventBus.java",
+        "notification-service/src/main/java/com/bkanent/notification/service/NotificationWorkflowEventService.java",
+        "nacos/agent-service.yaml"
+      ],
+      "edges": [
+        [
+          0,
+          1,
+          ""
+        ],
+        [
+          1,
+          2,
+          "领取"
+        ],
+        [
+          2,
+          3,
+          "发布"
+        ],
+        [
+          3,
+          4,
+          ""
+        ],
+        [
+          4,
+          5,
+          "订阅"
+        ],
+        [
+          4,
+          6,
+          "需 MQ"
+        ],
+        [
+          6,
+          7,
+          "发送"
+        ]
+      ],
+      "loop": false
+    },
+    {
+      "slug": "15-skills-tools",
+      "title": "Skills 与工具｜当前接入边界",
+      "subtitle": "区分已接入的 Supervisor Skills、官方 ReactAgent 工具与独立 MCP 通道",
+      "nodes": [
+        [
+          "Skill 文件",
+          "classpath / 外部目录\n声明领域、匹配规则、工具等",
+          "blue"
+        ],
+        [
+          "加载与注册",
+          "SkillFileLoader → SkillRegistry\n按名称、领域维护索引",
+          "blue"
+        ],
+        [
+          "Supervisor 匹配",
+          "SkillMatchNode / SupervisorSkillService\n为规划提供可用能力信息",
+          "purple"
+        ],
+        [
+          "官方子 Agent Provider",
+          "ReactAgent.builder\nsystemPrompt + ChatModel",
+          "purple"
+        ],
+        [
+          "本地工具绑定",
+          "MethodToolCallbackProvider\n直接绑定领域 *Tools 对象",
+          "blue"
+        ],
+        [
+          "领域 Service",
+          "@Tool 调用领域服务\n返回 DTO / ID / 状态",
+          "blue"
+        ],
+        [
+          "独立 MCP 通道",
+          "agent-service MCP 客户端\n发现服务器工具、对话调用",
+          "blue"
+        ],
+        [
+          "业务 MCP Server",
+          "各业务模块 *McpTools\n工具能力与本地 Tools 未必相同",
+          "blue"
+        ],
+        [
+          "尚未接入的辅助类",
+          "SubAgentSkillSupport 已存在\n未见 8 个官方 Provider 引用",
+          "orange"
+        ]
+      ],
+      "notes": [
+        "上排是 Supervisor Skills 路径，中排是子 Agent 官方工具路径，底排展示独立能力及未接入边界。",
+        "不要把 SubAgentSkillSupport 的设计能力视为所有官方子 Agent 已启用的动态 Skills 机制。"
+      ],
+      "sources": [
+        "agent-service/src/main/java/com/bkanent/agent/skill/SkillFileLoader.java",
+        "agent-service/src/main/java/com/bkanent/agent/graph/node/SkillMatchNode.java",
+        "agent-service/src/main/java/com/bkanent/agent/skill/SubAgentSkillSupport.java",
+        "contract-service/src/main/java/com/bkanent/contract/a2a/ContractOfficialA2aAgent.java"
+      ],
+      "edges": [
+        [
+          0,
+          1,
+          ""
+        ],
+        [
+          1,
+          2,
+          ""
+        ],
+        [
+          3,
+          4,
+          "绑定"
+        ],
+        [
+          4,
+          5,
+          "调用"
+        ],
+        [
+          6,
+          7,
+          "MCP"
+        ]
+      ],
+      "loop": false
+    },
+    {
+      "slug": "16-system-overview",
+      "title": "全系统总览｜房地产中台多 Agent 系统",
+      "subtitle": "入口 → 编排 → 领域智能体 → 业务执行；共享状态、检索与事件提供支撑",
+      "nodes": [
+        [
+          "用户与统一入口",
+          "前端 / HTTP / SSE\ngateway → auth-service",
+          "blue"
+        ],
+        [
+          "Supervisor · agent-service",
+          "Graph：规划、路由、并行、交接\n审批恢复、异步调度、权限治理",
+          "purple"
+        ],
+        [
+          "A2A · 8 个 ReactAgent",
+          "listing / compare / marketing / media\ntrade / contract / settlement / notification",
+          "purple"
+        ],
+        [
+          "领域工具与业务服务",
+          "本地 @Tool → 领域 Service\n另有 REST、MCP、Dubbo 入口",
+          "blue"
+        ],
+        [
+          "数据与业务集成",
+          "MySQL / Elasticsearch / MinIO\ncustomer / promotion 支撑业务\n签章、媒体、邮件、平台 Provider",
+          "green"
+        ],
+        [
+          "共享状态与记忆",
+          "memory-service：会话 / 产物 / 交接\nagent DB：检查点 / 异步 / 审计\nHTTP 共享记忆访问",
+          "green"
+        ],
+        [
+          "检索与模型",
+          "RAG：关键词 + Milvus + 重排\nDeepSeek ChatModel / Embedding\n模型与 Provider 均受配置控制",
+          "purple"
+        ],
+        [
+          "事件与反馈",
+          "SSE + 可选 RocketMQ 会话总线\n通知消费 / 独立媒体生成队列\nRedis：可选限流等基础能力",
+          "green"
+        ],
+        [
+          "配置与公共基础",
+          "Nacos：配置与服务发现\ncommon：公共 DTO / RPC 契约\ncommon-config-manager：配置支持",
+          "blue"
+        ]
+      ],
+      "notes": [
+        "实线为主要业务调用，虚线为支撑关系；下方与左侧是配套能力，不代表顺序执行。",
+        "当前实现边界：发布状态更新 ≠ 外部发布；媒体 Worker 生成图片；图基于源码而非运行环境验收。"
+      ],
+      "sources": [
+        "pom.xml",
+        "agent-service/src/main/java/com/bkanent/agent/graph/official/OfficialSupervisorGraphFactory.java",
+        "nacos/agent-service.yaml",
+        "memory-service/src/main/java/com/bkanent/memory/controller/MemoryController.java"
+      ],
+      "edges": [
+        [
+          0,
+          1,
+          "HTTP"
+        ],
+        [
+          1,
+          2,
+          "官方 A2A"
+        ],
+        [
+          2,
+          3,
+          "本地工具"
+        ],
+        [
+          3,
+          4,
+          "读写 / 集成"
+        ]
+      ],
+      "loop": false
+    }
+  ],
+  "source_sha256": {
+    "pom.xml": "082d7dbb095a341c7edc00f7842a1b5c26e02694754542ad678d7ee2f490a50c",
+    "gateway/src/main/resources/application.yml": "1b9ff88b1c4b0b39b0fe7d9bc71a19e1c42950953ff2e86f476fb3fd3c457bb2",
+    "nacos/agent-service.yaml": "b37285b706a801ffbb1e622278c2cb46e2d05a29354dc4e3698fdf5b24fd2f16",
+    "agent-service/src/main/java/com/bkanent/agent/graph/official/OfficialSupervisorGraphFactory.java": "4ebbb295826033f092ee2ff7cbf01810adf5f33456b34f317c34d6fc259bb573",
+    "agent-service/src/main/java/com/bkanent/agent/service/A2aExecutionService.java": "fd5847a8e461cd4318e9180710aa31dccad14f26a8ec15d3644aad4b87db4675",
+    "listing-master-service/src/main/java/com/bkanent/listing/a2a/ListingOfficialA2aAgent.java": "a8bebee72f58d46133b64b335be8d48a95a7718d7b32e350ed78306aaf561e1e",
+    "listing-master-service/src/main/java/com/bkanent/listing/a2a/A2aSupervisorContextInterceptor.java": "ba23b8cc76f0dc4fb07a43e160acecbce08c3323773a1e0990f2884fdf87cd9c",
+    "listing-master-service/src/main/java/com/bkanent/listing/tool/ListingTools.java": "6b8b372822e6e47aa8148a3c25d515ed34b5a531e81019bfe932b94da168f8a2",
+    "compare-engine-service/src/main/java/com/bkanent/compare/a2a/CompareOfficialA2aAgent.java": "6fe166ec995810fb7d444c09ba2901cc7ae41b13b138a6782aa034653e39bf20",
+    "compare-engine-service/src/main/java/com/bkanent/compare/a2a/A2aSupervisorContextInterceptor.java": "fe256e853892278e3e661d352afa0d6e680ba4e95c4439d79a2424feb0ee3dd1",
+    "compare-engine-service/src/main/java/com/bkanent/compare/tool/CompareTools.java": "06e319bd431d61b85edc85538c3f5f073c4c3c5a6f2c46ffa33b84ba496dbb5d",
+    "marketing-content-service/src/main/java/com/bkanent/marketing/a2a/MarketingOfficialA2aAgent.java": "5a514b9b2ce34f32c14be096532f33c5b441d7ff208d38592e14741429560913",
+    "marketing-content-service/src/main/java/com/bkanent/marketing/a2a/A2aSupervisorContextInterceptor.java": "9bf5206632bedd314fd5f57b652a7f7966de20e84ca7c14e86bb26fb2ef79ba2",
+    "marketing-content-service/src/main/java/com/bkanent/marketing/tool/MarketingTools.java": "cdc27adaef31630c98995052801f46ba878aa867bb578cfb59f59f897dc80ba4",
+    "media-worker-service/src/main/java/com/bkanent/media/a2a/MediaOfficialA2aAgent.java": "e4fba0006a53c159034915c453300a025d8d4119136b56593079fe9bc98ed362",
+    "media-worker-service/src/main/java/com/bkanent/media/a2a/A2aSupervisorContextInterceptor.java": "e653be1076e1fef3ef66ca02e2d52ccda9e35a90658f1fcc4743c87d630162dc",
+    "media-worker-service/src/main/java/com/bkanent/media/tool/MediaTools.java": "72ef0272f62228abc74f39422a5889e21f7680fefb47597ee177cccc179155ca",
+    "business-service/src/main/java/com/bkanent/business/a2a/TradeOfficialA2aAgent.java": "511b9cce3ae08a2309f9bd7fa974c315f600db89f8981001deb345de54a104da",
+    "business-service/src/main/java/com/bkanent/business/a2a/A2aSupervisorContextInterceptor.java": "0a1cffc7922c205f74db4f25fd11ab325c4bcbf23283e8863aec341c8cb0bfed",
+    "business-service/src/main/java/com/bkanent/business/tool/TradeTools.java": "c54ad715cc4c591289331c066a906d8e105ec599540d78b476676e034f5d638d",
+    "contract-service/src/main/java/com/bkanent/contract/a2a/ContractOfficialA2aAgent.java": "c69e5f577bee287835789de04b496ecb15d06313f3797ebd1d0a828a81df0a46",
+    "contract-service/src/main/java/com/bkanent/contract/a2a/A2aSupervisorContextInterceptor.java": "b5ee26581f9b90281358bc292d17a56514bd80344cff2852d413848cd232b5c8",
+    "contract-service/src/main/java/com/bkanent/contract/tool/ContractTools.java": "b2f081e106f2fc6490337a086efdab96dfe9129f7d5b2cc5588091983ecef70b",
+    "settlement-service/src/main/java/com/bkanent/settlement/a2a/SettlementOfficialA2aAgent.java": "77091727da5c056e63fe8f6c5a667fb1dacbe419500ae042eda55b78cf5c0880",
+    "settlement-service/src/main/java/com/bkanent/settlement/a2a/A2aSupervisorContextInterceptor.java": "300bb85e3fb649dc84f0142a90e542f45778222a444b0700e01be64e691fb801",
+    "settlement-service/src/main/java/com/bkanent/settlement/tool/SettlementTools.java": "59d22a17d786f3b1f33e2369fed60cdd110d44e4e7cb3c13c825160505ff074f",
+    "notification-service/src/main/java/com/bkanent/notification/a2a/NotificationOfficialA2aAgent.java": "31d9b742bad5c65d78f2b2a57e2e702f9aac13bfb940424466059469d8467afd",
+    "notification-service/src/main/java/com/bkanent/notification/a2a/A2aSupervisorContextInterceptor.java": "eb2ee1757dc98fcb4a9b310ebefafe9c4e43783f1e32d5c807c917301896439b",
+    "notification-service/src/main/java/com/bkanent/notification/tool/NotificationTools.java": "db2f605156b7d0ffb5fe1260b5f9cdeaa56115faa3ada5a3a338421cd5b41418",
+    "agent-service/src/main/java/com/bkanent/agent/graph/official/OfficialApprovalDecisionGraphFactory.java": "13fd7ef607976fc3f3731c5a8460c1efd5d8a005e6e45225dccae13aa1413fdd",
+    "sql/migrations/20260918_agent_workflow_approval_claim.sql": "bc9aeb3af434362c084aa1df5aeebd04377a361d97f53465476ce5517f472a31",
+    "agent-service/src/main/java/com/bkanent/agent/client/OfficialA2aAgentClient.java": "260f3220a1dc90ad38b223f082fcf8d6d81f476a3a9b8d60e6d0ee025ef2348b",
+    "agent-service/src/main/java/com/bkanent/agent/memory/HttpMemoryStoreClient.java": "cb825f8a5526a6aa326f07b46377da03287c1d9d9a36925ece997bfc3fda12e8",
+    "memory-service/src/main/java/com/bkanent/memory/controller/MemoryController.java": "00068d5d102ee1b0de1fe94146e599e8a2322c0adb0c04bcd8d32856934280eb",
+    "agent-service/src/main/java/com/bkanent/agent/milvus/listing/ListingMilvusService.java": "775afd9e379302b25ab8979b9a8ce02d1e401970908587f5c874d9fe2512a856",
+    "agent-service/src/main/java/com/bkanent/agent/milvus/listing/BgeRerankService.java": "6dc2c3e9d11a54f9a29fd0677cb28b3425810a29bd8d10f5b924829336ae8d5a",
+    "agent-service/src/main/java/com/bkanent/agent/service/SupervisorAsyncRuntimeDispatcher.java": "fe22176bdcf68b980de97464cd0a8175c75c44769af4bd8b7afede5cb25e6d41",
+    "agent-service/src/main/java/com/bkanent/agent/stream/RocketMqSessionEventBus.java": "f93685136d2e706f50e9727d3ce045632251d764eb50133d6cc933133e9d1ec7",
+    "notification-service/src/main/java/com/bkanent/notification/service/NotificationWorkflowEventService.java": "169bbfc42160cc12e95d637c91f475fa27895e7bba83700c7c19bebf9a052d2f",
+    "agent-service/src/main/java/com/bkanent/agent/skill/SkillFileLoader.java": "327b07a7af70dcf38f32e03d33b452ab0f959a7a21c5215cb012e955644febab",
+    "agent-service/src/main/java/com/bkanent/agent/graph/node/SkillMatchNode.java": "d0facd489abe2113e7b18fc0284ebd6fc9c90ca80525b2dad5c201ac7699968a",
+    "agent-service/src/main/java/com/bkanent/agent/skill/SubAgentSkillSupport.java": "bdda2b066737e1bcbfae8030adf7e20e349b636b3e350280092f827c7c91f2c1"
+  }
+}

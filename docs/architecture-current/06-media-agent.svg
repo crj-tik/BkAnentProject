@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1220" viewBox="0 0 1800 1220">
+<rect width="1800" height="1220" fill="#f3f6fa"/>
+<rect x="60" y="48" width="8" height="98" rx="3" fill="#336ddd" stroke="#336ddd" stroke-width="2"/>
+<text x="90" y="91" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="43" font-weight="700">媒体素材 Agent｜执行流程</text>
+<text x="90" y="140" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400">media-agent  ·  media-worker-service  ·  官方 A2A Provider</text>
+<polyline points="560,320 665,320" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="665,320 653.2941876694152,325.654551943446 653.2941876694152,314.345448056554" fill="#52677d"/>
+<polyline points="1135,320 1240,320" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="1240,320 1228.2941876694151,325.654551943446 1228.2941876694151,314.345448056554" fill="#52677d"/>
+<polyline points="1475,410 1475,500" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="1475,500 1469.345448056554,488.2941876694152 1480.654551943446,488.2941876694152" fill="#52677d"/>
+<polyline points="1240,590 1135,590" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="1135,590 1146.7058123305849,584.345448056554 1146.7058123305849,595.654551943446" fill="#52677d"/>
+<polyline points="665,590 560,590" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="560,590 571.7058123305848,584.345448056554 571.7058123305848,595.654551943446" fill="#52677d"/>
+<polyline points="325,680 325,770" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="325,770 319.345448056554,758.2941876694152 330.654551943446,758.2941876694152" fill="#52677d"/>
+<polyline points="560,860 665,860" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="665,860 653.2941876694152,865.654551943446 653.2941876694152,854.345448056554" fill="#52677d"/>
+<polyline points="1135,860 1240,860" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="1240,860 1228.2941876694151,865.654551943446 1228.2941876694151,854.345448056554" fill="#52677d"/>
+<polyline points="90,860 35,860 35,185 1765,185 1765,320 1710,320" fill="none" stroke="#8652be" stroke-width="3" stroke-dasharray="9 9"/>
+<polygon points="1710,320 1721.7058123305849,314.345448056554 1721.7058123305849,325.654551943446" fill="#8652be"/>
+<text x="715" y="176" fill="#8652be" font-family="Microsoft YaHei, sans-serif" font-size="19" font-weight="400">可继续工具推理：结果回填模型</text>
+<rect x="90" y="230" width="470" height="180" rx="16" fill="#eaf1ff" stroke="#336ddd" stroke-width="2"/>
+<text x="112" y="274" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">01  接收子任务</text>
+<text x="112" y="317" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">listingId + prompt</text>
+<text x="112" y="343" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">或已有媒体 taskId</text>
+<rect x="665" y="230" width="470" height="180" rx="16" fill="#eaf1ff" stroke="#336ddd" stroke-width="2"/>
+<text x="687" y="274" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">02  A2A 上下文注入</text>
+<text x="687" y="317" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">Supervisor metadata → 模型上下文</text>
+<text x="687" y="343" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">任务 / 会话 / 追踪 / 约束 / 预期输出</text>
+<rect x="1240" y="230" width="470" height="180" rx="16" fill="#f1eaff" stroke="#8652be" stroke-width="2"/>
+<text x="1262" y="274" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">03  ReactAgent 推理</text>
+<text x="1262" y="317" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">ChatModel + 领域 systemPrompt</text>
+<text x="1262" y="343" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">决定直接回答或调用本地工具</text>
+<rect x="1240" y="500" width="470" height="180" rx="16" fill="#f1eaff" stroke="#8652be" stroke-width="2"/>
+<text x="1262" y="544" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">04  选择工具</text>
+<text x="1262" y="587" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">submitMediaTask / getTaskResult</text>
+<text x="1262" y="613" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">提交任务或查询结果</text>
+<text x="1262" y="639" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">提交后返回可跟踪的任务 ID</text>
+<rect x="665" y="500" width="470" height="180" rx="16" fill="#eaf1ff" stroke="#336ddd" stroke-width="2"/>
+<text x="687" y="544" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">05  领域服务</text>
+<text x="687" y="587" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">MediaGenerationTaskService</text>
+<text x="687" y="613" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">校验 → 创建 QUEUED 任务</text>
+<text x="687" y="639" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">发送 RocketMQ 生成消息</text>
+<rect x="90" y="500" width="470" height="180" rx="16" fill="#e5f5ef" stroke="#168568" stroke-width="2"/>
+<text x="112" y="544" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">06  数据与执行</text>
+<text x="112" y="587" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">消费者 → 图片生成 Provider</text>
+<text x="112" y="613" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">上传 MinIO → 记录成功 / 失败</text>
+<text x="112" y="639" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">contentId 存在时 Dubbo 回写素材</text>
+<rect x="90" y="770" width="470" height="180" rx="16" fill="#e5f5ef" stroke="#168568" stroke-width="2"/>
+<text x="112" y="814" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">07  工具结果返回</text>
+<text x="112" y="857" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">查询任务状态与 assetUrls</text>
+<text x="112" y="883" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">未完成时不等同于素材已生成</text>
+<rect x="665" y="770" width="470" height="180" rx="16" fill="#eaf1ff" stroke="#336ddd" stroke-width="2"/>
+<text x="687" y="814" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">08  整理最终输出</text>
+<text x="687" y="857" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">工具结果回填模型，可继续调用</text>
+<text x="687" y="883" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">满足任务要求后生成 output</text>
+<rect x="1240" y="770" width="470" height="180" rx="16" fill="#eaf1ff" stroke="#336ddd" stroke-width="2"/>
+<text x="1262" y="814" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">09  返回 Supervisor</text>
+<text x="1262" y="857" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">官方 A2A 响应 / 任务 / 流</text>
+<text x="1262" y="883" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">客户端适配后合并工作流状态</text>
+<rect x="90" y="1010" width="1620" height="140" rx="14" fill="#ffffff" stroke="#ffffff" stroke-width="2"/>
+<text x="112" y="1046" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="700">阅读说明 / 实现边界</text>
+<text x="112" y="1080" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400">• 当前消费者调用 generateListingImages，成功结果 videoUrl 为 null；不能画成已实现的视频流水线。</text>
+<text x="112" y="1107" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400">• 虚线表示可多轮工具推理；模型也可直接回答。图中工具是可选分支，不代表每次全部执行。</text>
+<text x="90" y="1188" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">BK AGENT  /  CURRENT CODE ARCHITECTURE  /  2026-09-20</text>
+<text x="1475" y="1188" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">06 / 16</text>
+</svg>

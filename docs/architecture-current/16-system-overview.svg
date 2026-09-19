@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1220" viewBox="0 0 1800 1220">
+<rect width="1800" height="1220" fill="#f3f6fa"/>
+<rect x="60" y="48" width="8" height="98" rx="3" fill="#336ddd" stroke="#336ddd" stroke-width="2"/>
+<text x="90" y="91" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="43" font-weight="700">全系统总览｜房地产中台多 Agent 系统</text>
+<text x="90" y="140" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400">入口 → 编排 → 领域智能体 → 业务执行；共享状态、检索与事件提供支撑</text>
+<polyline points="560,320 665,320" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="665,320 653.2941876694152,325.654551943446 653.2941876694152,314.345448056554" fill="#52677d"/>
+<rect x="585.0" y="293.0" width="55.0" height="26.0" rx="3" fill="#f3f6fa" stroke="#f3f6fa" stroke-width="2"/>
+<text x="591.0" y="310.0" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">HTTP</text>
+<polyline points="1135,320 1240,320" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="1240,320 1228.2941876694151,325.654551943446 1228.2941876694151,314.345448056554" fill="#52677d"/>
+<rect x="1145.0" y="293.0" width="85.0" height="26.0" rx="3" fill="#f3f6fa" stroke="#f3f6fa" stroke-width="2"/>
+<text x="1151.0" y="310.0" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">官方 A2A</text>
+<polyline points="1475,410 1475,500" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="1475,500 1469.345448056554,488.2941876694152 1480.654551943446,488.2941876694152" fill="#52677d"/>
+<rect x="1435.0" y="428.0" width="80.0" height="26.0" rx="3" fill="#f3f6fa" stroke="#f3f6fa" stroke-width="2"/>
+<text x="1441.0" y="445.0" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">本地工具</text>
+<polyline points="1240,590 1135,590" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="1135,590 1146.7058123305849,584.345448056554 1146.7058123305849,595.654551943446" fill="#52677d"/>
+<rect x="1139.0" y="563.0" width="97.0" height="26.0" rx="3" fill="#f3f6fa" stroke="#f3f6fa" stroke-width="2"/>
+<text x="1145.0" y="580.0" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">读写 / 集成</text>
+<polyline points="325,500 325,455 900,455 900,410" fill="none" stroke="#168568" stroke-width="3" stroke-dasharray="9 9"/>
+<polygon points="900,410 905.654551943446,421.7058123305848 894.345448056554,421.7058123305848" fill="#168568"/>
+<text x="560" y="441" fill="#168568" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">记忆 / 状态读写</text>
+<polyline points="560,860 610,860 610,190 900,190 900,230" fill="none" stroke="#8652be" stroke-width="3" stroke-dasharray="9 9"/>
+<polygon points="900,230 894.345448056554,218.2941876694152 905.654551943446,218.2941876694152" fill="#8652be"/>
+<text x="685" y="179" fill="#8652be" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">检索与模型支撑</text>
+<polyline points="900,770 900,725 1185,725 1185,320 1135,320" fill="none" stroke="#168568" stroke-width="3" stroke-dasharray="9 9"/>
+<polygon points="1135,320 1146.7058123305849,314.345448056554 1146.7058123305849,325.654551943446" fill="#168568"/>
+<text x="995" y="715" fill="#168568" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">事件与反馈</text>
+<polyline points="1710,860 1765,860 1765,190 1475,190 1475,230" fill="none" stroke="#52677d" stroke-width="3" stroke-dasharray="9 9"/>
+<polygon points="1475,230 1469.345448056554,218.2941876694152 1480.654551943446,218.2941876694152" fill="#52677d"/>
+<text x="1430" y="179" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">发现 / 配置</text>
+<rect x="90" y="230" width="470" height="180" rx="16" fill="#eaf1ff" stroke="#336ddd" stroke-width="2"/>
+<text x="112" y="274" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">用户与统一入口</text>
+<text x="112" y="317" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">前端 / HTTP / SSE</text>
+<text x="112" y="343" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">gateway → auth-service</text>
+<rect x="665" y="230" width="470" height="180" rx="16" fill="#f1eaff" stroke="#8652be" stroke-width="2"/>
+<text x="687" y="274" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">Supervisor · agent-service</text>
+<text x="687" y="317" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">Graph：规划、路由、并行、交接</text>
+<text x="687" y="343" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">审批恢复、异步调度、权限治理</text>
+<rect x="1240" y="230" width="470" height="180" rx="16" fill="#f1eaff" stroke="#8652be" stroke-width="2"/>
+<text x="1262" y="274" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">A2A · 8 个 ReactAgent</text>
+<text x="1262" y="317" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">listing / compare / marketing / media</text>
+<text x="1262" y="343" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">trade / contract / settlement / notification</text>
+<rect x="1240" y="500" width="470" height="180" rx="16" fill="#eaf1ff" stroke="#336ddd" stroke-width="2"/>
+<text x="1262" y="544" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">领域工具与业务服务</text>
+<text x="1262" y="587" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">本地 @Tool → 领域 Service</text>
+<text x="1262" y="613" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">另有 REST、MCP、Dubbo 入口</text>
+<rect x="665" y="500" width="470" height="180" rx="16" fill="#e5f5ef" stroke="#168568" stroke-width="2"/>
+<text x="687" y="544" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">数据与业务集成</text>
+<text x="687" y="587" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">MySQL / Elasticsearch / MinIO</text>
+<text x="687" y="613" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">customer / promotion 支撑业务</text>
+<text x="687" y="639" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">签章、媒体、邮件、平台 Provider</text>
+<rect x="90" y="500" width="470" height="180" rx="16" fill="#e5f5ef" stroke="#168568" stroke-width="2"/>
+<text x="112" y="544" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">共享状态与记忆</text>
+<text x="112" y="587" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">memory-service：会话 / 产物 / 交接</text>
+<text x="112" y="613" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">agent DB：检查点 / 异步 / 审计</text>
+<text x="112" y="639" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">HTTP 共享记忆访问</text>
+<rect x="90" y="770" width="470" height="180" rx="16" fill="#f1eaff" stroke="#8652be" stroke-width="2"/>
+<text x="112" y="814" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">检索与模型</text>
+<text x="112" y="857" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">RAG：关键词 + Milvus + 重排</text>
+<text x="112" y="883" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">DeepSeek ChatModel / Embedding</text>
+<text x="112" y="909" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">模型与 Provider 均受配置控制</text>
+<rect x="665" y="770" width="470" height="180" rx="16" fill="#e5f5ef" stroke="#168568" stroke-width="2"/>
+<text x="687" y="814" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">事件与反馈</text>
+<text x="687" y="857" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">SSE + 可选 RocketMQ 会话总线</text>
+<text x="687" y="883" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">通知消费 / 独立媒体生成队列</text>
+<text x="687" y="909" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">Redis：可选限流等基础能力</text>
+<rect x="1240" y="770" width="470" height="180" rx="16" fill="#eaf1ff" stroke="#336ddd" stroke-width="2"/>
+<text x="1262" y="814" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">配置与公共基础</text>
+<text x="1262" y="857" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">Nacos：配置与服务发现</text>
+<text x="1262" y="883" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">common：公共 DTO / RPC 契约</text>
+<text x="1262" y="909" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">common-config-manager：配置支持</text>
+<rect x="90" y="1010" width="1620" height="140" rx="14" fill="#ffffff" stroke="#ffffff" stroke-width="2"/>
+<text x="112" y="1046" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="700">阅读说明 / 实现边界</text>
+<text x="112" y="1080" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400">• 实线为主要业务调用，虚线为支撑关系；下方与左侧是配套能力，不代表顺序执行。</text>
+<text x="112" y="1107" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400">• 当前实现边界：发布状态更新 ≠ 外部发布；媒体 Worker 生成图片；图基于源码而非运行环境验收。</text>
+<text x="90" y="1188" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">BK AGENT  /  CURRENT CODE ARCHITECTURE  /  2026-09-20</text>
+<text x="1475" y="1188" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">16 / 16</text>
+</svg>

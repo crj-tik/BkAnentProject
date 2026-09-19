@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1220" viewBox="0 0 1800 1220">
+<rect width="1800" height="1220" fill="#f3f6fa"/>
+<rect x="60" y="48" width="8" height="98" rx="3" fill="#336ddd" stroke="#336ddd" stroke-width="2"/>
+<text x="90" y="91" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="43" font-weight="700">RAG｜房源索引与混合检索</text>
+<text x="90" y="140" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400">agent-service 独立检索能力；并非 Listing ReactAgent 每次必经路径</text>
+<polyline points="560,320 665,320" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="665,320 653.2941876694152,325.654551943446 653.2941876694152,314.345448056554" fill="#52677d"/>
+<polyline points="1135,320 1240,320" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="1240,320 1228.2941876694151,325.654551943446 1228.2941876694151,314.345448056554" fill="#52677d"/>
+<rect x="1164.5" y="293.0" width="46.0" height="26.0" rx="3" fill="#f3f6fa" stroke="#f3f6fa" stroke-width="2"/>
+<text x="1170.5" y="310.0" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">写入</text>
+<polyline points="1240,590 1135,590" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="1135,590 1146.7058123305849,584.345448056554 1146.7058123305849,595.654551943446" fill="#52677d"/>
+<rect x="1164.5" y="563.0" width="46.0" height="26.0" rx="3" fill="#f3f6fa" stroke="#f3f6fa" stroke-width="2"/>
+<text x="1170.5" y="580.0" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">查询</text>
+<polyline points="665,590 560,590" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="560,590 571.7058123305848,584.345448056554 571.7058123305848,595.654551943446" fill="#52677d"/>
+<rect x="589.5" y="563.0" width="46.0" height="26.0" rx="3" fill="#f3f6fa" stroke="#f3f6fa" stroke-width="2"/>
+<text x="595.5" y="580.0" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">合并</text>
+<polyline points="325,680 325,770" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="325,770 319.345448056554,758.2941876694152 330.654551943446,758.2941876694152" fill="#52677d"/>
+<polyline points="560,860 665,860" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="665,860 653.2941876694152,865.654551943446 653.2941876694152,854.345448056554" fill="#52677d"/>
+<polyline points="1135,860 1240,860" fill="none" stroke="#52677d" stroke-width="3"/>
+<polygon points="1240,860 1228.2941876694151,865.654551943446 1228.2941876694151,854.345448056554" fill="#52677d"/>
+<rect x="90" y="230" width="470" height="180" rx="16" fill="#eaf1ff" stroke="#336ddd" stroke-width="2"/>
+<text x="112" y="274" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">索引入口</text>
+<text x="112" y="317" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">POST /agent/rag/listings/index</text>
+<text x="112" y="343" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">按房源 ID 读取权威数据</text>
+<rect x="665" y="230" width="470" height="180" rx="16" fill="#eaf1ff" stroke="#336ddd" stroke-width="2"/>
+<text x="687" y="274" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">文档与向量</text>
+<text x="687" y="317" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">ListingMasterRpcService → 文本</text>
+<text x="687" y="343" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">Embedding 模型生成向量</text>
+<rect x="1240" y="230" width="470" height="180" rx="16" fill="#e5f5ef" stroke="#168568" stroke-width="2"/>
+<text x="1262" y="274" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">Milvus 房源集合</text>
+<text x="1262" y="317" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">房源文本 / sourceId / metadata</text>
+<text x="1262" y="343" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">向量索引持久化</text>
+<rect x="1240" y="500" width="470" height="180" rx="16" fill="#eaf1ff" stroke="#336ddd" stroke-width="2"/>
+<text x="1262" y="544" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">查询入口</text>
+<text x="1262" y="587" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">POST /agent/rag/listings/query</text>
+<text x="1262" y="613" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">查询文本、结构化过滤与 topK</text>
+<rect x="665" y="500" width="470" height="180" rx="16" fill="#f1eaff" stroke="#8652be" stroke-width="2"/>
+<text x="687" y="544" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">双路召回</text>
+<text x="687" y="587" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">关键词：Dubbo → ES / MySQL</text>
+<text x="687" y="613" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">向量：Embedding → Milvus</text>
+<rect x="90" y="500" width="470" height="180" rx="16" fill="#eaf1ff" stroke="#336ddd" stroke-width="2"/>
+<text x="112" y="544" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">候选合并与过滤</text>
+<text x="112" y="587" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">以房源 ID 合并候选</text>
+<text x="112" y="613" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">结构化条件与相似度阈值</text>
+<rect x="90" y="770" width="470" height="180" rx="16" fill="#f1eaff" stroke="#8652be" stroke-width="2"/>
+<text x="112" y="814" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">Rerank 重排</text>
+<text x="112" y="857" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">ListingRerankService</text>
+<text x="112" y="883" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">按配置调用重排模型</text>
+<rect x="665" y="770" width="470" height="180" rx="16" fill="#eaf1ff" stroke="#336ddd" stroke-width="2"/>
+<text x="687" y="814" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">构建证据上下文</text>
+<text x="687" y="857" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">排序后的房源与分数</text>
+<text x="687" y="883" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">拼接 context 和 matches</text>
+<rect x="1240" y="770" width="470" height="180" rx="16" fill="#eaf1ff" stroke="#336ddd" stroke-width="2"/>
+<text x="1262" y="814" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">返回 RAG 响应</text>
+<text x="1262" y="857" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">检索结果供调用方使用</text>
+<text x="1262" y="883" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">回答生成由上层入口决定</text>
+<rect x="90" y="1010" width="1620" height="140" rx="14" fill="#ffffff" stroke="#ffffff" stroke-width="2"/>
+<text x="112" y="1046" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="700">阅读说明 / 实现边界</text>
+<text x="112" y="1080" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400">• 上排为索引写入链；第二、三排为查询链。查询读 Milvus，不要求每次先重新索引。</text>
+<text x="112" y="1107" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400">• 当前 Nacos 模板重排模型默认 qwen3-rerank；具体模型和降级行为由配置与实现决定。</text>
+<text x="90" y="1188" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">BK AGENT  /  CURRENT CODE ARCHITECTURE  /  2026-09-20</text>
+<text x="1475" y="1188" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">13 / 16</text>
+</svg>
