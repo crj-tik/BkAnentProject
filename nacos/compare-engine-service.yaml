@@ -35,8 +35,12 @@ spring:
             enabled: true
     mcp:
       server:
+        enabled: ${MCP_SERVER_ENABLED:true}
+        protocol: ${MCP_SERVER_PROTOCOL:STREAMABLE}
         name: compare-mcp-server
-        version: 1.0.0
+        version: ${MCP_SERVER_VERSION:1.0.0}
+        streamable-http:
+          mcp-endpoint: ${MCP_SERVER_MCP_ENDPOINT:/mcp}
   cloud:
     nacos:
       discovery:

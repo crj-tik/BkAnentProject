@@ -38,6 +38,14 @@ metadata:
 
 仅暴露旧自定义 HTTP 接口的 Agent 必须先增加 Alibaba 官方 Agent Card 和 A2A endpoint，再加入 Nacos 注册。发布前应完成 Agent Card、同步消息、流式事件、异步任务轮询、Artifact、协议错误和失败任务的契约验证；否则该 Agent 会被拒绝注册。
 
-## MCP 范围
+## MCP 与 SubAgent 工具调用边界
 
-本次迁移不改变 MCP 客户端或服务端的传输、endpoint、工具发现和工具执行行为。MCP 仍使用各服务现有的 `STREAMABLE` 或 SSE 配置。
+A2A 和 MCP 负责不同的边界：
+
+- Supervisor 到 SubAgent 使用 Alibaba 官方 A2A。SubAgent 收到 A2A Message 后，由自己的 ReactAgent 继续处理任务。
+- Supervisor 自己需要调用领域工具时，使用 Spring AI MCP Client 发现工具并通过 MCP `tools/call` 执行。静态 MCP 连接由 `spring.ai.mcp.client.connections` 配置，动态连接由 `DynamicMcpClientManager` 管理。
+- SubAgent 内部当前使用本服务注册的本地 `ToolCallback` 执行领域方法。这不会把 A2A 请求自动转换成 MCP 请求，也不会与官方 A2A 冲突；MCP 服务端是给 Supervisor 或其他 MCP Client 的独立工具入口。
+
+领域服务的 MCP Server 统一使用 Streamable HTTP，endpoint 为 `/mcp`，与 `agent-service.yaml` 中的 MCP Client 连接保持一致。此前部分服务默认使用 SSE，而 Supervisor 仅创建 Streamable HTTP 客户端，按默认配置会导致工具发现和调用失败。
+
+如果后续要求 SubAgent 的每一次内部工具执行也必须经过 MCP，需要为该 SubAgent 增加 MCP Client 连接和远程工具回调，并移除或明确禁用本地回调；这属于工具执行架构改造，不是 A2A 协议适配的一部分。

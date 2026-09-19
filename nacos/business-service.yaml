@@ -54,11 +54,11 @@ spring:
     mcp:
       server:
         enabled: ${MCP_SERVER_ENABLED:true}
-        protocol: ${MCP_SERVER_PROTOCOL:SSE}
+        protocol: ${MCP_SERVER_PROTOCOL:STREAMABLE}
         name: business-mcp-server
         version: ${MCP_SERVER_VERSION:1.0.0}
-        sse-endpoint: ${MCP_SERVER_SSE_ENDPOINT:/sse}
-        sse-message-endpoint: ${MCP_SERVER_SSE_MESSAGE_ENDPOINT:/mcp/message}
+        streamable-http:
+          mcp-endpoint: ${MCP_SERVER_MCP_ENDPOINT:/mcp}
   cloud:
     nacos:
       discovery:
