@@ -9,7 +9,6 @@ public record AgentCatalogView(
         String baseUrl,
         String a2aEndpoint,
         String runtimeType,
-        String officialPayloadMode,
         String source,
         List<String> supportedDomains,
         List<String> supportedSkills,

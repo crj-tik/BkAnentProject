@@ -66,12 +66,8 @@ spring:
           agent-id: trade-agent
           agent-domains: trade
           agent-runtime-provider: official
-          agent-official-payload-mode: structured
           agent-card-path: /.well-known/agent.json
           a2a-path: /a2a
-          a2a-task-create-path: /a2a
-          a2a-task-status-path: /a2a
-          a2a-task-stream-path: /a2a
 
 management:
   endpoints:

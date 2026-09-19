@@ -32,7 +32,6 @@ public class SupervisorAgentCatalogService {
                 descriptor.baseUrl(),
                 descriptor.agentCard() == null ? null : descriptor.agentCard().a2aEndpoint(),
                 descriptor.runtimeType() == null ? null : descriptor.runtimeType().name(),
-                descriptor.officialPayloadMode(),
                 descriptor.source() == null ? null : descriptor.source().name(),
                 descriptor.agentCard() == null ? List.of() : descriptor.agentCard().supportedDomains(),
                 descriptor.agentCard() == null ? List.of() : descriptor.agentCard().supportedSkills(),

@@ -39,6 +39,11 @@ public class DynamicAgentRegistry implements AgentRegistry {
         if (!properties.getCatalog().isStrictNacos()) {
             properties.getAgents().forEach((key, registration) -> {
                 if (StringUtils.hasText(registration.getAgentId())) {
+                    List<String> errors = OfficialA2aRegistrationValidator.validate(
+                            registration, properties.getAgentCardPath());
+                    if (!errors.isEmpty()) {
+                        throw new IllegalArgumentException(String.join("; ", errors));
+                    }
                     descriptors.put(registration.getAgentId(), buildStaticDescriptor(registration, resolveBaseUrl(registration)));
                 }
             });
@@ -110,7 +115,7 @@ public class DynamicAgentRegistry implements AgentRegistry {
                 .or(() -> agentCardDiscoveryClient.fetchAgentCard(resolvedBaseUrl, resolveCardPath(registration)))
                 .map(card -> buildDiscoveredDescriptor(registration, resolvedBaseUrl, card))
                 .ifPresentOrElse(descriptor -> descriptors.put(agentId, descriptor),
-                        () -> descriptors.put(agentId, buildStaticDescriptor(registration, resolvedBaseUrl)));
+                        () -> descriptors.remove(agentId));
         refreshedAt.put(agentId, System.currentTimeMillis());
     }
 
@@ -148,11 +153,11 @@ public class DynamicAgentRegistry implements AgentRegistry {
             }
             String baseUrl = resolveInstanceBaseUrl(instance);
             String cardPath = resolveCardPath(metadata, registration);
-            RegisteredAgentDescriptor descriptor = agentCardDiscoveryClient.fetchByAgentName(agentId)
+            agentCardDiscoveryClient.fetchByAgentName(agentId)
                     .or(() -> agentCardDiscoveryClient.fetchAgentCard(baseUrl, cardPath))
                     .map(card -> buildDiscoveredDescriptor(serviceId, registration, metadata, baseUrl, cardPath, card))
-                    .orElseGet(() -> buildMetadataDescriptor(serviceId, registration, metadata, baseUrl, cardPath));
-            descriptors.put(agentId, descriptor);
+                    .ifPresentOrElse(descriptor -> descriptors.put(agentId, descriptor),
+                            () -> descriptors.remove(agentId));
             refreshedAt.put(agentId, System.currentTimeMillis());
             discoveredAny = true;
         }
@@ -175,16 +180,13 @@ public class DynamicAgentRegistry implements AgentRegistry {
 
     private RegisteredAgentDescriptor buildStaticDescriptor(DistributedAgentProperties.AgentRegistration registration,
                                                             String baseUrl) {
-        return new RegisteredAgentDescriptor(
+        String a2aPath = StringUtils.hasText(registration.getA2aPath()) ? registration.getA2aPath() : "/a2a";
+        RegisteredAgentDescriptor descriptor = new RegisteredAgentDescriptor(
                 registration.getAgentId(),
                 baseUrl,
                 resolveCardPath(registration),
-                registration.getA2aPath(),
-                registration.getA2aTaskCreatePath(),
-                registration.getA2aTaskStatusPath(),
-                registration.getA2aTaskStreamPath(),
-                resolveRuntimeType(Map.of(), registration, resolveCardPath(registration), baseUrl + registration.getA2aPath()),
-                resolveOfficialPayloadMode(Map.of(), registration),
+                a2aPath,
+                resolveRuntimeType(Map.of(), registration, resolveCardPath(registration), joinUrl(baseUrl, a2aPath)),
                 AgentDescriptorSource.STATIC_CONFIG,
                 new AgentCard(
                         registration.getAgentId(),
@@ -195,11 +197,13 @@ public class DynamicAgentRegistry implements AgentRegistry {
                         List.copyOf(registration.getSupportedDomains()),
                         registration.isSupportsStreaming(),
                         registration.isSupportsAsyncTask(),
-                        baseUrl + registration.getA2aPath(),
+                        joinUrl(baseUrl, a2aPath),
                         List.copyOf(registration.getInputModes()),
                         List.copyOf(registration.getOutputModes())
                 )
         );
+        OfficialA2aRegistrationValidator.requireValidDescriptor(descriptor);
+        return descriptor;
     }
 
     private RegisteredAgentDescriptor buildDiscoveredDescriptor(DistributedAgentProperties.AgentRegistration registration,
@@ -215,21 +219,18 @@ public class DynamicAgentRegistry implements AgentRegistry {
                                                                 String cardPath,
                                                                 AgentCard agentCard) {
         String endpoint = agentCard.a2aEndpoint();
-        String resolvedPath = registration == null ? "/a2a" : registration.getA2aPath();
-        if (StringUtils.hasText(endpoint) && endpoint.startsWith(baseUrl)) {
+        String resolvedPath = registration == null || !StringUtils.hasText(registration.getA2aPath())
+                ? "/a2a" : registration.getA2aPath();
+        if (StringUtils.hasText(endpoint) && StringUtils.hasText(baseUrl) && endpoint.startsWith(baseUrl)) {
             resolvedPath = endpoint.substring(baseUrl.length());
         }
         String agentId = resolveAgentId(serviceId, metadata, registration);
-        return new RegisteredAgentDescriptor(
+        RegisteredAgentDescriptor descriptor = new RegisteredAgentDescriptor(
                 agentId,
                 baseUrl,
                 cardPath,
                 resolvedPath,
-                resolveTaskPath(metadata, registration, "a2a-task-create-path", registration == null ? "/a2a" : registration.getA2aTaskCreatePath()),
-                resolveTaskPath(metadata, registration, "a2a-task-status-path", registration == null ? "/a2a" : registration.getA2aTaskStatusPath()),
-                resolveTaskPath(metadata, registration, "a2a-task-stream-path", registration == null ? "/a2a" : registration.getA2aTaskStreamPath()),
                 resolveRuntimeType(metadata, registration, cardPath, agentCard.a2aEndpoint()),
-                resolveOfficialPayloadMode(metadata, registration),
                 AgentDescriptorSource.DISCOVERED_CARD,
                 new AgentCard(
                         StringUtils.hasText(agentCard.agentId()) ? agentCard.agentId() : agentId,
@@ -253,40 +254,8 @@ public class DynamicAgentRegistry implements AgentRegistry {
                                 : agentCard.outputModes()
                 )
         );
-    }
-
-    private RegisteredAgentDescriptor buildMetadataDescriptor(String serviceId,
-                                                              DistributedAgentProperties.AgentRegistration registration,
-                                                              Map<String, String> metadata,
-                                                              String baseUrl,
-                                                              String cardPath) {
-        String agentId = resolveAgentId(serviceId, metadata, registration);
-        String a2aPath = resolveTaskPath(metadata, registration, "a2a-path", registration == null ? "/a2a" : registration.getA2aPath());
-        return new RegisteredAgentDescriptor(
-                agentId,
-                baseUrl,
-                cardPath,
-                a2aPath,
-                resolveTaskPath(metadata, registration, "a2a-task-create-path", registration == null ? "/a2a" : registration.getA2aTaskCreatePath()),
-                resolveTaskPath(metadata, registration, "a2a-task-status-path", registration == null ? "/a2a" : registration.getA2aTaskStatusPath()),
-                resolveTaskPath(metadata, registration, "a2a-task-stream-path", registration == null ? "/a2a" : registration.getA2aTaskStreamPath()),
-                resolveRuntimeType(metadata, registration, cardPath, baseUrl + a2aPath),
-                resolveOfficialPayloadMode(metadata, registration),
-                AgentDescriptorSource.DISCOVERED_CARD,
-                new AgentCard(
-                        agentId,
-                        resolveName(serviceId, metadata, registration),
-                        resolveDescription(serviceId, metadata, registration),
-                        resolveVersion(registration),
-                        resolveSkills(metadata, registration),
-                        resolveDomains(metadata, registration),
-                        resolveSupportsStreaming(metadata, registration),
-                        resolveSupportsAsyncTask(metadata, registration),
-                        baseUrl + a2aPath,
-                        resolveInputModes(metadata, registration),
-                        resolveOutputModes(metadata, registration)
-                )
-        );
+        OfficialA2aRegistrationValidator.requireValidDescriptor(descriptor);
+        return descriptor;
     }
 
     private boolean resolveBoolean(Boolean discoveredValue, boolean fallbackValue) {
@@ -298,39 +267,24 @@ public class DynamicAgentRegistry implements AgentRegistry {
                                                 String cardPath,
                                                 String endpoint) {
         String provider = metadata == null ? null : metadata.get("agent-runtime-provider");
-        if ("official".equalsIgnoreCase(provider)) {
-            return AgentRuntimeType.ALIBABA_A2A;
+        if (!StringUtils.hasText(provider) && registration != null) {
+            provider = registration.getRuntimeProvider();
         }
-        if ("custom".equalsIgnoreCase(provider)) {
-            return AgentRuntimeType.CUSTOM_HTTP;
+        String normalized = StringUtils.hasText(provider) ? provider.trim().toLowerCase() : "official";
+        if ("custom".equals(normalized) || "custom_http".equals(normalized)) {
+            throw new IllegalArgumentException("agent " + resolveAgentId(null, metadata, registration)
+                    + " declares unsupported custom HTTP runtime; Alibaba official A2A is required");
         }
-        if (registration != null) {
-            if ("official".equalsIgnoreCase(registration.getRuntimeProvider())) {
-                return AgentRuntimeType.ALIBABA_A2A;
-            }
-            if ("custom".equalsIgnoreCase(registration.getRuntimeProvider())) {
-                return AgentRuntimeType.CUSTOM_HTTP;
-            }
+        if (!"official".equals(normalized) && !"auto".equals(normalized)) {
+            throw new IllegalArgumentException("unsupported A2A runtime provider: " + normalized);
         }
-        if (StringUtils.hasText(cardPath) && cardPath.contains(".well-known/agent.json")) {
-            return AgentRuntimeType.ALIBABA_A2A;
+        if (!StringUtils.hasText(cardPath) || !cardPath.contains("/.well-known/agent.json")) {
+            throw new IllegalArgumentException("official A2A Agent Card path is required");
         }
-        if (StringUtils.hasText(endpoint) && endpoint.contains("/a2a")) {
-            return AgentRuntimeType.ALIBABA_A2A;
+        if (!StringUtils.hasText(endpoint)) {
+            throw new IllegalArgumentException("official A2A endpoint is required in the Agent Card");
         }
-        return AgentRuntimeType.CUSTOM_HTTP;
-    }
-
-    private String resolveOfficialPayloadMode(Map<String, String> metadata,
-                                              DistributedAgentProperties.AgentRegistration registration) {
-        String metadataValue = metadata == null ? null : metadata.get("agent-official-payload-mode");
-        if (StringUtils.hasText(metadataValue)) {
-            return metadataValue.trim().toLowerCase();
-        }
-        if (registration == null || !StringUtils.hasText(registration.getOfficialPayloadMode())) {
-            return "auto";
-        }
-        return registration.getOfficialPayloadMode().trim().toLowerCase();
+        return AgentRuntimeType.ALIBABA_A2A;
     }
 
     private String resolveAgentId(String serviceId,
@@ -433,17 +387,6 @@ public class DynamicAgentRegistry implements AgentRegistry {
         return resolveCardPath(registration);
     }
 
-    private String resolveTaskPath(Map<String, String> metadata,
-                                   DistributedAgentProperties.AgentRegistration registration,
-                                   String metadataKey,
-                                   String fallback) {
-        String metadataValue = metadata == null ? null : metadata.get(metadataKey);
-        if (StringUtils.hasText(metadataValue)) {
-            return metadataValue.trim();
-        }
-        return StringUtils.hasText(fallback) ? fallback : "/a2a";
-    }
-
     private List<String> parseMetadataList(Map<String, String> metadata, String key) {
         String value = metadata == null ? null : metadata.get(key);
         if (!StringUtils.hasText(value)) {
@@ -488,5 +431,14 @@ public class DynamicAgentRegistry implements AgentRegistry {
             return registration.getAgentCardPath();
         }
         return properties.getAgentCardPath();
+    }
+
+    private String joinUrl(String baseUrl, String path) {
+        if (!StringUtils.hasText(baseUrl)) {
+            return path;
+        }
+        return baseUrl.endsWith("/") && path.startsWith("/")
+                ? baseUrl.substring(0, baseUrl.length() - 1) + path
+                : baseUrl + path;
     }
 }

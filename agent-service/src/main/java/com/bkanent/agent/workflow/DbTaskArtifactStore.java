@@ -7,7 +7,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 
 /**
  * DbTaskArtifactStore 数据库版任务产物存储。
@@ -44,6 +46,24 @@ public class DbTaskArtifactStore implements TaskArtifactStore {
         entity.setMetadataJson(writeJson(metadata == null ? Map.of() : metadata));
         artifactMapper.insert(entity);
         return entity.getArtifactId();
+    }
+
+    @Override
+    public Optional<String> findBySourceArtifactId(String taskId,
+                                                   String sessionId,
+                                                   String agentId,
+                                                   String sourceArtifactId) {
+        if (sourceArtifactId == null || sourceArtifactId.isBlank()) {
+            return Optional.empty();
+        }
+        AgentTaskArtifactEntity entity = artifactMapper.selectOne(new LambdaQueryWrapper<AgentTaskArtifactEntity>()
+                .eq(AgentTaskArtifactEntity::getTaskId, taskId)
+                .eq(AgentTaskArtifactEntity::getSessionId, sessionId)
+                .eq(AgentTaskArtifactEntity::getAgentId, agentId)
+                .like(AgentTaskArtifactEntity::getMetadataJson,
+                        "\"sourceArtifactId\":\"" + sourceArtifactId + "\"")
+                .last("limit 1"));
+        return entity == null ? Optional.empty() : Optional.of(entity.getArtifactId());
     }
 
     private String writeJson(Object value) {

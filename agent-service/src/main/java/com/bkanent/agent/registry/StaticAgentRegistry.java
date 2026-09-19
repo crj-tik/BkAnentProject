@@ -5,9 +5,11 @@ import com.bkanent.common.agent.AgentCard;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -19,56 +21,52 @@ public class StaticAgentRegistry implements AgentRegistry {
     private final Map<String, RegisteredAgentDescriptor> descriptors;
 
     public StaticAgentRegistry(DistributedAgentProperties properties) {
+        List<String> errors = new ArrayList<>();
+        properties.getAgents().values().stream()
+                .filter(registration -> StringUtils.hasText(registration.getAgentId()))
+                .forEach(registration -> errors.addAll(
+                        OfficialA2aRegistrationValidator.validate(registration, properties.getAgentCardPath())));
+        if (!errors.isEmpty()) {
+            throw new IllegalArgumentException(String.join("; ", errors));
+        }
         this.descriptors = properties.getAgents().values().stream()
                 .filter(registration -> StringUtils.hasText(registration.getAgentId()))
+                .map(registration -> buildDescriptor(registration, properties.getAgentCardPath()))
                 .collect(Collectors.toUnmodifiableMap(
-                        DistributedAgentProperties.AgentRegistration::getAgentId,
-                        registration -> new RegisteredAgentDescriptor(
-                                registration.getAgentId(),
-                                registration.getBaseUrl(),
-                                registration.getAgentCardPath(),
-                                registration.getA2aPath(),
-                                registration.getA2aTaskCreatePath(),
-                                registration.getA2aTaskStatusPath(),
-                                registration.getA2aTaskStreamPath(),
-                                resolveRuntimeType(registration),
-                                resolveOfficialPayloadMode(registration),
-                                AgentDescriptorSource.STATIC_CONFIG,
-                                new AgentCard(
-                                        registration.getAgentId(),
-                                        registration.getName(),
-                                        registration.getDescription(),
-                                        registration.getVersion(),
-                                        List.copyOf(registration.getSupportedSkills()),
-                                        List.copyOf(registration.getSupportedDomains()),
-                                        registration.isSupportsStreaming(),
-                                        registration.isSupportsAsyncTask(),
-                                        registration.getBaseUrl() + registration.getA2aPath(),
-                                        List.copyOf(registration.getInputModes()),
-                                        List.copyOf(registration.getOutputModes())
-                                )
-                        )
+                        RegisteredAgentDescriptor::agentId,
+                        Function.identity()
                 ));
     }
 
-    private AgentRuntimeType resolveRuntimeType(DistributedAgentProperties.AgentRegistration registration) {
-        if ("official".equalsIgnoreCase(registration.getRuntimeProvider())) {
-            return AgentRuntimeType.ALIBABA_A2A;
-        }
-        if ("custom".equalsIgnoreCase(registration.getRuntimeProvider())) {
-            return AgentRuntimeType.CUSTOM_HTTP;
-        }
-        if (registration.getAgentCardPath() != null && registration.getAgentCardPath().contains(".well-known/agent.json")) {
-            return AgentRuntimeType.ALIBABA_A2A;
-        }
-        return AgentRuntimeType.CUSTOM_HTTP;
-    }
-
-    private String resolveOfficialPayloadMode(DistributedAgentProperties.AgentRegistration registration) {
-        if (registration == null || !StringUtils.hasText(registration.getOfficialPayloadMode())) {
-            return "auto";
-        }
-        return registration.getOfficialPayloadMode().trim().toLowerCase();
+    private RegisteredAgentDescriptor buildDescriptor(DistributedAgentProperties.AgentRegistration registration,
+                                                       String defaultCardPath) {
+        String cardPath = resolveCardPath(registration, defaultCardPath);
+        String a2aPath = resolveA2aPath(registration);
+        String baseUrl = registration.getBaseUrl();
+        AgentCard card = new AgentCard(
+                registration.getAgentId(),
+                registration.getName(),
+                registration.getDescription(),
+                registration.getVersion(),
+                List.copyOf(registration.getSupportedSkills()),
+                List.copyOf(registration.getSupportedDomains()),
+                registration.isSupportsStreaming(),
+                registration.isSupportsAsyncTask(),
+                joinUrl(baseUrl, a2aPath),
+                List.copyOf(registration.getInputModes()),
+                List.copyOf(registration.getOutputModes())
+        );
+        RegisteredAgentDescriptor descriptor = new RegisteredAgentDescriptor(
+                registration.getAgentId(),
+                baseUrl,
+                cardPath,
+                a2aPath,
+                AgentRuntimeType.ALIBABA_A2A,
+                AgentDescriptorSource.STATIC_CONFIG,
+                card
+        );
+        OfficialA2aRegistrationValidator.requireValidDescriptor(descriptor);
+        return descriptor;
     }
 
     @Override
@@ -97,5 +95,25 @@ public class StaticAgentRegistry implements AgentRegistry {
     @Override
     public List<RegisteredAgentDescriptor> listDescriptors() {
         return List.copyOf(descriptors.values());
+    }
+
+    private String resolveCardPath(DistributedAgentProperties.AgentRegistration registration,
+                                   String defaultCardPath) {
+        return StringUtils.hasText(registration.getAgentCardPath())
+                ? registration.getAgentCardPath()
+                : defaultCardPath;
+    }
+
+    private String resolveA2aPath(DistributedAgentProperties.AgentRegistration registration) {
+        return StringUtils.hasText(registration.getA2aPath()) ? registration.getA2aPath() : "/a2a";
+    }
+
+    private String joinUrl(String baseUrl, String path) {
+        if (!StringUtils.hasText(baseUrl)) {
+            return path;
+        }
+        return baseUrl.endsWith("/") && path.startsWith("/")
+                ? baseUrl.substring(0, baseUrl.length() - 1) + path
+                : baseUrl + path;
     }
 }

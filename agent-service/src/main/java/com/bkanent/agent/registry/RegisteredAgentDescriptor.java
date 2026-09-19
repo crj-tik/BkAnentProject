@@ -10,11 +10,7 @@ public record RegisteredAgentDescriptor(
         String baseUrl,
         String agentCardPath,
         String a2aPath,
-        String a2aTaskCreatePath,
-        String a2aTaskStatusPath,
-        String a2aTaskStreamPath,
         AgentRuntimeType runtimeType,
-        String officialPayloadMode,
         AgentDescriptorSource source,
         AgentCard agentCard
 ) {

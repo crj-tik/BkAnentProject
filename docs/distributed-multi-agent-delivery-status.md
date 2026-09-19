@@ -22,11 +22,11 @@ Status labels:
 
 - `DONE` official Spring AI Alibaba Graph has replaced the earlier custom-only orchestration core in `agent-service`
 - `DONE` official graph coverage includes planning, single-agent invoke, parallel invoke, approval entry, approval decision write-back, resume flow, handoff flow
-- `PARTIAL` A2A sync / async / stream three-mode protocol is present; `listing / marketing / media / trade / contract / settlement / notification` now all have official Spring AI Alibaba A2A server/card pilots, and supervisor main-chain invoke already prefers the official path for these agents, but legacy `/internal/a2a/*` compatibility endpoints still remain in repository
-- `DONE` supervisor main-chain routing no longer falls back to `HttpA2aAgentClient` for migrated agents; this is locked by `DelegatingA2aAgentClientTest`
+- `DONE` A2A sync / async / stream three-mode protocol uses Alibaba official Message/Task/Stream/Artifact semantics for all registered child agents
+- `DONE` supervisor main-chain routing has one official `OfficialA2aAgentClient` path and does not fall back to a custom HTTP client
 - `DONE` legacy `/internal/a2a/*` controllers have been physically removed from migrated agent modules; supervisor config now uses `/a2a` semantics for migrated agents
 - `DONE` supervisor async task and async workflow management endpoints are present
-- `PARTIAL` distributed agent registry supports `Nacos + AgentCard` discovery with static fallback; all current domain agents now expose official Spring AI Alibaba A2A server/card pilots and supervisor official invoke path, but discovery still keeps static fallback and runtime still preserves legacy compatibility routes
+- `DONE` distributed agent registry accepts only official Agent Card discovery and rejects custom providers, incomplete cards, and custom task paths
 
 ### 2.2 Domain Agents
 
@@ -148,16 +148,16 @@ Status labels:
 
 ### 6.1 Important Partial Items
 
-- `PARTIAL` A2A runtime is now descriptor-driven: supervisor main chain prefers official Alibaba A2A by `runtimeProvider/runtimeType`, but non-migrated agents can still retain custom runtime
+- `DONE` A2A runtime is official-only: `runtimeProvider/runtimeType` is validated as Alibaba official A2A and non-migrated custom agents are rejected
 - `DONE` legacy `/internal/a2a/*` compatibility endpoints are no longer present in migrated child services
-- `DONE` Spring AI Alibaba official A2A discovery and card exposure are now the primary source for migrated agents
-  - child services publish `agent-id/domain/runtime/payload-mode` into Nacos metadata
+- `DONE` Spring AI Alibaba official A2A discovery and card exposure are the required source for registered agents
+  - child services publish `agent-id/domain/runtime` into Nacos metadata
   - `agent-service` static `agent.distributed.agents` has been reduced to an empty override container by default
   - supervisor catalog can be inspected through the discovered descriptor view
   - `strict Nacos catalog` mode is enabled by default, so undiscovered agents are no longer silently seeded from local static config
-- `DONE` runtime / discovery / governance boundaries are cleaner now
-  - `runtime` is selected from `RegisteredAgentDescriptor.runtimeType`
-  - `discovery` produces descriptors with source/runtime/payload metadata
+- `DONE` runtime / discovery / governance boundaries are official-only now
+  - `runtime` is fixed to `RegisteredAgentDescriptor.runtimeType=ALIBABA_A2A`
+  - `discovery` produces descriptors only from official Agent Cards
   - `governance` only provides overrides; default agent routing has been split out
 - `PARTIAL` artifact governance still preserves some compact raw fields for compatibility
 - `PARTIAL` event audit archive is in-memory, not persisted
@@ -166,8 +166,8 @@ Status labels:
 
 ### 6.2 Major TODO Items
 
-- `TODO` complete A2A officialization on Spring AI Alibaba route only
-- `TODO` finish A2A officialization cleanup after pilot rollout
+- `DONE` complete A2A officialization on the Spring AI Alibaba route only
+- `DONE` finish A2A officialization cleanup after pilot rollout
   - official dependency `spring-ai-alibaba-starter-a2a-nacos` has been verified and adopted in migrated agent modules
   - `listing / marketing / media / trade / contract / settlement / notification` already expose official A2A server/card pilots
   - `agent-service` already prefers official invoke path for these migrated agents

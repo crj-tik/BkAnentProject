@@ -20,7 +20,6 @@ public class DistributedAgentProperties {
     private boolean discoveryEnabled = true;
     private String agentCardPath = "/.well-known/agent.json";
     private long refreshIntervalSeconds = 30;
-    private final A2aProperties a2a = new A2aProperties();
     private final CatalogProperties catalog = new CatalogProperties();
     private final RateLimitProperties rateLimit = new RateLimitProperties();
     private final GrayReleaseProperties grayRelease = new GrayReleaseProperties();
@@ -66,10 +65,6 @@ public class DistributedAgentProperties {
         return rateLimit;
     }
 
-    public A2aProperties getA2a() {
-        return a2a;
-    }
-
     public CatalogProperties getCatalog() {
         return catalog;
     }
@@ -96,18 +91,6 @@ public class DistributedAgentProperties {
 
     public Map<String, AgentRegistration> getAgents() {
         return agents;
-    }
-
-    public static class A2aProperties {
-        private String discoveryProvider = "custom";
-
-        public String getDiscoveryProvider() {
-            return discoveryProvider;
-        }
-
-        public void setDiscoveryProvider(String discoveryProvider) {
-            this.discoveryProvider = discoveryProvider;
-        }
     }
 
     public static class CatalogProperties {
@@ -487,15 +470,11 @@ public class DistributedAgentProperties {
         private String name;
         private String description;
         private String version = "1.0.0";
-        private String runtimeProvider = "auto";
-        private String officialPayloadMode = "auto";
+        private String runtimeProvider = "official";
         private String serviceId;
         private String baseUrl;
         private String agentCardPath;
         private String a2aPath = "/a2a";
-        private String a2aTaskCreatePath = "/a2a";
-        private String a2aTaskStatusPath = "/a2a";
-        private String a2aTaskStreamPath = "/a2a";
         private List<String> supportedSkills = new ArrayList<>();
         private List<String> supportedDomains = new ArrayList<>();
         private boolean supportsStreaming;
@@ -543,14 +522,6 @@ public class DistributedAgentProperties {
             this.runtimeProvider = runtimeProvider;
         }
 
-        public String getOfficialPayloadMode() {
-            return officialPayloadMode;
-        }
-
-        public void setOfficialPayloadMode(String officialPayloadMode) {
-            this.officialPayloadMode = officialPayloadMode;
-        }
-
         public String getServiceId() {
             return serviceId;
         }
@@ -581,30 +552,6 @@ public class DistributedAgentProperties {
 
         public void setA2aPath(String a2aPath) {
             this.a2aPath = a2aPath;
-        }
-
-        public String getA2aTaskCreatePath() {
-            return a2aTaskCreatePath;
-        }
-
-        public void setA2aTaskCreatePath(String a2aTaskCreatePath) {
-            this.a2aTaskCreatePath = a2aTaskCreatePath;
-        }
-
-        public String getA2aTaskStatusPath() {
-            return a2aTaskStatusPath;
-        }
-
-        public void setA2aTaskStatusPath(String a2aTaskStatusPath) {
-            this.a2aTaskStatusPath = a2aTaskStatusPath;
-        }
-
-        public String getA2aTaskStreamPath() {
-            return a2aTaskStreamPath;
-        }
-
-        public void setA2aTaskStreamPath(String a2aTaskStreamPath) {
-            this.a2aTaskStreamPath = a2aTaskStreamPath;
         }
 
         public List<String> getSupportedSkills() {

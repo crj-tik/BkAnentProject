@@ -35,7 +35,8 @@ public class OfficialAgentCardDiscoveryClient implements AgentCardDiscoveryClien
             if (wrapper == null) {
                 return Optional.empty();
             }
-            return Optional.of(convertWrapper(wrapper));
+            AgentCard card = convertWrapper(wrapper);
+            return StringUtils.hasText(card.a2aEndpoint()) ? Optional.of(card) : Optional.empty();
         } catch (Exception exception) {
             return Optional.empty();
         }
@@ -43,7 +44,9 @@ public class OfficialAgentCardDiscoveryClient implements AgentCardDiscoveryClien
 
     @Override
     public Optional<AgentCard> fetchAgentCard(String baseUrl, String cardPath) {
-        if (!StringUtils.hasText(baseUrl)) {
+        if (!StringUtils.hasText(baseUrl)
+                || !StringUtils.hasText(cardPath)
+                || !cardPath.contains("/.well-known/agent.json")) {
             return Optional.empty();
         }
         try {
@@ -52,7 +55,8 @@ public class OfficialAgentCardDiscoveryClient implements AgentCardDiscoveryClien
             if (wrapper == null) {
                 return Optional.empty();
             }
-            return Optional.of(convertWrapper(wrapper));
+            AgentCard card = convertWrapper(wrapper);
+            return StringUtils.hasText(card.a2aEndpoint()) ? Optional.of(card) : Optional.empty();
         } catch (RuntimeException exception) {
             return Optional.empty();
         }

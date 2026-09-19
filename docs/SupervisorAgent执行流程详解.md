@@ -623,3 +623,6 @@ ResumeSubgraph 鈫?WorkflowResumeSupport.resume("regenerate"):
 | | `SupervisorWorkflowState.java` | 鎵ц闃舵鐘舵€?|
 | | `DbGraphCheckpointStore.java` | DB 妫€鏌ョ偣鎸佷箙鍖?|
 | 瑙勫垝鏈嶅姟 | `SupervisorIntentPlanningService.java` | LLM 璁″垝鐢熸垚 + 瑙ｆ瀽 |
+# 状态说明
+
+本文的 A2A 流程图保留了历史双路实现示意。当前实现已切换为 Alibaba 官方 A2A 单一路径：`OfficialA2aAgentClient` + `OfficialA2aMetadataMapper`，`DelegatingA2aAgentClient`、`HttpA2aAgentClient` 和 `officialPayloadMode` 已移除。以 `docs/official-a2a-runtime-migration.md` 为准。

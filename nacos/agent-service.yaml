@@ -138,8 +138,6 @@ agent:
   distributed:
     supervisor-agent-id: ${SUPERVISOR_AGENT_ID:supervisor-agent}
     refresh-interval-seconds: ${AGENT_DISCOVERY_REFRESH_INTERVAL_SECONDS:30}
-    a2a:
-      discovery-provider: ${AGENT_A2A_DISCOVERY_PROVIDER:official}
     catalog:
       strict-nacos: ${AGENT_CATALOG_STRICT_NACOS:true}
     rate-limit:

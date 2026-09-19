@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Component
 public class PersistParallelArtifactsNode {
@@ -30,6 +31,13 @@ public class PersistParallelArtifactsNode {
                                 List<String> parallelDomains,
                                 AgentTaskInvokeResponse mergedResponse) {
         List<String> artifactIds = new ArrayList<>(mergedResponse.artifactIds() == null ? List.of() : mergedResponse.artifactIds());
+        String sourceArtifactId = resolveSourceArtifactId(taskId, mergedResponse, artifactIds);
+        Optional<String> existing = taskArtifactStore.findBySourceArtifactId(
+                taskId, sessionId, "parallel-supervisor", sourceArtifactId);
+        if (existing.isPresent()) {
+            artifactIds.add(existing.get());
+            return List.copyOf(new LinkedHashSet<>(artifactIds));
+        }
         String artifactId = taskArtifactStore.save(
                 taskId,
                 sessionId,
@@ -38,7 +46,8 @@ public class PersistParallelArtifactsNode {
                 1,
                 mergedResponse.structuredOutput(),
                 Map.of("parallelDomains", parallelDomains,
-                        "summary", mergedResponse.summary() == null ? "" : mergedResponse.summary()),
+                        "summary", mergedResponse.summary() == null ? "" : mergedResponse.summary(),
+                        "sourceArtifactId", sourceArtifactId),
                 traceId
         );
         sessionStreamService.publish(new SessionStreamEvent(
@@ -58,5 +67,17 @@ public class PersistParallelArtifactsNode {
         ));
         artifactIds.add(artifactId);
         return List.copyOf(new LinkedHashSet<>(artifactIds));
+    }
+
+    private String resolveSourceArtifactId(String taskId,
+                                           AgentTaskInvokeResponse response,
+                                           List<String> artifactIds) {
+        if (!artifactIds.isEmpty()) {
+            return artifactIds.get(0);
+        }
+        if (response.taskId() != null && !response.taskId().isBlank()) {
+            return "a2a-task:" + response.taskId();
+        }
+        return "parallel-task:" + taskId;
     }
 }

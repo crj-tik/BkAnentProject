@@ -1,7 +1,7 @@
 package com.bkanent.common.agent;
 
 /**
- * A2aAsyncTaskCreateResponse 表示异步 A2A 任务创建响应。
+ * A2aAsyncTaskCreateResponse 表示 Supervisor 内部保存的官方 A2A 异步任务句柄。
  */
 public record A2aAsyncTaskCreateResponse(
         String sessionId,

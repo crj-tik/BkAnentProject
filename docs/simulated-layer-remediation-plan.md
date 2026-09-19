@@ -1,5 +1,7 @@
 # Simulated Layer Remediation Plan
 
+> 2026-09-19 状态更新：A2A 运行时和 Agent Card 发现已完成 Alibaba 官方化。本文件中关于自定义 HTTP A2A、双路发现和旧兼容 endpoint 的描述是历史规划，当前契约以 `docs/official-a2a-runtime-migration.md` 和 `openspec/changes/standardize-alibaba-a2a-runtime/` 为准。
+
 ## 1. Purpose
 
 This document lists the remaining simulated/custom layers in the current distributed multi-agent implementation and defines the remediation order.
@@ -41,18 +43,13 @@ Most important remaining simulated layers:
 
 ### 3.1 A2A Runtime
 
-Current simulated implementation:
+Historical implementation before official-only migration:
 
 - custom DTOs:
   - `AgentTaskInvokeRequest`
   - `AgentTaskInvokeResponse`
-- custom HTTP client:
-  - [HttpA2aAgentClient.java](/D:/project/BkAnentProject/BkAnentProject/agent-service/src/main/java/com/bkanent/agent/client/HttpA2aAgentClient.java:1)
-- custom child endpoints:
-  - `/internal/a2a/invoke`
-  - `/internal/a2a/tasks`
-  - `/internal/a2a/tasks/status`
-  - `/internal/a2a/tasks/stream`
+- custom HTTP client (已删除): `HttpA2aAgentClient`
+- custom child endpoints (已删除): `/internal/a2a/*`
 
 Why it is still simulated:
 
@@ -69,7 +66,7 @@ Target implementation:
 
 Primary affected code:
 
-- [HttpA2aAgentClient.java](/D:/project/BkAnentProject/BkAnentProject/agent-service/src/main/java/com/bkanent/agent/client/HttpA2aAgentClient.java:1)
+- `OfficialA2aAgentClient.java` 与 `OfficialA2aMetadataMapper.java`
 - all `*AgentController.java` A2A endpoints
 - `A2aExecutionService`
 - `RegisteredAgentDescriptor`
@@ -82,7 +79,7 @@ Remediation order:
 3. migrate one child agent first, recommended `listing-agent`
 4. migrate supervisor invoke path
 5. migrate remaining agents
-6. remove fallback custom-only path after compatibility window
+6. remove fallback custom-only path after compatibility window（已完成）
 
 Current blocker:
 
@@ -98,7 +95,7 @@ Current blocker:
 - `agent-service` now routes `marketing-agent` `marketing.generate_copy`, `marketing.publish_prepare`, and `marketing.publish` through the official sync/async A2A client path
 - `media-worker-service`, `business-service`, `contract-service`, `settlement-service`, and `notification-service` now also include the official starter and expose official Spring AI Alibaba A2A server/card pilots
 - `agent-service` main-chain runtime now prefers official Alibaba A2A invoke for `listing / marketing / media / trade / contract / settlement / notification`
-- therefore the remaining blocker is no longer child-agent rollout, but full removal of legacy `/internal/a2a/*` compatibility paths and completion of official runtime governance around them
+- custom HTTP client、旧 `/internal/a2a/*` 路径和双路发现已移除；剩余外部系统需要按官方 Agent Card/A2A 契约迁移
 
 Reference:
 
@@ -109,11 +106,10 @@ Reference:
 
 Current status:
 
-- partially remediated
-- `agent-service` now supports `agent.distributed.a2a.discovery-provider=custom|official`
-- official mode uses Spring AI Alibaba `RemoteAgentCardProvider`
-- static registration is still retained as fallback, so this layer is not fully officialized yet
-- this correction is limited to card discovery and does not yet mean A2A invoke/runtime has been officialized
+- remediated
+- `agent-service` uses Spring AI Alibaba `RemoteAgentCardProvider` and Nacos Agent Card discovery only
+- custom provider、旧 Agent Card 包络和静态 fallback descriptor 会被拒绝
+- discovery 与 invoke 均遵循 Alibaba 官方 A2A 契约
 
 Current simulated implementation:
 
@@ -185,7 +181,7 @@ Remediation order:
 Current simulated implementation:
 
 - session event bus + SSE bridge
-- child agent async stream is exposed, but stream semantics are not unified by official A2A runtime
+- child agent stream uses official A2A streaming events；session event bus 只负责聚合和转发
 
 Primary code:
 
@@ -283,16 +279,16 @@ Target:
 
 Recommended next execution order:
 
-1. official A2A runtime migration
-2. discovery loop correction
+1. official A2A runtime migration（已完成）
+2. discovery loop correction（已完成）
    - current repository has already split runtime/discovery/governance boundaries:
      - runtime is descriptor-driven instead of hardcoded migrated-agent lists
-     - discovery emits `runtimeType/source/payloadMode` metadata
+     - discovery emits `runtimeType/source` metadata
      - governance only contributes overrides, not default routing facts
    - migrated agents now publish identity and capability metadata into Nacos discovery
    - `agent-service` no longer keeps a full static migrated-agent catalog in local config
    - strict Nacos catalog mode is enabled by default; local config is no longer a hidden source of truth
-3. A2A streaming correction
+3. A2A streaming correction（已完成）
 4. MQ retry / dead-letter formalization
 5. async executor officialization / external runtime
 6. secondary cleanup items

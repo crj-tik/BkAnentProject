@@ -238,7 +238,8 @@ class OfficialSupervisorGraphExecutionTest {
 
     private RegisteredAgentDescriptor descriptor(String agentId, String domain) {
         return new RegisteredAgentDescriptor(agentId, "http://localhost", "/.well-known/agent.json",
-                "/a2a", "/a2a", "/a2a", "/a2a", null, "structured", null,
+                "/a2a", com.bkanent.agent.registry.AgentRuntimeType.ALIBABA_A2A,
+                com.bkanent.agent.registry.AgentDescriptorSource.DISCOVERED_CARD,
                 new AgentCard(agentId, agentId, agentId, "1", List.of(), List.of(domain),
                         false, false, "http://localhost/a2a", List.of("text"), List.of("text")));
     }
