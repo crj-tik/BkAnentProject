@@ -24,6 +24,7 @@ public class ListingOfficialA2aAgent {
                 .model(chatModel)
                 .systemPrompt(properties.getSystemPrompt())
                 .tools(toolCallbackProvider.getToolCallbacks())
+                .interceptors(new A2aSupervisorContextInterceptor())
                 .outputKey(OUTPUT_KEY)
                 .build();
     }

@@ -11,6 +11,8 @@ Supervisor 子 Agent 只通过 Alibaba Cloud 官方 A2A 发现和调用。注册
 
 Supervisor 内部仍然使用 `AgentTaskInvokeRequest`、`AgentTaskInvokeResponse` 和异步任务状态对象进行图路由、交接、持久化和重试。这些对象是内部规范化模型，不是 HTTP 请求体或响应体。官方 A2A 适配器会把调用指令放入 Message 文本，把 Supervisor 上下文放入 `supervisor` metadata 命名空间，并保留 A2A `threadId`、`isStreaming` 等运行时字段。
 
+每个领域 SubAgent 的官方 `ReactAgent` 都注册了 Supervisor 上下文拦截器。拦截器从官方 A2A metadata 读取 `threadId`、`isStreaming` 以及 `supervisor` 内的 session/task/trace、结构化上下文、约束和期望输出，并把它们注入模型系统上下文；上下文仅用于本次 Agent 执行，不会改变 MCP 工具协议，也不会把内部关联 ID 输出给用户。
+
 ## 注册失败处理
 
 以下注册不会进入路由表：

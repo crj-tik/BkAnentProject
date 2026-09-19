@@ -27,6 +27,7 @@ Status labels:
 - `DONE` legacy `/internal/a2a/*` controllers have been physically removed from migrated agent modules; supervisor config now uses `/a2a` semantics for migrated agents
 - `DONE` supervisor async task and async workflow management endpoints are present
 - `DONE` distributed agent registry accepts only official Agent Card discovery and rejects custom providers, incomplete cards, and custom task paths
+- `DONE` all eight official ReactAgent providers consume Supervisor A2A metadata through a model-context interceptor, preserving task/session/trace context, structured context, constraints, expected output, and stream intent
 
 ### 2.2 Domain Agents
 

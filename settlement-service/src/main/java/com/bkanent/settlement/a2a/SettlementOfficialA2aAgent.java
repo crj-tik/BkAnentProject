@@ -24,6 +24,7 @@ public class SettlementOfficialA2aAgent {
                 .model(chatModel)
                 .systemPrompt(properties.getSystemPrompt())
                 .tools(MethodToolCallbackProvider.builder().toolObjects(settlementTools).build().getToolCallbacks())
+                .interceptors(new A2aSupervisorContextInterceptor())
                 .outputKey(OUTPUT_KEY)
                 .build();
     }

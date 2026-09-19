@@ -24,6 +24,7 @@ public class NotificationOfficialA2aAgent {
                 .model(chatModel)
                 .systemPrompt(properties.getSystemPrompt())
                 .tools(MethodToolCallbackProvider.builder().toolObjects(notificationTools).build().getToolCallbacks())
+                .interceptors(new A2aSupervisorContextInterceptor())
                 .outputKey(OUTPUT_KEY)
                 .build();
     }

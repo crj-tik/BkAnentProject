@@ -24,6 +24,7 @@ public class MediaOfficialA2aAgent {
                 .model(chatModel)
                 .systemPrompt(properties.getSystemPrompt())
                 .tools(MethodToolCallbackProvider.builder().toolObjects(mediaTools).build().getToolCallbacks())
+                .interceptors(new A2aSupervisorContextInterceptor())
                 .outputKey(OUTPUT_KEY)
                 .build();
     }
