@@ -11,7 +11,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 import static java.util.stream.Collectors.toMap;
 
@@ -34,18 +34,19 @@ public class SkillAwareToolProvider implements ToolCallbackProvider {
 
     private static final Logger log = LoggerFactory.getLogger(SkillAwareToolProvider.class);
 
-    private final ToolCallback[] allCallbacks;
-    private final Map<String, ToolCallback> callbacksByName;
-    private final Map<String, ToolCallback[]> skillCache = new ConcurrentHashMap<>();
+    private final Supplier<ToolCallback[]> callbacksSupplier;
 
     public SkillAwareToolProvider(ToolCallback[] allCallbacks) {
-        this.allCallbacks = allCallbacks == null ? new ToolCallback[0] : allCallbacks;
-        this.callbacksByName = Arrays.stream(this.allCallbacks)
-                .collect(toMap(
-                        cb -> cb.getToolDefinition().name(),
-                        cb -> cb,
-                        (existing, duplicate) -> existing  // keep first in case of duplicates
-                ));
+        this(() -> allCallbacks);
+    }
+
+    /**
+     * Creates a provider whose source is read each time tools are requested.
+     * This is important for runtime MCP registration: a provider created during
+     * application startup must not permanently freeze the initial tool set.
+     */
+    public SkillAwareToolProvider(Supplier<ToolCallback[]> callbacksSupplier) {
+        this.callbacksSupplier = Objects.requireNonNull(callbacksSupplier, "callbacksSupplier");
     }
 
     /**
@@ -55,41 +56,52 @@ public class SkillAwareToolProvider implements ToolCallbackProvider {
      * If the skill has an empty tools list, returns all tools.
      */
     public ToolCallbackProvider resolveFor(SkillMatchResult match) {
-        if (!match.isMatched() || match.skill().tools().isEmpty()) {
+        ToolCallback[] allCallbacks = currentCallbacks();
+        if (match == null || !match.isMatched() || match.skill().tools().isEmpty()) {
             return this; // fallback: return all tools
         }
         SkillDefinition skill = match.skill();
-        ToolCallback[] filtered = skillCache.computeIfAbsent(skill.name(), name -> {
-            List<ToolCallback> matched = skill.tools().stream()
-                    .map(callbacksByName::get)
-                    .filter(Objects::nonNull)
-                    .toList();
-            if (matched.isEmpty()) {
-                log.warn("Skill '{}' listed tools {} but none found in registry, using all tools",
-                        skill.name(), skill.tools());
-                return allCallbacks;
-            }
-            log.debug("Skill '{}' loaded {} tools: {}", skill.name(), matched.size(), skill.tools());
-            return matched.toArray(new ToolCallback[0]);
-        });
-        if (filtered == allCallbacks) {
+        Map<String, ToolCallback> callbacksByName = indexByName(allCallbacks);
+        List<ToolCallback> matched = skill.tools().stream()
+                .map(callbacksByName::get)
+                .filter(Objects::nonNull)
+                .toList();
+        if (matched.isEmpty()) {
+            log.warn("Skill '{}' listed tools {} but none found in registry, using all tools",
+                    skill.name(), skill.tools());
             return this;
         }
+        log.debug("Skill '{}' loaded {} tools: {}", skill.name(), matched.size(), skill.tools());
+        ToolCallback[] filtered = matched.toArray(new ToolCallback[0]);
         return () -> filtered;
     }
 
     @Override
     public ToolCallback[] getToolCallbacks() {
-        return allCallbacks;
+        return currentCallbacks();
     }
 
     /** Returns the total number of registered tools. */
     public int totalToolCount() {
-        return allCallbacks.length;
+        return currentCallbacks().length;
     }
 
     /** Returns a defensive copy of the name→callback index. */
     public Map<String, ToolCallback> toolIndex() {
-        return Map.copyOf(callbacksByName);
+        return Map.copyOf(indexByName(currentCallbacks()));
+    }
+
+    private ToolCallback[] currentCallbacks() {
+        ToolCallback[] callbacks = callbacksSupplier.get();
+        return callbacks == null ? new ToolCallback[0] : Arrays.copyOf(callbacks, callbacks.length);
+    }
+
+    private Map<String, ToolCallback> indexByName(ToolCallback[] callbacks) {
+        return Arrays.stream(callbacks)
+                .collect(toMap(
+                        cb -> cb.getToolDefinition().name(),
+                        cb -> cb,
+                        (existing, duplicate) -> existing
+                ));
     }
 }

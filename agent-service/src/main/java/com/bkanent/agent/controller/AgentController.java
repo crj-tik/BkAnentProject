@@ -1,9 +1,11 @@
 package com.bkanent.agent.controller;
 
 import com.bkanent.agent.mcp.AgentMcpClient;
+import com.bkanent.common.mcp.DynamicMcpClientManager;
 import com.bkanent.agent.mcp.model.AgentMcpToolDescriptor;
 import com.bkanent.agent.mcp.model.AgentToolCatalogItem;
 import com.bkanent.agent.mcp.model.DiscoveredMcpTool;
+import com.bkanent.common.mcp.DynamicMcpConnectionConfig;
 import com.bkanent.agent.mcp.model.McpServerStatus;
 import com.bkanent.agent.mcp.model.RegisteredMcpTool;
 import com.bkanent.agent.model.chat.AgentChatRequest;
@@ -53,7 +55,9 @@ import com.bkanent.common.model.CompareReportDTO;
 import com.bkanent.common.model.HealthStatusDTO;
 import com.bkanent.common.model.MarketingContentDTO;
 import com.bkanent.common.model.PublishRequest;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -118,6 +122,7 @@ public class AgentController {
     private final SessionStreamService sessionStreamService;
     private final AgentPermissionService agentPermissionService;
     private final SupervisorGovernanceService supervisorGovernanceService;
+    private final DynamicMcpClientManager dynamicMcpClientManager;
 
     /**
      * 构造 AgentController 实例。
@@ -139,7 +144,8 @@ public class AgentController {
                            SupervisorEventAuditQueryService supervisorEventAuditQueryService,
                            SessionStreamService sessionStreamService,
                            AgentPermissionService agentPermissionService,
-                           SupervisorGovernanceService supervisorGovernanceService) {
+                           SupervisorGovernanceService supervisorGovernanceService,
+                           DynamicMcpClientManager dynamicMcpClientManager) {
         this.agentMemoryMilvusService = agentMemoryMilvusService;
         this.listingMilvusService = listingMilvusService;
         this.agentOrchestratorService = agentOrchestratorService;
@@ -158,6 +164,7 @@ public class AgentController {
         this.sessionStreamService = sessionStreamService;
         this.agentPermissionService = agentPermissionService;
         this.supervisorGovernanceService = supervisorGovernanceService;
+        this.dynamicMcpClientManager = dynamicMcpClientManager;
     }
 
     /**
@@ -250,6 +257,34 @@ public class AgentController {
             return ApiResponse.ok(mcpDebugService.listServerStatuses().stream()
                     .filter(item -> agentPermissionService.canReadMcpServer(userId, item.serverName()))
                     .toList());
+        });
+    }
+
+    @GetMapping("/mcp/dynamic/connections")
+    public ApiResponse<List<String>> listDynamicMcpConnections(@RequestParam String userId) {
+        return guarded(() -> {
+            agentPermissionService.assertPermission(userId, "agent.mcp.debug.read", "dynamic mcp connection listing");
+            return ApiResponse.ok(dynamicMcpClientManager.listConnectionNames());
+        });
+    }
+
+    @PostMapping("/mcp/dynamic/connect")
+    public ApiResponse<String> registerDynamicMcpConnection(@RequestParam String userId,
+                                                             @RequestBody DynamicMcpConnectionConfig config) {
+        return guarded(() -> {
+            agentPermissionService.assertPermission(userId, "agent.mcp.admin.manage", "dynamic mcp connection registration");
+            dynamicMcpClientManager.register(config);
+            return ApiResponse.ok("Dynamic MCP connection '" + config.name() + "' registered successfully");
+        });
+    }
+
+    @DeleteMapping("/mcp/dynamic/connect/{name}")
+    public ApiResponse<String> unregisterDynamicMcpConnection(@RequestParam String userId,
+                                                               @PathVariable String name) {
+        return guarded(() -> {
+            agentPermissionService.assertPermission(userId, "agent.mcp.admin.manage", "dynamic mcp connection removal");
+            dynamicMcpClientManager.unregister(name);
+            return ApiResponse.ok("Dynamic MCP connection '" + name + "' unregistered successfully");
         });
     }
 

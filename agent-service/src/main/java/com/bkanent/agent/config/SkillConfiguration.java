@@ -6,7 +6,6 @@ import com.bkanent.agent.skill.SkillFileWatcher;
 import com.bkanent.agent.skill.SkillMatcher;
 import com.bkanent.agent.skill.SkillRegistry;
 import com.bkanent.agent.skill.SupervisorSkillService;
-import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
@@ -67,8 +66,7 @@ public class SkillConfiguration {
     @Bean("skillAwareToolProvider")
     public SkillAwareToolProvider skillAwareToolProvider(
             @Qualifier("combinedToolCallbackProvider") ToolCallbackProvider combinedProvider) {
-        ToolCallback[] allCallbacks = combinedProvider.getToolCallbacks();
-        return new SkillAwareToolProvider(allCallbacks);
+        return new SkillAwareToolProvider(combinedProvider::getToolCallbacks);
     }
 
     /**

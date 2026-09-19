@@ -50,7 +50,7 @@ public class McpDebugServiceImpl implements McpDebugService {
 
     @Override
     public List<McpServerStatus> listServerStatuses() {
-        Map<String, McpSyncClient> clients = httpAgentMcpClient.clientsByName();
+        Map<String, McpSyncClient> clients = httpAgentMcpClient.allClients();
         return clients.entrySet().stream()
                 .map(entry -> toStatus(entry.getKey(), entry.getValue()))
                 .toList();

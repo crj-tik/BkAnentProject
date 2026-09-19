@@ -2,6 +2,7 @@ package com.bkanent.agent.mcp;
 
 import com.bkanent.agent.mcp.model.AgentMcpCallResult;
 import com.bkanent.agent.mcp.model.AgentMcpToolDescriptor;
+import com.bkanent.common.mcp.DynamicMcpClientManager;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.McpSyncClient;
@@ -23,33 +24,41 @@ public class HttpAgentMcpClient implements AgentMcpClient {
 
     private final Map<String, McpSyncClient> clientsByName;
     private final ObjectMapper objectMapper;
+    private final DynamicMcpClientManager dynamicMcpClientManager;
 
     public HttpAgentMcpClient(@Qualifier("mcpClientsByName") Map<String, McpSyncClient> clientsByName,
-                              ObjectMapper objectMapper) {
+                              ObjectMapper objectMapper,
+                              DynamicMcpClientManager dynamicMcpClientManager) {
         this.clientsByName = clientsByName == null ? Map.of() : clientsByName;
         this.objectMapper = objectMapper;
+        this.dynamicMcpClientManager = dynamicMcpClientManager;
+        this.dynamicMcpClientManager.reserveNames(this.clientsByName.keySet());
     }
 
     @Override
     public List<AgentMcpToolDescriptor> listTools() {
         List<AgentMcpToolDescriptor> descriptors = new ArrayList<>();
-        for (Map.Entry<String, McpSyncClient> entry : clientsByName.entrySet()) {
-            try {
-                McpSchema.ListToolsResult result = entry.getValue().listTools();
-                for (McpSchema.Tool tool : result.tools()) {
-                    descriptors.add(new AgentMcpToolDescriptor(
-                            entry.getKey(),
-                            tool.name(),
-                            tool.description(),
-                            writeJson(tool.inputSchema()),
-                            writeJson(tool.outputSchema())
-                    ));
-                }
-            } catch (Exception exception) {
-                log.warn("Failed to list MCP tools from '{}'", entry.getKey(), exception);
-            }
+        for (Map.Entry<String, McpSyncClient> entry : allClients().entrySet()) {
+            collectTools(entry.getKey(), entry.getValue(), descriptors);
         }
         return descriptors;
+    }
+
+    private void collectTools(String serverName, McpSyncClient client, List<AgentMcpToolDescriptor> descriptors) {
+        try {
+            McpSchema.ListToolsResult result = client.listTools();
+            for (McpSchema.Tool tool : result.tools()) {
+                descriptors.add(new AgentMcpToolDescriptor(
+                        serverName,
+                        tool.name(),
+                        tool.description(),
+                        writeJson(tool.inputSchema()),
+                        writeJson(tool.outputSchema())
+                ));
+            }
+        } catch (Exception exception) {
+            log.warn("Failed to list MCP tools from '{}'", serverName, exception);
+        }
     }
 
     @Override
@@ -66,12 +75,21 @@ public class HttpAgentMcpClient implements AgentMcpClient {
         return new AgentMcpCallResult(serverName, toolName, text, payload);
     }
 
-    public Map<String, McpSyncClient> clientsByName() {
-        return clientsByName;
+    public Map<String, McpSyncClient> allClients() {
+        Map<String, McpSyncClient> dynamic = dynamicMcpClientManager.dynamicClients();
+        if (dynamic.isEmpty()) {
+            return clientsByName;
+        }
+        Map<String, McpSyncClient> merged = new LinkedHashMap<>(clientsByName);
+        dynamic.forEach(merged::putIfAbsent);
+        return java.util.Collections.unmodifiableMap(merged);
     }
 
     private McpSyncClient getRequiredClient(String serverName) {
         McpSyncClient client = clientsByName.get(serverName);
+        if (client == null) {
+            client = dynamicMcpClientManager.dynamicClients().get(serverName);
+        }
         if (client == null) {
             throw new IllegalArgumentException("MCP server not found: " + serverName);
         }

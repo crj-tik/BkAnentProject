@@ -13,6 +13,7 @@
 
     <modules>
         <module>common</module>
+        <module>common-config-manager</module>
         <module>gateway</module>
         <module>auth-service</module>
         <module>agent-service</module>
@@ -102,6 +103,21 @@
                 <groupId>com.baomidou</groupId>
                 <artifactId>mybatis-plus-annotation</artifactId>
                 <version>${mybatis.plus.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
+                <artifactId>mcp-core</artifactId>
+                <version>0.14.0</version>
+            </dependency>
+            <dependency>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
+                <artifactId>mcp-json</artifactId>
+                <version>0.14.0</version>
+            </dependency>
+            <dependency>
+                <groupId>io.modelcontextprotocol.sdk</groupId>
+                <artifactId>mcp-json-jackson2</artifactId>
+                <version>0.14.0</version>
             </dependency>
             <dependency>
                 <groupId>com.mysql</groupId>

@@ -1,7 +1,9 @@
 package com.bkanent.agent.config;
 
+import com.bkanent.common.mcp.DynamicMcpClientManager;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -10,7 +12,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.web.client.RestClient;
 
-import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @Configuration
 @EnableConfigurationProperties({
@@ -30,14 +33,29 @@ public class AgentServiceConfiguration {
     @Bean("combinedToolCallbackProvider")
     public ToolCallbackProvider combinedToolCallbackProvider(
             @Qualifier("localToolCallbackProvider") ToolCallbackProvider localToolCallbackProvider,
-            @Qualifier("mcpToolCallbacks") ToolCallbackProvider mcpToolCallbacks) {
+            @Qualifier("mcpToolCallbacks") ToolCallbackProvider mcpToolCallbacks,
+            DynamicMcpClientManager dynamicMcpClientManager) {
         return () -> {
-            org.springframework.ai.tool.ToolCallback[] localCallbacks = localToolCallbackProvider.getToolCallbacks();
-            org.springframework.ai.tool.ToolCallback[] mcpCallbacks = mcpToolCallbacks.getToolCallbacks();
-            org.springframework.ai.tool.ToolCallback[] combined = Arrays.copyOf(localCallbacks, localCallbacks.length + mcpCallbacks.length);
-            System.arraycopy(mcpCallbacks, 0, combined, localCallbacks.length, mcpCallbacks.length);
-            return combined;
+            ToolCallback[] localCallbacks = localToolCallbackProvider.getToolCallbacks();
+            ToolCallback[] mcpCallbacks = mcpToolCallbacks.getToolCallbacks();
+            ToolCallback[] dynamicCallbacks = dynamicMcpClientManager.getDynamicToolCallbacks();
+            Map<String, ToolCallback> callbacksByName = new LinkedHashMap<>();
+            addCallbacks(callbacksByName, localCallbacks);
+            addCallbacks(callbacksByName, mcpCallbacks);
+            addCallbacks(callbacksByName, dynamicCallbacks);
+            return callbacksByName.values().toArray(new ToolCallback[0]);
         };
+    }
+
+    private void addCallbacks(Map<String, ToolCallback> callbacksByName, ToolCallback[] callbacks) {
+        if (callbacks == null) {
+            return;
+        }
+        for (ToolCallback callback : callbacks) {
+            if (callback != null && callback.getToolDefinition() != null) {
+                callbacksByName.putIfAbsent(callback.getToolDefinition().name(), callback);
+            }
+        }
     }
 
     /**
