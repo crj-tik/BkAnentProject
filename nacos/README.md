@@ -61,4 +61,4 @@
 - `README.md`：Nacos 配置说明
 - `mysql-common.yaml`：MySQL 公共配置模板
 - `agent-service.yaml` 等：各服务配置模板
-- `mcp-迁移方案.md`：MCP 相关落地说明
+- `../docs/official-a2a-runtime-migration.md`：A2A 与 MCP 运行时边界说明
