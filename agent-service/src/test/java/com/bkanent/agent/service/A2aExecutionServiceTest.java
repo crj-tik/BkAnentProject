@@ -9,7 +9,9 @@ import com.bkanent.agent.stream.SessionStreamService;
 import com.bkanent.common.agent.AgentCard;
 import com.bkanent.common.agent.AgentTaskInvokeRequest;
 import com.bkanent.common.agent.AgentTaskInvokeResponse;
+import com.bkanent.common.agent.SessionStreamEvent;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 import java.util.Map;
@@ -49,7 +51,13 @@ class A2aExecutionServiceTest {
         assertThat(actual).isSameAs(response);
         verify(client).stream(eq(descriptor), eq(request), any());
         verify(client, times(0)).invoke(any(), any());
-        verify(streamService, times(3)).publish(any());
+        ArgumentCaptor<SessionStreamEvent> events = ArgumentCaptor.forClass(SessionStreamEvent.class);
+        verify(streamService, times(3)).publish(events.capture());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> result = (Map<String, Object>) events.getAllValues().get(2).metadata().get("result");
+        assertThat(result)
+                .containsEntry("status", "COMPLETED")
+                .containsEntry("summary", "final");
     }
 
     @Test
@@ -70,7 +78,32 @@ class A2aExecutionServiceTest {
 
         assertThat(service.execute(descriptor, request, "test", Map.of())).isSameAs(response);
         verify(client).invoke(eq(descriptor), eq(request));
-        verify(streamService, times(2)).publish(any());
+        ArgumentCaptor<SessionStreamEvent> events = ArgumentCaptor.forClass(SessionStreamEvent.class);
+        verify(streamService, times(2)).publish(events.capture());
+        assertThat(events.getAllValues().get(1).metadata()).containsKey("result");
+    }
+
+    @Test
+    void publishesFailedTerminalEventWhenBlockingInvocationReturnsFailureResponse() {
+        A2aAgentClient client = mock(A2aAgentClient.class);
+        SessionStreamService streamService = mock(SessionStreamService.class);
+        AgentPermissionService permissionService = mock(AgentPermissionService.class);
+        RegisteredAgentDescriptor descriptor = descriptor(false, false);
+        AgentTaskInvokeRequest request = request(true);
+        AgentTaskInvokeResponse response = new AgentTaskInvokeResponse(
+                "session-1", "task-1", "listing-agent", "FAILED",
+                Map.of("error", "child validation failed", "remoteTaskId", "remote-task-1"),
+                List.of("remote-artifact-1"), List.of(), "child validation failed", "trace-1");
+        when(client.invoke(eq(descriptor), eq(request))).thenReturn(response);
+
+        A2aExecutionService service = new A2aExecutionService(
+                client, streamService, permissionService, new com.bkanent.agent.config.DistributedAgentProperties());
+
+        assertThat(service.execute(descriptor, request, "test", Map.of())).isSameAs(response);
+        ArgumentCaptor<SessionStreamEvent> events = ArgumentCaptor.forClass(SessionStreamEvent.class);
+        verify(streamService, times(2)).publish(events.capture());
+        assertThat(events.getAllValues().get(1).eventType()).isEqualTo("agent.failed");
+        assertThat(events.getAllValues().get(1).metadata()).containsKey("result");
     }
 
     private RegisteredAgentDescriptor descriptor(boolean streaming, boolean async) {

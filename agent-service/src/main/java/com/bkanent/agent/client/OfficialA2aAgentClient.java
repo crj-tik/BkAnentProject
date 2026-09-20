@@ -13,6 +13,7 @@ import io.a2a.spec.GetTaskResponse;
 import io.a2a.spec.Message;
 import io.a2a.spec.MessageSendConfiguration;
 import io.a2a.spec.MessageSendParams;
+import io.a2a.spec.Part;
 import io.a2a.spec.SendMessageResponse;
 import io.a2a.spec.StreamingEventKind;
 import io.a2a.spec.Task;
@@ -36,6 +37,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.UUID;
 
 /**
@@ -51,6 +53,18 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
 
     private final ConcurrentMap<String, A2AClient> clients = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, AgentTaskInvokeRequest> taskRequests = new ConcurrentHashMap<>();
+    private final OfficialA2aResponseNormalizer responseNormalizer;
+    private final Function<String, A2AClient> clientFactory;
+
+    public OfficialA2aAgentClient(OfficialA2aResponseNormalizer responseNormalizer) {
+        this(responseNormalizer, A2AClient::new);
+    }
+
+    OfficialA2aAgentClient(OfficialA2aResponseNormalizer responseNormalizer,
+                           Function<String, A2AClient> clientFactory) {
+        this.responseNormalizer = responseNormalizer;
+        this.clientFactory = clientFactory;
+    }
 
     @Override
     public AgentTaskInvokeResponse invoke(RegisteredAgentDescriptor descriptor, AgentTaskInvokeRequest request) {
@@ -58,8 +72,8 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
             SendMessageResponse response = clientFor(descriptor).sendMessage(buildMessageSendParams(request, true));
             EventKind result = response.getResult();
             if (result instanceof Message message) {
-                return responseFromText(descriptor, request, extractMessageText(message), "COMPLETED",
-                        request.taskId(), Set.of(), null);
+                return responseNormalizer.normalize(descriptor, request, extractMessageText(message), "COMPLETED",
+                        message.getTaskId(), Set.of(), null, message.getParts());
             }
             if (result instanceof Task task) {
                 return responseFromTask(descriptor, request, task);
@@ -88,12 +102,13 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
         CompletableFuture<AgentTaskInvokeResponse> result = new CompletableFuture<>();
         StringBuilder output = new StringBuilder();
         Set<String> artifactIds = new LinkedHashSet<>();
+        List<Part<?>> responseParts = new ArrayList<>();
         AtomicBoolean completed = new AtomicBoolean();
         try {
             clientFor(descriptor).sendStreamingMessage(
                     buildMessageSendParams(request, false),
                     event -> handleStreamingEvent(descriptor, request, eventConsumer, result, output,
-                            artifactIds, completed, event),
+                            artifactIds, responseParts, completed, event),
                     error -> result.completeExceptionally(new IllegalStateException(
                             "official a2a streaming error for " + descriptor.agentId() + ": " + error)),
                     () -> result.completeExceptionally(new IllegalStateException(
@@ -120,10 +135,12 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
                                       CompletableFuture<AgentTaskInvokeResponse> result,
                                       StringBuilder output,
                                       Set<String> artifactIds,
+                                      List<Part<?>> responseParts,
                                       AtomicBoolean completed,
                                       StreamingEventKind event) {
         if (event instanceof Message message) {
             String text = extractMessageText(message);
+            addParts(responseParts, message.getParts());
             appendOutput(output, text);
             emit(eventConsumer, "agent.delta", text, Map.of("source", "a2a.message"), false, null);
             return;
@@ -136,7 +153,9 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
             String text = extractArtifactText(artifact);
             if (Boolean.FALSE.equals(artifactUpdate.isAppend())) {
                 output.setLength(0);
+                responseParts.clear();
             }
+            addParts(responseParts, artifact == null ? null : artifact.parts());
             appendOutput(output, text);
             Map<String, Object> metadata = new LinkedHashMap<>();
             metadata.put("source", "a2a.artifact");
@@ -157,19 +176,23 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
             String statusText = statusUpdate.getStatus() == null
                     ? "Child agent status updated"
                     : extractMessageText(statusUpdate.getStatus().message());
+            if (statusUpdate.getStatus() != null && statusUpdate.getStatus().message() != null) {
+                addParts(responseParts, statusUpdate.getStatus().message().getParts());
+            }
             Map<String, Object> metadata = new LinkedHashMap<>();
             metadata.put("source", "a2a.status");
             metadata.put("childTaskId", statusUpdate.getTaskId());
             metadata.put("status", status);
             emit(eventConsumer, "agent.progress", statusText, metadata, false, null);
             if (statusUpdate.isFinal()) {
-                completeFromStatus(descriptor, request, eventConsumer, result, output, artifactIds,
+                completeFromStatus(descriptor, request, eventConsumer, result, output, artifactIds, responseParts,
                         completed, status, statusUpdate.getTaskId(), statusText);
             }
             return;
         }
         if (event instanceof Task task) {
             artifactIds.addAll(extractArtifactIds(task));
+            addTaskParts(responseParts, task);
             String taskOutput = extractTaskOutput(task);
             if (StringUtils.hasText(taskOutput)) {
                 output.setLength(0);
@@ -179,7 +202,7 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
             emit(eventConsumer, "agent.progress", "Child agent task update", Map.of(
                     "source", "a2a.task", "childTaskId", task.getId(), "status", status), false, null);
             if (isTerminal(status)) {
-                completeFromStatus(descriptor, request, eventConsumer, result, output, artifactIds,
+                completeFromStatus(descriptor, request, eventConsumer, result, output, artifactIds, responseParts,
                         completed, status, task.getId(), extractMessageText(
                                 task.getStatus() == null ? null : task.getStatus().message()));
             }
@@ -192,6 +215,7 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
                                     CompletableFuture<AgentTaskInvokeResponse> result,
                                     StringBuilder output,
                                     Set<String> artifactIds,
+                                    List<Part<?>> responseParts,
                                     AtomicBoolean completed,
                                     String status,
                                     String remoteTaskId,
@@ -200,8 +224,8 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
             return;
         }
         if (!"COMPLETED".equalsIgnoreCase(status)) {
-            AgentTaskInvokeResponse failedResponse = responseFromText(descriptor, request, output.toString(), status,
-                    request.taskId(), artifactIds, errorMessage);
+            AgentTaskInvokeResponse failedResponse = responseNormalizer.normalize(
+                    descriptor, request, output.toString(), status, remoteTaskId, artifactIds, errorMessage, responseParts);
             Map<String, Object> metadata = new LinkedHashMap<>();
             metadata.put("source", "a2a.status");
             metadata.put("status", status);
@@ -212,8 +236,8 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
             result.complete(failedResponse);
             return;
         }
-        AgentTaskInvokeResponse finalResponse = responseFromText(descriptor, request, output.toString(), status,
-                request.taskId(), artifactIds, null);
+        AgentTaskInvokeResponse finalResponse = responseNormalizer.normalize(
+                descriptor, request, output.toString(), status, remoteTaskId, artifactIds, null, responseParts);
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("source", "a2a.status");
         metadata.put("status", status);
@@ -242,6 +266,32 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
     private void appendOutput(StringBuilder output, String text) {
         if (StringUtils.hasText(text)) {
             output.append(text);
+        }
+    }
+
+    private void addParts(List<Part<?>> target, List<Part<?>> parts) {
+        if (target != null && parts != null && !parts.isEmpty()) {
+            target.addAll(parts);
+        }
+    }
+
+    private void addTaskParts(List<Part<?>> target, Task task) {
+        if (task == null) {
+            return;
+        }
+        if (task.getArtifacts() != null) {
+            task.getArtifacts().forEach(artifact -> {
+                if (artifact != null) {
+                    addParts(target, artifact.parts());
+                }
+            });
+        }
+        if (task.getHistory() != null) {
+            task.getHistory().forEach(message -> {
+                if (message != null) {
+                    addParts(target, message.getParts());
+                }
+            });
         }
     }
 
@@ -291,7 +341,7 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
             }
             AgentTaskInvokeRequest request = taskRequests.get(asyncTaskId);
             String status = mapTaskState(task.getStatus() == null ? null : task.getStatus().state());
-            AgentTaskInvokeResponse result = "COMPLETED".equalsIgnoreCase(status)
+            AgentTaskInvokeResponse result = isTerminal(status)
                     ? responseFromTask(descriptor, request, task)
                     : null;
             String errorMessage = "FAILED".equalsIgnoreCase(status) && task.getStatus() != null
@@ -316,7 +366,7 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
         if (descriptor == null || !StringUtils.hasText(descriptor.agentId())) {
             throw new IllegalArgumentException("official A2A descriptor is required");
         }
-        return clients.computeIfAbsent(descriptor.agentId(), ignored -> new A2AClient(resolveEndpoint(descriptor)));
+        return clients.computeIfAbsent(descriptor.agentId(), ignored -> clientFactory.apply(resolveEndpoint(descriptor)));
     }
 
     private String resolveEndpoint(RegisteredAgentDescriptor descriptor) {
@@ -374,38 +424,22 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
                                                      Task task) {
         String status = mapTaskState(task.getStatus() == null ? null : task.getStatus().state());
         String output = extractTaskOutput(task);
-        return responseFromText(descriptor, request, output, status,
-                request == null || !StringUtils.hasText(request.taskId()) ? task.getId() : request.taskId(),
+        return responseNormalizer.normalize(
+                descriptor,
+                request,
+                output,
+                status,
+                task == null ? null : task.getId(),
                 extractArtifactIds(task),
-                "FAILED".equalsIgnoreCase(status) && task.getStatus() != null
-                        ? extractMessageText(task.getStatus().message()) : null);
+                !"COMPLETED".equalsIgnoreCase(status) && task.getStatus() != null
+                        ? extractMessageText(task.getStatus().message()) : null,
+                extractTaskParts(task));
     }
 
-    private AgentTaskInvokeResponse responseFromText(RegisteredAgentDescriptor descriptor,
-                                                      AgentTaskInvokeRequest request,
-                                                      String output,
-                                                      String status,
-                                                      String taskId,
-                                                      Set<String> artifactIds,
-                                                      String errorMessage) {
-        String normalizedOutput = output == null ? "" : output;
-        Map<String, Object> structuredOutput = new LinkedHashMap<>();
-        structuredOutput.put("officialA2a", true);
-        structuredOutput.put("output", normalizedOutput);
-        if (StringUtils.hasText(errorMessage)) {
-            structuredOutput.put("error", errorMessage);
-        }
-        return new AgentTaskInvokeResponse(
-                request == null ? null : request.sessionId(),
-                taskId,
-                descriptor.agentId(),
-                status,
-                Map.copyOf(structuredOutput),
-                artifactIds == null ? List.of() : List.copyOf(artifactIds),
-                List.of(),
-                normalizedOutput,
-                request == null ? null : request.traceId()
-        );
+    private List<Part<?>> extractTaskParts(Task task) {
+        List<Part<?>> parts = new ArrayList<>();
+        addTaskParts(parts, task);
+        return parts;
     }
 
     private Set<String> extractArtifactIds(Task task) {

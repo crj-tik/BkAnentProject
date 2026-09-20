@@ -58,8 +58,8 @@ public class A2aExecutionService {
             if (!shouldUseAsync(descriptor, request)) {
                 AgentTaskInvokeResponse response = a2aAgentClient.invoke(descriptor, request);
                 publish(
-                        request.sessionId(), request.taskId(), descriptor.agentId(), "agent.completed",
-                        "Child agent completed", lifecycleMetadata(metadata, phase, request, true), request.traceId()
+                        request.sessionId(), request.taskId(), descriptor.agentId(), terminalEventType(response),
+                        terminalContent(response), terminalMetadata(metadata, phase, request, response), request.traceId()
                 );
                 return response;
             }
@@ -95,10 +95,13 @@ public class A2aExecutionService {
                 if (isRateLimited(event, rateWindowStartedAt, rateWindowCount)) {
                     return;
                 }
-                if (event.terminal()) {
+                boolean terminalWithResult = event.terminal() && event.result() != null;
+                if (terminalWithResult) {
                     terminalEventSeen.set(true);
                 }
-                Map<String, Object> eventMetadata = lifecycleMetadata(metadata, phase, request, event.terminal());
+                Map<String, Object> eventMetadata = terminalWithResult
+                        ? terminalMetadata(metadata, phase, request, event.result())
+                        : lifecycleMetadata(metadata, phase, request, false);
                 eventMetadata.putAll(sanitizeMetadata(event.metadata()));
                 String content = limitContent(event.content(), event.eventType());
                 publish(
@@ -117,8 +120,8 @@ public class A2aExecutionService {
         AgentTaskInvokeResponse finalResponse = terminalResponse.get() == null ? response : terminalResponse.get();
         if (!terminalEventSeen.get()) {
             publish(
-                    request.sessionId(), request.taskId(), descriptor.agentId(), "agent.completed",
-                    "Child agent stream completed", lifecycleMetadata(metadata, phase, request, true), request.traceId()
+                    request.sessionId(), request.taskId(), descriptor.agentId(), terminalEventType(finalResponse),
+                    terminalContent(finalResponse), terminalMetadata(metadata, phase, request, finalResponse), request.traceId()
             );
         }
         return finalResponse;
@@ -133,8 +136,8 @@ public class A2aExecutionService {
         }
         AgentTaskInvokeResponse response = a2aAgentClient.invoke(descriptor, request);
         publish(
-                request.sessionId(), request.taskId(), descriptor.agentId(), "agent.completed",
-                "Child agent completed", lifecycleMetadata(metadata, phase, request, true), request.traceId()
+                request.sessionId(), request.taskId(), descriptor.agentId(), terminalEventType(response),
+                terminalContent(response), terminalMetadata(metadata, phase, request, response), request.traceId()
         );
         return response;
     }
@@ -177,7 +180,7 @@ public class A2aExecutionService {
                 );
                 lastStatus = status.status();
             }
-            if ("COMPLETED".equalsIgnoreCase(status.status()) || "completed".equalsIgnoreCase(status.status())) {
+            if ("COMPLETED".equalsIgnoreCase(status.status())) {
                 publish(
                         request.sessionId(),
                         request.taskId(),
@@ -196,11 +199,11 @@ public class A2aExecutionService {
                 }
                 publish(
                         request.sessionId(), request.taskId(), descriptor.agentId(), "agent.completed",
-                        "Child async agent completed", lifecycleMetadata(metadata, phase, request, true), request.traceId()
+                        "Child async agent completed", terminalMetadata(metadata, phase, request, status.result()), request.traceId()
                 );
                 return status.result();
             }
-            if ("FAILED".equalsIgnoreCase(status.status()) || "failed".equalsIgnoreCase(status.status())) {
+            if (isTerminalStatus(status.status())) {
                 publish(
                         request.sessionId(),
                         request.taskId(),
@@ -215,6 +218,14 @@ public class A2aExecutionService {
                         )),
                         request.traceId()
                 );
+                if (status.result() != null) {
+                    publish(
+                            request.sessionId(), request.taskId(), descriptor.agentId(), "agent.failed",
+                            "Child async agent failed", terminalMetadata(metadata, phase, request, status.result()),
+                            request.traceId()
+                    );
+                    return status.result();
+                }
                 throw new IllegalStateException(status.errorMessage() == null ? "async child task failed" : status.errorMessage());
             }
         }
@@ -240,6 +251,25 @@ public class A2aExecutionService {
         }
         return Boolean.TRUE.equals(request.structuredContext().get("forceAsyncA2a"))
                 || Boolean.TRUE.equals(request.structuredContext().get("requestStream"));
+    }
+
+    private boolean isTerminalStatus(String status) {
+        return "FAILED".equalsIgnoreCase(status)
+                || "CANCELLED".equalsIgnoreCase(status)
+                || "REJECTED".equalsIgnoreCase(status);
+    }
+
+    private String terminalEventType(AgentTaskInvokeResponse response) {
+        return isSuccessfulResponse(response) ? "agent.completed" : "agent.failed";
+    }
+
+    private String terminalContent(AgentTaskInvokeResponse response) {
+        return isSuccessfulResponse(response) ? "Child agent completed" : "Child agent failed";
+    }
+
+    private boolean isSuccessfulResponse(AgentTaskInvokeResponse response) {
+        return response != null && ("COMPLETED".equalsIgnoreCase(response.status())
+                || "SUCCESS".equalsIgnoreCase(response.status()));
     }
 
     private Map<String, Object> extend(Map<String, Object> metadata, Map<String, Object> addition) {
@@ -305,6 +335,68 @@ public class A2aExecutionService {
         addIfText(lifecycle, "parentTaskId", request.parentTaskId());
         addIfText(lifecycle, "branchId", request.structuredContext(), "branchId");
         return lifecycle;
+    }
+
+    private Map<String, Object> terminalMetadata(Map<String, Object> metadata,
+                                                 String phase,
+                                                 AgentTaskInvokeRequest request,
+                                                 AgentTaskInvokeResponse response) {
+        Map<String, Object> lifecycle = lifecycleMetadata(metadata, phase, request, true);
+        if (response == null) {
+            return lifecycle;
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("status", response.status());
+        result.put("remoteTaskId", readRemoteTaskId(response));
+        result.put("artifactIds", response.artifactIds() == null ? java.util.List.of() : response.artifactIds());
+        result.put("structuredOutput", sanitizeResultValue(response.structuredOutput()));
+        result.put("nextHints", response.nextHints() == null ? java.util.List.of() : response.nextHints());
+        result.put("summary", response.summary() == null ? "" : response.summary());
+        Object error = response.structuredOutput() == null ? null : response.structuredOutput().get("error");
+        if (error != null) {
+            result.put("error", error);
+        }
+        lifecycle.put("result", result);
+        String remoteTaskId = readRemoteTaskId(response);
+        if (remoteTaskId != null) {
+            lifecycle.put("childTaskId", remoteTaskId);
+        }
+        return lifecycle;
+    }
+
+    private String readRemoteTaskId(AgentTaskInvokeResponse response) {
+        if (response == null || response.structuredOutput() == null) {
+            return null;
+        }
+        Object value = response.structuredOutput().get("remoteTaskId");
+        return value == null || String.valueOf(value).isBlank() ? null : String.valueOf(value);
+    }
+
+    private Object sanitizeResultValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> sanitized = new LinkedHashMap<>();
+            map.forEach((key, nestedValue) -> {
+                String normalizedKey = key == null ? "" : String.valueOf(key);
+                if (normalizedKey.isBlank() || isSensitiveResultKey(normalizedKey)) {
+                    return;
+                }
+                sanitized.put(normalizedKey, sanitizeResultValue(nestedValue));
+            });
+            return sanitized;
+        }
+        if (value instanceof Iterable<?> iterable) {
+            java.util.List<Object> sanitized = new java.util.ArrayList<>();
+            iterable.forEach(item -> sanitized.add(sanitizeResultValue(item)));
+            return sanitized;
+        }
+        return value;
+    }
+
+    private boolean isSensitiveResultKey(String key) {
+        return "raw".equalsIgnoreCase(key)
+                || "reasoning".equalsIgnoreCase(key)
+                || "arguments".equalsIgnoreCase(key)
+                || "input".equalsIgnoreCase(key);
     }
 
     private void addIfText(Map<String, Object> metadata, String key, String value) {
