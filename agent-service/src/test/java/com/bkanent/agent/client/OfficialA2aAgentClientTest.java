@@ -11,6 +11,7 @@ import io.a2a.client.A2AClient;
 import io.a2a.spec.Artifact;
 import io.a2a.spec.DataPart;
 import io.a2a.spec.GetTaskResponse;
+import io.a2a.spec.MessageSendParams;
 import io.a2a.spec.SendMessageResponse;
 import io.a2a.spec.Task;
 import io.a2a.spec.TaskArtifactUpdateEvent;
@@ -27,9 +28,29 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.ArgumentCaptor;
 
 class OfficialA2aAgentClientTest {
+
+    @Test
+    void requestsStructuredOutputFromOfficialSubAgent() throws Exception {
+        A2AClient a2aClient = mock(A2AClient.class);
+        Task task = new Task(
+                "remote-task-modes", "context-1", new TaskStatus(TaskState.COMPLETED),
+                List.of(), List.of(), Map.of());
+        when(a2aClient.sendMessage(any())).thenReturn(new SendMessageResponse(null, task));
+        OfficialA2aAgentClient client = new OfficialA2aAgentClient(
+                new OfficialA2aResponseNormalizer(new ObjectMapper()), ignored -> a2aClient);
+
+        client.invoke(descriptor(), request());
+
+        ArgumentCaptor<MessageSendParams> captor = ArgumentCaptor.forClass(MessageSendParams.class);
+        verify(a2aClient).sendMessage(captor.capture());
+        assertThat(captor.getValue().configuration().acceptedOutputModes())
+                .contains("text", "application/json");
+    }
 
     @Test
     void syncStreamingAndAsyncResultsUseTheSameNormalizedContract() throws Exception {

@@ -28,7 +28,9 @@ class OfficialA2aProviderConfigurationTest {
                     .withFailMessage("missing official A2A provider: " + provider)
                     .isTrue();
             assertThat(Files.readString(root.resolve(provider)))
-                    .contains(".interceptors(new A2aSupervisorContextInterceptor())");
+                    .contains(".interceptors(new A2aSupervisorContextInterceptor())")
+                    .contains("OfficialA2aAgentExecutor")
+                    .contains("A2aOutputPolicy.structured(");
         }
     }
 
@@ -74,7 +76,31 @@ class OfficialA2aProviderConfigurationTest {
                     .contains("agent-runtime-provider: official")
                     .contains("agent-card-path: /.well-known/agent.json")
                     .contains("a2a-path: /a2a")
-                    .contains("streaming: true");
+                    .contains("streaming: true")
+                    .contains("default-input-modes: text,application/json")
+                    .contains("default-output-modes: text,application/json")
+                    .contains("nextHints")
+                    .contains("contentType=");
+        }
+    }
+
+    @Test
+    void everyDomainServiceDependsOnSharedA2aExecutorModule() throws Exception {
+        String[] poms = {
+                "business-service/pom.xml",
+                "listing-master-service/pom.xml",
+                "marketing-content-service/pom.xml",
+                "media-worker-service/pom.xml",
+                "contract-service/pom.xml",
+                "settlement-service/pom.xml",
+                "notification-service/pom.xml",
+                "compare-engine-service/pom.xml"
+        };
+        Path root = locateProjectRoot();
+        for (String pom : poms) {
+            assertThat(Files.readString(root.resolve(pom)))
+                    .withFailMessage("missing common-a2a dependency: " + pom)
+                    .contains("<artifactId>common-a2a</artifactId>");
         }
     }
 

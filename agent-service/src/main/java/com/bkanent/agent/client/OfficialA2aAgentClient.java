@@ -392,7 +392,8 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
                 List.of(),
                 metadata
         );
-        MessageSendConfiguration configuration = new MessageSendConfiguration(List.of("text"), null, null, blocking);
+        MessageSendConfiguration configuration = new MessageSendConfiguration(
+                List.of("text", "application/json"), null, null, blocking);
         return new MessageSendParams(message, configuration, metadata);
     }
 

@@ -1,8 +1,12 @@
 package com.bkanent.notification.a2a;
 
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
+import com.bkanent.common.a2a.A2aOutputPolicy;
+import com.bkanent.common.a2a.OfficialA2aAgentExecutor;
 import com.bkanent.notification.config.NotificationAgentProperties;
 import com.bkanent.notification.tool.NotificationTools;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.a2a.server.agentexecution.AgentExecutor;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.context.annotation.Bean;
@@ -32,5 +36,10 @@ public class NotificationOfficialA2aAgent {
     @Bean
     public ReactAgent notificationReactAgent() {
         return reactAgent;
+    }
+
+    @Bean
+    public AgentExecutor notificationA2aAgentExecutor(ObjectMapper objectMapper) {
+        return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("notification"));
     }
 }

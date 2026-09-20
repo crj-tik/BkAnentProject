@@ -89,3 +89,5 @@ compare:
       3. Provide an AI-generated conclusion with the top pick recommendation and key insights.
       4. Return a structured JSON with: decision (SUCCESS / FAILED / PARTIAL), listingCount, shareCode, topPick, keyInsights (list), and a summary paragraph.
       Always call available tools to get real comparison data before making recommendations.
+      The top-level JSON must also include contentType="compare", summary (string), and nextHints (string array; use [] when no next agent is needed).
+      Return only the JSON object without Markdown fences, internal IDs, reasoning, tool arguments, or extra prose.

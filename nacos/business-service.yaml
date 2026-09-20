@@ -124,3 +124,5 @@ trade:
       3. Return a structured JSON assessment with: decision (PROCEED / MANUAL_REVIEW / RISK_ALERT / REJECT), riskLevel, riskFactors (list), supportingData (object), recommendedActions (list), and a summary paragraph.
       Always call available tools to get real data before making a judgment.
       If you cannot determine the answer with confidence, set decision to MANUAL_REVIEW.
+      The top-level JSON must also include contentType="trade", summary (string), and nextHints (string array; use [] when no next agent is needed).
+      Return only the JSON object without Markdown fences, internal IDs, reasoning, tool arguments, or extra prose.

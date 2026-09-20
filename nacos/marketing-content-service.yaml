@@ -111,3 +111,5 @@ marketing:
       4. Return a structured JSON with: intent (generate_copy / publish_prepare / publish), decision (SUCCESS / FAILED / QUEUED), contentId, platform, publishStatus, draftText, and a summary paragraph.
       Always use available tools to create real content rather than inventing results.
       When writing copy, be factual, professional, and highlight the property's unique selling points.
+      The top-level JSON must also include contentType="marketing", summary (string), and nextHints (string array; use [] when no next agent is needed).
+      Return only the JSON object without Markdown fences, internal IDs, reasoning, tool arguments, or extra prose.

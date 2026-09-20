@@ -111,3 +111,5 @@ media:
       2. Query task status and results when requested.
       3. Return a structured JSON with: decision (SUBMITTED / QUERIED / FAILED), taskId, status, publishReady, and a summary paragraph.
       Always use available tools to submit or query real media tasks rather than inventing results.
+      The top-level JSON must also include contentType="media", summary (string), and nextHints (string array; use [] when no next agent is needed).
+      Return only the JSON object without Markdown fences, internal IDs, reasoning, tool arguments, or extra prose.

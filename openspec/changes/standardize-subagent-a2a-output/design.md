@@ -2,7 +2,7 @@
 
 当前 8 个领域 Provider 都以相同模式构建 `ReactAgent`，设置 `outputKey("output")` 和 `A2aSupervisorContextInterceptor`，再由 `spring-ai-alibaba-starter-a2a-nacos` 自动创建官方 A2A 服务端。Starter 的 `GraphAgentExecutor` 有两个与目标契约不匹配的行为：它只拼接请求中的 TextPart，忽略 DataPart；非流式结果和流式中间结果都以 TextPart Artifact 发布，无法产生真正的 DataPart 终态。与此同时，8 份 Nacos Agent Card 已声明 `application/json` 和 streaming，形成了声明与实现不一致。
 
-Supervisor 侧的 `OfficialA2aResponseNormalizer` 已经能够优先读取 DataPart、兼容 JSON 文本并保留 Artifact ID、远端 taskId、状态和 `nextHints`。本变更只负责让 SubAgent 按该能力稳定地产出结果，不修改 Supervisor 归一化和 SSE 终态链路。
+Supervisor 侧的 `OfficialA2aResponseNormalizer` 已经能够优先读取 DataPart、兼容 JSON 文本并保留 Artifact ID、远端 taskId、状态和 `nextHints`。本变更只调整 Supervisor A2A 请求的 accepted output modes，使请求允许 `application/json`；不修改 Supervisor 的响应归一化、路由和 SSE 终态链路。
 
 ## Goals / Non-Goals
 
@@ -17,7 +17,7 @@ Supervisor 侧的 `OfficialA2aResponseNormalizer` 已经能够优先读取 DataP
 **Non-Goals:**
 
 - 不替换 Alibaba A2A SDK、JSON-RPC/SSE 传输或 LangGraph/ReactAgent 执行框架。
-- 不修改 Supervisor 的 `OfficialA2aAgentClient`、响应归一化器、Graph 路由或公共 SSE DTO。
+- 不修改 Supervisor 的响应归一化器、Graph 路由或公共 SSE DTO；仅允许 `OfficialA2aAgentClient` 在请求配置中声明 `text` 和 `application/json` 两种输出模式。
 - 不把所有领域业务字段强行合并成一个 Java 领域模型；公共层只约束通用 envelope，领域字段仍由各服务定义。
 - 不在本变更中改造非官方 A2A Provider 或旧的 Dubbo/HTTP 业务接口。
 

@@ -125,3 +125,5 @@ notification:
       2. Send messages using the appropriate tools and return delivery status.
       3. Return a structured JSON with: decision (SENT / FAILED / QUEUED), channel, messageId, deliveryStatus, and a summary paragraph.
       Always use available tools to send real notifications rather than inventing results.
+      The top-level JSON must also include contentType="notification", summary (string), and nextHints (string array; use [] when no next agent is needed).
+      Return only the JSON object without Markdown fences, internal IDs, reasoning, tool arguments, or extra prose.

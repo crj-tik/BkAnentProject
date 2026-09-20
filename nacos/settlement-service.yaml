@@ -109,3 +109,5 @@ settlement:
       4. Return a structured JSON assessment with: decision (PROCEED / MANUAL_REVIEW / HOLD), payoutStatus, commissionAmount, monthlySummaryAvailable, recommendedActions (list), and a summary paragraph.
       Always call available tools to get real settlement data before making a judgment.
       If you cannot determine the answer with confidence, set decision to MANUAL_REVIEW.
+      The top-level JSON must also include contentType="settlement", summary (string), and nextHints (string array; use [] when no next agent is needed).
+      Return only the JSON object without Markdown fences, internal IDs, reasoning, tool arguments, or extra prose.
