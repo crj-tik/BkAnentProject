@@ -1,0 +1,177 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3600" height="2700" viewBox="0 0 3600 2700" role="img" aria-labelledby="title desc">
+  <title id="title">Supervisor Agent LangGraph 工作流架构图</title>
+  <desc id="desc">展示 Supervisor 主图的规划、路由、审批、单 Agent 与并行 A2A 执行、handoff、完成及失败路径，以及规划、单 Agent、完成子图和 A2A 到 SSE 的进度数据流。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f4f8ff"/><stop offset="1" stop-color="#edf3fb"/></linearGradient>
+    <linearGradient id="head" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#142c4f"/><stop offset="1" stop-color="#245c91"/></linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="7" stdDeviation="9" flood-color="#183456" flood-opacity=".12"/></filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M1,1 L11,6 L1,11 Z" fill="#486581"/></marker>
+    <marker id="arrowPurple" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M1,1 L11,6 L1,11 Z" fill="#7958c7"/></marker>
+    <marker id="arrowGreen" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M1,1 L11,6 L1,11 Z" fill="#168269"/></marker>
+    <marker id="arrowAmber" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M1,1 L11,6 L1,11 Z" fill="#bf7c13"/></marker>
+    <style>
+      text{font-family:"Microsoft YaHei","Noto Sans CJK SC",Arial,sans-serif;fill:#17324d}
+      .title{font-size:52px;font-weight:750;fill:#fff}.subtitle{font-size:24px;fill:#dbeafe}
+      .section{font-size:28px;font-weight:750;fill:#17324d}.sectionNote{font-size:18px;fill:#60758a}
+      .node{fill:#fff;stroke:#88a6c5;stroke-width:2.5;rx:18;filter:url(#shadow)}
+      .nodeBlue{fill:#edf5ff;stroke:#4f83bd}.nodePurple{fill:#f4f0ff;stroke:#8970cf}.nodeGreen{fill:#eaf8f3;stroke:#42a588}.nodeRed{fill:#fff0ee;stroke:#dc8177}.nodeDark{fill:#203b59;stroke:#203b59}
+      .nTitle{font-size:22px;font-weight:750}.nCode{font-size:16px;fill:#60758a}.nDark{fill:#fff}.nDarkSub{fill:#dbeafe}
+      .edge{fill:none;stroke:#486581;stroke-width:3;marker-end:url(#arrow);stroke-linecap:round;stroke-linejoin:round}
+      .edgePurple{fill:none;stroke:#7958c7;stroke-width:3.2;marker-end:url(#arrowPurple);stroke-linecap:round;stroke-linejoin:round}
+      .edgeGreen{fill:none;stroke:#168269;stroke-width:3;marker-end:url(#arrowGreen);stroke-linecap:round;stroke-linejoin:round}
+      .edgeAmber{fill:none;stroke:#bf7c13;stroke-width:3;stroke-dasharray:10 9;marker-end:url(#arrowAmber);stroke-linecap:round;stroke-linejoin:round}
+      .edgeData{fill:none;stroke:#168269;stroke-width:3;stroke-dasharray:9 8;marker-end:url(#arrowGreen);stroke-linecap:round;stroke-linejoin:round}
+      .edgeLabel{font-size:16px;font-weight:700;fill:#4b6075}.pill{fill:#fff;stroke:#d5dfeb;stroke-width:1.5;rx:12}
+      .mini{fill:#fff;stroke:#9bb2ca;stroke-width:2;rx:13}.miniTitle{font-size:18px;font-weight:700}.miniSub{font-size:14px;fill:#61758a}
+      .streamBox{fill:#eff9f6;stroke:#52a991;stroke-width:2.5;rx:18}.streamHead{font-size:22px;font-weight:750;fill:#145a4b}.streamText{font-size:16px;fill:#44665e}
+      .footer{font-size:17px;fill:#51677d}
+    </style>
+  </defs>
+  <rect width="3600" height="2700" fill="url(#bg)"/>
+  <rect x="0" y="0" width="3600" height="145" fill="url(#head)"/>
+  <text class="title" x="76" y="73">Supervisor Agent · LangGraph 工作流</text>
+  <text class="subtitle" x="80" y="116">主图控制流 + 三个内部子图 + A2A 子 Agent 进度回传至 SSE 前端</text>
+  <text class="subtitle" x="3508" y="93" text-anchor="end">项目源码对照版 · 3600 × 2700 矢量高清</text>
+
+  <!-- Main graph -->
+  <rect x="55" y="170" width="3490" height="1190" rx="28" fill="#fff" stroke="#d8e3ef" stroke-width="2" filter="url(#shadow)"/>
+  <text class="section" x="92" y="220">一、Supervisor 主图：规划 → 分流执行 → 汇总/交接 → 结束</text>
+  <text class="sectionNote" x="3495" y="218" text-anchor="end">审批 gate 配置 interruptAfter；条件边依据 graph state 决策</text>
+
+  <!-- Main flow edges behind nodes -->
+  <path class="edge" d="M275 315 H355"/><path class="edge" d="M615 315 H690"/>
+  <path class="edgePurple" d="M950 315 H1010"/>
+  <path class="edgePurple" d="M950 300 C1120 235 1500 215 1720 270"/>
+  <path class="edgePurple" d="M820 355 V610 H1720"/>
+  <path class="edgePurple" d="M820 355 V1200 H3130 V1005"/>
+  <path class="edge" d="M1260 315 H1340"/>
+  <path class="edgePurple" d="M1590 300 H1720"/>
+  <path class="edgePurple" d="M1465 365 V590 H1720"/>
+  <path class="edgePurple" d="M1380 365 V500 H1125 V545"/>
+  <path class="edge" d="M1125 545 V475 H480 V365"/>
+  <path class="edge" d="M1590 335 H1655 V960 H1545"/>
+  <path class="edgePurple" d="M1565 365 H1660 V1160 H3130 V1005"/>
+  <path class="edge" d="M1980 270 H2780"/>
+  <path class="edgeGreen" d="M1980 660 H2050 V480 H2110"/>
+  <path class="edgeGreen" d="M1980 660 H2050 V560 H2110"/>
+  <path class="edgeGreen" d="M1980 660 H2050 V640 H2110"/>
+  <path class="edgeGreen" d="M1980 660 H2050 V720 H2110"/>
+  <path class="edgeGreen" d="M1980 660 H2050 V800 H2110"/>
+  <path class="edgeGreen" d="M1980 660 H2050 V880 H2110"/>
+  <path class="edgeGreen" d="M1980 660 H2050 V960 H2110"/>
+  <!-- ALL_OF joins -->
+  <path class="edgeGreen" d="M2360 480 H2440 V660 H2500"/>
+  <path class="edgeGreen" d="M2360 560 H2440 V670 H2500"/>
+  <path class="edgeGreen" d="M2360 640 H2440 V680 H2500"/>
+  <path class="edgeGreen" d="M2360 720 H2500"/>
+  <path class="edgeGreen" d="M2360 800 H2440 V740 H2500"/>
+  <path class="edgeGreen" d="M2360 880 H2440 V750 H2500"/>
+  <path class="edgeGreen" d="M2360 960 H2440 V760 H2500"/>
+  <path class="edge" d="M2735 720 H2770 V360"/>
+  <path class="edgePurple" d="M3050 300 H3130"/>
+  <path class="edgePurple" d="M3360 270 H3380"/>
+  <path class="edgePurple" d="M2910 365 V510"/>
+  <path class="edge" d="M3000 555 H3070 V410 H2910 V365"/>
+  <path class="edgePurple" d="M3050 310 H3090 V930 H3130"/>
+  <path class="edgePurple" d="M3245 320 V900"/>
+  <path class="edge" d="M3455 320 V1150 H3370 V1180"/>
+  <path class="edge" d="M3245 1005 V1135 H3370 V1180"/>
+  <path class="edge" d="M1442 1005 V1300 H3220 V1250 H3295"/>
+
+  <!-- Edge labels -->
+  <g><rect class="pill" x="956" y="265" width="168" height="29"/><text class="edgeLabel" x="1040" y="285" text-anchor="middle">requireApproval</text></g>
+  <g><rect class="pill" x="1115" y="218" width="210" height="28"/><text class="edgeLabel" x="1220" y="238" text-anchor="middle">无审批：domains ≤ 1</text></g>
+  <g><rect class="pill" x="1000" y="572" width="214" height="28"/><text class="edgeLabel" x="1107" y="592" text-anchor="middle">无审批：domains ≥ 2</text></g>
+  <g><rect class="pill" x="850" y="1170" width="235" height="28"/><text class="edgeLabel" x="967" y="1190" text-anchor="middle">error / 并行域不合法</text></g>
+  <g><rect class="pill" x="1600" y="430" width="168" height="28"/><text class="edgeLabel" x="1684" y="450" text-anchor="middle">批准：single</text></g>
+  <g><rect class="pill" x="1480" y="540" width="180" height="28"/><text class="edgeLabel" x="1570" y="560" text-anchor="middle">批准：parallel</text></g>
+  <g><rect class="pill" x="1135" y="480" width="190" height="28"/><text class="edgeLabel" x="1230" y="500" text-anchor="middle">拒绝且重试未超限</text></g>
+  <g><rect class="pill" x="1608" y="890" width="155" height="28"/><text class="edgeLabel" x="1685" y="910" text-anchor="middle">终止：cancel</text></g>
+  <g><rect class="pill" x="1720" y="1125" width="220" height="28"/><text class="edgeLabel" x="1830" y="1145" text-anchor="middle">审批状态非法/超限</text></g>
+  <g><rect class="pill" x="2320" y="690" width="168" height="27"/><text class="edgeLabel" x="2404" y="709" text-anchor="middle">ALL_OF 汇总</text></g>
+  <g><rect class="pill" x="2916" y="445" width="197" height="28"/><text class="edgeLabel" x="3014" y="465" text-anchor="middle">nextHint 且次数 &lt; 5</text></g>
+  <g><rect class="pill" x="3135" y="430" width="164" height="28"/><text class="edgeLabel" x="3217" y="450" text-anchor="middle">无下一 Agent</text></g>
+  <g><rect class="pill" x="3150" y="840" width="166" height="28"/><text class="edgeLabel" x="3233" y="860" text-anchor="middle">执行/完成错误</text></g>
+  <g><rect class="pill" x="3260" y="560" width="220" height="28"/><text class="edgeLabel" x="3370" y="580" text-anchor="middle">complete 有 errorCode</text></g>
+
+  <!-- Main flow nodes -->
+  <g><rect class="node nodeDark" x="105" y="275" width="170" height="80" rx="20"/><text class="nTitle nDark" x="190" y="323" text-anchor="middle">START</text></g>
+  <g><rect class="node nodeBlue" x="355" y="265" width="260" height="100"/><text class="nTitle" x="485" y="305" text-anchor="middle">plan</text><text class="nCode" x="485" y="337" text-anchor="middle">编排 planning 子图</text></g>
+  <g><rect class="node nodePurple" x="690" y="265" width="260" height="100"/><text class="nTitle" x="820" y="305" text-anchor="middle">route</text><text class="nCode" x="820" y="337" text-anchor="middle">审批 / 单调 / 并行 / 失败</text></g>
+  <g><rect class="node nodePurple" x="1010" y="265" width="250" height="100"/><text class="nTitle" x="1135" y="305" text-anchor="middle">approval_gate</text><text class="nCode" x="1135" y="337" text-anchor="middle">构造审批请求并暂停等待</text></g>
+  <g><rect class="node nodePurple" x="1340" y="265" width="250" height="100"/><text class="nTitle" x="1465" y="305" text-anchor="middle">resume_decision</text><text class="nCode" x="1465" y="337" text-anchor="middle">批准 / 拒绝 / 终止 / 错误</text></g>
+  <g><rect class="node nodeGreen" x="1720" y="220" width="260" height="100"/><text class="nTitle" x="1850" y="260" text-anchor="middle">single_agent</text><text class="nCode" x="1850" y="292" text-anchor="middle">执行一个目标 Agent</text></g>
+  <g><rect class="node nodeGreen" x="1720" y="610" width="260" height="100"/><text class="nTitle" x="1850" y="650" text-anchor="middle">parallel_fan_out</text><text class="nCode" x="1850" y="682" text-anchor="middle">按 parallelDomains 动态分支</text></g>
+  <g><rect class="node nodeBlue" x="2780" y="220" width="270" height="145"/><text class="nTitle" x="2915" y="260" text-anchor="middle">route_after_execution</text><text class="nCode" x="2915" y="292" text-anchor="middle">有错误 → fail</text><text class="nCode" x="2915" y="320" text-anchor="middle">有 nextHint → handoff</text><text class="nCode" x="2915" y="348" text-anchor="middle">否则 → complete</text></g>
+  <g><rect class="node nodeBlue" x="3130" y="220" width="230" height="100"/><text class="nTitle" x="3245" y="260" text-anchor="middle">complete</text><text class="nCode" x="3245" y="292" text-anchor="middle">校验并构造最终响应</text></g>
+  <g><rect class="node nodeDark" x="3380" y="220" width="150" height="100"/><text class="nTitle nDark" x="3455" y="260" text-anchor="middle">complete_end</text><text class="nCode nDarkSub" x="3455" y="292" text-anchor="middle">成功结束</text></g>
+  <g><rect class="node nodeGreen" x="2110" y="448" width="250" height="64"/><text class="nTitle" x="2235" y="475" text-anchor="middle">parallel_listing</text><text class="nCode" x="2235" y="498" text-anchor="middle">房源域子 Agent</text></g>
+  <g><rect class="node nodeGreen" x="2110" y="528" width="250" height="64"/><text class="nTitle" x="2235" y="555" text-anchor="middle">parallel_marketing</text><text class="nCode" x="2235" y="578" text-anchor="middle">营销域子 Agent</text></g>
+  <g><rect class="node nodeGreen" x="2110" y="608" width="250" height="64"/><text class="nTitle" x="2235" y="635" text-anchor="middle">parallel_media</text><text class="nCode" x="2235" y="658" text-anchor="middle">媒体域子 Agent</text></g>
+  <g><rect class="node nodeGreen" x="2110" y="688" width="250" height="64"/><text class="nTitle" x="2235" y="715" text-anchor="middle">parallel_trade</text><text class="nCode" x="2235" y="738" text-anchor="middle">交易域子 Agent</text></g>
+  <g><rect class="node nodeGreen" x="2110" y="768" width="250" height="64"/><text class="nTitle" x="2235" y="795" text-anchor="middle">parallel_contract</text><text class="nCode" x="2235" y="818" text-anchor="middle">合同域子 Agent</text></g>
+  <g><rect class="node nodeGreen" x="2110" y="848" width="250" height="64"/><text class="nTitle" x="2235" y="875" text-anchor="middle">parallel_settlement</text><text class="nCode" x="2235" y="898" text-anchor="middle">结算域子 Agent</text></g>
+  <g><rect class="node nodeGreen" x="2110" y="928" width="250" height="64"/><text class="nTitle" x="2235" y="955" text-anchor="middle">parallel_notification</text><text class="nCode" x="2235" y="978" text-anchor="middle">通知域子 Agent</text></g>
+  <g><rect class="node nodeGreen" x="2500" y="635" width="235" height="170"/><text class="nTitle" x="2617" y="680" text-anchor="middle">parallel_aggregate</text><text class="nCode" x="2617" y="715" text-anchor="middle">等待已选分支全部返回</text><text class="nCode" x="2617" y="745" text-anchor="middle">策略：ALL_OF</text><text class="nCode" x="2617" y="775" text-anchor="middle">合并结果与 artifacts</text></g>
+  <g><rect class="node nodePurple" x="2790" y="510" width="210" height="90"/><text class="nTitle" x="2895" y="547" text-anchor="middle">handoff</text><text class="nCode" x="2895" y="577" text-anchor="middle">调用 nextHint Agent</text></g>
+  <g><rect class="node nodePurple" x="1010" y="545" width="230" height="90"/><text class="nTitle" x="1125" y="580" text-anchor="middle">regenerate</text><text class="nCode" x="1125" y="610" text-anchor="middle">整理反馈后重新规划</text></g>
+  <g><rect class="node nodeRed" x="3130" y="900" width="230" height="105"/><text class="nTitle" x="3245" y="940" text-anchor="middle">fail</text><text class="nCode" x="3245" y="972" text-anchor="middle">保留错误码与错误信息</text></g>
+  <g><rect class="node nodeRed" x="1340" y="900" width="205" height="105"/><text class="nTitle" x="1442" y="940" text-anchor="middle">cancel</text><text class="nCode" x="1442" y="972" text-anchor="middle">用户终止审批流程</text></g>
+  <g><rect class="node nodeDark" x="3295" y="1180" width="150" height="70" rx="35"/><text class="nTitle nDark" x="3370" y="1223" text-anchor="middle">END</text></g>
+
+  <!-- Subgraphs -->
+  <rect x="55" y="1400" width="1120" height="555" rx="26" fill="#fff" stroke="#d8e3ef" stroke-width="2" filter="url(#shadow)"/>
+  <text class="section" x="90" y="1450">二、planning 子图（plan 调用）</text>
+  <text class="sectionNote" x="90" y="1482">串行确定意图、校验计划并选择目标 Agent</text>
+  <path class="edge" d="M135 1640 H155 M273 1640 H293 M411 1640 H431 M549 1640 H569 M687 1640 H707 M825 1640 H845 M963 1640 H983 M1101 1640 H1115"/>
+  <g><rect class="mini" x="85" y="1585" width="50" height="110" rx="22"/><text class="miniTitle" x="110" y="1645" text-anchor="middle" font-size="14">START</text></g>
+  <g><rect class="mini" x="155" y="1585" width="118" height="110"/><text class="miniTitle" x="214" y="1625" text-anchor="middle" font-size="16">load_session</text><text class="miniSub" x="214" y="1655" text-anchor="middle">加载会话状态</text></g>
+  <g><rect class="mini" x="293" y="1585" width="118" height="110"/><text class="miniTitle" x="352" y="1625" text-anchor="middle" font-size="16">skill_match</text><text class="miniSub" x="352" y="1655" text-anchor="middle">匹配技能</text></g>
+  <g><rect class="mini" x="431" y="1585" width="118" height="110"/><text class="miniTitle" x="490" y="1625" text-anchor="middle" font-size="16">llm_intent_plan</text><text class="miniSub" x="490" y="1655" text-anchor="middle">LLM 意图计划</text></g>
+  <g><rect class="mini" x="569" y="1585" width="118" height="110"/><text class="miniTitle" x="628" y="1625" text-anchor="middle" font-size="15">plan_validation</text><text class="miniSub" x="628" y="1655" text-anchor="middle">校验计划</text></g>
+  <g><rect class="mini" x="707" y="1585" width="118" height="110"/><text class="miniTitle" x="766" y="1625" text-anchor="middle" font-size="16">parse_intent</text><text class="miniSub" x="766" y="1655" text-anchor="middle">解析结构化意图</text></g>
+  <g><rect class="mini" x="845" y="1585" width="118" height="110"/><text class="miniTitle" x="904" y="1625" text-anchor="middle" font-size="16">plan_task</text><text class="miniSub" x="904" y="1655" text-anchor="middle">生成任务计划</text></g>
+  <g><rect class="mini" x="983" y="1585" width="118" height="110"/><text class="miniTitle" x="1042" y="1625" text-anchor="middle" font-size="16">select_agent</text><text class="miniSub" x="1042" y="1655" text-anchor="middle">选择目标 Agent</text></g>
+  <g><rect class="mini" x="1115" y="1585" width="50" height="110" rx="22"/><text class="miniTitle" x="1140" y="1645" text-anchor="middle" font-size="14">END</text></g>
+  <text class="sectionNote" x="90" y="1750">输出：intent、selectedAgent、parallelDomains、approval 要求及执行上下文</text>
+  <text class="sectionNote" x="90" y="1790">顺序：START → load_session → skill_match → llm_intent_plan → plan_validation → parse_intent → plan_task → select_agent → END</text>
+
+  <rect x="1200" y="1400" width="1190" height="555" rx="26" fill="#fff" stroke="#d8e3ef" stroke-width="2" filter="url(#shadow)"/>
+  <text class="section" x="1235" y="1450">三、single_agent 子图（单目标执行）</text>
+  <text class="sectionNote" x="1235" y="1482">Parallel domain 节点也按域执行 Agent，完成后汇入 ALL_OF 聚合</text>
+  <path class="edge" d="M1300 1640 H1350 M1550 1640 H1600 M1800 1640 H1850 M2050 1640 H2100 M2300 1640 H2340"/>
+  <g><rect class="mini" x="1245" y="1585" width="55" height="110" rx="24"/><text class="miniTitle" x="1272" y="1645" text-anchor="middle" font-size="14">START</text></g>
+  <g><rect class="mini" x="1350" y="1585" width="200" height="110"/><text class="miniTitle" x="1450" y="1625" text-anchor="middle">build_invoke_request</text><text class="miniSub" x="1450" y="1655" text-anchor="middle">构造 A2A 请求 / 上下文</text></g>
+  <g><rect class="mini" x="1600" y="1585" width="200" height="110"/><text class="miniTitle" x="1700" y="1625" text-anchor="middle">invoke_agent</text><text class="miniSub" x="1700" y="1655" text-anchor="middle">A2A 调用 / 消费流事件</text></g>
+  <g><rect class="mini" x="1850" y="1585" width="200" height="110"/><text class="miniTitle" x="1950" y="1625" text-anchor="middle">persist_artifacts</text><text class="miniSub" x="1950" y="1655" text-anchor="middle">保存输出 Artifacts</text></g>
+  <g><rect class="mini" x="2100" y="1585" width="200" height="110"/><text class="miniTitle" x="2200" y="1625" text-anchor="middle">merge_result</text><text class="miniSub" x="2200" y="1655" text-anchor="middle">合并 response / state</text></g>
+  <g><rect class="mini" x="2340" y="1585" width="40" height="110" rx="20"/><text class="miniTitle" x="2360" y="1645" text-anchor="middle" font-size="14">END</text></g>
+  <text class="sectionNote" x="1235" y="1750">请求传递：sessionId / taskId / traceId / parentTaskId / branchId / childRunId</text>
+  <text class="sectionNote" x="1235" y="1790">终态回传：AgentTaskInvokeResponse → 持久化 Artifacts → 更新 Supervisor graph state</text>
+  <text class="sectionNote" x="1235" y="1830">handoff 直接复用 A2aExecutionService，并写入 handoff 关系与响应</text>
+
+  <rect x="2420" y="1400" width="1125" height="555" rx="26" fill="#fff" stroke="#d8e3ef" stroke-width="2" filter="url(#shadow)"/>
+  <text class="section" x="2455" y="1450">四、completion 子图（成功完成）</text>
+  <text class="sectionNote" x="2455" y="1482">主图 complete 节点成功后进入；存在 errorCode 则转 fail</text>
+  <path class="edge" d="M2605 1640 H2700 M3120 1640 H3240"/>
+  <g><rect class="mini" x="2470" y="1585" width="110" height="110" rx="40"/><text class="miniTitle" x="2525" y="1645" text-anchor="middle">START</text></g>
+  <g><rect class="mini" x="2700" y="1560" width="420" height="160"/><text class="miniTitle" x="2910" y="1605" text-anchor="middle">complete_workflow</text><text class="miniSub" x="2910" y="1640" text-anchor="middle">校验最终结果 / 保存 session</text><text class="miniSub" x="2910" y="1670" text-anchor="middle">发布 task.completed / 生成响应</text></g>
+  <g><rect class="mini" x="3240" y="1585" width="110" height="110" rx="40"/><text class="miniTitle" x="3295" y="1645" text-anchor="middle">END</text></g>
+  <text class="sectionNote" x="2455" y="1780">完成响应携带：finalAnswer、artifactIds、task/session/trace 标识、执行状态</text>
+
+  <!-- Streaming data plane -->
+  <rect x="55" y="1995" width="3490" height="550" rx="28" fill="#fff" stroke="#b9ddd3" stroke-width="2.5" filter="url(#shadow)"/>
+  <text class="section" x="92" y="2050">五、A2A 子 Agent 流式进度如何续到前端（旁路数据流，不是 LangGraph 控制边）</text>
+  <text class="sectionNote" x="3495" y="2048" text-anchor="end">子 Agent 最终 response 另一路回到 graph node；两条流彼此独立</text>
+  <path class="edgeData" d="M650 2220 H760 M1320 2220 H1430 M1980 2220 H2090 M2640 2220 H2750"/>
+  <g><rect class="streamBox" x="100" y="2120" width="550" height="205"/><text class="streamHead" x="375" y="2160" text-anchor="middle">① Subagent A2A streaming</text><text class="streamText" x="135" y="2200">Artifact / TaskStatusUpdateEvent</text><text class="streamText" x="135" y="2232">文本 delta、状态、最终 Artifact</text><text class="streamText" x="135" y="2264">携带 childTask / branch / trace 关联</text><text class="streamText" x="135" y="2296">是否走流式由能力与配置协商决定</text></g>
+  <g><rect class="streamBox" x="760" y="2120" width="560" height="205"/><text class="streamHead" x="1040" y="2160" text-anchor="middle">② A2aExecutionService</text><text class="streamText" x="795" y="2200">消费 ChildAgentStreamEvent</text><text class="streamText" x="795" y="2232">规整事件、限流 delta、清理 metadata</text><text class="streamText" x="795" y="2264">逐条 publish SessionStreamEvent</text><text class="streamText" x="795" y="2296">返回最终 AgentTaskInvokeResponse</text></g>
+  <g><rect class="streamBox" x="1430" y="2120" width="550" height="205"/><text class="streamHead" x="1705" y="2160" text-anchor="middle">③ SessionStreamService</text><text class="streamText" x="1465" y="2200">按 session/task 发布事件</text><text class="streamText" x="1465" y="2232">订阅与事件回放 / 序号续传</text><text class="streamText" x="1465" y="2264">事件保留 child agent、phase、result</text><text class="streamText" x="1465" y="2296">统一供 Supervisor SSE 订阅</text></g>
+  <g><rect class="streamBox" x="2090" y="2120" width="550" height="205"/><text class="streamHead" x="2365" y="2160" text-anchor="middle">④ Supervisor SSE endpoint</text><text class="streamText" x="2125" y="2200">GET /agent/supervisor/stream</text><text class="streamText" x="2125" y="2232">sessionId + 可选 taskId</text><text class="streamText" x="2125" y="2264">afterEventId / afterSequence</text><text class="streamText" x="2125" y="2296">Last-Event-ID 断线续接</text></g>
+  <g><rect class="streamBox" x="2750" y="2120" width="650" height="205"/><text class="streamHead" x="3075" y="2160" text-anchor="middle">⑤ Frontend EventSource / SSE</text><text class="streamText" x="2790" y="2200">持续接收 child progress + lifecycle 事件</text><text class="streamText" x="2790" y="2232">UI 按 agentId / phase / branchId 展示</text><text class="streamText" x="2790" y="2264">重连时带事件游标，避免从头丢进度</text><text class="streamText" x="2790" y="2296">最终结果仍以 task.completed / response 为准</text></g>
+  <path class="edgeAmber" d="M1040 2325 V2400 H2470"/>
+  <g><rect x="2470" y="2355" width="900" height="90" rx="18" fill="#fff8e8" stroke="#d5a64d" stroke-width="2"/><text class="edgeLabel" x="2920" y="2392" text-anchor="middle">AgentTaskInvokeResponse → invoke_agent</text><text class="edgeLabel" x="2920" y="2420" text-anchor="middle">→ persist_artifacts / merge_result → Supervisor graph state</text></g>
+  <text class="footer" x="100" y="2485">共享状态贯穿主图：sessionId · taskId · traceId · userMessage · sharedContext · selectedAgent · parallelDomains · latestAgentResponse · artifactIds · workflowStatus</text>
+  <text class="footer" x="100" y="2520">图例：蓝灰实线 = LangGraph 控制流　紫色实线 = 条件路由 / 审批　绿色实线 = 子 Agent 并行分支　绿色虚线 = A2A 进度事件 → SSE　琥珀虚线 = 最终结构化结果回写 graph state</text>
+  <text class="footer" x="3500" y="2585" text-anchor="end">依据 OfficialSupervisorGraphFactory、Planning/SingleAgent/CompletionGraphFactory、A2aExecutionService 与 AgentController 实现绘制</text>
+</svg>
