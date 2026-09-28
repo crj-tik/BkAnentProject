@@ -43,8 +43,10 @@ import com.bkanent.agent.service.SupervisorEventAuditQueryService;
 import com.bkanent.agent.service.SupervisorTaskService;
 import com.bkanent.agent.service.SupervisorWorkflowQueryService;
 import com.bkanent.agent.service.SupervisorWorkflowService;
+import com.bkanent.agent.service.SupervisorSessionOwnershipService;
 import com.bkanent.agent.service.AgentToolCatalogService;
 import com.bkanent.agent.service.McpDebugService;
+import com.bkanent.agent.security.AgentPrincipalContext;
 import com.bkanent.agent.stream.SessionStreamService;
 import com.bkanent.common.agent.AgentCard;
 import com.bkanent.common.agent.ApprovalCallbackRequest;
@@ -123,6 +125,8 @@ public class AgentController {
     private final AgentPermissionService agentPermissionService;
     private final SupervisorGovernanceService supervisorGovernanceService;
     private final DynamicMcpClientManager dynamicMcpClientManager;
+    private final AgentPrincipalContext authenticatedPrincipal;
+    private final SupervisorSessionOwnershipService supervisorSessionOwnershipService;
 
     /**
      * 构造 AgentController 实例。
@@ -145,7 +149,9 @@ public class AgentController {
                            SessionStreamService sessionStreamService,
                            AgentPermissionService agentPermissionService,
                            SupervisorGovernanceService supervisorGovernanceService,
-                           DynamicMcpClientManager dynamicMcpClientManager) {
+                           DynamicMcpClientManager dynamicMcpClientManager,
+                           AgentPrincipalContext authenticatedPrincipal,
+                           SupervisorSessionOwnershipService supervisorSessionOwnershipService) {
         this.agentMemoryMilvusService = agentMemoryMilvusService;
         this.listingMilvusService = listingMilvusService;
         this.agentOrchestratorService = agentOrchestratorService;
@@ -165,6 +171,8 @@ public class AgentController {
         this.agentPermissionService = agentPermissionService;
         this.supervisorGovernanceService = supervisorGovernanceService;
         this.dynamicMcpClientManager = dynamicMcpClientManager;
+        this.authenticatedPrincipal = authenticatedPrincipal;
+        this.supervisorSessionOwnershipService = supervisorSessionOwnershipService;
     }
 
     /**
@@ -189,8 +197,9 @@ public class AgentController {
     @GetMapping({"/vector-store/milvus/search", "/mcp/milvus/search"})
     public ApiResponse<List<MilvusSearchResult>> milvusSearch(@RequestParam String userId,
                                                               @RequestParam String query) {
+        String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return guarded(() -> {
-            agentPermissionService.assertPermission(userId, "agent.rag.memory.search", "memory rag search");
+            agentPermissionService.assertPermission(authenticatedUserId, "agent.rag.memory.search", "memory rag search");
             return ApiResponse.ok(agentMemoryMilvusService.searchKnowledge(null, query, 5));
         });
     }
@@ -200,10 +209,11 @@ public class AgentController {
      */
     @GetMapping("/mcp/tools")
     public ApiResponse<List<AgentMcpToolDescriptor>> listMcpTools(@RequestParam String userId) {
+        String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return guarded(() -> {
-            agentPermissionService.assertPermission(userId, "agent.mcp.tools.read", "mcp tool listing");
+            agentPermissionService.assertPermission(authenticatedUserId, "agent.mcp.tools.read", "mcp tool listing");
             return ApiResponse.ok(agentMcpClient.listTools().stream()
-                    .filter(tool -> agentPermissionService.canReadMcpServer(userId, tool.serverName()))
+                    .filter(tool -> agentPermissionService.canReadMcpServer(authenticatedUserId, tool.serverName()))
                     .toList());
         });
     }
@@ -213,10 +223,11 @@ public class AgentController {
      */
     @GetMapping("/mcp/tools/catalog")
     public ApiResponse<List<AgentToolCatalogItem>> listMcpToolCatalog(@RequestParam String userId) {
+        String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return guarded(() -> {
-            agentPermissionService.assertPermission(userId, "agent.mcp.catalog.read", "mcp tool catalog");
+            agentPermissionService.assertPermission(authenticatedUserId, "agent.mcp.catalog.read", "mcp tool catalog");
             return ApiResponse.ok(agentToolCatalogService.listCatalog().stream()
-                    .filter(item -> agentPermissionService.canReadMcpServer(userId, item.serverName()))
+                    .filter(item -> agentPermissionService.canReadMcpServer(authenticatedUserId, item.serverName()))
                     .toList());
         });
     }
@@ -226,10 +237,11 @@ public class AgentController {
      */
     @GetMapping("/mcp/tools/discovered")
     public ApiResponse<List<DiscoveredMcpTool>> listDiscoveredMcpTools(@RequestParam String userId) {
+        String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return guarded(() -> {
-            agentPermissionService.assertPermission(userId, "agent.mcp.debug.read", "mcp discovered tool listing");
+            agentPermissionService.assertPermission(authenticatedUserId, "agent.mcp.debug.read", "mcp discovered tool listing");
             return ApiResponse.ok(mcpDebugService.listDiscoveredTools().stream()
-                    .filter(item -> agentPermissionService.canReadMcpServer(userId, item.serverName()))
+                    .filter(item -> agentPermissionService.canReadMcpServer(authenticatedUserId, item.serverName()))
                     .toList());
         });
     }
@@ -239,10 +251,11 @@ public class AgentController {
      */
     @GetMapping("/mcp/tools/registered")
     public ApiResponse<List<RegisteredMcpTool>> listRegisteredMcpTools(@RequestParam String userId) {
+        String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return guarded(() -> {
-            agentPermissionService.assertPermission(userId, "agent.mcp.debug.read", "mcp registered tool listing");
+            agentPermissionService.assertPermission(authenticatedUserId, "agent.mcp.debug.read", "mcp registered tool listing");
             return ApiResponse.ok(mcpDebugService.listRegisteredTools().stream()
-                    .filter(item -> agentPermissionService.canReadMcpServer(userId, item.serverName()))
+                    .filter(item -> agentPermissionService.canReadMcpServer(authenticatedUserId, item.serverName()))
                     .toList());
         });
     }
@@ -252,18 +265,20 @@ public class AgentController {
      */
     @GetMapping("/mcp/servers/status")
     public ApiResponse<List<McpServerStatus>> listMcpServerStatuses(@RequestParam String userId) {
+        String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return guarded(() -> {
-            agentPermissionService.assertPermission(userId, "agent.mcp.debug.read", "mcp server status listing");
+            agentPermissionService.assertPermission(authenticatedUserId, "agent.mcp.debug.read", "mcp server status listing");
             return ApiResponse.ok(mcpDebugService.listServerStatuses().stream()
-                    .filter(item -> agentPermissionService.canReadMcpServer(userId, item.serverName()))
+                    .filter(item -> agentPermissionService.canReadMcpServer(authenticatedUserId, item.serverName()))
                     .toList());
         });
     }
 
     @GetMapping("/mcp/dynamic/connections")
     public ApiResponse<List<String>> listDynamicMcpConnections(@RequestParam String userId) {
+        String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return guarded(() -> {
-            agentPermissionService.assertPermission(userId, "agent.mcp.debug.read", "dynamic mcp connection listing");
+            agentPermissionService.assertPermission(authenticatedUserId, "agent.mcp.debug.read", "dynamic mcp connection listing");
             return ApiResponse.ok(dynamicMcpClientManager.listConnectionNames());
         });
     }
@@ -271,8 +286,9 @@ public class AgentController {
     @PostMapping("/mcp/dynamic/connect")
     public ApiResponse<String> registerDynamicMcpConnection(@RequestParam String userId,
                                                              @RequestBody DynamicMcpConnectionConfig config) {
+        String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return guarded(() -> {
-            agentPermissionService.assertPermission(userId, "agent.mcp.admin.manage", "dynamic mcp connection registration");
+            agentPermissionService.assertPermission(authenticatedUserId, "agent.mcp.admin.manage", "dynamic mcp connection registration");
             dynamicMcpClientManager.register(config);
             return ApiResponse.ok("Dynamic MCP connection '" + config.name() + "' registered successfully");
         });
@@ -281,8 +297,9 @@ public class AgentController {
     @DeleteMapping("/mcp/dynamic/connect/{name}")
     public ApiResponse<String> unregisterDynamicMcpConnection(@RequestParam String userId,
                                                                @PathVariable String name) {
+        String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return guarded(() -> {
-            agentPermissionService.assertPermission(userId, "agent.mcp.admin.manage", "dynamic mcp connection removal");
+            agentPermissionService.assertPermission(authenticatedUserId, "agent.mcp.admin.manage", "dynamic mcp connection removal");
             dynamicMcpClientManager.unregister(name);
             return ApiResponse.ok("Dynamic MCP connection '" + name + "' unregistered successfully");
         });
@@ -294,8 +311,9 @@ public class AgentController {
     @PostMapping({"/vector-store/milvus/collections/init", "/mcp/milvus/collections/init"})
     public ApiResponse<Void> initCollection(@RequestParam String userId,
                                             @RequestBody MilvusCollectionInitRequest request) {
+        String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return guarded(() -> {
-            agentPermissionService.assertPermission(userId, "agent.rag.memory.init", "memory collection init");
+            agentPermissionService.assertPermission(authenticatedUserId, "agent.rag.memory.init", "memory collection init");
             agentMemoryMilvusService.initializeMemoryCollection(request.collectionName());
             return ApiResponse.ok(null);
         });
@@ -306,9 +324,10 @@ public class AgentController {
      */
     @PostMapping("/rag/listings/index")
     public ApiResponse<Void> indexListing(@RequestBody ListingIndexRequest request) {
+        ListingIndexRequest authenticatedRequest = authenticatedPrincipal.bind(request);
         return guarded(() -> {
-            agentPermissionService.assertPermission(request.userId(), "agent.rag.listing.index", "listing rag indexing");
-            listingMilvusService.indexListing(request);
+            agentPermissionService.assertPermission(authenticatedRequest.userId(), "agent.rag.listing.index", "listing rag indexing");
+            listingMilvusService.indexListing(authenticatedRequest);
             return ApiResponse.ok(null);
         });
     }
@@ -318,9 +337,10 @@ public class AgentController {
      */
     @PostMapping("/rag/listings/query")
     public ApiResponse<ListingRagResponse> listingRag(@RequestBody ListingRagQueryRequest request) {
+        ListingRagQueryRequest authenticatedRequest = authenticatedPrincipal.bind(request);
         return guarded(() -> {
-            agentPermissionService.assertPermission(request.userId(), "agent.rag.listing.query", "listing rag query");
-            return ApiResponse.ok(listingMilvusService.query(request));
+            agentPermissionService.assertPermission(authenticatedRequest.userId(), "agent.rag.listing.query", "listing rag query");
+            return ApiResponse.ok(listingMilvusService.query(authenticatedRequest));
         });
     }
 
@@ -329,12 +349,13 @@ public class AgentController {
      */
     @PostMapping("/chat")
     public ApiResponse<AgentChatResponse> chat(@RequestBody AgentChatRequest request) {
+        AgentChatRequest authenticatedRequest = authenticatedPrincipal.bind(request);
         return guarded(() -> {
-            agentPermissionService.assertPermission(request.userId(), "agent.chat.use", "agent chat");
-            if (Boolean.TRUE.equals(request.allowMcp())) {
-                agentPermissionService.assertPermission(request.userId(), "agent.mcp.chat.use", "agent chat with mcp");
+            agentPermissionService.assertPermission(authenticatedRequest.userId(), "agent.chat.use", "agent chat");
+            if (Boolean.TRUE.equals(authenticatedRequest.allowMcp())) {
+                agentPermissionService.assertPermission(authenticatedRequest.userId(), "agent.mcp.chat.use", "agent chat with mcp");
             }
-            return ApiResponse.ok(agentOrchestratorService.chat(request));
+            return ApiResponse.ok(agentOrchestratorService.chat(authenticatedRequest));
         });
     }
 
@@ -343,24 +364,35 @@ public class AgentController {
      */
     @PostMapping("/supervisor/tasks")
     public ApiResponse<SupervisorTaskResponse> submitSupervisorTask(@RequestBody SupervisorTaskRequest request) {
+        SupervisorTaskRequest authenticatedRequest = authenticatedPrincipal.bind(request);
         return guarded(() -> {
-            supervisorGovernanceService.assertRateLimit("supervisor.tasks", request);
-            return ApiResponse.ok(supervisorTaskService.submitTask(supervisorGovernanceService.applyGrayContext(request)));
+            supervisorGovernanceService.assertRateLimit("supervisor.tasks", authenticatedRequest);
+            if (authenticatedRequest.userMessage() == null || authenticatedRequest.userMessage().isBlank()) {
+                return ApiResponse.fail("SUPERVISOR_INVALID_REQUEST", "userMessage must not be blank");
+            }
+            supervisorSessionOwnershipService.claim(authenticatedRequest.sessionId(), authenticatedRequest.userId());
+            return ApiResponse.ok(supervisorTaskService.submitTask(supervisorGovernanceService.applyGrayContext(authenticatedRequest)));
         });
     }
 
     @PostMapping("/supervisor/tasks/async")
     public ApiResponse<SupervisorAsyncTaskCreateResponse> submitSupervisorTaskAsync(@RequestBody SupervisorTaskRequest request) {
+        SupervisorTaskRequest authenticatedRequest = authenticatedPrincipal.bind(request);
         return guarded(() -> {
-            supervisorGovernanceService.assertRateLimit("supervisor.tasks.async", request);
-            return ApiResponse.ok(supervisorAsyncTaskService.submitTask(supervisorGovernanceService.applyGrayContext(request)));
+            supervisorGovernanceService.assertRateLimit("supervisor.tasks.async", authenticatedRequest);
+            if (authenticatedRequest.userMessage() == null || authenticatedRequest.userMessage().isBlank()) {
+                return ApiResponse.fail("SUPERVISOR_INVALID_REQUEST", "userMessage must not be blank");
+            }
+            supervisorSessionOwnershipService.claim(authenticatedRequest.sessionId(), authenticatedRequest.userId());
+            return ApiResponse.ok(supervisorAsyncTaskService.submitTask(supervisorGovernanceService.applyGrayContext(authenticatedRequest)));
         });
     }
 
     @GetMapping("/supervisor/tasks/async/status")
     public ApiResponse<SupervisorAsyncTaskStatusResponse> querySupervisorAsyncTaskStatus(@RequestParam String asyncTaskId,
                                                                                          @RequestParam String userId) {
-        SupervisorAsyncTaskStatusResponse response = supervisorAsyncTaskService.queryStatus(asyncTaskId, userId);
+        String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
+        SupervisorAsyncTaskStatusResponse response = supervisorAsyncTaskService.queryStatus(asyncTaskId, authenticatedUserId);
         if (response == null) {
             return ApiResponse.fail("SUPERVISOR_ASYNC_TASK_NOT_FOUND", "async task not found");
         }
@@ -370,8 +402,9 @@ public class AgentController {
     @GetMapping("/supervisor/tasks/async/stream")
     public SseEmitter streamSupervisorAsyncTask(@RequestParam String asyncTaskId,
                                                 @RequestParam String userId) {
+        String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         SseEmitter emitter = new SseEmitter(0L);
-        CompletableFuture.runAsync(() -> streamSupervisorAsyncTaskStatus(asyncTaskId, userId, emitter));
+        CompletableFuture.runAsync(() -> streamSupervisorAsyncTaskStatus(asyncTaskId, authenticatedUserId, emitter));
         return emitter;
     }
 
@@ -380,24 +413,35 @@ public class AgentController {
      */
     @PostMapping("/supervisor/workflows")
     public ApiResponse<SupervisorTaskResponse> startSupervisorWorkflow(@RequestBody SupervisorTaskRequest request) {
+        SupervisorTaskRequest authenticatedRequest = authenticatedPrincipal.bind(request);
         return guarded(() -> {
-            supervisorGovernanceService.assertRateLimit("supervisor.workflows", request);
-            return ApiResponse.ok(supervisorWorkflowService.startWorkflow(supervisorGovernanceService.applyGrayContext(request)));
+            supervisorGovernanceService.assertRateLimit("supervisor.workflows", authenticatedRequest);
+            if (authenticatedRequest.userMessage() == null || authenticatedRequest.userMessage().isBlank()) {
+                return ApiResponse.fail("SUPERVISOR_INVALID_REQUEST", "userMessage must not be blank");
+            }
+            supervisorSessionOwnershipService.claim(authenticatedRequest.sessionId(), authenticatedRequest.userId());
+            return ApiResponse.ok(supervisorWorkflowService.startWorkflow(supervisorGovernanceService.applyGrayContext(authenticatedRequest)));
         });
     }
 
     @PostMapping("/supervisor/workflows/async")
     public ApiResponse<SupervisorAsyncWorkflowCreateResponse> startSupervisorWorkflowAsync(@RequestBody SupervisorTaskRequest request) {
+        SupervisorTaskRequest authenticatedRequest = authenticatedPrincipal.bind(request);
         return guarded(() -> {
-            supervisorGovernanceService.assertRateLimit("supervisor.workflows.async", request);
-            return ApiResponse.ok(supervisorAsyncWorkflowService.submitWorkflow(supervisorGovernanceService.applyGrayContext(request)));
+            supervisorGovernanceService.assertRateLimit("supervisor.workflows.async", authenticatedRequest);
+            if (authenticatedRequest.userMessage() == null || authenticatedRequest.userMessage().isBlank()) {
+                return ApiResponse.fail("SUPERVISOR_INVALID_REQUEST", "userMessage must not be blank");
+            }
+            supervisorSessionOwnershipService.claim(authenticatedRequest.sessionId(), authenticatedRequest.userId());
+            return ApiResponse.ok(supervisorAsyncWorkflowService.submitWorkflow(supervisorGovernanceService.applyGrayContext(authenticatedRequest)));
         });
     }
 
     @GetMapping("/supervisor/workflows/async/status")
     public ApiResponse<SupervisorAsyncWorkflowStatusResponse> querySupervisorAsyncWorkflowStatus(@RequestParam String asyncWorkflowId,
                                                                                                  @RequestParam String userId) {
-        SupervisorAsyncWorkflowStatusResponse response = supervisorAsyncWorkflowService.queryStatus(asyncWorkflowId, userId);
+        String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
+        SupervisorAsyncWorkflowStatusResponse response = supervisorAsyncWorkflowService.queryStatus(asyncWorkflowId, authenticatedUserId);
         if (response == null) {
             return ApiResponse.fail("SUPERVISOR_ASYNC_WORKFLOW_NOT_FOUND", "async workflow not found");
         }
@@ -410,14 +454,16 @@ public class AgentController {
                                                     @RequestParam(required = false) String afterEventId,
                                                     @RequestParam(required = false) Long afterSequence,
                                                     @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId) {
+        String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return supervisorAsyncWorkflowService.subscribeWorkflowStream(
-                asyncWorkflowId, userId, firstNonBlank(afterEventId, lastEventId), afterSequence);
+                asyncWorkflowId, authenticatedUserId, firstNonBlank(afterEventId, lastEventId), afterSequence);
     }
 
     @PostMapping("/supervisor/workflows/async/cancel")
     public ApiResponse<SupervisorAsyncWorkflowStatusResponse> cancelSupervisorAsyncWorkflow(@RequestParam String asyncWorkflowId,
                                                                                             @RequestParam String userId) {
-        SupervisorAsyncWorkflowStatusResponse response = supervisorAsyncWorkflowService.cancelWorkflow(asyncWorkflowId, userId);
+        String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
+        SupervisorAsyncWorkflowStatusResponse response = supervisorAsyncWorkflowService.cancelWorkflow(asyncWorkflowId, authenticatedUserId);
         if (response == null) {
             return ApiResponse.fail("SUPERVISOR_ASYNC_WORKFLOW_NOT_FOUND", "async workflow not found");
         }
@@ -428,7 +474,8 @@ public class AgentController {
     public ApiResponse<SupervisorAsyncWorkflowCreateResponse> retrySupervisorAsyncWorkflow(@RequestParam String asyncWorkflowId,
                                                                                            @RequestParam String userId) {
         try {
-            SupervisorAsyncWorkflowCreateResponse response = supervisorAsyncWorkflowService.retryWorkflow(asyncWorkflowId, userId);
+            String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
+            SupervisorAsyncWorkflowCreateResponse response = supervisorAsyncWorkflowService.retryWorkflow(asyncWorkflowId, authenticatedUserId);
             if (response == null) {
                 return ApiResponse.fail("SUPERVISOR_ASYNC_WORKFLOW_NOT_FOUND", "async workflow not found");
             }
@@ -449,14 +496,16 @@ public class AgentController {
     @GetMapping("/supervisor/workflows/state")
     public ApiResponse<SupervisorWorkflowView> getWorkflowState(@RequestParam String taskId,
                                                                 @RequestParam String userId) {
-        return guarded(() -> ApiResponse.ok(supervisorWorkflowQueryService.findWorkflow(taskId, userId).orElse(null)));
+        String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
+        return guarded(() -> ApiResponse.ok(supervisorWorkflowQueryService.findWorkflow(taskId, authenticatedUserId).orElse(null)));
     }
 
     @GetMapping("/supervisor/workflows/artifacts")
     public ApiResponse<List<TaskArtifactView>> listWorkflowArtifacts(@RequestParam String taskId,
                                                                      @RequestParam String userId) {
         try {
-            return ApiResponse.ok(supervisorWorkflowQueryService.listArtifacts(taskId, userId));
+            String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
+            return ApiResponse.ok(supervisorWorkflowQueryService.listArtifacts(taskId, authenticatedUserId));
         } catch (IllegalStateException exception) {
             return ApiResponse.fail(PermissionErrorCodes.ARTIFACT_ACCESS_DENIED, exception.getMessage());
         }
@@ -471,8 +520,9 @@ public class AgentController {
                                                               @RequestParam(required = false) String asyncTaskId,
                                                               @RequestParam(required = false) String asyncWorkflowId,
                                                               @RequestParam(required = false) String grayStrategyVersion) {
+        String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return guarded(() -> ApiResponse.ok(supervisorDiagnosticsService.diagnose(
-                userId, taskId, traceId, approvalId, artifactId, asyncTaskId, asyncWorkflowId, grayStrategyVersion
+                authenticatedUserId, taskId, traceId, approvalId, artifactId, asyncTaskId, asyncWorkflowId, grayStrategyVersion
         )));
     }
 
@@ -538,6 +588,8 @@ public class AgentController {
                                                 @RequestParam(required = false) String afterEventId,
                                                 @RequestParam(required = false) Long afterSequence,
                                                 @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId) {
+        String authenticatedUserId = authenticatedPrincipal.userId();
+        supervisorSessionOwnershipService.assertOwned(sessionId, authenticatedUserId);
         return sessionStreamService.subscribe(sessionId, taskId, firstNonBlank(afterEventId, lastEventId), afterSequence);
     }
 

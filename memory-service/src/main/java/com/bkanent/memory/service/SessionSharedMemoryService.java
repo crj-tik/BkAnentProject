@@ -34,6 +34,8 @@ public class SessionSharedMemoryService {
         if (entity == null) {
             entity = new SessionSharedMemoryEntity();
             entity.setSessionId(request.sessionId());
+        } else if (!java.util.Objects.equals(entity.getUserId(), request.userId())) {
+            throw new IllegalStateException("Session ownership cannot be changed");
         }
         entity.setUserId(request.userId());
         entity.setSummary(request.summary());
