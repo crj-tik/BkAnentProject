@@ -6,6 +6,7 @@ import com.bkanent.auth.entity.UserAccountEntity;
 import com.bkanent.auth.service.AuthTokenService;
 import com.bkanent.auth.service.InMemoryTokenRevocationStore;
 import com.bkanent.auth.service.UserAccountService;
+import com.bkanent.auth.rpc.AuthPermissionRpcServiceImpl;
 import com.bkanent.common.model.ApiResponse;
 import com.bkanent.common.model.AuthLoginRequest;
 import com.bkanent.common.model.AuthTokenDTO;
@@ -15,6 +16,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -71,10 +73,15 @@ class AuthControllerTest {
         assertTrue(response.success());
         assertNotNull(response.data());
         assertTrue(authTokenService.isValidAccessToken(response.data().accessToken()));
+        when(userAccountService.getById(7L)).thenReturn(activeAccount);
+        AuthPermissionRpcServiceImpl authRpc = new AuthPermissionRpcServiceImpl(authTokenService, userAccountService);
+        assertNotNull(authRpc.resolvePrincipal(response.data().accessToken()));
 
         authController.logout("Bearer " + response.data().accessToken());
 
         assertFalse(authTokenService.isValidAccessToken(response.data().accessToken()));
+        assertNull(authRpc.resolvePrincipal(response.data().accessToken()),
+                "the Gateway auth RPC must reject the token immediately after logout");
     }
 
     @Test

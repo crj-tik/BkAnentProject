@@ -32,9 +32,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -109,18 +109,30 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
                     buildMessageSendParams(request, false),
                     event -> handleStreamingEvent(descriptor, request, eventConsumer, result, output,
                             artifactIds, responseParts, completed, event),
-                    error -> result.completeExceptionally(new IllegalStateException(
-                            "official a2a streaming error for " + descriptor.agentId() + ": " + error)),
-                    () -> result.completeExceptionally(new IllegalStateException(
-                            "official a2a streaming connection failed for " + descriptor.agentId()))
+                    error -> {
+                        completed.set(true);
+                        result.completeExceptionally(new IllegalStateException(
+                                "official a2a streaming error for " + descriptor.agentId() + ": " + error));
+                    },
+                    () -> {
+                        completed.set(true);
+                        result.completeExceptionally(new IllegalStateException(
+                                "official a2a streaming connection failed for " + descriptor.agentId()));
+                    }
             );
         } catch (A2AServerException exception) {
+            completed.set(true);
             result.completeExceptionally(new IllegalStateException(
                     "official a2a streaming invoke failed for " + descriptor.agentId(), exception));
         }
         try {
-            return result.join();
-        } catch (CompletionException exception) {
+            return result.get();
+        } catch (InterruptedException exception) {
+            completed.set(true);
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("official a2a streaming invoke interrupted for " + descriptor.agentId(),
+                    exception);
+        } catch (ExecutionException exception) {
             Throwable cause = exception.getCause() == null ? exception : exception.getCause();
             if (cause instanceof RuntimeException runtimeException) {
                 throw runtimeException;
@@ -138,6 +150,9 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
                                       List<Part<?>> responseParts,
                                       AtomicBoolean completed,
                                       StreamingEventKind event) {
+        if (completed.get()) {
+            return;
+        }
         if (event instanceof Message message) {
             String text = extractMessageText(message);
             addParts(responseParts, message.getParts());

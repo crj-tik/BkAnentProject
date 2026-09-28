@@ -313,6 +313,9 @@ public class DistributedAgentProperties {
     }
 
     public static class AsyncRuntimeProperties {
+        private static final int MAX_LEASE_OWNER_LENGTH = 128;
+        private static final int LEASE_OWNER_SUFFIX_LENGTH = 1 + 36 + 1 + 36;
+
         private boolean enabled = true;
         private long dispatchIntervalMs = 1000L;
         private int dispatchBatchSize = 10;
@@ -322,13 +325,14 @@ public class DistributedAgentProperties {
         private int maxAttempts = 3;
         private long retryDelaySeconds = 5L;
         private long childTaskSubmitRequestTimeoutMs = 15_000L;
-        private long childTaskTimeoutMs = 300_000L;
+        private long childTaskTimeoutMs = 1_800_000L;
         private long childTaskPollRequestTimeoutMs = 15_000L;
         private long childTaskInitialPollIntervalMs = 1_000L;
         private long childTaskMaxPollIntervalMs = 10_000L;
         private double childTaskPollBackoffMultiplier = 1.5d;
         private int childTaskPollJitterPercent = 20;
-        private String workerId = "agent-worker-" + UUID.randomUUID();
+        private String workerId = "agent-worker";
+        private final String workerInstanceId = UUID.randomUUID().toString();
 
         public boolean isEnabled() {
             return enabled;
@@ -452,6 +456,24 @@ public class DistributedAgentProperties {
 
         public String getWorkerId() {
             return workerId;
+        }
+
+        /**
+         * Returns a process-unique lease owner even when every instance uses
+         * the same configured worker-id prefix.
+         */
+        public String getInstanceWorkerId() {
+            return normalizedWorkerIdPrefix() + "-" + workerInstanceId;
+        }
+
+        public String createLeaseOwner() {
+            return getInstanceWorkerId() + "-" + UUID.randomUUID();
+        }
+
+        private String normalizedWorkerIdPrefix() {
+            String prefix = workerId == null || workerId.isBlank() ? "agent-worker" : workerId.trim();
+            int maxPrefixLength = MAX_LEASE_OWNER_LENGTH - LEASE_OWNER_SUFFIX_LENGTH;
+            return prefix.length() > maxPrefixLength ? prefix.substring(0, maxPrefixLength) : prefix;
         }
 
         public void setWorkerId(String workerId) {

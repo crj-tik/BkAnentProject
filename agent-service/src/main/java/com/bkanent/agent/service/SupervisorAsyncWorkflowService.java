@@ -267,6 +267,7 @@ public class SupervisorAsyncWorkflowService {
     }
 
     public void dispatchPendingWorkflows(int batchSize) {
+        reclaimExpiredWorkflowLeases();
         java.util.List<AgentAsyncWorkflowEntity> pending = agentAsyncWorkflowMapper.selectList(
                 new LambdaQueryWrapper<AgentAsyncWorkflowEntity>()
                         .eq(AgentAsyncWorkflowEntity::getStatus, "ACCEPTED")
@@ -278,25 +279,39 @@ public class SupervisorAsyncWorkflowService {
                         .last("limit " + Math.max(1, batchSize))
         );
         for (AgentAsyncWorkflowEntity pendingEntity : pending) {
-            if (!claimWorkflow(pendingEntity.getId())) {
+            String leaseOwner = distributedAgentProperties.getAsyncRuntime().createLeaseOwner();
+            if (!claimWorkflow(pendingEntity.getId(), leaseOwner)) {
                 continue;
             }
+            AsyncRuntimeLeaseHeartbeat.LeaseHeartbeat heartbeat = startLeaseHeartbeat(pendingEntity, leaseOwner);
             try {
-                executor.execute(() -> runClaimedWorkflow(pendingEntity.getAsyncWorkflowId()));
+                executor.execute(() -> {
+                    try (heartbeat) {
+                        runClaimedWorkflow(pendingEntity.getAsyncWorkflowId(), leaseOwner);
+                    }
+                });
             } catch (RejectedExecutionException exception) {
-                releaseClaim(pendingEntity.getId());
+                heartbeat.close();
+                releaseClaim(pendingEntity.getId(), leaseOwner);
             }
         }
     }
 
-    private void runClaimedWorkflow(String asyncWorkflowId) {
+    private void runClaimedWorkflow(String asyncWorkflowId, String leaseOwner) {
         AgentAsyncWorkflowEntity entity = findEntity(asyncWorkflowId);
         if (entity == null || Integer.valueOf(1).equals(entity.getCancelRequested())) {
             return;
         }
-        if (!"RUNNING".equalsIgnoreCase(entity.getStatus())) {
+        if (!"RUNNING".equalsIgnoreCase(entity.getStatus())
+                || !leaseOwner.equals(entity.getLeaseOwner())) {
             return;
         }
+        processClaimedWorkflow(asyncWorkflowId, entity, leaseOwner);
+    }
+
+    private void processClaimedWorkflow(String asyncWorkflowId,
+                                        AgentAsyncWorkflowEntity entity,
+                                        String leaseOwner) {
         publish(entity.getSessionId(), entity.getTaskId(), "supervisor-agent", "supervisor.workflow_async.status", Map.of(
                 "asyncWorkflowId", entity.getAsyncWorkflowId(),
                 "status", entity.getStatus(),
@@ -308,7 +323,9 @@ public class SupervisorAsyncWorkflowService {
             SupervisorTaskRequest request = readRequest(entity.getOriginalRequestJson());
             SupervisorTaskResponse result = supervisorWorkflowService.startWorkflow(request);
             entity = findEntity(asyncWorkflowId);
-            if (entity == null || Integer.valueOf(1).equals(entity.getCancelRequested())) {
+            if (entity == null || Integer.valueOf(1).equals(entity.getCancelRequested())
+                    || !leaseOwner.equals(entity.getLeaseOwner())
+                    || !"RUNNING".equalsIgnoreCase(entity.getStatus())) {
                 return;
             }
             entity.setResultJson(writeJson(result));
@@ -317,7 +334,7 @@ public class SupervisorAsyncWorkflowService {
             entity.setErrorMessage(null);
             entity.setLeaseOwner(null);
             entity.setLeaseUntilMs(null);
-            if (!completeWorkflow(entity)) {
+            if (!completeWorkflow(entity, leaseOwner)) {
                 return;
             }
             publish(entity.getSessionId(), entity.getTaskId(), "supervisor-agent", "supervisor.workflow_async.completed", Map.of(
@@ -330,10 +347,12 @@ public class SupervisorAsyncWorkflowService {
             agentMetricsService.recordAsyncWorkflow(entity.getStatus(), elapsed(entity));
         } catch (Exception exception) {
             entity = findEntity(asyncWorkflowId);
-            if (entity == null || Integer.valueOf(1).equals(entity.getCancelRequested())) {
+            if (entity == null || Integer.valueOf(1).equals(entity.getCancelRequested())
+                    || !leaseOwner.equals(entity.getLeaseOwner())
+                    || !"RUNNING".equalsIgnoreCase(entity.getStatus())) {
                 return;
             }
-            if (!retryOrFail(entity, exception)) {
+            if (!retryOrFail(entity, exception, leaseOwner)) {
                 return;
             }
             boolean retry = "ACCEPTED".equalsIgnoreCase(entity.getStatus());
@@ -352,14 +371,13 @@ public class SupervisorAsyncWorkflowService {
         }
     }
 
-    private boolean completeWorkflow(AgentAsyncWorkflowEntity entity) {
-        String workerId = distributedAgentProperties.getAsyncRuntime().getWorkerId();
+    private boolean completeWorkflow(AgentAsyncWorkflowEntity entity, String leaseOwner) {
         return agentAsyncWorkflowMapper.update(
                 null,
                 new LambdaUpdateWrapper<AgentAsyncWorkflowEntity>()
                         .eq(AgentAsyncWorkflowEntity::getId, entity.getId())
                         .eq(AgentAsyncWorkflowEntity::getStatus, "RUNNING")
-                        .eq(AgentAsyncWorkflowEntity::getLeaseOwner, workerId)
+                        .eq(AgentAsyncWorkflowEntity::getLeaseOwner, leaseOwner)
                         .set(AgentAsyncWorkflowEntity::getStatus, entity.getStatus())
                         .set(AgentAsyncWorkflowEntity::getResultJson, entity.getResultJson())
                         .set(AgentAsyncWorkflowEntity::getErrorMessage, null)
@@ -369,7 +387,7 @@ public class SupervisorAsyncWorkflowService {
         ) > 0;
     }
 
-    private boolean retryOrFail(AgentAsyncWorkflowEntity entity, Exception exception) {
+    private boolean retryOrFail(AgentAsyncWorkflowEntity entity, Exception exception, String leaseOwner) {
         DistributedAgentProperties.AsyncRuntimeProperties properties = distributedAgentProperties.getAsyncRuntime();
         int attempts = entity.getAttemptCount() == null ? 1 : entity.getAttemptCount();
         boolean retry = AsyncRuntimePolicy.shouldRetry(attempts, properties.getMaxAttempts(), exception);
@@ -383,7 +401,7 @@ public class SupervisorAsyncWorkflowService {
         LambdaUpdateWrapper<AgentAsyncWorkflowEntity> update = new LambdaUpdateWrapper<AgentAsyncWorkflowEntity>()
                 .eq(AgentAsyncWorkflowEntity::getId, entity.getId())
                 .eq(AgentAsyncWorkflowEntity::getStatus, "RUNNING")
-                .eq(AgentAsyncWorkflowEntity::getLeaseOwner, properties.getWorkerId())
+                .eq(AgentAsyncWorkflowEntity::getLeaseOwner, leaseOwner)
                 .set(AgentAsyncWorkflowEntity::getStatus, entity.getStatus())
                 .set(AgentAsyncWorkflowEntity::getErrorMessage, entity.getErrorMessage())
                 .set(AgentAsyncWorkflowEntity::getFinishedAtMs, entity.getFinishedAtMs())
@@ -429,7 +447,7 @@ public class SupervisorAsyncWorkflowService {
         );
     }
 
-    private boolean claimWorkflow(Long id) {
+    private boolean claimWorkflow(Long id, String leaseOwner) {
         long now = System.currentTimeMillis();
         DistributedAgentProperties.AsyncRuntimeProperties properties = distributedAgentProperties.getAsyncRuntime();
         return agentAsyncWorkflowMapper.update(
@@ -443,27 +461,62 @@ public class SupervisorAsyncWorkflowService {
                                 .or().le(AgentAsyncWorkflowEntity::getNextAttemptAtMs, now))
                         .set(AgentAsyncWorkflowEntity::getStatus, "RUNNING")
                         .set(AgentAsyncWorkflowEntity::getStartedAtMs, now)
-                        .set(AgentAsyncWorkflowEntity::getLeaseOwner, properties.getWorkerId())
+                        .set(AgentAsyncWorkflowEntity::getLeaseOwner, leaseOwner)
                         .set(AgentAsyncWorkflowEntity::getLeaseUntilMs,
                                 now + Math.max(1L, properties.getLeaseTimeoutSeconds()) * 1000L)
                         .setSql("attempt_count = COALESCE(attempt_count, 0) + 1")
         ) > 0;
     }
 
-    private void releaseClaim(Long id) {
+    private void reclaimExpiredWorkflowLeases() {
+        long now = System.currentTimeMillis();
+        agentAsyncWorkflowMapper.update(
+                null,
+                new LambdaUpdateWrapper<AgentAsyncWorkflowEntity>()
+                        .eq(AgentAsyncWorkflowEntity::getStatus, "RUNNING")
+                        .and(wrapper -> wrapper.isNull(AgentAsyncWorkflowEntity::getLeaseUntilMs)
+                                .or().le(AgentAsyncWorkflowEntity::getLeaseUntilMs, now))
+                        .set(AgentAsyncWorkflowEntity::getStatus, "ACCEPTED")
+                        .set(AgentAsyncWorkflowEntity::getErrorMessage, "RECOVERED_AFTER_WORKER_LEASE_EXPIRED")
+                        .set(AgentAsyncWorkflowEntity::getLeaseOwner, null)
+                        .set(AgentAsyncWorkflowEntity::getLeaseUntilMs, null)
+                        .set(AgentAsyncWorkflowEntity::getNextAttemptAtMs, now)
+                        .set(AgentAsyncWorkflowEntity::getFinishedAtMs, null)
+        );
+    }
+
+    private void releaseClaim(Long id, String leaseOwner) {
         DistributedAgentProperties.AsyncRuntimeProperties properties = distributedAgentProperties.getAsyncRuntime();
         agentAsyncWorkflowMapper.update(
                 null,
                 new LambdaUpdateWrapper<AgentAsyncWorkflowEntity>()
                         .eq(AgentAsyncWorkflowEntity::getId, id)
                         .eq(AgentAsyncWorkflowEntity::getStatus, "RUNNING")
-                        .eq(AgentAsyncWorkflowEntity::getLeaseOwner, properties.getWorkerId())
+                        .eq(AgentAsyncWorkflowEntity::getLeaseOwner, leaseOwner)
                         .set(AgentAsyncWorkflowEntity::getStatus, "ACCEPTED")
                         .set(AgentAsyncWorkflowEntity::getLeaseOwner, null)
                         .set(AgentAsyncWorkflowEntity::getLeaseUntilMs, null)
                         .set(AgentAsyncWorkflowEntity::getNextAttemptAtMs, System.currentTimeMillis())
                         .setSql("attempt_count = GREATEST(COALESCE(attempt_count, 0) - 1, 0)")
         );
+    }
+
+    private AsyncRuntimeLeaseHeartbeat.LeaseHeartbeat startLeaseHeartbeat(AgentAsyncWorkflowEntity entity,
+                                                                          String leaseOwner) {
+        DistributedAgentProperties.AsyncRuntimeProperties properties = distributedAgentProperties.getAsyncRuntime();
+        long leaseTimeoutSeconds = properties.getLeaseTimeoutSeconds();
+        return AsyncRuntimeLeaseHeartbeat.start("workflow", entity.getAsyncWorkflowId(), leaseTimeoutSeconds, () -> {
+            long now = System.currentTimeMillis();
+            return agentAsyncWorkflowMapper.update(
+                    null,
+                    new LambdaUpdateWrapper<AgentAsyncWorkflowEntity>()
+                            .eq(AgentAsyncWorkflowEntity::getId, entity.getId())
+                            .eq(AgentAsyncWorkflowEntity::getStatus, "RUNNING")
+                            .eq(AgentAsyncWorkflowEntity::getLeaseOwner, leaseOwner)
+                            .set(AgentAsyncWorkflowEntity::getLeaseUntilMs,
+                                    now + Math.max(1L, leaseTimeoutSeconds) * 1000L)
+            ) > 0;
+        });
     }
 
     private SupervisorAsyncWorkflowCreateResponse toCreateResponse(AgentAsyncWorkflowEntity entity) {

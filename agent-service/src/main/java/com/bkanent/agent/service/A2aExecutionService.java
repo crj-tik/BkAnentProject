@@ -30,11 +30,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 @Service
 public class A2aExecutionService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(A2aExecutionService.class);
+    private static final ThreadPoolExecutor A2A_REQUEST_EXECUTOR = new ThreadPoolExecutor(
+            16, 16, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(256), daemonThreadFactory("a2a-request"),
+            new ThreadPoolExecutor.AbortPolicy());
     private static final ThreadPoolExecutor STATUS_QUERY_EXECUTOR = new ThreadPoolExecutor(
             4, 4, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(128), daemonThreadFactory("a2a-status-poll"),
             new ThreadPoolExecutor.AbortPolicy());
@@ -76,7 +80,7 @@ public class A2aExecutionService {
                 return executeStreaming(descriptor, request, phase, metadata);
             }
             if (!shouldUseAsync(descriptor, request)) {
-                AgentTaskInvokeResponse response = a2aAgentClient.invoke(descriptor, request);
+                AgentTaskInvokeResponse response = invokeWithin(descriptor, request, childTaskTimeoutMs());
                 publish(
                         request.sessionId(), request.taskId(), descriptor.agentId(), terminalEventType(response),
                         terminalContent(response), terminalMetadata(metadata, phase, request, response), request.traceId()
@@ -85,10 +89,13 @@ public class A2aExecutionService {
             }
             return executeAsync(descriptor, request, phase, metadata);
         } catch (RuntimeException exception) {
+            Map<String, Object> failureMetadata = lifecycleMetadata(metadata, phase, request, true);
+            failureMetadata.put("error", exception.getClass().getSimpleName());
+            failureMetadata.put("errorCode", AsyncRuntimePolicy.failureCode(exception));
             publish(
                     request.sessionId(), request.taskId(), descriptor.agentId(), "agent.failed",
                     exception.getMessage() == null ? "Child agent failed" : exception.getMessage(),
-                    extend(lifecycleMetadata(metadata, phase, request, true), Map.of("error", exception.getClass().getSimpleName())),
+                    failureMetadata,
                     request.traceId()
             );
             throw exception;
@@ -101,13 +108,18 @@ public class A2aExecutionService {
                                                       Map<String, Object> metadata) {
         AtomicReference<AgentTaskInvokeResponse> terminalResponse = new AtomicReference<>();
         AtomicBoolean terminalEventSeen = new AtomicBoolean();
+        AtomicReference<String> remoteTaskId = new AtomicReference<>();
         AtomicReference<Long> rateWindowStartedAt = new AtomicReference<>(System.currentTimeMillis());
         AtomicReference<Integer> rateWindowCount = new AtomicReference<>(0);
         AgentTaskInvokeResponse response;
         try {
-            response = a2aAgentClient.stream(descriptor, request, event -> {
+            response = streamWithin(descriptor, request, event -> {
                 if (event == null) {
                     return;
+                }
+                String childTaskId = childTaskId(event.metadata());
+                if (childTaskId != null) {
+                    remoteTaskId.set(childTaskId);
                 }
                 if (event.result() != null) {
                     terminalResponse.set(event.result());
@@ -133,7 +145,7 @@ public class A2aExecutionService {
                         eventMetadata,
                         request.traceId()
                 );
-            });
+            }, childTaskTimeoutMs(), remoteTaskId);
         } catch (UnsupportedOperationException exception) {
             return executeAsyncOrBlockingFallback(descriptor, request, phase, metadata);
         }
@@ -154,7 +166,7 @@ public class A2aExecutionService {
         if (shouldUseAsync(descriptor, request)) {
             return executeAsync(descriptor, request, phase, metadata);
         }
-        AgentTaskInvokeResponse response = a2aAgentClient.invoke(descriptor, request);
+        AgentTaskInvokeResponse response = invokeWithin(descriptor, request, childTaskTimeoutMs());
         publish(
                 request.sessionId(), request.taskId(), descriptor.agentId(), terminalEventType(response),
                 terminalContent(response), terminalMetadata(metadata, phase, request, response), request.traceId()
@@ -349,14 +361,87 @@ public class A2aExecutionService {
                                                               String asyncTaskId,
                                                               long timeoutMs) {
         return executeA2aRequest(
+                STATUS_QUERY_EXECUTOR,
                 () -> a2aAgentClient.queryAsyncStatus(descriptor, asyncTaskId), timeoutMs, "A2A status query");
+    }
+
+    public A2aAsyncTaskStatusResponse queryChildAsyncTaskStatus(RegisteredAgentDescriptor descriptor,
+                                                                String asyncTaskId) {
+        long timeoutMs = Math.max(1L,
+                distributedAgentProperties.getAsyncRuntime().getChildTaskPollRequestTimeoutMs());
+        return queryAsyncStatusWithin(descriptor, asyncTaskId, timeoutMs);
+    }
+
+    public AgentTaskInvokeResponse invokeChildSynchronously(RegisteredAgentDescriptor descriptor,
+                                                            AgentTaskInvokeRequest request) {
+        agentPermissionService.assertCanInvokeChildAgent(descriptor, request);
+        return invokeWithin(descriptor, request, childTaskTimeoutMs());
+    }
+
+    private AgentTaskInvokeResponse invokeWithin(RegisteredAgentDescriptor descriptor,
+                                                 AgentTaskInvokeRequest request,
+                                                 long timeoutMs) {
+        try {
+            return executeA2aRequest(A2A_REQUEST_EXECUTOR,
+                    () -> a2aAgentClient.invoke(descriptor, request), timeoutMs, "A2A child invocation");
+        } catch (A2aStatusQueryTimeoutException exception) {
+            throw new A2aTaskDeadlineExceededException(
+                    "A2A child invocation exceeded its " + timeoutMs + "ms deadline", exception);
+        }
+    }
+
+    private AgentTaskInvokeResponse streamWithin(RegisteredAgentDescriptor descriptor,
+                                                 AgentTaskInvokeRequest request,
+                                                 Consumer<ChildAgentStreamEvent> eventConsumer,
+                                                 long timeoutMs,
+                                                 AtomicReference<String> remoteTaskId) {
+        AtomicBoolean active = new AtomicBoolean(true);
+        try {
+            return executeA2aRequest(A2A_REQUEST_EXECUTOR, () -> a2aAgentClient.stream(descriptor, request, event -> {
+                if (!active.get() || event == null) {
+                    return;
+                }
+                String taskId = childTaskId(event.metadata());
+                if (taskId != null) {
+                    remoteTaskId.set(taskId);
+                }
+                eventConsumer.accept(event);
+            }), timeoutMs, "A2A child streaming invocation");
+        } catch (A2aStatusQueryTimeoutException exception) {
+            active.set(false);
+            String taskId = remoteTaskId.get();
+            if (taskId != null) {
+                requestCancellation(descriptor, taskId);
+            }
+            throw new A2aTaskDeadlineExceededException(
+                    "A2A child stream exceeded its " + timeoutMs + "ms deadline", exception);
+        } finally {
+            active.set(false);
+        }
+    }
+
+    private String childTaskId(Map<String, Object> metadata) {
+        if (metadata == null) {
+            return null;
+        }
+        Object value = metadata.get("childTaskId");
+        if (value == null) {
+            value = metadata.get("taskId");
+        }
+        String taskId = value == null ? null : String.valueOf(value).trim();
+        return taskId == null || taskId.isEmpty() ? null : taskId;
+    }
+
+    private long childTaskTimeoutMs() {
+        return Math.max(1L, distributedAgentProperties.getAsyncRuntime().getChildTaskTimeoutMs());
     }
 
     private A2aAsyncTaskCreateResponse submitAsyncWithin(RegisteredAgentDescriptor descriptor,
                                                         AgentTaskInvokeRequest request,
                                                         long timeoutMs) {
         try {
-            return executeA2aRequest(() -> a2aAgentClient.submitAsync(descriptor, request),
+            return executeA2aRequest(A2A_REQUEST_EXECUTOR,
+                    () -> a2aAgentClient.submitAsync(descriptor, request),
                     timeoutMs, "A2A async submission");
         } catch (RuntimeException exception) {
             throw new A2aTaskSubmissionOutcomeUnknownException(
@@ -364,14 +449,17 @@ public class A2aExecutionService {
         }
     }
 
-    private <T> T executeA2aRequest(Callable<T> request, long timeoutMs, String operation) {
-        Future<T> future = STATUS_QUERY_EXECUTOR.submit(request);
+    private <T> T executeA2aRequest(ThreadPoolExecutor executor,
+                                    Callable<T> request,
+                                    long timeoutMs,
+                                    String operation) {
+        Future<T> future = executor.submit(request);
         try {
             return future.get(timeoutMs, TimeUnit.MILLISECONDS);
         } catch (TimeoutException exception) {
             future.cancel(true);
             if (future instanceof Runnable runnable) {
-                STATUS_QUERY_EXECUTOR.remove(runnable);
+                executor.remove(runnable);
             }
             throw new A2aStatusQueryTimeoutException(operation + " exceeded its " + timeoutMs + "ms request timeout");
         } catch (InterruptedException exception) {

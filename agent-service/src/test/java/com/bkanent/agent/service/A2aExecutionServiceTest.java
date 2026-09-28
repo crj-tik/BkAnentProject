@@ -202,6 +202,26 @@ class A2aExecutionServiceTest {
     }
 
     @Test
+    void boundsStatusQueriesFromThePersistedChildTaskStatusEndpoint() {
+        A2aAgentClient client = mock(A2aAgentClient.class);
+        SessionStreamService streamService = mock(SessionStreamService.class);
+        AgentPermissionService permissionService = mock(AgentPermissionService.class);
+        RegisteredAgentDescriptor descriptor = descriptor(false, true);
+        when(client.queryAsyncStatus(eq(descriptor), eq("remote-task-1"))).thenAnswer(invocation -> {
+            Thread.sleep(1_000L);
+            return new A2aAsyncTaskStatusResponse("session-1", "task-1", "listing-agent", "remote-task-1",
+                    "WORKING", null, null, null, "trace-1");
+        });
+        DistributedAgentProperties properties = new DistributedAgentProperties();
+        properties.getAsyncRuntime().setChildTaskPollRequestTimeoutMs(10L);
+        A2aExecutionService service = new A2aExecutionService(client, streamService, permissionService, properties);
+
+        assertThatThrownBy(() -> service.queryChildAsyncTaskStatus(descriptor, "remote-task-1"))
+                .isInstanceOf(A2aStatusQueryTimeoutException.class)
+                .hasMessageContaining("A2A status query");
+    }
+
+    @Test
     void doesNotBlindlyRetryWhenAsyncSubmissionAcceptanceIsUnknown() {
         A2aAgentClient client = mock(A2aAgentClient.class);
         SessionStreamService streamService = mock(SessionStreamService.class);
@@ -221,6 +241,93 @@ class A2aExecutionServiceTest {
                 .isInstanceOf(A2aTaskSubmissionOutcomeUnknownException.class);
 
         verify(client, times(0)).queryAsyncStatus(any(), any());
+    }
+
+    @Test
+    void boundsSynchronousChildInvocationByTheConfiguredChildTaskDeadline() {
+        A2aAgentClient client = mock(A2aAgentClient.class);
+        SessionStreamService streamService = mock(SessionStreamService.class);
+        AgentPermissionService permissionService = mock(AgentPermissionService.class);
+        RegisteredAgentDescriptor descriptor = descriptor(false, false);
+        AgentTaskInvokeRequest request = request(false);
+        when(client.invoke(eq(descriptor), eq(request))).thenAnswer(invocation -> {
+            Thread.sleep(1_000L);
+            return response("too late");
+        });
+        DistributedAgentProperties properties = new DistributedAgentProperties();
+        properties.getAsyncRuntime().setChildTaskTimeoutMs(25L);
+        A2aExecutionService service = new A2aExecutionService(client, streamService, permissionService, properties);
+
+        assertThatThrownBy(() -> service.execute(descriptor, request, "test", Map.of()))
+                .isInstanceOf(A2aTaskDeadlineExceededException.class)
+                .hasMessageContaining("A2A child invocation");
+
+        verify(client, timeout(500)).invoke(descriptor, request);
+    }
+
+    @Test
+    void boundsSynchronousInvocationUsedWhenRegeneratingAnApprovedWorkflow() {
+        A2aAgentClient client = mock(A2aAgentClient.class);
+        SessionStreamService streamService = mock(SessionStreamService.class);
+        AgentPermissionService permissionService = mock(AgentPermissionService.class);
+        RegisteredAgentDescriptor descriptor = descriptor(false, false);
+        AgentTaskInvokeRequest request = request(false);
+        when(client.invoke(eq(descriptor), eq(request))).thenAnswer(invocation -> {
+            Thread.sleep(1_000L);
+            return response("too late");
+        });
+        DistributedAgentProperties properties = new DistributedAgentProperties();
+        properties.getAsyncRuntime().setChildTaskTimeoutMs(25L);
+        A2aExecutionService service = new A2aExecutionService(client, streamService, permissionService, properties);
+
+        assertThatThrownBy(() -> service.invokeChildSynchronously(descriptor, request))
+                .isInstanceOf(A2aTaskDeadlineExceededException.class)
+                .hasMessageContaining("A2A child invocation");
+
+        verify(permissionService).assertCanInvokeChildAgent(descriptor, request);
+        verify(client, timeout(500)).invoke(descriptor, request);
+    }
+
+    @Test
+    void boundsStreamingChildAndBestEffortCancelsTheObservedRemoteTask() {
+        A2aAgentClient client = mock(A2aAgentClient.class);
+        SessionStreamService streamService = mock(SessionStreamService.class);
+        AgentPermissionService permissionService = mock(AgentPermissionService.class);
+        RegisteredAgentDescriptor descriptor = descriptor(true, false);
+        AgentTaskInvokeRequest request = request(true);
+        when(client.supportsStreaming(eq(descriptor), eq(request))).thenReturn(true);
+        when(client.stream(eq(descriptor), eq(request), any())).thenAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            java.util.function.Consumer<ChildAgentStreamEvent> consumer = invocation.getArgument(2);
+            consumer.accept(new ChildAgentStreamEvent(
+                    "agent.progress", "working", Map.of("childTaskId", "remote-stream-task"), false, null));
+            Thread.sleep(1_000L);
+            return response("too late");
+        });
+        DistributedAgentProperties properties = new DistributedAgentProperties();
+        properties.getAsyncRuntime().setChildTaskTimeoutMs(25L);
+        A2aExecutionService service = new A2aExecutionService(client, streamService, permissionService, properties);
+
+        assertThatThrownBy(() -> service.execute(descriptor, request, "test", Map.of()))
+                .isInstanceOf(A2aTaskDeadlineExceededException.class)
+                .hasMessageContaining("A2A child stream");
+
+        verify(client, timeout(1000)).cancelAsyncTask(descriptor, "remote-stream-task");
+    }
+
+    @Test
+    void childTimeoutDefaultsToThirtyMinutesAndLeaseOwnersAreUniquePerRuntimeInstance() {
+        DistributedAgentProperties first = new DistributedAgentProperties();
+        DistributedAgentProperties second = new DistributedAgentProperties();
+
+        assertThat(first.getAsyncRuntime().getChildTaskTimeoutMs()).isEqualTo(1_800_000L);
+        assertThat(first.getAsyncRuntime().getInstanceWorkerId())
+                .startsWith(first.getAsyncRuntime().getWorkerId())
+                .isNotEqualTo(second.getAsyncRuntime().getInstanceWorkerId());
+        assertThat(first.getAsyncRuntime().createLeaseOwner())
+                .isNotEqualTo(first.getAsyncRuntime().createLeaseOwner());
+        first.getAsyncRuntime().setWorkerId("worker-".repeat(100));
+        assertThat(first.getAsyncRuntime().createLeaseOwner()).hasSizeLessThanOrEqualTo(128);
     }
 
     private RegisteredAgentDescriptor descriptor(boolean streaming, boolean async) {

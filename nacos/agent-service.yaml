@@ -188,7 +188,7 @@ agent:
       max-attempts: ${AGENT_ASYNC_RUNTIME_MAX_ATTEMPTS:3}
       retry-delay-seconds: ${AGENT_ASYNC_RUNTIME_RETRY_DELAY_SECONDS:5}
       child-task-submit-request-timeout-ms: ${AGENT_A2A_CHILD_TASK_SUBMIT_REQUEST_TIMEOUT_MS:15000}
-      child-task-timeout-ms: ${AGENT_A2A_CHILD_TASK_TIMEOUT_MS:300000}
+      child-task-timeout-ms: ${AGENT_A2A_CHILD_TASK_TIMEOUT_MS:1800000}
       child-task-poll-request-timeout-ms: ${AGENT_A2A_CHILD_TASK_POLL_REQUEST_TIMEOUT_MS:15000}
       child-task-initial-poll-interval-ms: ${AGENT_A2A_CHILD_TASK_INITIAL_POLL_INTERVAL_MS:1000}
       child-task-max-poll-interval-ms: ${AGENT_A2A_CHILD_TASK_MAX_POLL_INTERVAL_MS:10000}

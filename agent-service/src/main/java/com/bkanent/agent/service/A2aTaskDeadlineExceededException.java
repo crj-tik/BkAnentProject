@@ -6,4 +6,8 @@ public class A2aTaskDeadlineExceededException extends RuntimeException {
     public A2aTaskDeadlineExceededException(String message) {
         super(message);
     }
+
+    public A2aTaskDeadlineExceededException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }

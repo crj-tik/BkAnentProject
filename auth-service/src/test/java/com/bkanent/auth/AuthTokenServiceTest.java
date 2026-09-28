@@ -44,8 +44,10 @@ class AuthTokenServiceTest {
     @Test
     void rejectsTamperedAndExpiredTokens() {
         String token = authTokenService.issueAccessToken(account);
-        String tamperedToken = token.substring(0, token.length() - 1)
-                + (token.endsWith("A") ? "B" : "A");
+        int payloadStart = token.indexOf('.') + 1;
+        String tamperedToken = token.substring(0, payloadStart)
+                + (token.charAt(payloadStart) == 'A' ? 'B' : 'A')
+                + token.substring(payloadStart + 1);
         assertFalse(authTokenService.isValidAccessToken(tamperedToken));
 
         AuthTokenProperties expiredProperties = new AuthTokenProperties();

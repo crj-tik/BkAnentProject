@@ -2,7 +2,6 @@ package com.bkanent.agent.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
-import com.bkanent.agent.client.A2aAgentClient;
 import com.bkanent.agent.config.DistributedAgentProperties;
 import com.bkanent.agent.entity.AgentAsyncTaskEntity;
 import com.bkanent.agent.mapper.AgentAsyncTaskMapper;
@@ -32,7 +31,7 @@ import java.util.concurrent.RejectedExecutionException;
 @Service
 public class SupervisorAsyncTaskService {
     private final AgentRegistry agentRegistry;
-    private final A2aAgentClient a2aAgentClient;
+    private final A2aExecutionService a2aExecutionService;
     private final SupervisorTaskService supervisorTaskService;
     private final SessionStreamService sessionStreamService;
     private final AgentMetricsService agentMetricsService;
@@ -44,7 +43,7 @@ public class SupervisorAsyncTaskService {
     private final ThreadPoolTaskExecutor executor;
 
     public SupervisorAsyncTaskService(AgentRegistry agentRegistry,
-                                      A2aAgentClient a2aAgentClient,
+                                      A2aExecutionService a2aExecutionService,
                                       SupervisorTaskService supervisorTaskService,
                                       SessionStreamService sessionStreamService,
                                       AgentMetricsService agentMetricsService,
@@ -55,7 +54,7 @@ public class SupervisorAsyncTaskService {
                                       DistributedAgentProperties distributedAgentProperties,
                                       ThreadPoolTaskExecutor supervisorAsyncExecutor) {
         this.agentRegistry = agentRegistry;
-        this.a2aAgentClient = a2aAgentClient;
+        this.a2aExecutionService = a2aExecutionService;
         this.supervisorTaskService = supervisorTaskService;
         this.sessionStreamService = sessionStreamService;
         this.agentMetricsService = agentMetricsService;
@@ -145,7 +144,8 @@ public class SupervisorAsyncTaskService {
                 agentMetricsService.recordAsyncTask(entity.getMode(), "FAILED", elapsed(entity));
                 return toStatusResponse(entity);
             }
-            A2aAsyncTaskStatusResponse childStatus = a2aAgentClient.queryAsyncStatus(descriptor, entity.getChildAsyncTaskId());
+            A2aAsyncTaskStatusResponse childStatus = a2aExecutionService.queryChildAsyncTaskStatus(
+                    descriptor, entity.getChildAsyncTaskId());
             String previousStatus = entity.getStatus();
             entity.setStatus(childStatus.status());
             entity.setErrorMessage(childStatus.errorMessage());
@@ -231,6 +231,7 @@ public class SupervisorAsyncTaskService {
     }
 
     public void dispatchPendingLocalTasks(int batchSize) {
+        reclaimExpiredTaskLeases();
         List<AgentAsyncTaskEntity> pending = agentAsyncTaskMapper.selectList(
                 new LambdaQueryWrapper<AgentAsyncTaskEntity>()
                         .ne(AgentAsyncTaskEntity::getMode, "CHILD_AGENT")
@@ -241,22 +242,34 @@ public class SupervisorAsyncTaskService {
                         .last("limit " + Math.max(1, batchSize))
         );
         for (AgentAsyncTaskEntity pendingEntity : pending) {
-            if (!claimTask(pendingEntity.getId())) {
+            String leaseOwner = distributedAgentProperties.getAsyncRuntime().createLeaseOwner();
+            if (!claimTask(pendingEntity.getId(), leaseOwner)) {
                 continue;
             }
+            AsyncRuntimeLeaseHeartbeat.LeaseHeartbeat heartbeat = startLeaseHeartbeat(pendingEntity, leaseOwner);
             try {
-                executor.execute(() -> runClaimedLocal(pendingEntity.getAsyncTaskId()));
+                executor.execute(() -> {
+                    try (heartbeat) {
+                        runClaimedLocal(pendingEntity.getAsyncTaskId(), leaseOwner);
+                    }
+                });
             } catch (RejectedExecutionException exception) {
-                releaseClaim(pendingEntity.getId());
+                heartbeat.close();
+                releaseClaim(pendingEntity.getId(), leaseOwner);
             }
         }
     }
 
-    private void runClaimedLocal(String asyncTaskId) {
+    private void runClaimedLocal(String asyncTaskId, String leaseOwner) {
         AgentAsyncTaskEntity entity = findEntity(asyncTaskId);
-        if (entity == null || !"RUNNING".equalsIgnoreCase(entity.getStatus())) {
+        if (entity == null || !"RUNNING".equalsIgnoreCase(entity.getStatus())
+                || !leaseOwner.equals(entity.getLeaseOwner())) {
             return;
         }
+        processClaimedLocal(entity, leaseOwner);
+    }
+
+    private void processClaimedLocal(AgentAsyncTaskEntity entity, String leaseOwner) {
         publish(entity.getSessionId(), entity.getTaskId(), entity.getSelectedAgentId(), "supervisor.async.status", Map.of(
                 "asyncTaskId", entity.getAsyncTaskId(),
                 "mode", entity.getMode(),
@@ -274,7 +287,7 @@ public class SupervisorAsyncTaskService {
             entity.setErrorMessage(null);
             entity.setLeaseOwner(null);
             entity.setLeaseUntilMs(null);
-            if (!completeTask(entity)) {
+            if (!completeTask(entity, leaseOwner)) {
                 return;
             }
             publish(entity.getSessionId(), entity.getTaskId(), entity.getSelectedAgentId(), "supervisor.async.completed", Map.of(
@@ -287,7 +300,7 @@ public class SupervisorAsyncTaskService {
             ), entity.getTraceId());
             agentMetricsService.recordAsyncTask(entity.getMode(), entity.getStatus(), elapsed(entity));
         } catch (Exception exception) {
-            if (!retryOrFail(entity, exception)) {
+            if (!retryOrFail(entity, exception, leaseOwner)) {
                 return;
             }
             boolean retry = "ACCEPTED".equalsIgnoreCase(entity.getStatus());
@@ -307,14 +320,13 @@ public class SupervisorAsyncTaskService {
         }
     }
 
-    private boolean completeTask(AgentAsyncTaskEntity entity) {
-        String workerId = distributedAgentProperties.getAsyncRuntime().getWorkerId();
+    private boolean completeTask(AgentAsyncTaskEntity entity, String leaseOwner) {
         return agentAsyncTaskMapper.update(
                 null,
                 new LambdaUpdateWrapper<AgentAsyncTaskEntity>()
                         .eq(AgentAsyncTaskEntity::getId, entity.getId())
                         .eq(AgentAsyncTaskEntity::getStatus, "RUNNING")
-                        .eq(AgentAsyncTaskEntity::getLeaseOwner, workerId)
+                        .eq(AgentAsyncTaskEntity::getLeaseOwner, leaseOwner)
                         .set(AgentAsyncTaskEntity::getStatus, entity.getStatus())
                         .set(AgentAsyncTaskEntity::getResultJson, entity.getResultJson())
                         .set(AgentAsyncTaskEntity::getErrorMessage, null)
@@ -323,7 +335,7 @@ public class SupervisorAsyncTaskService {
         ) > 0;
     }
 
-    private boolean retryOrFail(AgentAsyncTaskEntity entity, Exception exception) {
+    private boolean retryOrFail(AgentAsyncTaskEntity entity, Exception exception, String leaseOwner) {
         DistributedAgentProperties.AsyncRuntimeProperties properties = distributedAgentProperties.getAsyncRuntime();
         int attempts = entity.getAttemptCount() == null ? 1 : entity.getAttemptCount();
         boolean retry = AsyncRuntimePolicy.shouldRetry(attempts, properties.getMaxAttempts(), exception);
@@ -337,7 +349,7 @@ public class SupervisorAsyncTaskService {
         LambdaUpdateWrapper<AgentAsyncTaskEntity> update = new LambdaUpdateWrapper<AgentAsyncTaskEntity>()
                 .eq(AgentAsyncTaskEntity::getId, entity.getId())
                 .eq(AgentAsyncTaskEntity::getStatus, "RUNNING")
-                .eq(AgentAsyncTaskEntity::getLeaseOwner, properties.getWorkerId())
+                .eq(AgentAsyncTaskEntity::getLeaseOwner, leaseOwner)
                 .set(AgentAsyncTaskEntity::getStatus, entity.getStatus())
                 .set(AgentAsyncTaskEntity::getErrorMessage, entity.getErrorMessage())
                 .set(AgentAsyncTaskEntity::getFinishedAtMs, entity.getFinishedAtMs())
@@ -396,7 +408,7 @@ public class SupervisorAsyncTaskService {
         );
     }
 
-    private boolean claimTask(Long id) {
+    private boolean claimTask(Long id, String leaseOwner) {
         long now = System.currentTimeMillis();
         DistributedAgentProperties.AsyncRuntimeProperties properties = distributedAgentProperties.getAsyncRuntime();
         return agentAsyncTaskMapper.update(
@@ -408,27 +420,63 @@ public class SupervisorAsyncTaskService {
                                 .or().le(AgentAsyncTaskEntity::getNextAttemptAtMs, now))
                         .set(AgentAsyncTaskEntity::getStatus, "RUNNING")
                         .set(AgentAsyncTaskEntity::getStartedAtMs, now)
-                        .set(AgentAsyncTaskEntity::getLeaseOwner, properties.getWorkerId())
+                        .set(AgentAsyncTaskEntity::getLeaseOwner, leaseOwner)
                         .set(AgentAsyncTaskEntity::getLeaseUntilMs,
                                 now + Math.max(1L, properties.getLeaseTimeoutSeconds()) * 1000L)
                         .setSql("attempt_count = COALESCE(attempt_count, 0) + 1")
         ) > 0;
     }
 
-    private void releaseClaim(Long id) {
+    private void reclaimExpiredTaskLeases() {
+        long now = System.currentTimeMillis();
+        agentAsyncTaskMapper.update(
+                null,
+                new LambdaUpdateWrapper<AgentAsyncTaskEntity>()
+                        .ne(AgentAsyncTaskEntity::getMode, "CHILD_AGENT")
+                        .eq(AgentAsyncTaskEntity::getStatus, "RUNNING")
+                        .and(wrapper -> wrapper.isNull(AgentAsyncTaskEntity::getLeaseUntilMs)
+                                .or().le(AgentAsyncTaskEntity::getLeaseUntilMs, now))
+                        .set(AgentAsyncTaskEntity::getStatus, "ACCEPTED")
+                        .set(AgentAsyncTaskEntity::getErrorMessage, "RECOVERED_AFTER_WORKER_LEASE_EXPIRED")
+                        .set(AgentAsyncTaskEntity::getLeaseOwner, null)
+                        .set(AgentAsyncTaskEntity::getLeaseUntilMs, null)
+                        .set(AgentAsyncTaskEntity::getNextAttemptAtMs, now)
+                        .set(AgentAsyncTaskEntity::getFinishedAtMs, null)
+        );
+    }
+
+    private void releaseClaim(Long id, String leaseOwner) {
         DistributedAgentProperties.AsyncRuntimeProperties properties = distributedAgentProperties.getAsyncRuntime();
         agentAsyncTaskMapper.update(
                 null,
                 new LambdaUpdateWrapper<AgentAsyncTaskEntity>()
                         .eq(AgentAsyncTaskEntity::getId, id)
                         .eq(AgentAsyncTaskEntity::getStatus, "RUNNING")
-                        .eq(AgentAsyncTaskEntity::getLeaseOwner, properties.getWorkerId())
+                        .eq(AgentAsyncTaskEntity::getLeaseOwner, leaseOwner)
                         .set(AgentAsyncTaskEntity::getStatus, "ACCEPTED")
                         .set(AgentAsyncTaskEntity::getLeaseOwner, null)
                         .set(AgentAsyncTaskEntity::getLeaseUntilMs, null)
                         .set(AgentAsyncTaskEntity::getNextAttemptAtMs, System.currentTimeMillis())
                         .setSql("attempt_count = GREATEST(COALESCE(attempt_count, 0) - 1, 0)")
         );
+    }
+
+    private AsyncRuntimeLeaseHeartbeat.LeaseHeartbeat startLeaseHeartbeat(AgentAsyncTaskEntity entity,
+                                                                          String leaseOwner) {
+        DistributedAgentProperties.AsyncRuntimeProperties properties = distributedAgentProperties.getAsyncRuntime();
+        long leaseTimeoutSeconds = properties.getLeaseTimeoutSeconds();
+        return AsyncRuntimeLeaseHeartbeat.start("task", entity.getAsyncTaskId(), leaseTimeoutSeconds, () -> {
+            long now = System.currentTimeMillis();
+            return agentAsyncTaskMapper.update(
+                    null,
+                    new LambdaUpdateWrapper<AgentAsyncTaskEntity>()
+                            .eq(AgentAsyncTaskEntity::getId, entity.getId())
+                            .eq(AgentAsyncTaskEntity::getStatus, "RUNNING")
+                            .eq(AgentAsyncTaskEntity::getLeaseOwner, leaseOwner)
+                            .set(AgentAsyncTaskEntity::getLeaseUntilMs,
+                                    now + Math.max(1L, leaseTimeoutSeconds) * 1000L)
+            ) > 0;
+        });
     }
 
     private SupervisorAsyncTaskCreateResponse toCreateResponse(AgentAsyncTaskEntity entity) {

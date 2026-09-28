@@ -1,6 +1,5 @@
 package com.bkanent.agent.graph;
 
-import com.bkanent.agent.client.A2aAgentClient;
 import com.bkanent.agent.config.DistributedAgentProperties;
 import com.bkanent.agent.graph.node.BuildNextStageApprovalNode;
 import com.bkanent.agent.graph.node.MergeParallelResultNode;
@@ -13,6 +12,7 @@ import com.bkanent.agent.model.distributed.SupervisorTaskRequest;
 import com.bkanent.agent.model.distributed.SupervisorTaskResponse;
 import com.bkanent.agent.registry.AgentRegistry;
 import com.bkanent.agent.registry.RegisteredAgentDescriptor;
+import com.bkanent.agent.service.A2aExecutionService;
 import com.bkanent.agent.stream.SessionStreamService;
 import com.bkanent.agent.workflow.GraphCheckpointStore;
 import com.bkanent.agent.workflow.SupervisorWorkflowState;
@@ -34,7 +34,7 @@ import java.util.Map;
 public class WorkflowResumeSupport {
 
     private final AgentRegistry agentRegistry;
-    private final A2aAgentClient a2aAgentClient;
+    private final A2aExecutionService a2aExecutionService;
     private final DistributedAgentProperties distributedAgentProperties;
     private final ApprovalSubgraphService approvalSubgraphService;
     private final HandoffSubgraph handoffSubgraph;
@@ -49,7 +49,7 @@ public class WorkflowResumeSupport {
     private final SessionStreamService sessionStreamService;
 
     public WorkflowResumeSupport(AgentRegistry agentRegistry,
-                                 A2aAgentClient a2aAgentClient,
+                                 A2aExecutionService a2aExecutionService,
                                  DistributedAgentProperties distributedAgentProperties,
                                  ApprovalSubgraphService approvalSubgraphService,
                                  HandoffSubgraph handoffSubgraph,
@@ -63,7 +63,7 @@ public class WorkflowResumeSupport {
                                  GraphCheckpointStore checkpointStore,
                                  SessionStreamService sessionStreamService) {
         this.agentRegistry = agentRegistry;
-        this.a2aAgentClient = a2aAgentClient;
+        this.a2aExecutionService = a2aExecutionService;
         this.distributedAgentProperties = distributedAgentProperties;
         this.approvalSubgraphService = approvalSubgraphService;
         this.handoffSubgraph = handoffSubgraph;
@@ -185,7 +185,7 @@ public class WorkflowResumeSupport {
 
         String domain = resolveDomain(context, state.userMessage());
         String intent = resolveIntent(domain);
-        AgentTaskInvokeResponse response = a2aAgentClient.invoke(
+        AgentTaskInvokeResponse response = a2aExecutionService.invokeChildSynchronously(
                 descriptor,
                 new AgentTaskInvokeRequest(
                         state.sessionId(),
