@@ -2,7 +2,9 @@ package com.bkanent.auth;
 
 import com.bkanent.auth.config.AuthTokenProperties;
 import com.bkanent.auth.entity.UserAccountEntity;
+import com.bkanent.auth.service.InMemoryTokenRevocationStore;
 import com.bkanent.auth.service.AuthTokenService;
+import com.bkanent.auth.service.TokenRevocationStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -14,6 +16,7 @@ class AuthTokenServiceTest {
 
     private AuthTokenService authTokenService;
     private UserAccountEntity account;
+    private TokenRevocationStore revocationStore;
 
     @BeforeEach
     void setUp() {
@@ -21,7 +24,8 @@ class AuthTokenServiceTest {
         properties.setSecret("unit-test-auth-secret");
         properties.setAccessTtlSeconds(3600);
         properties.setRefreshTtlSeconds(3600);
-        authTokenService = new AuthTokenService(properties);
+        revocationStore = new InMemoryTokenRevocationStore();
+        authTokenService = new AuthTokenService(properties, revocationStore);
         authTokenService.initialize();
 
         account = new UserAccountEntity();
@@ -47,7 +51,7 @@ class AuthTokenServiceTest {
         AuthTokenProperties expiredProperties = new AuthTokenProperties();
         expiredProperties.setSecret("unit-test-auth-secret");
         expiredProperties.setAccessTtlSeconds(0);
-        AuthTokenService expiredTokenService = new AuthTokenService(expiredProperties);
+        AuthTokenService expiredTokenService = new AuthTokenService(expiredProperties, new InMemoryTokenRevocationStore());
         expiredTokenService.initialize();
         assertFalse(expiredTokenService.isValidAccessToken(expiredTokenService.issueAccessToken(account)));
     }
@@ -59,5 +63,18 @@ class AuthTokenServiceTest {
         authTokenService.revoke(token);
 
         assertFalse(authTokenService.isValidAccessToken(token));
+    }
+
+    @Test
+    void revocationIsVisibleAcrossTokenServiceInstancesUsingSharedStore() {
+        String token = authTokenService.issueAccessToken(account);
+        AuthTokenProperties sameSecret = new AuthTokenProperties();
+        sameSecret.setSecret("unit-test-auth-secret");
+        AuthTokenService anotherInstance = new AuthTokenService(sameSecret, revocationStore);
+        anotherInstance.initialize();
+
+        authTokenService.revoke(token);
+
+        assertFalse(anotherInstance.isValidAccessToken(token));
     }
 }

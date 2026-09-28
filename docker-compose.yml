@@ -44,7 +44,7 @@ x-app-environment: &app-environment
   MEDIA_INTEGRATION_MODE: local
   PROMOTION_INTEGRATION_MODE: local
   BUSINESS_RANKING_USE_REDIS: "true"
-  AGENT_STREAM_PROVIDER: memory
+  AGENT_STREAM_PROVIDER: rocketmq
   MILVUS_ENABLED: "true"
   MILVUS_DATABASE: default
   LISTING_SEARCH_USE_ES: "true"
@@ -143,7 +143,7 @@ services:
 
   redis:
     image: redis:7.4-alpine
-    profiles: [full]
+    profiles: [minimal, full]
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -337,10 +337,18 @@ services:
   auth-service:
     <<: *minimal-app-service
     profiles: [minimal, full]
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: auth-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://auth-service:9101
+      SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,redis
     ports:
       - "${HOST_BIND_ADDRESS:-127.0.0.1}:${AUTH_EXPOSED_PORT:-9101}:9101"
     healthcheck:

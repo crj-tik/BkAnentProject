@@ -4,6 +4,7 @@ import com.bkanent.auth.config.AuthTokenProperties;
 import com.bkanent.auth.controller.AuthController;
 import com.bkanent.auth.entity.UserAccountEntity;
 import com.bkanent.auth.service.AuthTokenService;
+import com.bkanent.auth.service.InMemoryTokenRevocationStore;
 import com.bkanent.auth.service.UserAccountService;
 import com.bkanent.common.model.ApiResponse;
 import com.bkanent.common.model.AuthLoginRequest;
@@ -30,7 +31,7 @@ class AuthControllerTest {
         userAccountService = mock(UserAccountService.class);
         AuthTokenProperties properties = new AuthTokenProperties();
         properties.setSecret("unit-test-auth-secret");
-        authTokenService = new AuthTokenService(properties);
+        authTokenService = new AuthTokenService(properties, new InMemoryTokenRevocationStore());
         authTokenService.initialize();
         authController = new AuthController(
                 userAccountService,

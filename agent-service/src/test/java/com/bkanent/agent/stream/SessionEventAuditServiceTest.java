@@ -72,6 +72,18 @@ class SessionEventAuditServiceTest {
     }
 
     @Test
+    void resolvesResumeEventIdWithinItsSession() {
+        AgentEventAuditMapper mapper = mock(AgentEventAuditMapper.class);
+        AgentEventAuditEntity cursor = new AgentEventAuditEntity();
+        cursor.setId(19L);
+        when(mapper.selectOne(any())).thenReturn(cursor);
+        SessionEventAuditService service = new SessionEventAuditService(
+                new DistributedAgentProperties(), mapper, new ObjectMapper());
+
+        assertThat(service.sequenceForEventId("session", "event-19")).isEqualTo(19L);
+    }
+
+    @Test
     void replaysTerminalStructuredResultFromPersistedMetadata() {
         AgentEventAuditMapper mapper = mock(AgentEventAuditMapper.class);
         when(mapper.selectOne(any())).thenReturn(null);

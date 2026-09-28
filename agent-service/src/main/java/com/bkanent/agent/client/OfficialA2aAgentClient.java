@@ -362,6 +362,15 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
         }
     }
 
+    @Override
+    public void cancelAsyncTask(RegisteredAgentDescriptor descriptor, String asyncTaskId) {
+        try {
+            clientFor(descriptor).cancelTask(asyncTaskId);
+        } catch (A2AServerException exception) {
+            throw new IllegalStateException("official a2a async cancellation failed for " + descriptor.agentId(), exception);
+        }
+    }
+
     private A2AClient clientFor(RegisteredAgentDescriptor descriptor) {
         if (descriptor == null || !StringUtils.hasText(descriptor.agentId())) {
             throw new IllegalArgumentException("official A2A descriptor is required");

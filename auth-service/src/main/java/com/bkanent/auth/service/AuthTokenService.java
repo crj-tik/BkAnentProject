@@ -11,15 +11,14 @@ import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Small signed-token service for the authentication baseline.
  *
- * <p>Revocation is intentionally process-local until a shared session store is introduced.</p>
+ * <p>Revocation is delegated to a shared store in distributed deployments.</p>
  */
 @Service
 public class AuthTokenService {
@@ -30,11 +29,12 @@ public class AuthTokenService {
     private static final Base64.Decoder DECODER = Base64.getUrlDecoder();
 
     private final AuthTokenProperties properties;
-    private final Set<String> revokedTokenDigests = ConcurrentHashMap.newKeySet();
+    private final TokenRevocationStore tokenRevocationStore;
     private volatile byte[] signingKey;
 
-    public AuthTokenService(AuthTokenProperties properties) {
+    public AuthTokenService(AuthTokenProperties properties, TokenRevocationStore tokenRevocationStore) {
         this.properties = properties;
+        this.tokenRevocationStore = tokenRevocationStore;
     }
 
     @PostConstruct
@@ -65,13 +65,25 @@ public class AuthTokenService {
     }
 
     public void revoke(String token) {
-        if (StringUtils.hasText(token)) {
-            revokedTokenDigests.add(digest(token));
+        TokenPrincipal principal = verify(token);
+        if (principal != null) {
+            long remainingSeconds = principal.expiresAt() - Instant.now().getEpochSecond();
+            if (remainingSeconds > 0) {
+                tokenRevocationStore.revoke(digest(token), Duration.ofSeconds(remainingSeconds));
+            }
         }
     }
 
     public TokenPrincipal parse(String token) {
-        if (!StringUtils.hasText(token) || signingKey == null || revokedTokenDigests.contains(digest(token))) {
+        TokenPrincipal principal = verify(token);
+        if (principal == null || tokenRevocationStore.isRevoked(digest(token))) {
+            return null;
+        }
+        return principal;
+    }
+
+    private TokenPrincipal verify(String token) {
+        if (!StringUtils.hasText(token) || signingKey == null) {
             return null;
         }
         String[] parts = token.split("\\.", -1);

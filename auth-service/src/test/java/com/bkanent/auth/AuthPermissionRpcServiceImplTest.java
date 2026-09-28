@@ -4,6 +4,7 @@ import com.bkanent.auth.config.AuthTokenProperties;
 import com.bkanent.auth.entity.UserAccountEntity;
 import com.bkanent.auth.rpc.AuthPermissionRpcServiceImpl;
 import com.bkanent.auth.service.AuthTokenService;
+import com.bkanent.auth.service.InMemoryTokenRevocationStore;
 import com.bkanent.auth.service.UserAccountService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,7 +28,7 @@ class AuthPermissionRpcServiceImplTest {
         userAccountService = mock(UserAccountService.class);
         AuthTokenProperties properties = new AuthTokenProperties();
         properties.setSecret("unit-test-auth-secret");
-        authTokenService = new AuthTokenService(properties);
+        authTokenService = new AuthTokenService(properties, new InMemoryTokenRevocationStore());
         authTokenService.initialize();
         permissionService = new AuthPermissionRpcServiceImpl(authTokenService, userAccountService);
 

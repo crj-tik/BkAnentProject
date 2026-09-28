@@ -13,6 +13,10 @@ public final class AsyncRuntimePolicy {
     }
 
     public static boolean isRetryable(Throwable failure) {
+        if (failure instanceof A2aTaskDeadlineExceededException
+                || failure instanceof A2aTaskSubmissionOutcomeUnknownException) {
+            return false;
+        }
         Throwable current = failure;
         while (current != null) {
             if (current instanceof IOException
@@ -37,6 +41,12 @@ public final class AsyncRuntimePolicy {
     }
 
     public static String failureCode(Throwable failure) {
+        if (failure instanceof A2aTaskDeadlineExceededException) {
+            return "A2A_TASK_DEADLINE_EXCEEDED";
+        }
+        if (failure instanceof A2aTaskSubmissionOutcomeUnknownException) {
+            return "A2A_TASK_SUBMISSION_OUTCOME_UNKNOWN";
+        }
         return isRetryable(failure) ? "TRANSIENT_EXECUTION_ERROR" : "PERMANENT_EXECUTION_ERROR";
     }
 

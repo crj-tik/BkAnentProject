@@ -196,6 +196,24 @@ public class SessionEventAuditService {
         }
     }
 
+    public long sequenceForEventId(String sessionId, String eventId) {
+        if (!hasText(sessionId) || !hasText(eventId)) {
+            return 0L;
+        }
+        try {
+            AgentEventAuditEntity cursorEntity = agentEventAuditMapper.selectOne(
+                    new LambdaQueryWrapper<AgentEventAuditEntity>()
+                            .eq(AgentEventAuditEntity::getSessionId, sessionId)
+                            .eq(AgentEventAuditEntity::getEventId, eventId)
+                            .last("limit 1")
+            );
+            return cursorEntity == null || cursorEntity.getId() == null ? 0L : cursorEntity.getId();
+        } catch (RuntimeException exception) {
+            LOGGER.debug("Unable to resolve session event cursor", exception);
+            return 0L;
+        }
+    }
+
     private List<SessionStreamEvent> persistedReplay(String sessionId,
                                                      String taskId,
                                                      String afterEventId,

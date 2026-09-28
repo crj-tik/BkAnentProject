@@ -2,10 +2,13 @@ package com.bkanent.agent.stream;
 
 import com.bkanent.common.agent.SessionStreamEvent;
 import com.bkanent.common.agent.SessionStreamVisibility;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.ArrayDeque;
 import java.util.Queue;
@@ -19,6 +22,11 @@ import java.util.UUID;
 
 @Service
 public class InMemorySessionStreamService implements SessionStreamService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(InMemorySessionStreamService.class);
+    private static final int REPLAY_PAGE_SIZE = 1000;
+    private static final int MAX_REPLAY_PAGES_PER_PASS = 10;
+    private static final long IDLE_REPLAY_INTERVAL_MS = 15_000L;
 
     private final SessionEventBus sessionEventBus;
     private final SessionSubscriberRegistry subscriberRegistry;
@@ -54,10 +62,14 @@ public class InMemorySessionStreamService implements SessionStreamService {
         SseEmitter emitter = new SseEmitter(0L);
         String subscriberId = UUID.randomUUID().toString();
         AtomicLong lastDeliveredSequence = new AtomicLong(afterSequence == null ? 0L : afterSequence);
+        AtomicLong replayCursor = new AtomicLong(afterSequence == null
+                ? sessionEventAuditService.sequenceForEventId(sessionId, afterEventId)
+                : Math.max(0L, afterSequence));
         AtomicBoolean closed = new AtomicBoolean();
         Object subscriptionGate = new Object();
         Queue<SessionStreamEvent> pendingLiveEvents = new ArrayDeque<>();
         AtomicBoolean replaying = new AtomicBoolean(true);
+        AtomicLong lastNotificationAtMs = new AtomicLong(System.currentTimeMillis());
         ScheduledFuture<?>[] heartbeatRef = new ScheduledFuture<?>[1];
         Runnable cleanup = () -> {
             if (closed.compareAndSet(false, true)) {
@@ -70,20 +82,34 @@ public class InMemorySessionStreamService implements SessionStreamService {
         synchronized (lockForSession(sessionId)) {
             subscriberRegistry.register(sessionId, subscriberId,
                     event -> {
+                        if (event == null) {
+                            return;
+                        }
+                        lastNotificationAtMs.set(System.currentTimeMillis());
                         synchronized (subscriptionGate) {
                             if (replaying.get()) {
                                 pendingLiveEvents.add(event);
                                 return;
                             }
-                            sendEvent(sessionId, subscriberId, emitter, event, lastDeliveredSequence, closed);
+                            boolean replayComplete = replayPersistedEvents(
+                                    sessionId, taskId, subscriberId, emitter, replayCursor, lastDeliveredSequence, closed);
+                            if (replayComplete && (event.sequence() == null || event.sequence() > replayCursor.get())) {
+                                sendEvent(sessionId, taskId, subscriberId, emitter, event, lastDeliveredSequence, closed);
+                            }
                         }
                     });
             synchronized (subscriptionGate) {
-                sessionEventAuditService.replay(sessionId, taskId, afterEventId, afterSequence, 1000)
-                        .forEach(event -> sendEvent(sessionId, subscriberId, emitter, event, lastDeliveredSequence, closed));
+                replayPersistedEvents(sessionId, taskId, subscriberId, emitter,
+                        replayCursor, lastDeliveredSequence, closed);
                 replaying.set(false);
                 while (!pendingLiveEvents.isEmpty()) {
-                    sendEvent(sessionId, subscriberId, emitter, pendingLiveEvents.poll(), lastDeliveredSequence, closed);
+                    SessionStreamEvent event = pendingLiveEvents.poll();
+                    boolean replayComplete = replayPersistedEvents(
+                            sessionId, taskId, subscriberId, emitter, replayCursor, lastDeliveredSequence, closed);
+                    if (event != null && replayComplete
+                            && (event.sequence() == null || event.sequence() > replayCursor.get())) {
+                        sendEvent(sessionId, taskId, subscriberId, emitter, event, lastDeliveredSequence, closed);
+                    }
                 }
             }
         }
@@ -91,7 +117,17 @@ public class InMemorySessionStreamService implements SessionStreamService {
         emitter.onTimeout(cleanup);
         emitter.onError(throwable -> cleanup.run());
         heartbeatRef[0] = heartbeatExecutor.scheduleAtFixedRate(
-                () -> sendHeartbeat(emitter, cleanup, closed), 15, 15, TimeUnit.SECONDS);
+                () -> {
+                    synchronized (subscriptionGate) {
+                        long now = System.currentTimeMillis();
+                        if (!closed.get() && now - lastNotificationAtMs.get() >= IDLE_REPLAY_INTERVAL_MS) {
+                            replayPersistedEvents(sessionId, taskId, subscriberId, emitter,
+                                    replayCursor, lastDeliveredSequence, closed);
+                            lastNotificationAtMs.set(now);
+                        }
+                    }
+                    sendHeartbeat(emitter, cleanup, closed);
+                }, 15, 15, TimeUnit.SECONDS);
         return emitter;
     }
 
@@ -100,17 +136,58 @@ public class InMemorySessionStreamService implements SessionStreamService {
         Object sessionLock = lockForSession(event.sessionId());
         synchronized (sessionLock) {
             SessionStreamEvent enriched = sessionEventAuditService.recordAndEnrich(event);
-            sessionEventBus.publish(enriched);
+            try {
+                sessionEventBus.publish(enriched);
+            } catch (RuntimeException exception) {
+                LOGGER.warn("Live session event notification failed; persisted replay will recover it", exception);
+            }
         }
     }
 
+    private boolean replayPersistedEvents(String sessionId,
+                                         String taskId,
+                                         String subscriberId,
+                                         SseEmitter emitter,
+                                         AtomicLong replayCursor,
+                                         AtomicLong lastDeliveredSequence,
+                                         AtomicBoolean closed) {
+        for (int page = 0; page < MAX_REPLAY_PAGES_PER_PASS && !closed.get(); page++) {
+            long cursor = replayCursor.get();
+            List<SessionStreamEvent> events = sessionEventAuditService.replay(
+                    sessionId, taskId, null, cursor, REPLAY_PAGE_SIZE);
+            if (events.isEmpty()) {
+                return true;
+            }
+            boolean advanced = false;
+            for (SessionStreamEvent event : events) {
+                if (event == null) {
+                    continue;
+                }
+                Long sequence = event.sequence();
+                if (sequence != null && sequence > replayCursor.get()) {
+                    replayCursor.set(sequence);
+                    advanced = true;
+                }
+                sendEvent(sessionId, taskId, subscriberId, emitter, event, lastDeliveredSequence, closed);
+            }
+            if (events.size() < REPLAY_PAGE_SIZE || !advanced) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void sendEvent(String sessionId,
+                           String taskId,
                            String subscriberId,
                            SseEmitter emitter,
                            SessionStreamEvent event,
                            AtomicLong lastDeliveredSequence,
                            AtomicBoolean closed) {
         if (closed.get() || !SessionStreamVisibility.isExternallyVisible(event.visibility())) {
+            return;
+        }
+        if (taskId != null && !taskId.equals(event.taskId())) {
             return;
         }
         synchronized (emitter) {

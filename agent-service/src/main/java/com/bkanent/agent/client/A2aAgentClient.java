@@ -28,4 +28,8 @@ public interface A2aAgentClient {
     A2aAsyncTaskCreateResponse submitAsync(RegisteredAgentDescriptor descriptor, AgentTaskInvokeRequest request);
 
     A2aAsyncTaskStatusResponse queryAsyncStatus(RegisteredAgentDescriptor descriptor, String asyncTaskId);
+
+    default void cancelAsyncTask(RegisteredAgentDescriptor descriptor, String asyncTaskId) {
+        // Optional for A2A clients that do not support task cancellation.
+    }
 }

@@ -3,6 +3,7 @@ package com.bkanent.agent.stream;
 import com.bkanent.common.agent.SessionStreamEvent;
 import com.bkanent.common.agent.SessionEventTags;
 import org.apache.rocketmq.spring.annotation.ConsumeMode;
+import org.apache.rocketmq.spring.annotation.MessageModel;
 import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
 import org.apache.rocketmq.spring.core.RocketMQListener;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
@@ -19,7 +20,8 @@ import java.util.function.Consumer;
 @RocketMQMessageListener(
         topic = "${agent.distributed.stream.rocketmq.topic:bk.agent.session.stream}",
         consumerGroup = "${agent.distributed.stream.rocketmq.consumer-group:agent-service-session-stream}",
-        consumeMode = ConsumeMode.CONCURRENTLY
+        consumeMode = ConsumeMode.CONCURRENTLY,
+        messageModel = MessageModel.BROADCASTING
 )
 public class RocketMqSessionEventBus implements SessionEventBus, RocketMQListener<SessionStreamEvent> {
 
@@ -50,6 +52,7 @@ public class RocketMqSessionEventBus implements SessionEventBus, RocketMQListene
 
     @Override
     public void publish(SessionStreamEvent event) {
+        subscriberRegistry.publishLocal(event);
         rocketMQTemplate.convertAndSend(topic + ":" + SessionEventTags.resolveTag(event.eventType()), event);
     }
 

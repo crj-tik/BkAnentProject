@@ -321,6 +321,13 @@ public class DistributedAgentProperties {
         private long leaseTimeoutSeconds = 300L;
         private int maxAttempts = 3;
         private long retryDelaySeconds = 5L;
+        private long childTaskSubmitRequestTimeoutMs = 15_000L;
+        private long childTaskTimeoutMs = 300_000L;
+        private long childTaskPollRequestTimeoutMs = 15_000L;
+        private long childTaskInitialPollIntervalMs = 1_000L;
+        private long childTaskMaxPollIntervalMs = 10_000L;
+        private double childTaskPollBackoffMultiplier = 1.5d;
+        private int childTaskPollJitterPercent = 20;
         private String workerId = "agent-worker-" + UUID.randomUUID();
 
         public boolean isEnabled() {
@@ -385,6 +392,62 @@ public class DistributedAgentProperties {
 
         public void setRetryDelaySeconds(long retryDelaySeconds) {
             this.retryDelaySeconds = retryDelaySeconds;
+        }
+
+        public long getChildTaskSubmitRequestTimeoutMs() {
+            return childTaskSubmitRequestTimeoutMs;
+        }
+
+        public void setChildTaskSubmitRequestTimeoutMs(long childTaskSubmitRequestTimeoutMs) {
+            this.childTaskSubmitRequestTimeoutMs = childTaskSubmitRequestTimeoutMs;
+        }
+
+        public long getChildTaskTimeoutMs() {
+            return childTaskTimeoutMs;
+        }
+
+        public void setChildTaskTimeoutMs(long childTaskTimeoutMs) {
+            this.childTaskTimeoutMs = childTaskTimeoutMs;
+        }
+
+        public long getChildTaskPollRequestTimeoutMs() {
+            return childTaskPollRequestTimeoutMs;
+        }
+
+        public void setChildTaskPollRequestTimeoutMs(long childTaskPollRequestTimeoutMs) {
+            this.childTaskPollRequestTimeoutMs = childTaskPollRequestTimeoutMs;
+        }
+
+        public long getChildTaskInitialPollIntervalMs() {
+            return childTaskInitialPollIntervalMs;
+        }
+
+        public void setChildTaskInitialPollIntervalMs(long childTaskInitialPollIntervalMs) {
+            this.childTaskInitialPollIntervalMs = childTaskInitialPollIntervalMs;
+        }
+
+        public long getChildTaskMaxPollIntervalMs() {
+            return childTaskMaxPollIntervalMs;
+        }
+
+        public void setChildTaskMaxPollIntervalMs(long childTaskMaxPollIntervalMs) {
+            this.childTaskMaxPollIntervalMs = childTaskMaxPollIntervalMs;
+        }
+
+        public double getChildTaskPollBackoffMultiplier() {
+            return childTaskPollBackoffMultiplier;
+        }
+
+        public void setChildTaskPollBackoffMultiplier(double childTaskPollBackoffMultiplier) {
+            this.childTaskPollBackoffMultiplier = childTaskPollBackoffMultiplier;
+        }
+
+        public int getChildTaskPollJitterPercent() {
+            return childTaskPollJitterPercent;
+        }
+
+        public void setChildTaskPollJitterPercent(int childTaskPollJitterPercent) {
+            this.childTaskPollJitterPercent = childTaskPollJitterPercent;
         }
 
         public String getWorkerId() {

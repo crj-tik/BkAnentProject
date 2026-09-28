@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.concurrent.TimeoutException;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -17,6 +18,13 @@ class AsyncRuntimePolicyTest {
         assertTrue(AsyncRuntimePolicy.shouldRetry(1, 3, new IOException("connection reset")));
         assertFalse(AsyncRuntimePolicy.shouldRetry(3, 3, new IOException("connection reset")));
         assertFalse(AsyncRuntimePolicy.shouldRetry(1, 3, new IllegalArgumentException("invalid request")));
+        assertFalse(AsyncRuntimePolicy.isRetryable(new A2aTaskDeadlineExceededException("child task deadline exceeded")));
+        assertFalse(AsyncRuntimePolicy.isRetryable(new A2aTaskSubmissionOutcomeUnknownException(
+                "submission outcome unknown", new java.net.SocketTimeoutException("read timed out"))));
+        assertEquals("A2A_TASK_DEADLINE_EXCEEDED",
+                AsyncRuntimePolicy.failureCode(new A2aTaskDeadlineExceededException("deadline")));
+        assertEquals("A2A_TASK_SUBMISSION_OUTCOME_UNKNOWN",
+                AsyncRuntimePolicy.failureCode(new A2aTaskSubmissionOutcomeUnknownException("unknown", null)));
     }
 
     @Test

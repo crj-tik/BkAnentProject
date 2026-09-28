@@ -63,3 +63,5 @@ management:
 auth:
   token:
     allow-random-secret: true
+    revocation:
+      provider: memory

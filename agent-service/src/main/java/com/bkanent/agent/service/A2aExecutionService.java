@@ -10,17 +10,37 @@ import com.bkanent.common.agent.A2aAsyncTaskStatusResponse;
 import com.bkanent.common.agent.AgentTaskInvokeRequest;
 import com.bkanent.common.agent.AgentTaskInvokeResponse;
 import com.bkanent.common.agent.SessionStreamEvent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Service
 public class A2aExecutionService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(A2aExecutionService.class);
+    private static final ThreadPoolExecutor STATUS_QUERY_EXECUTOR = new ThreadPoolExecutor(
+            4, 4, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(128), daemonThreadFactory("a2a-status-poll"),
+            new ThreadPoolExecutor.AbortPolicy());
+    private static final Executor CANCELLATION_EXECUTOR = new ThreadPoolExecutor(
+            1, 2, 30L, TimeUnit.SECONDS, new ArrayBlockingQueue<>(64), daemonThreadFactory("a2a-task-cancel"),
+            new ThreadPoolExecutor.DiscardPolicy());
 
     private final A2aAgentClient a2aAgentClient;
     private final SessionStreamService sessionStreamService;
@@ -146,7 +166,8 @@ public class A2aExecutionService {
                                                  AgentTaskInvokeRequest request,
                                                  String phase,
                                                  Map<String, Object> metadata) {
-        A2aAsyncTaskCreateResponse accepted = a2aAgentClient.submitAsync(descriptor, request);
+        A2aAsyncTaskCreateResponse accepted = submitAsyncWithin(descriptor, request,
+                Math.max(1L, distributedAgentProperties.getAsyncRuntime().getChildTaskSubmitRequestTimeoutMs()));
         publish(
                 request.sessionId(),
                 request.taskId(),
@@ -160,11 +181,62 @@ public class A2aExecutionService {
                 )),
                 request.traceId()
         );
+        DistributedAgentProperties.AsyncRuntimeProperties polling = distributedAgentProperties.getAsyncRuntime();
+        long timeoutMs = Math.max(1L, polling.getChildTaskTimeoutMs());
+        long startedAtNanos = System.nanoTime();
+        long timeoutNanos = TimeUnit.MILLISECONDS.toNanos(timeoutMs);
+        long pollIntervalMs = Math.max(1L, polling.getChildTaskInitialPollIntervalMs());
+        long maxPollIntervalMs = Math.max(pollIntervalMs, polling.getChildTaskMaxPollIntervalMs());
         String lastStatus = accepted.status();
+        int pollCount = 0;
         while (true) {
-            sleepQuietly(1000L);
-            A2aAsyncTaskStatusResponse status = a2aAgentClient.queryAsyncStatus(descriptor, accepted.asyncTaskId());
-            if (!Objects.equals(lastStatus, status.status())) {
+            long elapsedNanos = System.nanoTime() - startedAtNanos;
+            long remainingNanos = timeoutNanos - elapsedNanos;
+            if (remainingNanos <= 0) {
+                throw deadlineExceeded(request, descriptor, phase, metadata, accepted.asyncTaskId(), lastStatus, timeoutMs);
+            }
+            long delayMs = jitterPollInterval(pollIntervalMs, polling.getChildTaskPollJitterPercent());
+            long remainingMs = Math.max(1L, TimeUnit.NANOSECONDS.toMillis(remainingNanos));
+            sleepQuietly(Math.max(1L, Math.min(delayMs, remainingMs)));
+            if (System.nanoTime() - startedAtNanos >= timeoutNanos) {
+                throw deadlineExceeded(request, descriptor, phase, metadata, accepted.asyncTaskId(), lastStatus, timeoutMs);
+            }
+
+            A2aAsyncTaskStatusResponse status;
+            try {
+                long requestTimeoutMs = Math.max(1L, polling.getChildTaskPollRequestTimeoutMs());
+                status = queryAsyncStatusWithin(
+                        descriptor,
+                        accepted.asyncTaskId(),
+                        Math.max(1L, Math.min(requestTimeoutMs, remainingMs))
+                );
+            } catch (RuntimeException exception) {
+                if (!AsyncRuntimePolicy.isRetryable(exception)) {
+                    throw exception;
+                }
+                pollCount++;
+                publish(
+                        request.sessionId(), request.taskId(), descriptor.agentId(), "a2a.async.poll_retry",
+                        "Temporary A2A status query failure; retrying within the task deadline",
+                        extend(metadata, Map.of(
+                                "phase", phase,
+                                "asyncTaskId", accepted.asyncTaskId(),
+                                "status", lastStatus == null ? "UNKNOWN" : lastStatus,
+                                "pollCount", pollCount,
+                                "errorType", exception.getClass().getSimpleName()
+                        )),
+                        request.traceId()
+                );
+                pollIntervalMs = nextPollInterval(pollIntervalMs, maxPollIntervalMs,
+                        polling.getChildTaskPollBackoffMultiplier());
+                continue;
+            }
+            if (System.nanoTime() - startedAtNanos >= timeoutNanos) {
+                throw deadlineExceeded(request, descriptor, phase, metadata, accepted.asyncTaskId(), lastStatus, timeoutMs);
+            }
+            pollCount++;
+            String currentStatus = status.status() == null ? "UNKNOWN" : status.status();
+            if (!Objects.equals(lastStatus, currentStatus)) {
                 publish(
                         request.sessionId(),
                         request.taskId(),
@@ -174,13 +246,14 @@ public class A2aExecutionService {
                         extend(metadata, Map.of(
                                 "phase", phase,
                                 "asyncTaskId", accepted.asyncTaskId(),
-                                "status", status.status()
+                                "status", currentStatus,
+                                "pollCount", pollCount
                         )),
                         request.traceId()
                 );
-                lastStatus = status.status();
+                lastStatus = currentStatus;
             }
-            if ("COMPLETED".equalsIgnoreCase(status.status())) {
+            if ("COMPLETED".equalsIgnoreCase(currentStatus)) {
                 publish(
                         request.sessionId(),
                         request.taskId(),
@@ -190,7 +263,8 @@ public class A2aExecutionService {
                         extend(metadata, Map.of(
                                 "phase", phase,
                                 "asyncTaskId", accepted.asyncTaskId(),
-                                "status", status.status()
+                                "status", currentStatus,
+                                "pollCount", pollCount
                         )),
                         request.traceId()
                 );
@@ -203,7 +277,7 @@ public class A2aExecutionService {
                 );
                 return status.result();
             }
-            if (isTerminalStatus(status.status())) {
+            if (isTerminalStatus(currentStatus)) {
                 publish(
                         request.sessionId(),
                         request.taskId(),
@@ -213,7 +287,7 @@ public class A2aExecutionService {
                         extend(metadata, Map.of(
                                 "phase", phase,
                                 "asyncTaskId", accepted.asyncTaskId(),
-                                "status", status.status(),
+                                "status", currentStatus,
                                 "errorMessage", status.errorMessage() == null ? "" : status.errorMessage()
                         )),
                         request.traceId()
@@ -228,7 +302,118 @@ public class A2aExecutionService {
                 }
                 throw new IllegalStateException(status.errorMessage() == null ? "async child task failed" : status.errorMessage());
             }
+            pollIntervalMs = nextPollInterval(pollIntervalMs, maxPollIntervalMs,
+                    polling.getChildTaskPollBackoffMultiplier());
         }
+    }
+
+    private A2aTaskDeadlineExceededException deadlineExceeded(AgentTaskInvokeRequest request,
+                                                               RegisteredAgentDescriptor descriptor,
+                                                               String phase,
+                                                               Map<String, Object> metadata,
+                                                               String asyncTaskId,
+                                                               String lastStatus,
+                                                               long timeoutMs) {
+        requestCancellation(descriptor, asyncTaskId);
+        publish(
+                request.sessionId(), request.taskId(), descriptor.agentId(), "a2a.async.timed_out",
+                "Child async task exceeded its configured deadline",
+                extend(metadata, Map.of(
+                        "phase", phase,
+                        "asyncTaskId", asyncTaskId,
+                        "status", lastStatus == null ? "UNKNOWN" : lastStatus,
+                        "timeoutMs", timeoutMs,
+                        "errorCode", "A2A_TASK_DEADLINE_EXCEEDED"
+                )),
+                request.traceId()
+        );
+        return new A2aTaskDeadlineExceededException(
+                "A2A child task " + asyncTaskId + " exceeded its " + timeoutMs + "ms deadline");
+    }
+
+    private void requestCancellation(RegisteredAgentDescriptor descriptor, String asyncTaskId) {
+        try {
+            CANCELLATION_EXECUTOR.execute(() -> {
+                try {
+                    a2aAgentClient.cancelAsyncTask(descriptor, asyncTaskId);
+                } catch (RuntimeException exception) {
+                    LOGGER.debug("Best-effort A2A task cancellation failed for {}", asyncTaskId, exception);
+                }
+            });
+        } catch (RuntimeException exception) {
+            LOGGER.debug("Unable to schedule best-effort A2A task cancellation for {}", asyncTaskId, exception);
+        }
+    }
+
+    private A2aAsyncTaskStatusResponse queryAsyncStatusWithin(RegisteredAgentDescriptor descriptor,
+                                                              String asyncTaskId,
+                                                              long timeoutMs) {
+        return executeA2aRequest(
+                () -> a2aAgentClient.queryAsyncStatus(descriptor, asyncTaskId), timeoutMs, "A2A status query");
+    }
+
+    private A2aAsyncTaskCreateResponse submitAsyncWithin(RegisteredAgentDescriptor descriptor,
+                                                        AgentTaskInvokeRequest request,
+                                                        long timeoutMs) {
+        try {
+            return executeA2aRequest(() -> a2aAgentClient.submitAsync(descriptor, request),
+                    timeoutMs, "A2A async submission");
+        } catch (RuntimeException exception) {
+            throw new A2aTaskSubmissionOutcomeUnknownException(
+                    "A2A child task submission outcome is unknown; automatic resubmission is suppressed", exception);
+        }
+    }
+
+    private <T> T executeA2aRequest(Callable<T> request, long timeoutMs, String operation) {
+        Future<T> future = STATUS_QUERY_EXECUTOR.submit(request);
+        try {
+            return future.get(timeoutMs, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException exception) {
+            future.cancel(true);
+            if (future instanceof Runnable runnable) {
+                STATUS_QUERY_EXECUTOR.remove(runnable);
+            }
+            throw new A2aStatusQueryTimeoutException(operation + " exceeded its " + timeoutMs + "ms request timeout");
+        } catch (InterruptedException exception) {
+            future.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(operation + " interrupted", exception);
+        } catch (ExecutionException exception) {
+            Throwable cause = exception.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw new IllegalStateException(operation + " failed", cause);
+        }
+    }
+
+    private static ThreadFactory daemonThreadFactory(String name) {
+        return runnable -> {
+            Thread thread = new Thread(runnable, name);
+            thread.setDaemon(true);
+            return thread;
+        };
+    }
+
+    private long jitterPollInterval(long intervalMs, int jitterPercent) {
+        int boundedPercent = Math.max(0, Math.min(50, jitterPercent));
+        if (boundedPercent == 0) {
+            return intervalMs;
+        }
+        long jitterRange = Math.max(1L, intervalMs * boundedPercent / 100L);
+        long minimum = Math.max(1L, intervalMs - jitterRange);
+        long maximum = Math.max(minimum, intervalMs + jitterRange);
+        return ThreadLocalRandom.current().nextLong(minimum, maximum + 1L);
+    }
+
+    private long nextPollInterval(long currentMs, long maximumMs, double multiplier) {
+        double safeMultiplier = Double.isFinite(multiplier) ? Math.max(1.0d, multiplier) : 1.0d;
+        double increased = currentMs * safeMultiplier;
+        long next = increased >= Long.MAX_VALUE ? Long.MAX_VALUE : (long) Math.ceil(increased);
+        return Math.min(maximumMs, Math.max(currentMs + 1L, next));
     }
 
     private boolean shouldUseStreaming(RegisteredAgentDescriptor descriptor, AgentTaskInvokeRequest request) {

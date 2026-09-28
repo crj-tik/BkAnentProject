@@ -2,10 +2,13 @@ package com.bkanent.agent.service;
 
 import com.bkanent.agent.client.A2aAgentClient;
 import com.bkanent.agent.client.ChildAgentStreamEvent;
+import com.bkanent.agent.config.DistributedAgentProperties;
 import com.bkanent.agent.registry.AgentDescriptorSource;
 import com.bkanent.agent.registry.AgentRuntimeType;
 import com.bkanent.agent.registry.RegisteredAgentDescriptor;
 import com.bkanent.agent.stream.SessionStreamService;
+import com.bkanent.common.agent.A2aAsyncTaskCreateResponse;
+import com.bkanent.common.agent.A2aAsyncTaskStatusResponse;
 import com.bkanent.common.agent.AgentCard;
 import com.bkanent.common.agent.AgentTaskInvokeRequest;
 import com.bkanent.common.agent.AgentTaskInvokeResponse;
@@ -17,10 +20,12 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -104,6 +109,118 @@ class A2aExecutionServiceTest {
         verify(streamService, times(2)).publish(events.capture());
         assertThat(events.getAllValues().get(1).eventType()).isEqualTo("agent.failed");
         assertThat(events.getAllValues().get(1).metadata()).containsKey("result");
+    }
+
+    @Test
+    void boundsAsyncChildPollingAndPublishesDeadlineEvent() {
+        A2aAgentClient client = mock(A2aAgentClient.class);
+        SessionStreamService streamService = mock(SessionStreamService.class);
+        AgentPermissionService permissionService = mock(AgentPermissionService.class);
+        RegisteredAgentDescriptor descriptor = descriptor(false, true);
+        AgentTaskInvokeRequest request = request(true);
+        when(client.submitAsync(eq(descriptor), eq(request))).thenReturn(new A2aAsyncTaskCreateResponse(
+                "session-1", "task-1", "listing-agent", "remote-task-1", "WORKING", "trace-1"));
+        when(client.queryAsyncStatus(eq(descriptor), eq("remote-task-1"))).thenReturn(
+                new A2aAsyncTaskStatusResponse("session-1", "task-1", "listing-agent", "remote-task-1",
+                        "WORKING", null, null, null, "trace-1"));
+        DistributedAgentProperties properties = new DistributedAgentProperties();
+        properties.getAsyncRuntime().setChildTaskTimeoutMs(10L);
+        properties.getAsyncRuntime().setChildTaskInitialPollIntervalMs(1L);
+        properties.getAsyncRuntime().setChildTaskMaxPollIntervalMs(1L);
+        properties.getAsyncRuntime().setChildTaskPollJitterPercent(0);
+        A2aExecutionService service = new A2aExecutionService(client, streamService, permissionService, properties);
+
+        assertThatThrownBy(() -> service.execute(descriptor, request, "test", Map.of()))
+                .isInstanceOf(A2aTaskDeadlineExceededException.class)
+                .hasMessageContaining("exceeded its 10ms deadline");
+
+        ArgumentCaptor<SessionStreamEvent> events = ArgumentCaptor.forClass(SessionStreamEvent.class);
+        verify(streamService, org.mockito.Mockito.atLeastOnce()).publish(events.capture());
+        assertThat(events.getAllValues()).anySatisfy(event -> {
+            assertThat(event.eventType()).isEqualTo("a2a.async.timed_out");
+            assertThat(event.metadata()).containsEntry("errorCode", "A2A_TASK_DEADLINE_EXCEEDED");
+        });
+        verify(client, timeout(1000)).cancelAsyncTask(descriptor, "remote-task-1");
+    }
+
+    @Test
+    void pollsAsyncChildUntilCompletionAndReturnsStructuredResult() {
+        A2aAgentClient client = mock(A2aAgentClient.class);
+        SessionStreamService streamService = mock(SessionStreamService.class);
+        AgentPermissionService permissionService = mock(AgentPermissionService.class);
+        RegisteredAgentDescriptor descriptor = descriptor(false, true);
+        AgentTaskInvokeRequest request = request(true);
+        AgentTaskInvokeResponse response = response("async final");
+        when(client.submitAsync(eq(descriptor), eq(request))).thenReturn(new A2aAsyncTaskCreateResponse(
+                "session-1", "task-1", "listing-agent", "remote-task-1", "WORKING", "trace-1"));
+        when(client.queryAsyncStatus(eq(descriptor), eq("remote-task-1"))).thenReturn(
+                new A2aAsyncTaskStatusResponse("session-1", "task-1", "listing-agent", "remote-task-1",
+                        "WORKING", null, null, null, "trace-1"),
+                new A2aAsyncTaskStatusResponse("session-1", "task-1", "listing-agent", "remote-task-1",
+                        "COMPLETED", response, null, null, "trace-1"));
+        DistributedAgentProperties properties = new DistributedAgentProperties();
+        properties.getAsyncRuntime().setChildTaskTimeoutMs(1000L);
+        properties.getAsyncRuntime().setChildTaskInitialPollIntervalMs(1L);
+        properties.getAsyncRuntime().setChildTaskMaxPollIntervalMs(1L);
+        properties.getAsyncRuntime().setChildTaskPollJitterPercent(0);
+        A2aExecutionService service = new A2aExecutionService(client, streamService, permissionService, properties);
+
+        assertThat(service.execute(descriptor, request, "test", Map.of())).isSameAs(response);
+
+        verify(client, org.mockito.Mockito.times(2)).queryAsyncStatus(descriptor, "remote-task-1");
+        ArgumentCaptor<SessionStreamEvent> events = ArgumentCaptor.forClass(SessionStreamEvent.class);
+        verify(streamService, org.mockito.Mockito.atLeastOnce()).publish(events.capture());
+        assertThat(events.getAllValues()).anySatisfy(event -> assertThat(event.eventType()).isEqualTo("a2a.async.completed"));
+    }
+
+    @Test
+    void boundsIndividualStatusRequestsEvenWhenRemoteClientStalls() {
+        A2aAgentClient client = mock(A2aAgentClient.class);
+        SessionStreamService streamService = mock(SessionStreamService.class);
+        AgentPermissionService permissionService = mock(AgentPermissionService.class);
+        RegisteredAgentDescriptor descriptor = descriptor(false, true);
+        AgentTaskInvokeRequest request = request(true);
+        when(client.submitAsync(eq(descriptor), eq(request))).thenReturn(new A2aAsyncTaskCreateResponse(
+                "session-1", "task-1", "listing-agent", "remote-task-1", "WORKING", "trace-1"));
+        when(client.queryAsyncStatus(eq(descriptor), eq("remote-task-1"))).thenAnswer(invocation -> {
+            Thread.sleep(1000L);
+            return new A2aAsyncTaskStatusResponse("session-1", "task-1", "listing-agent", "remote-task-1",
+                    "WORKING", null, null, null, "trace-1");
+        });
+        DistributedAgentProperties properties = new DistributedAgentProperties();
+        properties.getAsyncRuntime().setChildTaskTimeoutMs(50L);
+        properties.getAsyncRuntime().setChildTaskPollRequestTimeoutMs(5L);
+        properties.getAsyncRuntime().setChildTaskInitialPollIntervalMs(1L);
+        properties.getAsyncRuntime().setChildTaskMaxPollIntervalMs(1L);
+        properties.getAsyncRuntime().setChildTaskPollJitterPercent(0);
+        A2aExecutionService service = new A2aExecutionService(client, streamService, permissionService, properties);
+
+        assertThatThrownBy(() -> service.execute(descriptor, request, "test", Map.of()))
+                .isInstanceOf(A2aTaskDeadlineExceededException.class);
+
+        verify(client, org.mockito.Mockito.atLeastOnce()).queryAsyncStatus(descriptor, "remote-task-1");
+    }
+
+    @Test
+    void doesNotBlindlyRetryWhenAsyncSubmissionAcceptanceIsUnknown() {
+        A2aAgentClient client = mock(A2aAgentClient.class);
+        SessionStreamService streamService = mock(SessionStreamService.class);
+        AgentPermissionService permissionService = mock(AgentPermissionService.class);
+        RegisteredAgentDescriptor descriptor = descriptor(false, true);
+        AgentTaskInvokeRequest request = request(true);
+        when(client.submitAsync(eq(descriptor), eq(request))).thenAnswer(invocation -> {
+            Thread.sleep(1000L);
+            return new A2aAsyncTaskCreateResponse(
+                    "session-1", "task-1", "listing-agent", "remote-task-1", "WORKING", "trace-1");
+        });
+        DistributedAgentProperties properties = new DistributedAgentProperties();
+        properties.getAsyncRuntime().setChildTaskSubmitRequestTimeoutMs(5L);
+        A2aExecutionService service = new A2aExecutionService(client, streamService, permissionService, properties);
+
+        assertThatThrownBy(() -> service.execute(descriptor, request, "test", Map.of()))
+                .isInstanceOf(A2aTaskSubmissionOutcomeUnknownException.class);
+
+        verify(client, times(0)).queryAsyncStatus(any(), any());
     }
 
     private RegisteredAgentDescriptor descriptor(boolean streaming, boolean async) {

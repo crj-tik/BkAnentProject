@@ -1,6 +1,8 @@
 package com.bkanent.agent.stream;
 
 import com.bkanent.common.agent.SessionStreamEvent;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -10,6 +12,7 @@ import java.util.function.Consumer;
 @Component
 public class InMemorySessionEventBus implements SessionSubscriberRegistry {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(InMemorySessionEventBus.class);
     private final Map<String, Map<String, Consumer<SessionStreamEvent>>> subscribers = new ConcurrentHashMap<>();
 
     @Override
@@ -35,6 +38,12 @@ public class InMemorySessionEventBus implements SessionSubscriberRegistry {
         if (sessionSubscribers == null || sessionSubscribers.isEmpty()) {
             return;
         }
-        sessionSubscribers.values().forEach(consumer -> consumer.accept(event));
+        sessionSubscribers.values().forEach(consumer -> {
+            try {
+                consumer.accept(event);
+            } catch (RuntimeException exception) {
+                LOGGER.warn("Local session event subscriber failed for session {}", event.sessionId(), exception);
+            }
+        });
     }
 }

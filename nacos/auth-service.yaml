@@ -1,4 +1,9 @@
 spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
   datasource:
     url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_AUTH:bk_auth}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
     username: ${MYSQL_USER}
@@ -11,6 +16,8 @@ auth:
     access-ttl-seconds: ${AUTH_ACCESS_TOKEN_TTL_SECONDS:3600}
     refresh-ttl-seconds: ${AUTH_REFRESH_TOKEN_TTL_SECONDS:604800}
     allow-random-secret: false
+    revocation:
+      provider: redis
 
 management:
   endpoints:
@@ -30,10 +37,11 @@ management:
 service:
   readiness:
     mode: ${SERVICE_READINESS_MODE:distributed}
-    required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database}
+    required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database,redis}
     endpoints:
       nacos: "${NACOS_SERVER:127.0.0.1:8848}"
       database: "${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}"
+      redis: "${REDIS_HOST:127.0.0.1}:${REDIS_PORT:6379}"
 
 mybatis-plus:
   mapper-locations: classpath:/mapper/*.xml
