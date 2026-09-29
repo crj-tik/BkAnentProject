@@ -67,6 +67,24 @@ RISK_ALERT/needsMoreDocuments → contract），且默认只在 listing+trade �
 若需要超过 32，说明"单计划内多域并行"的模型本身需要重新评估（如分层 fan-out），
 而不是继续放大槽位数。
 
+### 7. 遗留词表审计结论（2026-09-29 全量排查）
+
+对槽位化改造后的代码做了一次全量硬编码排查，结论如下：
+
+**已修复（活跃路径漂移点）：**
+- `HandoffNode`：第四份 `resolveIntent` switch（handoff 到新域会错误兜底成 `listing.search`）已改为 `DomainCatalog.resolveDefaultIntent`；`resolveExpectedOutput` 的 default 分支从 "listing search summaries" 改为领域中立文案；顺带删除未被调用的 `containsListingIntent`。
+- `LoadSessionNode`：系统约束标签搜索的领域集合（原 `Set.of(6 域)`，且漏了 media）改为 `DomainCatalog.domains()`，新域的约束标签自动可搜。
+
+**确认为死代码岛（整条链路无调用者，建议后续单独删除）：**
+- `WorkflowResumeSupport`（内含完整的第五份词表：关键词表 + intent switch + expectedOutput switch + mapNextHint switch + listing+trade 并行规则 + 默认 `"media"` 兜底）及其唯一消费者 `OfficialRouteGraphFactory`/`OfficialRouteGraphHolder`、`OfficialRegenerateGraphFactory`/`OfficialRegenerateGraphHolder`、`RouteDecisionSubgraph`、`RegenerateSubgraph`。这些是上一代 resume/route/regenerate 图架构的遗留，`execute()` 无任何 main/test 调用方。删除前需再确认无反射/条件装配依赖。
+
+**评估后保留（属业务行为而非领域词表，新域优雅降级）：**
+- `RouteDecisionNode`：trade→contract handoff 是业务路由策略（见方向 3）。
+- `BuildNextAgentContextNode`：media/marketing/settlement 的下游上下文定制是业务行为，新域走通用上下文；若定制项增多再考虑元数据化。
+- `SupervisorGovernanceService.resolveDomain`：灰度匹配的消息→域启发式（含 publish/copy/media/risk 等英文词），未接入 rule-routing 配置。漂移后果仅限"新域无法按消息文本自动命中灰度"，显式 userId/sessionId/domain 上下文灰度不受影响；改造收益低、行为变化风险高，暂保留。
+- `SupervisorAgentRoutingService` 与 `OfficialSupervisorGraphFactory.selectAgent` 的 `listing-agent` 兜底：默认 Agent 选择策略，非领域词表问题。
+
 ## 迭代记录
 
 - 2026-09-29：建立本文件；记录方向 1（规则路由降级为 LLM 兜底）为既定方向。
+- 2026-09-29：完成槽位化改造后的全量硬编码审计，结论记入方向 7。

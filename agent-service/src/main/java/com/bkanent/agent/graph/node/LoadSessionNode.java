@@ -1,5 +1,6 @@
 package com.bkanent.agent.graph.node;
 
+import com.bkanent.agent.catalog.DomainCatalog;
 import com.bkanent.agent.graph.SupervisorGraphNode;
 import com.bkanent.agent.graph.SupervisorGraphState;
 import com.bkanent.agent.memory.MemoryStoreClient;
@@ -20,17 +21,16 @@ public class LoadSessionNode implements SupervisorGraphNode {
 
     private static final Logger log = LoggerFactory.getLogger(LoadSessionNode.class);
 
-    private static final Set<String> DOMAIN_KEYWORDS = Set.of(
-            "contract", "settlement", "notification", "marketing", "trade", "listing"
-    );
-
     private final MemoryStoreClient memoryStoreClient;
     private final UserPreferenceRetriever userPreferenceRetriever;
+    private final DomainCatalog domainCatalog;
 
     public LoadSessionNode(MemoryStoreClient memoryStoreClient,
-                           UserPreferenceRetriever userPreferenceRetriever) {
+                           UserPreferenceRetriever userPreferenceRetriever,
+                           DomainCatalog domainCatalog) {
         this.memoryStoreClient = memoryStoreClient;
         this.userPreferenceRetriever = userPreferenceRetriever;
+        this.domainCatalog = domainCatalog;
     }
 
     @Override
@@ -83,7 +83,7 @@ public class LoadSessionNode implements SupervisorGraphNode {
         }
         String lower = userMessage.toLowerCase();
         List<String> matchedTags = new ArrayList<>();
-        for (String kw : DOMAIN_KEYWORDS) {
+        for (String kw : domainCatalog.domains()) {
             if (lower.contains(kw)) {
                 matchedTags.add(kw);
             }

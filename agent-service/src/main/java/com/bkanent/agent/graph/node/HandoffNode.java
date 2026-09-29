@@ -1,5 +1,6 @@
 package com.bkanent.agent.graph.node;
 
+import com.bkanent.agent.catalog.DomainCatalog;
 import com.bkanent.agent.config.DistributedAgentProperties;
 import com.bkanent.agent.memory.MemoryStoreClient;
 import com.bkanent.agent.registry.RegisteredAgentDescriptor;
@@ -31,19 +32,22 @@ public class HandoffNode {
     private final MemoryStoreClient memoryStoreClient;
     private final SessionStreamService sessionStreamService;
     private final SupervisorAgentRoutingService supervisorAgentRoutingService;
+    private final DomainCatalog domainCatalog;
 
     public HandoffNode(A2aExecutionService a2aExecutionService,
                        DistributedAgentProperties distributedAgentProperties,
                        PersistArtifactsNode persistArtifactsNode,
                        MemoryStoreClient memoryStoreClient,
                        SessionStreamService sessionStreamService,
-                       SupervisorAgentRoutingService supervisorAgentRoutingService) {
+                       SupervisorAgentRoutingService supervisorAgentRoutingService,
+                       DomainCatalog domainCatalog) {
         this.a2aExecutionService = a2aExecutionService;
         this.distributedAgentProperties = distributedAgentProperties;
         this.persistArtifactsNode = persistArtifactsNode;
         this.memoryStoreClient = memoryStoreClient;
         this.sessionStreamService = sessionStreamService;
         this.supervisorAgentRoutingService = supervisorAgentRoutingService;
+        this.domainCatalog = domainCatalog;
     }
 
     public SupervisorWorkflowState handoff(SupervisorWorkflowState state,
@@ -282,15 +286,11 @@ public class HandoffNode {
         if (context != null && context.get("nextIntent") != null && StringUtils.hasText(String.valueOf(context.get("nextIntent")))) {
             return String.valueOf(context.get("nextIntent"));
         }
-        return switch (domain) {
-            case "marketing" -> "marketing.generate_copy";
-            case "media" -> "media.generate_video_task";
-            case "trade" -> "trade.feasibility_analysis";
-            case "contract" -> "contract.risk_review";
-            case "notification" -> "notification.send";
-            case "settlement" -> "settlement.prepare";
-            default -> "listing.search";
-        };
+        String resolved = domainCatalog.resolveDefaultIntent(domain);
+        if (!StringUtils.hasText(resolved)) {
+            throw new IllegalStateException("No default intent resolvable for domain " + domain);
+        }
+        return resolved;
     }
 
     private String resolveExpectedOutput(String domain, String intent) {
@@ -307,15 +307,7 @@ public class HandoffNode {
             case "contract" -> "Return a contract summary and risk review with compact structured output";
             case "notification" -> "Return a notification delivery summary with compact structured output";
             case "settlement" -> "Return a settlement preparation summary with compact structured output";
-            default -> "Return listing search summaries with compact structured output";
+            default -> "Return a concise domain result with compact structured output";
         };
-    }
-
-    private boolean containsListingIntent(String message) {
-        return StringUtils.hasText(message) && (message.contains("房源")
-                || message.contains("找房")
-                || message.contains("小区")
-                || message.contains("listing")
-                || message.contains("房子"));
     }
 }
