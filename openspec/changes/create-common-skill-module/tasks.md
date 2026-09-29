@@ -37,4 +37,4 @@
 
 - [x] 6.1 `mvn -gs .mvn-settings.xml -s .mvn-settings.xml compile` 全模块编译通过
 - [x] 6.2 `mvn -gs .mvn-settings.xml -s .mvn-settings.xml test` 相关模块测试通过
-- [ ] 6.3 按仓库约定分节点中文 commit 并 push（模块搭建 / runtime / agent-service 切换 / contract 样板）
+- [x] 6.3 按仓库约定分节点中文 commit 并 push（模块搭建 / runtime / agent-service 切换 / contract 样板）
