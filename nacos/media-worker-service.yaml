@@ -82,6 +82,10 @@ rocketmq:
   producer:
     group: ${MEDIA_ROCKETMQ_PRODUCER_GROUP:media-worker-producer-group}
 
+agent:
+  skills:
+    external-dir: ${AGENT_SKILLS_EXTERNAL_DIR:}
+    watch-enabled: ${AGENT_SKILLS_WATCH_ENABLED:true}
 media:
   integration:
     mode: ${MEDIA_INTEGRATION_MODE:unconfigured}

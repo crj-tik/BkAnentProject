@@ -21,11 +21,11 @@
 
 ## 4. 技能文件全覆盖与挂载
 
-- [ ] 4.1 listing-master-service：`skills/listing/listing-search.md`（description 锚点：找房/查房源/推荐房源；tools：searchListings、getListingDetail）+ pom 依赖 + 拦截器/SkillTool 挂载 + nacos `agent.skills` 段
-- [ ] 4.2 media-worker-service：`skills/media/media-generation.md`（出视频/出图/生成素材；tools：submitMediaTask、queryMediaTask）+ 同构挂载
-- [ ] 4.3 settlement-service：`skills/settlement/settlement-processing.md`（佣金/结算/分成/打款批次；tools：calculateSettlement、getCommissionSummary、createPayoutBatch）+ 同构挂载
-- [ ] 4.4 notification-service：`skills/notification/notification-sending.md`（发通知/站内信/邮件提醒；tools：sendStationMessage、sendEmailNotification）+ 同构挂载
-- [ ] 4.5 技能文件编写约定核对：全部 description 为场景导向、工具名与真实 @Tool 一致
+- [x] 4.1 listing-master-service：`skills/listing/listing-search.md`（description 锚点：找房/查房源/推荐房源；tools：searchListings、getListingDetail）+ pom 依赖 + 拦截器/SkillTool 挂载 + nacos `agent.skills` 段
+- [x] 4.2 media-worker-service：`skills/media/media-generation.md`（出视频/出图/生成素材；tools：submitMediaTask、queryMediaTask）+ 同构挂载
+- [x] 4.3 settlement-service：`skills/settlement/settlement-processing.md`（佣金/结算/分成/打款批次；tools：calculateSettlement、getCommissionSummary、createPayoutBatch）+ 同构挂载
+- [x] 4.4 notification-service：`skills/notification/notification-sending.md`（发通知/站内信/邮件提醒；tools：sendStationMessage、sendEmailNotification）+ 同构挂载
+- [x] 4.5 技能文件编写约定核对：全部 description 为场景导向、工具名与真实 @Tool 一致
 
 ## 5. skill_hint 通道
 
