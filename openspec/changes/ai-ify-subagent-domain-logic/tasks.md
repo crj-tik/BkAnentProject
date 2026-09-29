@@ -35,5 +35,5 @@
 
 ## 6. 收尾
 
-- [ ] 6.1 `mvn -gs .mvn-settings.xml -s .mvn-settings.xml compile` 全模块编译通过；contract/marketing/compare 测试全绿
-- [ ] 6.2 按仓库约定分节点中文 commit 并 push（contract / marketing / compare / 技能覆盖 / skill_hint）
+- [x] 6.1 `mvn -gs .mvn-settings.xml -s .mvn-settings.xml compile` 全模块编译通过；contract/marketing/compare 测试全绿
+- [x] 6.2 按仓库约定分节点中文 commit 并 push（contract / marketing / compare / 技能覆盖 / skill_hint）
