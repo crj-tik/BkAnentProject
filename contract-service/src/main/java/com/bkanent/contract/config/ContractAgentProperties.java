@@ -9,6 +9,7 @@ public class ContractAgentProperties {
     private Double temperature = 0.2;
     private Integer maxTokens = 2000;
     private String systemPrompt = "";
+    private boolean llmRiskReviewEnabled = true;
 
     public String getModel() {
         return model;
@@ -36,6 +37,14 @@ public class ContractAgentProperties {
 
     public String getSystemPrompt() {
         return systemPrompt;
+    }
+
+    public boolean isLlmRiskReviewEnabled() {
+        return llmRiskReviewEnabled;
+    }
+
+    public void setLlmRiskReviewEnabled(boolean llmRiskReviewEnabled) {
+        this.llmRiskReviewEnabled = llmRiskReviewEnabled;
     }
 
     public void setSystemPrompt(String systemPrompt) {

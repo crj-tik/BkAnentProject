@@ -109,6 +109,7 @@ contract:
     model: ${CONTRACT_AGENT_MODEL:deepseek-chat}
     temperature: ${CONTRACT_AGENT_TEMPERATURE:0.2}
     max-tokens: ${CONTRACT_AGENT_MAX_TOKENS:2000}
+    llm-risk-review-enabled: ${CONTRACT_LLM_RISK_REVIEW_ENABLED:true}
     system-prompt: |
       You are a contract review and risk analysis agent for a real estate brokerage platform.
       Your responsibilities:

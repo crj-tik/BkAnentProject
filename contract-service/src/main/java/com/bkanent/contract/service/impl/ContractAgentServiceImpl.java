@@ -4,14 +4,18 @@ import com.bkanent.common.agent.AgentCard;
 import com.bkanent.common.agent.AgentTaskInvokeRequest;
 import com.bkanent.common.agent.AgentTaskInvokeResponse;
 import com.bkanent.contract.config.ContractAgentProperties;
+import com.bkanent.contract.model.ContractDetailResponse;
+import com.bkanent.contract.model.ContractRiskAssessment;
 import com.bkanent.contract.service.ContractAgentService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.DefaultChatOptions;
+import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
@@ -24,14 +28,30 @@ public class ContractAgentServiceImpl implements ContractAgentService {
 
     private static final Logger log = LoggerFactory.getLogger(ContractAgentServiceImpl.class);
 
+    private static final String RISK_REVIEW_SYSTEM_PROMPT = """
+            You are a real-estate contract risk reviewer. Assess the contract strictly based on the
+            provided contract data. Respond only with a JSON object in this exact format:
+            {
+              "riskLevel": "low|medium|high",
+              "riskFactors": ["factor1 with clause basis", "factor2"],
+              "recommendedActions": ["action1", "action2"],
+              "summary": "A concise paragraph explaining the reasoning."
+            }
+            Do not invent facts that are not present in the provided data. If key information
+            (OCR summary, seal status, archive status) is missing, treat it as a risk factor.
+            """;
+
     private final ChatClient contractChatClient;
+    private final ChatModel chatModel;
     private final ContractAgentProperties properties;
     private final ObjectMapper objectMapper;
 
     public ContractAgentServiceImpl(@Qualifier("contractChatClient") ChatClient contractChatClient,
+                                    ChatModel chatModel,
                                     ContractAgentProperties properties,
                                     ObjectMapper objectMapper) {
         this.contractChatClient = contractChatClient;
+        this.chatModel = chatModel;
         this.properties = properties;
         this.objectMapper = objectMapper;
     }
@@ -81,6 +101,61 @@ public class ContractAgentServiceImpl implements ContractAgentService {
         }
     }
 
+    @Override
+    public ContractRiskAssessment reviewRisks(ContractDetailResponse detail) {
+        if (detail == null) {
+            throw new IllegalArgumentException("contract detail must not be null");
+        }
+        String llmResponse = chatModel.call(new Prompt(
+                buildRiskReviewUserPrompt(detail), riskReviewChatOptions())).getResult().getOutput().getText();
+        Map<String, Object> parsed = parseLlmResponse(llmResponse);
+        String riskLevel = String.valueOf(parsed.getOrDefault("riskLevel", "medium"));
+        if (!List.of("low", "medium", "high").contains(riskLevel.toLowerCase())) {
+            riskLevel = "medium";
+        }
+        return new ContractRiskAssessment(
+                riskLevel.toLowerCase(),
+                toStringList(parsed.get("riskFactors")),
+                toStringList(parsed.get("recommendedActions")),
+                String.valueOf(parsed.getOrDefault("summary", "")));
+    }
+
+    private String buildRiskReviewUserPrompt(ContractDetailResponse detail) {
+        StringBuilder sb = new StringBuilder(512);
+        sb.append("Assess the risk of the following contract:\n\n");
+        sb.append("contractNo: ").append(safe(detail.contractNo())).append('\n');
+        sb.append("title: ").append(safe(detail.title())).append('\n');
+        sb.append("contractType: ").append(safe(detail.contractType())).append('\n');
+        sb.append("status: ").append(safe(detail.status())).append('\n');
+        sb.append("sealStatus: ").append(safe(detail.sealStatus())).append('\n');
+        sb.append("archiveStatus: ").append(safe(detail.archiveStatus())).append('\n');
+        sb.append("expiryDate: ").append(safe(detail.expiryDate())).append('\n');
+        sb.append("dealAmount: ").append(detail.dealAmount() == null ? "unknown" : detail.dealAmount()).append('\n');
+        sb.append("attachmentCount: ").append(detail.attachments() == null ? 0 : detail.attachments().size()).append('\n');
+        sb.append("ocrSummary: ").append(safe(detail.ocrSummary())).append('\n');
+        sb.append("remark: ").append(safe(detail.remark()));
+        return sb.toString();
+    }
+
+    private ChatOptions riskReviewChatOptions() {
+        DefaultChatOptions options = new DefaultChatOptions();
+        options.setModel(properties.getModel());
+        options.setTemperature(properties.getTemperature());
+        options.setMaxTokens(properties.getMaxTokens());
+        return options;
+    }
+
+    private List<String> toStringList(Object value) {
+        if (value instanceof List<?> list) {
+            return list.stream().map(Object::toString).toList();
+        }
+        return List.of();
+    }
+
+    private String safe(String value) {
+        return value == null || value.isBlank() ? "(missing)" : value;
+    }
+
     private String buildUserPrompt(String instruction, Map<String, Object> context) {
         StringBuilder sb = new StringBuilder();
         sb.append("Analyze the following contract request:\n\n");
@@ -108,8 +183,7 @@ public class ContractAgentServiceImpl implements ContractAgentService {
 
     private Map<String, Object> parseLlmResponse(String llmResponse) {
         if (llmResponse == null || llmResponse.isBlank()) {
-            return Map.of("decision", "MANUAL_REVIEW", "riskLevel", "medium",
-                    "summary", "LLM returned empty response");
+            throw new IllegalStateException("LLM returned empty response");
         }
         String json = llmResponse;
         int start = json.indexOf('{');
@@ -121,13 +195,7 @@ public class ContractAgentServiceImpl implements ContractAgentService {
             return objectMapper.readValue(json,
                     new TypeReference<LinkedHashMap<String, Object>>() {});
         } catch (Exception e) {
-            log.warn("Failed to parse LLM response as JSON, using raw text");
-            Map<String, Object> fallback = new LinkedHashMap<>();
-            fallback.put("decision", "MANUAL_REVIEW");
-            fallback.put("riskLevel", "medium");
-            fallback.put("rawResponse", llmResponse);
-            fallback.put("summary", "LLM response could not be parsed as structured JSON");
-            return fallback;
+            throw new IllegalStateException("LLM response could not be parsed as structured JSON", e);
         }
     }
 
