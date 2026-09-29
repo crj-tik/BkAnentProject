@@ -336,7 +336,7 @@ class A2aExecutionServiceTest {
                 streaming, async, "http://127.0.0.1/a2a", List.of("text"), List.of("text"));
         return new RegisteredAgentDescriptor(
                 "listing-agent", "http://127.0.0.1:9999", "/.well-known/agent.json", "/a2a",
-                AgentRuntimeType.ALIBABA_A2A, AgentDescriptorSource.DISCOVERED_CARD, card);
+                AgentRuntimeType.ALIBABA_A2A, AgentDescriptorSource.DISCOVERED_CARD, card, java.util.Map.of());
     }
 
     private AgentTaskInvokeRequest request(boolean stream) {

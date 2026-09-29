@@ -140,6 +140,31 @@ agent:
     refresh-interval-seconds: ${AGENT_DISCOVERY_REFRESH_INTERVAL_SECONDS:30}
     catalog:
       strict-nacos: ${AGENT_CATALOG_STRICT_NACOS:true}
+      # 并行图分支槽位容量（编译期拓扑概念，修改后需重启）。必须 >= planning.max-parallel-domains
+      branch-capacity: ${AGENT_CATALOG_BRANCH_CAPACITY:16}
+      # 冷启动专用兜底领域词表：仅在 Agent 注册表首次成功刷新（返回至少一个 Agent）之前生效，
+      # 之后由注册表动态词表完全接管。禁止向本表追加新域。
+      cold-start-fallback-domains: [listing, marketing, media, trade, contract, settlement, notification]
+      # 存量领域默认 intent 种子表（行为兼容）。新领域必须通过注册元数据
+      # agent-default-intent 或 Agent Card supportedSkills 声明，禁止向本表追加新域。
+      default-intents:
+        listing: "listing.search"
+        marketing: "marketing.generate_copy"
+        media: "media.generate_video_task"
+        trade: "trade.feasibility_analysis"
+        contract: "contract.risk_review"
+        notification: "notification.send"
+        settlement: "settlement.prepare"
+      hint-rewrites:
+        settlement.batch: "settlement.prepare"
+      rule-routing:
+        default-domain: listing
+        keywords:
+          contract: [合同, 签约, 归档, ocr, OCR, contract]
+          notification: [通知, 提醒, 消息, notification]
+          settlement: [结算, 佣金, 出款, 打款, settlement]
+          marketing: [文案, 营销, 广告, 推广, 小红书, 抖音]
+          trade: [交易, 成交, 风险, 可行性, trade]
     rate-limit:
       enabled: ${AGENT_RATE_LIMIT_ENABLED:true}
       provider: ${AGENT_RATE_LIMIT_PROVIDER:memory}
@@ -199,6 +224,8 @@ agent:
       llm-enabled: ${AGENT_PLANNING_LLM_ENABLED:false}
       allow-fallback: ${AGENT_PLANNING_ALLOW_FALLBACK:true}
       strategy: ${AGENT_PLANNING_STRATEGY:rule-first}
+      # 运行期单次计划的并行扇出上限，必须 <= catalog.branch-capacity，否则启动失败
+      max-parallel-domains: ${AGENT_PLANNING_MAX_PARALLEL_DOMAINS:7}
     stream:
       provider: ${AGENT_STREAM_PROVIDER:rocketmq}
       rocketmq:

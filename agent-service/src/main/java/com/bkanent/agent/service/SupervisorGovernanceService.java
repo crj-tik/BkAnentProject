@@ -32,17 +32,20 @@ public class SupervisorGovernanceService {
     private final SupervisorRateLimiter supervisorRateLimiter;
     private final SessionEventAuditService sessionEventAuditService;
     private final AgentGovernanceOverrideMapper governanceOverrideMapper;
+    private final com.bkanent.agent.catalog.DomainCatalog domainCatalog;
     private final ObjectMapper objectMapper;
 
     public SupervisorGovernanceService(DistributedAgentProperties distributedAgentProperties,
                                        SupervisorRateLimiter supervisorRateLimiter,
                                        SessionEventAuditService sessionEventAuditService,
                                        AgentGovernanceOverrideMapper governanceOverrideMapper,
+                                       com.bkanent.agent.catalog.DomainCatalog domainCatalog,
                                        ObjectMapper objectMapper) {
         this.distributedAgentProperties = distributedAgentProperties;
         this.supervisorRateLimiter = supervisorRateLimiter;
         this.sessionEventAuditService = sessionEventAuditService;
         this.governanceOverrideMapper = governanceOverrideMapper;
+        this.domainCatalog = domainCatalog;
         this.objectMapper = objectMapper;
     }
 
@@ -160,14 +163,27 @@ public class SupervisorGovernanceService {
         grayRelease.put("enabled", isGrayEnabled(gray, override));
         grayRelease.put("strategyVersion", resolveGrayStrategyVersion(gray, override));
         grayRelease.put("preferAsyncA2a", resolvePreferAsyncA2a(gray, override));
-        grayRelease.put("enabledOverride", override.enabledOverride());
-        grayRelease.put("strategyVersionOverride", override.strategyVersionOverride());
-        grayRelease.put("preferAsyncOverride", override.preferAsyncOverride());
+        if (override.enabledOverride() != null) {
+            grayRelease.put("enabledOverride", override.enabledOverride());
+        }
+        if (override.strategyVersionOverride() != null) {
+            grayRelease.put("strategyVersionOverride", override.strategyVersionOverride());
+        }
+        if (override.preferAsyncOverride() != null) {
+            grayRelease.put("preferAsyncOverride", override.preferAsyncOverride());
+        }
+
+        com.bkanent.agent.catalog.DomainCatalog.CatalogSnapshot catalogSnapshot = domainCatalog.snapshot();
+        Map<String, Object> domainCatalogView = new LinkedHashMap<>();
+        domainCatalogView.put("vocabularySource", catalogSnapshot.vocabularySource());
+        domainCatalogView.put("domains", catalogSnapshot.domains());
+        domainCatalogView.put("branchCapacity", domainCatalog.branchCapacity());
 
         return new SupervisorGovernanceView(
                 Map.copyOf(rateLimit),
                 Map.copyOf(grayRelease),
-                sessionEventAuditService.summarize()
+                sessionEventAuditService.summarize(),
+                Map.copyOf(domainCatalogView)
         );
     }
 

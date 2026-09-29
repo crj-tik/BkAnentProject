@@ -314,6 +314,6 @@ class SupervisorAsyncTaskLeaseTest {
                 List.of("listing"), false, false, "http://localhost:9999/a2a", List.of("text"), List.of("text"));
         return new RegisteredAgentDescriptor("listing-agent", "http://localhost:9999",
                 "/.well-known/agent.json", "/a2a", AgentRuntimeType.ALIBABA_A2A,
-                AgentDescriptorSource.DISCOVERED_CARD, card);
+                AgentDescriptorSource.DISCOVERED_CARD, card, java.util.Map.of());
     }
 }

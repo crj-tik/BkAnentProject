@@ -12,6 +12,7 @@ import com.alibaba.cloud.ai.graph.action.AsyncNodeAction;
 import com.alibaba.cloud.ai.graph.action.MultiCommand;
 import com.alibaba.cloud.ai.graph.action.NodeAction;
 import com.alibaba.cloud.ai.graph.checkpoint.config.SaverConfig;
+import com.bkanent.agent.catalog.DomainCatalog;
 import com.bkanent.agent.graph.SingleAgentSubgraph;
 import com.bkanent.agent.graph.SupervisorGraphPlanner;
 import com.bkanent.agent.graph.SupervisorGraphState;
@@ -39,29 +40,23 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 /**
  * The single top-level Supervisor workflow. Domain services are invoked by
  * graph nodes, while all business transitions are represented by graph edges.
+ *
+ * <p>并行分支采用与领域词表解耦的通用槽位：图拓扑里不存在任何领域词汇，
+ * 分支成员完全由 DomainCatalog（Agent 注册表派生）在运行时决定，
+ * 新增领域无需修改或重建本图。</p>
  */
 @Component
 public class OfficialSupervisorGraphFactory {
-
-    private static final Map<String, String> PARALLEL_DOMAIN_NODES = Map.of(
-            "listing", OfficialSupervisorGraphNodeNames.PARALLEL_LISTING,
-            "marketing", OfficialSupervisorGraphNodeNames.PARALLEL_MARKETING,
-            "media", OfficialSupervisorGraphNodeNames.PARALLEL_MEDIA,
-            "trade", OfficialSupervisorGraphNodeNames.PARALLEL_TRADE,
-            "contract", OfficialSupervisorGraphNodeNames.PARALLEL_CONTRACT,
-            "settlement", OfficialSupervisorGraphNodeNames.PARALLEL_SETTLEMENT,
-            "notification", OfficialSupervisorGraphNodeNames.PARALLEL_NOTIFICATION
-    );
 
     private final OfficialSupervisorGraphSchema graphSchema;
     private final DatabaseCheckpointSaverFactory checkpointSaverFactory;
@@ -73,6 +68,7 @@ public class OfficialSupervisorGraphFactory {
     private final MergeParallelResultNode mergeParallelResultNode;
     private final PersistParallelArtifactsNode persistParallelArtifactsNode;
     private final AgentRegistry agentRegistry;
+    private final DomainCatalog domainCatalog;
     private final ObjectMapper objectMapper;
     private final SessionStreamService sessionStreamService;
     private final BuildNextAgentContextNode buildNextAgentContextNode;
@@ -89,6 +85,7 @@ public class OfficialSupervisorGraphFactory {
                                           MergeParallelResultNode mergeParallelResultNode,
                                           PersistParallelArtifactsNode persistParallelArtifactsNode,
                                           AgentRegistry agentRegistry,
+                                          DomainCatalog domainCatalog,
                                           ObjectMapper objectMapper,
                                           SessionStreamService sessionStreamService,
                                           BuildNextAgentContextNode buildNextAgentContextNode,
@@ -104,6 +101,7 @@ public class OfficialSupervisorGraphFactory {
         this.mergeParallelResultNode = mergeParallelResultNode;
         this.persistParallelArtifactsNode = persistParallelArtifactsNode;
         this.agentRegistry = agentRegistry;
+        this.domainCatalog = domainCatalog;
         this.objectMapper = objectMapper;
         this.sessionStreamService = sessionStreamService;
         this.buildNextAgentContextNode = buildNextAgentContextNode;
@@ -124,20 +122,7 @@ public class OfficialSupervisorGraphFactory {
         stateGraph.addNode(OfficialSupervisorGraphNodeNames.ROUTE_AFTER_EXECUTION, routeAfterExecution());
         stateGraph.addNode(OfficialSupervisorGraphNodeNames.HANDOFF, handoff());
         stateGraph.addNode(OfficialSupervisorGraphNodeNames.PARALLEL_FAN_OUT, parallelFanOut());
-        stateGraph.addNode(OfficialSupervisorGraphNodeNames.PARALLEL_LISTING,
-                parallelBranch("listing", OfficialSupervisorGraphNodeNames.PARALLEL_LISTING));
-        stateGraph.addNode(OfficialSupervisorGraphNodeNames.PARALLEL_MARKETING,
-                parallelBranch("marketing", OfficialSupervisorGraphNodeNames.PARALLEL_MARKETING));
-        stateGraph.addNode(OfficialSupervisorGraphNodeNames.PARALLEL_MEDIA,
-                parallelBranch("media", OfficialSupervisorGraphNodeNames.PARALLEL_MEDIA));
-        stateGraph.addNode(OfficialSupervisorGraphNodeNames.PARALLEL_TRADE,
-                parallelBranch("trade", OfficialSupervisorGraphNodeNames.PARALLEL_TRADE));
-        stateGraph.addNode(OfficialSupervisorGraphNodeNames.PARALLEL_CONTRACT,
-                parallelBranch("contract", OfficialSupervisorGraphNodeNames.PARALLEL_CONTRACT));
-        stateGraph.addNode(OfficialSupervisorGraphNodeNames.PARALLEL_SETTLEMENT,
-                parallelBranch("settlement", OfficialSupervisorGraphNodeNames.PARALLEL_SETTLEMENT));
-        stateGraph.addNode(OfficialSupervisorGraphNodeNames.PARALLEL_NOTIFICATION,
-                parallelBranch("notification", OfficialSupervisorGraphNodeNames.PARALLEL_NOTIFICATION));
+        List<String> parallelSlots = registerParallelSlots(stateGraph);
         stateGraph.addNode(OfficialSupervisorGraphNodeNames.PARALLEL_AGGREGATE, parallelAggregate());
         stateGraph.addNode(OfficialSupervisorGraphNodeNames.REGENERATE, regenerate());
         stateGraph.addNode(OfficialSupervisorGraphNodeNames.COMPLETE, complete());
@@ -176,17 +161,9 @@ public class OfficialSupervisorGraphFactory {
         stateGraph.addParallelConditionalEdges(
                 OfficialSupervisorGraphNodeNames.PARALLEL_FAN_OUT,
                 AsyncMultiCommandAction.node_async(this::parallelTargets),
-                parallelEdgeMappings()
+                parallelEdgeMappings(parallelSlots)
         );
-        stateGraph.addEdge(List.of(
-                OfficialSupervisorGraphNodeNames.PARALLEL_LISTING,
-                OfficialSupervisorGraphNodeNames.PARALLEL_MARKETING,
-                OfficialSupervisorGraphNodeNames.PARALLEL_MEDIA,
-                OfficialSupervisorGraphNodeNames.PARALLEL_TRADE,
-                OfficialSupervisorGraphNodeNames.PARALLEL_CONTRACT,
-                OfficialSupervisorGraphNodeNames.PARALLEL_SETTLEMENT,
-                OfficialSupervisorGraphNodeNames.PARALLEL_NOTIFICATION
-        ), OfficialSupervisorGraphNodeNames.PARALLEL_AGGREGATE);
+        stateGraph.addEdge(parallelSlots, OfficialSupervisorGraphNodeNames.PARALLEL_AGGREGATE);
         stateGraph.addEdge(OfficialSupervisorGraphNodeNames.PARALLEL_AGGREGATE,
                 OfficialSupervisorGraphNodeNames.ROUTE_AFTER_EXECUTION);
         stateGraph.addConditionalEdges(
@@ -217,6 +194,20 @@ public class OfficialSupervisorGraphFactory {
                         checkpointSaverFactory.create("official-supervisor")).build())
                 .interruptAfter(OfficialSupervisorGraphNodeNames.APPROVAL_GATE)
                 .build());
+    }
+
+    private List<String> registerParallelSlots(StateGraph stateGraph) throws Exception {
+        int capacity = domainCatalog.branchCapacity();
+        if (capacity < 2) {
+            throw new IllegalStateException("branch capacity must allow at least two parallel branches");
+        }
+        List<String> slots = new ArrayList<>(capacity);
+        for (int index = 0; index < capacity; index++) {
+            String nodeName = OfficialSupervisorGraphNodeNames.parallelBranchSlot(index);
+            stateGraph.addNode(nodeName, parallelBranch(index, nodeName));
+            slots.add(nodeName);
+        }
+        return slots;
     }
 
     private AsyncNodeAction plan() {
@@ -504,10 +495,10 @@ public class OfficialSupervisorGraphFactory {
             RouteDecisionNode.RouteDecision decision = routeDecisionNode.evaluate(
                     OfficialGraphStateAdapters.sharedContext(state), response);
             if (decision != null && StringUtils.hasText(decision.nextDomain())
-                    && PARALLEL_DOMAIN_NODES.containsKey(decision.nextDomain())) {
+                    && domainCatalog.contains(decision.nextDomain())) {
                 return new HandoffTarget(
                         decision.nextDomain(),
-                        "".equals(decision.nextDomain()) ? null : resolveIntent(decision.nextDomain()),
+                        domainCatalog.resolveDefaultIntent(decision.nextDomain()),
                         "route_decision",
                         decision.asMap());
             }
@@ -515,31 +506,21 @@ public class OfficialSupervisorGraphFactory {
         return null;
     }
 
+    /**
+     * nextHint 通用规则：先应用配置改写表，再按 '.' 前缀切出目标领域；
+     * 领域必须是当前领域目录成员，否则忽略该 hint。
+     */
     private HandoffTarget mapNextHint(String nextHint) {
         if (!StringUtils.hasText(nextHint)) {
             return null;
         }
-        return switch (nextHint) {
-            case "marketing.publish_prepare", "marketing.publish" ->
-                    new HandoffTarget("marketing", nextHint, "next_hint", nextHint);
-            case "notification.send" ->
-                    new HandoffTarget("notification", nextHint, "next_hint", nextHint);
-            case "settlement.prepare", "settlement.batch" ->
-                    new HandoffTarget("settlement", "settlement.prepare", "next_hint", nextHint);
-            default -> null;
-        };
-    }
-
-    private String resolveIntent(String domain) {
-        return switch (domain) {
-            case "marketing" -> "marketing.generate_copy";
-            case "media" -> "media.generate_video_task";
-            case "trade" -> "trade.feasibility_analysis";
-            case "contract" -> "contract.risk_review";
-            case "notification" -> "notification.send";
-            case "settlement" -> "settlement.prepare";
-            default -> "listing.search";
-        };
+        String rewritten = domainCatalog.rewriteHint(nextHint);
+        int separatorIndex = rewritten.indexOf('.');
+        String domain = separatorIndex > 0 ? rewritten.substring(0, separatorIndex) : rewritten;
+        if (!domainCatalog.contains(domain)) {
+            return null;
+        }
+        return new HandoffTarget(domain, rewritten, "next_hint", nextHint);
     }
 
     private boolean isFailedResponse(AgentTaskInvokeResponse response) {
@@ -573,20 +554,31 @@ public class OfficialSupervisorGraphFactory {
         return AsyncNodeAction.node_async(action);
     }
 
-    private AsyncNodeAction parallelBranch(String domain, String nodeName) {
+    /**
+     * 通用槽位分支：从 state 的 parallelDomains 按槽位下标取出本分支要执行的领域，
+     * 调用与领域无关的 ParallelInvokeNode.invokeDomain。空槽位不会被路由，永不执行。
+     */
+    private AsyncNodeAction parallelBranch(int slotIndex, String nodeName) {
         NodeAction action = state -> {
             SupervisorGraphState graphState = OfficialGraphStateAdapters.toSupervisorGraphState(state);
+            List<String> domains = graphState.parallelDomains();
+            String domain = slotIndex < domains.size() ? domains.get(slotIndex) : null;
             AgentTaskInvokeResponse response;
-            try {
-                response = parallelInvokeNode.invokeDomain(requestOf(state), graphState, domain);
-            } catch (Exception exception) {
-                String message = exception.getMessage() == null
-                        ? exception.getClass().getSimpleName() : exception.getMessage();
-                response = failedParallelResponse(graphState, domain, message);
+            if (!StringUtils.hasText(domain)) {
+                response = failedParallelResponse(graphState, "slot-" + slotIndex,
+                        "No domain assigned to parallel slot " + slotIndex);
+            } else {
+                try {
+                    response = parallelInvokeNode.invokeDomain(requestOf(state), graphState, domain);
+                } catch (Exception exception) {
+                    String message = exception.getMessage() == null
+                            ? exception.getClass().getSimpleName() : exception.getMessage();
+                    response = failedParallelResponse(graphState, domain, message);
+                }
             }
             Map<String, Object> result = new LinkedHashMap<>();
             result.put("runId", state.value(OfficialSupervisorGraphKeys.PARALLEL_RUN_ID, ""));
-            result.put("domain", domain);
+            result.put("domain", StringUtils.hasText(domain) ? domain : "slot-" + slotIndex);
             result.put("response", response);
             return Map.of(
                     OfficialSupervisorGraphKeys.PARALLEL_BRANCH_RESULTS, List.of(result),
@@ -649,13 +641,16 @@ public class OfficialSupervisorGraphFactory {
     private MultiCommand parallelTargets(OverAllState state,
                                           com.alibaba.cloud.ai.graph.RunnableConfig config) {
         List<String> domains = castList(state.value(OfficialSupervisorGraphKeys.PARALLEL_DOMAINS, List.of()));
-        List<String> branchNodes = domains.stream().map(PARALLEL_DOMAIN_NODES::get).toList();
-        if (!validParallelDomains(domains) || branchNodes.stream().anyMatch(java.util.Objects::isNull)) {
+        if (!validParallelDomains(domains)) {
             throw new IllegalStateException(
                     "parallelDomains must contain at least two distinct supported domains");
         }
+        List<String> targets = new ArrayList<>(domains.size());
+        for (int index = 0; index < domains.size(); index++) {
+            targets.add(OfficialSupervisorGraphNodeNames.parallelBranchSlot(index));
+        }
         return new MultiCommand(
-                domains,
+                targets,
                 Map.of(
                         OfficialSupervisorGraphKeys.PARALLEL_RUN_ID, UUID.randomUUID().toString(),
                         OfficialSupervisorGraphKeys.PARALLEL_AGGREGATION_STRATEGY, "ALL_OF",
@@ -664,8 +659,12 @@ public class OfficialSupervisorGraphFactory {
         );
     }
 
-    private Map<String, String> parallelEdgeMappings() {
-        return new LinkedHashMap<>(PARALLEL_DOMAIN_NODES);
+    private Map<String, String> parallelEdgeMappings(List<String> parallelSlots) {
+        Map<String, String> mappings = new LinkedHashMap<>();
+        for (String slot : parallelSlots) {
+            mappings.put(slot, slot);
+        }
+        return mappings;
     }
 
     private AgentTaskInvokeResponse failedParallelResponse(SupervisorGraphState state,
@@ -733,8 +732,7 @@ public class OfficialSupervisorGraphFactory {
             } catch (Exception exception) {
                 Map<String, Object> failed = new LinkedHashMap<>(
                         error("COMPLETION_FAILED", messageOf(exception)));
-                failed.put(OfficialSupervisorGraphKeys.CURRENT_NODE,
-                        OfficialSupervisorGraphNodeNames.COMPLETE);
+                failed.put(OfficialSupervisorGraphKeys.CURRENT_NODE, OfficialSupervisorGraphNodeNames.COMPLETE);
                 return failed;
             }
         };
@@ -857,7 +855,7 @@ public class OfficialSupervisorGraphFactory {
             return matched.get(0);
         }
         List<RegisteredAgentDescriptor> listing = agentRegistry.findByDomain("listing");
-        if (!listing.isEmpty() && containsListingIntent(message)) {
+        if (!listing.isEmpty() && containsDefaultDomainIntent(message)) {
             return listing.get(0);
         }
         return agentRegistry.getByAgentId("listing-agent")
@@ -899,13 +897,18 @@ public class OfficialSupervisorGraphFactory {
         return value instanceof List<?> list ? (List<String>) list : List.of();
     }
 
+    /**
+     * 并行领域合法性：领域必须是当前领域目录成员、去重、数量在运行期扇出上限内。
+     * 上限由 WorkflowPlanValidator 在计划生成时校验，这里是执行前的最后一道防线。
+     */
     private boolean validParallelDomains(List<String> domains) {
         return domains.size() >= 2
-                && domains.stream().allMatch(domain -> domain != null && PARALLEL_DOMAIN_NODES.containsKey(domain))
+                && domains.size() <= domainCatalog.branchCapacity()
+                && domains.stream().allMatch(domainCatalog::contains)
                 && domains.stream().distinct().count() == domains.size();
     }
 
-    private boolean containsListingIntent(String message) {
+    private boolean containsDefaultDomainIntent(String message) {
         return StringUtils.hasText(message) && (message.contains("房源")
                 || message.contains("找房")
                 || message.contains("小区")

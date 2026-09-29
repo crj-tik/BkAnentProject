@@ -52,6 +52,8 @@ spring:
         metadata:
           agent-id: contract-agent
           agent-domains: contract
+          # Supervisor 默认 intent 解析第一级：显式钉住现用值（card 技能 contract.review 与其不一致）
+          agent-default-intent: contract.risk_review
           agent-runtime-provider: official
           agent-card-path: /.well-known/agent.json
           a2a-path: /a2a

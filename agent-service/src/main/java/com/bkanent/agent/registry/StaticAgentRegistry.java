@@ -63,7 +63,10 @@ public class StaticAgentRegistry implements AgentRegistry {
                 a2aPath,
                 AgentRuntimeType.ALIBABA_A2A,
                 AgentDescriptorSource.STATIC_CONFIG,
-                card
+                card,
+                StringUtils.hasText(registration.getDefaultIntent())
+                        ? Map.of("agent-default-intent", registration.getDefaultIntent().trim())
+                        : Map.of()
         );
         OfficialA2aRegistrationValidator.requireValidDescriptor(descriptor);
         return descriptor;

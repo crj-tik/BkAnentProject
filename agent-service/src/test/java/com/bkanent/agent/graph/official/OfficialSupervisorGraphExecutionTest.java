@@ -4,6 +4,7 @@ import com.alibaba.cloud.ai.graph.CompiledGraph;
 import com.alibaba.cloud.ai.graph.OverAllState;
 import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.alibaba.cloud.ai.graph.state.StateSnapshot;
+import com.bkanent.agent.catalog.DomainCatalog;
 import com.bkanent.agent.graph.CompletionSubgraph;
 import com.bkanent.agent.graph.SingleAgentSubgraph;
 import com.bkanent.agent.graph.SupervisorGraphPlanner;
@@ -45,18 +46,36 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class OfficialSupervisorGraphExecutionTest {
 
+    private static final int BRANCH_CAPACITY = 16;
+
     private final AgentWorkflowCheckpointMapper checkpointMapper = mock(AgentWorkflowCheckpointMapper.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final DomainCatalog domainCatalog = mock(DomainCatalog.class);
 
     @BeforeEach
-    void configureCheckpointMapper() {
+    void configureMocks() {
         when(checkpointMapper.selectList(any())).thenReturn(List.of());
         when(checkpointMapper.selectOne(any())).thenReturn(null);
+        when(domainCatalog.branchCapacity()).thenReturn(BRANCH_CAPACITY);
+        when(domainCatalog.rewriteHint(anyString())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(domainCatalog.contains(anyString())).thenReturn(false);
+        when(domainCatalog.contains("listing")).thenReturn(true);
+        when(domainCatalog.contains("marketing")).thenReturn(true);
+        when(domainCatalog.contains("media")).thenReturn(true);
+        when(domainCatalog.contains("trade")).thenReturn(true);
+        when(domainCatalog.contains("contract")).thenReturn(true);
+        when(domainCatalog.contains("settlement")).thenReturn(true);
+        when(domainCatalog.contains("notification")).thenReturn(true);
+        when(domainCatalog.contains("compare")).thenReturn(true);
+        when(domainCatalog.resolveDefaultIntent("listing")).thenReturn("listing.search");
+        when(domainCatalog.resolveDefaultIntent("marketing")).thenReturn("marketing.generate_copy");
+        when(domainCatalog.resolveDefaultIntent("compare")).thenReturn("compare.listings");
     }
 
     @Test
@@ -114,6 +133,75 @@ class OfficialSupervisorGraphExecutionTest {
         verify(handoff).handoff(any(SupervisorWorkflowState.class), eq("marketing"), anyMap(),
                 eq("next_hint"), anyInt());
         verify(completion).execute(any());
+    }
+
+    @Test
+    void parallelPlanMustFanOutThroughSlotsAndLeaveEmptySlotsIdle() throws Exception {
+        SupervisorGraphPlanner planner = mock(SupervisorGraphPlanner.class);
+        SingleAgentSubgraph single = mock(SingleAgentSubgraph.class);
+        CompletionSubgraph completion = mock(CompletionSubgraph.class);
+        ParallelInvokeNode parallelInvokeNode = mock(ParallelInvokeNode.class);
+        MergeParallelResultNode mergeNode = mock(MergeParallelResultNode.class);
+        PersistParallelArtifactsNode persistNode = mock(PersistParallelArtifactsNode.class);
+        SupervisorGraphState planned = parallelPlannedState("parallel-slot-task", List.of("listing", "marketing"));
+        AgentTaskInvokeResponse listingResponse = response("COMPLETED", "listing done", List.of());
+        AgentTaskInvokeResponse marketingResponse = response("COMPLETED", "marketing done", List.of());
+        AgentTaskInvokeResponse merged = response("COMPLETED", "merged", List.of());
+        when(planner.plan(any(), anyString(), anyString(), anyString())).thenReturn(planned);
+        when(parallelInvokeNode.invokeDomain(any(), any(), eq("listing"))).thenReturn(listingResponse);
+        when(parallelInvokeNode.invokeDomain(any(), any(), eq("marketing"))).thenReturn(marketingResponse);
+        when(parallelInvokeNode.mergeResponses(any(), any(), any(), any(), any())).thenReturn(merged);
+        when(persistNode.persist(any(), any(), any(), any(), any(), any())).thenReturn(List.of("artifact-1"));
+        SupervisorWorkflowState mergedState = workflowState(planned, merged, "parallel-supervisor");
+        when(mergeNode.merge(any(), any(), any())).thenReturn(mergedState);
+        when(completion.execute(any())).thenReturn(new SupervisorTaskResponse(
+                "session-1", "parallel-slot-task", WorkflowStatus.COMPLETED.name(), "done",
+                List.of("artifact-1"), "trace-1", "parallel-supervisor", Map.of()));
+
+        CompiledGraph graph = graph(planner, single, completion, mock(HandoffNode.class),
+                mock(BuildNextAgentContextNode.class), mock(BuildApprovalRequestNode.class),
+                parallelInvokeNode, mergeNode, persistNode);
+        OverAllState output = graph.invoke(initialRequest("parallel-slot-task"),
+                config("parallel-slot-task")).orElseThrow();
+
+        assertThat(output.value(OfficialSupervisorGraphKeys.WORKFLOW_STATUS, String.class).orElseThrow())
+                .isEqualTo(WorkflowStatus.COMPLETED.name());
+        verify(parallelInvokeNode, times(2)).invokeDomain(any(), any(), anyString());
+        verify(parallelInvokeNode).invokeDomain(any(), any(), eq("listing"));
+        verify(parallelInvokeNode).invokeDomain(any(), any(), eq("marketing"));
+        verify(parallelInvokeNode, never()).invokeDomain(any(), any(), eq("compare"));
+    }
+
+    @Test
+    void parallelPlanWithNewlyRegisteredDomainMustRouteThroughSlots() throws Exception {
+        SupervisorGraphPlanner planner = mock(SupervisorGraphPlanner.class);
+        SingleAgentSubgraph single = mock(SingleAgentSubgraph.class);
+        CompletionSubgraph completion = mock(CompletionSubgraph.class);
+        ParallelInvokeNode parallelInvokeNode = mock(ParallelInvokeNode.class);
+        MergeParallelResultNode mergeNode = mock(MergeParallelResultNode.class);
+        PersistParallelArtifactsNode persistNode = mock(PersistParallelArtifactsNode.class);
+        SupervisorGraphState planned = parallelPlannedState("parallel-compare-task", List.of("listing", "compare"));
+        AgentTaskInvokeResponse merged = response("COMPLETED", "merged", List.of());
+        when(planner.plan(any(), anyString(), anyString(), anyString())).thenReturn(planned);
+        when(parallelInvokeNode.invokeDomain(any(), any(), anyString()))
+                .thenReturn(response("COMPLETED", "branch done", List.of()));
+        when(parallelInvokeNode.mergeResponses(any(), any(), any(), any(), any())).thenReturn(merged);
+        when(persistNode.persist(any(), any(), any(), any(), any(), any())).thenReturn(List.of());
+        when(mergeNode.merge(any(), any(), any()))
+                .thenReturn(workflowState(planned, merged, "parallel-supervisor"));
+        when(completion.execute(any())).thenReturn(new SupervisorTaskResponse(
+                "session-1", "parallel-compare-task", WorkflowStatus.COMPLETED.name(), "done",
+                List.of(), "trace-1", "parallel-supervisor", Map.of()));
+
+        CompiledGraph graph = graph(planner, single, completion, mock(HandoffNode.class),
+                mock(BuildNextAgentContextNode.class), mock(BuildApprovalRequestNode.class),
+                parallelInvokeNode, mergeNode, persistNode);
+        OverAllState output = graph.invoke(initialRequest("parallel-compare-task"),
+                config("parallel-compare-task")).orElseThrow();
+
+        assertThat(output.value(OfficialSupervisorGraphKeys.WORKFLOW_STATUS, String.class).orElseThrow())
+                .isEqualTo(WorkflowStatus.COMPLETED.name());
+        verify(parallelInvokeNode).invokeDomain(any(), any(), eq("compare"));
     }
 
     @Test
@@ -206,6 +294,12 @@ class OfficialSupervisorGraphExecutionTest {
                 ? (BuildNextAgentContextNode) extra[0] : mock(BuildNextAgentContextNode.class);
         BuildApprovalRequestNode approvalNode = extra.length > 1 && extra[1] instanceof BuildApprovalRequestNode
                 ? (BuildApprovalRequestNode) extra[1] : mock(BuildApprovalRequestNode.class);
+        ParallelInvokeNode parallelInvokeNode = extra.length > 2 && extra[2] instanceof ParallelInvokeNode
+                ? (ParallelInvokeNode) extra[2] : mock(ParallelInvokeNode.class);
+        MergeParallelResultNode mergeNode = extra.length > 3 && extra[3] instanceof MergeParallelResultNode
+                ? (MergeParallelResultNode) extra[3] : mock(MergeParallelResultNode.class);
+        PersistParallelArtifactsNode persistNode = extra.length > 4 && extra[4] instanceof PersistParallelArtifactsNode
+                ? (PersistParallelArtifactsNode) extra[4] : mock(PersistParallelArtifactsNode.class);
         OfficialSupervisorGraphFactory factory = new OfficialSupervisorGraphFactory(
                 new OfficialSupervisorGraphSchema(),
                 new DatabaseCheckpointSaverFactory(checkpointMapper, objectMapper),
@@ -213,10 +307,11 @@ class OfficialSupervisorGraphExecutionTest {
                 single,
                 completion,
                 approvalNode,
-                mock(ParallelInvokeNode.class),
-                mock(MergeParallelResultNode.class),
-                mock(PersistParallelArtifactsNode.class),
+                parallelInvokeNode,
+                mergeNode,
+                persistNode,
                 registry(),
+                domainCatalog,
                 objectMapper,
                 mock(SessionStreamService.class),
                 contextNode,
@@ -241,7 +336,8 @@ class OfficialSupervisorGraphExecutionTest {
                 "/a2a", com.bkanent.agent.registry.AgentRuntimeType.ALIBABA_A2A,
                 com.bkanent.agent.registry.AgentDescriptorSource.DISCOVERED_CARD,
                 new AgentCard(agentId, agentId, agentId, "1", List.of(), List.of(domain),
-                        false, false, "http://localhost/a2a", List.of("text"), List.of("text")));
+                        false, false, "http://localhost/a2a", List.of("text"), List.of("text")),
+                Map.of());
     }
 
     private SupervisorGraphState plannedState(boolean parallel,
@@ -253,6 +349,12 @@ class OfficialSupervisorGraphExecutionTest {
                 .withIntent("listing.search", domain, parallel ? "parallel" : "single_agent")
                 .withPlan(parallel, approval, parallel ? List.of("listing", "marketing") : List.of())
                 .withSelectedAgent(agentId);
+    }
+
+    private SupervisorGraphState parallelPlannedState(String taskId, List<String> parallelDomains) {
+        return SupervisorGraphState.initialize("session-1", taskId, "trace-1", "user-1", "query")
+                .withIntent("parallel.query", parallelDomains.get(0), "parallel")
+                .withPlan(true, false, parallelDomains);
     }
 
     private SupervisorWorkflowState workflowState(SupervisorGraphState state,

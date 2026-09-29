@@ -9,13 +9,6 @@ public final class OfficialSupervisorGraphNodeNames {
     public static final String SINGLE_AGENT = "single_agent";
     public static final String PARALLEL_AGENTS = "parallel_agents";
     public static final String PARALLEL_FAN_OUT = "parallel_fan_out";
-    public static final String PARALLEL_LISTING = "parallel_listing";
-    public static final String PARALLEL_MARKETING = "parallel_marketing";
-    public static final String PARALLEL_MEDIA = "parallel_media";
-    public static final String PARALLEL_TRADE = "parallel_trade";
-    public static final String PARALLEL_CONTRACT = "parallel_contract";
-    public static final String PARALLEL_SETTLEMENT = "parallel_settlement";
-    public static final String PARALLEL_NOTIFICATION = "parallel_notification";
     public static final String PARALLEL_AGGREGATE = "parallel_aggregate";
     public static final String ROUTE_AFTER_EXECUTION = "route_after_execution";
     public static final String HANDOFF = "handoff";
@@ -26,5 +19,14 @@ public final class OfficialSupervisorGraphNodeNames {
     public static final String FAIL = "fail";
 
     private OfficialSupervisorGraphNodeNames() {
+    }
+
+    /**
+     * 并行分支槽位节点名。槽位与领域解耦：分支成员由运行时领域词表决定，
+     * 槽位容量由 agent.distributed.catalog.branch-capacity 配置（编译期拓扑概念），
+     * 未被路由到的空槽位不会执行。
+     */
+    public static String parallelBranchSlot(int index) {
+        return "parallel_branch_" + index;
     }
 }

@@ -1,5 +1,7 @@
 package com.bkanent.agent.service;
 
+import com.bkanent.agent.catalog.DomainCatalog;
+import com.bkanent.agent.config.DistributedAgentProperties;
 import com.bkanent.agent.model.distributed.WorkflowPlan;
 import com.bkanent.agent.model.distributed.WorkflowPlanStep;
 import com.bkanent.agent.registry.AgentRegistry;
@@ -14,50 +16,54 @@ import java.util.Set;
 @Service
 public class WorkflowPlanValidator {
 
-    private static final Set<String> ALLOWED_DOMAINS = Set.of(
-            "listing", "marketing", "media", "trade", "contract", "settlement", "notification"
+    /**
+     * 结构型 workflowType 是图骨架词汇，与领域词表无关，保持静态枚举；
+     * 领域审批型 "<domain>_with_approval" 按派生规则判定（前缀在领域目录中即合法）。
+     */
+    private static final Set<String> STRUCTURAL_WORKFLOW_TYPES = Set.of(
+            "single_agent", "parallel", "marketing_pipeline"
     );
-
-    private static final Set<String> ALLOWED_WORKFLOW_TYPES = Set.of(
-            "single_agent", "parallel", "marketing_pipeline",
-            "marketing_with_approval", "trade_with_approval",
-            "contract_with_approval", "listing_with_approval"
-    );
+    private static final String APPROVAL_SUFFIX = "_with_approval";
     private static final Set<String> ALLOWED_STEP_TYPES = Set.of(
             "agent", "invoke", "single_agent", "parallel", "approval", "handoff", "complete"
     );
-    private static final int MAX_PARALLEL_DOMAINS = 7;
     private static final int MAX_PLAN_STEPS = 16;
 
     private final AgentRegistry agentRegistry;
+    private final DomainCatalog domainCatalog;
+    private final DistributedAgentProperties distributedAgentProperties;
 
-    public WorkflowPlanValidator(AgentRegistry agentRegistry) {
+    public WorkflowPlanValidator(AgentRegistry agentRegistry,
+                                 DomainCatalog domainCatalog,
+                                 DistributedAgentProperties distributedAgentProperties) {
         this.agentRegistry = agentRegistry;
+        this.domainCatalog = domainCatalog;
+        this.distributedAgentProperties = distributedAgentProperties;
     }
 
     public WorkflowPlan validate(WorkflowPlan plan) {
         if (plan == null) {
             throw new IllegalArgumentException("workflow plan is null");
         }
-        if (!StringUtils.hasText(plan.domain()) || !ALLOWED_DOMAINS.contains(plan.domain())) {
+        if (!StringUtils.hasText(plan.domain()) || !domainCatalog.contains(plan.domain())) {
             throw new IllegalArgumentException("workflow plan domain is invalid");
         }
         if (!StringUtils.hasText(plan.intent())) {
             throw new IllegalArgumentException("workflow plan intent is invalid");
         }
-        if (StringUtils.hasText(plan.workflowType()) && !ALLOWED_WORKFLOW_TYPES.contains(plan.workflowType())) {
+        if (StringUtils.hasText(plan.workflowType()) && !isAllowedWorkflowType(plan.workflowType())) {
             throw new IllegalArgumentException("workflow plan workflowType is invalid");
         }
         List<String> parallelDomains = plan.parallelDomains() == null ? List.of() : plan.parallelDomains();
-        if (parallelDomains.size() > MAX_PARALLEL_DOMAINS) {
+        if (parallelDomains.size() > maxParallelDomains()) {
             throw new IllegalArgumentException("workflow plan parallelDomains exceeds the maximum of "
-                    + MAX_PARALLEL_DOMAINS);
+                    + maxParallelDomains());
         }
         if (new HashSet<>(parallelDomains).size() != parallelDomains.size()) {
             throw new IllegalArgumentException("workflow plan parallelDomains must be distinct");
         }
         for (String domain : parallelDomains) {
-            if (!StringUtils.hasText(domain) || !ALLOWED_DOMAINS.contains(domain)) {
+            if (!StringUtils.hasText(domain) || !domainCatalog.contains(domain)) {
                 throw new IllegalArgumentException("workflow plan parallelDomains contains invalid domain");
             }
         }
@@ -65,13 +71,28 @@ public class WorkflowPlanValidator {
             throw new IllegalArgumentException("parallel workflow plan requires at least two domains");
         }
         if (plan.requireApproval() != null && plan.workflowType() != null
-                && plan.workflowType().endsWith("_with_approval")
+                && plan.workflowType().endsWith(APPROVAL_SUFFIX)
                 && !plan.requireApproval()) {
             throw new IllegalArgumentException("approval workflow plan must require approval");
         }
         validateSteps(plan.steps());
         validateSelectedAgent(plan, plan.selectedAgentId());
         return plan;
+    }
+
+    private boolean isAllowedWorkflowType(String workflowType) {
+        if (STRUCTURAL_WORKFLOW_TYPES.contains(workflowType)) {
+            return true;
+        }
+        if (workflowType.endsWith(APPROVAL_SUFFIX)) {
+            return domainCatalog.contains(
+                    workflowType.substring(0, workflowType.length() - APPROVAL_SUFFIX.length()));
+        }
+        return false;
+    }
+
+    private int maxParallelDomains() {
+        return distributedAgentProperties.getPlanning().getMaxParallelDomains();
     }
 
     private void validateSteps(List<WorkflowPlanStep> steps) {
@@ -86,7 +107,7 @@ public class WorkflowPlanValidator {
                     || !ALLOWED_STEP_TYPES.contains(step.type())) {
                 throw new IllegalArgumentException("workflow plan contains an invalid step type");
             }
-            if (StringUtils.hasText(step.domain()) && !ALLOWED_DOMAINS.contains(step.domain())) {
+            if (StringUtils.hasText(step.domain()) && !domainCatalog.contains(step.domain())) {
                 throw new IllegalArgumentException("workflow plan step contains an invalid domain");
             }
             if (("agent".equals(step.type()) || "invoke".equals(step.type())

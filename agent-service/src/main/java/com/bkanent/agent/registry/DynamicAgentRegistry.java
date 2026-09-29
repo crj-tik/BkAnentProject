@@ -200,7 +200,8 @@ public class DynamicAgentRegistry implements AgentRegistry {
                         joinUrl(baseUrl, a2aPath),
                         List.copyOf(registration.getInputModes()),
                         List.copyOf(registration.getOutputModes())
-                )
+                ),
+                defaultIntentMetadata(registration)
         );
         OfficialA2aRegistrationValidator.requireValidDescriptor(descriptor);
         return descriptor;
@@ -252,10 +253,27 @@ public class DynamicAgentRegistry implements AgentRegistry {
                         agentCard.outputModes() == null || agentCard.outputModes().isEmpty()
                                 ? resolveOutputModes(metadata, registration)
                                 : agentCard.outputModes()
-                )
+                ),
+                resolveDescriptorMetadata(metadata, registration)
         );
         OfficialA2aRegistrationValidator.requireValidDescriptor(descriptor);
         return descriptor;
+    }
+
+    private Map<String, String> resolveDescriptorMetadata(Map<String, String> metadata,
+                                                          DistributedAgentProperties.AgentRegistration registration) {
+        String defaultIntent = metadata == null ? null : metadata.get("agent-default-intent");
+        if (!StringUtils.hasText(defaultIntent)) {
+            return defaultIntentMetadata(registration);
+        }
+        return Map.of("agent-default-intent", defaultIntent.trim());
+    }
+
+    private Map<String, String> defaultIntentMetadata(DistributedAgentProperties.AgentRegistration registration) {
+        if (registration != null && StringUtils.hasText(registration.getDefaultIntent())) {
+            return Map.of("agent-default-intent", registration.getDefaultIntent().trim());
+        }
+        return Map.of();
     }
 
     private boolean resolveBoolean(Boolean discoveredValue, boolean fallbackValue) {

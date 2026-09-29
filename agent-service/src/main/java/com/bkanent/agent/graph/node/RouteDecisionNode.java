@@ -1,6 +1,9 @@
 package com.bkanent.agent.graph.node;
 
+import com.bkanent.agent.catalog.DomainCatalog;
 import com.bkanent.common.agent.AgentTaskInvokeResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -10,6 +13,14 @@ import java.util.Map;
 
 @Component
 public class RouteDecisionNode {
+
+    private static final Logger log = LoggerFactory.getLogger(RouteDecisionNode.class);
+
+    private final DomainCatalog domainCatalog;
+
+    public RouteDecisionNode(DomainCatalog domainCatalog) {
+        this.domainCatalog = domainCatalog;
+    }
 
     public RouteDecision evaluate(Map<String, Object> context, AgentTaskInvokeResponse response) {
         String strategyVersion = resolveStrategyVersion(context);
@@ -91,7 +102,13 @@ public class RouteDecisionNode {
             return null;
         }
         Object value = map.get("parallel");
-        return value == null || !StringUtils.hasText(String.valueOf(value)) ? null : String.valueOf(value);
+        String domain = value == null || !StringUtils.hasText(String.valueOf(value))
+                ? null : String.valueOf(value);
+        if (domain != null && !domainCatalog.contains(domain)) {
+            log.warn("Gray route override domain {} is not in the domain catalog; override ignored", domain);
+            return null;
+        }
+        return domain;
     }
 
     public record RouteDecision(String action, String nextDomain, String summary, String strategyVersion) {

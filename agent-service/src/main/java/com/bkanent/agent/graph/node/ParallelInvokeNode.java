@@ -1,5 +1,6 @@
 package com.bkanent.agent.graph.node;
 
+import com.bkanent.agent.catalog.DomainCatalog;
 import com.bkanent.agent.model.distributed.SupervisorTaskRequest;
 import com.bkanent.agent.registry.RegisteredAgentDescriptor;
 import com.bkanent.agent.service.A2aExecutionService;
@@ -26,15 +27,18 @@ public class ParallelInvokeNode {
     private final A2aExecutionService a2aExecutionService;
     private final SessionStreamService sessionStreamService;
     private final SupervisorAgentRoutingService supervisorAgentRoutingService;
+    private final DomainCatalog domainCatalog;
 
     public ParallelInvokeNode(BuildInvokeRequestNode buildInvokeRequestNode,
                               A2aExecutionService a2aExecutionService,
                               SessionStreamService sessionStreamService,
-                              SupervisorAgentRoutingService supervisorAgentRoutingService) {
+                              SupervisorAgentRoutingService supervisorAgentRoutingService,
+                              DomainCatalog domainCatalog) {
         this.buildInvokeRequestNode = buildInvokeRequestNode;
         this.a2aExecutionService = a2aExecutionService;
         this.sessionStreamService = sessionStreamService;
         this.supervisorAgentRoutingService = supervisorAgentRoutingService;
+        this.domainCatalog = domainCatalog;
     }
 
     public AgentTaskInvokeResponse invoke(SupervisorTaskRequest request,
@@ -56,9 +60,13 @@ public class ParallelInvokeNode {
                                                 com.bkanent.agent.graph.SupervisorGraphState graphState,
                                                 String domain) {
         RegisteredAgentDescriptor descriptor = selectAgent(domain, request.userMessage(), graphState.sharedContext());
+        String intent = domainCatalog.resolveDefaultIntent(domain);
+        if (!StringUtils.hasText(intent)) {
+            throw new IllegalStateException("No default intent resolvable for domain " + domain);
+        }
         AgentTaskInvokeRequest invokeRequest = buildInvokeRequestNode.build(
                 withDomain(request, domain),
-                graphState.withIntent(resolveIntent(domain), domain, "parallel"),
+                graphState.withIntent(intent, domain, "parallel"),
                 descriptor.agentId(),
                 null,
                 0
@@ -212,24 +220,6 @@ public class ParallelInvokeNode {
                 traceId,
                 System.currentTimeMillis()
         ));
-    }
-
-    private String resolveIntent(String domain) {
-        return switch (domain) {
-            case "marketing" -> "marketing.generate_copy";
-            case "media" -> "media.generate_video_task";
-            case "trade" -> "trade.feasibility_analysis";
-            case "contract" -> "contract.risk_review";
-            default -> "listing.search";
-        };
-    }
-
-    private boolean containsListingIntent(String message) {
-        return message.contains("房源")
-                || message.contains("找房")
-                || message.contains("小区")
-                || message.contains("listing")
-                || message.contains("房子");
     }
 
     private String capitalize(String value) {

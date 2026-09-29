@@ -47,6 +47,8 @@ spring:
         metadata:
           agent-id: media-agent
           agent-domains: media
+          # Supervisor 默认 intent 解析第一级：显式钉住现用值（card 技能 media.generate 与其不一致）
+          agent-default-intent: media.generate_video_task
           agent-runtime-provider: official
           agent-card-path: /.well-known/agent.json
           a2a-path: /a2a

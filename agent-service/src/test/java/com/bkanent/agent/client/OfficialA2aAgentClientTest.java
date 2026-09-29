@@ -134,7 +134,7 @@ class OfficialA2aAgentClientTest {
                 AgentRuntimeType.ALIBABA_A2A, AgentDescriptorSource.DISCOVERED_CARD,
                 new AgentCard("listing-agent", "listing-agent", "listing", "1.0.0", List.of(),
                         List.of("listing"), true, true, "http://127.0.0.1:9999/a2a",
-                        List.of("text"), List.of("text", "application/json")));
+                        List.of("text"), List.of("text", "application/json")), java.util.Map.of());
     }
 
     private AgentTaskInvokeRequest request() {

@@ -5,6 +5,7 @@ import java.util.Map;
 public record SupervisorGovernanceView(
         Map<String, Object> rateLimit,
         Map<String, Object> grayRelease,
-        Map<String, Object> eventAudit
+        Map<String, Object> eventAudit,
+        Map<String, Object> domainCatalog
 ) {
 }

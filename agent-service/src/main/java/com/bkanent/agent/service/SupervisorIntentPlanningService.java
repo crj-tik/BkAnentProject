@@ -1,8 +1,10 @@
 package com.bkanent.agent.service;
 
+import com.bkanent.agent.catalog.DomainCatalog;
 import com.bkanent.agent.config.DistributedAgentProperties;
 import com.bkanent.agent.model.distributed.WorkflowPlan;
 import com.bkanent.agent.model.distributed.WorkflowPlanStep;
+import com.bkanent.common.agent.AgentCard;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
@@ -21,15 +23,18 @@ public class SupervisorIntentPlanningService {
     private final DistributedAgentProperties distributedAgentProperties;
     private final AgentChatService agentChatService;
     private final WorkflowPlanValidator workflowPlanValidator;
+    private final DomainCatalog domainCatalog;
     private final ObjectMapper objectMapper;
 
     public SupervisorIntentPlanningService(DistributedAgentProperties distributedAgentProperties,
                                            AgentChatService agentChatService,
                                            WorkflowPlanValidator workflowPlanValidator,
+                                           DomainCatalog domainCatalog,
                                            ObjectMapper objectMapper) {
         this.distributedAgentProperties = distributedAgentProperties;
         this.agentChatService = agentChatService;
         this.workflowPlanValidator = workflowPlanValidator;
+        this.domainCatalog = domainCatalog;
         this.objectMapper = objectMapper;
     }
 
@@ -41,7 +46,8 @@ public class SupervisorIntentPlanningService {
         if (!StringUtils.hasText(strategy) || "rule-first".equalsIgnoreCase(strategy)) {
             return null;
         }
-        String raw = agentChatService.call(systemPrompt(), userPrompt(userMessage, context), false);
+        DomainCatalog.CatalogSnapshot snapshot = domainCatalog.snapshot();
+        String raw = agentChatService.call(systemPrompt(snapshot), userPrompt(userMessage, context), false);
         WorkflowPlan plan = parse(raw);
         return workflowPlanValidator.validate(plan);
     }
@@ -121,7 +127,7 @@ public class SupervisorIntentPlanningService {
         }
     }
 
-    private String systemPrompt() {
+    private String systemPrompt(DomainCatalog.CatalogSnapshot snapshot) {
         return """
                 You are a supervisor planning model for a distributed multi-agent system.
                 Return only JSON.
@@ -133,9 +139,37 @@ public class SupervisorIntentPlanningService {
                 - parallelDomains
                 - selectedAgentId
                 - steps
-                Allowed domains: listing, marketing, media, trade, contract, settlement, notification.
-                Allowed workflowType: single_agent, parallel, marketing_pipeline, marketing_with_approval, trade_with_approval, contract_with_approval, listing_with_approval.
-                """;
+                Allowed domains (dynamically derived from the registered agent catalog):
+                %s
+                For intent, prefer a skill id declared by the selected domain's agent (listed above);
+                otherwise use a concise domain-scoped intent identifier.
+                Allowed workflowType: single_agent, parallel, marketing_pipeline,
+                or "<domain>_with_approval" where <domain> is one of the allowed domains above.
+                """.formatted(domainCatalogLines(snapshot));
+    }
+
+    private String domainCatalogLines(DomainCatalog.CatalogSnapshot snapshot) {
+        StringBuilder lines = new StringBuilder();
+        for (String domain : snapshot.domains()) {
+            lines.append("- ").append(domain);
+            AgentCard representative = null;
+            for (AgentCard card : snapshot.cards()) {
+                if (card.supportedDomains() != null && card.supportedDomains().contains(domain)) {
+                    representative = card;
+                    break;
+                }
+            }
+            if (representative != null) {
+                if (StringUtils.hasText(representative.description())) {
+                    lines.append(": ").append(representative.description());
+                }
+                if (representative.supportedSkills() != null && !representative.supportedSkills().isEmpty()) {
+                    lines.append(" (skills: ").append(String.join(", ", representative.supportedSkills())).append(")");
+                }
+            }
+            lines.append('\n');
+        }
+        return lines.toString();
     }
 
     private String userPrompt(String userMessage, Map<String, Object> context) {
