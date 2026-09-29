@@ -1,11 +1,8 @@
-package com.bkanent.agent.skill;
+package com.bkanent.common.skill.core;
 
 import com.bkanent.common.skill.SkillDefinition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
-
-import org.springframework.beans.factory.annotation.Value;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,25 +16,24 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * Central registry for all loaded skills. Provides indexed lookups by name,
  * domain, and supervisor-mode.
  *
- * <p>Skills are loaded at startup from classpath:skills/**&#47;*.md.
+ * <p>Skills are loaded at startup from classpath:skills/**&#47;*.md, optionally merged
+ * with an external directory (external overrides classpath on name conflict).
  * The registry can be refreshed at runtime via {@link #reload()}.</p>
  */
-@Component
 public class SkillRegistry {
 
     private static final Logger log = LoggerFactory.getLogger(SkillRegistry.class);
 
     private final SkillFileLoader loader;
-
-    @Value("${agent.skills.external-dir:}")
-    private String externalDir;
+    private final String externalDir;
 
     private final List<SkillDefinition> skills = new CopyOnWriteArrayList<>();
     private final Map<String, SkillDefinition> byName = new LinkedHashMap<>();
     private final Map<String, List<SkillDefinition>> byDomain = new LinkedHashMap<>();
 
-    public SkillRegistry(SkillFileLoader loader) {
+    public SkillRegistry(SkillFileLoader loader, String externalDir) {
         this.loader = loader;
+        this.externalDir = externalDir;
         reload();
     }
 

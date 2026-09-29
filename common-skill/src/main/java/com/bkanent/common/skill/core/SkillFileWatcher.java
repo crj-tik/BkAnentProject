@@ -1,10 +1,9 @@
-package com.bkanent.agent.skill;
+package com.bkanent.common.skill.core;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
-import org.springframework.beans.factory.annotation.Value;
 
 import java.io.IOException;
 import java.nio.file.FileSystems;
@@ -49,6 +48,8 @@ public class SkillFileWatcher {
     private static final Logger log = LoggerFactory.getLogger(SkillFileWatcher.class);
 
     private final SkillRegistry registry;
+    private final String externalDir;
+    private final boolean watchEnabled;
     private final ScheduledExecutorService scheduler;
     private final AtomicLong lastChangeTimestamp = new AtomicLong(0);
     private final AtomicBoolean reloadScheduled = new AtomicBoolean(false);
@@ -56,20 +57,16 @@ public class SkillFileWatcher {
     private volatile WatchService watchService;
     private volatile boolean running;
 
-    @Value("${agent.skills.external-dir:}")
-    private String externalDir;
-
-    @Value("${agent.skills.watch-enabled:true}")
-    private boolean watchEnabled;
-
     /**
      * 消抖时间（毫秒）。在检测到最后一个文件变更后等待此时间再执行 reload，
      * 避免批量文件变更时多次重复加载。
      */
     private static final long DEBOUNCE_MS = 2000;
 
-    public SkillFileWatcher(SkillRegistry registry) {
+    public SkillFileWatcher(SkillRegistry registry, String externalDir, boolean watchEnabled) {
         this.registry = registry;
+        this.externalDir = externalDir;
+        this.watchEnabled = watchEnabled;
         this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "skill-file-watcher");
             t.setDaemon(true);

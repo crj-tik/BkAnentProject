@@ -1,4 +1,4 @@
-package com.bkanent.agent.skill;
+package com.bkanent.common.skill.core;
 
 import com.bkanent.common.skill.SkillDefinition;
 import org.slf4j.Logger;
