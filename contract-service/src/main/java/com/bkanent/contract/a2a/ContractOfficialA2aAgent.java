@@ -3,32 +3,47 @@ package com.bkanent.contract.a2a;
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.bkanent.common.a2a.A2aOutputPolicy;
 import com.bkanent.common.a2a.OfficialA2aAgentExecutor;
+import com.bkanent.common.skill.core.SkillRegistry;
+import com.bkanent.common.skill.runtime.SkillRoutingModelInterceptor;
+import com.bkanent.common.skill.runtime.SkillTool;
 import com.bkanent.contract.config.ContractAgentProperties;
 import com.bkanent.contract.tool.ContractTools;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.a2a.server.agentexecution.AgentExecutor;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 @Component
 public class ContractOfficialA2aAgent {
 
     private static final String OUTPUT_KEY = "output";
+    private static final String DOMAIN = "contract";
 
     private final ReactAgent reactAgent;
 
     public ContractOfficialA2aAgent(ChatModel chatModel,
                                     ContractAgentProperties properties,
-                                    ContractTools contractTools) {
+                                    ContractTools contractTools,
+                                    SkillRegistry skillRegistry) {
+        List<ToolCallback> tools = new ArrayList<>(Arrays.asList(
+                MethodToolCallbackProvider.builder().toolObjects(contractTools).build().getToolCallbacks()));
+        tools.add(new SkillTool(skillRegistry, DOMAIN));
+
         this.reactAgent = ReactAgent.builder()
                 .name("contract-agent")
                 .description("Responsible for contract parsing, risk review, and contract lifecycle management with LLM-driven analysis")
                 .model(chatModel)
                 .systemPrompt(properties.getSystemPrompt())
-                .tools(MethodToolCallbackProvider.builder().toolObjects(contractTools).build().getToolCallbacks())
-                .interceptors(new A2aSupervisorContextInterceptor())
+                .tools(tools)
+                .interceptors(new A2aSupervisorContextInterceptor(),
+                        new SkillRoutingModelInterceptor(skillRegistry, DOMAIN))
                 .outputKey(OUTPUT_KEY)
                 .build();
     }

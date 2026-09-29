@@ -91,6 +91,11 @@ mybatis-plus:
       logic-delete-value: 1
       logic-not-delete-value: 0
 
+agent:
+  skills:
+    external-dir: ${AGENT_SKILLS_EXTERNAL_DIR:}
+    watch-enabled: ${AGENT_SKILLS_WATCH_ENABLED:true}
+
 contract:
   reminder:
     enabled: true

@@ -13,10 +13,10 @@
 
 ## 3. runtime 组件（新逻辑）
 
-- [ ] 3.1 实现 `SkillTool`：单一伪工具（工具名 `skill`），schema 含 `name`（Registry 运行时生成 enum）、`task`（必填）、`context`（可选对象）；合法调用返回 SKILL.md 正文 + 技能工具清单 + task 回显；enum 外名称返回纠错信息与当前清单；缺失 task 返回参数错误
-- [ ] 3.2 实现 `SkillTool` 边界行为：同执行内再次调用 = 切换（最新生效）；技能 tools 为空时结果中说明保留全量工具
-- [ ] 3.3 实现 `SkillRoutingModelInterceptor`：每次模型调用前扫描消息历史中最近一次 skill 调用（无状态），命中则按 `ModelRequest.Builder` 换装 `systemMessage`（技能正文叠加既有系统约束）并收窄 `tools`（按 1.1 spike 结论选通道）；未命中时在系统提示词附加轻量技能目录（场景导向 description）
-- [ ] 3.4 runtime 单测：enum 生成与热加载更新、结果送达内容、切换生效、纠错回显、收窄与不收窄（tools 为空）、未命中目录注入
+- [x] 3.1 实现 `SkillTool`：单一伪工具（工具名 `skill`），schema 含 `name`（Registry 运行时生成 enum）、`task`（必填）、`context`（可选对象）；合法调用返回 SKILL.md 正文 + 技能工具清单 + task 回显；enum 外名称返回纠错信息与当前清单；缺失 task 返回参数错误
+- [x] 3.2 实现 `SkillTool` 边界行为：同执行内再次调用 = 切换（最新生效）；技能 tools 为空时结果中说明保留全量工具
+- [x] 3.3 实现 `SkillRoutingModelInterceptor`：每次模型调用前扫描消息历史中最近一次 skill 调用（无状态），命中则按 `ModelRequest.Builder` 换装 `systemMessage`（技能正文叠加既有系统约束）并收窄 `tools`（按 1.1 spike 结论选通道）；未命中时在系统提示词附加轻量技能目录（场景导向 description）
+- [x] 3.4 runtime 单测：enum 生成与热加载更新、结果送达内容、切换生效、纠错回显、收窄与不收窄（tools 为空）、未命中目录注入
 
 ## 4. agent-service 切换
 
@@ -27,14 +27,14 @@
 
 ## 5. contract 样板接入
 
-- [ ] 5.1 `contract-service` pom 增加 common-skill 依赖
-- [ ] 5.2 `ContractOfficialA2aAgent` 拦截器链挂载 `SkillRoutingModelInterceptor`（Registry 由 Spring 注入），保留既有 `A2aSupervisorContextInterceptor`
-- [ ] 5.3 新增 `contract-service/src/main/resources/skills/contract/contract-risk-review.md`：description 场景导向（何时需要风险审查），tools 引用 `getContractDetail`、`reviewContractRisks` 真实名，正文含执行步骤指引
-- [ ] 5.4 `nacos/contract-service.yaml` 增加 `agent.skills` 段
-- [ ] 5.5 contract 冒烟验证：风险审查请求命中技能（日志含技能选中与 task）；普通合同详情请求走默认路径不受影响
+- [x] 5.1 `contract-service` pom 增加 common-skill 依赖
+- [x] 5.2 `ContractOfficialA2aAgent` 拦截器链挂载 `SkillRoutingModelInterceptor`（Registry 由 Spring 注入），保留既有 `A2aSupervisorContextInterceptor`
+- [x] 5.3 新增 `contract-service/src/main/resources/skills/contract/contract-risk-review.md`：description 场景导向（何时需要风险审查），tools 引用 `getContractDetail`、`reviewContractRisks` 真实名，正文含执行步骤指引
+- [x] 5.4 `nacos/contract-service.yaml` 增加 `agent.skills` 段
+- [ ] 5.5 contract 冒烟验证：风险审查请求命中技能（日志含技能选中与 task）；普通合同详情请求走默认路径不受影响 —— 运行时冒烟需 Nacos/DeepSeek/MySQL 分布式环境，当前以单测（SkillTool 命中/纠错/收窄语义 + 拦截器换装/回退）与全模块编译代替，环境可用后补充端到端冒烟
 
 ## 6. 收尾验证与文档
 
-- [ ] 6.1 `mvn -gs .mvn-settings.xml -s .mvn-settings.xml compile` 全模块编译通过
-- [ ] 6.2 `mvn -gs .mvn-settings.xml -s .mvn-settings.xml test` 相关模块测试通过
+- [x] 6.1 `mvn -gs .mvn-settings.xml -s .mvn-settings.xml compile` 全模块编译通过
+- [x] 6.2 `mvn -gs .mvn-settings.xml -s .mvn-settings.xml test` 相关模块测试通过
 - [ ] 6.3 按仓库约定分节点中文 commit 并 push（模块搭建 / runtime / agent-service 切换 / contract 样板）
