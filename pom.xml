@@ -30,6 +30,7 @@
         <module>business-service</module>
         <module>contract-service</module>
         <module>settlement-service</module>
+        <module>interview-service</module>
     </modules>
 
     <properties>

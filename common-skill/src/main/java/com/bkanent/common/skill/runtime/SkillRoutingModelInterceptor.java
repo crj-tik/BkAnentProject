@@ -70,7 +70,20 @@ public final class SkillRoutingModelInterceptor extends ModelInterceptor {
             return handler.call(withSkill(request, skill, activeSkillName));
         }
 
-        String catalog = buildCatalogPrompt(supervisorHint(request));
+        // skill_hint 预激活：Supervisor 建议性提示命中本域技能时以激活态开局，
+        // 免去先浏览目录再选择的往返。仅影响首轮：后续轮次仍以消息历史中
+        // 最近一次 skill 伪工具调用为准（hint 不产生持久的隐藏状态）。
+        String hint = supervisorHint(request);
+        if (hint != null && !hint.isBlank()) {
+            SkillDefinition hinted = resolveHintedSkill(hint);
+            if (hinted != null) {
+                log.info("Skill '{}' pre-activated via supervisor skill_hint", hinted.name());
+                return handler.call(withSkill(request, hinted, hinted.name()));
+            }
+            log.debug("skill_hint '{}' not resolvable in domain '{}', falling back to catalog", hint, domain);
+        }
+
+        String catalog = buildCatalogPrompt(hint);
         if (catalog.isBlank()) {
             return handler.call(request);
         }
@@ -78,6 +91,19 @@ public final class SkillRoutingModelInterceptor extends ModelInterceptor {
         return handler.call(ModelRequest.builder(request)
                 .systemMessage(enhanced)
                 .build());
+    }
+
+    /**
+     * 解析 hint 指向的技能：必须存在于本域且非 Supervisor 知识技能；
+     * 不存在（或跨域）时返回 null，由调用方回退目录注入。
+     */
+    private SkillDefinition resolveHintedSkill(String hint) {
+        for (SkillDefinition skill : registry.findOperationalSkills(domain)) {
+            if (skill.name().equals(hint)) {
+                return skill;
+            }
+        }
+        return null;
     }
 
     /**

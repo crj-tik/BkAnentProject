@@ -54,6 +54,9 @@ spring:
           media-mcp-server:
             url: ${MEDIA_MCP_ENDPOINT:http://127.0.0.1:9007/mcp}
             type: STREAMABLE
+          interview-mcp-server:
+            url: ${INTERVIEW_MCP_ENDPOINT:http://127.0.0.1:9014/mcp}
+            type: STREAMABLE
 
 management:
   endpoints:

@@ -1,0 +1,131 @@
+spring:
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_INTERVIEW:bk_interview}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USER}
+    password: ${MYSQL_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  ai:
+    deepseek:
+      api-key: ${DEEPSEEK_API_KEY}
+      chat:
+        api-key: ${DEEPSEEK_API_KEY}
+    alibaba:
+      a2a:
+        server:
+          enabled: true
+          message-url: /a2a
+          agent-card-url: /.well-known/agent.json
+          card:
+            name: interview-agent
+            description: AI deep-interview agent for pre-interview question design, live interview runtime, transcript archiving and case reports
+            version: 1.0.0
+            url: ${A2A_PUBLIC_BASE_URL}
+            default-input-modes: text,application/json
+            default-output-modes: text,application/json
+            capabilities:
+              streaming: true
+              push-notifications: false
+              state-transition-history: true
+            skills:
+              - id: interview.prep
+                name: interview-prep
+                description: pre-interview case setup and question design
+                tags: interview,prep
+              - id: interview.report
+                name: interview-report
+                description: case card report generation
+                tags: interview,report
+        nacos:
+          server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+          namespace: ${NACOS_NAMESPACE:}
+          registry:
+            enabled: true
+          discovery:
+            enabled: true
+    mcp:
+      server:
+        enabled: ${MCP_SERVER_ENABLED:true}
+        protocol: ${MCP_SERVER_PROTOCOL:STREAMABLE}
+        name: interview-mcp-server
+        version: ${MCP_SERVER_VERSION:1.0.0}
+        streamable-http:
+          mcp-endpoint: ${MCP_SERVER_MCP_ENDPOINT:/mcp}
+  cloud:
+    nacos:
+      discovery:
+        metadata:
+          agent-id: interview-agent
+          agent-domains: interview
+          agent-default-intent: interview.deep_visit
+          agent-runtime-provider: official
+          agent-card-path: /.well-known/agent.json
+          a2a-path: /a2a
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,dependencyReadiness
+
+service:
+  readiness:
+    mode: ${SERVICE_READINESS_MODE:distributed}
+    required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database}
+    endpoints:
+      nacos: "${NACOS_SERVER:127.0.0.1:8848}"
+      database: "${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}"
+
+mybatis-plus:
+  mapper-locations: classpath:/mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+agent:
+  skills:
+    external-dir: ${AGENT_SKILLS_EXTERNAL_DIR:}
+    watch-enabled: ${AGENT_SKILLS_WATCH_ENABLED:true}
+
+interview:
+  agent:
+    model: ${INTERVIEW_AGENT_MODEL:deepseek-chat}
+    temperature: ${INTERVIEW_AGENT_TEMPERATURE:0.3}
+    max-tokens: ${INTERVIEW_AGENT_MAX_TOKENS:4000}
+    system-prompt: |
+      You are an AI deep-interview agent for a real-estate brokerage platform.
+      Your responsibilities:
+      1. Pre-interview: help the initiator set up an interview case (scene, objective, org levels, respondent role), then design candidate questions with focus labels and risk hints. Questions only enter the interview after explicit confirmation.
+      2. Live interview support: report progress, relay director commands (wrap up / next question / pinned follow-up).
+      3. Post-interview: trigger case card reports and search archived transcripts (L2/L3) and derived reports.
+      Always call available tools for real data before answering. Never fabricate quotes.
+      The top-level JSON must include contentType="interview", summary (string), and nextHints (string array; use [] when no next agent is needed).
+      Return only the JSON object without Markdown fences, internal IDs, reasoning, tool arguments, or extra prose.
+  runtime:
+    # 单轮追问 SLO 6 秒：造句调用预算
+    turn-timeout-seconds: 6
+    # 题目预算（按时长）：15/30/45/60 分钟 → 8/14/20/26 题
+    question-budget: "15:8,30:14,45:20,60:26"
+    ticket:
+      # 会话凭据签名密钥（生产经环境变量注入，勿硬编码）
+      secret: ${INTERVIEW_TICKET_SECRET:change-me-interview-ticket-secret}
+      ttl-hours: 24
+    collection:
+      scan-fixed-rate-seconds: 60
+      max-retries: 8
+  report:
+    lease-minutes: 10
+    renew-ratio: 3
+    max-retries: 3

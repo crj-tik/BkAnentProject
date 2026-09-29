@@ -59,7 +59,7 @@ class SkillRoutingModelInterceptorTest {
     }
 
     @Test
-    void supervisorHintMarksSkillAtCatalogTop() {
+    void validHintPreActivatesSkill() {
         SkillRoutingModelInterceptor interceptor = new SkillRoutingModelInterceptor(registry, "contract");
         ModelRequest request = ModelRequest.builder()
                 .systemMessage(new SystemMessage("基础提示词"))
@@ -70,14 +70,49 @@ class SkillRoutingModelInterceptorTest {
 
         interceptor.interceptModel(request, handler);
 
-        String prompt = captured.get(0).getSystemMessage().getText();
-        int markerIdx = prompt.indexOf("Supervisor 建议");
-        int skillIdx = prompt.indexOf("contract-risk-review");
-        assertThat(markerIdx).isGreaterThan(0);
-        assertThat(skillIdx).isGreaterThan(0);
-        assertThat(prompt.indexOf("**contract-risk-review**（Supervisor 建议）")).isGreaterThan(0);
-        // 选择权不变：工具面未被收窄
-        assertThat(captured.get(0).getTools()).containsExactly("getContractDetail", "reviewContractRisks", "skill");
+        // 预激活：首轮即加载技能正文并收窄工具面，无需先经历目录浏览
+        ModelRequest forwarded = captured.get(0);
+        assertThat(forwarded.getSystemMessage().getText())
+                .contains("[当前技能: contract-risk-review 生效中]")
+                .contains("按步骤审查合同风险。");
+        assertThat(forwarded.getTools()).containsExactly("reviewContractRisks", "skill");
+    }
+
+    @Test
+    void explicitSkillCallOverridesHint() {
+        SkillRoutingModelInterceptor interceptor = new SkillRoutingModelInterceptor(registry, "contract");
+        // 消息历史已有 skill 伪工具调用 → 以消息历史为准，hint 不产生持久隐藏状态
+        ModelRequest request = ModelRequest.builder()
+                .systemMessage(new SystemMessage("基础提示词"))
+                .messages(List.of(assistantWithSkillCall("contract-risk-review")))
+                .tools(List.of("getContractDetail", "reviewContractRisks", "skill"))
+                .context(Map.of("supervisor", Map.of("skillHint", "contract-risk-review")))
+                .build();
+
+        interceptor.interceptModel(request, handler);
+
+        assertThat(captured.get(0).getSystemMessage().getText())
+                .contains("[当前技能: contract-risk-review 生效中]");
+    }
+
+    @Test
+    void crossDomainHintIgnored() {
+        SkillRoutingModelInterceptor interceptor = new SkillRoutingModelInterceptor(registry, "contract");
+        ModelRequest request = ModelRequest.builder()
+                .systemMessage(new SystemMessage("基础提示词"))
+                .messages(List.of(userMessage("随便看看")))
+                .tools(List.of("getContractDetail", "reviewContractRisks", "skill"))
+                .context(Map.of("supervisor", Map.of("skillHint", "trade-kpi-report")))
+                .build();
+
+        interceptor.interceptModel(request, handler);
+
+        // 跨域 hint 静默忽略，回退目录注入
+        assertThat(captured.get(0).getSystemMessage().getText())
+                .contains("可用技能")
+                .contains("contract-risk-review");
+        assertThat(captured.get(0).getTools())
+                .containsExactly("getContractDetail", "reviewContractRisks", "skill");
     }
 
     @Test

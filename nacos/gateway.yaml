@@ -48,6 +48,10 @@ spring:
             uri: lb://notification-service
             predicates:
               - Path=/notifications/**
+          - id: interview-service
+            uri: lb://interview-service
+            predicates:
+              - Path=/interviews/**
 
 management:
   endpoints:
