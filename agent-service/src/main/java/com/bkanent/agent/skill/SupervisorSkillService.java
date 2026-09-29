@@ -2,6 +2,8 @@ package com.bkanent.agent.skill;
 
 import com.bkanent.common.skill.SkillDefinition;
 import com.bkanent.common.skill.SkillMatchResult;
+import com.bkanent.common.skill.core.SkillMatcher;
+import com.bkanent.common.skill.core.SkillRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
