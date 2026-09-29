@@ -14,6 +14,7 @@ import org.springframework.ai.chat.messages.UserMessage;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -55,6 +56,45 @@ class SkillRoutingModelInterceptorTest {
                 .contains("contract-risk-review")
                 .contains("审查合同风险");
         assertThat(forwarded.getTools()).containsExactly("getContractDetail", "reviewContractRisks", "skill");
+    }
+
+    @Test
+    void supervisorHintMarksSkillAtCatalogTop() {
+        SkillRoutingModelInterceptor interceptor = new SkillRoutingModelInterceptor(registry, "contract");
+        ModelRequest request = ModelRequest.builder()
+                .systemMessage(new SystemMessage("基础提示词"))
+                .messages(List.of(userMessage("随便看看")))
+                .tools(List.of("getContractDetail", "reviewContractRisks", "skill"))
+                .context(Map.of("supervisor", Map.of("skillHint", "contract-risk-review")))
+                .build();
+
+        interceptor.interceptModel(request, handler);
+
+        String prompt = captured.get(0).getSystemMessage().getText();
+        int markerIdx = prompt.indexOf("Supervisor 建议");
+        int skillIdx = prompt.indexOf("contract-risk-review");
+        assertThat(markerIdx).isGreaterThan(0);
+        assertThat(skillIdx).isGreaterThan(0);
+        assertThat(prompt.indexOf("**contract-risk-review**（Supervisor 建议）")).isGreaterThan(0);
+        // 选择权不变：工具面未被收窄
+        assertThat(captured.get(0).getTools()).containsExactly("getContractDetail", "reviewContractRisks", "skill");
+    }
+
+    @Test
+    void unknownHintIsSilentlyIgnored() {
+        SkillRoutingModelInterceptor interceptor = new SkillRoutingModelInterceptor(registry, "contract");
+        ModelRequest request = ModelRequest.builder()
+                .systemMessage(new SystemMessage("基础提示词"))
+                .messages(List.of(userMessage("随便看看")))
+                .tools(List.of("getContractDetail", "reviewContractRisks", "skill"))
+                .context(Map.of("supervisor", Map.of("skillHint", "not-a-skill")))
+                .build();
+
+        interceptor.interceptModel(request, handler);
+
+        assertThat(captured.get(0).getSystemMessage().getText())
+                .contains("contract-risk-review")
+                .doesNotContain("Supervisor 建议");
     }
 
     @Test

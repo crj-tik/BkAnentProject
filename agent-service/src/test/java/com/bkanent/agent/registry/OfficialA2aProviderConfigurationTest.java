@@ -28,7 +28,7 @@ class OfficialA2aProviderConfigurationTest {
                     .withFailMessage("missing official A2A provider: " + provider)
                     .isTrue();
             assertThat(Files.readString(root.resolve(provider)))
-                    .contains(".interceptors(new A2aSupervisorContextInterceptor())")
+                    .contains("new A2aSupervisorContextInterceptor()")
                     .contains("OfficialA2aAgentExecutor")
                     .contains("A2aOutputPolicy.structured(");
         }

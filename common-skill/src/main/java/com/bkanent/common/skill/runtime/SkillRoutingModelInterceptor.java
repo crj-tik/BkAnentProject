@@ -70,7 +70,7 @@ public final class SkillRoutingModelInterceptor extends ModelInterceptor {
             return handler.call(withSkill(request, skill, activeSkillName));
         }
 
-        String catalog = buildCatalogPrompt();
+        String catalog = buildCatalogPrompt(supervisorHint(request));
         if (catalog.isBlank()) {
             return handler.call(request);
         }
@@ -78,6 +78,22 @@ public final class SkillRoutingModelInterceptor extends ModelInterceptor {
         return handler.call(ModelRequest.builder(request)
                 .systemMessage(enhanced)
                 .build());
+    }
+
+    /**
+     * 读取 Supervisor 元数据中的建议性技能提示（skillHint，位于 supervisor 命名空间）。
+     */
+    private String supervisorHint(ModelRequest request) {
+        Map<String, Object> context = request.getContext();
+        if (context == null || context.isEmpty()) {
+            return null;
+        }
+        Object supervisor = context.get("supervisor");
+        if (supervisor instanceof Map<?, ?> supervisorMap) {
+            Object hint = supervisorMap.get("skillHint");
+            return hint == null ? null : hint.toString();
+        }
+        return null;
     }
 
     /**
@@ -167,21 +183,35 @@ public final class SkillRoutingModelInterceptor extends ModelInterceptor {
 
     /**
      * 构建轻量技能目录（名称 + 场景导向描述），注入未激活技能时的系统提示词。
+     * Supervisor 建议的技能置顶并标记（仅建议，不改变选择权）；建议技能不存在于
+     * 本领域时静默忽略。
      */
-    private String buildCatalogPrompt() {
-        List<SkillDefinition> skills = registry.findOperationalSkills(domain);
+    private String buildCatalogPrompt(String hint) {
+        List<SkillDefinition> skills = new java.util.ArrayList<>(
+                registry.findOperationalSkills(domain));
         if (skills.isEmpty()) {
             return "";
         }
-        skills = skills.stream()
-                .sorted((a, b) -> Integer.compare(b.priority(), a.priority()))
-                .toList();
+        skills.sort((a, b) -> Integer.compare(b.priority(), a.priority()));
+
+        SkillDefinition hinted = null;
+        if (hint != null && !hint.isBlank()) {
+            hinted = skills.stream()
+                    .filter(skill -> skill.name().equals(hint))
+                    .findFirst().orElse(null);
+        }
+        if (hinted != null) {
+            skills.remove(hinted);
+            skills.add(0, hinted);
+        }
 
         StringBuilder sb = new StringBuilder(256);
         sb.append("\n\n## 可用技能\n");
         sb.append("当任务匹配以下技能的适用场景时，调用 skill 工具（name 传技能名，task 传要完成的任务）以加载专项指引与工具：\n");
         for (SkillDefinition skill : skills) {
-            sb.append("- **").append(skill.name()).append("**: ").append(skill.description()).append("\n");
+            String marker = skill == hinted ? "（Supervisor 建议）" : "";
+            sb.append("- **").append(skill.name()).append("**").append(marker)
+                    .append(": ").append(skill.description()).append("\n");
         }
         return sb.toString();
     }

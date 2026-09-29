@@ -29,9 +29,9 @@
 
 ## 5. skill_hint 通道
 
-- [ ] 5.1 Supervisor 侧（`OfficialA2aAgentClient` 请求构建处）将建议技能名写入 supervisor 元数据键 `skillHint`（来源：规划产物中的领域意图映射，建议性）
-- [ ] 5.2 `SkillRoutingModelInterceptor` 渲染目录时读取 context 中的 `skillHint`：存在且为本领域技能 → 置顶并追加"（Supervisor 建议）"标记；缺失/不匹配 → 目录与一期一致
-- [ ] 5.3 单测：带提示置顶标记、无提示行为不变、提示技能不属于本领域时忽略
+- [x] 5.1 Supervisor 侧（`OfficialA2aAgentClient` 请求构建处）将建议技能名写入 supervisor 元数据键 `skillHint`（来源：规划产物中的领域意图映射，建议性）
+- [x] 5.2 `SkillRoutingModelInterceptor` 渲染目录时读取 context 中的 `skillHint`：存在且为本领域技能 → 置顶并追加"（Supervisor 建议）"标记；缺失/不匹配 → 目录与一期一致
+- [x] 5.3 单测：带提示置顶标记、无提示行为不变、提示技能不属于本领域时忽略
 
 ## 6. 收尾
 

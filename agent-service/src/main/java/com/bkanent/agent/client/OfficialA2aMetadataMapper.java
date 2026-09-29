@@ -21,6 +21,8 @@ public final class OfficialA2aMetadataMapper {
     public static final String SUPERVISOR_METADATA_KEY = "supervisor";
     public static final String THREAD_ID_KEY = "threadId";
     public static final String STREAMING_KEY = "isStreaming";
+    /** 建议性技能提示：子 Agent 仅作目录置顶标记，不强制激活。 */
+    public static final String SKILL_HINT_KEY = "skillHint";
 
     private OfficialA2aMetadataMapper() {
     }
@@ -57,6 +59,11 @@ public final class OfficialA2aMetadataMapper {
                     structuredContext.put(key, value);
                 }
             });
+            // skillHint 透传：Supervisor 图节点可将其放入 structuredContext，本处提升到 supervisor 顶层
+            Object skillHint = structuredContext.get(SKILL_HINT_KEY);
+            if (skillHint != null) {
+                putText(supervisor, SKILL_HINT_KEY, String.valueOf(skillHint));
+            }
             if (!structuredContext.isEmpty()) {
                 supervisor.put("structuredContext", Map.copyOf(structuredContext));
             }
