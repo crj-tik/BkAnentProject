@@ -9,6 +9,7 @@ public class MarketingAgentProperties {
     private Double temperature = 0.2;
     private Integer maxTokens = 2000;
     private String systemPrompt = "";
+    private boolean llmGenerationEnabled = true;
 
     public String getModel() {
         return model;
@@ -36,6 +37,14 @@ public class MarketingAgentProperties {
 
     public String getSystemPrompt() {
         return systemPrompt;
+    }
+
+    public boolean isLlmGenerationEnabled() {
+        return llmGenerationEnabled;
+    }
+
+    public void setLlmGenerationEnabled(boolean llmGenerationEnabled) {
+        this.llmGenerationEnabled = llmGenerationEnabled;
     }
 
     public void setSystemPrompt(String systemPrompt) {

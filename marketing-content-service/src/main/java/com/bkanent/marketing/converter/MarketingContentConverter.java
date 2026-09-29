@@ -73,7 +73,8 @@ public class MarketingContentConverter {
                 entity.getStatus(),
                 entity.getPublishMessage(),
                 entity.getExternalPublishId(),
-                entity.getPublishTime()
+                entity.getPublishTime(),
+                entity.getSource()
         );
     }
 

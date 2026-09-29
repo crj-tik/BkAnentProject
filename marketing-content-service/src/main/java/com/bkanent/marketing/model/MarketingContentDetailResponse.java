@@ -42,6 +42,8 @@ public record MarketingContentDetailResponse(
         /** 业务属性：externalPublishId。 */
         String externalPublishId,
         /** 业务属性：publishTime。 */
-        LocalDateTime publishTime
+        LocalDateTime publishTime,
+        /** 业务属性：source。 */
+        String source
 ) {
 }

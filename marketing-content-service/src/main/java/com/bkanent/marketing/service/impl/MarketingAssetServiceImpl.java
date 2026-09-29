@@ -166,6 +166,7 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
         entity.setTags(marketingContentConverter.joinValues(request.tags()));
         entity.setAuditStatus(StringUtils.hasText(request.auditStatus()) ? request.auditStatus().toUpperCase() : MarketingAuditStatusEnum.DRAFT.name());
         entity.setParentContentId(request.parentContentId());
+        entity.setSource(StringUtils.hasText(request.source()) ? request.source() : "manual");
     }
 
     private MarketingContentEntity requireContent(Long contentId) {

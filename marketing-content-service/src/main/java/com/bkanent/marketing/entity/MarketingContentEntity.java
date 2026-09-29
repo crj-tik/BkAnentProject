@@ -32,6 +32,10 @@ public class MarketingContentEntity extends BaseEntity {
      * 业务属性：copywriting。
      */
     private String copywriting;
+    /**
+     * 业务属性：source。内容来源：manual（人工/外层模型提交）或 llm（专用生成）。
+     */
+    private String source;
 
     @TableField("asset_urls")
     /**
@@ -122,6 +126,14 @@ public class MarketingContentEntity extends BaseEntity {
 
     public void setCopywriting(String copywriting) {
         this.copywriting = copywriting;
+    }
+
+    public String getSource() {
+        return source;
+    }
+
+    public void setSource(String source) {
+        this.source = source;
     }
 
     public String getAssetUrls() {

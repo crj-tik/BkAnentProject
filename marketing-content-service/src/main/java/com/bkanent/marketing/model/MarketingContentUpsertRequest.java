@@ -29,6 +29,8 @@ public record MarketingContentUpsertRequest(
         /** 业务属性：auditStatus。 */
         String auditStatus,
         /** 业务属性：parentContentId。 */
-        Long parentContentId
+        Long parentContentId,
+        /** 业务属性：source。 */
+        String source
 ) {
 }

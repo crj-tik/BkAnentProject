@@ -102,6 +102,7 @@ marketing:
     model: ${MARKETING_AGENT_MODEL:deepseek-chat}
     temperature: ${MARKETING_AGENT_TEMPERATURE:0.2}
     max-tokens: ${MARKETING_AGENT_MAX_TOKENS:2000}
+    llm-generation-enabled: ${MARKETING_LLM_GENERATION_ENABLED:true}
     system-prompt: |
       You are a marketing content generation agent for a real estate brokerage platform.
       Your responsibilities:

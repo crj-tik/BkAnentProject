@@ -10,7 +10,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.ChatOptions;
+import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.DefaultChatOptions;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
@@ -24,16 +28,52 @@ public class MarketingAgentServiceImpl implements MarketingAgentService {
 
     private static final Logger log = LoggerFactory.getLogger(MarketingAgentServiceImpl.class);
 
+    private static final String COPY_GENERATION_SYSTEM_PROMPT = """
+            你是资深房产营销文案专家。依据给定的房源信息与目标平台，撰写一条可直接发布的营销文案。
+            要求：贴合目标平台的内容风格与篇幅习惯；突出房源核心卖点；不得编造房源信息中不存在的
+            事实（面积、价格、学区、交通等以输入为准）；只输出文案正文本身，不要附加解释或标题。
+            """;
+
     private final ChatClient marketingChatClient;
+    private final ChatModel chatModel;
     private final MarketingAgentProperties properties;
     private final ObjectMapper objectMapper;
 
     public MarketingAgentServiceImpl(@Qualifier("marketingChatClient") ChatClient marketingChatClient,
+                                      ChatModel chatModel,
                                       MarketingAgentProperties properties,
                                       ObjectMapper objectMapper) {
         this.marketingChatClient = marketingChatClient;
+        this.chatModel = chatModel;
         this.properties = properties;
         this.objectMapper = objectMapper;
+    }
+
+    @Override
+    public String generateCopy(String listingSummary, String platform) {
+        if (listingSummary == null || listingSummary.isBlank()) {
+            throw new IllegalArgumentException("listing summary must not be blank");
+        }
+        String userPrompt = "目标平台: " + (platform == null || platform.isBlank() ? "通用" : platform)
+                + "\n\n房源信息:\n" + listingSummary
+                + "\n\n请为该房源撰写营销文案正文。";
+        Prompt prompt = new Prompt(
+                List.of(new SystemMessage(COPY_GENERATION_SYSTEM_PROMPT), new UserMessage(userPrompt)),
+                copyChatOptions());
+        String response = chatModel.call(prompt)
+                .getResult().getOutput().getText();
+        if (response == null || response.isBlank()) {
+            throw new IllegalStateException("LLM returned empty marketing copy");
+        }
+        return response.strip();
+    }
+
+    private ChatOptions copyChatOptions() {
+        DefaultChatOptions options = new DefaultChatOptions();
+        options.setModel(properties.getModel());
+        options.setTemperature(properties.getTemperature());
+        options.setMaxTokens(properties.getMaxTokens());
+        return options;
     }
 
     @Override

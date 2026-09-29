@@ -7,11 +7,11 @@
 
 ## 2. marketing 文案生成模式
 
-- [ ] 2.1 `MarketingAgentService` 接口新增 `generateCopy(String listingSummary, String platform)`；`MarketingAgentServiceImpl` 实现：无工具绑定 ChatModel + 专用生成 prompt（平台风格/字数/卖点结构）；`MarketingAgentProperties` 新增 `llmGenerationEnabled`
-- [ ] 2.2 `MarketingTools.createMarketingContent` 的 `copywriting` 参数改为可空：为空且房源/平台有效 → 经 RPC 取房源摘要并调用生成；不为空 → 既有路径不变；生成失败抛可读错误且不落库
-- [ ] 2.3 `sql/migrations/` 新增 `marketing_content.source` 列迁移（默认 `manual`）；实体与 mapper 同步；入库时按路径写 `llm`/`manual`
-- [ ] 2.4 nacos/marketing-content-service.yaml 增加生成开关与参数
-- [ ] 2.5 单测：空文案触发生成（source=llm）、显式提交兼容（source=manual、不触发生成）、生成失败不落库
+- [x] 2.1 `MarketingAgentService` 接口新增 `generateCopy(String listingSummary, String platform)`；`MarketingAgentServiceImpl` 实现：无工具绑定 ChatModel + 专用生成 prompt（平台风格/字数/卖点结构）；`MarketingAgentProperties` 新增 `llmGenerationEnabled`
+- [x] 2.2 `MarketingTools.createMarketingContent` 的 `copywriting` 参数改为可空：为空且房源/平台有效 → 经 RPC 取房源摘要并调用生成；不为空 → 既有路径不变；生成失败抛可读错误且不落库
+- [x] 2.3 `sql/migrations/` 新增 `marketing_content.source` 列迁移（默认 `manual`）；实体与 mapper 同步；入库时按路径写 `llm`/`manual`
+- [x] 2.4 nacos/marketing-content-service.yaml 增加生成开关与参数
+- [x] 2.5 单测：空文案触发生成（source=llm）、显式提交兼容（source=manual、不触发生成）、生成失败不落库
 
 ## 3. compare 对比结论真 AI 化
 
