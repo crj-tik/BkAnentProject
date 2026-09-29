@@ -15,9 +15,9 @@
 
 ## 3. compare 对比结论真 AI 化
 
-- [ ] 3.1 `CompareAnalysisServiceImpl.generateAiConclusion` 注入 ChatModel：指标齐备时基于对比指标生成结论（prompt 强制仅基于给定数据）；指标不足时维持现有明确说明短路；LLM 异常回退模板拼接（不抛出）；新增 `aiConclusionEnabled` 配置与属性类
-- [ ] 3.2 nacos/compare-engine-service.yaml 增加开关与参数；`includeAiConclusion=false` 路径不变；报告缓存结构不动
-- [ ] 3.3 单测：有数据走 LLM（mock）、缺数据短路说明、LLM 异常回退模板、开关关闭走模板
+- [x] 3.1 `CompareAnalysisServiceImpl.generateAiConclusion` 注入 ChatModel：指标齐备时基于对比指标生成结论（prompt 强制仅基于给定数据）；指标不足时维持现有明确说明短路；LLM 异常回退模板拼接（不抛出）；新增 `aiConclusionEnabled` 配置与属性类
+- [x] 3.2 nacos/compare-engine-service.yaml 增加开关与参数；`includeAiConclusion=false` 路径不变；报告缓存结构不动
+- [x] 3.3 单测：有数据走 LLM（mock）、缺数据短路说明、LLM 异常回退模板、开关关闭走模板
 
 ## 4. 技能文件全覆盖与挂载
 

@@ -9,6 +9,7 @@ public class CompareAgentProperties {
     private Double temperature = 0.2;
     private Integer maxTokens = 2000;
     private String systemPrompt = "";
+    private boolean aiConclusionEnabled = true;
 
     public String getModel() {
         return model;
@@ -36,6 +37,14 @@ public class CompareAgentProperties {
 
     public String getSystemPrompt() {
         return systemPrompt;
+    }
+
+    public boolean isAiConclusionEnabled() {
+        return aiConclusionEnabled;
+    }
+
+    public void setAiConclusionEnabled(boolean aiConclusionEnabled) {
+        this.aiConclusionEnabled = aiConclusionEnabled;
     }
 
     public void setSystemPrompt(String systemPrompt) {

@@ -3,12 +3,21 @@ package com.bkanent.compare.service.impl;
 import com.bkanent.common.model.CompareReportDTO;
 import com.bkanent.common.model.ListingDTO;
 import com.bkanent.common.rpc.ListingMasterRpcService;
+import com.bkanent.compare.config.CompareAgentProperties;
 import com.bkanent.compare.model.CompareColumnResponse;
 import com.bkanent.compare.model.CompareMetricResponse;
 import com.bkanent.compare.model.CompareReportResponse;
 import com.bkanent.compare.model.CompareRowResponse;
 import com.bkanent.compare.service.CompareAnalysisService;
 import com.bkanent.compare.service.CompareReportCacheService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.prompt.ChatOptions;
+import org.springframework.ai.chat.prompt.DefaultChatOptions;
+import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
@@ -26,13 +35,27 @@ import java.util.stream.Collectors;
 @Service
 public class CompareAnalysisServiceImpl implements CompareAnalysisService {
 
+    private static final Logger log = LoggerFactory.getLogger(CompareAnalysisServiceImpl.class);
+
+    private static final String AI_CONCLUSION_SYSTEM_PROMPT = """
+            你是房产对比分析专家。仅基于给定的对比指标生成一段简明的中文对比结论，
+            指出最具性价比与面积优势的选项并给出筛选建议。严禁编造给定数据之外的事实；
+            数据不足时直接说明无法得出结论。只输出结论正文。
+            """;
+
     private final CompareReportCacheService compareReportCacheService;
     private final ListingMasterRpcService listingMasterRpcService;
+    private final ObjectProvider<ChatModel> chatModelProvider;
+    private final CompareAgentProperties properties;
 
     public CompareAnalysisServiceImpl(CompareReportCacheService compareReportCacheService,
-                                      ObjectProvider<ListingMasterRpcService> listingMasterRpcServiceProvider) {
+                                      ObjectProvider<ListingMasterRpcService> listingMasterRpcServiceProvider,
+                                      ObjectProvider<ChatModel> chatModelProvider,
+                                      CompareAgentProperties properties) {
         this.compareReportCacheService = compareReportCacheService;
         this.listingMasterRpcService = listingMasterRpcServiceProvider.getIfAvailable();
+        this.chatModelProvider = chatModelProvider;
+        this.properties = properties;
     }
 
     @Override
@@ -180,6 +203,66 @@ public class CompareAnalysisServiceImpl implements CompareAnalysisService {
         if (listings == null || listings.isEmpty()) {
             return "未获取到可用房源数据，无法生成对比结论。";
         }
+        if (!hasComparableMetrics(listings)) {
+            return "对比指标不足（缺少总价与面积数据），无法生成对比结论。";
+        }
+        if (properties.isAiConclusionEnabled()) {
+            ChatModel chatModel = chatModelProvider.getIfAvailable();
+            if (chatModel != null) {
+                try {
+                    long start = System.currentTimeMillis();
+                    String conclusion = chatModel.call(new Prompt(
+                            List.of(new SystemMessage(AI_CONCLUSION_SYSTEM_PROMPT),
+                                    new UserMessage(buildMetricsSummary(listings))),
+                            conclusionChatOptions()))
+                            .getResult().getOutput().getText();
+                    if (conclusion != null && !conclusion.isBlank()) {
+                        log.info("AI compare conclusion generated via LLM in {} ms",
+                                System.currentTimeMillis() - start);
+                        return conclusion.strip();
+                    }
+                    log.warn("LLM returned empty compare conclusion, falling back to template");
+                } catch (Exception e) {
+                    log.warn("LLM compare conclusion failed, falling back to template: {}", e.getMessage());
+                }
+            }
+        }
+        return templateConclusion(listings);
+    }
+
+    private boolean hasComparableMetrics(List<ListingDTO> listings) {
+        return listings.stream().anyMatch(item -> item != null && item.totalPrice() != null)
+                || listings.stream().anyMatch(item -> item != null && item.area() != null);
+    }
+
+    private String buildMetricsSummary(List<ListingDTO> listings) {
+        StringBuilder sb = new StringBuilder(512);
+        sb.append("共对比 ").append(listings.size()).append(" 套房源，指标如下：\n");
+        for (ListingDTO listing : listings) {
+            if (listing == null) {
+                continue;
+            }
+            sb.append("- ").append(safeText(listing.title()))
+                    .append("：面积 ").append(decimalText(listing.area()))
+                    .append("㎡，总价 ").append(listing.totalPrice() == null ? "缺失" : listing.totalPrice().toPlainString() + "万")
+                    .append("，单价 ").append(calculateUnitPrice(listing))
+                    .append("元/㎡，装修 ").append(safeText(listing.decoration()))
+                    .append("，学区 ").append(safeText(listing.schoolZone()))
+                    .append("，交通 ").append(safeText(listing.traffic()))
+                    .append('\n');
+        }
+        return sb.toString();
+    }
+
+    private ChatOptions conclusionChatOptions() {
+        DefaultChatOptions options = new DefaultChatOptions();
+        options.setModel(properties.getModel());
+        options.setTemperature(properties.getTemperature());
+        options.setMaxTokens(properties.getMaxTokens());
+        return options;
+    }
+
+    private String templateConclusion(List<ListingDTO> listings) {
         ListingDTO cheapestListing = listings.stream()
                 .filter(item -> item != null && item.totalPrice() != null)
                 .reduce((left, right) -> left.totalPrice().compareTo(right.totalPrice()) <= 0 ? left : right)

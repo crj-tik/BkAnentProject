@@ -81,6 +81,7 @@ compare:
     model: ${COMPARE_AGENT_MODEL:deepseek-chat}
     temperature: ${COMPARE_AGENT_TEMPERATURE:0.2}
     max-tokens: ${COMPARE_AGENT_MAX_TOKENS:2000}
+    ai-conclusion-enabled: ${COMPARE_AI_CONCLUSION_ENABLED:true}
     system-prompt: |
       You are a property listing comparison agent for a real estate brokerage platform.
       Your responsibilities:
