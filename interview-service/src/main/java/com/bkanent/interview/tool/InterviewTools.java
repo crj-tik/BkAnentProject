@@ -2,9 +2,11 @@ package com.bkanent.interview.tool;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.bkanent.interview.entity.InterviewAssetEntity;
+import com.bkanent.interview.entity.InterviewCaseEntity;
 import com.bkanent.interview.entity.InterviewQuestionEntity;
 import com.bkanent.interview.entity.InterviewSessionEntity;
 import com.bkanent.interview.mapper.InterviewAssetMapper;
+import com.bkanent.interview.mapper.InterviewCaseMapper;
 import com.bkanent.interview.mapper.InterviewQuestionMapper;
 import com.bkanent.interview.mapper.InterviewSessionMapper;
 import com.bkanent.interview.runtime.InterviewSessionStateMachine;
@@ -30,6 +32,7 @@ public class InterviewTools {
     private final InterviewSessionMapper sessionMapper;
     private final InterviewQuestionMapper questionMapper;
     private final InterviewAssetMapper assetMapper;
+    private final InterviewCaseMapper caseMapper;
     private final InterviewSessionStateMachine stateMachine;
     private final InterviewReportService reportService;
 
@@ -37,12 +40,14 @@ public class InterviewTools {
                           InterviewSessionMapper sessionMapper,
                           InterviewQuestionMapper questionMapper,
                           InterviewAssetMapper assetMapper,
+                          InterviewCaseMapper caseMapper,
                           InterviewSessionStateMachine stateMachine,
                           InterviewReportService reportService) {
         this.prepService = prepService;
         this.sessionMapper = sessionMapper;
         this.questionMapper = questionMapper;
         this.assetMapper = assetMapper;
+        this.caseMapper = caseMapper;
         this.stateMachine = stateMachine;
         this.reportService = reportService;
     }
@@ -168,18 +173,33 @@ public class InterviewTools {
     @Tool(description = "Search archived interview transcripts (L2/L3 only) and derived reports by keyword, "
             + "scene or creator work number.")
     public List<Map<String, Object>> searchAssets(
-            @ToolParam(description = "Keyword to match in title/content, blank to skip") String keyword,
+            @ToolParam(description = "Keyword to match in title, blank to skip") String keyword,
             @ToolParam(description = "Scene filter, e.g. SECOND_HAND_PARTY, blank to skip") String scene,
             @ToolParam(description = "Creator work number filter, blank to skip") String creatorWorkNo) {
-        List<InterviewAssetEntity> assets = assetMapper.selectList(
-                new LambdaQueryWrapper<InterviewAssetEntity>()
-                        .in(InterviewAssetEntity::getArchiveGrade, "L2", "L3")
-                        .eq(creatorWorkNo != null && !creatorWorkNo.isBlank(),
-                                InterviewAssetEntity::getId, -1L)
-                        .like(keyword != null && !keyword.isBlank(),
-                                InterviewAssetEntity::getTitle, keyword == null ? "" : keyword)
-                        .orderByDesc(InterviewAssetEntity::getId)
-                        .last("LIMIT 20"));
+        // 创建人与场景在 case 表上：先解析 caseId 集合再过滤资产
+        List<Long> caseIdFilter = null;
+        boolean hasCaseFilter = (scene != null && !scene.isBlank())
+                || (creatorWorkNo != null && !creatorWorkNo.isBlank());
+        if (hasCaseFilter) {
+            caseIdFilter = caseMapper.selectList(new LambdaQueryWrapper<InterviewCaseEntity>()
+                            .eq(scene != null && !scene.isBlank(), InterviewCaseEntity::getScene, scene == null ? "" : scene)
+                            .eq(creatorWorkNo != null && !creatorWorkNo.isBlank(),
+                                    InterviewCaseEntity::getCreatorWorkNo, creatorWorkNo == null ? "" : creatorWorkNo))
+                    .stream().map(InterviewCaseEntity::getId).toList();
+            if (caseIdFilter.isEmpty()) {
+                return List.of();
+            }
+        }
+        LambdaQueryWrapper<InterviewAssetEntity> wrapper = new LambdaQueryWrapper<InterviewAssetEntity>()
+                .in(InterviewAssetEntity::getArchiveGrade, "L2", "L3")
+                .like(keyword != null && !keyword.isBlank(),
+                        InterviewAssetEntity::getTitle, keyword == null ? "" : keyword)
+                .orderByDesc(InterviewAssetEntity::getId)
+                .last("LIMIT 20");
+        if (caseIdFilter != null) {
+            wrapper.in(InterviewAssetEntity::getCaseId, caseIdFilter);
+        }
+        List<InterviewAssetEntity> assets = assetMapper.selectList(wrapper);
         List<Map<String, Object>> results = new ArrayList<>();
         for (InterviewAssetEntity asset : assets) {
             Map<String, Object> item = new LinkedHashMap<>();

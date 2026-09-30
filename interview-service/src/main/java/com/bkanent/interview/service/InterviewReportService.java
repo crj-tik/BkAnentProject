@@ -121,12 +121,13 @@ public class InterviewReportService {
         return view;
     }
 
-    /** 租约执行器：扫描 PENDING/RETRYABLE 且租约过期的任务。 */
+    /** 租约执行器：扫描可执行任务——PENDING/RETRYABLE 无租约或租约过期，
+     * 以及 RUNNING 但租约已过期（持有者进程崩溃，防任务卡死）。 */
     @Scheduled(fixedDelay = 15000)
     public void runLeasedTasks() {
         List<InterviewReportTaskEntity> runnable = taskMapper.selectList(
                 new LambdaQueryWrapper<InterviewReportTaskEntity>()
-                        .in(InterviewReportTaskEntity::getStatus, "PENDING", "RETRYABLE")
+                        .in(InterviewReportTaskEntity::getStatus, "PENDING", "RETRYABLE", "RUNNING")
                         .and(w -> w.isNull(InterviewReportTaskEntity::getLeaseExpiresAt)
                                 .or()
                                 .lt(InterviewReportTaskEntity::getLeaseExpiresAt, LocalDateTime.now()))

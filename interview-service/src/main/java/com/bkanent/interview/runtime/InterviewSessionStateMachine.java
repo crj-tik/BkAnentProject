@@ -36,16 +36,19 @@ public class InterviewSessionStateMachine {
     public static final String COLLECT_PENDING = "COLLECT_PENDING";
     public static final String ARCHIVED = "ARCHIVED";
 
-    /** 推进权限表：目标状态 → 允许的推进方。 */
+    /**
+     * 推进权限表：目标状态 → 允许的推进方（对齐 design D3：
+     * →QUESTIONS_CONFIRMED/→IN_PROGRESS 仅治理面；→CLOSING_LOCKED 仅运行面
+     * （含导演指令触发的运行面收束）；→COLLECT_PENDING/→ARCHIVED 仅补偿器）。
+     */
     public enum Actor { GOVERNANCE, RUNTIME, COMPENSATOR }
 
     private static final java.util.Map<String, Set<String>> TRANSITIONS = java.util.Map.of(
-            DRAFT, Set.of("GOVERNANCE"),
             QUESTIONS_CONFIRMED, Set.of("GOVERNANCE"),
-            IN_PROGRESS, Set.of("RUNTIME"),
-            CLOSING_LOCKED, Set.of("COMPENSATOR"),
+            IN_PROGRESS, Set.of("GOVERNANCE"),
+            CLOSING_LOCKED, Set.of("RUNTIME"),
             COLLECT_PENDING, Set.of("COMPENSATOR"),
-            ARCHIVED, Set.of()
+            ARCHIVED, Set.of("COMPENSATOR")
     );
 
     /** 状态推进非法异常。 */
@@ -81,8 +84,7 @@ public class InterviewSessionStateMachine {
         if (current.equals(target)) {
             return session;
         }
-        Set<String> allowedActors = TRANSITIONS.getOrDefault(target, Set.of());
-        if (!allowedActors.contains(actor.name())) {
+        if (!isAllowed(target, actor)) {
             throw new IllegalTransitionException(
                     "actor " + actor + " not allowed to transition session to " + target);
         }
@@ -115,7 +117,8 @@ public class InterviewSessionStateMachine {
         return sessionMapper.selectById(sessionId);
     }
 
-    private String expectedPrevious(String target) {
+    /** 目标状态的前置状态（null = 无固定前置）。 */
+    static String expectedPrevious(String target) {
         return switch (target) {
             case QUESTIONS_CONFIRMED -> DRAFT;
             case IN_PROGRESS -> QUESTIONS_CONFIRMED;
@@ -124,6 +127,11 @@ public class InterviewSessionStateMachine {
             case ARCHIVED -> COLLECT_PENDING;
             default -> null;
         };
+    }
+
+    /** 权限判定（包级可见以便单测防回归）。 */
+    static boolean isAllowed(String target, Actor actor) {
+        return TRANSITIONS.getOrDefault(target, Set.of()).contains(actor.name());
     }
 
     // ---------- 会话凭据（功能寻址所需的最小凭据，非鉴权体系） ----------

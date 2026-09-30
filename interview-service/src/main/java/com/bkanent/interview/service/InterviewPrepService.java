@@ -12,7 +12,6 @@ import com.bkanent.interview.mapper.InterviewPrepCardMapper;
 import com.bkanent.interview.mapper.InterviewQuestionMapper;
 import com.bkanent.interview.mapper.InterviewSessionMapper;
 import com.bkanent.interview.runtime.InterviewSessionStateMachine;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -35,20 +34,20 @@ public class InterviewPrepService {
     private final InterviewQuestionMapper questionMapper;
     private final InterviewSessionMapper sessionMapper;
     private final InterviewRuntimeProperties runtimeProperties;
-    private final ObjectMapper objectMapper;
+    private final InterviewSessionStateMachine stateMachine;
 
     public InterviewPrepService(InterviewCaseMapper caseMapper,
                                 InterviewPrepCardMapper prepCardMapper,
                                 InterviewQuestionMapper questionMapper,
                                 InterviewSessionMapper sessionMapper,
                                 InterviewRuntimeProperties runtimeProperties,
-                                ObjectMapper objectMapper) {
+                                InterviewSessionStateMachine stateMachine) {
         this.caseMapper = caseMapper;
         this.prepCardMapper = prepCardMapper;
         this.questionMapper = questionMapper;
         this.sessionMapper = sessionMapper;
         this.runtimeProperties = runtimeProperties;
-        this.objectMapper = objectMapper;
+        this.stateMachine = stateMachine;
     }
 
     /**
@@ -134,9 +133,8 @@ public class InterviewPrepService {
                         .last("LIMIT 1"));
         if (session != null && InterviewSessionStateMachine.DRAFT.equals(session.getStatus())) {
             // 治理面推进 DRAFT → QUESTIONS_CONFIRMED
-            new InterviewSessionStateMachine(sessionMapper, runtimeProperties)
-                    .transition(session.getId(), InterviewSessionStateMachine.QUESTIONS_CONFIRMED,
-                            InterviewSessionStateMachine.Actor.GOVERNANCE);
+            stateMachine.transition(session.getId(), InterviewSessionStateMachine.QUESTIONS_CONFIRMED,
+                    InterviewSessionStateMachine.Actor.GOVERNANCE);
         }
         return confirmed;
     }
@@ -165,9 +163,5 @@ public class InterviewPrepService {
                 .eq(InterviewQuestionEntity::getCaseId, caseId)
                 .eq(InterviewQuestionEntity::getConfirmed, 1)
                 .eq(InterviewQuestionEntity::getAnswerStatus, "ANSWERED"));
-    }
-
-    ObjectMapper objectMapper() {
-        return objectMapper;
     }
 }

@@ -99,6 +99,12 @@ public class InterviewRuntimeService {
             return new TurnResult(lockedReply, "CLOSE", true);
         }
 
+        // 会话状态守卫：仅 IN_PROGRESS 接受话轮（已收尾锁定的走上方极短道别分支）
+        if (!InterviewSessionStateMachine.IN_PROGRESS.equals(session.getStatus())) {
+            throw new IllegalArgumentException(
+                    "session " + sessionId + " not in progress: " + session.getStatus());
+        }
+
         // ① 幂等去重：同 idempotency_key 的重复提交直接返回既有回复
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             InterviewTurnEntity existing = turnMapper.selectOne(new LambdaQueryWrapper<InterviewTurnEntity>()
@@ -132,9 +138,7 @@ public class InterviewRuntimeService {
                         .eq(InterviewQuestionEntity::getCaseId, caseId)
                         .eq(InterviewQuestionEntity::getConfirmed, 1)
                         .orderByAsc(InterviewQuestionEntity::getSeqNo));
-        boolean allDone = current == null
-                || (current.getSeqNo() != null
-                && confirmed.stream().noneMatch(q -> "PENDING".equals(q.getAnswerStatus())));
+        boolean allDone = current == null;
         boolean isLast = current != null && !confirmed.isEmpty()
                 && confirmed.get(confirmed.size() - 1).getId().equals(current.getId());
         boolean currentAnswered = current != null && "ANSWERED".equals(current.getAnswerStatus());
@@ -157,12 +161,17 @@ public class InterviewRuntimeService {
             case CLOSE -> {
                 reply = ClosingDetector.lockedReplyText();
                 sessionClosed = true;
+                markAnswered(current);
                 // 运行面推进 IN_PROGRESS → CLOSING_LOCKED（收尾锁生效）
                 stateMachine.transition(sessionId, InterviewSessionStateMachine.CLOSING_LOCKED,
                         InterviewSessionStateMachine.Actor.RUNTIME);
             }
-            case ACK_AND_SWITCH -> reply = synthesize(session, sanitized, decision, current,
-                    "受访者表示这个问题已经问过了。先真诚道歉，然后直接切换到下一题：" + nextQuestionText(confirmed, current));
+            case ACK_AND_SWITCH -> {
+                // 重复抗议换向：当前题视为已答（受访者抗议说明此前已答过），否则下轮仍指向旧题
+                markAnswered(current);
+                reply = synthesize(session, sanitized, decision, current,
+                        "受访者表示这个问题已经问过了。先真诚道歉，然后直接切换到下一题：" + nextQuestionText(confirmed, current));
+            }
             case ANGLE -> reply = synthesize(session, sanitized, decision, current,
                     "当前问题的追问角度：" + AngleLadder.angleInstruction(decision.angleLevel()));
             case ADVANCE -> {
@@ -184,7 +193,10 @@ public class InterviewRuntimeService {
         }
 
         // ⑥ answer_status 判定 + 追问轮数
-        if (current != null && decision.move() != ProbeDecisionEngine.Move.ADVANCE) {
+        //（ADVANCE/CLOSE/ACK_AND_SWITCH 已在分支内标记当前题已答）
+        if (current != null
+                && (decision.move() == ProbeDecisionEngine.Move.OPEN_DRILL
+                || decision.move() == ProbeDecisionEngine.Move.ANGLE)) {
             if (AnswerStatusJudge.shouldMarkAnswered(decision.move(), probeRounds)) {
                 markAnswered(current);
             } else {
@@ -268,11 +280,13 @@ public class InterviewRuntimeService {
             messages.add(new SystemMessage("[受访者已说过的内容摘要]\n"
                     + factSummary(session.getId())));
         }
-        List<InterviewTurnEntity> recentTurns = turnMapper.selectList(
+        List<InterviewTurnEntity> recentTurns = new ArrayList<>(turnMapper.selectList(
                 new LambdaQueryWrapper<InterviewTurnEntity>()
                         .eq(InterviewTurnEntity::getSessionId, session.getId())
                         .orderByDesc(InterviewTurnEntity::getTurnSeq)
-                        .last("LIMIT 6"));
+                        .last("LIMIT 6")));
+        // 取最近 6 条后反转为时间正序——对话模型要求历史从旧到新
+        java.util.Collections.reverse(recentTurns);
         for (InterviewTurnEntity t : recentTurns) {
             String content = t.getSanitizedContent() == null ? t.getContent() : t.getSanitizedContent();
             if ("RESPONDENT".equals(t.getRole())) {
