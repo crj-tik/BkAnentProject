@@ -85,13 +85,65 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
       - ./sql/mysql-init.sql:/docker-entrypoint-initdb.d/001-mysql-init.sql:ro
-    ports:
-      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${MYSQL_EXPOSED_PORT:-3306}:3306"
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
       interval: 5s
       timeout: 5s
       retries: 30
+    networks: [bk]
+
+  # This short-lived job also provisions the account on existing data volumes.
+  mysql-mcp-init:
+    image: bk-anent-mysql-mcp:dev
+    build:
+      context: ./mysql-mcp
+    profiles: [mcp]
+    restart: "no"
+    command: ["python", "init_account.py"]
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-bk_dev_password}
+      MYSQL_MCP_PASSWORD: ${MYSQL_MCP_PASSWORD:-}
+      MYSQL_MCP_DATABASES: ${MYSQL_MCP_DATABASES:-bk_auth,bk_listing,bk_customer,bk_notification,bk_marketing,bk_promotion,bk_business,bk_agent,bk_memory,bk_contract,bk_settlement}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks: [bk]
+
+  mysql-mcp:
+    image: bk-anent-mysql-mcp:dev
+    build:
+      context: ./mysql-mcp
+    profiles: [mcp]
+    restart: unless-stopped
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: mcp_ro
+      MYSQL_PASSWORD: ${MYSQL_MCP_PASSWORD:-}
+      MYSQL_MCP_DATABASES: ${MYSQL_MCP_DATABASES:-bk_auth,bk_listing,bk_customer,bk_notification,bk_marketing,bk_promotion,bk_business,bk_agent,bk_memory,bk_contract,bk_settlement}
+      MYSQL_MCP_TOKEN: ${MYSQL_MCP_TOKEN:-}
+      MYSQL_MCP_MAX_ROWS: ${MYSQL_MCP_MAX_ROWS:-200}
+      MYSQL_MCP_QUERY_TIMEOUT_MS: ${MYSQL_MCP_QUERY_TIMEOUT_MS:-5000}
+      MYSQL_MCP_ALLOWED_HOSTS: ${MYSQL_MCP_ALLOWED_HOSTS:-127.0.0.1:*,localhost:*,mysql-mcp:8000}
+    ports:
+      - "${MYSQL_MCP_BIND_ADDRESS:-127.0.0.1}:${MYSQL_MCP_EXPOSED_PORT:-18081}:8000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      mysql-mcp-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "healthcheck.py"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
     networks: [bk]
 
   nacos:

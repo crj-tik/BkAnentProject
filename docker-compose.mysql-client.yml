@@ -1,0 +1,5 @@
+# Opt in only when host-side JDBC tools or database clients need MySQL directly.
+services:
+  mysql:
+    ports:
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${MYSQL_EXPOSED_PORT:-3306}:3306"

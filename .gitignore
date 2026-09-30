@@ -6,3 +6,5 @@ target/
 .agents/
 .env
 .env.local
+.codex-temp-*
+__pycache__/

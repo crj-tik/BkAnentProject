@@ -7,4 +7,7 @@ runtime-logs
 **/target
 *.iml
 .codex-temp-*
-
+.env
+.env.*
+**/__pycache__
+mysql-mcp

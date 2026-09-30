@@ -1,0 +1,8 @@
+*
+!Dockerfile
+!requirements.txt
+!config.py
+!database.py
+!server.py
+!init_account.py
+!healthcheck.py

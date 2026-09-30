@@ -124,7 +124,27 @@ docker compose --profile full up -d --build
 docker compose --profile minimal stop
 ```
 
-开发环境基础设施对宿主机 `127.0.0.1` 的入口为：MySQL `3306`、Nacos API `8848`、Nacos 控制台/健康接口 `18080`（gRPC `9848/9849`）、Redis `6379`、RocketMQ NameServer `9876`、Broker `10911/10909`、MinIO API/控制台 `19000/19001`、Elasticsearch `9200`、Milvus gRPC/健康检查 `19530/9091`。Compose 默认只绑定 `127.0.0.1`，如需局域网访问可在 `.env` 中修改 `HOST_BIND_ADDRESS`。容器内部仍使用服务名和标准端口互联。
+开发环境基础设施对宿主机 `127.0.0.1` 的入口为：Nacos API `8848`、Nacos 控制台/健康接口 `18080`（gRPC `9848/9849`）、Redis `6379`、RocketMQ NameServer `9876`、Broker `10911/10909`、MinIO API/控制台 `19000/19001`、Elasticsearch `9200`、Milvus gRPC/健康检查 `19530/9091`。MySQL 默认仅在 `bk` 网络内部开放 `3306`，容器内部仍使用 `MYSQL_HOST=mysql` 连接。Compose 默认只绑定 `127.0.0.1`，其他基础设施如需局域网访问可在 `.env` 中修改 `HOST_BIND_ADDRESS`。
+
+### 独立 MySQL MCP 容器
+
+MySQL 保留官方 `mysql:8.4` 镜像和原有 `mysql-data` 数据卷，独立的 `mysql-mcp` 容器提供只读数据库工具。启动入口会为缺失的 MCP 数据库密码和 Bearer Token 生成随机值，写入已被 Git 忽略的 `.env`，并保留已有配置：
+
+```powershell
+powershell -NoProfile -File scripts/start-mysql-mcp.ps1
+```
+
+这条命令只启动 MySQL、一次性账号初始化任务和 MCP，不会启动 Nacos 或业务服务。MCP 地址为 `http://127.0.0.1:18081/mcp`，使用 Streamable HTTP；客户端必须发送 `Authorization: Bearer <MYSQL_MCP_TOKEN>`，Token 取自本机 `.env`。`18080` 已由 Nacos 使用，因此 MCP 默认采用 `18081`。详细工具、验证和维护说明见 [mysql-mcp/README.md](mysql-mcp/README.md)。
+
+账号初始化任务会在已有数据卷上创建或更新专用 `mcp_ro` 用户，只授予 `MYSQL_MCP_DATABASES` 中业务库的 `SELECT`、`SHOW VIEW`，不执行业务初始化 SQL。默认包含 11 个 `bk_*` 业务库，不包含 Nacos 或 MySQL 系统库；按需要在 `.env` 缩小范围。不要删除数据卷来创建 MCP 账号。已有数据卷的 root 密码需通过 `MYSQL_ROOT_PASSWORD` 提供。
+
+仅在宿主机数据库客户端或本地 Java 服务需要直连 MySQL 时，显式启用端口覆盖配置：
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.mysql-client.yml up -d mysql
+```
+
+这会把 `3306` 绑定到 `127.0.0.1`（可通过 `MYSQL_EXPOSED_PORT` 调整）。MCP 对外绑定独立使用 `MYSQL_MCP_BIND_ADDRESS`，默认始终为 loopback；远程接入前配置 HTTPS 入口及 `MYSQL_MCP_ALLOWED_HOSTS`，客户端应能提供 Bearer 请求头。
 
 Docker 编排默认只用于开发演示：full profile 会启用 Milvus 和 Elasticsearch 搜索；MySQL 使用 `sql/mysql-init.sql` 初始化业务库和表，MinIO 创建 `generated-assets` bucket，Elasticsearch 创建 `listing_info`、`marketing_content` 索引。Redis、Elasticsearch、Milvus 开发模式不创建业务表空间或独立账号，MinIO 使用 root 开发账号；生产部署前必须通过环境变量或密钥管理系统提供 `MYSQL_ROOT_PASSWORD`、`AUTH_TOKEN_SECRET`、模型/API 密钥和独立的基础设施凭据，并接入真实 Provider。停止并删除容器（保留数据卷）使用 `docker compose down`，清理数据卷前请确认数据已备份。
 
