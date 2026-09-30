@@ -8,3 +8,5 @@ target/
 .env.local
 .codex-temp-*
 __pycache__/
+.codex/config.toml
+.codex/config.toml.bak

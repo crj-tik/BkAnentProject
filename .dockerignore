@@ -11,3 +11,4 @@ runtime-logs
 .env.*
 **/__pycache__
 mysql-mcp
+.codex

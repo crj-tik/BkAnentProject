@@ -31,6 +31,26 @@ docker compose --profile mcp ps -a mysql mysql-mcp-init mysql-mcp
 
 ## 客户端接入
 
+### 当前桌面应用的本地项目
+
+在仓库根目录运行以下命令，给可信的 BkAnentProject 本地项目配置连接：
+
+```powershell
+powershell -NoProfile -File scripts/connect-mysql-mcp.ps1
+```
+
+连接名称为 `bk_mysql_readonly`，使用 Streamable HTTP，仅启用下面列出的四个只读工具。脚本从进程环境或项目 `.env` 读取 `MYSQL_MCP_TOKEN`，为当前客户端生成兼容的 Authorization 配置，写入本机 `.codex/config.toml`；该文件及备份已被 Git 忽略，`.codex` 目录也排除在 Docker 构建之外。其他项目配置会保留，用户全局 MCP 配置不会改变。`scripts/mysql-mcp-headers.ps1` 是内部凭据读取脚本，其输出包含鉴权头。
+
+保存后在桌面应用的「设置 → MCP servers」中刷新或重启 MCP 连接。当前已打开的会话需要重新加载连接配置；在输入框使用 `/mcp` 检查 `bk_mysql_readonly`，然后可请求“使用 bk_mysql_readonly 列出业务数据库”。桌面应用、CLI 和 IDE 使用同一套 [官方 MCP 配置机制](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)，项目配置只对可信项目生效。
+
+修改 Token 后重新运行上述连接脚本。自定义端口时显式指定地址，例如：
+
+```powershell
+powershell -NoProfile -File scripts/connect-mysql-mcp.ps1 -Endpoint http://127.0.0.1:18082/mcp
+```
+
+### 地址与工具
+
 - 传输：Streamable HTTP。
 - 宿主机地址：`http://127.0.0.1:18081/mcp`。
 - 同一 Compose 网络内：`http://mysql-mcp:8000/mcp`。
