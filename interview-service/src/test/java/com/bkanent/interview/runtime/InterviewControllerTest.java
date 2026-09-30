@@ -133,6 +133,17 @@ class InterviewControllerTest {
     }
 
     @Test
+    void searchReportsDelegatesKeywordCreatorAndPaging() {
+        when(reportService.searchReports("学区房", "emp-01", 1, 20))
+                .thenReturn(Map.of("reports", List.of(), "total", 0L, "page", 1, "pageSize", 20));
+
+        var response = controller.searchReports("学区房", "emp-01", 1, 20);
+
+        assertThat(response.success()).isTrue();
+        verify(reportService).searchReports("学区房", "emp-01", 1, 20);
+    }
+
+    @Test
     void reportTaskDetailMapsMissingTaskToFriendlyError() {
         when(reportService.getTaskDetail(404L)).thenReturn(Map.of("error", "task not found: 404"));
 

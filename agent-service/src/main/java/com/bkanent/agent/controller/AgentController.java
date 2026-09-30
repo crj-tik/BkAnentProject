@@ -40,6 +40,7 @@ import com.bkanent.agent.service.SupervisorAsyncWorkflowService;
 import com.bkanent.agent.service.SupervisorAgentCatalogService;
 import com.bkanent.agent.service.SupervisorDiagnosticsService;
 import com.bkanent.agent.service.SupervisorEventAuditQueryService;
+import com.bkanent.agent.service.SupervisorApprovalTodoService;
 import com.bkanent.agent.service.SupervisorTaskService;
 import com.bkanent.agent.service.SupervisorWorkflowQueryService;
 import com.bkanent.agent.service.SupervisorWorkflowService;
@@ -70,6 +71,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -118,6 +120,7 @@ public class AgentController {
      */
     private final SupervisorWorkflowService supervisorWorkflowService;
     private final SupervisorWorkflowQueryService supervisorWorkflowQueryService;
+    private final SupervisorApprovalTodoService supervisorApprovalTodoService;
     private final SupervisorDiagnosticsService supervisorDiagnosticsService;
     private final SupervisorAgentCatalogService supervisorAgentCatalogService;
     private final SupervisorEventAuditQueryService supervisorEventAuditQueryService;
@@ -143,6 +146,7 @@ public class AgentController {
                            SupervisorAsyncWorkflowService supervisorAsyncWorkflowService,
                            SupervisorWorkflowService supervisorWorkflowService,
                            SupervisorWorkflowQueryService supervisorWorkflowQueryService,
+                           SupervisorApprovalTodoService supervisorApprovalTodoService,
                            SupervisorDiagnosticsService supervisorDiagnosticsService,
                            SupervisorAgentCatalogService supervisorAgentCatalogService,
                            SupervisorEventAuditQueryService supervisorEventAuditQueryService,
@@ -164,6 +168,7 @@ public class AgentController {
         this.supervisorAsyncWorkflowService = supervisorAsyncWorkflowService;
         this.supervisorWorkflowService = supervisorWorkflowService;
         this.supervisorWorkflowQueryService = supervisorWorkflowQueryService;
+        this.supervisorApprovalTodoService = supervisorApprovalTodoService;
         this.supervisorDiagnosticsService = supervisorDiagnosticsService;
         this.supervisorAgentCatalogService = supervisorAgentCatalogService;
         this.supervisorEventAuditQueryService = supervisorEventAuditQueryService;
@@ -491,6 +496,21 @@ public class AgentController {
     @PostMapping("/supervisor/approvals/callback")
     public ApiResponse<SupervisorTaskResponse> handleApprovalCallback(@RequestBody ApprovalCallbackRequest request) {
         return ApiResponse.ok(supervisorWorkflowService.handleCallback(request));
+    }
+
+    /**
+     * 审批待办分页：按任务最新 checkpoint 判定「仍在等待」，owner 过滤与单任务工作流查询同口径。
+     */
+    @GetMapping("/supervisor/approvals/pending")
+    public ApiResponse<Map<String, Object>> listPendingApprovals(
+            @RequestParam(name = "userId", required = false) String userId,
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "pageSize", defaultValue = "20") int pageSize) {
+        String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
+        return guarded(() -> {
+            agentPermissionService.assertCanReadApprovalTodos(authenticatedUserId);
+            return ApiResponse.ok(supervisorApprovalTodoService.listPendingApprovals(authenticatedUserId, page, pageSize));
+        });
     }
 
     @GetMapping("/supervisor/workflows/state")

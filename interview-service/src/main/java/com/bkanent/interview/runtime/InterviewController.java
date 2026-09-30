@@ -339,6 +339,20 @@ public class InterviewController {
         return ApiResponse.ok(detail);
     }
 
+    // ---------- 报告跨任务搜索（报告中心检索，任务详情端点提供全文） ----------
+
+    /**
+     * 跨任务报告搜索（分页）：关键词匹配报告正文，可叠加创建人过滤；报告维度、时间倒序。
+     */
+    @GetMapping("/reports/search")
+    public ApiResponse<Map<String, Object>> searchReports(
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "creatorWorkNo", required = false) String creatorWorkNo,
+            @RequestParam(value = "page", defaultValue = "1") int page,
+            @RequestParam(value = "pageSize", defaultValue = "20") int pageSize) {
+        return ApiResponse.ok(reportService.searchReports(keyword, creatorWorkNo, page, pageSize));
+    }
+
     // ---------- 导演台直连 ----------
 
     /**

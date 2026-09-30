@@ -14,6 +14,7 @@ import com.bkanent.auth.service.UserAccountService;
 import com.bkanent.auth.service.UserManagementException;
 import com.bkanent.common.model.ApiResponse;
 import com.bkanent.common.model.AuthLoginRequest;
+import com.bkanent.common.model.AuthRefreshRequest;
 import com.bkanent.common.model.AuthTokenDTO;
 import com.bkanent.common.model.HealthStatusDTO;
 import jakarta.validation.Valid;
@@ -75,6 +76,42 @@ public class AuthController {
         return ApiResponse.ok(new AuthTokenDTO(
                 authTokenService.issueAccessToken(account),
                 authTokenService.issueRefreshToken(account),
+                account.getId(),
+                account.getRoleCode(),
+                account.getDisplayName(),
+                userManagementService.getRoleNameForCode(account.getRoleCode()),
+                account.getTenantCode()
+        ));
+    }
+
+    /**
+     * 刷新访问令牌：refresh token 一次性轮换——旧的用后即废，
+     * 前端必须以本次响应的新 refreshToken 替换本地存储（见 LR-16）。
+     */
+    @PostMapping("/refresh")
+    public ApiResponse<AuthTokenDTO> refresh(@RequestBody AuthRefreshRequest request) {
+        if (request == null || request.refreshToken() == null || request.refreshToken().isBlank()) {
+            return ApiResponse.fail("AUTH_400", "refreshToken is required");
+        }
+        AuthTokenService.TokenPrincipal principal = authTokenService.parse(request.refreshToken());
+        if (principal == null || !"refresh".equals(principal.tokenType())) {
+            return ApiResponse.fail("AUTH_401", "invalid or expired refresh token");
+        }
+        UserAccountEntity account = userAccountService.getById(principal.userId());
+        if (account == null || !Integer.valueOf(0).equals(account.getDeleted())
+                || !"ACTIVE".equalsIgnoreCase(account.getAccountStatus())
+                || !userManagementService.isActiveRole(account.getRoleCode())) {
+            return ApiResponse.fail("AUTH_401", "账号已停用或权限已失效");
+        }
+        // 一次性轮换：旧 refresh token 用后即废。token 无 nonce、秒级时间戳，
+        // 同一秒内重签会得到相同串——此时跳过 revoke，避免新 token「出生即被吊销」。
+        String newRefreshToken = authTokenService.issueRefreshToken(account);
+        if (!request.refreshToken().equals(newRefreshToken)) {
+            authTokenService.revoke(request.refreshToken());
+        }
+        return ApiResponse.ok(new AuthTokenDTO(
+                authTokenService.issueAccessToken(account),
+                newRefreshToken,
                 account.getId(),
                 account.getRoleCode(),
                 account.getDisplayName(),

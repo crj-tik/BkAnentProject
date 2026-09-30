@@ -1,6 +1,8 @@
 package com.bkanent.agent.controller;
 
 import com.bkanent.agent.security.AgentPrincipalContext;
+import com.bkanent.agent.service.AgentPermissionService;
+import com.bkanent.agent.service.SupervisorApprovalTodoService;
 import com.bkanent.agent.service.SupervisorSessionOwnershipService;
 import com.bkanent.agent.service.SupervisorWorkflowQueryService;
 import com.bkanent.agent.stream.SessionStreamService;
@@ -25,6 +27,8 @@ class AgentControllerQueryTest {
 
     private final AgentPrincipalContext principal = mock(AgentPrincipalContext.class);
     private final SupervisorWorkflowQueryService queryService = mock(SupervisorWorkflowQueryService.class);
+    private final SupervisorApprovalTodoService approvalTodoService = mock(SupervisorApprovalTodoService.class);
+    private final AgentPermissionService permissionService = mock(AgentPermissionService.class);
     private final SessionStreamService streamService = mock(SessionStreamService.class);
     private final SupervisorSessionOwnershipService ownership = mock(SupervisorSessionOwnershipService.class);
     private MockMvc mvc;
@@ -32,8 +36,8 @@ class AgentControllerQueryTest {
     @BeforeEach
     void setUp() {
         AgentController controller = new AgentController(null, null, null, null, null, null, null,
-                null, null, null, null, queryService, null, null, null, streamService,
-                null, null, null, principal, ownership);
+                null, null, null, null, queryService, approvalTodoService, null, null, null, streamService,
+                permissionService, null, null, principal, ownership);
         mvc = MockMvcBuilders.standaloneSetup(controller).build();
         when(principal.resolveUserId("2")).thenReturn("2");
         when(principal.userId()).thenReturn("2");
@@ -55,6 +59,17 @@ class AgentControllerQueryTest {
                         .param("taskId", "task-1").param("userId", "2"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data").isArray());
         verify(queryService).listArtifacts("task-1", "2");
+    }
+
+    @Test
+    void bindsApprovalTodoQueryWithPermissionCheck() throws Exception {
+        when(approvalTodoService.listPendingApprovals("2", 1, 20))
+                .thenReturn(java.util.Map.of("approvals", List.of(), "total", 0L, "page", 1, "pageSize", 20));
+        mvc.perform(get("/agent/supervisor/approvals/pending")
+                        .param("userId", "2"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.success").value(true));
+        verify(permissionService).assertCanReadApprovalTodos("2");
+        verify(approvalTodoService).listPendingApprovals("2", 1, 20);
     }
 
     @Test

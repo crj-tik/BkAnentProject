@@ -52,4 +52,19 @@ class InterviewReportServiceTest {
         String json = EvidenceVerifier.missingJson(missing);
         assertTrue(json.contains("INTERVIEW_GAP"));
     }
+
+    @Test
+    void searchReportsRejectsBlankKeywordBeforeTouchingStorage() {
+        // 空关键词 = 无检索语义：直接空结果，不进 LIKE 全表扫
+        InterviewReportService service = new InterviewReportService(
+                null, null, null, null, null, null,
+                new com.fasterxml.jackson.databind.ObjectMapper());
+
+        Map<String, Object> result = service.searchReports("", "emp-01", 1, 20);
+
+        assertEquals(0L, result.get("total"));
+        assertTrue(((List<?>) result.get("reports")).isEmpty());
+        assertEquals(1, result.get("page"));
+        assertEquals(20, result.get("pageSize"));
+    }
 }

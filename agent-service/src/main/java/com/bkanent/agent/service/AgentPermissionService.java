@@ -31,6 +31,14 @@ public class AgentPermissionService {
         }
     }
 
+    /**
+     * 审批待办列表查询权限：复用工作流读权限（待办是工作流状态的一部分；
+     * 列表内的 owner 过滤在查询服务内完成，口径与单任务工作流查询一致）。
+     */
+    public void assertCanReadApprovalTodos(String userId) {
+        assertPermission(userId, WORKFLOW_READ_PERMISSION, "approval todo query");
+    }
+
     public void assertCanReadWorkflow(String requesterUserId,
                                       String ownerUserId,
                                       String sessionId,

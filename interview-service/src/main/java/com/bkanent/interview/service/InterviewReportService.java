@@ -135,6 +135,84 @@ public class InterviewReportService {
     }
 
     /**
+     * 跨任务报告搜索（分页）：关键词匹配报告正文（report_json 结构化文本），
+     * 可叠加创建人过滤；报告维度、提交时间倒序。跨 case 跨任务，供报告中心检索。
+     */
+    public Map<String, Object> searchReports(String keyword, String creatorWorkNo,
+                                             int page, int pageSize) {
+        int safePage = Math.max(1, page);
+        int safeSize = Math.min(Math.max(1, pageSize), 100);
+        if (keyword == null || keyword.isBlank()) {
+            return Map.of("reports", List.of(), "total", 0L, "page", safePage, "pageSize", safeSize);
+        }
+
+        List<Long> caseIdFilter = null;
+        if (creatorWorkNo != null && !creatorWorkNo.isBlank()) {
+            caseIdFilter = caseMapper.selectList(new LambdaQueryWrapper<InterviewCaseEntity>()
+                            .eq(InterviewCaseEntity::getCreatorWorkNo, creatorWorkNo))
+                    .stream().map(InterviewCaseEntity::getId).toList();
+            if (caseIdFilter.isEmpty()) {
+                return Map.of("reports", List.of(), "total", 0L, "page", safePage, "pageSize", safeSize);
+            }
+        }
+
+        LambdaQueryWrapper<InterviewReportEntity> wrapper = new LambdaQueryWrapper<InterviewReportEntity>()
+                .like(InterviewReportEntity::getReportJson, keyword.trim())
+                .orderByDesc(InterviewReportEntity::getId);
+        if (caseIdFilter != null) {
+            wrapper.in(InterviewReportEntity::getCaseId, caseIdFilter);
+        }
+        long total = reportMapper.selectCount(wrapper);
+        wrapper.last("LIMIT " + safeSize + " OFFSET " + (safePage - 1) * safeSize);
+        List<InterviewReportEntity> reports = reportMapper.selectList(wrapper);
+
+        List<Map<String, Object>> items = new ArrayList<>(reports.size());
+        for (InterviewReportEntity report : reports) {
+            items.add(reportView(report));
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("reports", items);
+        result.put("total", total);
+        result.put("page", safePage);
+        result.put("pageSize", safeSize);
+        return result;
+    }
+
+    /** 报告摘要视图：不回传全文（report_json 可能很长），前端经任务详情端点按需取全文。 */
+    private Map<String, Object> reportView(InterviewReportEntity report) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("reportId", report.getId());
+        item.put("caseId", report.getCaseId());
+        item.put("sessionId", report.getSessionId());
+        item.put("assetId", report.getAssetId());
+        item.put("reportType", report.getReportType());
+        item.put("score", report.getScore());
+        item.put("replicabilityLevel", report.getReplicabilityLevel());
+        item.put("oneLiner", extractOneLiner(report.getReportJson()));
+        item.put("createdAt", report.getCreatedAt() == null ? null : report.getCreatedAt().toString());
+        return item;
+    }
+
+    /** 从 report_json 抽 oneLiner 作结果行摘要；解析失败时返回 null（前端回退显示 ID）。 */
+    private String extractOneLiner(String reportJson) {
+        if (reportJson == null || reportJson.isBlank()) {
+            return null;
+        }
+        try {
+            Map<String, Object> parsed = objectMapper.readValue(reportJson,
+                    new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {
+                    });
+            if (parsed.get("coreFinding") instanceof Map<?, ?> coreFinding
+                    && coreFinding.get("oneLiner") != null) {
+                return String.valueOf(coreFinding.get("oneLiner"));
+            }
+        } catch (Exception exception) {
+            return null;
+        }
+        return null;
+    }
+
+    /**
      * 任务详情（含已生成报告的结构化结论与核验状态）。
      */
     public Map<String, Object> getTaskDetail(Long taskId) {

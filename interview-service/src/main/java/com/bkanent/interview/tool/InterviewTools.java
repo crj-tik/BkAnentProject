@@ -267,6 +267,19 @@ public class InterviewTools {
                 page == null ? 1 : page, pageSize == null ? 20 : pageSize);
     }
 
+    @Tool(description = "Search case card reports across tasks and cases by keyword (paginated). "
+            + "Matches the structured report text (core findings, timeline, strategies, persona, quotes); "
+            + "returns report summaries with score and replicability level. Filter optionally by creator "
+            + "work number. Use getReportTaskDetail / the task detail endpoint for the full report.")
+    public Map<String, Object> searchReports(
+            @ToolParam(description = "Keyword to match in report text, required") String keyword,
+            @ToolParam(description = "Creator work number filter, blank for all") String creatorWorkNo,
+            @ToolParam(description = "Page number, 1-based") Integer page,
+            @ToolParam(description = "Page size, max 100") Integer pageSize) {
+        return reportService.searchReports(keyword, creatorWorkNo,
+                page == null ? 1 : page, pageSize == null ? 20 : pageSize);
+    }
+
     @Tool(description = "Search archived interview transcripts (L2/L3 only) and derived reports by keyword, "
             + "scene or creator work number.")
     public List<Map<String, Object>> searchAssets(

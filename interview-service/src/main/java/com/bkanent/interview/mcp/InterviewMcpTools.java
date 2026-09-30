@@ -135,6 +135,17 @@ public class InterviewMcpTools implements McpTool {
                 "gradeBasis", com.bkanent.interview.engine.ArchiveGrader.gradeBasisJson(grade));
     }
 
+    @Tool(description = "Search case card reports across cases and tasks by keyword. Public read-only "
+            + "view matching the transcript search boundary; returns report summaries (score, replicability "
+            + "level, one-liner). Use get_case_report for a full report.")
+    public Map<String, Object> search_reports(
+            @ToolParam(description = "Keyword to match in report text, required") String keyword,
+            @ToolParam(description = "Page number, 1-based") Integer page,
+            @ToolParam(description = "Page size, max 20 on the public surface") Integer pageSize) {
+        return reportService.searchReports(keyword, null,
+                page == null ? 1 : page, pageSize == null ? 10 : Math.min(pageSize, 20));
+    }
+
     @Tool(description = "Submit an asynchronous case card report generation task for an L2/L3 transcript. "
             + "Idempotent: same input reuses the same task. Returns taskId and status for polling via this tool.")
     public Map<String, Object> generate_case_report(
