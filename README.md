@@ -64,7 +64,11 @@ mvn -pl auth-service -am -DskipTests install
 mvn -pl auth-service "-Dspring-boot.run.profiles=local" spring-boot:run
 ```
 
-启动后访问 `http://127.0.0.1:9101/auth/health`。本地演示账号为 `broker01`，密码为 `demo-password`，只用于冒烟测试，生产环境必须替换。
+启动后访问 `http://127.0.0.1:9101/auth/health`。本地演示管理员账号为 `admin01`，初始密码为 `demo-password`；业务演示账号为 `broker01`，密码同为 `demo-password`。这些账号只用于开发测试，生产环境必须替换并立即修改初始密码。
+
+用户管理由 `auth-service` 提供，账号写入 `user_account`，可分配角色写入 `auth_role`。管理员可通过 `GET /auth/users`、`GET /auth/roles`、`POST /auth/users`、`PUT /auth/users/{userId}`、`PUT /auth/users/{userId}/password` 和 `DELETE /auth/users/{userId}` 管理账号；`GET /auth/me` 返回当前登录用户信息。管理接口要求有效的管理员访问令牌，删除采用逻辑删除，服务端会阻止删除或停用最后一个启用的管理员。
+
+给已有 MySQL 开发库升级时，执行 [20260930_auth_user_management.sql](/D:/project/BkAnentProject/sql/migrations/20260930_auth_user_management.sql:1)。新建开发库可由 `sql/mysql-init.sql` 创建用户和角色表。
 
 ## 分布式环境启动
 

@@ -12,7 +12,10 @@ public record AuthTokenDTO(
         /** 业务属性：userId。 */
         Long userId,
         /** 业务属性：roleCode。 */
-        String roleCode
+        String roleCode,
+        String displayName,
+        String roleName,
+        String tenantCode
 ) {
 }
 

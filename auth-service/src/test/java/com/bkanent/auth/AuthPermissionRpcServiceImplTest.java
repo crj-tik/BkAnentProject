@@ -6,6 +6,7 @@ import com.bkanent.auth.rpc.AuthPermissionRpcServiceImpl;
 import com.bkanent.auth.service.AuthTokenService;
 import com.bkanent.auth.service.InMemoryTokenRevocationStore;
 import com.bkanent.auth.service.UserAccountService;
+import com.bkanent.auth.service.UserManagementService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -21,22 +22,25 @@ class AuthPermissionRpcServiceImplTest {
     private UserAccountService userAccountService;
     private AuthTokenService authTokenService;
     private AuthPermissionRpcServiceImpl permissionService;
+    private UserManagementService userManagementService;
     private UserAccountEntity activeAccount;
 
     @BeforeEach
     void setUp() {
         userAccountService = mock(UserAccountService.class);
+        userManagementService = mock(UserManagementService.class);
         AuthTokenProperties properties = new AuthTokenProperties();
         properties.setSecret("unit-test-auth-secret");
         authTokenService = new AuthTokenService(properties, new InMemoryTokenRevocationStore());
         authTokenService.initialize();
-        permissionService = new AuthPermissionRpcServiceImpl(authTokenService, userAccountService);
+        permissionService = new AuthPermissionRpcServiceImpl(authTokenService, userAccountService, userManagementService);
 
         activeAccount = new UserAccountEntity();
         activeAccount.setId(7L);
         activeAccount.setAccountStatus("ACTIVE");
         activeAccount.setDeleted(0);
         when(userAccountService.getById(7L)).thenReturn(activeAccount);
+        when(userManagementService.isActiveRole(null)).thenReturn(true);
     }
 
     @Test

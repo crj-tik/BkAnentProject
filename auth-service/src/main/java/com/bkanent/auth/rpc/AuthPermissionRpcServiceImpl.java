@@ -2,6 +2,7 @@ package com.bkanent.auth.rpc;
 
 import com.bkanent.auth.entity.UserAccountEntity;
 import com.bkanent.auth.service.AuthTokenService;
+import com.bkanent.auth.service.UserManagementService;
 import com.bkanent.auth.service.UserAccountService;
 import com.bkanent.common.rpc.AuthPermissionRpcService;
 import com.bkanent.common.rpc.AuthenticatedPrincipal;
@@ -16,11 +17,14 @@ public class AuthPermissionRpcServiceImpl implements AuthPermissionRpcService {
 
     private final AuthTokenService authTokenService;
     private final UserAccountService userAccountService;
+    private final UserManagementService userManagementService;
 
     public AuthPermissionRpcServiceImpl(AuthTokenService authTokenService,
-                                        UserAccountService userAccountService) {
+                                        UserAccountService userAccountService,
+                                        UserManagementService userManagementService) {
         this.authTokenService = authTokenService;
         this.userAccountService = userAccountService;
+        this.userManagementService = userManagementService;
     }
 
     @Override
@@ -52,7 +56,8 @@ public class AuthPermissionRpcServiceImpl implements AuthPermissionRpcService {
 
     private boolean isActive(UserAccountEntity account) {
         return account != null && Integer.valueOf(0).equals(account.getDeleted())
-                && "ACTIVE".equalsIgnoreCase(account.getAccountStatus());
+                && "ACTIVE".equalsIgnoreCase(account.getAccountStatus())
+                && userManagementService.isActiveRole(account.getRoleCode());
     }
 }
 

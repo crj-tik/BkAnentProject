@@ -6,6 +6,7 @@ import com.bkanent.auth.entity.UserAccountEntity;
 import com.bkanent.auth.service.AuthTokenService;
 import com.bkanent.auth.service.InMemoryTokenRevocationStore;
 import com.bkanent.auth.service.UserAccountService;
+import com.bkanent.auth.service.UserManagementService;
 import com.bkanent.auth.rpc.AuthPermissionRpcServiceImpl;
 import com.bkanent.common.model.ApiResponse;
 import com.bkanent.common.model.AuthLoginRequest;
@@ -25,12 +26,14 @@ class AuthControllerTest {
 
     private UserAccountService userAccountService;
     private AuthTokenService authTokenService;
+    private UserManagementService userManagementService;
     private AuthController authController;
     private UserAccountEntity activeAccount;
 
     @BeforeEach
     void setUp() {
         userAccountService = mock(UserAccountService.class);
+        userManagementService = mock(UserManagementService.class);
         AuthTokenProperties properties = new AuthTokenProperties();
         properties.setSecret("unit-test-auth-secret");
         authTokenService = new AuthTokenService(properties, new InMemoryTokenRevocationStore());
@@ -38,7 +41,8 @@ class AuthControllerTest {
         authController = new AuthController(
                 userAccountService,
                 new BCryptPasswordEncoder(),
-                authTokenService
+                authTokenService,
+                userManagementService
         );
 
         activeAccount = new UserAccountEntity();
@@ -49,6 +53,8 @@ class AuthControllerTest {
         activeAccount.setAccountStatus("ACTIVE");
         activeAccount.setDeleted(0);
         when(userAccountService.findByUsername("broker01")).thenReturn(activeAccount);
+        when(userManagementService.isActiveRole("BROKER")).thenReturn(true);
+        when(userManagementService.getRoleNameForCode("BROKER")).thenReturn("经纪人");
     }
 
     @Test
@@ -74,7 +80,9 @@ class AuthControllerTest {
         assertNotNull(response.data());
         assertTrue(authTokenService.isValidAccessToken(response.data().accessToken()));
         when(userAccountService.getById(7L)).thenReturn(activeAccount);
-        AuthPermissionRpcServiceImpl authRpc = new AuthPermissionRpcServiceImpl(authTokenService, userAccountService);
+        when(userManagementService.isActiveRole("BROKER")).thenReturn(true);
+        AuthPermissionRpcServiceImpl authRpc = new AuthPermissionRpcServiceImpl(
+                authTokenService, userAccountService, userManagementService);
         assertNotNull(authRpc.resolvePrincipal(response.data().accessToken()));
 
         authController.logout("Bearer " + response.data().accessToken());
