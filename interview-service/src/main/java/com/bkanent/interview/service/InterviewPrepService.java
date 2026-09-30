@@ -6,6 +6,7 @@ import com.bkanent.interview.entity.InterviewCaseEntity;
 import com.bkanent.interview.entity.InterviewPrepCardEntity;
 import com.bkanent.interview.entity.InterviewQuestionEntity;
 import com.bkanent.interview.entity.InterviewSessionEntity;
+import com.bkanent.interview.engine.AngleLadder;
 import com.bkanent.interview.engine.OutlineRouter;
 import com.bkanent.interview.mapper.InterviewCaseMapper;
 import com.bkanent.interview.mapper.InterviewPrepCardMapper;
@@ -100,6 +101,53 @@ public class InterviewPrepService {
         log.info("Interview case opened: caseId={}, session={}, route={}, preset={}, entry={}",
                 caseEntity.getId(), session.getId(), route.outlineRoute(), route.noSuccessPreset(), entrySource);
         return result;
+    }
+
+    /**
+     * 候选题创建（题目确认制第一步）：插入未确认的候选题。
+     * 治理面由模型在磋商中设计题目后落库；表单入口由前端提交草稿。
+     * 重复调用追加候选题（同 focus 不去重，由发起人勾选时取舍）。
+     */
+    public List<Long> createCandidateQuestions(Long caseId, String outlineRoute,
+                                               List<QuestionDraft> drafts) {
+        if (drafts == null || drafts.isEmpty()) {
+            throw new IllegalArgumentException("drafts must not be empty");
+        }
+        List<InterviewQuestionEntity> existing = questionMapper.selectList(
+                new LambdaQueryWrapper<InterviewQuestionEntity>()
+                        .eq(InterviewQuestionEntity::getCaseId, caseId));
+        int nextSeq = existing.stream()
+                .map(InterviewQuestionEntity::getSeqNo)
+                .filter(java.util.Objects::nonNull)
+                .max(Integer::compareTo)
+                .orElse(0) + 1;
+
+        List<Long> ids = new java.util.ArrayList<>(drafts.size());
+        for (QuestionDraft draft : drafts) {
+            InterviewQuestionEntity q = new InterviewQuestionEntity();
+            q.setCaseId(caseId);
+            q.setOutlineRoute(outlineRoute == null ? "T1" : outlineRoute);
+            q.setSeqNo(nextSeq++);
+            q.setContent(draft.content());
+            q.setFocusLabel(draft.focusLabel());
+            q.setRiskHint(draft.riskHint());
+            q.setConfirmed(0);
+            q.setAnswerStatus("PENDING");
+            q.setProbeRounds(0);
+            q.setDepthLimit(AngleLadder.depthLimit(draft.core()));
+            q.setIsCore(draft.core() ? 1 : 0);
+            questionMapper.insert(q);
+            ids.add(q.getId());
+        }
+        log.info("Created {} candidate questions for case {}", ids.size(), caseId);
+        return ids;
+    }
+
+    /** 候选题草稿。 */
+    public record QuestionDraft(String content, String focusLabel, String riskHint, boolean core) {
+        public static QuestionDraft of(String content, String focusLabel) {
+            return new QuestionDraft(content, focusLabel, null, false);
+        }
     }
 
     /**

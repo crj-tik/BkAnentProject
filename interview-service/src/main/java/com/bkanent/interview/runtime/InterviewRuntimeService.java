@@ -2,6 +2,7 @@ package com.bkanent.interview.runtime;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.bkanent.interview.config.InterviewRuntimeProperties;
+import com.bkanent.interview.entity.InterviewDirectorCommandEntity;
 import com.bkanent.interview.entity.InterviewQuestionEntity;
 import com.bkanent.interview.entity.InterviewSessionEntity;
 import com.bkanent.interview.entity.InterviewTurnEntity;
@@ -13,6 +14,7 @@ import com.bkanent.interview.engine.ProhibitedQuestionFilter;
 import com.bkanent.interview.engine.RepetitionGuard;
 import com.bkanent.interview.engine.Sanitizer;
 import com.bkanent.interview.engine.SignalDetector;
+import com.bkanent.interview.mapper.InterviewDirectorCommandMapper;
 import com.bkanent.interview.mapper.InterviewQuestionMapper;
 import com.bkanent.interview.mapper.InterviewSessionMapper;
 import com.bkanent.interview.mapper.InterviewTurnMapper;
@@ -56,6 +58,7 @@ public class InterviewRuntimeService {
     private final InterviewSessionMapper sessionMapper;
     private final InterviewQuestionMapper questionMapper;
     private final InterviewTurnMapper turnMapper;
+    private final InterviewDirectorCommandMapper directorCommandMapper;
     private final InterviewPrepService prepService;
     private final InterviewSessionStateMachine stateMachine;
     private final InterviewRuntimeProperties properties;
@@ -65,6 +68,7 @@ public class InterviewRuntimeService {
                                    InterviewSessionMapper sessionMapper,
                                    InterviewQuestionMapper questionMapper,
                                    InterviewTurnMapper turnMapper,
+                                   InterviewDirectorCommandMapper directorCommandMapper,
                                    InterviewPrepService prepService,
                                    InterviewSessionStateMachine stateMachine,
                                    InterviewRuntimeProperties properties) {
@@ -73,6 +77,7 @@ public class InterviewRuntimeService {
         this.sessionMapper = sessionMapper;
         this.questionMapper = questionMapper;
         this.turnMapper = turnMapper;
+        this.directorCommandMapper = directorCommandMapper;
         this.prepService = prepService;
         this.stateMachine = stateMachine;
         this.properties = properties;
@@ -154,6 +159,50 @@ public class InterviewRuntimeService {
                         sanitized.sanitizedText(), signals.hardFarewell(), signals.softComplete(),
                         signals.repeatProtest(), currentAnswered, allDone, isLast,
                         probeRounds, depthLimit, 0));
+
+        // ⑤' 导演指令覆盖：消费本会话待处理指令（人工干预优先于引擎决策，
+        // 但不越过收尾信号——已收尾锁定的会话在入口就被拦截）
+        InterviewDirectorCommandEntity directorCommand = consumeDirectorCommand(sessionId);
+        String pinnedQuestionText = null;
+        if (directorCommand != null && !shouldClose) {
+            switch (directorCommand.getCommand()) {
+                case "PINNED_QUESTION" -> {
+                    // 加问置顶：逐字播出，绕过造句
+                    pinnedQuestionText = directorCommand.getPinnedQuestion();
+                    markAnswered(current);
+                }
+                case "WRAP_UP" -> {
+                    // 收束当前题：视为已答，决策改为换向下一题
+                    markAnswered(current);
+                    decision = new ProbeDecisionEngine.Decision(ProbeDecisionEngine.Move.ADVANCE, 0);
+                }
+                case "NEXT_QUESTION" -> {
+                    // 直接下一问：当前题标记 SKIPPED 后推进
+                    if (current != null) {
+                        InterviewQuestionEntity skip = new InterviewQuestionEntity();
+                        skip.setId(current.getId());
+                        skip.setAnswerStatus("SKIPPED");
+                        questionMapper.updateById(skip);
+                    }
+                    decision = new ProbeDecisionEngine.Decision(ProbeDecisionEngine.Move.ADVANCE, 0);
+                }
+                default -> log.warn("Unknown director command ignored: {}", directorCommand.getCommand());
+            }
+        }
+        if (pinnedQuestionText != null) {
+            // 加问走质量门（违禁拦截/截断）但不换皮比对（人工指定，语义优先）
+            ProhibitedQuestionFilter.GateResult gate = ProhibitedQuestionFilter.apply(pinnedQuestionText);
+            String finalPinned = gate.blocked() ? null : gate.text();
+            if (finalPinned == null) {
+                log.info("Pinned question blocked by output gate ({}), falling back to engine decision", gate.reason());
+            } else {
+                persistTurn(sessionId, nextTurnSeq(sessionId), "DIRECTOR", finalPinned, finalPinned,
+                        "PINNED", current == null ? null : current.getId(), "director:" + directorCommand.getId());
+                persistTurn(sessionId, nextTurnSeq(sessionId), "INTERVIEWER", finalPinned, finalPinned,
+                        "ADVANCE", current == null ? null : current.getId(), "director-pin:" + directorCommand.getId());
+                return new TurnResult(finalPinned, "PINNED", false);
+            }
+        }
 
         String reply;
         boolean sessionClosed = false;
@@ -387,6 +436,34 @@ public class InterviewRuntimeService {
                 .orderByDesc(InterviewTurnEntity::getTurnSeq)
                 .last("LIMIT 1"));
         return last == null || last.getTurnSeq() == null ? 1 : last.getTurnSeq() + 1;
+    }
+
+    /**
+     * 消费一条待处理导演指令（FIFO，原子置 CONSUMED 防双消费）。
+     */
+    private InterviewDirectorCommandEntity consumeDirectorCommand(Long sessionId) {
+        InterviewDirectorCommandEntity pending = directorCommandMapper.selectOne(
+                new LambdaQueryWrapper<InterviewDirectorCommandEntity>()
+                        .eq(InterviewDirectorCommandEntity::getSessionId, sessionId)
+                        .eq(InterviewDirectorCommandEntity::getStatus, "PENDING")
+                        .orderByAsc(InterviewDirectorCommandEntity::getId)
+                        .last("LIMIT 1"));
+        if (pending == null) {
+            return null;
+        }
+        InterviewDirectorCommandEntity consume = new InterviewDirectorCommandEntity();
+        consume.setId(pending.getId());
+        consume.setStatus("CONSUMED");
+        int rows = directorCommandMapper.update(consume,
+                new LambdaQueryWrapper<InterviewDirectorCommandEntity>()
+                        .eq(InterviewDirectorCommandEntity::getId, pending.getId())
+                        .eq(InterviewDirectorCommandEntity::getStatus, "PENDING"));
+        if (rows == 0) {
+            return null; // 并发消费，本轮回退引擎决策
+        }
+        log.info("Director command {} consumed for session {}: {}",
+                pending.getId(), sessionId, pending.getCommand());
+        return pending;
     }
 
     /** 幂等落库（写队列语义：唯一键防重，失败由补偿器退避重试）。 */

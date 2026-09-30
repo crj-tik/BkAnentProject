@@ -2,6 +2,7 @@ package com.bkanent.interview.runtime;
 
 import com.bkanent.interview.entity.InterviewQuestionEntity;
 import com.bkanent.interview.entity.InterviewSessionEntity;
+import com.bkanent.interview.mapper.InterviewDirectorCommandMapper;
 import com.bkanent.interview.mapper.InterviewSessionMapper;
 import com.bkanent.interview.service.InterviewPrepService;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +20,7 @@ class InterviewControllerTest {
     private InterviewSessionStateMachine stateMachine;
     private InterviewSessionMapper sessionMapper;
     private InterviewPrepService prepService;
+    private InterviewDirectorCommandMapper directorCommandMapper;
     private InterviewController controller;
 
     @BeforeEach
@@ -27,7 +29,9 @@ class InterviewControllerTest {
         stateMachine = mock(InterviewSessionStateMachine.class);
         sessionMapper = mock(InterviewSessionMapper.class);
         prepService = mock(InterviewPrepService.class);
-        controller = new InterviewController(runtimeService, stateMachine, sessionMapper, prepService);
+        directorCommandMapper = mock(InterviewDirectorCommandMapper.class);
+        controller = new InterviewController(runtimeService, stateMachine, sessionMapper,
+                prepService, directorCommandMapper);
     }
 
     @Test

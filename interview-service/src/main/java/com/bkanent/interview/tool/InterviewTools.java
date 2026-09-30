@@ -3,10 +3,13 @@ package com.bkanent.interview.tool;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.bkanent.interview.entity.InterviewAssetEntity;
 import com.bkanent.interview.entity.InterviewCaseEntity;
+import com.bkanent.interview.entity.InterviewDirectorCommandEntity;
 import com.bkanent.interview.entity.InterviewQuestionEntity;
 import com.bkanent.interview.entity.InterviewSessionEntity;
+import com.bkanent.interview.engine.OutlineRouter;
 import com.bkanent.interview.mapper.InterviewAssetMapper;
 import com.bkanent.interview.mapper.InterviewCaseMapper;
+import com.bkanent.interview.mapper.InterviewDirectorCommandMapper;
 import com.bkanent.interview.mapper.InterviewQuestionMapper;
 import com.bkanent.interview.mapper.InterviewSessionMapper;
 import com.bkanent.interview.runtime.InterviewSessionStateMachine;
@@ -33,6 +36,7 @@ public class InterviewTools {
     private final InterviewQuestionMapper questionMapper;
     private final InterviewAssetMapper assetMapper;
     private final InterviewCaseMapper caseMapper;
+    private final InterviewDirectorCommandMapper directorCommandMapper;
     private final InterviewSessionStateMachine stateMachine;
     private final InterviewReportService reportService;
 
@@ -41,6 +45,7 @@ public class InterviewTools {
                           InterviewQuestionMapper questionMapper,
                           InterviewAssetMapper assetMapper,
                           InterviewCaseMapper caseMapper,
+                          InterviewDirectorCommandMapper directorCommandMapper,
                           InterviewSessionStateMachine stateMachine,
                           InterviewReportService reportService) {
         this.prepService = prepService;
@@ -48,8 +53,51 @@ public class InterviewTools {
         this.questionMapper = questionMapper;
         this.assetMapper = assetMapper;
         this.caseMapper = caseMapper;
+        this.directorCommandMapper = directorCommandMapper;
         this.stateMachine = stateMachine;
         this.reportService = reportService;
+    }
+
+    /** 解析候选题草稿 JSON（治理面模型产出 / 表单前端提交共用格式）。 */
+    private List<InterviewPrepService.QuestionDraft> parseDrafts(String draftsJson) {
+        try {
+            com.fasterxml.jackson.databind.JsonNode array = new com.fasterxml.jackson.databind.ObjectMapper()
+                    .readTree(draftsJson == null ? "[]" : draftsJson);
+            if (!array.isArray() || array.isEmpty()) {
+                throw new IllegalArgumentException("draftsJson must be a non-empty JSON array");
+            }
+            List<InterviewPrepService.QuestionDraft> drafts = new ArrayList<>();
+            for (com.fasterxml.jackson.databind.JsonNode node : array) {
+                String content = node.path("content").asText(null);
+                if (content == null || content.isBlank()) {
+                    throw new IllegalArgumentException("each draft requires non-blank content");
+                }
+                drafts.add(new InterviewPrepService.QuestionDraft(
+                        content,
+                        node.path("focusLabel").asText(null),
+                        node.path("riskHint").asText(null),
+                        node.path("core").asBoolean(false)));
+            }
+            return drafts;
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalArgumentException("invalid draftsJson: " + e.getMessage(), e);
+        }
+    }
+
+    /** 案例的提纲路由（题目创建时落 outline_route）。 */
+    private String caseOutlineRoute(Long caseId) {
+        List<InterviewQuestionEntity> existing = questionMapper.selectList(
+                new LambdaQueryWrapper<InterviewQuestionEntity>()
+                        .eq(InterviewQuestionEntity::getCaseId, caseId)
+                        .orderByAsc(InterviewQuestionEntity::getId)
+                        .last("LIMIT 1"));
+        if (!existing.isEmpty() && existing.get(0).getOutlineRoute() != null) {
+            return existing.get(0).getOutlineRoute();
+        }
+        InterviewCaseEntity caseEntity = caseMapper.selectById(caseId);
+        return caseEntity == null ? "T1"
+                : OutlineRouter.route(caseEntity.getScene(), caseEntity.getRespondentRole(),
+                caseEntity.getCaseStatus()).outlineRoute();
     }
 
     @Tool(description = "Open an interview case: validates the opening essentials, routes the T1-T8 outline, "
@@ -69,6 +117,24 @@ public class InterviewTools {
         return prepService.openCase(scene, respondentRole, caseStatus, objective,
                 divisionName, regionName, businessDistrict, referenceMinutes,
                 "A2A", creatorWorkNo);
+    }
+
+    @Tool(description = "Create candidate questions for an interview case (first step of the question confirmation "
+            + "system). Draft the questions based on the outline route, scene and objective from openInterviewCase; "
+            + "each question carries a focus label and an optional risk hint. The first two questions should be "
+            + "marked core. Questions are created unconfirmed; the initiator confirms via confirmQuestions.")
+    public Map<String, Object> generateQuestionSet(
+            @ToolParam(description = "Interview case ID from openInterviewCase") Long caseId,
+            @ToolParam(description = "Candidate question drafts as JSON array: [{\"content\":\"...\",\"focusLabel\":\"...\",\"riskHint\":\"...\",\"core\":false}]") String draftsJson) {
+        List<InterviewPrepService.QuestionDraft> drafts = parseDrafts(draftsJson);
+        String outlineRoute = caseOutlineRoute(caseId);
+        List<Long> ids = prepService.createCandidateQuestions(caseId, outlineRoute, drafts);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("caseId", caseId);
+        result.put("questionIds", ids);
+        result.put("candidateCount", ids.size());
+        result.put("nextStep", "请发起人勾选确认题目后调用 confirmQuestions");
+        return result;
     }
 
     @Tool(description = "Confirm candidate questions for an interview case (question confirmation system). "
@@ -142,12 +208,28 @@ public class InterviewTools {
         if (session == null) {
             return Map.of("error", "session not found: " + sessionId);
         }
+        if (!List.of("WRAP_UP", "NEXT_QUESTION", "PINNED_QUESTION").contains(command)) {
+            return Map.of("error", "unknown command: " + command);
+        }
+        if ("PINNED_QUESTION".equals(command) && (pinnedQuestion == null || pinnedQuestion.isBlank())) {
+            return Map.of("error", "PINNED_QUESTION requires pinnedQuestion text");
+        }
+        // 指令落库（人工操作留痕），运行面在下一话轮前消费
+        InterviewDirectorCommandEntity cmd = new InterviewDirectorCommandEntity();
+        cmd.setSessionId(sessionId);
+        cmd.setCommand(command);
+        cmd.setPinnedQuestion("PINNED_QUESTION".equals(command) ? pinnedQuestion : null);
+        cmd.setStatus("PENDING");
+        cmd.setSource("A2A");
+        directorCommandMapper.insert(cmd);
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("sessionId", sessionId);
         result.put("command", command);
+        result.put("commandId", cmd.getId());
         result.put("accepted", true);
-        if (pinnedQuestion != null && !pinnedQuestion.isBlank()) {
-            result.put("pinnedQuestion", pinnedQuestion);
+        if (cmd.getPinnedQuestion() != null) {
+            result.put("pinnedQuestion", cmd.getPinnedQuestion());
         }
         return result;
     }
