@@ -19,7 +19,7 @@ spring:
             name: interview-agent
             description: AI deep-interview agent for pre-interview question design, live interview runtime, transcript archiving and case reports
             version: 1.0.0
-            url: ${A2A_PUBLIC_BASE_URL}
+            url: ${A2A_PUBLIC_BASE_URL}/a2a
             default-input-modes: text,application/json
             default-output-modes: text,application/json
             capabilities:
