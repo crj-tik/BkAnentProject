@@ -61,6 +61,21 @@ class DynamicAgentRegistryTest {
                 "http://interview-service:9014", "/.well-known/agent.json");
         verify(cardDiscoveryClient, never()).fetchAgentCard(
                 "http://172.24.0.15:20884", "/.well-known/agent.json");
+
+        // Repeated UI catalog requests must retain the cached card during its refresh interval.
+        assertEquals(1, registry.listDescriptors().size());
+        assertEquals("interview-agent", registry.getByAgentId("interview-agent").orElseThrow().agentId());
+        verify(cardDiscoveryClient).fetchAgentCard(
+                "http://interview-service:9014", "/.well-known/agent.json");
+
+        // A service without an active HTTP agent instance must disappear from the strict catalog.
+        when(discoveryClient.getInstances("interview-service")).thenReturn(List.of(dubboInstance));
+        assertEquals(0, registry.listDescriptors().size());
+
+        // Rediscovery must fetch the card again rather than retain the removed cache timestamp.
+        when(discoveryClient.getInstances("interview-service"))
+                .thenReturn(List.of(dubboInstance, agentInstance));
+        assertEquals(1, registry.listDescriptors().size());
     }
 
     private ServiceInstance serviceInstance(String url, Map<String, String> metadata) {

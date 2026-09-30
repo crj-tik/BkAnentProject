@@ -11,10 +11,12 @@ import org.springframework.util.StringUtils;
 
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Primary
@@ -124,13 +126,15 @@ public class DynamicAgentRegistry implements AgentRegistry {
         if (discoveryClient == null) {
             return false;
         }
-        if (properties.getCatalog().isStrictNacos()) {
-            descriptors.clear();
-        }
         List<String> serviceIds = discoveryClient.getServices();
         if (serviceIds == null || serviceIds.isEmpty()) {
+            if (properties.getCatalog().isStrictNacos()) {
+                descriptors.clear();
+                refreshedAt.clear();
+            }
             return false;
         }
+        Set<String> discoveredAgentIds = new HashSet<>();
         boolean discoveredAny = false;
         for (String serviceId : serviceIds) {
             if (!StringUtils.hasText(serviceId)) {
@@ -150,6 +154,7 @@ public class DynamicAgentRegistry implements AgentRegistry {
             if (!StringUtils.hasText(agentId)) {
                 continue;
             }
+            discoveredAgentIds.add(agentId);
             if (!shouldRefresh(agentId)) {
                 discoveredAny = true;
                 continue;
@@ -163,6 +168,10 @@ public class DynamicAgentRegistry implements AgentRegistry {
                             () -> descriptors.remove(agentId));
             refreshedAt.put(agentId, System.currentTimeMillis());
             discoveredAny = true;
+        }
+        if (properties.getCatalog().isStrictNacos()) {
+            descriptors.keySet().retainAll(discoveredAgentIds);
+            refreshedAt.keySet().retainAll(discoveredAgentIds);
         }
         return discoveredAny;
     }
