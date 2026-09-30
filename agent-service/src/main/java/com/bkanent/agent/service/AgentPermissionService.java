@@ -42,8 +42,8 @@ public class AgentPermissionService {
                 || !authPermissionRpcService.hasPermission(requesterId, WORKFLOW_READ_PERMISSION)) {
             permissionAuditService.publishDenied(sessionId, taskId, "workflow query",
                     java.util.Map.of(
-                            "userId", requesterUserId,
-                            "ownerUserId", ownerUserId,
+                            "userId", requesterUserId == null ? "" : requesterUserId,
+                            "ownerUserId", ownerUserId == null ? "" : ownerUserId,
                             "permissionCode", WORKFLOW_READ_PERMISSION
                     ), traceId);
             throw new IllegalStateException("permission denied for workflow query");
@@ -71,8 +71,8 @@ public class AgentPermissionService {
                 || !authPermissionRpcService.hasPermission(requesterId, WORKFLOW_READ_PERMISSION)) {
             permissionAuditService.publishDenied(sessionId, taskId, action,
                     java.util.Map.of(
-                            "userId", requesterUserId,
-                            "ownerUserId", ownerUserId,
+                            "userId", requesterUserId == null ? "" : requesterUserId,
+                            "ownerUserId", ownerUserId == null ? "" : ownerUserId,
                             "permissionCode", WORKFLOW_READ_PERMISSION
                     ), traceId);
             throw new IllegalStateException("permission denied for " + action);

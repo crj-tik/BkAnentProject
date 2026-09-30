@@ -169,6 +169,7 @@ agent:
       rule-routing:
         default-domain: listing
         keywords:
+          interview: [访谈, 访前, 受访者, 开台, interview]
           contract: [合同, 签约, 归档, ocr, OCR, contract]
           notification: [通知, 提醒, 消息, notification]
           settlement: [结算, 佣金, 出款, 打款, settlement]

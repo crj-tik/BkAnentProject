@@ -3,12 +3,17 @@ package com.bkanent.agent.workflow;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.bkanent.agent.entity.AgentWorkflowCheckpointEntity;
 import com.bkanent.agent.mapper.AgentWorkflowCheckpointMapper;
+import com.bkanent.agent.graph.official.OfficialGraphStateAdapters;
+import com.alibaba.cloud.ai.graph.OverAllState;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
+import java.util.Map;
 
 /**
  * DbGraphCheckpointStore 数据库版检查点存储，支持多版本 checkpoint（多审批场景）。
@@ -106,6 +111,12 @@ public class DbGraphCheckpointStore implements GraphCheckpointStore {
 
     private SupervisorWorkflowState readJson(String snapshotJson) {
         try {
+            JsonNode root = objectMapper.readTree(snapshotJson);
+            if (root.has("nodeId") && root.path("state").isObject()) {
+                Map<String, Object> state = objectMapper.convertValue(root.path("state"),
+                        new TypeReference<Map<String, Object>>() { });
+                return OfficialGraphStateAdapters.toWorkflowState(new OverAllState(state), objectMapper);
+            }
             return objectMapper.readValue(snapshotJson, SupervisorWorkflowState.class);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Failed to deserialize workflow checkpoint", exception);
