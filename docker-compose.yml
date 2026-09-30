@@ -85,6 +85,8 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
       - ./sql/mysql-init.sql:/docker-entrypoint-initdb.d/001-mysql-init.sql:ro
+      - ./sql/migrations/20260929_interview_subagent.sql:/docker-entrypoint-initdb.d/002-interview-subagent.sql:ro
+      - ./sql/migrations/20260930_interview_report_task_asset_id.sql:/docker-entrypoint-initdb.d/003-interview-report-task-asset-id.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
       interval: 5s
@@ -105,7 +107,7 @@ services:
       MYSQL_PORT: "3306"
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-bk_dev_password}
       MYSQL_MCP_PASSWORD: ${MYSQL_MCP_PASSWORD:-}
-      MYSQL_MCP_DATABASES: ${MYSQL_MCP_DATABASES:-bk_auth,bk_listing,bk_customer,bk_notification,bk_marketing,bk_promotion,bk_business,bk_agent,bk_memory,bk_contract,bk_settlement}
+      MYSQL_MCP_DATABASES: ${MYSQL_MCP_DATABASES:-bk_auth,bk_listing,bk_customer,bk_notification,bk_marketing,bk_promotion,bk_business,bk_agent,bk_memory,bk_contract,bk_settlement,bk_interview}
     depends_on:
       mysql:
         condition: service_healthy
@@ -122,7 +124,7 @@ services:
       MYSQL_PORT: "3306"
       MYSQL_USER: mcp_ro
       MYSQL_PASSWORD: ${MYSQL_MCP_PASSWORD:-}
-      MYSQL_MCP_DATABASES: ${MYSQL_MCP_DATABASES:-bk_auth,bk_listing,bk_customer,bk_notification,bk_marketing,bk_promotion,bk_business,bk_agent,bk_memory,bk_contract,bk_settlement}
+      MYSQL_MCP_DATABASES: ${MYSQL_MCP_DATABASES:-bk_auth,bk_listing,bk_customer,bk_notification,bk_marketing,bk_promotion,bk_business,bk_agent,bk_memory,bk_contract,bk_settlement,bk_interview}
       MYSQL_MCP_TOKEN: ${MYSQL_MCP_TOKEN:-}
       MYSQL_MCP_MAX_ROWS: ${MYSQL_MCP_MAX_ROWS:-200}
       MYSQL_MCP_QUERY_TIMEOUT_MS: ${MYSQL_MCP_QUERY_TIMEOUT_MS:-5000}
@@ -597,6 +599,23 @@ services:
       <<: *app-environment
       SERVICE_ARTIFACT: settlement-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://settlement-service:9013
+
+  interview-service:
+    <<: *app-service
+    image: bk-anent-interview:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        MAVEN_MODULES: interview-service
+    profiles: [full]
+    environment:
+      <<: *app-environment
+      SERVICE_ARTIFACT: interview-service-1.0.0-SNAPSHOT.jar
+      A2A_PUBLIC_BASE_URL: http://interview-service:9014
+      SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database
+      MYSQL_DB_INTERVIEW: bk_interview
+      NACOS_A2A_AGENT_REGISTRY_ENABLED: ${NACOS_A2A_AGENT_REGISTRY_ENABLED:-false}
 
 volumes:
   mysql-data:

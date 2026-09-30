@@ -6,6 +6,8 @@ import com.bkanent.agent.model.distributed.TaskArtifactView;
 import com.bkanent.agent.workflow.GraphCheckpointStore;
 import com.bkanent.agent.workflow.SupervisorWorkflowState;
 import com.bkanent.common.agent.ArtifactQueryResponse;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -17,13 +19,16 @@ public class SupervisorWorkflowQueryService {
     private final GraphCheckpointStore checkpointStore;
     private final MemoryStoreClient memoryStoreClient;
     private final AgentPermissionService agentPermissionService;
+    private final ObjectMapper objectMapper;
 
     public SupervisorWorkflowQueryService(GraphCheckpointStore checkpointStore,
                                           MemoryStoreClient memoryStoreClient,
-                                          AgentPermissionService agentPermissionService) {
+                                          AgentPermissionService agentPermissionService,
+                                          ObjectMapper objectMapper) {
         this.checkpointStore = checkpointStore;
         this.memoryStoreClient = memoryStoreClient;
         this.agentPermissionService = agentPermissionService;
+        this.objectMapper = objectMapper;
     }
 
     public Optional<SupervisorWorkflowView> findWorkflow(String taskId) {
@@ -76,9 +81,20 @@ public class SupervisorWorkflowQueryService {
                 response.meta().agentId(),
                 response.meta().artifactType(),
                 response.meta().version(),
-                response.content() == null ? null : String.valueOf(response.content()),
-                response.meta().metadata() == null ? null : String.valueOf(response.meta().metadata()),
+                writeJson(response.content()),
+                writeJson(response.meta().metadata()),
                 response.meta().createdAt()
         );
+    }
+
+    private String writeJson(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("Could not serialize task artifact", exception);
+        }
     }
 }

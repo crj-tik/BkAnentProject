@@ -27,7 +27,7 @@ docker compose --profile mcp up -d --build --wait mysql-mcp
 docker compose --profile mcp ps -a mysql mysql-mcp-init mysql-mcp
 ```
 
-`MYSQL_MCP_DATABASES` 使用逗号分隔的数据库白名单（不要加空格）。默认配置包含项目的 11 个业务库；授权前会确认这些库已经存在，不包含 Nacos。专用账号 `mcp_ro` 由初始化任务管理，会撤销旧权限后重新授予白名单库的 `SELECT`、`SHOW VIEW`。不要将它复用为其他应用账号。MCP 容器只持有该只读账号，root 凭据仅用于一次性初始化任务。
+`MYSQL_MCP_DATABASES` 使用逗号分隔的数据库白名单（不要加空格）。默认配置包含项目的 12 个业务库；授权前会确认这些库已经存在，不包含 Nacos。专用账号 `mcp_ro` 由初始化任务管理，会撤销旧权限后重新授予白名单库的 `SELECT`、`SHOW VIEW`。不要将它复用为其他应用账号。MCP 容器只持有该只读账号，root 凭据仅用于一次性初始化任务。
 
 ## 客户端接入
 

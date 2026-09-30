@@ -21,6 +21,7 @@ import io.a2a.spec.TaskArtifactUpdateEvent;
 import io.a2a.spec.TaskState;
 import io.a2a.spec.TaskStatusUpdateEvent;
 import io.a2a.spec.TextPart;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -56,6 +57,7 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
     private final OfficialA2aResponseNormalizer responseNormalizer;
     private final Function<String, A2AClient> clientFactory;
 
+    @Autowired
     public OfficialA2aAgentClient(OfficialA2aResponseNormalizer responseNormalizer) {
         this(responseNormalizer, A2AClient::new);
     }

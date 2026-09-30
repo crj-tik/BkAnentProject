@@ -1,5 +1,10 @@
 package com.bkanent.interview.runtime;
 
+import com.bkanent.interview.entity.InterviewQuestionEntity;
+import com.bkanent.interview.entity.InterviewSessionEntity;
+import com.bkanent.interview.mapper.InterviewSessionMapper;
+import com.bkanent.interview.service.InterviewPrepService;
+import com.bkanent.common.model.ApiResponse;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,15 +32,47 @@ public class InterviewController {
 
     private final InterviewRuntimeService runtimeService;
     private final InterviewSessionStateMachine stateMachine;
+    private final InterviewSessionMapper sessionMapper;
+    private final InterviewPrepService prepService;
 
     public InterviewController(InterviewRuntimeService runtimeService,
-                               InterviewSessionStateMachine stateMachine) {
+                               InterviewSessionStateMachine stateMachine,
+                               InterviewSessionMapper sessionMapper,
+                               InterviewPrepService prepService) {
         this.runtimeService = runtimeService;
         this.stateMachine = stateMachine;
+        this.sessionMapper = sessionMapper;
+        this.prepService = prepService;
     }
 
     /** 话轮请求体。 */
     public record TurnRequest(String content, String idempotencyKey) {
+    }
+
+    /** 访谈入口页读取当前题目和进度；会话凭据只从请求头传递。 */
+    @GetMapping("/{sessionId}")
+    public ApiResponse<InterviewMonitorResponse> monitor(
+            @PathVariable("sessionId") Long sessionId,
+            @RequestHeader(value = "x-ticket", required = false) String ticket) {
+        if (!stateMachine.validateTicket(sessionId, ticket)) {
+            return ApiResponse.fail("INTERVIEW_INVALID_TICKET", "访谈入口凭据无效或已过期");
+        }
+        InterviewSessionEntity session = sessionMapper.selectById(sessionId);
+        if (session == null) {
+            return ApiResponse.fail("INTERVIEW_SESSION_NOT_FOUND", "未找到该访谈会话");
+        }
+        InterviewQuestionEntity current = prepService.currentQuestion(session.getCaseId());
+        return ApiResponse.ok(new InterviewMonitorResponse(
+                session.getId(),
+                session.getCaseId(),
+                session.getStatus(),
+                session.getMode(),
+                current == null ? null : current.getContent(),
+                current == null ? null : current.getId(),
+                prepService.confirmedCount(session.getCaseId()),
+                prepService.answeredCount(session.getCaseId()),
+                Integer.valueOf(1).equals(session.getClosingLocked())
+        ));
     }
 
     /**
@@ -43,7 +80,7 @@ public class InterviewController {
      */
     @PostMapping(value = "/{sessionId}/turns", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> submitTurn(
-            @PathVariable Long sessionId,
+            @PathVariable("sessionId") Long sessionId,
             @RequestHeader(value = "x-req-id", required = false) String reqId,
             @RequestHeader(value = "x-ticket", required = false) String ticket,
             @RequestBody TurnRequest request) {
@@ -75,8 +112,8 @@ public class InterviewController {
      */
     @GetMapping(value = "/{sessionId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> stream(
-            @PathVariable Long sessionId,
-            @RequestParam(required = false) String ticket) {
+            @PathVariable("sessionId") Long sessionId,
+            @RequestParam(value = "ticket", required = false) String ticket) {
         if (!stateMachine.validateTicket(sessionId, ticket)) {
             return reject("invalid ticket for session " + sessionId);
         }

@@ -140,7 +140,10 @@ public class DynamicAgentRegistry implements AgentRegistry {
             if (instances == null || instances.isEmpty()) {
                 continue;
             }
-            ServiceInstance instance = instances.get(0);
+            ServiceInstance instance = selectAgentInstance(instances);
+            if (instance == null) {
+                continue;
+            }
             Map<String, String> metadata = instance.getMetadata() == null ? Map.of() : instance.getMetadata();
             DistributedAgentProperties.AgentRegistration registration = findRegistrationByServiceId(serviceId);
             String agentId = resolveAgentId(serviceId, metadata, registration);
@@ -162,6 +165,22 @@ public class DynamicAgentRegistry implements AgentRegistry {
             discoveredAny = true;
         }
         return discoveredAny;
+    }
+
+    private ServiceInstance selectAgentInstance(List<ServiceInstance> instances) {
+        if (!properties.getCatalog().isStrictNacos()) {
+            return instances.get(0);
+        }
+        return instances.stream()
+                .filter(instance -> {
+                    Map<String, String> metadata = instance.getMetadata();
+                    return metadata != null
+                            && StringUtils.hasText(metadata.get("agent-id"))
+                            && StringUtils.hasText(metadata.get("agent-card-path"))
+                            && metadata.get("agent-card-path").contains("/.well-known/agent.json");
+                })
+                .findFirst()
+                .orElse(null);
     }
 
     private DistributedAgentProperties.AgentRegistration findRegistration(String agentId) {

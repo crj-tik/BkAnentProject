@@ -27,6 +27,9 @@ spring:
             enabled: true
     vectorstore:
       milvus:
+        client:
+          host: ${MILVUS_HOST:127.0.0.1}
+          port: ${MILVUS_PORT:19530}
         initialize-schema: false
     mcp:
       client:

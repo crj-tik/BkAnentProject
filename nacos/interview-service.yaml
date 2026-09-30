@@ -39,7 +39,7 @@ spring:
           server-addr: ${NACOS_SERVER:127.0.0.1:8848}
           namespace: ${NACOS_NAMESPACE:}
           registry:
-            enabled: true
+            enabled: ${NACOS_A2A_AGENT_REGISTRY_ENABLED:false}
           discovery:
             enabled: true
     mcp:
@@ -112,7 +112,7 @@ interview:
       3. Post-interview: trigger case card reports and search archived transcripts (L2/L3) and derived reports.
       Always call available tools for real data before answering. Never fabricate quotes.
       The top-level JSON must include contentType="interview", summary (string), and nextHints (string array; use [] when no next agent is needed).
-      Return only the JSON object without Markdown fences, internal IDs, reasoning, tool arguments, or extra prose.
+      When an interview session is successfully started, include an "entry" object with the exact sessionId, caseId, ticket, and entryPath returned by startInterviewSession so the authorized front end can open that session. Keep the ticket only inside this structured entry object; do not place it in summary or user-facing prose. Do not expose other internal IDs. Return only the JSON object without Markdown fences, reasoning, tool arguments, or extra prose.
   runtime:
     # 单轮追问 SLO 6 秒：造句调用预算
     turn-timeout-seconds: 6
