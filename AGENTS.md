@@ -29,5 +29,11 @@ The repository has no commit history yet, so adopt short imperative commit messa
 ## 项目提交与推送规则
 每次修改完成并验证通过后，必须立即创建 commit 并 push 到当前对应的远程分支。commit message 必须使用中文，内容应简洁准确地概括本次修改。
 
+## 项目认知清单（AI 必读）
+本仓库维护两份动态清单，所有 AI 助手与开发者在改动相关模块前必须先查阅：
+- `docs/logic-rationale.md`（逻辑释义清单，编号 LR-N）：记录「结论不显而易见、容易被误改」的设计根因——如凭据签发时机（LR-1）、状态机权限表（LR-5）、脱敏域自洽（LR-6）、MCP 只读边界（LR-8）。修改 interview-service、common-skill、agent-service 编排相关代码前，先查对应条目避免破坏既定逻辑；做出新的非显然设计决策后，必须在同一提交内追加条目（结论 → 根因 → 代码位置 → 关联）。
+- `docs/known-issues.md`（Bug 与已知问题清单，编号 KI-N）：记录已修/待修缺陷与设计限制。修复任何 bug 前先在此查重，避免重复排查；修复后在条目上更新状态与修复 commit；发现新问题（含排查中确认的隐性缺陷）必须当日追加。修改运行面话轮或状态机时，KI-2 的防回归单测规则（新增 transition 调用点必须同步加单测）同样适用。
+两份清单与代码同仓同提交维护，是项目设计决策与已知问题的唯一权威来源；条目编号稳定不复用，代码注释与 commit message 中引用时写 `LR-N` / `KI-N`。
+
 ## Security & Configuration Tips
 Do not hardcode secrets. Supply MySQL, Nacos, DeepSeek, DashScope, token, and Milvus values through environment variables or a secret manager. Review `sql/mysql-init.sql` before applying it to shared environments; existing plaintext auth rows require a BCrypt migration.

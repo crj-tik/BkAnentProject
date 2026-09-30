@@ -2,6 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 项目认知清单（AI 必读）
+
+改动任何模块前，先查阅两份动态维护的清单（详见 AGENTS.md 同名章节）：
+
+- `docs/logic-rationale.md` — 逻辑释义清单（LR-N）：不显而易见的设计根因（凭据签发时机、状态机权限表、脱敏域自洽、MCP 只读边界等）。修改相关代码前先查条目；做出新的非显然设计决策后必须追加。
+- `docs/known-issues.md` — Bug 与已知问题清单（KI-N）：已修/待修缺陷与设计限制。修 bug 前查重；修复后更新状态与 commit；发现新问题当日追加。
+
 ## Build Commands
 
 ```bash
@@ -44,6 +51,7 @@ This is a **multi-agent real-estate middle-platform** built on Spring Cloud Alib
 | `settlement-service` | — | Commission & settlement (A2A agent) |
 | `notification-service` | — | Notifications (A2A agent) |
 | `media-worker-service` | — | Async media tasks (A2A agent) |
+| `interview-service` | 9014 | AI deep-interview subAgent — three surfaces: A2A governance (ReactAgent), runtime REST/SSE turn pipeline (no ReAct, code-driven decisions), read-only MCP tools (see `docs/ai-interview-subagent-design.md`) |
 | `promotion-service` | — | Multi-platform publishing |
 | `auth-service` | — | Authentication & authorization |
 
@@ -69,12 +77,7 @@ Agent discovery in `agent-service` follows a priority chain:
 
 ### MCP (Model Context Protocol)
 
-Three sub-agents expose MCP tools:
-- `business-mcp-server` → `queryMonthlyKpis`
-- `compare-mcp-server` → `compareListings`
-- `marketing-mcp-server` → `publishMarketingContent`
-
-`agent-service` connects to each via `McpSyncClient` (HTTP streamable transport), wraps them as `SyncMcpToolCallbackProvider`, and merges them with local tools (`AgentMilvusTool.milvusKnowledgeSearch`) into a single `combinedToolCallbackProvider` for the ChatClient.
+Seven sub-agents expose MCP tools (business/compare/marketing/contract/settlement/notification/media-worker, plus `interview-mcp-server` with read-only transcript/report tools). `agent-service` connects to each via `McpSyncClient` (HTTP streamable transport), wraps them as `SyncMcpToolCallbackProvider`, and merges them with local tools (`AgentMilvusTool.milvusKnowledgeSearch`) into a single `combinedToolCallbackProvider` for the ChatClient. MCP-dedicated tool classes implement the `McpTool` marker interface in `common/`.
 
 ### Common Module (`common/`)
 
