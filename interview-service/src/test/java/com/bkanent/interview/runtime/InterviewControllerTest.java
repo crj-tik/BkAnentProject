@@ -5,8 +5,12 @@ import com.bkanent.interview.entity.InterviewSessionEntity;
 import com.bkanent.interview.mapper.InterviewDirectorCommandMapper;
 import com.bkanent.interview.mapper.InterviewSessionMapper;
 import com.bkanent.interview.service.InterviewPrepService;
+import com.bkanent.interview.service.InterviewReportService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -21,6 +25,7 @@ class InterviewControllerTest {
     private InterviewSessionMapper sessionMapper;
     private InterviewPrepService prepService;
     private InterviewDirectorCommandMapper directorCommandMapper;
+    private InterviewReportService reportService;
     private InterviewController controller;
 
     @BeforeEach
@@ -30,8 +35,9 @@ class InterviewControllerTest {
         sessionMapper = mock(InterviewSessionMapper.class);
         prepService = mock(InterviewPrepService.class);
         directorCommandMapper = mock(InterviewDirectorCommandMapper.class);
+        reportService = mock(InterviewReportService.class);
         controller = new InterviewController(runtimeService, stateMachine, sessionMapper,
-                prepService, directorCommandMapper);
+                prepService, directorCommandMapper, reportService);
     }
 
     @Test
@@ -113,5 +119,26 @@ class InterviewControllerTest {
 
         assertThat(response.success()).isFalse();
         assertThat(response.code()).isEqualTo("INTERVIEW_START_INVALID");
+    }
+
+    @Test
+    void listReportTasksDelegatesWithDefaultsAndFilters() {
+        when(reportService.listCaseCardTasks("emp-01", "SUCCEEDED", 2, 50))
+                .thenReturn(Map.of("tasks", List.of(), "total", 0L, "page", 2, "pageSize", 50));
+
+        var response = controller.listReportTasks("emp-01", "SUCCEEDED", 2, 50);
+
+        assertThat(response.success()).isTrue();
+        verify(reportService).listCaseCardTasks("emp-01", "SUCCEEDED", 2, 50);
+    }
+
+    @Test
+    void reportTaskDetailMapsMissingTaskToFriendlyError() {
+        when(reportService.getTaskDetail(404L)).thenReturn(Map.of("error", "task not found: 404"));
+
+        var response = controller.reportTaskDetail(404L);
+
+        assertThat(response.success()).isFalse();
+        assertThat(response.code()).isEqualTo("INTERVIEW_TASK_NOT_FOUND");
     }
 }

@@ -47,6 +47,7 @@ public class InterviewController {
     private final InterviewSessionMapper sessionMapper;
     private final InterviewPrepService prepService;
     private final InterviewDirectorCommandMapper directorCommandMapper;
+    private final com.bkanent.interview.service.InterviewReportService reportService;
 
     /** 断线续取：reqId → 终态响应（含过期时间，惰性清理）。 */
     private final ConcurrentMap<String, TerminalReply> terminalReplies = new ConcurrentHashMap<>();
@@ -55,12 +56,14 @@ public class InterviewController {
                                InterviewSessionStateMachine stateMachine,
                                InterviewSessionMapper sessionMapper,
                                InterviewPrepService prepService,
-                               InterviewDirectorCommandMapper directorCommandMapper) {
+                               InterviewDirectorCommandMapper directorCommandMapper,
+                               com.bkanent.interview.service.InterviewReportService reportService) {
         this.runtimeService = runtimeService;
         this.stateMachine = stateMachine;
         this.sessionMapper = sessionMapper;
         this.prepService = prepService;
         this.directorCommandMapper = directorCommandMapper;
+        this.reportService = reportService;
     }
 
     /** 话轮请求体。 */
@@ -306,6 +309,34 @@ public class InterviewController {
                         .event("heartbeat")
                         .data("alive")
                         .build());
+    }
+
+    // ---------- 报告任务中心（任务列表/详情，前端分页拉取） ----------
+
+    /**
+     * 报告任务列表（分页）：按创建人与状态过滤，提交时间倒序。
+     * creatorWorkNo 为空时返回全部（平台尚无组织鉴权，公开只读口径）。
+     */
+    @GetMapping("/reports/tasks")
+    public ApiResponse<Map<String, Object>> listReportTasks(
+            @RequestParam(value = "creatorWorkNo", required = false) String creatorWorkNo,
+            @RequestParam(value = "status", required = false) String status,
+            @RequestParam(value = "page", defaultValue = "1") int page,
+            @RequestParam(value = "pageSize", defaultValue = "20") int pageSize) {
+        return ApiResponse.ok(reportService.listCaseCardTasks(creatorWorkNo, status, page, pageSize));
+    }
+
+    /**
+     * 报告任务详情（含已生成报告的结构化结论、核验状态与缺失分类）。
+     */
+    @GetMapping("/reports/tasks/{taskId}")
+    public ApiResponse<Map<String, Object>> reportTaskDetail(
+            @PathVariable("taskId") Long taskId) {
+        Map<String, Object> detail = reportService.getTaskDetail(taskId);
+        if (detail.containsKey("error")) {
+            return ApiResponse.fail("INTERVIEW_TASK_NOT_FOUND", String.valueOf(detail.get("error")));
+        }
+        return ApiResponse.ok(detail);
     }
 
     // ---------- 导演台直连 ----------

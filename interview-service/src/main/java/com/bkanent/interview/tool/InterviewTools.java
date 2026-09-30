@@ -255,6 +255,18 @@ public class InterviewTools {
         return reportService.submitCaseCardTask(caseId, assetId);
     }
 
+    @Tool(description = "List case card report tasks (paginated, newest first). Filter by creator work "
+            + "number and/or status (PENDING|RUNNING|SUCCEEDED|RETRYABLE|BLOCKED). Use this when the user asks "
+            + "about their report tasks or task status in general, instead of guessing task IDs.")
+    public Map<String, Object> listReportTasks(
+            @ToolParam(description = "Creator work number filter, blank for all") String creatorWorkNo,
+            @ToolParam(description = "Status filter, blank for all") String status,
+            @ToolParam(description = "Page number, 1-based") Integer page,
+            @ToolParam(description = "Page size, max 100") Integer pageSize) {
+        return reportService.listCaseCardTasks(creatorWorkNo, status,
+                page == null ? 1 : page, pageSize == null ? 20 : pageSize);
+    }
+
     @Tool(description = "Search archived interview transcripts (L2/L3 only) and derived reports by keyword, "
             + "scene or creator work number.")
     public List<Map<String, Object>> searchAssets(

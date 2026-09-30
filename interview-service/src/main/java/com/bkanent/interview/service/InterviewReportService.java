@@ -2,11 +2,14 @@ package com.bkanent.interview.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.bkanent.interview.config.InterviewReportProperties;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.bkanent.interview.entity.InterviewAssetEntity;
+import com.bkanent.interview.entity.InterviewCaseEntity;
 import com.bkanent.interview.entity.InterviewReportEntity;
 import com.bkanent.interview.entity.InterviewReportTaskEntity;
 import com.bkanent.interview.engine.EvidenceVerifier;
 import com.bkanent.interview.mapper.InterviewAssetMapper;
+import com.bkanent.interview.mapper.InterviewCaseMapper;
 import com.bkanent.interview.mapper.InterviewReportMapper;
 import com.bkanent.interview.mapper.InterviewReportTaskMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -55,6 +58,7 @@ public class InterviewReportService {
     private final InterviewReportTaskMapper taskMapper;
     private final InterviewReportMapper reportMapper;
     private final InterviewAssetMapper assetMapper;
+    private final InterviewCaseMapper caseMapper;
     private final ChatModel chatModel;
     private final InterviewReportProperties properties;
     private final ObjectMapper objectMapper;
@@ -62,15 +66,106 @@ public class InterviewReportService {
     public InterviewReportService(InterviewReportTaskMapper taskMapper,
                                   InterviewReportMapper reportMapper,
                                   InterviewAssetMapper assetMapper,
+                                  InterviewCaseMapper caseMapper,
                                   ChatModel chatModel,
                                   InterviewReportProperties properties,
                                   ObjectMapper objectMapper) {
         this.taskMapper = taskMapper;
         this.reportMapper = reportMapper;
         this.assetMapper = assetMapper;
+        this.caseMapper = caseMapper;
         this.chatModel = chatModel;
         this.properties = properties;
         this.objectMapper = objectMapper;
+    }
+
+    /**
+     * 报告任务列表（分页）：按创建人（经 case 表解析）与状态过滤，按提交时间倒序。
+     * 供任务中心页拉取；创建人过滤为空时返回全部任务（平台尚无组织鉴权，公开只读口径）。
+     */
+    public Map<String, Object> listCaseCardTasks(String creatorWorkNo, String status,
+                                                 int page, int pageSize) {
+        int safePage = Math.max(1, page);
+        int safeSize = Math.min(Math.max(1, pageSize), 100);
+
+        // 创建人在 case 表：先解析创建人的 caseId 集合（IN 过滤；空集合即无任务）
+        List<Long> caseIdFilter = null;
+        if (creatorWorkNo != null && !creatorWorkNo.isBlank()) {
+            caseIdFilter = caseMapper.selectList(new LambdaQueryWrapper<InterviewCaseEntity>()
+                            .eq(InterviewCaseEntity::getCreatorWorkNo, creatorWorkNo))
+                    .stream().map(InterviewCaseEntity::getId).toList();
+            if (caseIdFilter.isEmpty()) {
+                return Map.of("tasks", List.of(), "total", 0L, "page", safePage, "pageSize", safeSize);
+            }
+        }
+
+        LambdaQueryWrapper<InterviewReportTaskEntity> wrapper = new LambdaQueryWrapper<InterviewReportTaskEntity>()
+                .eq(status != null && !status.isBlank(),
+                        InterviewReportTaskEntity::getStatus, status == null ? "" : status)
+                .orderByDesc(InterviewReportTaskEntity::getId);
+        if (caseIdFilter != null) {
+            wrapper.in(InterviewReportTaskEntity::getCaseId, caseIdFilter);
+        }
+
+        long total = taskMapper.selectCount(wrapper);
+        wrapper.last("LIMIT " + safeSize + " OFFSET " + (safePage - 1) * safeSize);
+        List<InterviewReportTaskEntity> tasks = taskMapper.selectList(wrapper);
+
+        List<Map<String, Object>> items = new java.util.ArrayList<>(tasks.size());
+        for (InterviewReportTaskEntity task : tasks) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("taskId", task.getId());
+            item.put("caseId", task.getCaseId());
+            item.put("assetId", task.getAssetId());
+            item.put("status", task.getStatus());
+            item.put("reportId", task.getReportId());
+            item.put("errorClass", task.getErrorClass());
+            item.put("errorMessage", task.getErrorMessage());
+            item.put("retries", task.getRetries());
+            item.put("createdAt", task.getCreatedAt() == null ? null : task.getCreatedAt().toString());
+            item.put("updatedAt", task.getUpdatedAt() == null ? null : task.getUpdatedAt().toString());
+            items.add(item);
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("tasks", items);
+        result.put("total", total);
+        result.put("page", safePage);
+        result.put("pageSize", safeSize);
+        return result;
+    }
+
+    /**
+     * 任务详情（含已生成报告的结构化结论与核验状态）。
+     */
+    public Map<String, Object> getTaskDetail(Long taskId) {
+        InterviewReportTaskEntity task = taskMapper.selectById(taskId);
+        if (task == null) {
+            return Map.of("error", "task not found: " + taskId);
+        }
+        Map<String, Object> view = new LinkedHashMap<>();
+        view.put("taskId", task.getId());
+        view.put("caseId", task.getCaseId());
+        view.put("assetId", task.getAssetId());
+        view.put("status", task.getStatus());
+        view.put("errorClass", task.getErrorClass());
+        view.put("errorMessage", task.getErrorMessage());
+        view.put("retries", task.getRetries());
+        view.put("reportId", task.getReportId());
+        view.put("createdAt", task.getCreatedAt() == null ? null : task.getCreatedAt().toString());
+        if (task.getReportId() != null) {
+            InterviewReportEntity report = reportMapper.selectById(task.getReportId());
+            if (report != null) {
+                view.put("report", Map.of(
+                        "reportId", report.getId(),
+                        "reportType", report.getReportType(),
+                        "score", report.getScore(),
+                        "replicabilityLevel", report.getReplicabilityLevel(),
+                        "reportJson", report.getReportJson(),
+                        "evidenceVerification", report.getEvidenceVerification(),
+                        "missingItems", report.getMissingItems()));
+            }
+        }
+        return view;
     }
 
     /**
