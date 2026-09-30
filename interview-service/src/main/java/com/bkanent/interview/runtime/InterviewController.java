@@ -173,6 +173,34 @@ public class InterviewController {
         }
     }
 
+    /**
+     * 表单入口显式开始访谈（发起人点「开始访谈」：QUESTIONS_CONFIRMED → IN_PROGRESS）。
+     * 不重签 ticket——开台响应里的那张在题目确认阶段已被前端持有，重签会作废它；
+     * 凭据单活，状态推进即可。对话式入口无此端点（startInterviewSession 经 Supervisor 背书签发）。
+     */
+    @PostMapping("/{sessionId}/start")
+    public ApiResponse<Map<String, Object>> start(
+            @PathVariable("sessionId") Long sessionId,
+            @RequestHeader(value = "x-ticket", required = false) String ticket) {
+        if (!stateMachine.validateTicket(sessionId, ticket)) {
+            return ApiResponse.fail("INTERVIEW_INVALID_TICKET", "访谈入口凭据无效或已过期");
+        }
+        try {
+            InterviewSessionEntity session = stateMachine.transition(sessionId,
+                    InterviewSessionStateMachine.IN_PROGRESS,
+                    InterviewSessionStateMachine.Actor.GOVERNANCE);
+            Map<String, Object> result = new java.util.LinkedHashMap<>();
+            result.put("sessionId", sessionId);
+            result.put("status", session.getStatus());
+            result.put("mode", session.getMode());
+            result.put("turnsPath", "/interviews/" + sessionId + "/turns");
+            result.put("streamPath", "/interviews/" + sessionId + "/stream");
+            return ApiResponse.ok(result);
+        } catch (InterviewSessionStateMachine.IllegalTransitionException e) {
+            return ApiResponse.fail("INTERVIEW_START_INVALID", e.getMessage());
+        }
+    }
+
     // ---------- 运行面：话轮与监播 ----------
 
     /** 访谈入口页读取当前题目和进度；会话凭据只从请求头传递。 */

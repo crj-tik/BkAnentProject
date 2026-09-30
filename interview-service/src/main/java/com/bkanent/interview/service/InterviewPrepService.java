@@ -90,9 +90,17 @@ public class InterviewPrepService {
         session.setClosingLocked(0);
         sessionMapper.insert(session);
 
+        // 会话凭据开台即签发：ticket 语义是"本场会话持有人证明"，
+        // 生命周期对齐会话而非访谈进度——题目确认阶段（DRAFT/QUESTIONS_CONFIRMED）
+        // 即可用，能做什么由各端点的状态守卫分层管理。
+        // 注意：重签会作废上一张（DB 只存 hash）；A2A 入口在 startInterviewSession
+        // 重签属于权威签发点（开台响应那张无人在持有，被覆盖无副作用）。
+        String ticket = stateMachine.issueTicket(session);
+
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("caseId", caseEntity.getId());
         result.put("sessionId", session.getId());
+        result.put("ticket", ticket);
         result.put("outlineRoute", route.outlineRoute());
         result.put("noSuccessPreset", route.noSuccessPreset());
         result.put("mustCollectItems", route.mustCollectItems());

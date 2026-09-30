@@ -69,4 +69,49 @@ class InterviewControllerTest {
                 12L, 6L, "IN_PROGRESS", "AI_LEAD", "请讲讲这次交易的经过。", 31L, 8L, 2L, false));
         verify(sessionMapper).selectById(12L);
     }
+
+    @Test
+    void startRequiresTicketAndRejectsInvalidOne() {
+        when(stateMachine.validateTicket(12L, "bad-ticket")).thenReturn(false);
+
+        var response = controller.start(12L, "bad-ticket");
+
+        assertThat(response.success()).isFalse();
+        assertThat(response.code()).isEqualTo("INTERVIEW_INVALID_TICKET");
+        verifyNoInteractions(directorCommandMapper);
+    }
+
+    @Test
+    void startAdvancesConfirmedSessionWithoutReissuingTicket() {
+        when(stateMachine.validateTicket(12L, "form-ticket")).thenReturn(true);
+        InterviewSessionEntity started = new InterviewSessionEntity();
+        started.setId(12L);
+        started.setCaseId(6L);
+        started.setStatus(InterviewSessionStateMachine.IN_PROGRESS);
+        started.setMode("AI_LEAD");
+        when(stateMachine.transition(12L, InterviewSessionStateMachine.IN_PROGRESS,
+                InterviewSessionStateMachine.Actor.GOVERNANCE)).thenReturn(started);
+
+        var response = controller.start(12L, "form-ticket");
+
+        assertThat(response.success()).isTrue();
+        assertThat(response.data().get("status")).isEqualTo("IN_PROGRESS");
+        assertThat(response.data().get("turnsPath")).isEqualTo("/interviews/12/turns");
+        // 显式开始不重签：start 不调用 issueTicket（ticket 由开台响应签发、前端一直持有）
+        verifyNoInteractions(runtimeService);
+    }
+
+    @Test
+    void startSurfacesIllegalTransitionAsFriendlyError() {
+        when(stateMachine.validateTicket(12L, "form-ticket")).thenReturn(true);
+        when(stateMachine.transition(12L, InterviewSessionStateMachine.IN_PROGRESS,
+                InterviewSessionStateMachine.Actor.GOVERNANCE))
+                .thenThrow(new InterviewSessionStateMachine.IllegalTransitionException(
+                        "session 12 in DRAFT cannot jump to IN_PROGRESS"));
+
+        var response = controller.start(12L, "form-ticket");
+
+        assertThat(response.success()).isFalse();
+        assertThat(response.code()).isEqualTo("INTERVIEW_START_INVALID");
+    }
 }

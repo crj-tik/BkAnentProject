@@ -163,6 +163,9 @@ public class InterviewTools {
             sessionMapper.updateById(update);
             session = sessionMapper.selectById(sessionId);
         }
+        // 对话式权威签发点：此处重签并随卡片返回。开台时签发的那张仅存在于
+        // 治理面工具响应中（对话式前端不经手），被覆盖无副作用；表单入口前端
+        // 持有的开台 ticket 则由 POST /start 保持不重签。
         String ticket = stateMachine.issueTicket(session);
 
         Map<String, Object> artifact = new LinkedHashMap<>();
