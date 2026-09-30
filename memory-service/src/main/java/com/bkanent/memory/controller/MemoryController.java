@@ -62,7 +62,7 @@ public class MemoryController {
     }
 
     @GetMapping("/sessions")
-    public ApiResponse<SessionMemoryResponse> getSessionMemory(@RequestParam String sessionId) {
+    public ApiResponse<SessionMemoryResponse> getSessionMemory(@RequestParam("sessionId") String sessionId) {
         return ApiResponse.ok(sessionSharedMemoryService.find(sessionId).orElse(null));
     }
 
@@ -72,15 +72,15 @@ public class MemoryController {
     }
 
     @GetMapping("/artifacts/by-task")
-    public ApiResponse<List<ArtifactQueryResponse>> listArtifactsByTask(@RequestParam String taskId,
-                                                                        @RequestParam String sessionId) {
+    public ApiResponse<List<ArtifactQueryResponse>> listArtifactsByTask(@RequestParam("taskId") String taskId,
+                                                                        @RequestParam("sessionId") String sessionId) {
         return ApiResponse.ok(taskArtifactMemoryService.listByTaskId(taskId, sessionId));
     }
 
     @GetMapping("/artifacts/by-id")
-    public ApiResponse<ArtifactQueryResponse> getArtifactById(@RequestParam String artifactId,
-                                                              @RequestParam String taskId,
-                                                              @RequestParam(required = false) String sessionId) {
+    public ApiResponse<ArtifactQueryResponse> getArtifactById(@RequestParam("artifactId") String artifactId,
+                                                              @RequestParam("taskId") String taskId,
+                                                              @RequestParam(value = "sessionId", required = false) String sessionId) {
         return ApiResponse.ok(taskArtifactMemoryService.getByArtifactId(artifactId, taskId, sessionId));
     }
 
@@ -90,12 +90,12 @@ public class MemoryController {
     }
 
     @GetMapping("/handoffs/by-task")
-    public ApiResponse<List<HandoffRelationQueryResponse>> listHandoffsByTask(@RequestParam String taskId) {
+    public ApiResponse<List<HandoffRelationQueryResponse>> listHandoffsByTask(@RequestParam("taskId") String taskId) {
         return ApiResponse.ok(handoffRelationMemoryService.listByTaskId(taskId));
     }
 
     @GetMapping("/handoffs/by-session")
-    public ApiResponse<List<HandoffRelationQueryResponse>> listHandoffsBySession(@RequestParam String sessionId) {
+    public ApiResponse<List<HandoffRelationQueryResponse>> listHandoffsBySession(@RequestParam("sessionId") String sessionId) {
         return ApiResponse.ok(handoffRelationMemoryService.listBySessionId(sessionId));
     }
 
@@ -109,15 +109,15 @@ public class MemoryController {
 
     @GetMapping("/user-preferences/{userId}")
     public ApiResponse<List<UserPreferenceRecord>> getUserPreferences(
-            @PathVariable String userId,
-            @RequestParam(required = false) String category) {
+            @PathVariable("userId") String userId,
+            @RequestParam(value = "category", required = false) String category) {
         return ApiResponse.ok(userPreferenceMemoryService.findByUserId(userId, category));
     }
 
     @PostMapping("/user-preferences/{userId}/decay")
     public ApiResponse<Void> decayUserPreferences(
-            @PathVariable String userId,
-            @RequestParam(required = false) String excludePreferenceKey) {
+            @PathVariable("userId") String userId,
+            @RequestParam(value = "excludePreferenceKey", required = false) String excludePreferenceKey) {
         userPreferenceMemoryService.decayConfidence(userId, excludePreferenceKey);
         return ApiResponse.ok(null);
     }
@@ -132,13 +132,13 @@ public class MemoryController {
 
     @GetMapping("/system-constraints")
     public ApiResponse<List<SystemConstraintRecord>> getSystemConstraints(
-            @RequestParam(required = false) String category) {
+            @RequestParam(value = "category", required = false) String category) {
         return ApiResponse.ok(systemConstraintMemoryService.findByCategory(category));
     }
 
     @GetMapping("/system-constraints/search")
     public ApiResponse<List<SystemConstraintRecord>> searchSystemConstraints(
-            @RequestParam(required = false) String tags) {
+            @RequestParam(value = "tags", required = false) String tags) {
         return ApiResponse.ok(systemConstraintMemoryService.searchByTags(tags));
     }
 
@@ -151,14 +151,14 @@ public class MemoryController {
     }
 
     @GetMapping("/sessions/snapshot/{sessionId}")
-    public ApiResponse<SessionMemoryResponse> getLatestSessionMemorySnapshot(@PathVariable String sessionId) {
+    public ApiResponse<SessionMemoryResponse> getLatestSessionMemorySnapshot(@PathVariable("sessionId") String sessionId) {
         return ApiResponse.ok(sessionMemorySnapshotService.getLatest(sessionId).orElse(null));
     }
 
     // --- Workflow History ---
 
     @GetMapping("/workflow/{taskId}/history")
-    public ApiResponse<WorkflowHistoryView> getWorkflowHistory(@PathVariable String taskId) {
+    public ApiResponse<WorkflowHistoryView> getWorkflowHistory(@PathVariable("taskId") String taskId) {
         List<HandoffRelationQueryResponse> handoffs = handoffRelationMemoryService.listByTaskId(taskId);
         List<Map<String, Object>> steps = new ArrayList<>();
         for (int i = 0; i < handoffs.size(); i++) {
