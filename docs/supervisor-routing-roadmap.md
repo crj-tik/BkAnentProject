@@ -4,6 +4,14 @@
 > 后续可迭代方向持续追加到本文件。配套规格见 `openspec/specs/supervisor-domain-catalog/spec.md`
 > （`registry-driven-domain-catalog` 变更归档后生效）。
 
+## 2026-10-03 设计意图对齐（最新目标，待实施）
+
+用户明确：正常请求给 LLM 配上真实 A2A/MCP 等工具的 description/schema，由模型判断调用；“规则工作流”指本次显式指定 skill 内已经确定的 Agent/工具流程。入口关键词、默认 Agent 和自动 nextHint 交接不属于新默认路径；模型失败也不静默回到关键词分流。
+
+最新方案见 [realign-supervisor-tool-and-skill-orchestration](../openspec/changes/realign-supervisor-tool-and-skill-orchestration/design.md)，关联 LR-17、KI-17/18。以下方向 1 的“LLM 失败后规则兜底”以及方向 2/3 的入口规则扩展保留作历史记录，由新方案的模型工具循环和显式 skill 流程替代。本次仅编写方案，现有代码、主规格和运行配置尚未切换。
+
+目录发现、权限、审批、通用并行容量和恢复仍保留为基础设施；具体业务目标、顺序、条件属于 LLM 选择或已选 skill，不再由入口启发式替模型决定。Subagent 需要同步显式技能契约，旧 hint 与访谈运行面边界保持独立。
+
 ## 背景
 
 `registry-driven-domain-catalog` 变更之后，Supervisor 的领域词表从 `DomainCatalog`

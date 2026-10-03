@@ -65,6 +65,28 @@
 
 **关联**：LR-15、LR-16
 
+## KI-17 [OPEN·P1] Supervisor 入口规则分流偏离显式 skill 的设计边界
+
+**确认日期**：2026-10-03。用户确认正常请求应由 LLM 根据 A2A/MCP 等能力 description 判断调用；固定规则只属于本次显式指定 skill 中的流程。
+
+**现象**：默认 `llm-enabled=false`、`strategy=rule-first`，入口关键词与默认 listing/intent 选择 Agent，nextHints 和 trade 结果又可自动交接。现有知识技能、技能正文和工具白名单不构成可执行的固定跨服务流程；skillHint 也不能承担显式强制技能契约。
+
+**处置**：已编写 `realign-supervisor-tool-and-skill-orchestration` 方案，包含统一可调用能力目录、AUTO 模型工具循环、显式 instruction/workflow 技能、Subagent 共享契约和调用级恢复。仅文档交付，代码未修复；按 tasks.md 后续实施。
+
+**关联**：LR-17、LR-9、LR-15；主规格 `supervisor-domain-catalog` 的冲突行为在本变更 delta 中明确替代。
+
+## KI-18 [OPEN·P2] 动态 Agent 能力目录存在信息损失和地址缓存限制
+
+**确认日期**：2026-10-03（静态代码/依赖检查，未连接部署环境）。
+
+**现象**：`OfficialAgentCardDiscoveryClient.convertWrapper` 将 skills 置空、异步能力设为 false，并以 transport 存在简化流式能力；`OfficialA2aAgentClient.clientFor` 按 agentId 缓存客户端，endpoint 改变没有失效逻辑。Compose 配置 Nacos 3.0.3，本地 A2A Starter 使用 Agent Registry API，需实际验证服务端支持版本，不能把普通服务发现成功等同于 Agent Card 注册成功。
+
+**处置**：作为 KI-17 的能力发现前置工作列入新方案：保真卡片字段、地址/版本变更重建客户端、动态目录契约测试、部署版本与 HTTP Card fallback 明确化。本次未修改代码和配置，保持 OPEN。
+
+**代码位置**：`agent-service/registry/OfficialAgentCardDiscoveryClient`、`agent-service/client/OfficialA2aAgentClient`、`docker-compose.yml`。
+
+**关联**：KI-17；`realign-supervisor-tool-and-skill-orchestration/tasks.md` 第 2 组。
+
 ## 设计限制（LIMIT）
 
 ## KI-14 [LIMIT] 运行面依赖 MySQL 单点读写

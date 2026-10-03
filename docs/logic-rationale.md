@@ -144,3 +144,15 @@
 **代码位置**：`auth-service/controller/AuthController.refresh`
 
 **关联**：KI-16
+
+## LR-17 正常请求由模型选择，固定调用规则属于显式 skill（设计已对齐，待实施）
+
+**结论**：正常 Supervisor 请求的 Agent/MCP 调用由配有真实能力 description/schema 的 LLM 决定；用户本次显式指定 skill 时，由技能的指引、有效能力范围或固定步骤决定执行。入口关键词、默认 listing、默认 intent、trade 条件和 nextHint 自动交接不属于新默认路径。知识技能与旧 skillHint 只提供提示，不能隐式切成固定流程。
+
+**根因**：用户原始设计中的“按规则调用”指技能内已经确定的 Agent/工具协作流程；此前将规则前移到工作流入口，导致模型无法依据任务语义选择，含否定、多意图或新增领域的请求也会被固定分流。仅打开旧 JSON 规划器仍不能实现完整的 A2A/MCP 模型工具循环。
+
+**实现边界**：explicit selection 与 LR-9 的建议性 hint 分开；固定流程需要结构化步骤保证，不能只依赖 prompt。Subagent 同步共享技能契约并复用已有领域 ReAct；访谈运行面的 LR-3/4/5/8/13 边界继续有效。权限、审批、checkpoint、租约和调用账本属于执行治理，不能被模型或技能越过。
+
+**方案位置**：`openspec/changes/realign-supervisor-tool-and-skill-orchestration/`（proposal/design/specs/tasks）。2026-10-03 本次只形成方案，业务代码与运行行为尚未调整，实施任务全部未完成。
+
+**关联**：KI-17；LR-9、LR-15；`docs/supervisor-routing-roadmap.md` 的旧“LLM 失败后关键词兜底”方向由本方案替代。
