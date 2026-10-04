@@ -13,3 +13,5 @@ model-timeout-ms 默认 30000，tool-timeout-ms 默认 120000，max-queued-calls
 `POST /agent/supervisor/runs/cancel?runId=...` 取消原 run 并尝试取消其已接受远端 Task；`POST /agent/supervisor/runs/reconcile?runId=...` 续查原 Task，全部未知调用确认后才把真实结果交回模型。两入口绑定网关身份和 workflow owner 权限。未获得远端 Task ID 时不会猜地址或重发。异步查询按 run 最新 checkpoint 展示恢复后的状态，未知结果禁止创建替代 run 重试。
 
 skill 与 request_input 每轮最多一个且须单独调用；混批不产生任何业务效果。审批 payload 给出 callId、capabilityId 和 argumentsHash。OUTCOME_UNKNOWN 停止模型继续推进，必须核对原调用，不应使用新 run 自动重发。
+
+动态发现基线为 Nacos Server/SDK 3.1.0、A2A Starter 1.1.2.3。先通过普通 Nacos Naming 找带 agent-id/agent-card-path 的 HTTP 实例，再按 agent 名通过 Agent Registry 获取 Card；`agent.distributed.http-card-fallback-enabled=true` 时可回退到该真实实例的 `/.well-known/agent.json`。关闭后注册 API 失败不会伪造 Card。Compose 新数据库初始化会应用两份 Supervisor migration；已有卷必须由运维手动应用，不能依赖首次初始化。

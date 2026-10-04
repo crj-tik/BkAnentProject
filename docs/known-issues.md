@@ -75,7 +75,7 @@
 
 **关联**：LR-17、LR-18、LR-9、LR-15、KI-19；主规格 `supervisor-domain-catalog` 的冲突行为在本变更 delta 中明确替代。
 
-## KI-18 [OPEN·P2] 动态 Agent 能力目录存在信息损失和地址缓存限制
+## KI-18 [FIXED] 动态 Agent 能力目录存在信息损失和地址缓存限制
 
 **确认日期**：2026-10-03（静态代码/依赖检查，未连接部署环境）。
 
@@ -85,9 +85,19 @@
 
 **代码位置**：`agent-service/registry/OfficialAgentCardDiscoveryClient`、`agent-service/client/OfficialA2aAgentClient`、`docker-compose.yml`。
 
+**验收结论（2026-10-04）**：Docker Nacos `v3.1.0` + SDK `3.1.0` + A2A Starter `1.1.2.3` 已实测 releaseAgentCard→registerAgentEndpoint→NacosAgentCardProvider→官方 HTTP A2A 调用，HTTP Card fallback 也通过。Compose 升级 3.1.0；`agent.distributed.http-card-fallback-enabled` 默认 true，可显式关闭。调用账本接受关联与原地址对账见 `26cdeb4`；描述修复见 `0064b85`，地址缓存见 `b58b14d`。测试是确定性协议夹具，不代表真实模型或九服务业务联调全部通过。SDK 可选布尔字段限制见 KI-22。
+
 **关联**：KI-17；`realign-supervisor-tool-and-skill-orchestration/tasks.md` 第 2 组。
 
 ## 设计限制（LIMIT）
+
+## KI-22 [LIMIT] Nacos A2A Starter 读取缺省布尔字段的外部 Card 可失败
+
+**确认日期**：2026-10-04（实际注册接口验收）。
+
+**现象**：Starter `1.1.2.3` 的 AgentCardConverterUtil 对 pushNotifications、stateTransitionHistory、supportsAuthenticatedExtendedCard 直接拆箱，外部 Card 未填这些可选值时可抛 NullPointerException。项目的官方 Card 构建器发布明确布尔值，验收已覆盖完整字段；省略字段的外部发布者需补齐，或开启 HTTP Card fallback。不能把发现失败当成 Agent 不支持业务任务。
+
+**关联**：KI-18；`NacosAgentRegistryDockerTest`。
 
 ## KI-20 [FIXED] Supervisor 审批回调未绑定网关身份和任务 owner
 
@@ -103,13 +113,13 @@
 
 **关联**：LR-15、LR-18；`realign-supervisor-tool-and-skill-orchestration/tasks.md` 6.3。
 
-## KI-21 [FIXED·本提交] 数据库 checkpoint 重启后读取了最早状态
+## KI-21 [FIXED] 数据库 checkpoint 重启后读取了最早状态
 
 **确认日期**：2026-10-04（Docker MySQL 8.4 实测）。
 
 **现象**：内存执行已暂停为 WAITING_USER_INPUT，创建新 saver/runner 后却读取 RUNNING，续接被错误拒绝；旧 graph 同样受影响。
 
-**根因与修复**：Graph 1.1.2.3 的 MemorySaver 把最新 checkpoint 放在链表头，BaseCheckpointSaver.getLast 实际取 peek。原数据库加载按版本升序 append，使重启后最早记录位于表头。改为版本降序；增加普通回归与真实 MySQL 新 runner 续接测试。修复哈希随后回填。
+**根因与修复**：Graph 1.1.2.3 的 MemorySaver 把最新 checkpoint 放在链表头，BaseCheckpointSaver.getLast 实际取 peek。原数据库加载按版本升序 append，使重启后最早记录位于表头。改为版本降序；增加普通回归与真实 MySQL 新 runner 续接测试。修复 commit：`c2f5a4c`。
 
 **代码位置**：`DatabaseCheckpointSaver.loadedCheckpoints`、`DatabaseCheckpointSaverOrderTest`、`SupervisorDockerDatabaseTest`。
 

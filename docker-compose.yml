@@ -87,6 +87,9 @@ services:
       - ./sql/mysql-init.sql:/docker-entrypoint-initdb.d/001-mysql-init.sql:ro
       - ./sql/migrations/20260929_interview_subagent.sql:/docker-entrypoint-initdb.d/002-interview-subagent.sql:ro
       - ./sql/migrations/20260930_interview_report_task_asset_id.sql:/docker-entrypoint-initdb.d/003-interview-report-task-asset-id.sql:ro
+      - ./docker/mysql/004-supervisor.sql:/docker-entrypoint-initdb.d/004-supervisor.sql:ro
+      - ./sql/migrations/20261004_supervisor_orchestration.sql:/opt/bk-migrations/supervisor-orchestration.sql:ro
+      - ./sql/migrations/20261004_supervisor_run_control.sql:/opt/bk-migrations/supervisor-run-control.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
       interval: 5s
@@ -149,7 +152,7 @@ services:
     networks: [bk]
 
   nacos:
-    image: nacos/nacos-server:v3.0.3
+    image: nacos/nacos-server:v3.1.0
     restart: unless-stopped
     environment:
       MODE: standalone

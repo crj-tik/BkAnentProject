@@ -114,7 +114,7 @@ public class DynamicAgentRegistry implements AgentRegistry {
             return;
         }
         agentCardDiscoveryClient.fetchByAgentName(agentId)
-                .or(() -> agentCardDiscoveryClient.fetchAgentCard(resolvedBaseUrl, resolveCardPath(registration)))
+                .or(() -> httpFallback(resolvedBaseUrl, resolveCardPath(registration)))
                 .map(card -> buildDiscoveredDescriptor(registration, resolvedBaseUrl, card))
                 .ifPresentOrElse(descriptor -> descriptors.put(agentId, descriptor),
                         () -> descriptors.remove(agentId));
@@ -162,7 +162,7 @@ public class DynamicAgentRegistry implements AgentRegistry {
             String baseUrl = resolveInstanceBaseUrl(instance);
             String cardPath = resolveCardPath(metadata, registration);
             agentCardDiscoveryClient.fetchByAgentName(agentId)
-                    .or(() -> agentCardDiscoveryClient.fetchAgentCard(baseUrl, cardPath))
+                    .or(() -> httpFallback(baseUrl, cardPath))
                     .map(card -> buildDiscoveredDescriptor(serviceId, registration, metadata, baseUrl, cardPath, card))
                     .ifPresentOrElse(descriptor -> descriptors.put(agentId, descriptor),
                             () -> descriptors.remove(agentId));
@@ -174,6 +174,10 @@ public class DynamicAgentRegistry implements AgentRegistry {
             refreshedAt.keySet().retainAll(discoveredAgentIds);
         }
         return discoveredAny;
+    }
+
+    private Optional<AgentCard> httpFallback(String baseUrl, String path) {
+        return properties.isHttpCardFallbackEnabled() ? agentCardDiscoveryClient.fetchAgentCard(baseUrl, path) : Optional.empty();
     }
 
     private ServiceInstance selectAgentInstance(List<ServiceInstance> instances) {

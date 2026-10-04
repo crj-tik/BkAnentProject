@@ -21,6 +21,22 @@ import static org.mockito.Mockito.when;
 class DynamicAgentRegistryTest {
 
     @Test
+    void disabledHttpFallbackDoesNotReplaceMissingNacosCard() {
+        var client = mock(DiscoveryClient.class);
+        @SuppressWarnings("unchecked") ObjectProvider<DiscoveryClient> provider = mock(ObjectProvider.class);
+        var cards = mock(AgentCardDiscoveryClient.class);
+        when(provider.getIfAvailable()).thenReturn(client);
+        when(client.getServices()).thenReturn(List.of("listing-service"));
+        var instance = serviceInstance("http://listing:9011", Map.of("agent-id", "listing-agent", "agent-card-path", "/.well-known/agent.json"));
+        when(client.getInstances("listing-service")).thenReturn(List.of(instance));
+        when(cards.fetchByAgentName("listing-agent")).thenReturn(Optional.empty());
+        var properties = new DistributedAgentProperties(); properties.setHttpCardFallbackEnabled(false);
+        var registry = new DynamicAgentRegistry(properties, cards, mock(AgentInstanceResolver.class), provider);
+        assertEquals(0, registry.listDescriptors().size());
+        verify(cards, never()).fetchAgentCard(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
     void selectsTheAgentHttpInstanceWhenNacosAlsoListsADubboInstance() {
         DiscoveryClient discoveryClient = mock(DiscoveryClient.class);
         @SuppressWarnings("unchecked")

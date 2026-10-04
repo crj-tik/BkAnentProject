@@ -18,6 +18,7 @@ public class DistributedAgentProperties {
 
     private String supervisorAgentId = "supervisor-agent";
     private boolean discoveryEnabled = true;
+    private boolean httpCardFallbackEnabled = true;
     private String agentCardPath = "/.well-known/agent.json";
     private long refreshIntervalSeconds = 30;
     private final CatalogProperties catalog = new CatalogProperties();
@@ -48,6 +49,8 @@ public class DistributedAgentProperties {
     public String getAgentCardPath() {
         return agentCardPath;
     }
+    public boolean isHttpCardFallbackEnabled() { return httpCardFallbackEnabled; }
+    public void setHttpCardFallbackEnabled(boolean value) { httpCardFallbackEnabled = value; }
 
     public void setAgentCardPath(String agentCardPath) {
         this.agentCardPath = agentCardPath;
