@@ -29,6 +29,11 @@ public interface A2aAgentClient {
 
     A2aAsyncTaskStatusResponse queryAsyncStatus(RegisteredAgentDescriptor descriptor, String asyncTaskId);
 
+    default void restoreAsyncTask(RegisteredAgentDescriptor acceptedDescriptor, String asyncTaskId,
+                                  AgentTaskInvokeRequest request) {
+        throw new UnsupportedOperationException("remote task binding recovery is not supported");
+    }
+
     default void cancelAsyncTask(RegisteredAgentDescriptor descriptor, String asyncTaskId) {
         // Optional for A2A clients that do not support task cancellation.
     }

@@ -52,8 +52,8 @@ import java.util.UUID;
 @Component
 public class OfficialA2aAgentClient implements A2aAgentClient {
 
-    private final ConcurrentMap<String, A2AClient> clients = new ConcurrentHashMap<>();
-    private final ConcurrentMap<String, AgentTaskInvokeRequest> taskRequests = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, ClientBinding> clients = new ConcurrentHashMap<>();
+    private final ConcurrentMap<RemoteTaskKey, TaskBinding> taskBindings = new ConcurrentHashMap<>();
     private final OfficialA2aResponseNormalizer responseNormalizer;
     private final Function<String, A2AClient> clientFactory;
 
@@ -71,13 +71,15 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
     @Override
     public AgentTaskInvokeResponse invoke(RegisteredAgentDescriptor descriptor, AgentTaskInvokeRequest request) {
         try {
-            SendMessageResponse response = clientFor(descriptor).sendMessage(buildMessageSendParams(request, true));
+            A2AClient client = clientFor(descriptor);
+            SendMessageResponse response = client.sendMessage(buildMessageSendParams(request, true));
             EventKind result = response.getResult();
             if (result instanceof Message message) {
                 return responseNormalizer.normalize(descriptor, request, extractMessageText(message), "COMPLETED",
                         message.getTaskId(), Set.of(), null, message.getParts());
             }
             if (result instanceof Task task) {
+                rememberTask(descriptor, task.getId(), request, client);
                 return responseFromTask(descriptor, request, task);
             }
             throw new IllegalStateException("official a2a invoke returned unsupported result for " + descriptor.agentId());
@@ -107,10 +109,11 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
         List<Part<?>> responseParts = new ArrayList<>();
         AtomicBoolean completed = new AtomicBoolean();
         try {
-            clientFor(descriptor).sendStreamingMessage(
+            A2AClient client = clientFor(descriptor);
+            client.sendStreamingMessage(
                     buildMessageSendParams(request, false),
                     event -> handleStreamingEvent(descriptor, request, eventConsumer, result, output,
-                            artifactIds, responseParts, completed, event),
+                            artifactIds, responseParts, completed, client, event),
                     error -> {
                         completed.set(true);
                         result.completeExceptionally(new IllegalStateException(
@@ -151,11 +154,13 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
                                       Set<String> artifactIds,
                                       List<Part<?>> responseParts,
                                       AtomicBoolean completed,
+                                      A2AClient client,
                                       StreamingEventKind event) {
         if (completed.get()) {
             return;
         }
         if (event instanceof Message message) {
+            rememberTask(descriptor, message.getTaskId(), request, client);
             String text = extractMessageText(message);
             addParts(responseParts, message.getParts());
             appendOutput(output, text);
@@ -163,6 +168,7 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
             return;
         }
         if (event instanceof TaskArtifactUpdateEvent artifactUpdate) {
+            rememberTask(descriptor, artifactUpdate.getTaskId(), request, client);
             Artifact artifact = artifactUpdate.getArtifact();
             if (artifact != null && StringUtils.hasText(artifact.artifactId())) {
                 artifactIds.add(artifact.artifactId());
@@ -189,6 +195,7 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
             return;
         }
         if (event instanceof TaskStatusUpdateEvent statusUpdate) {
+            rememberTask(descriptor, statusUpdate.getTaskId(), request, client);
             String status = mapTaskState(statusUpdate.getStatus() == null ? null : statusUpdate.getStatus().state());
             String statusText = statusUpdate.getStatus() == null
                     ? "Child agent status updated"
@@ -208,6 +215,7 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
             return;
         }
         if (event instanceof Task task) {
+            rememberTask(descriptor, task.getId(), request, client);
             artifactIds.addAll(extractArtifactIds(task));
             addTaskParts(responseParts, task);
             String taskOutput = extractTaskOutput(task);
@@ -328,13 +336,14 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
     @Override
     public A2aAsyncTaskCreateResponse submitAsync(RegisteredAgentDescriptor descriptor, AgentTaskInvokeRequest request) {
         try {
-            SendMessageResponse response = clientFor(descriptor).sendMessage(buildMessageSendParams(request, false));
+            A2AClient client = clientFor(descriptor);
+            SendMessageResponse response = client.sendMessage(buildMessageSendParams(request, false));
             if (!(response.getResult() instanceof Task task)) {
                 throw new IllegalStateException("official a2a async create did not return a task for "
                         + descriptor.agentId());
             }
             String asyncTaskId = task.getId();
-            taskRequests.put(asyncTaskId, request);
+            rememberTask(descriptor, asyncTaskId, request, client);
             return new A2aAsyncTaskCreateResponse(
                     request.sessionId(),
                     request.taskId(),
@@ -351,15 +360,16 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
     @Override
     public A2aAsyncTaskStatusResponse queryAsyncStatus(RegisteredAgentDescriptor descriptor, String asyncTaskId) {
         try {
-            GetTaskResponse response = clientFor(descriptor).getTask(asyncTaskId);
+            TaskBinding binding = bindingFor(descriptor, asyncTaskId);
+            GetTaskResponse response = binding.client().getTask(asyncTaskId);
             Task task = response.getResult();
             if (task == null) {
                 throw new IllegalStateException("official a2a task not found: " + asyncTaskId);
             }
-            AgentTaskInvokeRequest request = taskRequests.get(asyncTaskId);
+            AgentTaskInvokeRequest request = binding.request();
             String status = mapTaskState(task.getStatus() == null ? null : task.getStatus().state());
             AgentTaskInvokeResponse result = isTerminal(status)
-                    ? responseFromTask(descriptor, request, task)
+                    ? responseFromTask(binding.descriptor(), request, task)
                     : null;
             String errorMessage = "FAILED".equalsIgnoreCase(status) && task.getStatus() != null
                     ? extractMessageText(task.getStatus().message()) : null;
@@ -382,7 +392,7 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
     @Override
     public void cancelAsyncTask(RegisteredAgentDescriptor descriptor, String asyncTaskId) {
         try {
-            clientFor(descriptor).cancelTask(asyncTaskId);
+            bindingFor(descriptor, asyncTaskId).client().cancelTask(asyncTaskId);
         } catch (A2AServerException exception) {
             throw new IllegalStateException("official a2a async cancellation failed for " + descriptor.agentId(), exception);
         }
@@ -392,7 +402,60 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
         if (descriptor == null || !StringUtils.hasText(descriptor.agentId())) {
             throw new IllegalArgumentException("official A2A descriptor is required");
         }
-        return clients.computeIfAbsent(descriptor.agentId(), ignored -> clientFactory.apply(resolveEndpoint(descriptor)));
+        String endpoint = resolveEndpoint(descriptor);
+        com.bkanent.common.agent.AgentCard card = descriptor.agentCard();
+        String version = card == null ? null : card.version();
+        Map<String, Object> capabilities = card == null ? Map.of() : card.capabilities();
+        String transport = card == null ? null : card.preferredTransport();
+        String protocolVersion = card == null ? null : card.protocolVersion();
+        return clients.compute(descriptor.agentId(), (ignored, existing) -> {
+            if (existing != null && existing.endpoint().equals(endpoint)
+                    && java.util.Objects.equals(existing.version(), version)
+                    && java.util.Objects.equals(existing.transport(), transport)
+                    && java.util.Objects.equals(existing.protocolVersion(), protocolVersion)
+                    && existing.capabilities().equals(capabilities)) {
+                return existing;
+            }
+            return new ClientBinding(endpoint, version, transport, protocolVersion, capabilities,
+                    clientFactory.apply(endpoint));
+        }).client();
+    }
+
+    @Override
+    public void restoreAsyncTask(RegisteredAgentDescriptor acceptedDescriptor, String asyncTaskId,
+                                 AgentTaskInvokeRequest request) {
+        if (request == null || !StringUtils.hasText(asyncTaskId)) {
+            throw new IllegalArgumentException("accepted task identity and original request are required");
+        }
+        rememberTask(acceptedDescriptor, asyncTaskId, request, clientFor(acceptedDescriptor));
+    }
+
+    private void rememberTask(RegisteredAgentDescriptor descriptor, String taskId,
+                              AgentTaskInvokeRequest request, A2AClient client) {
+        if (StringUtils.hasText(taskId)) {
+            taskBindings.putIfAbsent(new RemoteTaskKey(descriptor.agentId(), taskId),
+                    new TaskBinding(descriptor, request, client));
+        }
+    }
+
+    private TaskBinding bindingFor(RegisteredAgentDescriptor descriptor, String taskId) {
+        TaskBinding binding = descriptor == null ? null
+                : taskBindings.get(new RemoteTaskKey(descriptor.agentId(), taskId));
+        if (binding == null) {
+            throw new IllegalStateException("remote task binding is missing; restore the accepted endpoint: " + taskId);
+        }
+        return binding;
+    }
+
+    private record ClientBinding(String endpoint, String version, String transport, String protocolVersion,
+                                 Map<String, Object> capabilities, A2AClient client) {
+    }
+
+    private record RemoteTaskKey(String agentId, String taskId) {
+    }
+
+    private record TaskBinding(RegisteredAgentDescriptor descriptor, AgentTaskInvokeRequest request,
+                               A2AClient client) {
     }
 
     private String resolveEndpoint(RegisteredAgentDescriptor descriptor) {

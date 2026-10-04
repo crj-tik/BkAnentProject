@@ -30,9 +30,72 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.never;
 import org.mockito.ArgumentCaptor;
 
 class OfficialA2aAgentClientTest {
+
+    @Test
+    void refreshesNewCallsButKeepsAcceptedTaskOnOriginalEndpoint() throws Exception {
+        A2AClient original = mock(A2AClient.class);
+        A2AClient updated = mock(A2AClient.class);
+        Task accepted = new Task("remote-address", "ctx", new TaskStatus(TaskState.WORKING),
+                List.of(), List.of(), Map.of());
+        Task completed = new Task("remote-new", "ctx", new TaskStatus(TaskState.COMPLETED),
+                List.of(), List.of(), Map.of());
+        when(original.sendMessage(any())).thenReturn(new SendMessageResponse(null, accepted));
+        when(original.getTask("remote-address")).thenReturn(new GetTaskResponse(null, accepted));
+        when(updated.sendMessage(any())).thenReturn(new SendMessageResponse(null, completed));
+        List<String> created = new ArrayList<>();
+        OfficialA2aAgentClient client = new OfficialA2aAgentClient(
+                new OfficialA2aResponseNormalizer(new ObjectMapper()), endpoint -> {
+                    created.add(endpoint);
+                    return endpoint.contains("9999") ? original : updated;
+                });
+        RegisteredAgentDescriptor changed = withEndpointAndVersion("http://localhost:10000/a2a", "2");
+
+        client.submitAsync(descriptor(), request());
+        client.invoke(changed, request());
+        client.queryAsyncStatus(changed, "remote-address");
+        client.cancelAsyncTask(changed, "remote-address");
+
+        assertThat(created).containsExactly("http://127.0.0.1:9999/a2a", "http://localhost:10000/a2a");
+        verify(original).getTask("remote-address");
+        verify(original).cancelTask("remote-address");
+        verify(updated, never()).getTask("remote-address");
+    }
+
+    @Test
+    void versionChangeRebuildsClientAndRestartCanRestoreAcceptedAddress() throws Exception {
+        A2AClient remote = mock(A2AClient.class);
+        Task task = new Task("old-task", "ctx", new TaskStatus(TaskState.WORKING),
+                List.of(), List.of(), Map.of());
+        when(remote.sendMessage(any())).thenReturn(new SendMessageResponse(null, task));
+        when(remote.getTask("old-task")).thenReturn(new GetTaskResponse(null, task));
+        List<String> created = new ArrayList<>();
+        OfficialA2aAgentClient client = new OfficialA2aAgentClient(
+                new OfficialA2aResponseNormalizer(new ObjectMapper()), endpoint -> {
+                    created.add(endpoint);
+                    return remote;
+                });
+        client.invoke(descriptor(), request());
+        client.invoke(withEndpointAndVersion("http://127.0.0.1:9999/a2a", "2"), request());
+        assertThat(created).hasSize(2);
+        OfficialA2aAgentClient restarted = new OfficialA2aAgentClient(
+                new OfficialA2aResponseNormalizer(new ObjectMapper()), ignored -> remote);
+        restarted.restoreAsyncTask(descriptor(), "old-task", request());
+        assertThat(restarted.queryAsyncStatus(withEndpointAndVersion("http://localhost:10000/a2a", "3"),
+                "old-task").status()).isEqualTo("RUNNING");
+    }
+
+    private RegisteredAgentDescriptor withEndpointAndVersion(String endpoint, String version) {
+        RegisteredAgentDescriptor old = descriptor();
+        AgentCard card = old.agentCard();
+        return new RegisteredAgentDescriptor(old.agentId(), old.baseUrl(), old.agentCardPath(), old.a2aPath(),
+                old.runtimeType(), old.source(), new AgentCard(card.agentId(), card.name(), card.description(), version,
+                card.supportedSkills(), card.supportedDomains(), card.supportsStreaming(), card.supportsAsyncTask(),
+                endpoint, card.inputModes(), card.outputModes()), old.metadata());
+    }
 
     @Test
     void requestsStructuredOutputFromOfficialSubAgent() throws Exception {
