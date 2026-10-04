@@ -31,6 +31,11 @@ public class PersistArtifactsNode {
                                       String userId,
                                       String traceId,
                                       AgentTaskInvokeResponse response) {
+        return persistSingle(taskId, sessionId, agentId, userId, traceId, response, Map.of());
+    }
+
+    public List<String> persistSingle(String taskId, String sessionId, String agentId, String userId,
+                                      String traceId, AgentTaskInvokeResponse response, Map<String, Object> callMetadata) {
         List<String> baseArtifactIds = response == null || response.artifactIds() == null
                 ? List.of()
                 : List.copyOf(new LinkedHashSet<>(response.artifactIds()));
@@ -47,9 +52,11 @@ public class PersistArtifactsNode {
         if (existing.isPresent()) {
             List<String> mergedExisting = new ArrayList<>(baseArtifactIds);
             mergedExisting.add(existing.get());
+            mergedExisting.addAll(persistDerivedArtifacts(taskId, sessionId, agentId, userId, traceId,
+                    artifactType, versionNo, response.structuredOutput(), response.summary(), sourceArtifactId, callMetadata));
             return List.copyOf(new LinkedHashSet<>(mergedExisting));
         }
-        Map<String, Object> metadata = new LinkedHashMap<>();
+        Map<String, Object> metadata = new LinkedHashMap<>(callMetadata);
         metadata.put("summary", response.summary() == null ? "" : response.summary());
         metadata.put("sourceArtifactId", sourceArtifactId);
         String artifactId = taskArtifactStore.save(
@@ -62,7 +69,7 @@ public class PersistArtifactsNode {
                 metadata,
                 traceId
         );
-        publishArtifactCreated(sessionId, taskId, agentId, userId, traceId, artifactId, artifactType, versionNo);
+        publishArtifactCreated(sessionId, taskId, agentId, userId, traceId, artifactId, artifactType, versionNo, callMetadata);
         List<String> merged = new ArrayList<>(baseArtifactIds);
         merged.add(artifactId);
         merged.addAll(persistDerivedArtifacts(
@@ -75,7 +82,8 @@ public class PersistArtifactsNode {
                 versionNo,
                 response.structuredOutput(),
                 response.summary(),
-                sourceArtifactId
+                sourceArtifactId,
+                callMetadata
         ));
         return List.copyOf(merged);
     }
@@ -89,7 +97,8 @@ public class PersistArtifactsNode {
                                                  Integer versionNo,
                                                  Map<String, Object> structuredOutput,
                                                  String summary,
-                                                 String sourceArtifactId) {
+                                                 String sourceArtifactId,
+                                                 Map<String, Object> callMetadata) {
         List<String> derivedArtifactIds = new ArrayList<>();
         if ("publish_payload".equalsIgnoreCase(artifactType)) {
             Object payload = structuredOutput.get("publishPayload");
@@ -104,7 +113,7 @@ public class PersistArtifactsNode {
                         versionNo,
                         payloadMap,
                         summary,
-                        sourceArtifactId + ":publish_payload_body"
+                        sourceArtifactId + ":publish_payload_body", callMetadata
                 );
                 derivedArtifactIds.add(artifactId);
             }
@@ -122,7 +131,7 @@ public class PersistArtifactsNode {
                         versionNo,
                         mediaTaskDetail,
                         summary,
-                        sourceArtifactId + ":media_task_detail"
+                        sourceArtifactId + ":media_task_detail", callMetadata
                 );
                 derivedArtifactIds.add(artifactId);
             }
@@ -144,7 +153,7 @@ public class PersistArtifactsNode {
                                 "appliedFeedback", structuredOutput.getOrDefault("appliedFeedback", "")
                         ),
                         summary,
-                        sourceArtifactId + ":copy_draft_body"
+                        sourceArtifactId + ":copy_draft_body", callMetadata
                 );
                 derivedArtifactIds.add(artifactId);
             }
@@ -166,7 +175,7 @@ public class PersistArtifactsNode {
                         versionNo,
                         detail,
                         summary,
-                        sourceArtifactId + ":contract_review_detail"
+                        sourceArtifactId + ":contract_review_detail", callMetadata
                 );
                 derivedArtifactIds.add(artifactId);
             }
@@ -188,7 +197,7 @@ public class PersistArtifactsNode {
                         versionNo,
                         detail,
                         summary,
-                        sourceArtifactId + ":settlement_detail_body"
+                        sourceArtifactId + ":settlement_detail_body", callMetadata
                 );
                 derivedArtifactIds.add(artifactId);
             }
@@ -205,13 +214,14 @@ public class PersistArtifactsNode {
                                        Integer versionNo,
                                        Object content,
                                        String summary,
-                                       String sourceArtifactId) {
+                                       String sourceArtifactId,
+                                       Map<String, Object> callMetadata) {
         Optional<String> existing = taskArtifactStore.findBySourceArtifactId(
                 taskId, sessionId, agentId, sourceArtifactId);
         if (existing.isPresent()) {
             return existing.get();
         }
-        Map<String, Object> metadata = new LinkedHashMap<>();
+        Map<String, Object> metadata = new LinkedHashMap<>(callMetadata);
         metadata.put("summary", summary == null ? "" : summary);
         metadata.put("sourceArtifactId", sourceArtifactId);
         String artifactId = taskArtifactStore.save(
@@ -224,7 +234,7 @@ public class PersistArtifactsNode {
                 metadata,
                 traceId
         );
-        publishArtifactCreated(sessionId, taskId, agentId, userId, traceId, artifactId, artifactType, versionNo);
+        publishArtifactCreated(sessionId, taskId, agentId, userId, traceId, artifactId, artifactType, versionNo, callMetadata);
         return artifactId;
     }
 
@@ -276,21 +286,22 @@ public class PersistArtifactsNode {
                                         String traceId,
                                         String artifactId,
                                         String artifactType,
-                                        Integer versionNo) {
-        sessionStreamService.publish(new SessionStreamEvent(
+                                        Integer versionNo,
+                                        Map<String, Object> callMetadata) {
+        Map<String, Object> metadata = new LinkedHashMap<>(callMetadata);
+        metadata.put("artifactId", artifactId); metadata.put("artifactType", artifactType); metadata.put("version", versionNo);
+        metadata.put("userId", userId == null ? "" : userId);
+        try { sessionStreamService.publish(new SessionStreamEvent(
                 sessionId,
                 taskId,
                 agentId,
                 "artifact.created",
                 "Artifact persisted",
-                Map.of(
-                        "artifactId", artifactId,
-                        "artifactType", artifactType,
-                        "version", versionNo,
-                        "userId", userId == null ? "" : userId
-                ),
+                metadata,
                 traceId,
                 System.currentTimeMillis()
-        ));
+        )); } catch (RuntimeException exception) {
+            org.slf4j.LoggerFactory.getLogger(getClass()).warn("Artifact event unavailable; durable artifact retained: {}", artifactId);
+        }
     }
 }

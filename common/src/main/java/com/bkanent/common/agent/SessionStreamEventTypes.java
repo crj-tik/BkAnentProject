@@ -48,7 +48,8 @@ public final class SessionStreamEventTypes {
                 || eventType.startsWith("permission.")
                 || eventType.startsWith("security.")
                 || eventType.startsWith("graph.")
-                || eventType.startsWith("task.");
+                || eventType.startsWith("task.")
+                || eventType.startsWith("tool.");
     }
 
     public static String defaultPhase(String eventType) {

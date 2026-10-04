@@ -23,6 +23,7 @@ class SessionStreamEventTest {
     void identifiesTerminalAndAllowedLifecycleEvents() {
         assertThat(SessionStreamEventTypes.isAllowed("agent.delta")).isTrue();
         assertThat(SessionStreamEventTypes.isAllowed("workflow.completed")).isTrue();
+        assertThat(SessionStreamEventTypes.isAllowed("tool.completed")).isTrue();
         assertThat(SessionStreamEventTypes.isTerminal("agent.completed")).isTrue();
         assertThat(SessionStreamEventTypes.isTerminal("agent.delta")).isFalse();
     }

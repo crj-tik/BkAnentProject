@@ -30,12 +30,13 @@ class SupervisorToolLoopGraphTest {
     private SupervisorToolLoopRunner runner;
     private CompiledGraph graph;
     private final ApprovalResumeClaimStore claims = mock(ApprovalResumeClaimStore.class);
+    private final SessionStreamService events = mock(SessionStreamService.class);
 
     @BeforeEach
     void setup() throws Exception {
         store = OrchestrationStoreTest.database(mapper);
         factory = new SupervisorToolLoopGraph(catalog, model, skills, store, mapper, properties,
-                mock(SessionStreamService.class), new OfficialSupervisorGraphSchema(), mock(DatabaseCheckpointSaverFactory.class));
+                events, new OfficialSupervisorGraphSchema(), mock(DatabaseCheckpointSaverFactory.class));
         graph = factory.create(new MemorySaver());
         runner = new SupervisorToolLoopRunner(factory, graph, store, properties, claims);
         when(claims.claim(any())).thenReturn(ApprovalResumeClaimStore.ClaimResult.claimed());
@@ -44,6 +45,42 @@ class SupervisorToolLoopGraphTest {
         when(catalog.snapshot("1", true)).thenReturn(Map.of("local:search", capability("search")));
     }
     @AfterEach void cleanup() { factory.close(); runner.close(); }
+
+    @Test
+    void waitingAndActualResultEventsCarryOwnerSkillIdentityAndRemainReplayable() {
+        when(skills.getByName("find")).thenReturn(SkillDefinition.builder().name("find").description("find").domain("supervisor")
+                .tools(List.of("search")).systemPrompt("body").build());
+        when(model.call(anyList(), anyList())).thenReturn(calls(call("input", "request_input", "{\"question\":\"地区\"}")),
+                calls(call("actual", "search", "{}")), new AssistantMessage("done"));
+        runner.execute(request("stream", new SkillSelection("find", "1"), null, "find"));
+        runner.execute(request("input-request", null, "stream", "浦东"));
+        var capture = org.mockito.ArgumentCaptor.forClass(com.bkanent.common.agent.SessionStreamEvent.class);
+        verify(events, atLeast(3)).publish(capture.capture());
+        assertThat(capture.getAllValues()).anySatisfy(event -> {
+            if (!"supervisor.waiting_user_input".equals(event.eventType())) throw new AssertionError("not waiting");
+            assertThat(event.metadata()).containsEntry("userId", "1").containsEntry("mode", "EXPLICIT_SKILL").containsEntry("terminal", false);
+            assertThat(event.metadata()).containsKeys("pendingInput", "skill", "runId");
+        }).anySatisfy(event -> {
+            if (!"tool.completed".equals(event.eventType())) throw new AssertionError("not tool result");
+            assertThat(event.metadata()).containsEntry("callId", "actual").containsEntry("capabilityId", "local:search")
+                    .containsEntry("terminal", false).containsEntry("userId", "1");
+        });
+    }
+
+    @Test
+    void confirmedFailedRemoteTaskIsAResultWithoutAFabricatedArtifact() {
+        var artifacts = mock(com.bkanent.agent.graph.node.PersistArtifactsNode.class);
+        factory.setArtifacts(artifacts);
+        ToolCallback failedRemote = new ToolCallback() {
+            public ToolDefinition getToolDefinition() { return ToolDefinition.builder().name("remote").description("remote").inputSchema("{\"type\":\"object\"}").build(); }
+            public String call(String input) { return "{\"status\":\"FAILED\",\"errorCode\":\"REMOTE_FAILURE\"}"; }
+        };
+        when(catalog.snapshot("1", true)).thenReturn(Map.of("a2a:listing-agent", new SupervisorCapability("a2a:listing-agent", "a2a", "remote", "1", failedRemote)));
+        when(model.call(anyList(), anyList())).thenReturn(calls(call("failed", "remote", "{}")), new AssistantMessage("远端失败已确认"));
+        assertThat(runner.execute(request("remote-failed", null, null, "find")).status()).isEqualTo("COMPLETED");
+        verifyNoInteractions(artifacts);
+        assertThat(store.find("remote-failed", "failed").result()).contains("REMOTE_FAILURE");
+    }
 
     @Test
     void modelChoosesActualToolAndNextHintsNeverTriggerImplicitHandoff() {

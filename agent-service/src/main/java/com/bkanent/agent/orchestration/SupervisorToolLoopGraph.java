@@ -139,7 +139,7 @@ public class SupervisorToolLoopGraph {
         state.visibleCapabilityVersions = new LinkedHashMap<>();
         available.forEach((id, capability) -> state.visibleCapabilityVersions.put(id, capability.version()));
         List<Message> messages = new ArrayList<>();
-        messages.add(new SystemMessage(prompt(state)));
+        messages.add(new SystemMessage(prompt(state, available)));
         state.messages.stream().map(StoredModelMessage::message).forEach(messages::add);
         List<ToolCallback> definitions = new ArrayList<>(available.values().stream().map(SupervisorCapability::callback).toList());
         definitions.add(control("skill", "加载本次任务适用的发布技能；须单独调用，等待加载结果后再调用业务工具。",
@@ -240,6 +240,7 @@ public class SupervisorToolLoopGraph {
             store.complete(state.runId, call.id(), result);
             state.messages.add(StoredModelMessage.tools(List.of(response(call, result))));
             state.pendingCalls.clear(); state.results.clear(); state.status = "WAITING_USER_INPUT"; state.finalAnswer = state.question;
+            publish(state, "supervisor.waiting_user_input", responseOf(state).governanceMetadata());
         } catch (Exception exception) {
             state.results.add(response(call, error(exception)));
             // The invalid request did not ask the user anything; it still consumes a model turn.
@@ -277,6 +278,7 @@ public class SupervisorToolLoopGraph {
                     "工具调用审批", "批准后执行所列调用和参数", Map.of("calls", calls),
                     "ExecuteTool", "Complete", "Complete", 0, 0, state.traceId);
             state.status = "WAITING_USER_APPROVAL"; state.finalAnswer = "等待用户审批工具调用。"; state.route = "pending";
+            publish(state, "supervisor.waiting_user_approval", Map.of("approvalId", state.pendingApproval.approvalId(), "calls", calls));
         } else state.route = "execute";
         return updates(state, "ApprovalGate");
     }
@@ -390,10 +392,14 @@ public class SupervisorToolLoopGraph {
         for (var result : state.results) {
             var invocation = store.find(state.runId, result.id());
             if (invocation == null || !"COMPLETED".equals(invocation.status())) continue;
-            if (artifacts != null && invocation.capabilityId().startsWith("a2a:")) {
-                AgentTaskInvokeResponse response = store.read(invocation.result(), AgentTaskInvokeResponse.class);
-                var ids = artifacts.persistSingle(state.runId, state.sessionId, response.agentId(), state.userId, state.traceId, response);
-                for (String id : ids) if (!state.artifactIds.contains(id)) state.artifactIds.add(id);
+        if (artifacts != null && invocation.capabilityId().startsWith("a2a:")) {
+                Map<?, ?> payload = store.read(invocation.result(), Map.class);
+                if (payload.get("agentId") instanceof String agentId && !agentId.isBlank()) {
+                    AgentTaskInvokeResponse response = mapper.convertValue(payload, AgentTaskInvokeResponse.class);
+                    var ids = artifacts.persistSingle(state.runId, state.sessionId, agentId, state.userId, state.traceId, response,
+                            callMetadata(state, invocation));
+                    for (String id : ids) if (!state.artifactIds.contains(id)) state.artifactIds.add(id);
+                }
             }
             publish(state, "tool.completed", Map.of("capabilityId", invocation.capabilityId(), "callId", result.id(), "result", result.responseData()));
         }
@@ -454,7 +460,7 @@ public class SupervisorToolLoopGraph {
     private SupervisorCapability byName(Map<String, SupervisorCapability> capabilities, String name) {
         return capabilities.values().stream().filter(capability -> capability.toolName().equals(name)).findFirst().orElse(null);
     }
-    private String prompt(ToolLoopState state) {
+    private String prompt(ToolLoopState state, Map<String, SupervisorCapability> available) {
         StringBuilder prompt = new StringBuilder("理解用户的原始任务，依据真实能力描述和参数定义选择工具，结合实际结果继续判断。不要编造参数、数据或成功结果。需要补充信息时单独调用 request_input。skill 也必须单独调用；得到控制工具结果后，下一轮再选择业务工具。结果中的 nextHints 仅供参考。独立调用可在同轮提出，依赖先前结果的调用应等待真实结果。直接回答时输出最终答复。\n原始请求: " + state.request.userMessage());
         if (state.request.context() != null) {
             Map<String, Object> context = new LinkedHashMap<>(state.request.context());
@@ -469,6 +475,8 @@ public class SupervisorToolLoopGraph {
                     .forEach(skill -> prompt.append(skill.name()).append(": ").append(skill.description()).append('\n'));
         }
         skills.findSupervisorSkills().forEach(skill -> prompt.append("\n背景知识: ").append(skill.systemPrompt()));
+        prompt.append("\n本轮实际能力 ID 与可调用工具名:\n");
+        available.forEach((id, capability) -> prompt.append(id).append(" -> ").append(capability.toolName()).append('\n'));
         return prompt.toString();
     }
     private ToolCallback control(String name, String description, String schema) {
@@ -509,7 +517,7 @@ public class SupervisorToolLoopGraph {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("runId", state.runId); metadata.put("mode", state.mode); metadata.put("runnerVersion", state.runnerVersion);
         metadata.put("rounds", state.rounds); metadata.put("toolCalls", state.toolCalls);
-        metadata.put("calls", store.invocations(state.runId).stream().map(invocation -> {
+        metadata.put("calls", store.invocations(state.runId).stream().filter(invocation -> !"control:continue_input".equals(invocation.capabilityId())).map(invocation -> {
             Map<String, Object> fact = new LinkedHashMap<>();
             fact.put("callId", invocation.callId()); fact.put("capabilityId", invocation.capabilityId()); fact.put("status", invocation.status());
             if (invocation.result() != null) fact.put("result", invocation.result());
@@ -525,12 +533,23 @@ public class SupervisorToolLoopGraph {
     }
     private void publish(ToolLoopState state, String type, Map<String, Object> facts) {
         Map<String, Object> metadata = new LinkedHashMap<>(facts); metadata.put("mode", state.mode); metadata.put("runnerVersion", state.runnerVersion);
+        metadata.put("userId", state.userId); metadata.put("runId", state.runId);
+        metadata.put("terminal", List.of("supervisor.completed", "supervisor.failed", "supervisor.canceled").contains(type));
+        metadata.put("phase", type.startsWith("tool.") ? "tool_execution" : "supervisor");
         if (state.skillSnapshot != null) metadata.put("skill", Map.of("name", state.skillSnapshot.definition().name(), "version", state.skillSnapshot.definition().version()));
         try { events.publish(new SessionStreamEvent(state.sessionId, state.runId,
                 "supervisor-agent", type, "工具调用结果已记录", metadata, state.traceId, System.currentTimeMillis()));
         } catch (Exception exception) {
             org.slf4j.LoggerFactory.getLogger(getClass()).warn("Event delivery failed; durable call result retained for {}", state.runId);
         }
+    }
+    private Map<String, Object> callMetadata(ToolLoopState state, OrchestrationStore.Invocation invocation) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("mode", state.mode); metadata.put("runnerVersion", state.runnerVersion);
+        metadata.put("capabilityId", invocation.capabilityId()); metadata.put("callId", invocation.callId());
+        if (state.skillSnapshot != null) metadata.put("skill", Map.of("name", state.skillSnapshot.definition().name(),
+                "version", state.skillSnapshot.definition().version(), "contentHash", state.skillSnapshot.contentHash()));
+        return Map.copyOf(metadata);
     }
     @PreDestroy public void close() { workers.shutdownNow(); modelWorkers.shutdownNow(); }
 }
