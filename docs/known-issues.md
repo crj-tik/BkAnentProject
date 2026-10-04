@@ -81,7 +81,7 @@
 
 **现象**：`OfficialAgentCardDiscoveryClient.convertWrapper` 将 skills 置空、异步能力设为 false，并以 transport 存在简化流式能力；`OfficialA2aAgentClient.clientFor` 按 agentId 缓存客户端，endpoint 改变没有失效逻辑。Compose 配置 Nacos 3.0.3，本地 A2A Starter 使用 Agent Registry API，需实际验证服务端支持版本，不能把普通服务发现成功等同于 Agent Card 注册成功。
 
-**处置**：作为 KI-17 的能力发现前置工作列入新方案：保真卡片字段、地址/版本变更重建客户端、动态目录契约测试、部署版本与 HTTP Card fallback 明确化。本次未修改代码和配置，保持 OPEN。
+**处置**：2026-10-04 已实现卡片 skills/description/原生 capabilities/协议字段保真，并在动态注册描述中保留这些字段和实例元数据；回归测试通过。原生 A2A Card 无独立 async 标志，保持未知并允许明确配置/实例元数据补充，不通过 transport 或 stateTransitionHistory 猜测。地址/版本缓存与部署冒烟继续实施，整体保持 OPEN；卡片修复提交见本次“保真动态Agent卡片”提交。
 
 **代码位置**：`agent-service/registry/OfficialAgentCardDiscoveryClient`、`agent-service/client/OfficialA2aAgentClient`、`docker-compose.yml`。
 

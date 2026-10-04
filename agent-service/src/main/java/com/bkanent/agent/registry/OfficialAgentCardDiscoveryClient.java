@@ -5,11 +5,15 @@ import com.alibaba.cloud.ai.graph.agent.a2a.AgentCardProvider;
 import com.alibaba.cloud.ai.graph.agent.a2a.AgentCardWrapper;
 import com.alibaba.cloud.ai.graph.agent.a2a.RemoteAgentCardProvider;
 import com.bkanent.common.agent.AgentCard;
+import com.bkanent.common.agent.AgentSkillDescriptor;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 @Component
@@ -62,19 +66,43 @@ public class OfficialAgentCardDiscoveryClient implements AgentCardDiscoveryClien
         }
     }
 
-    private AgentCard convertWrapper(AgentCardWrapper wrapper) {
+    AgentCard convertWrapper(AgentCardWrapper wrapper) {
+        List<AgentSkillDescriptor> skills = wrapper.skills() == null ? List.of() : wrapper.skills().stream()
+                .filter(Objects::nonNull)
+                .map(skill -> new AgentSkillDescriptor(skill.id(), skill.name(), skill.description(), skill.tags(),
+                        skill.examples(), skill.inputModes(), skill.outputModes()))
+                .toList();
+        Map<String, Object> capabilities = new LinkedHashMap<>();
+        if (wrapper.capabilities() != null) {
+            capabilities.put("streaming", wrapper.capabilities().streaming());
+            capabilities.put("pushNotifications", wrapper.capabilities().pushNotifications());
+            capabilities.put("stateTransitionHistory", wrapper.capabilities().stateTransitionHistory());
+            capabilities.put("extensions", wrapper.capabilities().extensions() == null ? List.of()
+                    : wrapper.capabilities().extensions().stream().filter(Objects::nonNull).map(extension -> {
+                        Map<String, Object> facts = new LinkedHashMap<>();
+                        if (extension.uri() != null) facts.put("uri", extension.uri());
+                        if (extension.description() != null) facts.put("description", extension.description());
+                        facts.put("required", extension.required());
+                        facts.put("params", extension.params() == null ? Map.of() : Map.copyOf(extension.params()));
+                        return Map.copyOf(facts);
+                    }).toList());
+        }
         return new AgentCard(
                 null,
                 wrapper.name(),
                 wrapper.description(),
                 wrapper.version(),
+                skills.stream().map(AgentSkillDescriptor::id).filter(StringUtils::hasText).toList(),
                 List.of(),
-                List.of(),
-                Boolean.valueOf(StringUtils.hasText(wrapper.preferredTransport())),
-                Boolean.FALSE,
+                wrapper.capabilities() == null ? null : wrapper.capabilities().streaming(),
+                null,
                 wrapper.url(),
                 wrapper.defaultInputModes() == null ? List.of() : List.copyOf(wrapper.defaultInputModes()),
-                wrapper.defaultOutputModes() == null ? List.of() : List.copyOf(wrapper.defaultOutputModes())
+                wrapper.defaultOutputModes() == null ? List.of() : List.copyOf(wrapper.defaultOutputModes()),
+                skills,
+                capabilities,
+                wrapper.preferredTransport(),
+                wrapper.protocolVersion()
         );
     }
 }

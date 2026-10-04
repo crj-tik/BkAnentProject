@@ -280,7 +280,11 @@ public class DynamicAgentRegistry implements AgentRegistry {
                                 : agentCard.inputModes(),
                         agentCard.outputModes() == null || agentCard.outputModes().isEmpty()
                                 ? resolveOutputModes(metadata, registration)
-                                : agentCard.outputModes()
+                                : agentCard.outputModes(),
+                        agentCard.skillDescriptors(),
+                        agentCard.capabilities(),
+                        agentCard.preferredTransport(),
+                        agentCard.protocolVersion()
                 ),
                 resolveDescriptorMetadata(metadata, registration)
         );
@@ -290,11 +294,14 @@ public class DynamicAgentRegistry implements AgentRegistry {
 
     private Map<String, String> resolveDescriptorMetadata(Map<String, String> metadata,
                                                           DistributedAgentProperties.AgentRegistration registration) {
+        Map<String, String> result = new LinkedHashMap<>(metadata == null ? Map.of() : metadata);
         String defaultIntent = metadata == null ? null : metadata.get("agent-default-intent");
         if (!StringUtils.hasText(defaultIntent)) {
-            return defaultIntentMetadata(registration);
+            result.putAll(defaultIntentMetadata(registration));
+        } else {
+            result.put("agent-default-intent", defaultIntent.trim());
         }
-        return Map.of("agent-default-intent", defaultIntent.trim());
+        return Map.copyOf(result);
     }
 
     private Map<String, String> defaultIntentMetadata(DistributedAgentProperties.AgentRegistration registration) {
@@ -405,6 +412,10 @@ public class DynamicAgentRegistry implements AgentRegistry {
 
     private boolean resolveSupportsAsyncTask(Map<String, String> metadata,
                                              DistributedAgentProperties.AgentRegistration registration) {
+        String advertised = metadata == null ? null : metadata.get("agent-supports-async-task");
+        if ("true".equalsIgnoreCase(advertised) || "false".equalsIgnoreCase(advertised)) {
+            return Boolean.parseBoolean(advertised);
+        }
         return registration != null && registration.isSupportsAsyncTask();
     }
 
