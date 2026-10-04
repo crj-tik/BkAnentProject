@@ -131,7 +131,7 @@
 
 **现象**：reload 清空并逐项填充名称/领域索引时，并发模型请求可能读到空目录或部分技能；领域查询还返回可修改的内部列表。
 
-**修复**：先在局部构建完整的不可变目录和索引，再一次性发布 volatile 快照。暂停构建的并发回归确认读者始终看到完整旧版或完整新版，返回列表不可修改。修复 commit：本次提交。
+**修复**：先在局部构建完整的不可变目录和索引，再一次性发布 volatile 快照。暂停构建的并发回归确认读者始终看到完整旧版或完整新版，返回列表不可修改。修复 commit：`4d8f846`。
 
 **代码位置**：`common-skill/core/SkillRegistry`、`SkillRegistryTest.concurrentReloadPublishesCompleteImmutableRegistryAtOnce`。
 

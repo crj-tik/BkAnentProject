@@ -11,6 +11,23 @@ import static org.assertj.core.api.Assertions.assertThat;
 class OfficialA2aMetadataMapperTest {
 
     @Test
+    void explicitChildSelectionAndParentFactsRemainSeparateOnTheWire() {
+        var parent = Map.of("name", "parent-flow", "owner", "supervisor", "version", "1");
+        var request = new AgentTaskInvokeRequest("session", "child", "run", "trace", "supervisor-agent", "listing-agent",
+                null, null, "原始子任务", Map.of("parentSkill", parent, "skillHint", "legacy-hint", "userId", "1"),
+                List.of(), List.of(), "json", "call", false,
+                new com.bkanent.common.agent.SkillSelection("listing-search", "2", "hash", "listing"));
+        var supervisor = (Map<?, ?>) OfficialA2aMetadataMapper.toMetadata(request, false).get("supervisor");
+        assertThat(supervisor.get("parentRunId")).isEqualTo("run");
+        assertThat(supervisor.get("callId")).isEqualTo("call");
+        assertThat(supervisor.get("parentSkill")).isEqualTo(parent);
+        assertThat(supervisor.get("skillHint")).isEqualTo("legacy-hint");
+        assertThat(supervisor.get("skillSelection")).isEqualTo(Map.of("name", "listing-search", "version", "2",
+                "contentHash", "hash", "owner", "listing", "mode", "explicit"));
+        assertThat(supervisor.containsKey("stepId")).isFalse();
+    }
+
+    @Test
     void mapsInternalInvocationContextIntoOfficialMetadataNamespace() {
         AgentTaskInvokeRequest request = new AgentTaskInvokeRequest(
                 "session-1", "task-1", "parent-1", "trace-1", "supervisor-agent", "listing-agent",

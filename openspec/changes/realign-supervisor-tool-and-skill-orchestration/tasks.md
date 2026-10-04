@@ -26,16 +26,16 @@
 
 ## 4. Subagent 共享契约同步
 
-- [ ] 4.1 在 A2A metadata/input/executor 传递与校验 skillSelection 和 parentRunId/callId/parentSkill；通过父 skill 不自动变子 skill、显式/旧 hint 参数契约和身份绑定测试验证。
+- [x] 4.1 在 A2A metadata/input/executor 传递与校验 skillSelection 和 parentRunId/callId/parentSkill；通过父 skill 不自动变子 skill、显式/旧 hint 参数契约和身份绑定测试验证。
 - [x] 4.2 对未支持 explicit、名称/归属/版本/内容身份不符返回结构化失败，不降级 hint；通过滚动发布兼容与无越权执行测试验证。
-- [ ] 4.3 先接入 listing/compare/marketing，复用各服务 ReAct、本地工具和业务逻辑；通过三个服务的映射样例及相关范围回归验证。
-- [ ] 4.4 再接入 trade/media/contract/settlement/notification 的共享契约与范围策略；通过五个服务的映射样例和默认/显式执行回归验证。
-- [ ] 4.5 interview 只升级治理面契约；运行 LR-3/4/5/8/13 相关回归，确认高频话轮、确定性决策、状态机和 MCP 范围不迁移到 Supervisor。
+- [x] 4.3 先接入 listing/compare/marketing，复用各服务 ReAct、本地工具和业务逻辑；通过三个服务的映射样例及相关范围回归验证。
+- [x] 4.4 再接入 trade/media/contract/settlement/notification 的共享契约与范围策略；通过五个服务的映射样例和默认/显式执行回归验证。
+- [x] 4.5 interview 只升级治理面契约；运行 LR-3/4/5/8/13 相关回归，确认高频话轮、确定性决策、状态机和 MCP 范围不迁移到 Supervisor。
 
 ## 5. Supervisor 通用模型工具循环
 
 - [x] 5.1 实现单轮模型适配，只返回 AssistantMessage/toolCalls，不内部执行回调；通过带工具调用的受控模型测试确认副作用次数为 0，再与 1.1.2.3 实际 API 做契约冒烟验证。
-- [ ] 5.2 实现 A2A ToolCallback，把 instruction/结构化输入/可选下游 skill 转到既有 A2aExecutionService；通过真实响应规范化、稳定子调用身份和官方 Task/Artifact 关联测试验证。
+- [x] 5.2 实现 A2A ToolCallback，把 instruction/结构化输入/可选下游 skill 转到既有 A2aExecutionService；通过真实响应规范化、稳定子调用身份和官方 Task/Artifact 关联测试验证。
 - [ ] 5.3 将 MCP/本地回调接入同一 ExecuteTool 治理入口，保留实际 description/schema 和能力映射；通过 A2A/MCP 混合工具决策、参数错误及唯一执行次数测试验证。
 - [x] 5.4 用通用 PrepareContext/Model/Dispatch/LoadSkill/GuardCall/ApprovalGate/ExecuteTool/Observe/Complete 图替代新请求的领域路由；通过新增 Agent/skill 不增加业务节点、AUTO/EXPLICIT_SKILL 同循环和 nextHints 不自动调用测试验证。
 - [x] 5.5 实现 request_input 控制调用、待输入保存和 continueRunId 续接，把原始请求/补充信息/真实结果持续返回模型；通过追问无业务动作、幂等续接及 explicit 快照不改变测试验证，不用问号或关键词分类等待。
@@ -52,7 +52,7 @@
 
 ## 7. 示范技能、切换与文档
 
-- [ ] 7.1 根据真实 Card/tools/list 编写显式专用 Markdown “找房→对比→营销草稿”技能，正文说明调用对象、参数来源和信息不足行为；通过解析、能力范围绑定和发布元数据契约验证，不添加 DAG/顺序校验配置。
+- [x] 7.1 根据真实 Card/tools/list 编写显式专用 Markdown “找房→对比→营销草稿”技能，正文说明调用对象、参数来源和信息不足行为；通过解析、能力范围绑定和发布元数据契约验证，不添加 DAG/顺序校验配置。
 - [ ] 7.2 将各 Supervisor 入口和普通 chat 接到统一核心，保留原响应字段、allowMcp和审批入口，提供旧 domain/requireParallel/workflowType 迁移说明；通过同步/异步/续接接口契约测试验证。
 - [ ] 7.3 按 runnerVersion 保留旧未完成任务恢复，新请求停用关键词/default listing/default intent、trade 自动交接与 nextHints handoff；通过旧审批恢复、新请求调用链和灰度不替换业务目标测试验证。
 - [ ] 7.4 旧 run 排空后删除旧路由节点/配置/死链，更新 README、路线图、相交未完成变更并同步本 delta；通过配置/调用审计与严格校验验证，更新 LR-17/18 和 KI-17/18 状态，保留 KI-19 限制。
