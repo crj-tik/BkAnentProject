@@ -1,6 +1,7 @@
 package com.bkanent.common.skill.core;
 
 import com.bkanent.common.skill.SkillDefinition;
+import com.bkanent.common.skill.SkillCapabilityPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.Resource;
@@ -160,7 +161,30 @@ public class SkillFileLoader {
                 .systemPrompt(markdownBody)
                 .priority(intValue(frontmatter, "priority", 5))
                 .supervisorSkill(boolValue(frontmatter, "supervisor_skill", false))
+                .owner(string(frontmatter, "owner"))
+                .version(string(frontmatter, "version"))
+                .capabilities(capabilityPolicy(frontmatter))
+                .explicitOnly(boolValue(frontmatter, "explicit_only", false))
                 .build();
+    }
+
+    private SkillCapabilityPolicy capabilityPolicy(Map<String, Object> frontmatter) {
+        Object value = frontmatter.get("capabilities");
+        if (value == null) return SkillCapabilityPolicy.legacy();
+        if (!(value instanceof Map<?, ?> raw)) {
+            throw new IllegalArgumentException("capabilities must be an object");
+        }
+        Map<String, Object> policy = new LinkedHashMap<>();
+        raw.forEach((key, item) -> policy.put(String.valueOf(key), item));
+        if (!policy.containsKey("policy")) {
+            throw new IllegalArgumentException("capabilities.policy is required");
+        }
+        Object refs = policy.get("refs");
+        if (refs != null && (!(refs instanceof List<?> list)
+                || list.stream().anyMatch(ref -> !(ref instanceof String)))) {
+            throw new IllegalArgumentException("capabilities.refs must be a list of strings");
+        }
+        return new SkillCapabilityPolicy(string(policy, "policy"), stringList(policy, "refs"));
     }
 
     private String string(Map<String, Object> map, String key) {

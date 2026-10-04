@@ -18,7 +18,7 @@
 
 ## 3. 共享技能加载和严格能力范围
 
-- [ ] 3.1 保持现有 frontmatter+Markdown 和知识标记，扩展 owner/version/capabilities 策略及显式专用发布标记；通过旧技能解析、非空 tools 映射、旧空 tools 兼容和不解析步骤 DSL 的测试验证。
+- [x] 3.1 保持现有 frontmatter+Markdown 和知识标记，扩展 owner/version/capabilities 策略及显式专用发布标记；通过旧技能解析、非空 tools 映射、旧空 tools 兼容和不解析步骤 DSL 的测试验证。
 - [ ] 3.2 接入 Supervisor 技能摘要目录和 skill 加载工具，保留 Subagent 既有组件；通过首轮摘要、成功加载后正文/原始任务/工具范围可见、加载失败不激活及 explicit-only 不被猜名绕过的测试验证。
 - [ ] 3.3 在显式请求首轮模型前校验与加载全文/有效工具；通过自然语言参数理解所需上下文、未知/跨 owner/版本错、能力缺失和 allowMcp=false 冲突测试验证。
 - [ ] 3.4 在模型面和实际回调边界共用有效范围，显式选择高于历史激活/hint且禁止换名/换版本/扩权；通过交集为空不开放全量、越界工具和 LR-9 旧 hint 可覆盖回归验证。
