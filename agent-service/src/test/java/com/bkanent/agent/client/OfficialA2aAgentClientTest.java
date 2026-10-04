@@ -36,6 +36,19 @@ import org.mockito.ArgumentCaptor;
 class OfficialA2aAgentClientTest {
 
     @Test
+    void acceptedTaskObserverReceivesOriginalIdentityAndEndpoint() throws Exception {
+        A2AClient remote = mock(A2AClient.class);
+        Task task = new Task("accepted", "ctx", new TaskStatus(TaskState.WORKING), List.of(), List.of(), Map.of());
+        when(remote.sendMessage(any())).thenReturn(new SendMessageResponse(null, task));
+        var client = new OfficialA2aAgentClient(new OfficialA2aResponseNormalizer(new ObjectMapper()), ignored -> remote);
+        List<AcceptedA2aTask> facts = new ArrayList<>();
+        client.watchAcceptedTasks(request(), facts::add);
+        client.submitAsync(descriptor(), request());
+        assertThat(facts).containsExactly(new AcceptedA2aTask(descriptor(), "accepted", request()));
+        client.unwatchAcceptedTasks(request());
+    }
+
+    @Test
     void refreshesNewCallsButKeepsAcceptedTaskOnOriginalEndpoint() throws Exception {
         A2AClient original = mock(A2AClient.class);
         A2AClient updated = mock(A2AClient.class);

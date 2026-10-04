@@ -89,9 +89,11 @@
 
 ## 设计限制（LIMIT）
 
-## KI-20 [FIXED·待提交] Supervisor 审批回调未绑定网关身份和任务 owner
+## KI-20 [FIXED] Supervisor 审批回调未绑定网关身份和任务 owner
 
 **确认日期**：2026-10-04。
+
+**修复 commit**：`bfe48c2`。
 
 **现象**：审批回调控制器直接使用请求中的 reviewerId 调用工作流服务，未像查询入口一样解析网关身份并检查任务 owner。通用工具审批不能依赖调用者自行填写 reviewerId。
 

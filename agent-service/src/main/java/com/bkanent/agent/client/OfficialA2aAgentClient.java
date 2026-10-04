@@ -54,6 +54,15 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
 
     private final ConcurrentMap<String, ClientBinding> clients = new ConcurrentHashMap<>();
     private final ConcurrentMap<RemoteTaskKey, TaskBinding> taskBindings = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, TaskWatch> taskObservers = new ConcurrentHashMap<>();
+
+    @Override
+    public void watchAcceptedTasks(AgentTaskInvokeRequest request, Consumer<AcceptedA2aTask> observer) {
+        taskObservers.entrySet().removeIf(entry -> entry.getValue().expiresAt() < System.currentTimeMillis());
+        taskObservers.put(request.taskId(), new TaskWatch(observer, System.currentTimeMillis() + 30 * 60_000L));
+    }
+    @Override public void unwatchAcceptedTasks(AgentTaskInvokeRequest request) { taskObservers.remove(request.taskId()); }
+    private record TaskWatch(Consumer<AcceptedA2aTask> observer, long expiresAt) {}
     private final OfficialA2aResponseNormalizer responseNormalizer;
     private final Function<String, A2AClient> clientFactory;
 
@@ -433,8 +442,13 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
     private void rememberTask(RegisteredAgentDescriptor descriptor, String taskId,
                               AgentTaskInvokeRequest request, A2AClient client) {
         if (StringUtils.hasText(taskId)) {
-            taskBindings.putIfAbsent(new RemoteTaskKey(descriptor.agentId(), taskId),
+            TaskBinding previous = taskBindings.putIfAbsent(new RemoteTaskKey(descriptor.agentId(), taskId),
                     new TaskBinding(descriptor, request, client));
+            if (previous != null && !java.util.Objects.equals(previous.request().taskId(), request.taskId()))
+                throw new IllegalStateException("remote task id is associated with another invocation");
+            TaskWatch watch = taskObservers.get(request.taskId());
+            if (watch != null && watch.expiresAt() >= System.currentTimeMillis())
+                watch.observer().accept(new AcceptedA2aTask(descriptor, taskId, request));
         }
     }
 

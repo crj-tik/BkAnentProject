@@ -13,6 +13,9 @@ import java.util.function.Consumer;
  */
 public interface A2aAgentClient {
 
+    default void watchAcceptedTasks(AgentTaskInvokeRequest request, Consumer<AcceptedA2aTask> observer) {}
+    default void unwatchAcceptedTasks(AgentTaskInvokeRequest request) {}
+
     AgentTaskInvokeResponse invoke(RegisteredAgentDescriptor descriptor, AgentTaskInvokeRequest request);
 
     default boolean supportsStreaming(RegisteredAgentDescriptor descriptor, AgentTaskInvokeRequest request) {

@@ -102,8 +102,12 @@ public class SupervisorCapabilityCatalog {
                 required(context, "traceId"), "supervisor-agent", agentId, null, null,
                 (String) arguments.get("instruction"), structured, List.of(), List.of(), "json", callId,
                 Boolean.TRUE.equals(context.get("stream")), skill);
-        return json(execution.execute(descriptor, request, "tool", Map.of("capabilityId", CapabilityId.a2a(agentId).value(),
-                "callId", callId, "parentRunId", runId)));
+        Map<String, Object> metadata = Map.of("capabilityId", CapabilityId.a2a(agentId).value(), "callId", callId, "parentRunId", runId);
+        if (context.get("acceptedTaskRecorder") instanceof java.util.function.Consumer<?> recorder) {
+            @SuppressWarnings("unchecked") var accepted = (java.util.function.Consumer<com.bkanent.agent.client.AcceptedA2aTask>) recorder;
+            return json(execution.execute(descriptor, request, "tool", metadata, accepted));
+        }
+        return json(execution.execute(descriptor, request, "tool", metadata));
     }
 
     private SkillSelection resolveChildSkill(RegisteredAgentDescriptor descriptor, Object selected) {

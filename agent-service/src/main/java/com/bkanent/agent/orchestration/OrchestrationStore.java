@@ -76,7 +76,7 @@ public class OrchestrationStore {
                 System.currentTimeMillis(), runId, callId);
     }
     public void remoteAccepted(String runId, String callId, Object association) {
-        jdbc.update("UPDATE agent_tool_invocation SET remote_association_json=?,updated_at_ms=? WHERE run_id=? AND call_id=? AND status='EXECUTING'",
+        jdbc.update("UPDATE agent_tool_invocation SET remote_association_json=?,updated_at_ms=? WHERE run_id=? AND call_id=? AND status IN ('EXECUTING','OUTCOME_UNKNOWN')",
                 json(association), System.currentTimeMillis(), runId, callId);
     }
     public void snapshot(String runId, SkillExecutionSnapshot snapshot) {

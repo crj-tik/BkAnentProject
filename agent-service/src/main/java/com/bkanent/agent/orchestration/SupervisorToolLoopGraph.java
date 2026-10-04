@@ -44,6 +44,10 @@ public class SupervisorToolLoopGraph {
     private final OfficialSupervisorGraphSchema schema;
     private final DatabaseCheckpointSaverFactory saverFactory;
     private final ExecutorService workers;
+    private RemoteTaskReconciler reconciler;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setReconciler(RemoteTaskReconciler reconciler) { this.reconciler = reconciler; }
 
     public SupervisorToolLoopGraph(SupervisorCapabilityCatalog catalog, SupervisorModelTurn model, SkillRegistry skills,
                                    OrchestrationStore store, ObjectMapper mapper, SupervisorOrchestrationProperties properties,
@@ -286,13 +290,20 @@ public class SupervisorToolLoopGraph {
         OrchestrationStore.Invocation invocation = store.prepare(state.runId, call.id(), capability.capabilityId(), call.arguments());
         if ("COMPLETED".equals(invocation.status())) return response(call, invocation.result());
         if (!store.claim(state.runId, call.id())) {
-            store.unknown(state.runId, call.id()); return response(call, "OUTCOME_UNKNOWN: 已提交调用需要核对，未重新发送");
+            store.unknown(state.runId, call.id());
+            if (invocation.remoteAssociation() != null && reconciler != null) {
+                var reconciled = reconciler.reconcile(state.runId, call.id(), state.userId, false);
+                if ("COMPLETED".equals(reconciled.status())) return response(call, reconciled.result());
+            }
+            return response(call, "OUTCOME_UNKNOWN: 已提交调用需要核对，未重新发送");
         }
         Map<String, Object> context = new LinkedHashMap<>();
         context.put("userId", state.userId); context.put("runId", state.runId); context.put("sessionId", state.sessionId);
         context.put("callId", call.id()); context.put("traceId", state.traceId); context.put("stream", Boolean.TRUE.equals(state.request.stream()));
         context.put("parentSkill", state.skillSnapshot == null ? Map.of() : Map.of("name", state.skillSnapshot.definition().name(),
                 "version", state.skillSnapshot.definition().version(), "contentHash", state.skillSnapshot.contentHash(), "owner", "supervisor"));
+        context.put("acceptedTaskRecorder", (java.util.function.Consumer<com.bkanent.agent.client.AcceptedA2aTask>)
+                accepted -> store.remoteAccepted(state.runId, call.id(), accepted));
         try {
             String result = capability.callback().call(call.arguments(), new ToolContext(Map.copyOf(context)));
             store.complete(state.runId, call.id(), result);

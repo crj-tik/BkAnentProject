@@ -102,6 +102,22 @@ public class A2aExecutionService {
         }
     }
 
+    public AgentTaskInvokeResponse execute(RegisteredAgentDescriptor descriptor, AgentTaskInvokeRequest request,
+                                           String phase, Map<String, Object> metadata,
+                                           Consumer<com.bkanent.agent.client.AcceptedA2aTask> observer) {
+        a2aAgentClient.watchAcceptedTasks(request, observer);
+        boolean resolved = false;
+        try {
+            AgentTaskInvokeResponse response = execute(descriptor, request, phase, metadata);
+            resolved = true;
+            return response;
+        } finally {
+            // A late accepted response may still arrive after a caller timeout. Keep its observer
+            // bounded by the client TTL so the original remote handle can reach the durable journal.
+            if (resolved) a2aAgentClient.unwatchAcceptedTasks(request);
+        }
+    }
+
     private AgentTaskInvokeResponse executeStreaming(RegisteredAgentDescriptor descriptor,
                                                       AgentTaskInvokeRequest request,
                                                       String phase,
