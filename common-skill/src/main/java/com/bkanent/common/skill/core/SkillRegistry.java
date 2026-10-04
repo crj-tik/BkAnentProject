@@ -10,7 +10,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Central registry for all loaded skills. Provides indexed lookups by name,
@@ -27,9 +26,9 @@ public class SkillRegistry {
     private final SkillFileLoader loader;
     private final String externalDir;
 
-    private final List<SkillDefinition> skills = new CopyOnWriteArrayList<>();
-    private final Map<String, SkillDefinition> byName = new LinkedHashMap<>();
-    private final Map<String, List<SkillDefinition>> byDomain = new LinkedHashMap<>();
+    private volatile RegistrySnapshot snapshot = new RegistrySnapshot(List.of(), Map.of(), Map.of());
+    private record RegistrySnapshot(List<SkillDefinition> skills, Map<String, SkillDefinition> byName,
+                                    Map<String, List<SkillDefinition>> byDomain) {}
 
     public SkillRegistry(SkillFileLoader loader, String externalDir) {
         this.loader = loader;
@@ -46,16 +45,17 @@ public class SkillRegistry {
         Path extDir = resolveExternalDir();
         List<SkillDefinition> loaded = extDir != null ? loader.loadAll(extDir) : loader.loadAll();
 
-        skills.clear();
-        byName.clear();
-        byDomain.clear();
+        Map<String, SkillDefinition> byName = new LinkedHashMap<>();
+        Map<String, List<SkillDefinition>> byDomain = new LinkedHashMap<>();
         for (SkillDefinition skill : loaded) {
-            skills.add(skill);
             byName.put(skill.name(), skill);
             byDomain.computeIfAbsent(skill.domain(), k -> new ArrayList<>()).add(skill);
         }
+        Map<String, List<SkillDefinition>> immutableDomains = new LinkedHashMap<>();
+        byDomain.forEach((domain, skills) -> immutableDomains.put(domain, List.copyOf(skills)));
+        snapshot = new RegistrySnapshot(List.copyOf(loaded), Map.copyOf(byName), Map.copyOf(immutableDomains));
         log.info("SkillRegistry reloaded: {} skills across {} domains (externalDir={})",
-                skills.size(), byDomain.size(), extDir);
+                loaded.size(), byDomain.size(), extDir);
     }
 
     private Path resolveExternalDir() {
@@ -67,21 +67,21 @@ public class SkillRegistry {
     }
 
     public List<SkillDefinition> allSkills() {
-        return List.copyOf(skills);
+        return snapshot.skills();
     }
 
     public SkillDefinition getByName(String name) {
-        return byName.get(name);
+        return snapshot.byName().get(name);
     }
 
     /** Returns all skills registered for the given domain (e.g. "trade", "supervisor"). */
     public List<SkillDefinition> findByDomain(String domain) {
-        return byDomain.getOrDefault(domain, List.of());
+        return snapshot.byDomain().getOrDefault(domain, List.of());
     }
 
     /** Returns only supervisor skills (used for intent knowledge enrichment). */
     public List<SkillDefinition> findSupervisorSkills() {
-        return skills.stream().filter(SkillDefinition::supervisorSkill).toList();
+        return snapshot.skills().stream().filter(SkillDefinition::supervisorSkill).toList();
     }
 
     /** Returns only operational skills (used by sub-agents for tool filtering). */
@@ -92,6 +92,6 @@ public class SkillRegistry {
     }
 
     public int size() {
-        return skills.size();
+        return snapshot.skills().size();
     }
 }

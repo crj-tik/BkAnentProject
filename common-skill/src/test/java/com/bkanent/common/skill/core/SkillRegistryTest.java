@@ -11,6 +11,39 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class SkillRegistryTest {
 
+    @Test
+    void concurrentReloadPublishesCompleteImmutableRegistryAtOnce() throws Exception {
+        var old = skill("old", "listing", false); var replacement = skill("new", "listing", false);
+        var assembling = new java.util.concurrent.CountDownLatch(1); var release = new java.util.concurrent.CountDownLatch(1);
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var loader = new SkillFileLoader() {
+            public java.util.List<SkillDefinition> loadAll() {
+                if (calls.getAndIncrement() == 0) return java.util.List.of(old);
+                return new java.util.AbstractList<>() {
+                    public int size() { return 1; }
+                    public SkillDefinition get(int index) {
+                        assembling.countDown();
+                        try { if (!release.await(2, java.util.concurrent.TimeUnit.SECONDS)) throw new IllegalStateException("reload timeout"); }
+                        catch (InterruptedException exception) { Thread.currentThread().interrupt(); throw new IllegalStateException(exception); }
+                        return replacement;
+                    }
+                };
+            }
+        };
+        var registry = new SkillRegistry(loader, "");
+        var worker = java.util.concurrent.Executors.newSingleThreadExecutor();
+        try {
+            var reload = worker.submit(registry::reload);
+            assertThat(assembling.await(2, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            assertThat(registry.getByName("old")).isEqualTo(old);
+            assertThat(registry.findByDomain("listing")).containsExactly(old);
+            release.countDown(); reload.get(2, java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(registry.getByName("new")).isEqualTo(replacement);
+            assertThat(registry.getByName("old")).isNull();
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> registry.findByDomain("listing").clear()).isInstanceOf(UnsupportedOperationException.class);
+        } finally { release.countDown(); worker.shutdownNow(); }
+    }
+
     @TempDir
     Path tempDir;
 
