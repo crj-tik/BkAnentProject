@@ -27,11 +27,14 @@ public class ListingOfficialA2aAgent {
     private static final String DOMAIN = "listing";
 
     private final ReactAgent reactAgent;
+    private final SkillRegistry skillRegistry;
+    private List<ToolCallback> executionTools;
 
     public ListingOfficialA2aAgent(ChatModel chatModel,
                                    ListingAgentProperties properties,
                                    @Qualifier("listingToolCallbackProvider") ToolCallbackProvider toolCallbackProvider,
                                    SkillRegistry skillRegistry) {
+        this.skillRegistry = skillRegistry;
         this.reactAgent = buildAgent(chatModel, properties, toolCallbackProvider, skillRegistry);
     }
 
@@ -41,6 +44,7 @@ public class ListingOfficialA2aAgent {
                                   SkillRegistry skillRegistry) {
         List<ToolCallback> tools = new ArrayList<>(Arrays.asList(toolCallbackProvider.getToolCallbacks()));
         tools.add(new SkillTool(skillRegistry, DOMAIN));
+        executionTools = List.copyOf(tools);
         return ReactAgent.builder()
                 .name("listing-agent")
                 .description("Responsible for property listing search, recommendation, and summary with LLM-driven insights")
@@ -48,7 +52,8 @@ public class ListingOfficialA2aAgent {
                 .systemPrompt(properties.getSystemPrompt())
                 .tools(tools)
                 .interceptors(new A2aSupervisorContextInterceptor(),
-                        new SkillRoutingModelInterceptor(skillRegistry, DOMAIN))
+                        new SkillRoutingModelInterceptor(skillRegistry, DOMAIN),
+                        new com.bkanent.common.skill.runtime.SkillRoutingToolInterceptor())
                 .outputKey(OUTPUT_KEY)
                 .build();
     }
@@ -60,6 +65,7 @@ public class ListingOfficialA2aAgent {
 
     @Bean
     public AgentExecutor listingA2aAgentExecutor(ObjectMapper objectMapper) {
-        return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("listing"));
+        return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("listing"),
+                skillRegistry, DOMAIN, executionTools);
     }
 }

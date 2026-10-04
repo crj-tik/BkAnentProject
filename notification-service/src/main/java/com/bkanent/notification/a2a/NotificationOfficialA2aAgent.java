@@ -27,11 +27,14 @@ public class NotificationOfficialA2aAgent {
     private static final String DOMAIN = "notification";
 
     private final ReactAgent reactAgent;
+    private final SkillRegistry skillRegistry;
+    private List<ToolCallback> executionTools;
 
     public NotificationOfficialA2aAgent(ChatModel chatModel,
                                         NotificationAgentProperties properties,
                                         NotificationTools notificationTools,
                                         SkillRegistry skillRegistry) {
+        this.skillRegistry = skillRegistry;
         this.reactAgent = buildAgent(chatModel, properties, notificationTools, skillRegistry);
     }
 
@@ -39,6 +42,7 @@ public class NotificationOfficialA2aAgent {
                                   NotificationTools notificationTools, SkillRegistry skillRegistry) {
         List<ToolCallback> tools = new ArrayList<>(Arrays.asList(MethodToolCallbackProvider.builder().toolObjects(notificationTools).build().getToolCallbacks()));
         tools.add(new SkillTool(skillRegistry, DOMAIN));
+        executionTools = List.copyOf(tools);
         return ReactAgent.builder()
                 .name("notification-agent")
                 .description("Responsible for in-app station messages, email notifications, and message management with LLM-driven routing")
@@ -46,7 +50,8 @@ public class NotificationOfficialA2aAgent {
                 .systemPrompt(properties.getSystemPrompt())
                 .tools(tools)
                 .interceptors(new A2aSupervisorContextInterceptor(),
-                        new SkillRoutingModelInterceptor(skillRegistry, DOMAIN))
+                        new SkillRoutingModelInterceptor(skillRegistry, DOMAIN),
+                        new com.bkanent.common.skill.runtime.SkillRoutingToolInterceptor())
                 .outputKey(OUTPUT_KEY)
                 .build();
     }
@@ -58,6 +63,7 @@ public class NotificationOfficialA2aAgent {
 
     @Bean
     public AgentExecutor notificationA2aAgentExecutor(ObjectMapper objectMapper) {
-        return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("notification"));
+        return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("notification"),
+                skillRegistry, DOMAIN, executionTools);
     }
 }

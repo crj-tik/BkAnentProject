@@ -27,11 +27,14 @@ public class SettlementOfficialA2aAgent {
     private static final String DOMAIN = "settlement";
 
     private final ReactAgent reactAgent;
+    private final SkillRegistry skillRegistry;
+    private List<ToolCallback> executionTools;
 
     public SettlementOfficialA2aAgent(ChatModel chatModel,
                                       SettlementAgentProperties properties,
                                       SettlementTools settlementTools,
                                       SkillRegistry skillRegistry) {
+        this.skillRegistry = skillRegistry;
         this.reactAgent = buildAgent(chatModel, properties, settlementTools, skillRegistry);
     }
 
@@ -39,6 +42,7 @@ public class SettlementOfficialA2aAgent {
                                   SettlementTools settlementTools, SkillRegistry skillRegistry) {
         List<ToolCallback> tools = new ArrayList<>(Arrays.asList(MethodToolCallbackProvider.builder().toolObjects(settlementTools).build().getToolCallbacks()));
         tools.add(new SkillTool(skillRegistry, DOMAIN));
+        executionTools = List.copyOf(tools);
         return ReactAgent.builder()
                 .name("settlement-agent")
                 .description("Responsible for settlement calculation, commission computation, payout batch preparation, and monthly summary analysis with LLM-driven reasoning")
@@ -46,7 +50,8 @@ public class SettlementOfficialA2aAgent {
                 .systemPrompt(properties.getSystemPrompt())
                 .tools(tools)
                 .interceptors(new A2aSupervisorContextInterceptor(),
-                        new SkillRoutingModelInterceptor(skillRegistry, DOMAIN))
+                        new SkillRoutingModelInterceptor(skillRegistry, DOMAIN),
+                        new com.bkanent.common.skill.runtime.SkillRoutingToolInterceptor())
                 .outputKey(OUTPUT_KEY)
                 .build();
     }
@@ -58,6 +63,7 @@ public class SettlementOfficialA2aAgent {
 
     @Bean
     public AgentExecutor settlementA2aAgentExecutor(ObjectMapper objectMapper) {
-        return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("settlement"));
+        return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("settlement"),
+                skillRegistry, DOMAIN, executionTools);
     }
 }

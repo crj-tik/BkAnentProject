@@ -57,7 +57,20 @@ public final class SkillRoutingModelInterceptor extends ModelInterceptor {
 
     @Override
     public ModelResponse interceptModel(ModelRequest request, ModelCallHandler handler) {
-        String activeSkillName = findLastActivatedSkill(request.getMessages());
+        SkillExecutionContext execution = SkillExecutionContext.from(request.getContext());
+        if (execution != null && execution.snapshot() != null) {
+            var snapshot = execution.snapshot();
+            String block = "\n\n[当前技能 " + snapshot.definition().name() + " / "
+                    + snapshot.definition().version() + "]\n" + snapshot.definition().systemPrompt()
+                    + "\n[原始请求]\n" + execution.originalTask()
+                    + "\n请理解本次需求、补充缺失信息，并遵循指引选择工具；正文不是平台步骤调度。";
+            List<String> allowed = request.getTools() == null ? List.of() : request.getTools().stream()
+                    .filter(name -> SkillTool.TOOL_NAME.equals(name) || execution.availableCapabilities().containsValue(name))
+                    .toList();
+            return handler.call(ModelRequest.builder(request).systemMessage(appendToSystem(request.getSystemMessage(), block))
+                    .tools(allowed).build());
+        }
+        String activeSkillName = execution == null ? findLastActivatedSkill(request.getMessages()) : null;
 
         if (activeSkillName != null) {
             SkillDefinition skill = registry.getByName(activeSkillName);
@@ -99,7 +112,7 @@ public final class SkillRoutingModelInterceptor extends ModelInterceptor {
      */
     private SkillDefinition resolveHintedSkill(String hint) {
         for (SkillDefinition skill : registry.findOperationalSkills(domain)) {
-            if (skill.name().equals(hint)) {
+            if (!skill.explicitOnly() && skill.name().equals(hint)) {
                 return skill;
             }
         }
@@ -214,7 +227,7 @@ public final class SkillRoutingModelInterceptor extends ModelInterceptor {
      */
     private String buildCatalogPrompt(String hint) {
         List<SkillDefinition> skills = new java.util.ArrayList<>(
-                registry.findOperationalSkills(domain));
+                registry.findOperationalSkills(domain).stream().filter(skill -> !skill.explicitOnly()).toList());
         if (skills.isEmpty()) {
             return "";
         }

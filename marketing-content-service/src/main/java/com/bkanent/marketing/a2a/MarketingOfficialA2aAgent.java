@@ -1,6 +1,14 @@
 package com.bkanent.marketing.a2a;
 
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
+import com.bkanent.common.skill.core.SkillRegistry;
+import com.bkanent.common.skill.runtime.SkillTool;
+import com.bkanent.common.skill.runtime.SkillRoutingModelInterceptor;
+import com.bkanent.common.skill.runtime.SkillRoutingToolInterceptor;
+import org.springframework.ai.tool.ToolCallback;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Arrays;
 import com.bkanent.common.a2a.A2aOutputPolicy;
 import com.bkanent.common.a2a.OfficialA2aAgentExecutor;
 import com.bkanent.marketing.config.MarketingAgentProperties;
@@ -18,17 +26,25 @@ public class MarketingOfficialA2aAgent {
     private static final String OUTPUT_KEY = "output";
 
     private final ReactAgent reactAgent;
+    private final SkillRegistry skillRegistry;
+    private final List<ToolCallback> executionTools;
 
     public MarketingOfficialA2aAgent(ChatModel chatModel,
                                      MarketingAgentProperties properties,
-                                     MarketingTools marketingTools) {
+                                   MarketingTools marketingTools, SkillRegistry skillRegistry) {
+        this.skillRegistry = skillRegistry;
+        List<ToolCallback> tools = new ArrayList<>(Arrays.asList(
+                MethodToolCallbackProvider.builder().toolObjects(marketingTools).build().getToolCallbacks()));
+        tools.add(new SkillTool(skillRegistry, "marketing"));
+        this.executionTools = List.copyOf(tools);
         this.reactAgent = ReactAgent.builder()
                 .name("marketing-agent")
                 .description("Responsible for marketing copy generation, content creation, publish preparation and execution with LLM-driven creativity")
                 .model(chatModel)
                 .systemPrompt(properties.getSystemPrompt())
-                .tools(MethodToolCallbackProvider.builder().toolObjects(marketingTools).build().getToolCallbacks())
-                .interceptors(new A2aSupervisorContextInterceptor())
+                .tools(tools)
+                .interceptors(new A2aSupervisorContextInterceptor(),
+                        new SkillRoutingModelInterceptor(skillRegistry, "marketing"), new SkillRoutingToolInterceptor())
                 .outputKey(OUTPUT_KEY)
                 .build();
     }
@@ -40,6 +56,7 @@ public class MarketingOfficialA2aAgent {
 
     @Bean
     public AgentExecutor marketingA2aAgentExecutor(ObjectMapper objectMapper) {
-        return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("marketing"));
+        return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("marketing"),
+                skillRegistry, "marketing", executionTools);
     }
 }

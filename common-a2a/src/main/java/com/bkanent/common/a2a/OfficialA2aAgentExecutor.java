@@ -45,12 +45,27 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
     private final A2aInputParser inputParser;
     private final A2aOutputNormalizer outputNormalizer;
     private final ConcurrentMap<String, ExecutionState> executions = new ConcurrentHashMap<>();
+    private final com.bkanent.common.skill.core.SkillRegistry skillRegistry;
+    private final String skillOwner;
+    private final Map<String, String> capabilities;
 
     public OfficialA2aAgentExecutor(ReactAgent agent, ObjectMapper objectMapper, A2aOutputPolicy outputPolicy) {
+        this(agent, objectMapper, outputPolicy, null, null, List.of());
+    }
+
+    public OfficialA2aAgentExecutor(ReactAgent agent, ObjectMapper objectMapper, A2aOutputPolicy outputPolicy,
+                                  com.bkanent.common.skill.core.SkillRegistry skillRegistry, String skillOwner,
+                                  List<org.springframework.ai.tool.ToolCallback> tools) {
         this.agent = agent;
         this.outputPolicy = outputPolicy;
         this.inputParser = new A2aInputParser(objectMapper);
         this.outputNormalizer = new A2aOutputNormalizer(objectMapper);
+        this.skillRegistry = skillRegistry;
+        this.skillOwner = skillOwner;
+        Map<String, String> available = new java.util.LinkedHashMap<>();
+        tools.stream().map(tool -> tool.getToolDefinition().name()).filter(name -> !"skill".equals(name))
+                .forEach(name -> available.put(com.bkanent.common.agent.CapabilityId.local(name).value(), name));
+        this.capabilities = Map.copyOf(available);
     }
 
     @Override
@@ -63,6 +78,8 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
         }
         try {
             A2aInput input = inputParser.parse(context, outputPolicy);
+            var skillExecution = prepareSkillExecution(input);
+            execution.skillExecution = skillExecution;
             if (execution.cancelled.get()) {
                 cancelExecution(execution, "CANCELED");
                 return;
@@ -76,6 +93,9 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
             }
         }
         catch (A2aInputException exception) {
+            failExecution(execution, exception.code(), exception.getMessage());
+        }
+        catch (com.bkanent.common.skill.runtime.SkillExecutionException exception) {
             failExecution(execution, exception.code(), exception.getMessage());
         }
         catch (Exception exception) {
@@ -113,7 +133,7 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
         if (execution.terminal.get()) {
             return;
         }
-        var result = agent.invoke(input.instruction(), runnableConfig(context, input));
+        var result = agent.invoke(input.instruction(), runnableConfig(context, input, execution));
         if (execution.cancelled.get() || execution.terminal.get()) {
             return;
         }
@@ -127,7 +147,7 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
         execution.streamFinished = finished;
         StringBuilder output = new StringBuilder();
         AtomicInteger progressNumber = new AtomicInteger();
-        Flux<NodeOutput> stream = agent.stream(input.instruction(), runnableConfig(context, input));
+        Flux<NodeOutput> stream = agent.stream(input.instruction(), runnableConfig(context, input, execution));
         Disposable subscription = stream.subscribe(nodeOutput -> {
                     if (execution.cancelled.get() || execution.terminal.get()
                             || nodeOutput.isSTART() || nodeOutput.isEND()
@@ -229,7 +249,32 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
                 && Boolean.TRUE.equals(context.getParams().metadata().get("isStreaming"));
     }
 
-    private RunnableConfig runnableConfig(RequestContext context, A2aInput input) {
+    private com.bkanent.common.skill.runtime.SkillExecutionContext prepareSkillExecution(A2aInput input) {
+        Object raw = input.metadata().get("supervisor");
+        Object selected = raw instanceof Map<?, ?> supervisor ? supervisor.get("skillSelection") : null;
+        com.bkanent.common.agent.SkillSelection selection = null;
+        if (selected != null) {
+            if (skillRegistry == null) {
+                throw new com.bkanent.common.skill.runtime.SkillExecutionException(
+                        "EXPLICIT_SKILL_UNSUPPORTED", "target does not support explicit selection");
+            }
+            if (!(selected instanceof Map<?, ?> fields) || !"explicit".equals(fields.get("mode"))) {
+                throw new com.bkanent.common.skill.runtime.SkillExecutionException("SKILL_POLICY_INVALID", "invalid selection");
+            }
+            try {
+                selection = new com.bkanent.common.agent.SkillSelection(string(fields.get("name")),
+                        string(fields.get("version")), string(fields.get("contentHash")), string(fields.get("owner")));
+            } catch (IllegalArgumentException exception) {
+                throw new com.bkanent.common.skill.runtime.SkillExecutionException("SKILL_POLICY_INVALID", "skill name required");
+            }
+        }
+        return skillRegistry == null ? null : new com.bkanent.common.skill.runtime.SkillExecutionContext(
+                skillRegistry, skillOwner, input.instruction(), capabilities, selection);
+    }
+
+    private String string(Object value) { return value instanceof String text ? text : null; }
+
+    private RunnableConfig runnableConfig(RequestContext context, A2aInput input, ExecutionState execution) {
         RunnableConfig.Builder builder = RunnableConfig.builder();
         Object threadId = input.metadata().get("threadId");
         if (threadId instanceof String text && StringUtils.hasText(text)) {
@@ -239,6 +284,9 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
             builder.threadId(context.getTaskId());
         }
         input.metadata().forEach(builder::addMetadata);
+        if (execution.skillExecution != null) {
+            builder.addMetadata(com.bkanent.common.skill.runtime.SkillExecutionContext.KEY, execution.skillExecution);
+        }
         builder.addMetadata("a2aStructuredInput", input.structuredContext());
         builder.addMetadata("a2aOutputMode", input.jsonOutput()
                 ? A2aOutputPolicy.JSON_MODE : A2aOutputPolicy.TEXT_MODE);
@@ -282,6 +330,7 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
         private final AtomicBoolean terminal = new AtomicBoolean();
         private volatile Disposable subscription;
         private volatile CountDownLatch streamFinished;
+        private com.bkanent.common.skill.runtime.SkillExecutionContext skillExecution;
 
         private ExecutionState(TaskUpdater updater) {
             this.updater = updater;

@@ -27,7 +27,7 @@
 ## 4. Subagent 共享契约同步
 
 - [ ] 4.1 在 A2A metadata/input/executor 传递与校验 skillSelection 和 parentRunId/callId/parentSkill；通过父 skill 不自动变子 skill、显式/旧 hint 参数契约和身份绑定测试验证。
-- [ ] 4.2 对未支持 explicit、名称/归属/版本/内容身份不符返回结构化失败，不降级 hint；通过滚动发布兼容与无越权执行测试验证。
+- [x] 4.2 对未支持 explicit、名称/归属/版本/内容身份不符返回结构化失败，不降级 hint；通过滚动发布兼容与无越权执行测试验证。
 - [ ] 4.3 先接入 listing/compare/marketing，复用各服务 ReAct、本地工具和业务逻辑；通过三个服务的映射样例及相关范围回归验证。
 - [ ] 4.4 再接入 trade/media/contract/settlement/notification 的共享契约与范围策略；通过五个服务的映射样例和默认/显式执行回归验证。
 - [ ] 4.5 interview 只升级治理面契约；运行 LR-3/4/5/8/13 相关回归，确认高频话轮、确定性决策、状态机和 MCP 范围不迁移到 Supervisor。

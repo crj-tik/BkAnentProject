@@ -42,6 +42,40 @@ class OfficialA2aAgentExecutorTest {
     private final A2aOutputPolicy policy = A2aOutputPolicy.structured("listing");
 
     @Test
+    void explicitSelectionOnOldExecutorFailsBeforeAnyModelInvocation() throws Exception {
+        ReactAgent agent = mockAgent("{}");
+        var executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy);
+        EventQueue queue = EventQueue.create();
+        executor.execute(context("unsupported", Map.of("supervisor", Map.of("skillSelection",
+                Map.of("name", "find", "mode", "explicit"))), List.of("text")), queue);
+        assertThat(drain(queue)).anySatisfy(event -> assertThat(event).isInstanceOfSatisfying(
+                TaskStatusUpdateEvent.class, status -> {
+                    assertThat(status.getStatus().state()).isEqualTo(TaskState.FAILED);
+                    assertThat(status.getStatus().message().getMetadata()).containsEntry("errorCode", "EXPLICIT_SKILL_UNSUPPORTED");
+                }));
+        org.mockito.Mockito.verify(agent, org.mockito.Mockito.never()).invoke(anyString(), any());
+        queue.close();
+    }
+
+    @Test
+    void incompatibleExplicitVersionFailsWithoutHintFallback() throws Exception {
+        ReactAgent agent = mockAgent("{}");
+        var registry = mock(com.bkanent.common.skill.core.SkillRegistry.class);
+        when(registry.getByName("find")).thenReturn(com.bkanent.common.skill.SkillDefinition.builder()
+                .name("find").description("find").domain("listing").version("1")
+                .tools(List.of("search")).build());
+        var executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy, registry, "listing", List.of());
+        EventQueue queue = EventQueue.create();
+        executor.execute(context("version-mismatch", Map.of("supervisor", Map.of("skillHint", "find",
+                "skillSelection", Map.of("name", "find", "mode", "explicit", "version", "2"))), List.of("text")), queue);
+        assertThat(drain(queue)).anySatisfy(event -> assertThat(event).isInstanceOfSatisfying(
+                TaskStatusUpdateEvent.class, status -> assertThat(status.getStatus().message().getMetadata())
+                        .containsEntry("errorCode", "SKILL_VERSION_MISMATCH")));
+        org.mockito.Mockito.verify(agent, org.mockito.Mockito.never()).invoke(anyString(), any());
+        queue.close();
+    }
+
+    @Test
     void blockingExecutionEmitsOneStructuredTerminalArtifact() throws Exception {
         ReactAgent agent = mockAgent("{\"decision\":\"SUCCESS\",\"listingCount\":1,"
                 + "\"summary\":\"找到 1 套房源\",\"nextHints\":[]}");

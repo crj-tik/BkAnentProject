@@ -1,6 +1,14 @@
 package com.bkanent.compare.a2a;
 
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
+import com.bkanent.common.skill.core.SkillRegistry;
+import com.bkanent.common.skill.runtime.SkillTool;
+import com.bkanent.common.skill.runtime.SkillRoutingModelInterceptor;
+import com.bkanent.common.skill.runtime.SkillRoutingToolInterceptor;
+import org.springframework.ai.tool.ToolCallback;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Arrays;
 import com.bkanent.common.a2a.A2aOutputPolicy;
 import com.bkanent.common.a2a.OfficialA2aAgentExecutor;
 import com.bkanent.compare.config.CompareAgentProperties;
@@ -18,17 +26,25 @@ public class CompareOfficialA2aAgent {
     private static final String OUTPUT_KEY = "output";
 
     private final ReactAgent reactAgent;
+    private final SkillRegistry skillRegistry;
+    private final List<ToolCallback> executionTools;
 
     public CompareOfficialA2aAgent(ChatModel chatModel,
                                    CompareAgentProperties properties,
-                                   CompareTools compareTools) {
+                                   CompareTools compareTools, SkillRegistry skillRegistry) {
+        this.skillRegistry = skillRegistry;
+        List<ToolCallback> tools = new ArrayList<>(Arrays.asList(
+                MethodToolCallbackProvider.builder().toolObjects(compareTools).build().getToolCallbacks()));
+        tools.add(new SkillTool(skillRegistry, "compare"));
+        this.executionTools = List.copyOf(tools);
         this.reactAgent = ReactAgent.builder()
                 .name("compare-agent")
                 .description("Responsible for multi-listing comparison analysis with LLM-driven insights, side-by-side metrics, and AI-generated conclusions")
                 .model(chatModel)
                 .systemPrompt(properties.getSystemPrompt())
-                .tools(MethodToolCallbackProvider.builder().toolObjects(compareTools).build().getToolCallbacks())
-                .interceptors(new A2aSupervisorContextInterceptor())
+                .tools(tools)
+                .interceptors(new A2aSupervisorContextInterceptor(),
+                        new SkillRoutingModelInterceptor(skillRegistry, "compare"), new SkillRoutingToolInterceptor())
                 .outputKey(OUTPUT_KEY)
                 .build();
     }
@@ -40,6 +56,7 @@ public class CompareOfficialA2aAgent {
 
     @Bean
     public AgentExecutor compareA2aAgentExecutor(ObjectMapper objectMapper) {
-        return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("compare"));
+        return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("compare"),
+                skillRegistry, "compare", executionTools);
     }
 }

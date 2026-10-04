@@ -27,11 +27,14 @@ public class MediaOfficialA2aAgent {
     private static final String DOMAIN = "media";
 
     private final ReactAgent reactAgent;
+    private final SkillRegistry skillRegistry;
+    private List<ToolCallback> executionTools;
 
     public MediaOfficialA2aAgent(ChatModel chatModel,
                                  MediaAgentProperties properties,
                                  MediaTools mediaTools,
                                  SkillRegistry skillRegistry) {
+        this.skillRegistry = skillRegistry;
         this.reactAgent = buildAgent(chatModel, properties, mediaTools, skillRegistry);
     }
 
@@ -39,6 +42,7 @@ public class MediaOfficialA2aAgent {
                                   MediaTools mediaTools, SkillRegistry skillRegistry) {
         List<ToolCallback> tools = new ArrayList<>(Arrays.asList(MethodToolCallbackProvider.builder().toolObjects(mediaTools).build().getToolCallbacks()));
         tools.add(new SkillTool(skillRegistry, DOMAIN));
+        executionTools = List.copyOf(tools);
         return ReactAgent.builder()
                 .name("media-agent")
                 .description("Responsible for media task generation, video/cover asset preparation, and publish-ready media references with LLM-driven task routing")
@@ -46,7 +50,8 @@ public class MediaOfficialA2aAgent {
                 .systemPrompt(properties.getSystemPrompt())
                 .tools(tools)
                 .interceptors(new A2aSupervisorContextInterceptor(),
-                        new SkillRoutingModelInterceptor(skillRegistry, DOMAIN))
+                        new SkillRoutingModelInterceptor(skillRegistry, DOMAIN),
+                        new com.bkanent.common.skill.runtime.SkillRoutingToolInterceptor())
                 .outputKey(OUTPUT_KEY)
                 .build();
     }
@@ -58,6 +63,7 @@ public class MediaOfficialA2aAgent {
 
     @Bean
     public AgentExecutor mediaA2aAgentExecutor(ObjectMapper objectMapper) {
-        return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("media"));
+        return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("media"),
+                skillRegistry, DOMAIN, executionTools);
     }
 }

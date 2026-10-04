@@ -27,14 +27,18 @@ public class InterviewOfficialA2aAgent {
     private static final String DOMAIN = "interview";
 
     private final ReactAgent reactAgent;
+    private final SkillRegistry skillRegistry;
+    private List<ToolCallback> executionTools;
 
     public InterviewOfficialA2aAgent(ChatModel chatModel,
                                      InterviewAgentProperties properties,
                                      InterviewTools interviewTools,
                                      SkillRegistry skillRegistry) {
+        this.skillRegistry = skillRegistry;
         List<ToolCallback> tools = new ArrayList<>(Arrays.asList(
                 MethodToolCallbackProvider.builder().toolObjects(interviewTools).build().getToolCallbacks()));
         tools.add(new SkillTool(skillRegistry, DOMAIN));
+        executionTools = List.copyOf(tools);
 
         this.reactAgent = ReactAgent.builder()
                 .name("interview-agent")
@@ -43,7 +47,8 @@ public class InterviewOfficialA2aAgent {
                 .systemPrompt(properties.getSystemPrompt())
                 .tools(tools)
                 .interceptors(new A2aSupervisorContextInterceptor(),
-                        new SkillRoutingModelInterceptor(skillRegistry, DOMAIN))
+                        new SkillRoutingModelInterceptor(skillRegistry, DOMAIN),
+                        new com.bkanent.common.skill.runtime.SkillRoutingToolInterceptor())
                 .outputKey(OUTPUT_KEY)
                 .build();
     }
@@ -55,6 +60,7 @@ public class InterviewOfficialA2aAgent {
 
     @Bean
     public AgentExecutor interviewA2aAgentExecutor(ObjectMapper objectMapper) {
-        return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("interview"));
+        return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("interview"),
+                skillRegistry, DOMAIN, executionTools);
     }
 }

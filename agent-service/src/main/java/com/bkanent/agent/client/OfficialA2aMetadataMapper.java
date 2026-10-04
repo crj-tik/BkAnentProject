@@ -43,6 +43,18 @@ public final class OfficialA2aMetadataMapper {
         putText(supervisor, "sessionId", request.sessionId());
         putText(supervisor, "taskId", request.taskId());
         putText(supervisor, "parentTaskId", request.parentTaskId());
+        putText(supervisor, "parentRunId", request.parentTaskId());
+        putText(supervisor, "callId", request.idempotencyKey());
+        if (request.skillSelection() != null) {
+            var selection = request.skillSelection();
+            Map<String, Object> explicit = new LinkedHashMap<>();
+            explicit.put("mode", "explicit");
+            explicit.put("name", selection.name());
+            putText(explicit, "version", selection.version());
+            putText(explicit, "contentHash", selection.contentHash());
+            putText(explicit, "owner", selection.owner());
+            supervisor.put("skillSelection", Map.copyOf(explicit));
+        }
         putText(supervisor, "traceId", request.traceId());
         putText(supervisor, "sourceAgentId", request.sourceAgentId());
         putText(supervisor, "targetAgentId", request.targetAgentId());

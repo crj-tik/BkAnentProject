@@ -72,7 +72,7 @@ public final class SkillTool implements ToolCallback {
         }
 
         SkillDefinition skill = registry.getByName(name);
-        if (skill == null || skill.supervisorSkill()
+        if (skill == null || skill.supervisorSkill() || skill.explicitOnly()
                 || !skill.domain().equals(domain)) {
             log.warn("Skill '{}' requested but not available in domain '{}'", name, domain);
             return "技能调用失败：未找到技能 '" + name + "'。当前可用技能：" + catalogNames()
@@ -102,6 +102,7 @@ public final class SkillTool implements ToolCallback {
      */
     private String buildInputSchema() {
         List<String> names = registry.findOperationalSkills(domain).stream()
+                .filter(skill -> !skill.explicitOnly())
                 .map(SkillDefinition::name)
                 .toList();
 
@@ -159,6 +160,7 @@ public final class SkillTool implements ToolCallback {
 
     private String catalogNames() {
         List<String> names = new ArrayList<>(registry.findOperationalSkills(domain).stream()
+                .filter(skill -> !skill.explicitOnly())
                 .map(SkillDefinition::name)
                 .toList());
         return names.isEmpty() ? "（无）" : String.join("、", names);
