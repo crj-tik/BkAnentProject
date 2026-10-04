@@ -12,6 +12,12 @@ public record AgentChatResponse(
         String model,
         AgentToolDecision decision,
         List<MilvusSearchResult> toolResults,
-        String toolContext
+        String toolContext,
+        String runId,
+        String status,
+        java.util.Map<String, Object> orchestration
 ) {
+    public AgentChatResponse(String answer, String model, AgentToolDecision decision, List<MilvusSearchResult> toolResults, String toolContext) {
+        this(answer, model, decision, toolResults, toolContext, null, null, java.util.Map.of());
+    }
 }

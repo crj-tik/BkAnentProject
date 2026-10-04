@@ -19,6 +19,8 @@ class OrchestrationStoreTest {
         while (!Files.exists(root.resolve("sql/migrations/20261004_supervisor_orchestration.sql"))) root = root.getParent();
         for (String sql : Files.readString(root.resolve("sql/migrations/20261004_supervisor_orchestration.sql")).replaceAll("(?m)^--.*$", "").split(";"))
             if (!sql.isBlank()) jdbc.execute(sql);
+        for (String sql : Files.readString(root.resolve("sql/migrations/20261004_supervisor_run_control.sql")).replaceAll("(?m)^--.*$", "").split(";"))
+            if (!sql.isBlank()) jdbc.execute(sql);
         return new OrchestrationStore(jdbc, mapper);
     }
 

@@ -83,6 +83,17 @@ public class ApprovalResumeClaimStore {
                 .eq(AgentWorkflowApprovalClaimEntity::getApprovalId, approvalId)
                 .eq(AgentWorkflowApprovalClaimEntity::getDecisionStatus, PROCESSING));
     }
+    /** Called only by the leased owner after a matching durable graph decision has been recovered. */
+    public void completeRecovered(ApprovalCallbackRequest request, SupervisorTaskResponse response) {
+        var entity = new AgentWorkflowApprovalClaimEntity();
+        entity.setDecisionStatus(COMPLETED);
+        try { entity.setResultJson(objectMapper.writeValueAsString(response)); }
+        catch (JsonProcessingException exception) { throw new IllegalStateException(exception); }
+        claimMapper.update(entity, new LambdaQueryWrapper<AgentWorkflowApprovalClaimEntity>()
+                .eq(AgentWorkflowApprovalClaimEntity::getApprovalId, request.approvalId())
+                .eq(AgentWorkflowApprovalClaimEntity::getTaskId, request.taskId())
+                .in(AgentWorkflowApprovalClaimEntity::getDecisionStatus, PROCESSING, FAILED));
+    }
 
     private AgentWorkflowApprovalClaimEntity find(String approvalId) {
         return claimMapper.selectOne(new LambdaQueryWrapper<AgentWorkflowApprovalClaimEntity>()

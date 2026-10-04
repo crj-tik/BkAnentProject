@@ -102,6 +102,10 @@ public class AgentPermissionService {
         Long parsedUserId = parseUserId(userId);
         return parsedUserId != null && authPermissionRpcService.hasPermission(parsedUserId, "agent.chat.use");
     }
+    public boolean canUseMcpTools(String userId) {
+        Long parsedUserId = parseUserId(userId);
+        return parsedUserId != null && authPermissionRpcService.hasPermission(parsedUserId, "agent.mcp.chat.use");
+    }
 
     public void assertCanInvokeChildAgent(RegisteredAgentDescriptor descriptor, AgentTaskInvokeRequest request) {
         Long userId = resolveUserId(request);

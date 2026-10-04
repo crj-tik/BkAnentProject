@@ -69,7 +69,9 @@ public class SupervisorWorkflowQueryService {
                 state.pendingApproval(),
                 state.latestApprovalDecision(),
                 state.latestAgentResponse(),
-                state.finalAnswer()
+                state.finalAnswer(),
+                state.sharedContext().get("orchestration") instanceof java.util.Map<?, ?> metadata
+                        ? objectMapper.convertValue(metadata, java.util.Map.class) : java.util.Map.of()
         );
     }
 

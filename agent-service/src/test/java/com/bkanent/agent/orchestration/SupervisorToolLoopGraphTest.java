@@ -218,6 +218,128 @@ class SupervisorToolLoopGraphTest {
         verify(skills, times(1)).getByName("find");
     }
 
+    @Test
+    void changedInputIdentityAndOwnerAndPolicyAreRejected() {
+        when(model.call(anyList(), anyList())).thenReturn(calls(call("question", "request_input", "{\"question\":\"地区\"}")), new AssistantMessage("done"));
+        runner.execute(request("waiting-policy", null, null, "find"));
+        assertThatThrownBy(() -> runner.execute(new SupervisorTaskRequest("session", "2", "input", "trace", "浦东", Map.of(), "api", false, null, "waiting-policy", null)))
+                .hasMessage("CONTINUATION_OWNER_MISMATCH");
+        assertThatThrownBy(() -> runner.execute(new SupervisorTaskRequest("session", "1", "input", "trace", "浦东", Map.of(), "api", false, null, "waiting-policy", false)))
+                .hasMessage("CONTINUATION_POLICY_CHANGED");
+        runner.execute(request("input", null, "waiting-policy", "浦东"));
+        assertThatThrownBy(() -> runner.execute(request("input", null, "waiting-policy", "徐汇"))).hasMessage("TOOL_CALL_ID_CONFLICT");
+        assertThatThrownBy(() -> runner.execute(request("another", null, "waiting-policy", "浦东"))).hasMessage("CONTINUATION_STATE_INVALID");
+    }
+
+    @Test
+    void explicitBodyOrderDoesNotAddBusinessPrerequisiteNodes() {
+        when(catalog.snapshot("1", true)).thenReturn(Map.of("local:first", capability("first"), "local:second", capability("second")));
+        when(skills.getByName("ordered")).thenReturn(SkillDefinition.builder().name("ordered").description("steps").domain("supervisor")
+                .tools(List.of("first", "second")).systemPrompt("先 first，再 second").build());
+        when(model.call(anyList(), anyList())).thenReturn(calls(call("two", "second", "{}")), calls(call("one", "first", "{}")), new AssistantMessage("done"));
+        assertThat(runner.execute(request("reorder", new SkillSelection("ordered", "1"), null, "find")).status()).isEqualTo("COMPLETED");
+        assertThat(effects).hasValue(2);
+        assertThat(store.invocations("reorder")).extracting(OrchestrationStore.Invocation::capabilityId).containsExactly("local:second", "local:first");
+    }
+
+    @Test
+    void originalCallResultsSurviveEventFailureAndCanReconcileWithoutResend() {
+        SessionStreamService broken = mock(SessionStreamService.class);
+        doThrow(new IllegalStateException("events down")).when(broken).publish(any());
+        factory.close();
+        factory = new SupervisorToolLoopGraph(catalog, model, skills, store, mapper, properties, broken,
+                new OfficialSupervisorGraphSchema(), mock(DatabaseCheckpointSaverFactory.class));
+        try { graph = factory.create(new MemorySaver()); } catch (Exception exception) { throw new IllegalStateException(exception); }
+        runner.close(); runner = new SupervisorToolLoopRunner(factory, graph, store, properties, claims);
+        when(model.call(anyList(), anyList())).thenReturn(calls(call("one", "search", "{}")), new AssistantMessage("done"));
+        assertThat(runner.execute(request("events", null, null, "find")).status()).isEqualTo("COMPLETED");
+        assertThat(store.find("events", "one").status()).isEqualTo("COMPLETED");
+        assertThat(effects).hasValue(1);
+    }
+
+    @Test
+    void cancellationWhileWaitingCannotBeBypassedByContinuation() {
+        when(model.call(anyList(), anyList())).thenReturn(calls(call("question", "request_input", "{\"question\":\"地区\"}")));
+        runner.execute(request("cancel", null, null, "find"));
+        assertThat(runner.cancel("cancel", "1").status()).isEqualTo("CANCELED");
+        assertThatThrownBy(() -> runner.execute(request("input", null, "cancel", "浦东"))).hasMessage("CONTINUATION_STATE_INVALID");
+        assertThat(effects).hasValue(0);
+    }
+
+    @Test
+    void confirmedLateResultReturnsToModelWithoutExecutingToolAgain() {
+        ToolCallback failed = new ToolCallback() {
+            public ToolDefinition getToolDefinition() { return ToolDefinition.builder().name("search").description("search").inputSchema("{\"type\":\"object\"}").build(); }
+            public String call(String input) { effects.incrementAndGet(); throw new IllegalStateException("network"); }
+        };
+        when(catalog.snapshot("1", true)).thenReturn(Map.of("local:search", new SupervisorCapability("local:search", "local", "search", "1", failed)));
+        when(model.call(anyList(), anyList())).thenReturn(calls(call("unknown", "search", "{}")), new AssistantMessage("confirmed"));
+        runner.execute(request("late", null, null, "find"));
+        store.complete("late", "unknown", "confirmed actual result");
+        assertThat(runner.reconcile("late", "1").status()).isEqualTo("COMPLETED");
+        assertThat(effects).hasValue(1);
+        assertThat(state("late").messages.stream().filter(message -> "tool".equals(message.role())).findFirst().orElseThrow().responses().get(0).responseData())
+                .isEqualTo("confirmed actual result");
+    }
+
+    @Test
+    void separateChangedParametersRequireNewApprovalAndRepeatedCallbackCannotExecuteAgain() {
+        when(model.call(anyList(), anyList())).thenReturn(calls(call("original", "search", "{\"limit\":1}")),
+                calls(call("changed", "search", "{\"limit\":2}")), new AssistantMessage("done"));
+        runner.execute(new SupervisorTaskRequest("session", "1", "twice", "trace", "find", Map.of("requireApproval", true), "api", false));
+        var first = state("twice").pendingApproval;
+        var callback = new com.bkanent.common.agent.ApprovalCallbackRequest(first.approvalId(), "twice", "session", com.bkanent.common.agent.ApprovalStatus.APPROVED, "1", null, "trace", first.subjectVersion());
+        assertThat(runner.resume(callback).status()).isEqualTo("WAITING_USER_APPROVAL");
+        assertThat(effects).hasValue(1);
+        var second = state("twice").pendingApproval;
+        assertThat(second.subjectId()).isNotEqualTo(first.subjectId());
+        // Simulate completed claim replay while another actual-call approval is pending.
+        when(claims.claim(callback)).thenReturn(ApprovalResumeClaimStore.ClaimResult.replay(factory.responseOf(state("twice"))));
+        runner.resume(callback);
+        assertThat(effects).hasValue(1);
+        runner.resume(new com.bkanent.common.agent.ApprovalCallbackRequest(second.approvalId(), "twice", "session", com.bkanent.common.agent.ApprovalStatus.APPROVED, "1", null, "trace", second.subjectVersion()));
+        assertThat(effects).hasValue(2);
+    }
+
+    @Test
+    void independentCallsRunInParallelAndBudgetStopsUnboundedCalls() throws Exception {
+        var entered = new java.util.concurrent.CountDownLatch(2);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        ToolCallback parallel = new ToolCallback() {
+            public ToolDefinition getToolDefinition() { return ToolDefinition.builder().name("search").description("search").inputSchema("{\"type\":\"object\"}").build(); }
+            public String call(String input) {
+                entered.countDown();
+                try { if (!release.await(2, java.util.concurrent.TimeUnit.SECONDS)) throw new IllegalStateException("not parallel"); }
+                catch (InterruptedException exception) { Thread.currentThread().interrupt(); throw new IllegalStateException(exception); }
+                effects.incrementAndGet(); return "actual";
+            }
+        };
+        when(catalog.snapshot("1", true)).thenReturn(Map.of("local:search", new SupervisorCapability("local:search", "local", "search", "1", parallel)));
+        when(model.call(anyList(), anyList())).thenReturn(calls(call("a", "search", "{}"), call("b", "search", "{}")), new AssistantMessage("done"));
+        var executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+        try {
+            var result = executor.submit(() -> runner.execute(request("parallel", null, null, "find")));
+            assertThat(entered.await(2, java.util.concurrent.TimeUnit.SECONDS)).isTrue(); release.countDown();
+            assertThat(result.get(3, java.util.concurrent.TimeUnit.SECONDS).status()).isEqualTo("COMPLETED");
+        } finally { release.countDown(); executor.shutdownNow(); }
+        assertThat(effects).hasValue(2);
+        properties.setMaxToolCalls(1);
+        when(model.call(anyList(), anyList())).thenReturn(calls(call("c", "search", "{}"), call("d", "search", "{}")));
+        assertThat(runner.execute(request("budget", null, null, "find")).governanceMetadata()).containsEntry("errorCode", "BUDGET_EXHAUSTED");
+        assertThat(effects).hasValue(2);
+    }
+
+    @Test
+    void modelDeadlineAndPauseNewAcceptancePreserveSameModeRecovery() {
+        properties.setModelTimeoutMs(20); properties.setModelRetries(0);
+        when(model.call(anyList(), anyList())).thenAnswer(invocation -> { Thread.sleep(5000); return new AssistantMessage("late"); });
+        assertThat(runner.execute(request("timeout", null, null, "find")).governanceMetadata()).containsEntry("errorCode", "MODEL_UNAVAILABLE");
+        properties.setAccepting(false);
+        assertThatThrownBy(() -> runner.execute(request("new", null, null, "find"))).hasMessage("SUPERVISOR_ACCEPTANCE_PAUSED");
+        assertThat(runner.execute(request("timeout", null, null, "find")).status()).isEqualTo("FAILED");
+        assertThat(effects).hasValue(0);
+    }
+
     private ToolLoopState state(String id) { return factory.stateOf(graph.lastStateOf(com.alibaba.cloud.ai.graph.RunnableConfig.builder().threadId(id).build()).orElseThrow().state()); }
     private SupervisorTaskRequest request(String id, SkillSelection skill, String continueId, String message) {
         return new SupervisorTaskRequest("session", "1", id, "trace", message, Map.of(), "api", false, skill, continueId, null);

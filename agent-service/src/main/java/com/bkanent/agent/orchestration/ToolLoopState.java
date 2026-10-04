@@ -37,4 +37,7 @@ public class ToolLoopState {
     public String approvedBatchHash;
     public String finalAnswer = "";
     public String errorCode;
+    public String leaseToken;
+    public String lastInputId;
+    public List<String> uncertainCallIds = new ArrayList<>();
 }

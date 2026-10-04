@@ -60,14 +60,14 @@ public class SupervisorCapabilityCatalog {
                     invokeAgent(descriptor.agentId(), arguments, context));
             add(result, new SupervisorCapability(id, "a2a", descriptor.agentId(), card.version(), callback));
         }
-        if (allowMcp) for (var tool : mcp.listTools()) {
+        if (allowMcp && permissions.canUseMcpTools(userId)) for (var tool : mcp.listTools()) {
             if (!permissions.canReadMcpServer(userId, tool.serverName())) continue;
             String id = CapabilityId.mcp(tool.serverName(), tool.toolName()).value();
             add(result, new SupervisorCapability(id, "mcp", tool.serverName(), tool.inputSchema(),
                     callback(id, tool.description() == null ? tool.toolName() : tool.description(), tool.inputSchema(),
                             (arguments, context) -> {
                                 String actor = required(context, "userId");
-                                if (!permissions.canReadMcpServer(actor, tool.serverName())) throw new IllegalStateException("CAPABILITY_PERMISSION_DENIED");
+                                if (!permissions.canUseMcpTools(actor) || !permissions.canReadMcpServer(actor, tool.serverName())) throw new IllegalStateException("CAPABILITY_PERMISSION_DENIED");
                                 return json(mcp.callTool(tool.serverName(), tool.toolName(), arguments));
                             })));
         }

@@ -35,6 +35,7 @@ class SupervisorCapabilityCatalogTest {
     void identicalMcpAndLocalNamesKeepAllRealBindingsAndDescriptions() {
         when(agents.listDescriptors()).thenReturn(List.of());
         when(permissions.canUseLocalTools("1")).thenReturn(true);
+        when(permissions.canUseMcpTools("1")).thenReturn(true);
         when(permissions.canReadMcpServer(eq("1"), anyString())).thenReturn(true);
         when(mcp.listTools()).thenReturn(List.of(tool("one"), tool("two")));
         when(mcp.callTool("two", "search", Map.of("query", "real")))
@@ -60,6 +61,7 @@ class SupervisorCapabilityCatalogTest {
         verify(mcp, never()).listTools();
         when(permissions.canReadMcpServer(eq("1"), anyString())).thenReturn(true);
         when(mcp.listTools()).thenReturn(List.of(tool("added")));
+        when(permissions.canUseMcpTools("1")).thenReturn(true);
         assertThat(catalog.snapshot("1", true)).containsOnlyKeys("mcp:added:search");
         when(mcp.listTools()).thenReturn(List.of());
         assertThat(catalog.snapshot("1", true)).isEmpty();

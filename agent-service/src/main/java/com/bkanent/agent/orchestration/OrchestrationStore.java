@@ -47,6 +47,25 @@ public class OrchestrationStore {
     public void release(String runId, String token) {
         jdbc.update("UPDATE agent_orchestration_run SET lease_owner=NULL,lease_until_ms=0 WHERE run_id=? AND lease_owner=?", runId, token);
     }
+    public void assertActive(String runId, String token) {
+        var rows = jdbc.queryForList("SELECT lease_owner,lease_until_ms,cancel_requested FROM agent_orchestration_run WHERE run_id=?", runId);
+        if (rows.isEmpty()) throw new IllegalStateException("RUN_NOT_FOUND");
+        var row = rows.get(0);
+        if (((Number) row.get("cancel_requested")).intValue() != 0) throw new IllegalStateException("RUN_CANCELLED");
+        if (token == null || !token.equals(row.get("lease_owner"))
+                || ((Number) row.get("lease_until_ms")).longValue() < System.currentTimeMillis()) throw new IllegalStateException("RUN_LEASE_LOST");
+    }
+    public void cancel(String runId, String userId) {
+        assertOwner(runId, userId);
+        jdbc.update("UPDATE agent_orchestration_run SET cancel_requested=1 WHERE run_id=?", runId);
+    }
+    public java.util.List<Invocation> invocations(String runId) {
+        return jdbc.query("SELECT call_id FROM agent_tool_invocation WHERE run_id=? ORDER BY updated_at_ms,call_id",
+                (result, row) -> result.getString(1), runId).stream().map(id -> find(runId, id)).toList();
+    }
+    public void executionMetadata(String runId, String callId, Object metadata) {
+        jdbc.update("UPDATE agent_tool_invocation SET execution_metadata_json=? WHERE run_id=? AND call_id=?", json(metadata), runId, callId);
+    }
     public Invocation prepare(String runId, String callId, String capabilityId, String arguments) {
         String hash = hash(arguments);
         try { jdbc.update("INSERT INTO agent_tool_invocation(run_id,call_id,capability_id,arguments_hash,arguments_json,status,updated_at_ms) VALUES (?,?,?,?,?,'PENDING',?)",
@@ -60,7 +79,8 @@ public class OrchestrationStore {
     public Invocation find(String runId, String callId) {
         var rows = jdbc.query("SELECT * FROM agent_tool_invocation WHERE run_id=? AND call_id=?", (result, row) ->
                 new Invocation(runId, callId, result.getString("capability_id"), result.getString("arguments_hash"),
-                        result.getString("status"), result.getString("result_json"), result.getString("remote_association_json")), runId, callId);
+                        result.getString("status"), result.getString("result_json"), result.getString("remote_association_json"),
+                        result.getString("execution_metadata_json")), runId, callId);
         return rows.isEmpty() ? null : rows.get(0);
     }
     public boolean claim(String runId, String callId) {
@@ -109,5 +129,5 @@ public class OrchestrationStore {
         try { return mapper.readValue(json, type); } catch (Exception exception) { throw new IllegalStateException(exception); }
     }
     public record Invocation(String runId, String callId, String capabilityId, String argumentsHash,
-                             String status, String result, String remoteAssociation) {}
+                             String status, String result, String remoteAssociation, String executionMetadata) {}
 }

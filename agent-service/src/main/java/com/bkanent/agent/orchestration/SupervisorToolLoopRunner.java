@@ -13,7 +13,7 @@ import jakarta.annotation.PreDestroy;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.function.Supplier;
+import java.util.function.Function;
 
 import static com.bkanent.agent.graph.official.OfficialSupervisorGraphKeys.LATEST_APPROVAL_DECISION;
 
@@ -52,17 +52,20 @@ public class SupervisorToolLoopRunner {
                 request.context(), request.channel(), request.stream(), request.skill(), null, request.allowMcp());
         if (!hasRun(runId) && !properties.isAccepting()) throw new IllegalStateException("SUPERVISOR_ACCEPTANCE_PAUSED");
         store.register(runId, normalized);
-        return leased(runId, () -> {
+        return leased(runId, token -> {
             StateSnapshot existing = snapshot(runId);
             if (existing != null) {
                 var state = factory.stateOf(existing.state());
                 if (!state.userId.equals(request.userId())) throw new IllegalStateException("CONTINUATION_OWNER_MISMATCH");
                 if (!"RUNNING".equals(state.status)) return factory.responseOf(state);
-                return invoke(Map.of(), existing.config().withResume());
+                state.leaseToken = token;
+                try { return invoke(Map.of(), graph.updateState(existing.config(), factory.updates(state, "Recovery")).withResume()); }
+                catch (Exception exception) { throw new IllegalStateException(exception); }
             }
             ToolLoopState state = new ToolLoopState();
             state.request = normalized; state.runId = runId; state.sessionId = sessionId; state.traceId = traceId;
             state.userId = normalized.userId(); state.mode = OrchestrationMode.from(normalized.skill()).name();
+            state.leaseToken = token;
             state.allowMcp = normalized.allowMcp() == null || normalized.allowMcp();
             state.maxRounds = Math.max(1, properties.getMaxRounds()); state.maxToolCalls = Math.max(1, properties.getMaxToolCalls());
             return invoke(factory.updates(state, "PrepareContext"), config(runId));
@@ -73,19 +76,34 @@ public class SupervisorToolLoopRunner {
         String runId = request.continueRunId();
         if (!StringUtils.hasText(request.requestId())) throw new IllegalArgumentException("continuation requestId required");
         store.assertOwner(runId, request.userId());
-        return leased(runId, () -> {
+        return leased(runId, token -> {
             StateSnapshot existing = snapshot(runId);
             if (existing == null) throw new IllegalArgumentException("CONTINUATION_NOT_FOUND");
             ToolLoopState state = factory.stateOf(existing.state());
             validateContinuation(state, request);
             String id = "input-" + store.hash(store.json(Map.of("requestId", request.requestId())));
             var previous = store.find(runId, id);
+            if (previous != null) store.prepare(runId, id, "control:continue_input", store.json(Map.of("message", request.userMessage())));
             if (previous != null && "COMPLETED".equals(previous.status()))
                 return store.read(previous.result(), SupervisorTaskResponse.class);
+            state.leaseToken = token;
+            if (previous != null && id.equals(state.lastInputId)) {
+                try {
+                    var response = "RUNNING".equals(state.status)
+                            ? invoke(Map.of(), graph.updateState(existing.config(), factory.updates(state, "Recovery")).withResume())
+                            : factory.responseOf(state);
+                    store.complete(runId, id, store.json(response));
+                    return response;
+                } catch (Exception exception) { throw new IllegalStateException("continuation requires checkpoint recovery", exception); }
+            }
             if (!"WAITING_USER_INPUT".equals(state.status)) throw new IllegalStateException("CONTINUATION_STATE_INVALID");
             var invocation = store.prepare(runId, id, "control:continue_input", store.json(Map.of("message", request.userMessage())));
-            if (!store.claim(runId, id)) throw new IllegalStateException("CONTINUATION_ALREADY_PROCESSING");
+            // Lease ownership proves an abandoned internal input claim can be recovered.
+            // No external side effect precedes the checkpoint recording this input identity.
+            if (!store.claim(runId, id) && !"EXECUTING".equals(invocation.status()))
+                throw new IllegalStateException("CONTINUATION_ALREADY_PROCESSING");
             state.messages.add(StoredModelMessage.user(request.userMessage()));
+            state.lastInputId = id;
             state.status = "RUNNING"; state.question = null; state.missingFields = List.of(); state.finalAnswer = "";
             try {
                 RunnableConfig resumed = graph.updateState(existing.config(), factory.updates(state, "PauseInput")).withResume();
@@ -119,16 +137,33 @@ public class SupervisorToolLoopRunner {
 
     public SupervisorTaskResponse resume(ApprovalCallbackRequest request) {
         if (request.status() == null || request.status() == ApprovalStatus.PENDING) throw new IllegalArgumentException("approval decision required");
-        return leased(request.taskId(), () -> {
+        return leased(request.taskId(), token -> {
             StateSnapshot existing = snapshot(request.taskId());
             if (existing == null) throw new IllegalArgumentException("run not found");
             ToolLoopState state = factory.stateOf(existing.state());
+            store.assertOwner(request.taskId(), request.reviewerId());
+            state.leaseToken = token;
             if (StringUtils.hasText(request.sessionId()) && !state.sessionId.equals(request.sessionId())) throw new IllegalArgumentException("approval session mismatch");
             ApprovalDecision previousDecision = existing.state().value(LATEST_APPROVAL_DECISION)
                     .map(value -> store.read(store.json(value), ApprovalDecision.class)).orElse(null);
             boolean pendingMatches = state.pendingApproval != null && request.approvalId().equals(state.pendingApproval.approvalId());
             boolean replayMatches = previousDecision != null && request.approvalId().equals(previousDecision.approvalId());
             if (!pendingMatches && !replayMatches) throw new IllegalArgumentException("approval does not belong to run");
+            if (replayMatches) {
+                if (previousDecision.status() != request.status()) throw new IllegalArgumentException("approval decision conflict");
+                if (state.pendingApproval != null && !pendingMatches) {
+                    var response = factory.responseOf(state);
+                    claims.completeRecovered(request, response);
+                    return response;
+                }
+                try {
+                    var response = AsyncRunStatus.terminal(state.status) || "WAITING_USER_INPUT".equals(state.status)
+                            ? factory.responseOf(state)
+                            : invoke(Map.of(), graph.updateState(existing.config(), factory.updates(state, "Recovery")).withResume());
+                    claims.completeRecovered(request, response);
+                    return response;
+                } catch (Exception exception) { throw new IllegalStateException("approval requires checkpoint recovery", exception); }
+            }
             var claim = claims.claim(request);
             if (!claim.acquired()) return claim.replayedResponse();
             if (!"WAITING_USER_APPROVAL".equals(state.status) || state.pendingApproval == null
@@ -138,17 +173,73 @@ public class SupervisorToolLoopRunner {
             }
             try {
                 var decision = new ApprovalDecision(request.approvalId(), request.status(), request.reviewerId(), request.feedback(), LocalDateTime.now(), request.traceId());
-                var resumed = graph.updateState(existing.config(), Map.of(LATEST_APPROVAL_DECISION, decision)).withResume();
+                Map<String, Object> update = new LinkedHashMap<>(factory.updates(state, "PauseApproval"));
+                update.put(LATEST_APPROVAL_DECISION, decision);
+                var resumed = graph.updateState(existing.config(), update).withResume();
                 var response = invoke(Map.of(), resumed); claims.complete(request.approvalId(), response); return response;
             } catch (Exception exception) { claims.fail(request.approvalId(), exception); throw new IllegalStateException(exception); }
         });
     }
 
-    private SupervisorTaskResponse leased(String runId, Supplier<SupervisorTaskResponse> operation) {
+    public SupervisorTaskResponse current(String runId, String userId) {
+        store.assertOwner(runId, userId);
+        var existing = snapshot(runId);
+        return existing == null ? null : factory.responseOf(factory.stateOf(existing.state()));
+    }
+
+    public SupervisorTaskResponse cancel(String runId, String userId) {
+        store.cancel(runId, userId);
+        factory.cancelRemoteTasks(runId, userId);
+        try {
+            return leased(runId, token -> {
+                var existing = snapshot(runId);
+                if (existing == null) throw new IllegalArgumentException("RUN_NOT_FOUND");
+                var state = factory.stateOf(existing.state());
+                if (!AsyncRunStatus.terminal(state.status)) {
+                    state.status = "CANCELED"; state.finalAnswer = "执行已取消。"; state.errorCode = "RUN_CANCELLED";
+                    state.pendingApproval = null;
+                    try { graph.updateState(existing.config(), factory.updates(state, "Cancelled")); }
+                    catch (Exception exception) { throw new IllegalStateException(exception); }
+                }
+                return factory.responseOf(state);
+            });
+        } catch (IllegalStateException exception) {
+            if (!"run already being processed".equals(exception.getMessage())) throw exception;
+            // An active owner observes the durable cancellation before its next model/call boundary.
+            var response = current(runId, userId);
+            return new SupervisorTaskResponse(response.sessionId(), response.taskId(), "CANCEL_REQUESTED", response.finalAnswer(),
+                    response.artifactIds(), response.traceId(), response.selectedAgentId(), response.governanceMetadata());
+        }
+    }
+
+    public SupervisorTaskResponse reconcile(String runId, String userId) {
+        store.assertOwner(runId, userId);
+        return leased(runId, token -> {
+            var existing = snapshot(runId);
+            if (existing == null) throw new IllegalArgumentException("RUN_NOT_FOUND");
+            var state = factory.stateOf(existing.state());
+            if (!"OUTCOME_UNKNOWN".equals(state.errorCode)) return factory.responseOf(state);
+            state.leaseToken = token;
+            if (!factory.reconcileResults(state)) return factory.responseOf(state);
+            try {
+                // A terminal checkpoint points at END. Restart at Model with the complete persisted state,
+                // bypassing PrepareContext and preserving original messages, snapshots and call identities.
+                var update = factory.updates(state, "Observe");
+                var saver = graph.compileConfig.checkpointSaver().orElseThrow();
+                Map<String, Object> restored = new LinkedHashMap<>(existing.state().data()); restored.putAll(update);
+                var checkpoint = com.alibaba.cloud.ai.graph.checkpoint.Checkpoint.builder().state(restored).nodeId("Observe").nextNodeId("Model").build();
+                var resumed = saver.put(config(runId), checkpoint).withResume();
+                return invoke(Map.of(), resumed);
+            }
+            catch (Exception exception) { throw new IllegalStateException(exception); }
+        });
+    }
+
+    private SupervisorTaskResponse leased(String runId, Function<String, SupervisorTaskResponse> operation) {
         String token = UUID.randomUUID().toString();
         if (!store.lease(runId, token, LEASE_MS)) throw new IllegalStateException("run already being processed");
         Future<?> heartbeat = renewals.scheduleAtFixedRate(() -> store.renew(runId, token, LEASE_MS), LEASE_MS / 3, LEASE_MS / 3, TimeUnit.MILLISECONDS);
-        try { return operation.get(); }
+        try { return operation.apply(token); }
         finally { heartbeat.cancel(false); store.release(runId, token); }
     }
     private SupervisorTaskResponse invoke(Map<String, Object> input, RunnableConfig config) {

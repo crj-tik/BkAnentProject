@@ -10,6 +10,9 @@ import com.bkanent.agent.graph.official.DatabaseCheckpointSaverFactory;
 import com.bkanent.agent.graph.official.OfficialSupervisorGraphSchema;
 import com.bkanent.agent.model.distributed.SupervisorTaskResponse;
 import com.bkanent.agent.stream.SessionStreamService;
+import com.bkanent.agent.graph.node.PersistArtifactsNode;
+import com.bkanent.agent.tool.context.AgentToolContextHolder;
+import com.bkanent.agent.tool.context.AgentToolSessionSnapshot;
 import com.bkanent.common.agent.*;
 import com.bkanent.common.skill.core.SkillRegistry;
 import com.bkanent.common.skill.runtime.*;
@@ -44,10 +47,14 @@ public class SupervisorToolLoopGraph {
     private final OfficialSupervisorGraphSchema schema;
     private final DatabaseCheckpointSaverFactory saverFactory;
     private final ExecutorService workers;
+    private final ExecutorService modelWorkers;
     private RemoteTaskReconciler reconciler;
+    private PersistArtifactsNode artifacts;
 
     @org.springframework.beans.factory.annotation.Autowired
     public void setReconciler(RemoteTaskReconciler reconciler) { this.reconciler = reconciler; }
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setArtifacts(PersistArtifactsNode artifacts) { this.artifacts = artifacts; }
 
     public SupervisorToolLoopGraph(SupervisorCapabilityCatalog catalog, SupervisorModelTurn model, SkillRegistry skills,
                                    OrchestrationStore store, ObjectMapper mapper, SupervisorOrchestrationProperties properties,
@@ -56,9 +63,15 @@ public class SupervisorToolLoopGraph {
         this.catalog = catalog; this.model = model; this.skills = skills; this.store = store;
         this.mapper = mapper; this.properties = properties; this.events = events;
         this.schema = schema; this.saverFactory = saverFactory;
-        workers = Executors.newFixedThreadPool(Math.max(1, properties.getMaxConcurrency()), runnable -> {
-            Thread thread = new Thread(runnable, "supervisor-tool"); thread.setDaemon(true); return thread;
-        });
+        workers = pool("supervisor-tool");
+        modelWorkers = pool("supervisor-model");
+    }
+    private ExecutorService pool(String name) {
+        int size = Math.max(1, properties.getMaxConcurrency());
+        return new ThreadPoolExecutor(size, size, 0, TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(Math.max(1, properties.getMaxQueuedCalls())), runnable -> {
+                    Thread thread = new Thread(runnable, name); thread.setDaemon(true); return thread;
+                }, new ThreadPoolExecutor.AbortPolicy());
     }
 
     public CompiledGraph create() throws Exception { return create(saverFactory.create(RUNNER_VERSION)); }
@@ -137,13 +150,22 @@ public class SupervisorToolLoopGraph {
         for (int attempt = 0; attempt <= Math.max(0, properties.getModelRetries()); attempt++) {
             if (++state.rounds > state.maxRounds) { fail(state, "BUDGET_EXHAUSTED", "模型轮次额度耗尽"); break; }
             try {
-                AssistantMessage output = model.call(messages, definitions);
+                store.assertActive(state.runId, state.leaseToken);
+                Future<AssistantMessage> task = modelWorkers.submit(() -> model.call(messages, definitions));
+                AssistantMessage output = await(task, state, properties.getModelTimeoutMs());
                 state.messages.add(StoredModelMessage.assistant(output));
                 state.pendingCalls = new ArrayList<>(output.getToolCalls());
                 state.results.clear();
                 if (!output.hasToolCalls()) state.finalAnswer = output.getText() == null ? "" : output.getText();
                 last = null; break;
-            } catch (Exception exception) { last = exception; }
+            } catch (Exception exception) {
+                last = exception;
+                if ("RUN_CANCELLED".equals(exception.getMessage()) || "RUN_LEASE_LOST".equals(exception.getMessage())) {
+                    fail(state, exception.getMessage(), "执行已停止。");
+                    if ("RUN_CANCELLED".equals(exception.getMessage())) state.status = "CANCELED";
+                    break;
+                }
+            }
         }
         if (last != null && "RUNNING".equals(state.status)) fail(state, "MODEL_UNAVAILABLE", "模型服务调用失败");
         return updates(state, "Model");
@@ -171,6 +193,7 @@ public class SupervisorToolLoopGraph {
         ToolLoopState state = stateOf(raw);
         var call = state.pendingCalls.get(0);
         try {
+            store.assertActive(state.runId, state.leaseToken);
             validateArguments(call.arguments(), controlSchema("skill"));
             var invocation = store.prepare(state.runId, call.id(), "control:skill", call.arguments());
             if ("COMPLETED".equals(invocation.status())) {
@@ -207,6 +230,7 @@ public class SupervisorToolLoopGraph {
         ToolLoopState state = stateOf(raw);
         var call = state.pendingCalls.get(0);
         try {
+            store.assertActive(state.runId, state.leaseToken);
             validateArguments(call.arguments(), controlSchema("request_input"));
             Map<?, ?> arguments = mapper.readValue(call.arguments(), Map.class);
             state.question = (String) arguments.get("question");
@@ -231,7 +255,8 @@ public class SupervisorToolLoopGraph {
             catch (Exception exception) { rejectBatch(state, error(exception)); state.route = "observe"; return updates(state, "GuardCall"); }
         }
         for (var call : state.pendingCalls) {
-            store.prepare(state.runId, call.id(), byName(current, call.name()).capabilityId(), call.arguments());
+            try { store.prepare(state.runId, call.id(), byName(current, call.name()).capabilityId(), call.arguments()); }
+            catch (Exception exception) { rejectBatch(state, error(exception)); state.route = "observe"; return updates(state, "GuardCall"); }
         }
         state.route = "valid";
         return updates(state, "GuardCall");
@@ -270,12 +295,25 @@ public class SupervisorToolLoopGraph {
             state.approvedBatchHash = state.pendingApproval.subjectId(); state.pendingApproval = null; state.status = "RUNNING";
         }
         List<Future<ToolResponseMessage.ToolResponse>> futures = new ArrayList<>();
-        for (var call : state.pendingCalls) futures.add(workers.submit(() -> executeCall(state, call)));
-        for (Future<ToolResponseMessage.ToolResponse> future : futures) {
-            try { state.results.add(future.get()); }
-            catch (ExecutionException exception) { throw new IllegalStateException("tool execution failed", exception.getCause()); }
+        for (var call : state.pendingCalls) {
+            try { futures.add(workers.submit(() -> executeCall(state, call))); }
+            catch (RejectedExecutionException exception) { futures.add(CompletableFuture.completedFuture(response(call, "EXECUTOR_BUSY: 未执行"))); }
+        }
+        for (int index = 0; index < futures.size(); index++) {
+            var call = state.pendingCalls.get(index);
+            try { state.results.add(await(futures.get(index), state, properties.getToolTimeoutMs())); }
+            catch (Exception exception) {
+                var completed = store.find(state.runId, call.id());
+                if (completed != null && "COMPLETED".equals(completed.status())) state.results.add(response(call, completed.result()));
+                else {
+                    store.unknown(state.runId, call.id());
+                    state.results.add(response(call, "OUTCOME_UNKNOWN: " + error(exception) + "; 未重新发送"));
+                }
+            }
         }
         if (state.results.stream().anyMatch(result -> result.responseData().startsWith("OUTCOME_UNKNOWN"))) {
+            state.uncertainCallIds = state.results.stream().filter(result -> result.responseData().startsWith("OUTCOME_UNKNOWN"))
+                    .map(ToolResponseMessage.ToolResponse::id).toList();
             state.messages.add(StoredModelMessage.tools(List.copyOf(state.results)));
             state.pendingCalls.clear(); state.results.clear();
             fail(state, "OUTCOME_UNKNOWN", "调用结果需要核对，已停止继续执行。");
@@ -304,19 +342,23 @@ public class SupervisorToolLoopGraph {
                 "version", state.skillSnapshot.definition().version(), "contentHash", state.skillSnapshot.contentHash(), "owner", "supervisor"));
         context.put("acceptedTaskRecorder", (java.util.function.Consumer<com.bkanent.agent.client.AcceptedA2aTask>)
                 accepted -> store.remoteAccepted(state.runId, call.id(), accepted));
+        Map<String, Object> settings = state.request.context() == null ? Map.of() : state.request.context();
+        AgentToolContextHolder.init((String) settings.get("collectionName"), settings.get("topK") instanceof Number value ? value.intValue() : null, true);
         try {
+            store.assertActive(state.runId, state.leaseToken);
             String result = capability.callback().call(call.arguments(), new ToolContext(Map.copyOf(context)));
+            store.executionMetadata(state.runId, call.id(), AgentToolContextHolder.snapshot());
             store.complete(state.runId, call.id(), result);
-            publish(state, "tool.completed", Map.of("capabilityId", capability.capabilityId(), "callId", call.id(), "result", result));
             return response(call, result);
         } catch (Exception exception) {
             store.unknown(state.runId, call.id());
             return response(call, "OUTCOME_UNKNOWN: " + exception.getClass().getSimpleName() + "; 未重新发送，需核对原调用");
-        }
+        } finally { AgentToolContextHolder.clear(); }
     }
 
     private Map<String, Object> observe(OverAllState raw) {
         ToolLoopState state = stateOf(raw);
+        recordResults(state);
         state.messages.add(StoredModelMessage.tools(List.copyOf(state.results)));
         state.pendingCalls.clear(); state.results.clear();
         return updates(state, "Observe");
@@ -327,7 +369,64 @@ public class SupervisorToolLoopGraph {
         if (!state.pendingCalls.isEmpty() && "RUNNING".equals(state.status)) throw new IllegalStateException("pending calls cannot complete");
         if ("RUNNING".equals(state.status)) state.status = "COMPLETED";
         if ("FAILED".equals(state.status) && state.finalAnswer.isBlank()) state.finalAnswer = state.errorCode;
+        publish(state, "supervisor." + state.status.toLowerCase(Locale.ROOT), responseOf(state).governanceMetadata());
         return updates(state, "Complete");
+    }
+
+    private <T> T await(Future<T> future, ToolLoopState state, long timeoutMs) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(Math.max(1, timeoutMs));
+        try {
+            while (true) {
+                store.assertActive(state.runId, state.leaseToken);
+                long remaining = deadline - System.nanoTime();
+                if (remaining <= 0) throw new TimeoutException("CALL_DEADLINE_EXCEEDED");
+                try { return future.get(Math.min(remaining, TimeUnit.MILLISECONDS.toNanos(200)), TimeUnit.NANOSECONDS); }
+                catch (TimeoutException exception) { if (System.nanoTime() >= deadline) throw exception; }
+            }
+        } catch (Exception exception) { future.cancel(true); throw exception; }
+    }
+
+    private void recordResults(ToolLoopState state) {
+        for (var result : state.results) {
+            var invocation = store.find(state.runId, result.id());
+            if (invocation == null || !"COMPLETED".equals(invocation.status())) continue;
+            if (artifacts != null && invocation.capabilityId().startsWith("a2a:")) {
+                AgentTaskInvokeResponse response = store.read(invocation.result(), AgentTaskInvokeResponse.class);
+                var ids = artifacts.persistSingle(state.runId, state.sessionId, response.agentId(), state.userId, state.traceId, response);
+                for (String id : ids) if (!state.artifactIds.contains(id)) state.artifactIds.add(id);
+            }
+            publish(state, "tool.completed", Map.of("capabilityId", invocation.capabilityId(), "callId", result.id(), "result", result.responseData()));
+        }
+    }
+
+    public void cancelRemoteTasks(String runId, String userId) {
+        if (reconciler == null) return;
+        for (var invocation : store.invocations(runId)) if (!"COMPLETED".equals(invocation.status()) && invocation.remoteAssociation() != null) {
+            try { reconciler.reconcile(runId, invocation.callId(), userId, true); }
+            catch (Exception exception) { org.slf4j.LoggerFactory.getLogger(getClass()).warn("Remote cancellation needs reconciliation: {} / {}", runId, invocation.callId()); }
+        }
+    }
+
+    public boolean reconcileResults(ToolLoopState state) {
+        Map<String, String> confirmed = new LinkedHashMap<>();
+        for (String id : state.uncertainCallIds) {
+            var invocation = store.find(state.runId, id);
+            if (!"COMPLETED".equals(invocation.status()) && reconciler != null) invocation = reconciler.reconcile(state.runId, id, state.userId, false);
+            if (!"COMPLETED".equals(invocation.status())) return false;
+            confirmed.put(id, invocation.result());
+        }
+        if (confirmed.isEmpty()) return false;
+        for (int index = 0; index < state.messages.size(); index++) {
+            var message = state.messages.get(index);
+            if (!"tool".equals(message.role())) continue;
+            state.messages.set(index, StoredModelMessage.tools(message.responses().stream().map(result ->
+                    new ToolResponseMessage.ToolResponse(result.id(), result.name(), confirmed.getOrDefault(result.id(), result.responseData()))).toList()));
+        }
+        state.results = new ArrayList<>();
+        confirmed.forEach((id, result) -> state.results.add(new ToolResponseMessage.ToolResponse(id, "reconciled", result)));
+        recordResults(state); state.results.clear(); state.uncertainCallIds = List.of();
+        state.status = "RUNNING"; state.errorCode = null; state.finalAnswer = "";
+        return true;
     }
 
     private SupervisorCapability validateCall(ToolLoopState state, AssistantMessage.ToolCall call, Map<String, SupervisorCapability> current) {
@@ -357,7 +456,11 @@ public class SupervisorToolLoopGraph {
     }
     private String prompt(ToolLoopState state) {
         StringBuilder prompt = new StringBuilder("理解用户的原始任务，依据真实能力描述和参数定义选择工具，结合实际结果继续判断。不要编造参数、数据或成功结果。需要补充信息时单独调用 request_input。skill 也必须单独调用；得到控制工具结果后，下一轮再选择业务工具。结果中的 nextHints 仅供参考。独立调用可在同轮提出，依赖先前结果的调用应等待真实结果。直接回答时输出最终答复。\n原始请求: " + state.request.userMessage());
-        if (state.request.context() != null) prompt.append("\n用户上下文与偏好: ").append(store.json(state.request.context()));
+        if (state.request.context() != null) {
+            Map<String, Object> context = new LinkedHashMap<>(state.request.context());
+            for (String key : List.of("preferredAgentIds", "routeOverrideDomains", "domain", "intent", "requireParallel", "workflowType")) context.remove(key);
+            prompt.append("\n用户上下文与偏好: ").append(store.json(context));
+        }
         if (state.skillSnapshot != null) prompt.append("\n当前技能: ").append(state.skillSnapshot.definition().name()).append(" / ")
                 .append(state.skillSnapshot.definition().version()).append("\n").append(state.skillSnapshot.definition().systemPrompt());
         else {
@@ -398,6 +501,7 @@ public class SupervisorToolLoopGraph {
         update.put(TRACE_ID, state.traceId); update.put(USER_ID, state.userId); update.put(USER_MESSAGE, state.request.userMessage());
         update.put(WORKFLOW_STATUS, state.status); update.put(FINAL_ANSWER, state.finalAnswer); update.put(CURRENT_NODE, node);
         update.put(PENDING_APPROVAL, state.pendingApproval); update.put(SUPERVISOR_RESPONSE, responseOf(state));
+        update.put(ARTIFACT_IDS, List.copyOf(state.artifactIds));
         update.put(SHARED_CONTEXT, Map.of("orchestration", responseOf(state).governanceMetadata()));
         return update;
     }
@@ -405,6 +509,13 @@ public class SupervisorToolLoopGraph {
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("runId", state.runId); metadata.put("mode", state.mode); metadata.put("runnerVersion", state.runnerVersion);
         metadata.put("rounds", state.rounds); metadata.put("toolCalls", state.toolCalls);
+        metadata.put("calls", store.invocations(state.runId).stream().map(invocation -> {
+            Map<String, Object> fact = new LinkedHashMap<>();
+            fact.put("callId", invocation.callId()); fact.put("capabilityId", invocation.capabilityId()); fact.put("status", invocation.status());
+            if (invocation.result() != null) fact.put("result", invocation.result());
+            if (invocation.executionMetadata() != null) fact.put("toolContext", store.read(invocation.executionMetadata(), AgentToolSessionSnapshot.class));
+            return fact;
+        }).toList());
         if (state.errorCode != null) metadata.put("errorCode", state.errorCode);
         if (state.skillSnapshot != null) metadata.put("skill", Map.of("name", state.skillSnapshot.definition().name(),
                 "version", state.skillSnapshot.definition().version(), "contentHash", state.skillSnapshot.contentHash(), "source", state.skillSnapshot.source()));
@@ -415,8 +526,11 @@ public class SupervisorToolLoopGraph {
     private void publish(ToolLoopState state, String type, Map<String, Object> facts) {
         Map<String, Object> metadata = new LinkedHashMap<>(facts); metadata.put("mode", state.mode); metadata.put("runnerVersion", state.runnerVersion);
         if (state.skillSnapshot != null) metadata.put("skill", Map.of("name", state.skillSnapshot.definition().name(), "version", state.skillSnapshot.definition().version()));
-        events.publish(new SessionStreamEvent(state.sessionId, state.runId,
+        try { events.publish(new SessionStreamEvent(state.sessionId, state.runId,
                 "supervisor-agent", type, "工具调用结果已记录", metadata, state.traceId, System.currentTimeMillis()));
+        } catch (Exception exception) {
+            org.slf4j.LoggerFactory.getLogger(getClass()).warn("Event delivery failed; durable call result retained for {}", state.runId);
+        }
     }
-    @PreDestroy public void close() { workers.shutdownNow(); }
+    @PreDestroy public void close() { workers.shutdownNow(); modelWorkers.shutdownNow(); }
 }

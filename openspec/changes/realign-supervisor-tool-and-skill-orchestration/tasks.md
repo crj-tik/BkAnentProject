@@ -13,7 +13,7 @@
 - [x] 2.1 修复 Agent Card discovery 描述、skills、streaming/task 等能力字段保真；通过真实字段样例和注册契约测试验证。
 - [x] 2.2 修正 A2AClient 按 endpoint/能力版本刷新及执行中远端 Task 地址关联；通过同 agentId 地址切换与旧任务续查测试验证。
 - [x] 2.3 建立统一能力目录、稳定命名空间和实际工具定义，把 A2A、静态/动态 MCP、本地能力映射为无冲突名称；通过同名工具不覆盖和真实回调绑定测试验证。
-- [ ] 2.4 接入目录授权可见性、逐轮快照及执行前目标/权限再校验；通过冷启动无假 Agent、动态增加/撤销、无权限及 MCP 禁用测试验证。
+- [x] 2.4 接入目录授权可见性、逐轮快照及执行前目标/权限再校验；通过冷启动无假 Agent、动态增加/撤销、无权限及 MCP 禁用测试验证。
 - [ ] 2.5 选定并记录运维环境支持 Agent Registry API 的 Nacos 版本与 HTTP Card fallback 配置；通过实际注册→Card→endpoint→调用冒烟验证，更新 KI-18 验证结论。
 
 ## 3. 共享技能加载和严格能力范围
@@ -38,9 +38,9 @@
 - [ ] 5.2 实现 A2A ToolCallback，把 instruction/结构化输入/可选下游 skill 转到既有 A2aExecutionService；通过真实响应规范化、稳定子调用身份和官方 Task/Artifact 关联测试验证。
 - [ ] 5.3 将 MCP/本地回调接入同一 ExecuteTool 治理入口，保留实际 description/schema 和能力映射；通过 A2A/MCP 混合工具决策、参数错误及唯一执行次数测试验证。
 - [x] 5.4 用通用 PrepareContext/Model/Dispatch/LoadSkill/GuardCall/ApprovalGate/ExecuteTool/Observe/Complete 图替代新请求的领域路由；通过新增 Agent/skill 不增加业务节点、AUTO/EXPLICIT_SKILL 同循环和 nextHints 不自动调用测试验证。
-- [ ] 5.5 实现 request_input 控制调用、待输入保存和 continueRunId 续接，把原始请求/补充信息/真实结果持续返回模型；通过追问无业务动作、幂等续接及 explicit 快照不改变测试验证，不用问号或关键词分类等待。
+- [x] 5.5 实现 request_input 控制调用、待输入保存和 continueRunId 续接，把原始请求/补充信息/真实结果持续返回模型；通过追问无业务动作、幂等续接及 explicit 快照不改变测试验证，不用问号或关键词分类等待。
 - [x] 5.6 限制每轮至多一个单独的 skill/request_input 控制调用，控制与业务混合或多个控制调用均整批拒绝并为每个 callId 返回未执行结果；通过无技能激活/无等待状态变化/无业务副作用、下一轮分轮继续和消息关联测试验证。
-- [ ] 5.7 增加模型轮次/工具预算/并发上限和有界同模式重试；通过独立调用并行、额度耗尽、模型不可用不转关键词和取消测试验证。
+- [x] 5.7 增加模型轮次/工具预算/并发上限和有界同模式重试；通过独立调用并行、额度耗尽、模型不可用不转关键词和取消测试验证。
 - [x] 5.8 验证 GuardCall/Complete 只执行通用治理，不检查正文步骤顺序/前置业务步骤/文字流程完成；通过受控模型提出范围内重排/提前结束的测试及新拓扑审计验证第一种边界。
 
 ## 6. 调用账本、审批与恢复

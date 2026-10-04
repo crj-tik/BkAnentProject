@@ -1,102 +1,46 @@
 package com.bkanent.agent.service;
 
 import com.bkanent.agent.config.AgentChatProperties;
-import com.bkanent.agent.model.chat.AgentChatRequest;
-import com.bkanent.agent.model.chat.AgentChatResponse;
-import com.bkanent.agent.model.chat.AgentToolDecision;
-import com.bkanent.agent.tool.context.AgentToolContextHolder;
+import com.bkanent.agent.model.chat.*;
+import com.bkanent.agent.model.distributed.SupervisorTaskRequest;
+import com.bkanent.agent.orchestration.SupervisorToolLoopRunner;
 import com.bkanent.agent.tool.context.AgentToolSessionSnapshot;
+import com.bkanent.agent.milvus.core.model.MilvusSearchResult;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
+import java.util.*;
 
-/**
- * AgentOrchestratorService 服务类。
- */
+/** Ordinary chat uses the same execution owner and preserves its original response fields. */
 @Service
 public class AgentOrchestratorService {
-
-    /**
-     * 字段：deepSeekChatService。
-     */
-    private final AgentChatService agentChatService;
-    /**
-     * 字段：agentDeepSeekProperties。
-     */
-    private final AgentChatProperties agentChatProperties;
-
-    /**
-     * 构造 AgentOrchestratorService 实例。
-     */
-    public AgentOrchestratorService(AgentChatService agentChatService,
-                                    AgentChatProperties agentChatProperties) {
-        this.agentChatService = agentChatService;
-        this.agentChatProperties = agentChatProperties;
+    private final SupervisorToolLoopRunner runner;
+    private final AgentChatProperties properties;
+    private final ObjectMapper mapper;
+    public AgentOrchestratorService(SupervisorToolLoopRunner runner, AgentChatProperties properties, ObjectMapper mapper) {
+        this.runner = runner; this.properties = properties; this.mapper = mapper;
     }
 
-    /**
-     * 处理对话。
-     */
     public AgentChatResponse chat(AgentChatRequest request) {
-        String message = request.message() == null ? "" : request.message().trim();
-        if (message.isBlank()) {
-            throw new IllegalArgumentException("Message must not be blank");
+        Map<String, Object> context = new LinkedHashMap<>();
+        if (request.continueRunId() == null || request.collectionName() != null || request.topK() != null) {
+            context.put("collectionName", request.collectionName() == null ? "agent_knowledge" : request.collectionName());
+            context.put("topK", request.topK() == null ? properties.getDefaultTopK() : Math.max(1, request.topK()));
         }
-
-        int topK = request.topK() == null ? agentChatProperties.getDefaultTopK() : Math.max(1, request.topK());
-        boolean allowMcp = request.allowMcp() == null || request.allowMcp();
-
-        AgentToolContextHolder.init(request.collectionName(), topK, true);
-        try {
-            String answer = agentChatService.call(
-                    agentChatService.getSystemPrompt(),
-                    buildUserPrompt(message, request.collectionName(), topK, allowMcp),
-                    allowMcp
-            );
-            AgentToolSessionSnapshot snapshot = AgentToolContextHolder.snapshot();
-            return new AgentChatResponse(
-                    answer,
-                    agentChatService.getModel(),
-                    buildDecision(snapshot),
-                    snapshot.milvusResults(),
-                    snapshot.toolContext()
-            );
-        } finally {
-            AgentToolContextHolder.clear();
+        var response = runner.execute(new SupervisorTaskRequest(request.sessionId(), request.userId(), request.requestId(), null,
+                request.message(), context, "chat", false, request.skill(), request.continueRunId(), request.allowMcp()));
+        List<AgentToolSessionSnapshot> snapshots = new ArrayList<>();
+        if (response.governanceMetadata().get("calls") instanceof List<?> calls) for (Object call : calls) {
+            if (call instanceof Map<?, ?> fact && fact.get("toolContext") != null)
+                snapshots.add(mapper.convertValue(fact.get("toolContext"), AgentToolSessionSnapshot.class));
         }
-    }
-
-    /**
-     * 构建userPrompt。
-     */
-    private String buildUserPrompt(String message, String collectionName, int topK, boolean allowMcp) {
-        return """
-                User question:
-                %s
-
-                Current session context:
-                - Knowledge collection: %s
-                - Default search topK: %s
-                - MCP tools allowed: %s
-
-                Decide whether tools are needed first, then answer based on real tool results.
-                """.formatted(
-                message,
-                collectionName == null || collectionName.isBlank() ? "agent_knowledge" : collectionName,
-                topK,
-                allowMcp ? "yes" : "no"
-        ).trim();
-    }
-
-    /**
-     * 构建decision。
-     */
-    private AgentToolDecision buildDecision(AgentToolSessionSnapshot snapshot) {
-        if (!snapshot.usedTool()) {
-            return new AgentToolDecision(false, null, null, null, "Model decided no tool call was needed");
-        }
-        boolean usedKnowledgeTool = snapshot.milvusResults() != null && !snapshot.milvusResults().isEmpty();
-        String reason = usedKnowledgeTool
-                ? "Model invoked the Milvus knowledge retrieval tool"
-                : "Model invoked an external MCP tool";
-        return new AgentToolDecision(usedKnowledgeTool, snapshot.firstToolName(), snapshot.firstToolQuery(), snapshot.topK(), reason);
+        var first = snapshots.stream().filter(AgentToolSessionSnapshot::usedTool).findFirst().orElse(null);
+        List<MilvusSearchResult> results = snapshots.stream().flatMap(snapshot -> snapshot.milvusResults().stream()).toList();
+        String trace = snapshots.stream().map(AgentToolSessionSnapshot::toolContext).filter(value -> !value.isBlank())
+                .reduce((left, right) -> left + System.lineSeparator() + right).orElse("");
+        var decision = new AgentToolDecision(!results.isEmpty(), first == null ? null : first.firstToolName(),
+                first == null ? null : first.firstToolQuery(), first == null ? null : first.topK(),
+                first == null ? "Model decided no retrieval tool call was needed" : "Model invoked tools; results recorded by the shared execution loop");
+        return new AgentChatResponse(response.finalAnswer(), properties.getModel(), decision, results, trace,
+                response.taskId(), response.status(), response.governanceMetadata());
     }
 }

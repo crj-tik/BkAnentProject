@@ -30,6 +30,9 @@ import java.util.concurrent.RejectedExecutionException;
 
 @Service
 public class SupervisorAsyncTaskService {
+    private com.bkanent.agent.orchestration.SupervisorToolLoopRunner toolLoopRunner;
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setToolLoopRunner(com.bkanent.agent.orchestration.SupervisorToolLoopRunner runner) { this.toolLoopRunner = runner; }
     private final AgentRegistry agentRegistry;
     private final A2aExecutionService a2aExecutionService;
     private final SupervisorTaskService supervisorTaskService;
@@ -187,6 +190,7 @@ public class SupervisorAsyncTaskService {
                 entity.getTraceId(),
                 "async task view"
         );
+        toStatusResponse(entity);
         return new SupervisorAsyncTaskView(
                 entity.getSessionId(),
                 entity.getTaskId(),
@@ -209,7 +213,7 @@ public class SupervisorAsyncTaskService {
         AgentAsyncTaskEntity entity = new AgentAsyncTaskEntity();
         entity.setAsyncTaskId(asyncTaskId);
         entity.setSessionId(sessionId);
-        entity.setTaskId(taskId);
+        entity.setTaskId(StringUtils.hasText(request.continueRunId()) ? request.continueRunId() : taskId);
         entity.setTraceId(traceId);
         entity.setUserId(request.userId());
         entity.setSelectedAgentId(selectedAgentId);
@@ -492,6 +496,10 @@ public class SupervisorAsyncTaskService {
     }
 
     private SupervisorAsyncTaskStatusResponse toStatusResponse(AgentAsyncTaskEntity entity) {
+        if (toolLoopRunner != null && toolLoopRunner.hasRun(entity.getTaskId())) {
+            var current = toolLoopRunner.current(entity.getTaskId(), entity.getUserId());
+            entity.setStatus(current.status()); entity.setResultJson(writeJson(current));
+        }
         return new SupervisorAsyncTaskStatusResponse(
                 entity.getSessionId(),
                 entity.getTaskId(),

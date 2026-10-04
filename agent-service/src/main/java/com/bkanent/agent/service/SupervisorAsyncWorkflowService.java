@@ -26,6 +26,9 @@ import java.util.concurrent.RejectedExecutionException;
 
 @Service
 public class SupervisorAsyncWorkflowService {
+    private com.bkanent.agent.orchestration.SupervisorToolLoopRunner toolLoopRunner;
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setToolLoopRunner(com.bkanent.agent.orchestration.SupervisorToolLoopRunner runner) { this.toolLoopRunner = runner; }
     private final SupervisorWorkflowService supervisorWorkflowService;
     private final SessionStreamService sessionStreamService;
     private final AgentMetricsService agentMetricsService;
@@ -98,7 +101,7 @@ public class SupervisorAsyncWorkflowService {
         AgentAsyncWorkflowEntity entity = new AgentAsyncWorkflowEntity();
         entity.setAsyncWorkflowId(asyncWorkflowId);
         entity.setSessionId(sessionId);
-        entity.setTaskId(taskId);
+        entity.setTaskId(StringUtils.hasText(request.continueRunId()) ? request.continueRunId() : taskId);
         entity.setTraceId(traceId);
         entity.setUserId(normalizedRequest.userId());
         entity.setStatus("ACCEPTED");
@@ -146,6 +149,7 @@ public class SupervisorAsyncWorkflowService {
                 entity.getTraceId(),
                 "async workflow view"
         );
+        toStatusResponse(entity);
         return new SupervisorAsyncWorkflowView(
                 entity.getSessionId(),
                 entity.getTaskId(),
@@ -172,12 +176,13 @@ public class SupervisorAsyncWorkflowService {
         if (isTerminal(entity.getStatus())) {
             return toStatusResponse(entity);
         }
+        if (toolLoopRunner != null && toolLoopRunner.hasRun(entity.getTaskId())) toolLoopRunner.cancel(entity.getTaskId(), userId);
         long now = System.currentTimeMillis();
         int updated = agentAsyncWorkflowMapper.update(
                 null,
                 new LambdaUpdateWrapper<AgentAsyncWorkflowEntity>()
                         .eq(AgentAsyncWorkflowEntity::getId, entity.getId())
-                        .in(AgentAsyncWorkflowEntity::getStatus, "ACCEPTED", "RUNNING")
+                        .in(AgentAsyncWorkflowEntity::getStatus, "ACCEPTED", "RUNNING", "WAITING_USER_INPUT", "WAITING_USER_APPROVAL")
                         .set(AgentAsyncWorkflowEntity::getCancelRequested, 1)
                         .set(AgentAsyncWorkflowEntity::getStatus, "CANCELLED")
                         .set(AgentAsyncWorkflowEntity::getErrorMessage, "workflow cancelled by user")
@@ -220,6 +225,8 @@ public class SupervisorAsyncWorkflowService {
         if (!isTerminal(entity.getStatus())) {
             throw new IllegalStateException("async workflow is still running");
         }
+        if (toolLoopRunner != null && toolLoopRunner.hasRun(entity.getTaskId()))
+            throw new IllegalStateException("通用 run 通过原任务恢复或对账，不创建替代 run；新请求请使用新的 requestId");
         SupervisorTaskRequest originalRequest = readRequest(entity.getOriginalRequestJson());
         SupervisorTaskRequest replayRequest = new SupervisorTaskRequest(
                 originalRequest.sessionId(),
@@ -530,6 +537,10 @@ public class SupervisorAsyncWorkflowService {
     }
 
     private SupervisorAsyncWorkflowStatusResponse toStatusResponse(AgentAsyncWorkflowEntity entity) {
+        if (toolLoopRunner != null && toolLoopRunner.hasRun(entity.getTaskId())) {
+            var current = toolLoopRunner.current(entity.getTaskId(), entity.getUserId());
+            entity.setStatus(current.status()); entity.setResultJson(writeJson(current));
+        }
         return new SupervisorAsyncWorkflowStatusResponse(
                 entity.getSessionId(),
                 entity.getTaskId(),

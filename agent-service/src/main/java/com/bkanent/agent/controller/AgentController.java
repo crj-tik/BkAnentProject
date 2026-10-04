@@ -80,6 +80,27 @@ import java.util.concurrent.CompletableFuture;
 @RestController
 @RequestMapping("/agent")
 public class AgentController {
+    private com.bkanent.agent.orchestration.SupervisorToolLoopRunner toolLoopRunner;
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setToolLoopRunner(com.bkanent.agent.orchestration.SupervisorToolLoopRunner runner) { this.toolLoopRunner = runner; }
+
+    @PostMapping("/supervisor/runs/cancel")
+    public ApiResponse<SupervisorTaskResponse> cancelRun(@RequestParam String runId, @RequestParam(required = false) String userId) {
+        return guarded(() -> {
+            String actor = authenticatedPrincipal.resolveUserId(userId);
+            if (supervisorWorkflowQueryService.findWorkflow(runId, actor).isEmpty()) return ApiResponse.fail("RUN_NOT_FOUND", "run not found");
+            return ApiResponse.ok(toolLoopRunner.cancel(runId, actor));
+        });
+    }
+
+    @PostMapping("/supervisor/runs/reconcile")
+    public ApiResponse<SupervisorTaskResponse> reconcileRun(@RequestParam String runId, @RequestParam(required = false) String userId) {
+        return guarded(() -> {
+            String actor = authenticatedPrincipal.resolveUserId(userId);
+            if (supervisorWorkflowQueryService.findWorkflow(runId, actor).isEmpty()) return ApiResponse.fail("RUN_NOT_FOUND", "run not found");
+            return ApiResponse.ok(toolLoopRunner.reconcile(runId, actor));
+        });
+    }
 
     /**
      * 字段：agentMemoryMilvusService。

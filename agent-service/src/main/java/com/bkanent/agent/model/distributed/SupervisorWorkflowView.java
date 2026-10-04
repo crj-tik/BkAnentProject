@@ -18,6 +18,13 @@ public record SupervisorWorkflowView(
         ApprovalRequest pendingApproval,
         ApprovalDecision latestApprovalDecision,
         AgentTaskInvokeResponse latestAgentResponse,
-        String finalAnswer
+        String finalAnswer,
+        Map<String, Object> orchestration
 ) {
+    public SupervisorWorkflowView(String sessionId, String taskId, String traceId, String workflowStatus, String selectedAgentId,
+                                  List<Map<String, Object>> handoffHistory, List<String> artifactIds, ApprovalRequest pendingApproval,
+                                  ApprovalDecision latestApprovalDecision, AgentTaskInvokeResponse latestAgentResponse, String finalAnswer) {
+        this(sessionId, taskId, traceId, workflowStatus, selectedAgentId, handoffHistory, artifactIds,
+                pendingApproval, latestApprovalDecision, latestAgentResponse, finalAnswer, Map.of());
+    }
 }
