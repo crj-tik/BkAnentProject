@@ -24,6 +24,15 @@ public record AgentTaskInvokeRequest(
         List<String> constraints,
         String expectedOutput,
         String idempotencyKey,
-        Boolean stream
+        Boolean stream,
+        SkillSelection skillSelection
 ) {
+    public AgentTaskInvokeRequest(String sessionId, String taskId, String parentTaskId, String traceId,
+                                  String sourceAgentId, String targetAgentId, String intent, String domain,
+                                  String instruction, Map<String, Object> structuredContext, List<String> artifactIds,
+                                  List<String> constraints, String expectedOutput, String idempotencyKey,
+                                  Boolean stream) {
+        this(sessionId, taskId, parentTaskId, traceId, sourceAgentId, targetAgentId, intent, domain, instruction,
+                structuredContext, artifactIds, constraints, expectedOutput, idempotencyKey, stream, null);
+    }
 }
