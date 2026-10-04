@@ -12,7 +12,7 @@
 
 - [x] 2.1 修复 Agent Card discovery 描述、skills、streaming/task 等能力字段保真；通过真实字段样例和注册契约测试验证。
 - [x] 2.2 修正 A2AClient 按 endpoint/能力版本刷新及执行中远端 Task 地址关联；通过同 agentId 地址切换与旧任务续查测试验证。
-- [ ] 2.3 建立统一能力目录、稳定命名空间和实际工具定义，把 A2A、静态/动态 MCP、本地能力映射为无冲突名称；通过同名工具不覆盖和真实回调绑定测试验证。
+- [x] 2.3 建立统一能力目录、稳定命名空间和实际工具定义，把 A2A、静态/动态 MCP、本地能力映射为无冲突名称；通过同名工具不覆盖和真实回调绑定测试验证。
 - [ ] 2.4 接入目录授权可见性、逐轮快照及执行前目标/权限再校验；通过冷启动无假 Agent、动态增加/撤销、无权限及 MCP 禁用测试验证。
 - [ ] 2.5 选定并记录运维环境支持 Agent Registry API 的 Nacos 版本与 HTTP Card fallback 配置；通过实际注册→Card→endpoint→调用冒烟验证，更新 KI-18 验证结论。
 
@@ -34,7 +34,7 @@
 
 ## 5. Supervisor 通用模型工具循环
 
-- [ ] 5.1 实现单轮模型适配，只返回 AssistantMessage/toolCalls，不内部执行回调；通过带工具调用的受控模型测试确认副作用次数为 0，再与 1.1.2.3 实际 API 做契约冒烟验证。
+- [x] 5.1 实现单轮模型适配，只返回 AssistantMessage/toolCalls，不内部执行回调；通过带工具调用的受控模型测试确认副作用次数为 0，再与 1.1.2.3 实际 API 做契约冒烟验证。
 - [ ] 5.2 实现 A2A ToolCallback，把 instruction/结构化输入/可选下游 skill 转到既有 A2aExecutionService；通过真实响应规范化、稳定子调用身份和官方 Task/Artifact 关联测试验证。
 - [ ] 5.3 将 MCP/本地回调接入同一 ExecuteTool 治理入口，保留实际 description/schema 和能力映射；通过 A2A/MCP 混合工具决策、参数错误及唯一执行次数测试验证。
 - [ ] 5.4 用通用 PrepareContext/Model/Dispatch/LoadSkill/GuardCall/ApprovalGate/ExecuteTool/Observe/Complete 图替代新请求的领域路由；通过新增 Agent/skill 不增加业务节点、AUTO/EXPLICIT_SKILL 同循环和 nextHints 不自动调用测试验证。

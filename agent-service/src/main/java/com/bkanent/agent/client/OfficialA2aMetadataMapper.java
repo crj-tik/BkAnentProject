@@ -76,6 +76,9 @@ public final class OfficialA2aMetadataMapper {
             if (skillHint != null) {
                 putText(supervisor, SKILL_HINT_KEY, String.valueOf(skillHint));
             }
+            if (structuredContext.get("parentSkill") instanceof Map<?, ?> parentSkill) {
+                supervisor.put("parentSkill", Map.copyOf(parentSkill));
+            }
             if (!structuredContext.isEmpty()) {
                 supervisor.put("structuredContext", Map.copyOf(structuredContext));
             }

@@ -92,6 +92,17 @@ public class AgentPermissionService {
         return parsedUserId != null && authPermissionRpcService.hasPermission(parsedUserId, resolveMcpServerPermission(serverName));
     }
 
+    public boolean canInvokeChildAgent(String userId, RegisteredAgentDescriptor descriptor) {
+        Long parsedUserId = parseUserId(userId);
+        return parsedUserId != null && authPermissionRpcService.hasPermission(parsedUserId,
+                resolveInvokePermissionCode(descriptor, null));
+    }
+
+    public boolean canUseLocalTools(String userId) {
+        Long parsedUserId = parseUserId(userId);
+        return parsedUserId != null && authPermissionRpcService.hasPermission(parsedUserId, "agent.chat.use");
+    }
+
     public void assertCanInvokeChildAgent(RegisteredAgentDescriptor descriptor, AgentTaskInvokeRequest request) {
         Long userId = resolveUserId(request);
         String permissionCode = resolveInvokePermissionCode(descriptor, request);
