@@ -103,6 +103,18 @@
 
 **关联**：LR-15、LR-18；`realign-supervisor-tool-and-skill-orchestration/tasks.md` 6.3。
 
+## KI-21 [FIXED·本提交] 数据库 checkpoint 重启后读取了最早状态
+
+**确认日期**：2026-10-04（Docker MySQL 8.4 实测）。
+
+**现象**：内存执行已暂停为 WAITING_USER_INPUT，创建新 saver/runner 后却读取 RUNNING，续接被错误拒绝；旧 graph 同样受影响。
+
+**根因与修复**：Graph 1.1.2.3 的 MemorySaver 把最新 checkpoint 放在链表头，BaseCheckpointSaver.getLast 实际取 peek。原数据库加载按版本升序 append，使重启后最早记录位于表头。改为版本降序；增加普通回归与真实 MySQL 新 runner 续接测试。修复哈希随后回填。
+
+**代码位置**：`DatabaseCheckpointSaver.loadedCheckpoints`、`DatabaseCheckpointSaverOrderTest`、`SupervisorDockerDatabaseTest`。
+
+**关联**：LR-15、LR-23；本变更 3.5、6.1、8.4。
+
 ## KI-14 [LIMIT] 运行面依赖 MySQL 单点读写
 
 话轮管线每轮从 DB 重查重装三段记忆（无进程内会话缓存），延迟依赖 DB 且高并发下 `nextTurnSeq` 有竞态窗口（同会话并发话轮可能拿到相同 seq，靠幂等键去重兜底）。访谈会话天然单人串行，实际触发概率低；若未来支持多人同场访谈需引入分布式锁。

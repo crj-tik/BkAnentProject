@@ -51,7 +51,7 @@ public class DatabaseCheckpointSaver extends MemorySaver {
         List<AgentWorkflowCheckpointEntity> entities = checkpointMapper.selectList(
                 new LambdaQueryWrapper<AgentWorkflowCheckpointEntity>()
                         .eq(AgentWorkflowCheckpointEntity::getTaskId, threadId)
-                        .orderByAsc(AgentWorkflowCheckpointEntity::getCheckpointVersion)
+                        .orderByDesc(AgentWorkflowCheckpointEntity::getCheckpointVersion)
         );
         entities.stream()
                 .map(entity -> readCheckpoint(entity, entities))
