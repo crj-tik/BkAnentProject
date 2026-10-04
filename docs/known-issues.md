@@ -67,13 +67,13 @@
 
 ## KI-17 [OPEN·P1] Supervisor 入口规则分流偏离显式 skill 的设计边界
 
-**确认日期**：2026-10-03。用户确认正常请求应由 LLM 根据 A2A/MCP 等能力 description 判断调用；固定规则只属于本次显式指定 skill 中的流程。
+**确认日期**：2026-10-03；最终方案于 2026-10-04 对齐。用户确认正常请求应由 LLM 根据 A2A/MCP 等能力 description 判断调用；本次指定 skill 后仍由模型理解原始请求，并遵循技能正文中的流程。
 
-**现象**：默认 `llm-enabled=false`、`strategy=rule-first`，入口关键词与默认 listing/intent 选择 Agent，nextHints 和 trade 结果又可自动交接。现有知识技能、技能正文和工具白名单不构成可执行的固定跨服务流程；skillHint 也不能承担显式强制技能契约。
+**现象**：默认 `llm-enabled=false`、`strategy=rule-first`，入口关键词与默认 listing/intent 选择 Agent，nextHints 和 trade 结果又可自动交接。现有 Supervisor 知识技能与 Subagent 正文加载是不同消费路径，Supervisor 尚未接入统一的 A2A/MCP 模型工具循环；skillHint 也不能承担本次显式选择、版本固定和严格能力范围契约。正文与工具白名单本身不提供业务步骤顺序强保证（KI-19）。
 
-**处置**：已编写 `realign-supervisor-tool-and-skill-orchestration` 方案，包含统一可调用能力目录、AUTO 模型工具循环、显式 instruction/workflow 技能、Subagent 共享契约和调用级恢复。仅文档交付，代码未修复；按 tasks.md 后续实施。
+**处置**：已修订 `realign-supervisor-tool-and-skill-orchestration` 为最终方案：统一可调用能力目录，AUTO/EXPLICIT_SKILL 使用同一通用模型工具循环；显式技能首轮前加载正文，但模型仍理解请求并选择工具。保留 Markdown 指引，严格约束调用范围、参数、权限与审批，同步 Subagent 契约及调用级恢复；不增加 workflow/DAG、步骤调度或正文顺序/完成检查器。2026-10-04 本次仅更新文档，代码未修复，状态保持 OPEN；按 tasks.md 后续实施。
 
-**关联**：LR-17、LR-9、LR-15；主规格 `supervisor-domain-catalog` 的冲突行为在本变更 delta 中明确替代。
+**关联**：LR-17、LR-18、LR-9、LR-15、KI-19；主规格 `supervisor-domain-catalog` 的冲突行为在本变更 delta 中明确替代。
 
 ## KI-18 [OPEN·P2] 动态 Agent 能力目录存在信息损失和地址缓存限制
 
@@ -92,6 +92,18 @@
 ## KI-14 [LIMIT] 运行面依赖 MySQL 单点读写
 
 话轮管线每轮从 DB 重查重装三段记忆（无进程内会话缓存），延迟依赖 DB 且高并发下 `nextTurnSeq` 有竞态窗口（同会话并发话轮可能拿到相同 seq，靠幂等键去重兜底）。访谈会话天然单人串行，实际触发概率低；若未来支持多人同场访谈需引入分布式锁。
+
+## KI-19 [LIMIT] 技能正文不提供业务步骤顺序强保证
+
+**确认日期**：2026-10-04。
+
+**现象**：现有 Subagent 的 SkillTool/技能拦截器加载 Markdown 指引并收窄工具集合，不验证调用顺序。最终待实施的 Supervisor 方案延续这一边界：即使本次显式指定 skill，模型仍可能漏掉、提前执行或重复正文中的业务过程，工具允许清单本身不能证明流程正确完成。当前 Supervisor 尚未实现该统一循环，本条不代表新功能已经落地。
+
+**根因与选择**：用户最终接受由模型遵循正文的方案，以避免步骤 DSL、DAG 或业务顺序/完成检查器与通用 Graph 耦合。平台在实施后应硬约束能力范围、参数、身份、权限、预算和审批，但这些调用级守卫不构成正文流程的顺序保证。
+
+**处置**：保留 LIMIT，不将强制顺序校验列入本次实施任务；通过清晰的技能正文、模型真实调用评估和运行轨迹观察改善遵循质量。评估通过不能证明顺序强保证；如果后续业务必须保证先后关系，应重新讨论设计并更新变更范围，不能在通用节点中暗加业务步骤判断。
+
+**关联**：LR-17、LR-18、KI-17；`realign-supervisor-tool-and-skill-orchestration/design.md` 的非目标和验证边界。
 
 ---
 

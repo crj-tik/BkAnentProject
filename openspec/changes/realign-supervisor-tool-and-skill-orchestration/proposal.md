@@ -2,35 +2,36 @@
 
 ## Why
 
-当前 Supervisor 默认通过入口关键词、领域默认 intent 和业务交接条件决定 Agent，偏离了用户原始设计：正常请求应由配有 A2A/MCP 能力描述的 LLM 决定调用，确定的跨 Agent/工具流程应属于本次显式指定的 skill。仅开启现有 LLM JSON 规划不能消除固定路由骨架，也不能保证指定 skill 的执行约束。
+当前 Subagent 已能由 LLM 读取 skill 正文并选择本域工具，但 Supervisor 默认仍通过入口关键词、领域计划和自动交接决定 Agent，跨服务决策没有交给配有真实 A2A/MCP 工具的 LLM。2026-10-04 用户最终选择“模型遵循技能正文”的第一种方案：统一 Supervisor 模型工具循环，指定 skill 后仍由模型理解请求，不引入技能顺序校验或 DAG 执行器。
 
 ## What Changes
 
-- 建立统一的 Supervisor 能力目录，将已发现 A2A Agent、静态/动态 MCP 工具及必要本地工具转换为有稳定标识、description、输入 schema 的模型可调用工具；正常请求进入 LLM 的工具调用循环。
-- **BREAKING**：正常请求不再通过关键词、默认 listing Agent、领域默认 intent、trade→contract 条件或 `nextHints` 自动决定业务调用；LLM 不可用时明确失败或等待恢复，不回到关键词分流。
-- 增加请求级 `skill` 选择和两类执行技能：`instruction` 为专项指引和显式能力范围；`workflow` 以技能文件声明目标、依赖、条件、数据映射和审批节点，通用执行器按声明执行。固定流程以结构化步骤保证，不能只靠 prompt。
-- 知识技能、模型主动选用的普通技能和旧 `skillHint` 保持独立语义；关键词可辅助知识提示，不能在请求入口隐式切换执行模式。
-- Supervisor 和 Subagent 共享显式技能契约：指定技能应校验所属 Agent/版本、固定本次执行的有效能力边界，并拒绝缺失技能、能力和越界调用；旧 hint 仍为可覆盖的建议。
-- 复用现有 A2A Message/Task/Artifact、权限、审批、checkpoint、异步租约和 SSE；增加可恢复的模型/工具执行状态与调用账本，避免审批或进程恢复重复执行副作用。
-- 修正动态目录的 Agent Card 技能/能力保真及 endpoint 缓存刷新；检查 Nacos Agent Registry 版本兼容性，作为可靠能力发现的前置工作。
+- 建立统一能力目录，将真实可用且授权可见的 A2A Agent、静态/动态 MCP 和必要本地工具转换为有稳定身份、description、输入 schema 和执行回调的模型工具；模型根据实际结果逐轮选择调用、追问或结束。
+- **BREAKING**：新请求停用入口关键词分流、默认 listing/default intent、固定业务并行、trade→contract 自动交接和 nextHints 自动 handoff。LLM 不可用时同模式有界重试或明确失败，不切换到关键词路径。
+- 接入 Supervisor 技能目录与 `skill` 加载工具。未指定技能时模型可按 description 自主加载普通指引技能；本次显式指定技能时平台在首轮 LLM 前校验、固定版本、加载全文和能力范围，模型仍理解原始需求、提取参数并处理缺失/冲突。
+- 技能保持 frontmatter + Markdown 正文。正文中的调用对象、顺序、条件和结果使用方法由模型遵循；平台严格约束工具范围、参数、身份、权限和审批，**不检查业务步骤顺序、前置步骤完成或流程完成条件**，不增加 workflow DSL、步骤调度器或 DAG 子图。
+- 将 Supervisor Graph 改为通用的上下文准备、单轮模型决策、技能加载、调用校验、审批、工具执行、结果回写和结束/恢复循环。A2A/MCP 通过统一工具执行节点调用，不为每个 Agent、技能或业务链建立节点；模型节点不能偷偷自动执行工具。
+- Subagent 复用已有 ReactAgent、SkillTool 和领域工具，仅同步显式 skillSelection 契约、版本快照、能力范围校验和 Agent Card 技能映射；旧 skillHint 保持建议语义。父级技能不自动强制传给所有子 Agent。
+- 复用 A2A Message/Task/Artifact、权限、异步租约、审批和 SSE，增加调用级 checkpoint、调用账本和技能快照，避免恢复时重复已完成调用。技能顺序依赖模型的明确限制进入验收与已知问题说明。
+- 修正 Agent Card 描述/技能/能力保真、endpoint 缓存更新和 MCP 重名问题，并验证 Nacos Agent Registry 部署版本，保证工具目录对应真实执行能力。
 
 ## Capabilities
 
 ### New Capabilities
 
-- `supervisor-tool-orchestration`：LLM 根据统一能力目录自主选择 A2A/MCP/本地工具，含动态刷新、执行治理和恢复。
-- `explicit-skill-execution`：请求级显式技能选择、指引技能和固定流程技能、能力限制及版本固定。
-- `subagent-skill-contract`：A2A 显式技能与建议 hint 的区分、Subagent 执行约束和向后兼容。
+- `supervisor-tool-orchestration`：基于真实统一能力目录的 Supervisor LLM 工具循环、通用 Graph、执行治理与恢复。
+- `explicit-skill-execution`：模型自主/用户显式技能加载、指定后持续理解需求、正文流程指引、严格能力范围及版本固定；不提供顺序强保证。
+- `subagent-skill-contract`：显式技能与旧 hint 的区分、子执行的技能范围和版本约束、既有领域 ReAct 兼容。
 
 ### Modified Capabilities
 
-- `supervisor-domain-catalog`：目录由业务路由入口改为能力描述与合法性校验来源；调整冷启动、规划、并行和 nextHint 语义，删除入口关键词默认分流要求。
+- `supervisor-domain-catalog`：领域目录用于能力描述、动态发现和合法性校验；改写旧领域计划、并行和 nextHint 语义，删除新入口关键词默认分流要求。
 
 ## Impact
 
-- 主要模块：`agent-service`、`common`、`common-skill`、`common-a2a`；`common-config-manager` 配合 MCP 稳定身份与动态能力刷新；九个领域 Subagent 的共享装配、技能和卡片配置需同步核对。
-- API：现有 Supervisor 同步/异步入口增补可选 `skill`；`/agent/chat` 作为兼容入口逐步接入同一执行核心。保留现有任务/会话/产物/审批查询和 SSE 入口，新增执行模式等观测字段。
-- 存储：checkpoint 内容增补执行模式、技能快照和工具循环状态；拟增加独立工具调用账本及技能快照存储，迁移脚本在实施阶段提供。
-- 规格冲突：主规格仍要求关键词兜底和 nextHint 自动交接，本变更提供明确 delta；未完成的 `migrate-supervisor-graph-approval-routing`、`create-common-skill-module` 需按新边界协调，避免继续扩展旧入口路由。
-- 保留领域职责：访谈治理面可参与 A2A 委托；访谈运行面遵守 LR-3/4/5/8/13，不迁移高频话轮、状态机或公开 MCP 边界。
-- 本次交付仅为待实施方案、规格和任务。业务代码、运行配置、数据库及部署均未实施；所有实现任务保持未勾选。
+- 主要模块：`agent-service`、`common`、`common-skill`、`common-a2a`；`common-config-manager` 配合动态 MCP 稳定身份。九个领域 Subagent 接入共享契约和卡片映射，不重写领域执行逻辑。
+- API：Supervisor 同步/异步入口增补可选顶层 `skill={name,version}` 和 `continueRunId`，以 WAITING_USER_INPUT 表达追问；普通 `/agent/chat` 逐步接入同一核心并保留既有字段和 `allowMcp`。任务/审批/产物查询及 SSE 入口继续使用，新增状态与续接语义在客户端迁移说明中声明。
+- 存储：版本化 checkpoint 增补模型消息、待调用、有效技能快照和预算；拟增加调用账本及技能快照存储，不增加技能步骤/依赖/流程进度表。
+- 兼容：旧任务按旧 runner 恢复；新请求采用 AUTO/EXPLICIT_SKILL，同一通用 Graph 执行。旧技能资源与 hint 兼容，显式技能的范围策略必须明确；主规格和相交未完成变更在实施阶段按本 delta 协调。
+- 领域边界：访谈治理面可接 A2A；高频话轮、确定性决策、状态机和只读 MCP 边界保持 LR-3/4/5/8/13 的既定职责。
+- 本版替代本变更上一版 instruction/workflow 双执行器设计；第一种方案的限制是模型可能偏离正文顺序，不承诺平台强制固定流程。本次仅更新规划文档、认知清单和路线图，代码、配置、SQL 与部署未修改，全部实施任务保持未完成。

@@ -4,13 +4,13 @@
 > 后续可迭代方向持续追加到本文件。配套规格见 `openspec/specs/supervisor-domain-catalog/spec.md`
 > （`registry-driven-domain-catalog` 变更归档后生效）。
 
-## 2026-10-03 设计意图对齐（最新目标，待实施）
+## 2026-10-04 最终方案：模型遵循技能正文（最新目标，待实施）
 
-用户明确：正常请求给 LLM 配上真实 A2A/MCP 等工具的 description/schema，由模型判断调用；“规则工作流”指本次显式指定 skill 内已经确定的 Agent/工具流程。入口关键词、默认 Agent 和自动 nextHint 交接不属于新默认路径；模型失败也不静默回到关键词分流。
+用户最终选择第一种方案：正常请求给 LLM 配上真实 A2A/MCP 等工具的 description/schema，由模型判断调用；本次显式指定 skill 时，平台首轮前校验、固定版本并加载全文和能力范围，模型仍理解原始请求、提取参数、处理缺失与冲突，按正文指引逐轮选择工具。AUTO 与 EXPLICIT_SKILL 使用同一通用 Graph，不引入 workflow/DAG、正文步骤调度或业务顺序/完成检查器。
 
-最新方案见 [realign-supervisor-tool-and-skill-orchestration](../openspec/changes/realign-supervisor-tool-and-skill-orchestration/design.md)，关联 LR-17、KI-17/18。以下方向 1 的“LLM 失败后规则兜底”以及方向 2/3 的入口规则扩展保留作历史记录，由新方案的模型工具循环和显式 skill 流程替代。本次仅编写方案，现有代码、主规格和运行配置尚未切换。
+最新方案见 [realign-supervisor-tool-and-skill-orchestration](../openspec/changes/realign-supervisor-tool-and-skill-orchestration/design.md)，关联 LR-17/18、KI-17/18/19。2026-10-03 的 instruction/workflow 双执行器及结构化 DAG 版本已被本版取代。以下方向 1 的“LLM 失败后规则兜底”及方向 2/3 的入口规则扩展保留为历史记录，均已被模型工具循环替代。入口关键词、默认 Agent、自动 nextHint 交接和模型失败时关键词兜底退出新请求路径。本次仅修订文档，现有代码、主规格和运行配置尚未切换。
 
-目录发现、权限、审批、通用并行容量和恢复仍保留为基础设施；具体业务目标、顺序、条件属于 LLM 选择或已选 skill，不再由入口启发式替模型决定。Subagent 需要同步显式技能契约，旧 hint 与访谈运行面边界保持独立。
+目录发现、权限、审批、通用并行容量和恢复仍保留为基础设施；Graph 的统一工具执行节点持有实际业务调用权，模型节点只提出调用。平台严格约束能力范围、参数、身份、权限、预算与审批；正文流程的顺序和完成质量由模型遵循，不承诺程序强保证（KI-19）。Subagent 需要同步显式技能契约并复用已有 ReAct，旧 hint 与访谈运行面边界保持独立。
 
 ## 背景
 
@@ -18,11 +18,11 @@
 （Agent 注册表动态派生）统一供给：LLM 规划 prompt、计划校验白名单、并行图槽位路由、
 规则路由关键词表。图拓扑与领域词表解耦（通用槽位），新增 Agent 只需注册到 Nacos。
 
-## 已确定的未来方向
+## 历史方向与基础设施候选
 
-### 1. 规则路由整体降级为 LLM 规划失败的兜底
+### 1. 规则路由整体降级为 LLM 规划失败的兜底（历史，已替代）
 
-**状态**：既定方向，未排期。
+**状态**：2026-10-04 已被最终方案替代，以下保留历史意图，不再作为实施方向。
 
 当前规则路由（`ParseIntentNode` 关键词表 + `PlanTaskNode` 并行规则）是**加速层**：
 在 `planning.strategy=rule-first`（默认）或 LLM 规划关闭时承担全部路由。未来将调整为：
@@ -33,26 +33,28 @@
 
 前置条件：LLM 规划的时延与稳定性达标（需要生产数据验证），`planning.llm-enabled` 全量开启。
 
-### 2. 关键词表收敛与置信度分级
+### 2. 关键词表收敛与置信度分级（历史，已替代）
 
-**状态**：候选，依赖方向 1。
+**状态**：2026-10-04 已被最终方案替代，以下保留历史候选，不再作为实施方向。
 
 对 `catalog.rule-routing.keywords` 做一次清理：只保留"命中即基本不会错"的关键词，
 移除模糊词（如"消息"既可能是通知也可能是其他意图）。可考虑为关键词增加置信度标记，
 高置信词可直接路由，低置信词仅作为 LLM 规划的提示上下文。
 
-### 3. `RouteDecisionNode` 业务路由策略配置化
+### 3. `RouteDecisionNode` 业务路由策略配置化（历史，已替代）
 
-**状态**：候选。
+**状态**：2026-10-04 已被最终方案替代，以下保留历史候选，不再作为实施方向。
 
 `RouteDecisionNode` 中的 trade→contract handoff 是业务策略（decision=MANUAL_REVIEW/
 RISK_ALERT/needsMoreDocuments → contract），且默认只在 listing+trade 并行场景生效。
 若未来出现第二组类似的业务路由链，应将其抽象为配置化的路由策略规则，而不是在代码里
 堆叠第二份 if-else。当前仅一组，保持代码实现（YAGNI）。
 
-### 4. Agent Card 技能与 intent 命名的语义对齐
+### 4. Agent Card 技能与 intent 命名的语义对齐（旧任务维护）
 
 **状态**：观察中（实施期已人工核对存量 7 域，见变更任务 2.5 的核对记录）。
+
+2026-10-04 边界：以下 defaultIntent 候选只涉及存量旧 runner 维护，不纳入新模型工具路径。新目录通过稳定 capabilityId、Card skill ID 与本地技能身份映射提供能力定义，不以 default intent 选择调用。
 
 `resolveDefaultIntent` 的第三级回退取 Agent Card `supportedSkills` 首项。若未来 A2A
 生态的 skill 命名出现多语言/多风格混用，考虑在 Agent Card 层面引入显式的
@@ -67,13 +69,15 @@ RISK_ALERT/needsMoreDocuments → contract），且默认只在 listing+trade �
 更及时的词表生效或审计能力，可将注册表变更（服务上线/下线）转化为事件，驱动：
 词表快照主动刷新、prompt 缓存失效、治理端点变更通知（如 webhook 到运维群）。
 
-### 6. 槽位容量的弹性观察
+### 6. 槽位容量的弹性观察（旧 runner 参数）
 
 **状态**：观察中。
 
 `branch-capacity` 默认 16。若并行扇出需求长期低于 8 或接近 16，相应调整默认值；
 若需要超过 32，说明"单计划内多域并行"的模型本身需要重新评估（如分层 fan-out），
 而不是继续放大槽位数。
+
+2026-10-04 边界：branch-capacity 留给存量槽位图，不直接成为新 runner 的配置。新模型工具循环使用同轮独立调用的并发上限与总体预算，具体默认值测量后确定，不恢复领域计划槽位路由。
 
 ### 7. 遗留词表审计结论（2026-09-29 全量排查）
 
@@ -96,3 +100,5 @@ RISK_ALERT/needsMoreDocuments → contract），且默认只在 listing+trade �
 
 - 2026-09-29：建立本文件；记录方向 1（规则路由降级为 LLM 兜底）为既定方向。
 - 2026-09-29：完成槽位化改造后的全量硬编码审计，结论记入方向 7。
+- 2026-10-03：形成 Supervisor 模型工具循环与显式 instruction/workflow 技能方案，仅文档，未实施。
+- 2026-10-04：用户最终选择模型遵循技能正文；修订为 AUTO/EXPLICIT_SKILL 同一通用 Graph，取消 DAG 和业务步骤检查，明确顺序不作强保证。仅更新规划文档和认知清单，代码未调整。

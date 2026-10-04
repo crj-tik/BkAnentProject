@@ -145,14 +145,26 @@
 
 **关联**：KI-16
 
-## LR-17 正常请求由模型选择，固定调用规则属于显式 skill（设计已对齐，待实施）
+## LR-17 正常请求与显式技能都由模型理解并选择调用（设计已对齐，待实施）
 
-**结论**：正常 Supervisor 请求的 Agent/MCP 调用由配有真实能力 description/schema 的 LLM 决定；用户本次显式指定 skill 时，由技能的指引、有效能力范围或固定步骤决定执行。入口关键词、默认 listing、默认 intent、trade 条件和 nextHint 自动交接不属于新默认路径。知识技能与旧 skillHint 只提供提示，不能隐式切成固定流程。
+**结论**：正常 Supervisor 请求的 Agent/MCP 调用由配有真实能力 description/schema 的 LLM 决定；本次显式指定 skill 时，平台在首轮模型调用前校验、固定版本并加载正文和有效能力范围，LLM 仍结合原始请求理解意图、提取参数、处理缺失与冲突，再逐轮选择调用。技能正文中的调用顺序、条件和结果使用方式由模型遵循，不由平台保证业务步骤顺序。入口关键词、默认 listing、默认 intent、trade 条件和 nextHint 自动交接不属于新默认路径，知识技能与旧 skillHint 只提供提示。
 
-**根因**：用户原始设计中的“按规则调用”指技能内已经确定的 Agent/工具协作流程；此前将规则前移到工作流入口，导致模型无法依据任务语义选择，含否定、多意图或新增领域的请求也会被固定分流。仅打开旧 JSON 规划器仍不能实现完整的 A2A/MCP 模型工具循环。
+**根因**：用户原始设计中的“按规则调用”指技能正文内已经说明的 Agent/工具协作流程；此前将规则前移到工作流入口，导致模型无法依据任务语义选择，含否定、多意图或新增领域的请求也会被固定分流。仅打开旧 JSON 规划器仍不能实现完整的 A2A/MCP 模型工具循环。2026-10-04 用户最终选择由模型遵循正文的方案，指定 skill 不能成为绕过意图理解的开关。
 
-**实现边界**：explicit selection 与 LR-9 的建议性 hint 分开；固定流程需要结构化步骤保证，不能只依赖 prompt。Subagent 同步共享技能契约并复用已有领域 ReAct；访谈运行面的 LR-3/4/5/8/13 边界继续有效。权限、审批、checkpoint、租约和调用账本属于执行治理，不能被模型或技能越过。
+**实现边界**：AUTO 与 EXPLICIT_SKILL 使用同一通用模型工具循环，不增加 workflow/DAG、技能步骤调度器或业务顺序/完成条件检查。explicit selection 与 LR-9 的建议性 hint 分开；平台硬约束能力范围、参数、身份、权限与审批，正文流程属于模型指引（LR-18、KI-19）。Subagent 同步共享技能契约并复用已有领域 ReAct；访谈运行面的 LR-3/4/5/8/13 边界继续有效。checkpoint、租约和调用账本记录执行事实，不能被模型或技能越过。
 
-**方案位置**：`openspec/changes/realign-supervisor-tool-and-skill-orchestration/`（proposal/design/specs/tasks）。2026-10-03 本次只形成方案，业务代码与运行行为尚未调整，实施任务全部未完成。
+**方案位置**：`openspec/changes/realign-supervisor-tool-and-skill-orchestration/`（proposal/design/specs/tasks）。2026-10-04 修订最终方案，替代 2026-10-03 的 instruction/workflow 双执行器方案。本次仅更新文档，业务代码与运行行为尚未调整，实施任务全部未完成。
 
-**关联**：KI-17；LR-9、LR-15；`docs/supervisor-routing-roadmap.md` 的旧“LLM 失败后关键词兜底”方向由本方案替代。
+**关联**：KI-17、KI-19；LR-9、LR-15、LR-18；`docs/supervisor-routing-roadmap.md` 的旧“LLM 失败后关键词兜底”方向由本方案替代。
+
+## LR-18 技能正文为模型指引，调用治理由通用 Graph 执行（设计已对齐，待实施）
+
+**结论**：skill 正文中的业务过程是模型遵循的软约束；有效能力范围、参数 schema、认证身份、权限、预算及审批是平台的硬边界。Supervisor 单轮模型节点只提出调用，通用 Graph 的工具执行节点持有业务调用的唯一执行权，避免模型客户端内隐式执行后外层再次执行。Graph 不检查正文步骤顺序、前置业务步骤是否完成或全部文字步骤是否完成。
+
+**根因**：2026-10-04 用户最终选择“模型遵循技能正文”的第一种方案，希望新增技能、Agent 和 MCP 时无需增加业务节点或维护步骤 DSL，降低业务流程与 Graph 的耦合。正文不转换成 DAG，也不增加隐藏的下一合法步骤或流程完成检查器；选择该方案意味着模型可能偏离正文顺序，这一限制已明确接受。
+
+**代码位置（现有复用点）**：`common-skill/runtime/SkillTool`、`common-skill/runtime/SkillRoutingModelInterceptor`；`agent-service/config/AgentServiceConfiguration` 的自动工具调用仅是当前行为，后续 Supervisor 单轮适配必须停止内部业务工具执行。拟议 PrepareContext/Model/LoadSkill/GuardCall/ApprovalGate/ExecuteTool/Observe 节点及调用账本见本变更 `design.md`，本次未实现。
+
+**验证边界**：契约测试验证模型节点无工具副作用、执行节点范围/参数/权限/审批守卫以及恢复不重复调用；真实模型场景评估检查正文遵循质量，但通过评估不能证明步骤顺序强保证。新增审批或状态转换调用点仍须遵守 KI-2 防回归要求。
+
+**关联**：LR-17、LR-9、LR-15；KI-17、KI-19；`openspec/changes/realign-supervisor-tool-and-skill-orchestration/`。
