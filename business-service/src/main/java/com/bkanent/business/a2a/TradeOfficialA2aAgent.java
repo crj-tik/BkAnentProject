@@ -55,6 +55,15 @@ public class TradeOfficialA2aAgent {
     }
 
     @Bean
+    public io.a2a.spec.AgentCard tradePublishedAgentCard(
+            com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerProperties server,
+            com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerAgentCardProperties card) {
+        return com.bkanent.common.a2a.SkillAgentCardPublisher.publish(
+                new com.alibaba.cloud.ai.a2a.autoconfigure.server.A2aServerAgentCardAutoConfiguration()
+                        .agentCard(reactAgent, server, card), skillRegistry, "trade");
+    }
+
+    @Bean
     public AgentExecutor tradeA2aAgentExecutor(ObjectMapper objectMapper) {
         return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("trade"),
                 skillRegistry, "trade", executionTools);

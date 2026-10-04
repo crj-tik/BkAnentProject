@@ -6,7 +6,7 @@
 
 - [x] 1.1 在 common 定义可选 skillSelection、owner/version/contentHash、AUTO/EXPLICIT_SKILL、稳定 capabilityId 及错误码；通过序列化和旧客户端兼容测试验证。
 - [ ] 1.2 为 Supervisor 同步/异步与普通 chat 增补 skill、continueRunId/runId 和 WAITING_USER_INPUT 语义，区分新 run 与明确续接；通过作用域、同会话不继承、跨 owner/错误状态/重复续接和旧响应字段测试验证，续接沿用原 mode/session/请求政策与累计预算。
-- [ ] 1.3 发布九 Agent 的 Card skill ID→本地 skill name/owner/version 及 explicit 支持版本映射；通过契约样例和唯一映射校验验证，不用默认 intent 或字符串猜测。
+- [x] 1.3 发布九 Agent 的 Card skill ID→本地 skill name/owner/version 及 explicit 支持版本映射；通过契约样例和唯一映射校验验证，不用默认 intent 或字符串猜测。
 
 ## 2. 真实动态能力目录
 

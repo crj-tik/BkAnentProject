@@ -8,7 +8,7 @@
 
 | 层/位置 | 已观察到的行为 | 最终调整 |
 | --- | --- | --- |
-| 九个 Subagent 的 `*OfficialA2aAgent` | 已装配 ReactAgent、SkillTool 和技能拦截器，模型读取正文后选择本域工具 | 保留执行模式，补显式选择、版本固定和执行边界 |
+| 九个 Subagent 的 `*OfficialA2aAgent` | 基线六个服务有 SkillTool/技能拦截器；compare、trade、marketing 仅有领域 ReAct。实施时已补齐共享组件 | 保留执行模式，补显式选择、版本固定和执行边界 |
 | `AgentServiceConfiguration` / 普通 chat | ChatClient 合并本地、静态/动态 MCP 并自动调用工具；没有统一 A2A 模型工具 | 复用能力来源，逐步接入 Supervisor 的同一执行核心 |
 | `SupervisorIntentPlanningService` | 默认 llmEnabled=false、rule-first；开启后产出领域 JSON 计划 | 新请求改为单轮模型工具决策，不把开关开启视为完成改造 |
 | `OfficialPlanningGraphFactory` | load_session→skill_match→llm_intent_plan→plan_validation→parse_intent→plan_task→select_agent | 新 runner 使用通用模型循环，退出关键词/default intent/默认 Agent 选择 |

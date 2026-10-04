@@ -62,6 +62,15 @@ public class SettlementOfficialA2aAgent {
     }
 
     @Bean
+    public io.a2a.spec.AgentCard settlementPublishedAgentCard(
+            com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerProperties server,
+            com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerAgentCardProperties card) {
+        return com.bkanent.common.a2a.SkillAgentCardPublisher.publish(
+                new com.alibaba.cloud.ai.a2a.autoconfigure.server.A2aServerAgentCardAutoConfiguration()
+                        .agentCard(reactAgent, server, card), skillRegistry, "settlement");
+    }
+
+    @Bean
     public AgentExecutor settlementA2aAgentExecutor(ObjectMapper objectMapper) {
         return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("settlement"),
                 skillRegistry, DOMAIN, executionTools);

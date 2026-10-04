@@ -55,6 +55,15 @@ public class MarketingOfficialA2aAgent {
     }
 
     @Bean
+    public io.a2a.spec.AgentCard marketingPublishedAgentCard(
+            com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerProperties server,
+            com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerAgentCardProperties card) {
+        return com.bkanent.common.a2a.SkillAgentCardPublisher.publish(
+                new com.alibaba.cloud.ai.a2a.autoconfigure.server.A2aServerAgentCardAutoConfiguration()
+                        .agentCard(reactAgent, server, card), skillRegistry, "marketing");
+    }
+
+    @Bean
     public AgentExecutor marketingA2aAgentExecutor(ObjectMapper objectMapper) {
         return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("marketing"),
                 skillRegistry, "marketing", executionTools);

@@ -59,6 +59,15 @@ public class InterviewOfficialA2aAgent {
     }
 
     @Bean
+    public io.a2a.spec.AgentCard interviewPublishedAgentCard(
+            com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerProperties server,
+            com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerAgentCardProperties card) {
+        return com.bkanent.common.a2a.SkillAgentCardPublisher.publish(
+                new com.alibaba.cloud.ai.a2a.autoconfigure.server.A2aServerAgentCardAutoConfiguration()
+                        .agentCard(reactAgent, server, card), skillRegistry, "interview");
+    }
+
+    @Bean
     public AgentExecutor interviewA2aAgentExecutor(ObjectMapper objectMapper) {
         return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("interview"),
                 skillRegistry, DOMAIN, executionTools);

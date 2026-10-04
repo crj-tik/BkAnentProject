@@ -55,6 +55,15 @@ public class CompareOfficialA2aAgent {
     }
 
     @Bean
+    public io.a2a.spec.AgentCard comparePublishedAgentCard(
+            com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerProperties server,
+            com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerAgentCardProperties card) {
+        return com.bkanent.common.a2a.SkillAgentCardPublisher.publish(
+                new com.alibaba.cloud.ai.a2a.autoconfigure.server.A2aServerAgentCardAutoConfiguration()
+                        .agentCard(reactAgent, server, card), skillRegistry, "compare");
+    }
+
+    @Bean
     public AgentExecutor compareA2aAgentExecutor(ObjectMapper objectMapper) {
         return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("compare"),
                 skillRegistry, "compare", executionTools);
