@@ -102,7 +102,7 @@ public class SupervisorAsyncTaskService {
                 request.userMessage(),
                 request.context(),
                 request.channel(),
-                request.stream()
+                request.stream(), request.skill(), request.continueRunId(), request.allowMcp()
         );
         // Async submission is a persistence/dispatch concern. Planning,
         // approval and Agent selection must happen once inside the official
@@ -533,8 +533,6 @@ public class SupervisorAsyncTaskService {
     }
 
     private boolean isTerminal(String status) {
-        return "COMPLETED".equalsIgnoreCase(status)
-                || "FAILED".equalsIgnoreCase(status)
-                || "CANCELLED".equalsIgnoreCase(status);
+        return com.bkanent.agent.orchestration.AsyncRunStatus.terminal(status);
     }
 }

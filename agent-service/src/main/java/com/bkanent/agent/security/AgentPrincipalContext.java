@@ -24,6 +24,10 @@ import java.util.Collections;
 public class AgentPrincipalContext {
 
     private final String userId;
+    private com.bkanent.agent.orchestration.OrchestrationStore orchestrationStore;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setOrchestrationStore(com.bkanent.agent.orchestration.OrchestrationStore store) { orchestrationStore = store; }
 
     public AgentPrincipalContext(HttpServletRequest request) {
         String marker = request.getHeader(AuthPrincipalContext.MARKER_HEADER);
@@ -57,7 +61,7 @@ public class AgentPrincipalContext {
         requireRequest(request);
         resolveUserId(request.userId());
         return new AgentChatRequest(userId, request.message(), request.collectionName(),
-                request.topK(), request.allowMcp());
+                request.topK(), request.allowMcp(), request.skill(), request.continueRunId(), request.sessionId(), request.requestId());
     }
 
     public ListingIndexRequest bind(ListingIndexRequest request) {
@@ -83,8 +87,16 @@ public class AgentPrincipalContext {
         context.put("userId", userId);
         String sessionId = StringUtils.hasText(request.sessionId())
                 ? request.sessionId().trim() : UUID.randomUUID().toString();
+        if (StringUtils.hasText(request.continueRunId()) && orchestrationStore != null) {
+            orchestrationStore.assertOwner(request.continueRunId(), userId);
+            String originalSession = orchestrationStore.originalRequest(request.continueRunId()).sessionId();
+            if (StringUtils.hasText(request.sessionId()) && !originalSession.equals(request.sessionId()))
+                throw new AgentPrincipalException("continuation session does not match original run");
+            sessionId = originalSession;
+        }
         return new SupervisorTaskRequest(sessionId, userId, request.requestId(), request.traceId(),
-                request.userMessage(), Collections.unmodifiableMap(context), request.channel(), request.stream());
+                request.userMessage(), Collections.unmodifiableMap(context), request.channel(), request.stream(),
+                request.skill(), request.continueRunId(), request.allowMcp());
     }
 
     private void requireRequest(Object request) {

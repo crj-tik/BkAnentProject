@@ -32,6 +32,12 @@ public class DefaultOfficialSupervisorGraphFacade implements OfficialSupervisorG
     private final OfficialSupervisorGraphMigrationFacade migrationFacade;
     private final ApprovalResumeClaimStore approvalResumeClaimStore;
     private final ObjectMapper objectMapper;
+    private com.bkanent.agent.orchestration.SupervisorToolLoopRunner toolLoopRunner;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setToolLoopRunner(com.bkanent.agent.orchestration.SupervisorToolLoopRunner runner) {
+        this.toolLoopRunner = runner;
+    }
 
     public DefaultOfficialSupervisorGraphFacade(OfficialSupervisorGraphHolder graphHolder,
                                                 OfficialSupervisorGraphMigrationFacade migrationFacade,
@@ -45,6 +51,7 @@ public class DefaultOfficialSupervisorGraphFacade implements OfficialSupervisorG
 
     @Override
     public SupervisorTaskResponse execute(SupervisorTaskRequest request) {
+        if (toolLoopRunner != null && StringUtils.hasText(request.continueRunId())) return toolLoopRunner.execute(request);
         String sessionId = StringUtils.hasText(request.sessionId())
                 ? request.sessionId() : UUID.randomUUID().toString();
         String taskId = StringUtils.hasText(request.requestId())
@@ -58,7 +65,7 @@ public class DefaultOfficialSupervisorGraphFacade implements OfficialSupervisorG
                 request.userMessage(),
                 request.context(),
                 request.channel(),
-                request.stream()
+                request.stream(), request.skill(), request.continueRunId(), request.allowMcp()
         );
         RunnableConfig graphConfig = migrationFacade.runnableConfig(sessionId, taskId);
         StateSnapshot existing = graphHolder.compiledGraph().lastStateOf(graphConfig).orElse(null);
@@ -69,6 +76,7 @@ public class DefaultOfficialSupervisorGraphFacade implements OfficialSupervisorG
             // path, while this API remains idempotent.
             return responseOf(existing.state(), normalized);
         }
+        if (toolLoopRunner != null) return toolLoopRunner.execute(normalized);
         Map<String, Object> initialState = migrationFacade.initializeState(
                 normalized, sessionId, taskId, traceId);
         OverAllState output = graphHolder.compiledGraph()
@@ -83,6 +91,7 @@ public class DefaultOfficialSupervisorGraphFacade implements OfficialSupervisorG
                 || !StringUtils.hasText(request.approvalId())) {
             throw new IllegalArgumentException("taskId and approvalId are required");
         }
+        if (toolLoopRunner != null && toolLoopRunner.hasRun(request.taskId())) return toolLoopRunner.resume(request);
         String lockKey = StringUtils.hasText(request.taskId()) ? request.taskId() : request.approvalId();
         Object lock = RESUME_LOCKS.computeIfAbsent(lockKey, ignored -> new Object());
         synchronized (lock) {

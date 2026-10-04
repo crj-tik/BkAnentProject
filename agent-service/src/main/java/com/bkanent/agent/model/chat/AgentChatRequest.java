@@ -8,8 +8,15 @@ public record AgentChatRequest(
         String message,
         String collectionName,
         Integer topK,
-        Boolean allowMcp
+        Boolean allowMcp,
+        com.bkanent.common.agent.SkillSelection skill,
+        String continueRunId,
+        String sessionId,
+        String requestId
 ) {
+    public AgentChatRequest(String userId, String message, String collectionName, Integer topK, Boolean allowMcp) {
+        this(userId, message, collectionName, topK, allowMcp, null, null, null, null);
+    }
     /**
      * 处理AgentChatRequest。
      */

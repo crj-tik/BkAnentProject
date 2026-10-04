@@ -45,6 +45,23 @@ public final class SkillExecutionContext {
         return loaded;
     }
 
+    public static SkillExecutionContext restored(SkillRegistry registry, String owner, String originalTask,
+                                                 Map<String, String> authorizedCapabilities,
+                                                 SkillExecutionSnapshot snapshot, boolean explicit) {
+        return new SkillExecutionContext(registry, owner, originalTask, authorizedCapabilities, snapshot, explicit);
+    }
+
+    private SkillExecutionContext(SkillRegistry registry, String owner, String originalTask,
+                                  Map<String, String> authorizedCapabilities, SkillExecutionSnapshot snapshot, boolean explicit) {
+        this.owner = owner; this.originalTask = originalTask; this.resolver = new SkillExecutionResolver(registry);
+        this.authorizedCapabilities = Map.copyOf(authorizedCapabilities); this.explicit = explicit;
+        if (snapshot != null && (!owner.equals(snapshot.definition().owner())
+                || !authorizedCapabilities.keySet().containsAll(snapshot.capabilityIds()))) {
+            throw new SkillExecutionException(SKILL_POLICY_INVALID, "invalid restored scope");
+        }
+        this.snapshot = snapshot;
+    }
+
     public synchronized void restore(SkillExecutionSnapshot restored) {
         if (!owner.equals(restored.definition().owner())
                 || !authorizedCapabilities.keySet().containsAll(restored.capabilityIds())

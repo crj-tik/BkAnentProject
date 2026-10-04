@@ -495,7 +495,14 @@ public class AgentController {
      */
     @PostMapping("/supervisor/approvals/callback")
     public ApiResponse<SupervisorTaskResponse> handleApprovalCallback(@RequestBody ApprovalCallbackRequest request) {
-        return ApiResponse.ok(supervisorWorkflowService.handleCallback(request));
+        return guarded(() -> {
+            String reviewerId = authenticatedPrincipal.resolveUserId(request.reviewerId());
+            if (supervisorWorkflowQueryService.findWorkflow(request.taskId(), reviewerId).isEmpty())
+                return ApiResponse.fail("SUPERVISOR_WORKFLOW_NOT_FOUND", "workflow not found");
+            return ApiResponse.ok(supervisorWorkflowService.handleCallback(new ApprovalCallbackRequest(
+                    request.approvalId(), request.taskId(), request.sessionId(), request.status(), reviewerId,
+                    request.feedback(), request.traceId(), request.approvalVersion())));
+        });
     }
 
     /**
@@ -661,11 +668,6 @@ public class AgentController {
 
 
     private boolean isTerminalStatus(String status) {
-        return "COMPLETED".equalsIgnoreCase(status)
-                || "FAILED".equalsIgnoreCase(status)
-                || "CANCELLED".equalsIgnoreCase(status)
-                || "completed".equalsIgnoreCase(status)
-                || "failed".equalsIgnoreCase(status)
-                || "cancelled".equalsIgnoreCase(status);
+        return com.bkanent.agent.orchestration.AsyncRunStatus.stopStatusStream(status);
     }
 }

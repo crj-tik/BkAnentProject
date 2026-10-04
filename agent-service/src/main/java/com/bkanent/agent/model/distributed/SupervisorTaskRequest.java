@@ -13,6 +13,13 @@ public record SupervisorTaskRequest(
         String userMessage,
         Map<String, Object> context,
         String channel,
-        Boolean stream
+        Boolean stream,
+        com.bkanent.common.agent.SkillSelection skill,
+        String continueRunId,
+        Boolean allowMcp
 ) {
+    public SupervisorTaskRequest(String sessionId, String userId, String requestId, String traceId,
+                                 String userMessage, Map<String, Object> context, String channel, Boolean stream) {
+        this(sessionId, userId, requestId, traceId, userMessage, context, channel, stream, null, null, null);
+    }
 }

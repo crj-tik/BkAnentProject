@@ -83,4 +83,15 @@ class AgentControllerQueryTest {
         verify(ownership).assertOwned("session-1", "2");
         verify(streamService).subscribe("session-1", "task-1", "event-9", 9L);
     }
+
+    @Test
+    void approvalCallbackRequiresAuthenticatedReviewerAndOwnedWorkflowBeforeResuming() throws Exception {
+        when(queryService.findWorkflow("task-1", "2")).thenReturn(Optional.empty());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/agent/supervisor/approvals/callback")
+                        .contentType("application/json")
+                        .content("{\"approvalId\":\"approval\",\"taskId\":\"task-1\",\"status\":\"APPROVED\",\"reviewerId\":\"2\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.success").value(false));
+        verify(principal).resolveUserId("2");
+        verify(queryService).findWorkflow("task-1", "2");
+    }
 }

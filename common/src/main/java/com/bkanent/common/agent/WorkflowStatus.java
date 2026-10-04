@@ -6,6 +6,7 @@ package com.bkanent.common.agent;
 public enum WorkflowStatus {
     RUNNING,
     WAITING_USER_APPROVAL,
+    WAITING_USER_INPUT,
     COMPLETED,
     FAILED,
     CANCELED

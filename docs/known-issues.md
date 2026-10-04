@@ -89,6 +89,18 @@
 
 ## 设计限制（LIMIT）
 
+## KI-20 [FIXED·待提交] Supervisor 审批回调未绑定网关身份和任务 owner
+
+**确认日期**：2026-10-04。
+
+**现象**：审批回调控制器直接使用请求中的 reviewerId 调用工作流服务，未像查询入口一样解析网关身份并检查任务 owner。通用工具审批不能依赖调用者自行填写 reviewerId。
+
+**修复**：回调先绑定认证 reviewer，再通过现有 workflow 查询权限及 owner 校验，之后才能恢复具体审批调用。控制器新增未找到所属工作流时禁止恢复的回归。新旧 runner 均经过此入口。
+
+**代码位置**：`agent-service/controller/AgentController.handleApprovalCallback`。
+
+**关联**：LR-15、LR-18；`realign-supervisor-tool-and-skill-orchestration/tasks.md` 6.3。
+
 ## KI-14 [LIMIT] 运行面依赖 MySQL 单点读写
 
 话轮管线每轮从 DB 重查重装三段记忆（无进程内会话缓存），延迟依赖 DB 且高并发下 `nextTurnSeq` 有竞态窗口（同会话并发话轮可能拿到相同 seq，靠幂等键去重兜底）。访谈会话天然单人串行，实际触发概率低；若未来支持多人同场访谈需引入分布式锁。

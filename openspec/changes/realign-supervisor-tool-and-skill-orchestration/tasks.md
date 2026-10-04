@@ -19,9 +19,9 @@
 ## 3. 共享技能加载和严格能力范围
 
 - [x] 3.1 保持现有 frontmatter+Markdown 和知识标记，扩展 owner/version/capabilities 策略及显式专用发布标记；通过旧技能解析、非空 tools 映射、旧空 tools 兼容和不解析步骤 DSL 的测试验证。
-- [ ] 3.2 接入 Supervisor 技能摘要目录和 skill 加载工具，保留 Subagent 既有组件；通过首轮摘要、成功加载后正文/原始任务/工具范围可见、加载失败不激活及 explicit-only 不被猜名绕过的测试验证。
-- [ ] 3.3 在显式请求首轮模型前校验与加载全文/有效工具；通过自然语言参数理解所需上下文、未知/跨 owner/版本错、能力缺失和 allowMcp=false 冲突测试验证。
-- [ ] 3.4 在模型面和实际回调边界共用有效范围，显式选择高于历史激活/hint且禁止换名/换版本/扩权；通过交集为空不开放全量、越界工具和 LR-9 旧 hint 可覆盖回归验证。
+- [x] 3.2 接入 Supervisor 技能摘要目录和 skill 加载工具，保留 Subagent 既有组件；通过首轮摘要、成功加载后正文/原始任务/工具范围可见、加载失败不激活及 explicit-only 不被猜名绕过的测试验证。
+- [x] 3.3 在显式请求首轮模型前校验与加载全文/有效工具；通过自然语言参数理解所需上下文、未知/跨 owner/版本错、能力缺失和 allowMcp=false 冲突测试验证。
+- [x] 3.4 在模型面和实际回调边界共用有效范围，显式选择高于历史激活/hint且禁止换名/换版本/扩权；通过交集为空不开放全量、越界工具和 LR-9 旧 hint 可覆盖回归验证。
 - [ ] 3.5 将成功加载的正文/能力范围/身份保存为执行快照，区分选择来源并以 run 隔离；通过热更新恢复、续接快照和同会话新请求不继承测试验证。
 
 ## 4. Subagent 共享契约同步
@@ -37,11 +37,11 @@
 - [x] 5.1 实现单轮模型适配，只返回 AssistantMessage/toolCalls，不内部执行回调；通过带工具调用的受控模型测试确认副作用次数为 0，再与 1.1.2.3 实际 API 做契约冒烟验证。
 - [ ] 5.2 实现 A2A ToolCallback，把 instruction/结构化输入/可选下游 skill 转到既有 A2aExecutionService；通过真实响应规范化、稳定子调用身份和官方 Task/Artifact 关联测试验证。
 - [ ] 5.3 将 MCP/本地回调接入同一 ExecuteTool 治理入口，保留实际 description/schema 和能力映射；通过 A2A/MCP 混合工具决策、参数错误及唯一执行次数测试验证。
-- [ ] 5.4 用通用 PrepareContext/Model/Dispatch/LoadSkill/GuardCall/ApprovalGate/ExecuteTool/Observe/Complete 图替代新请求的领域路由；通过新增 Agent/skill 不增加业务节点、AUTO/EXPLICIT_SKILL 同循环和 nextHints 不自动调用测试验证。
+- [x] 5.4 用通用 PrepareContext/Model/Dispatch/LoadSkill/GuardCall/ApprovalGate/ExecuteTool/Observe/Complete 图替代新请求的领域路由；通过新增 Agent/skill 不增加业务节点、AUTO/EXPLICIT_SKILL 同循环和 nextHints 不自动调用测试验证。
 - [ ] 5.5 实现 request_input 控制调用、待输入保存和 continueRunId 续接，把原始请求/补充信息/真实结果持续返回模型；通过追问无业务动作、幂等续接及 explicit 快照不改变测试验证，不用问号或关键词分类等待。
-- [ ] 5.6 限制每轮至多一个单独的 skill/request_input 控制调用，控制与业务混合或多个控制调用均整批拒绝并为每个 callId 返回未执行结果；通过无技能激活/无等待状态变化/无业务副作用、下一轮分轮继续和消息关联测试验证。
+- [x] 5.6 限制每轮至多一个单独的 skill/request_input 控制调用，控制与业务混合或多个控制调用均整批拒绝并为每个 callId 返回未执行结果；通过无技能激活/无等待状态变化/无业务副作用、下一轮分轮继续和消息关联测试验证。
 - [ ] 5.7 增加模型轮次/工具预算/并发上限和有界同模式重试；通过独立调用并行、额度耗尽、模型不可用不转关键词和取消测试验证。
-- [ ] 5.8 验证 GuardCall/Complete 只执行通用治理，不检查正文步骤顺序/前置业务步骤/文字流程完成；通过受控模型提出范围内重排/提前结束的测试及新拓扑审计验证第一种边界。
+- [x] 5.8 验证 GuardCall/Complete 只执行通用治理，不检查正文步骤顺序/前置业务步骤/文字流程完成；通过受控模型提出范围内重排/提前结束的测试及新拓扑审计验证第一种边界。
 
 ## 6. 调用账本、审批与恢复
 

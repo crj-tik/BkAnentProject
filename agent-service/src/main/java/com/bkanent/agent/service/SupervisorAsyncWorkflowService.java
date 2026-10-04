@@ -92,7 +92,7 @@ public class SupervisorAsyncWorkflowService {
                 request.userMessage(),
                 request.context(),
                 request.channel(),
-                request.stream()
+                request.stream(), request.skill(), request.continueRunId(), request.allowMcp()
         );
 
         AgentAsyncWorkflowEntity entity = new AgentAsyncWorkflowEntity();
@@ -229,7 +229,7 @@ public class SupervisorAsyncWorkflowService {
                 originalRequest.userMessage(),
                 originalRequest.context(),
                 originalRequest.channel(),
-                originalRequest.stream()
+                originalRequest.stream(), originalRequest.skill(), originalRequest.continueRunId(), originalRequest.allowMcp()
         );
         publish(entity.getSessionId(), entity.getTaskId(), "supervisor-agent", "supervisor.workflow_async.retry_requested", Map.of(
                 "asyncWorkflowId", entity.getAsyncWorkflowId(),
@@ -569,8 +569,6 @@ public class SupervisorAsyncWorkflowService {
     }
 
     private boolean isTerminal(String status) {
-        return "COMPLETED".equalsIgnoreCase(status)
-                || "FAILED".equalsIgnoreCase(status)
-                || "CANCELLED".equalsIgnoreCase(status);
+        return com.bkanent.agent.orchestration.AsyncRunStatus.terminal(status);
     }
 }
