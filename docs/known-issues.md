@@ -49,6 +49,80 @@
 
 定义见 `openspec/changes/create-interview-subagent/proposal.md` 的范围边界。
 
+## KI-37 [OPEN·P1] Linux 增量迁移未选择目标数据库
+
+**确认日期**：2026-10-05。
+
+**现象与根因**：`scripts/deploy/apply-migrations.sh:64` 每个文件创建独立 mysql 连接，未传 `--database`；`20260929_marketing_content_source.sql`、`20261004_supervisor_orchestration.sql`、`20261004_supervisor_run_control.sql` 又没有 `USE`。隔离 MySQL 8.4 实测三份文件均返回 `ERROR 1046: No database selected`，前一个文件的 `USE` 不会跨连接保留。
+
+**处置方向**：每份迁移明确目标库，或使用可审查的文件到库映射传入数据库；不能把全部文件统一指定到 bk_agent。验证单文件和按顺序批量升级。完整检查见 `docs/linux-deployment-init-review.md`。
+
+## KI-38 [OPEN·P1] 历史迁移语法不兼容 Compose 的 MySQL 8.4
+
+**确认日期**：2026-10-05。
+
+**现象与根因**：`20260916_async_runtime_leases.sql` 和 `20260918_supervisor_stream_events.sql` 使用 `ADD COLUMN IF NOT EXISTS`。显式指定 bk_agent 后，真实 MySQL 8.4 仍返回 `ERROR 1064`；前者关于 MySQL 8.0.29+ 支持该语法的注释不成立。新增 Linux 迁移入口默认首先执行旧文件，不能完成声明的全量增量升级。
+
+**处置方向**：按 information_schema 检查后执行兼容的 ALTER，结合目标库与升级基线判断已应用内容；参照现有 interview asset_id 迁移。已有列、缺列和重复运行都要验证。关联 KI-37。
+
+## KI-39 [OPEN·P1] 全新 Compose 数据库缺少已实现业务所需结构
+
+**确认日期**：2026-10-05。
+
+**现象与根因**：按 Compose 原样挂载并执行全部首启 SQL，MySQL 8.4 初始化成功，Supervisor 两张新表及 cancel_requested 存在，但 `bk_marketing.marketing_content.source` 和 `bk_interview.interview_director_command` 不存在。对应实体与服务已使用这些结构；营销来源迁移和导演指令迁移均未包含在首启链。新增文档所述“全新数据卷无需手工迁移”不足以保证全量业务可用。该缺口来自原有 Compose/SQL，检查新增部署流程时确认。
+
+**处置方向**：补齐规范的首启 schema，确保与已实现功能一致；用真实新库验证字段、表及相关业务访问，不能仅以数据库容器 healthy 作为完成标准。关联 KI-37、KI-38、KI-10。
+
+## KI-40 [OPEN·P1] Linux 初始化指南的环境覆盖未传入应用容器
+
+**确认日期**：2026-10-05。
+
+**现象与根因**：`docker-compose.yml` 应用环境写死四类 `*_INTEGRATION_MODE=local`、空 NACOS_PASSWORD、固定 NACOS_USERNAME 和 loopback MINIO_PUBLIC_BASE_URL。使用测试 .env 渲染 full/mcp 配置，四项 real 仍变为 local，Nacos 凭据及公共资源地址也不生效。新增初始化脚本和文档要求在 .env 调整这些值，但原有 Compose 没有相应插值，无法按指南接入真实 Provider、同版本 Card 更新凭据或外部资源地址。
+
+**处置方向**：让相应应用变量可通过明确的 Compose 插值覆盖，保留开发默认值；Nacos Admin 初始化和权限仍须独立配置，不能只生成密码便视为授权完成。用有效配置渲染和真实服务验证。关联 LR-28、KI-30。
+
+## KI-41 [OPEN·P2] Linux 可达性检查忽略配置的远端地址
+
+**确认日期**：2026-10-05。
+
+**现象与根因**：`check-environment.sh:26` 只将 port 传给 `lib.sh:73` 的 port_open，该函数始终连接 127.0.0.1。隔离 Linux 中将七项地址设为不可达远端、在本机对应端口启动监听，检查仍全部显示远端“可达”并返回 0；真实远端可用而本机无监听时也会被误报。
+
+**处置方向**：分开宿主机端口占用和目标 host/port 可达性探测，给连接设置有限超时；验证远端/本机同端口但状态不同的正反例。
+
+## KI-42 [OPEN·P2] Linux 启动等待与状态检查存在成功误报
+
+**确认日期**：2026-10-05。
+
+**现象与根因**：wait_all_healthy 使用 `docker compose ps -q`，真实 Compose 默认列表不包含已退出容器。两个隔离容器中，一个 running、另一个 exit 42，默认列表仅返回前者；按该真实行为构造的函数测试返回“全部就绪”和 0。它也不比对预期服务集合。`status.sh --no-http` 在 compose ps 失败后仍 exit 0；HTTP probe 失败同样只打印，未累积失败状态。
+
+**边界**：Compose up 的 service_completed_successfully 依赖仍会拦住其已检测到的初始化失败，不能据此声称所有 config-init 失败都会绕过 up。问题在独立等待/状态层不能证明所有预期服务及初始化任务成功。
+
+**处置方向**：检查全部容器和预期服务，区分成功的一次性任务与业务进程退出；保留 Compose/HTTP 失败的非零退出码，并按档位选择健康端点。
+
+## KI-43 [OPEN·P2] minimal 初始化漏检实际使用的 Redis 端口
+
+**确认日期**：2026-10-05。
+
+**现象与根因**：Compose 的 Redis 属于 minimal/full，auth-service 依赖其 healthy，但 init-environment.sh 只在 full 分支检查 Redis。隔离 Linux 中占用 minimal 配置的 Redis 端口，初始化仍成功。已有任意本项目容器运行时跳过全部端口检查，也不能证明新启用档位的端口可用。
+
+**处置方向**：从目标档位的实际服务/发布端口检查冲突，排除本项目对应容器已拥有的端口；覆盖 minimal Redis 和 minimal 升级 full/mcp 的场景。
+
+## KI-44 [OPEN·P2] 自定义 env 解析与 Compose dotenv 语义不同
+
+**确认日期**：2026-10-05。
+
+**现象与根因**：lib.sh 的 env_value 只裁剪空白及两端引号。合法 Compose 写法 `MYSQL_ROOT_PASSWORD="值" # 注释` 被读成包含引号和注释的整段；真实 Compose 配置渲染可以正确读取相同写法。迁移脚本因而可能用错误密码连接 MySQL，检查脚本也可能得到错误端口。重复键、插值及环境覆盖同样没有统一语义，不能将该解析器视为完整 Compose dotenv 实现。
+
+**处置方向**：明确定义并校验支持的配置格式，或读取与 Compose 一致的有效配置；不要通过 source 执行用户配置。优先验证行尾注释、引号、CRLF 与覆盖优先级。
+
+## KI-45 [OPEN·P3] Linux 部署选项缺值时直接抛 Bash 未绑定变量
+
+**确认日期**：2026-10-05。
+
+**现象与根因**：需要值的选项直接读取 `$2`，与 `set -u` 组合时缺值绕过正常参数错误提示；实测 `init-environment.sh --profile` 返回 `$2: unbound variable`。start/stop 的 profile、start 的 wait-timeout、apply-migrations 的 file 等存在相同读取方式。
+
+**处置方向**：读取选项值前检查剩余参数和空值，返回具体选项的用法错误；补充缺值、非法值和正常值的入口验证。
+
 ## KI-30 [FIXED·本提交·P1] 技能热更新未同步 HTTP/Nacos Card
 
 **发现日期**：2026-10-05。
