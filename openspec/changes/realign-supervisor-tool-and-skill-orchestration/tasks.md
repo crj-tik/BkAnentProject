@@ -5,7 +5,7 @@
 ## 1. 请求选择与执行身份契约
 
 - [x] 1.1 在 common 定义可选 skillSelection、owner/version/contentHash、AUTO/EXPLICIT_SKILL、稳定 capabilityId 及错误码；通过序列化和旧客户端兼容测试验证。
-- [ ] 1.2 为 Supervisor 同步/异步与普通 chat 增补 skill、continueRunId/runId 和 WAITING_USER_INPUT 语义，区分新 run 与明确续接；通过作用域、同会话不继承、跨 owner/错误状态/重复续接和旧响应字段测试验证，续接沿用原 mode/session/请求政策与累计预算。
+- [x] 1.2 为 Supervisor 同步/异步与普通 chat 增补 skill、continueRunId/runId 和 WAITING_USER_INPUT 语义，区分新 run 与明确续接；通过作用域、同会话不继承、跨 owner/错误状态/重复续接和旧响应字段测试验证，续接沿用原 mode/session/请求政策与累计预算。
 - [x] 1.3 发布九 Agent 的 Card skill ID→本地 skill name/owner/version 及 explicit 支持版本映射；通过契约样例和唯一映射校验验证，不用默认 intent 或字符串猜测。
 
 ## 2. 真实动态能力目录
@@ -36,7 +36,7 @@
 
 - [x] 5.1 实现单轮模型适配，只返回 AssistantMessage/toolCalls，不内部执行回调；通过带工具调用的受控模型测试确认副作用次数为 0，再与 1.1.2.3 实际 API 做契约冒烟验证。
 - [x] 5.2 实现 A2A ToolCallback，把 instruction/结构化输入/可选下游 skill 转到既有 A2aExecutionService；通过真实响应规范化、稳定子调用身份和官方 Task/Artifact 关联测试验证。
-- [ ] 5.3 将 MCP/本地回调接入同一 ExecuteTool 治理入口，保留实际 description/schema 和能力映射；通过 A2A/MCP 混合工具决策、参数错误及唯一执行次数测试验证。
+- [x] 5.3 将 MCP/本地回调接入同一 ExecuteTool 治理入口，保留实际 description/schema 和能力映射；通过 A2A/MCP 混合工具决策、参数错误及唯一执行次数测试验证。
 - [x] 5.4 用通用 PrepareContext/Model/Dispatch/LoadSkill/GuardCall/ApprovalGate/ExecuteTool/Observe/Complete 图替代新请求的领域路由；通过新增 Agent/skill 不增加业务节点、AUTO/EXPLICIT_SKILL 同循环和 nextHints 不自动调用测试验证。
 - [x] 5.5 实现 request_input 控制调用、待输入保存和 continueRunId 续接，把原始请求/补充信息/真实结果持续返回模型；通过追问无业务动作、幂等续接及 explicit 快照不改变测试验证，不用问号或关键词分类等待。
 - [x] 5.6 限制每轮至多一个单独的 skill/request_input 控制调用，控制与业务混合或多个控制调用均整批拒绝并为每个 callId 返回未执行结果；通过无技能激活/无等待状态变化/无业务副作用、下一轮分轮继续和消息关联测试验证。
@@ -46,20 +46,20 @@
 ## 6. 调用账本、审批与恢复
 
 - [x] 6.1 提供调用账本和技能快照 SQL migration/映射，扩展 runnerVersion、模式、模型消息、待调用/输入/审批和预算的 checkpoint；通过独立测试库、runId+toolCallId 唯一和旧 checkpoint 读取测试验证，不新增技能步骤进度表。
-- [ ] 6.2 实现执行前写调用记录、执行后保存结果及工具消息，接入远端 Task 续查/取消与 OUTCOME_UNKNOWN 对账；通过已完成结果复用、提交结果未知不盲重发、稳定子 task/thread 和重启测试验证。
-- [ ] 6.3 将审批绑定实际调用 ID/目标/参数哈希，批准后恢复原调用、变参重新审批；通过未批准零调用、拒绝/取消不可绕过、重复回调及 LR-15 最新 checkpoint 待办回归验证。
-- [ ] 6.4 扩展任务/产物/SSE 为 mode、capabilityId、callId、skill/version、待输入及实际结果；通过重放/断点、owner 可见性测试验证，不输出隐藏推理或虚构技能步骤状态。
+- [x] 6.2 实现执行前写调用记录、执行后保存结果及工具消息，接入远端 Task 续查/取消与 OUTCOME_UNKNOWN 对账；通过已完成结果复用、提交结果未知不盲重发、稳定子 task/thread 和重启测试验证。
+- [x] 6.3 将审批绑定实际调用 ID/目标/参数哈希，批准后恢复原调用、变参重新审批；通过未批准零调用、拒绝/取消不可绕过、重复回调及 LR-15 最新 checkpoint 待办回归验证。
+- [x] 6.4 扩展任务/产物/SSE 为 mode、capabilityId、callId、skill/version、待输入及实际结果；通过重放/断点、owner 可见性测试验证，不输出隐藏推理或虚构技能步骤状态。
 
 ## 7. 示范技能、切换与文档
 
 - [x] 7.1 根据真实 Card/tools/list 编写显式专用 Markdown “找房→对比→营销草稿”技能，正文说明调用对象、参数来源和信息不足行为；通过解析、能力范围绑定和发布元数据契约验证，不添加 DAG/顺序校验配置。
-- [ ] 7.2 将各 Supervisor 入口和普通 chat 接到统一核心，保留原响应字段、allowMcp和审批入口，提供旧 domain/requireParallel/workflowType 迁移说明；通过同步/异步/续接接口契约测试验证。
+- [x] 7.2 将各 Supervisor 入口和普通 chat 接到统一核心，保留原响应字段、allowMcp和审批入口，提供旧 domain/requireParallel/workflowType 迁移说明；通过同步/异步/续接接口契约测试验证。
 - [ ] 7.3 按 runnerVersion 保留旧未完成任务恢复，新请求停用关键词/default listing/default intent、trade 自动交接与 nextHints handoff；通过旧审批恢复、新请求调用链和灰度不替换业务目标测试验证。
 - [ ] 7.4 旧 run 排空后删除旧路由节点/配置/死链，更新 README、路线图、相交未完成变更并同步本 delta；通过配置/调用审计与严格校验验证，更新 LR-17/18 和 KI-17/18 状态，保留 KI-19 限制。
 
 ## 8. 验收与发布
 
-- [ ] 8.1 运行 common/common-skill/common-a2a/agent-service 和受影响服务的针对性测试，使用 mvn -gs .mvn-settings.xml -s .mvn-settings.xml compile 验证全模块装配；新增相关状态转换点同步补 KI-2 要求的回归用例。
-- [ ] 8.2 在真实分布式环境执行 design 的确定性验收，交付动态发现、混合协议、技能范围、审批/待输入恢复及访谈边界的请求和调用记录。
+- [x] 8.1 运行 common/common-skill/common-a2a/agent-service 和受影响服务的针对性测试，使用 mvn -gs .mvn-settings.xml -s .mvn-settings.xml compile 验证全模块装配；新增相关状态转换点同步补 KI-2 要求的回归用例。
+- [x] 8.2 在真实分布式环境执行 design 的确定性验收，交付动态发现、混合协议、技能范围、审批/待输入恢复及访谈边界的请求和调用记录。
 - [ ] 8.3 用代表性请求评估模型意图理解、正文顺序遵循、遗漏/重复动作、参数真实性和输出质量，记录模型版本、偏差、轮次、时延与成本并确定预算；报告明确评估通过不代表顺序强保证。
 - [ ] 8.4 演练先服务端后 Supervisor 的滚动升级、新旧 runner 分别恢复以及暂停新接收的回滚；交付任务与已完成调用不重复推进的演练记录。

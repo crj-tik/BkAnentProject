@@ -20,6 +20,10 @@ import java.util.Optional;
 public class OfficialAgentCardDiscoveryClient implements AgentCardDiscoveryClient {
 
     private final ObjectProvider<NacosAgentCardProvider> nacosAgentCardProvider;
+    private ObjectProvider<com.alibaba.nacos.api.ai.A2aService> rawNacosService;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setRawNacosService(ObjectProvider<com.alibaba.nacos.api.ai.A2aService> service) { this.rawNacosService = service; }
 
     public OfficialAgentCardDiscoveryClient(ObjectProvider<NacosAgentCardProvider> nacosAgentCardProvider) {
         this.nacosAgentCardProvider = nacosAgentCardProvider;
@@ -29,6 +33,16 @@ public class OfficialAgentCardDiscoveryClient implements AgentCardDiscoveryClien
     public Optional<AgentCard> fetchByAgentName(String agentName) {
         if (!StringUtils.hasText(agentName)) {
             return Optional.empty();
+        }
+        var rawService = rawNacosService == null ? null : rawNacosService.getIfAvailable();
+        if (rawService != null) {
+            try {
+                var published = rawService.getAgentCard(agentName);
+                if (published == null) return Optional.empty();
+                var card = convertWrapper(new com.alibaba.cloud.ai.a2a.registry.nacos.discovery.NacosAgentCardWrapper(
+                        com.bkanent.common.a2a.NacosSkillCardMapper.toOfficial(published)));
+                return StringUtils.hasText(card.a2aEndpoint()) ? Optional.of(card) : Optional.empty();
+            } catch (Exception exception) { return Optional.empty(); }
         }
         NacosAgentCardProvider provider = nacosAgentCardProvider.getIfAvailable();
         if (provider == null || !provider.supportGetAgentCardByName()) {

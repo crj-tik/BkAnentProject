@@ -14,4 +14,8 @@ model-timeout-ms 默认 30000，tool-timeout-ms 默认 120000，max-queued-calls
 
 skill 与 request_input 每轮最多一个且须单独调用；混批不产生任何业务效果。审批 payload 给出 callId、capabilityId 和 argumentsHash。OUTCOME_UNKNOWN 停止模型继续推进，必须核对原调用，不应使用新 run 自动重发。
 
+旧 context.domain、requireParallel、workflowType、intent、preferredAgentIds 与 routeOverrideDomains 不再决定新请求的业务目标或拓扑；需要指定过程时使用顶层 skill，需要补充参数时使用 userMessage/context，独立调用是否并行由模型提出的本轮调用决定。context.requireApproval、collectionName/topK、allowMcp 和认证身份继续按原字段治理，不能通过迁移字段绕过。旧响应字段保留，调用事实位于 governanceMetadata/orchestration；WAITING_USER_INPUT 与 WAITING_USER_APPROVAL 为暂停态。
+
 动态发现基线为 Nacos Server/SDK 3.1.0、A2A Starter 1.1.2.3。先通过普通 Nacos Naming 找带 agent-id/agent-card-path 的 HTTP 实例，再按 agent 名通过 Agent Registry 获取 Card；`agent.distributed.http-card-fallback-enabled=true` 时可回退到该真实实例的 `/.well-known/agent.json`。关闭后注册 API 失败不会伪造 Card。Compose 新数据库初始化会应用两份 Supervisor migration；已有卷必须由运维手动应用，不能依赖首次初始化。
+
+根 POM 统一 SDK 3.1.0。common-a2a 的兼容组件只替换已启用的 Starter 默认注册操作，保留 SERVICE/registerAsLatest 策略并保真 capabilities.extensions；自定义注册组件不替换。Supervisor 优先从同一个官方 SDK A2aService 读取 Card 原数据，避免 Starter 1.1.2.3 的双向扩展丢失；不新增注册服务或隐藏路由规则。见 KI-25/26。

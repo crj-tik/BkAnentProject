@@ -10,6 +10,11 @@
     <artifactId>agent-service</artifactId>
     <dependencies>
         <dependency>
+            <groupId>com.bkanent</groupId>
+            <artifactId>common-a2a</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>com.networknt</groupId>
             <artifactId>json-schema-validator</artifactId>
             <version>1.5.7</version>
@@ -82,7 +87,6 @@
         <dependency>
             <groupId>com.alibaba.nacos</groupId>
             <artifactId>nacos-client</artifactId>
-            <version>3.1.0</version>
         </dependency>
         <dependency>
             <groupId>com.baomidou</groupId>

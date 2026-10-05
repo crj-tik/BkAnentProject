@@ -91,13 +91,15 @@
 
 ## 设计限制（LIMIT）
 
-## KI-22 [LIMIT] Nacos A2A Starter 读取缺省布尔字段的外部 Card 可失败
+## KI-22 [FIXED] Nacos A2A Starter 读取缺省布尔字段的外部 Card 可失败
 
 **确认日期**：2026-10-04（实际注册接口验收）。
 
 **现象**：Starter `1.1.2.3` 的 AgentCardConverterUtil 对 pushNotifications、stateTransitionHistory、supportsAuthenticatedExtendedCard 直接拆箱，外部 Card 未填这些可选值时可抛 NullPointerException。项目的官方 Card 构建器发布明确布尔值，验收已覆盖完整字段；省略字段的外部发布者需补齐，或开启 HTTP Card fallback。不能把发现失败当成 Agent 不支持业务任务。
 
-**关联**：KI-18；`NacosAgentRegistryDockerTest`。
+**项目修复（2026-10-05）**：共享 NacosSkillCardMapper 在副本中按协议默认值补齐可选布尔字段，再保真转换扩展；Supervisor 优先通过 SDK 读取原 Card，绕过 Starter 的有损转换。上游 Starter 缺陷仍存在，项目默认路径已修复，保留旧 provider 适配及 HTTP fallback。`NacosSkillCardMapperTest` 覆盖空字段且不修改原 Card。修复 commit：本次提交。
+
+**关联**：KI-18、KI-25；`NacosAgentRegistryDockerTest`。
 
 ## KI-20 [FIXED] Supervisor 审批回调未绑定网关身份和任务 owner
 
@@ -145,9 +147,31 @@
 
 **修复**：事件失败不覆盖持久事实；主产物存在时仍按独立来源身份检查并补存衍生产物。新增推送故障和主产物已存在、正文缺失两个回归。通用循环同时将 mode、capabilityId、callId 与 skill/version 传入主/衍生产物和事件。修复 commit：本次提交。
 
-**代码位置**：`agent-service/graph/node/PersistArtifactsNode`、`PersistArtifactsNodeTest`。
+**代码位置**：`agent-service/graph/node/PersistArtifactsNode`、`PersistArtifactsNodeTest`。修复 commit：`993cb7e`。
 
 **关联**：LR-22、LR-23；本变更 6.4。
+
+## KI-25 [FIXED] Nacos 注册与发现转换丢失显式技能扩展
+
+**确认日期**：2026-10-05（Nacos 3.1.0 混合协议真实验收）。
+
+**现象**：Starter 1.1.2.3 的 CardConverter 在双向转换中丢弃 capabilities.extensions，发布技能在 Nacos 中缺少版本/内容身份契约，或发现后返回空扩展，导致真实下游委托报 EXPLICIT_SKILL_UNSUPPORTED。
+
+**修复**：共享 mapper 保留扩展原内容；只装饰已启用的 Starter 默认注册组件，使用同一个 SDK client、SERVICE 注册类型和 registerAsLatest 策略。Supervisor 注入实际 A2aService 后从 SDK 原 Card 转换，不再经过有损 provider；SDK 不可用时保留旧适配和已配置 HTTP fallback。自动装配和真实注册→发现→带子技能 A2A 调用均有回归。修复 commit：本次提交。
+
+**代码位置**：`common-a2a/NacosSkillCardMapper`、`SkillAwareNacosOperationService`、`SkillNacosCompatibilityAutoConfiguration`；`OfficialAgentCardDiscoveryClient`。
+
+**关联**：KI-18、KI-22；LR-25；本变更 1.3、2.5、4.1、8.2。
+
+## KI-26 [FIXED] 九个 Subagent 的 Nacos SDK 被 BOM 降为 3.0.3
+
+**确认日期**：2026-10-05（Maven 实际依赖树）。
+
+**现象**：只有 agent-service 显式声明 3.1.0；公共 A2A Starter 在其余模块被 Spring Cloud BOM 管理为 nacos-client 3.0.3，缺少 A2aService/Agent Registry 契约，不能把 Supervisor 冒烟等同于九服务注册成功。
+
+**修复**：根 POM 统一管理 nacos-client 3.1.0，Supervisor 去除重复硬编码版本；全模块使用相同基线。修复 commit：本次提交。
+
+**关联**：KI-18、KI-25；本变更 2.5、8.1、8.4。
 
 ## KI-14 [LIMIT] 运行面依赖 MySQL 单点读写
 

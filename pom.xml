@@ -34,6 +34,7 @@
     </modules>
 
     <properties>
+        <nacos.client.version>3.1.0</nacos.client.version>
         <java.version>17</java.version>
         <spring.boot.version>3.5.0</spring.boot.version>
         <spring.cloud.version>2025.0.0</spring.cloud.version>
@@ -121,6 +122,11 @@
                 <groupId>io.modelcontextprotocol.sdk</groupId>
                 <artifactId>mcp-json-jackson2</artifactId>
                 <version>0.14.0</version>
+            </dependency>
+            <dependency>
+                <groupId>com.alibaba.nacos</groupId>
+                <artifactId>nacos-client</artifactId>
+                <version>${nacos.client.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.mysql</groupId>
