@@ -163,6 +163,18 @@
 
 **关联**：KI-18、KI-22；LR-25；本变更 1.3、2.5、4.1、8.2。
 
+## KI-27 [FIXED] 旧任务恢复可能改选业务目标或缺少 owner 校验
+
+**确认日期**：2026-10-05。
+
+**现象**：旧 checkpoint 已固定 selectedAgentId，但原目标下线后执行器会按 domain 重新选择；旧任务查询和审批恢复也未在 facade 校验原 owner。
+
+**修复**：旧任务仍走原 graph timeline，已固定目标不可改选，撤销时明确失败；旧任务查询及审批核对 owner，新 timeline 优先按持久化 run 身份定位。
+
+**验证**：`LegacyRunnerDockerRecoveryTest` 在真实 MySQL 重建 graph/facade，原审批恢复仅执行一次；重复审批、完成后重启均不重执行，撤销目标零执行，伪造 owner 拒绝，新请求使用新 runner。测试业务执行为计数夹具，未声称旧远端未知请求具有 exactly-once。
+
+**代码位置**：`DefaultOfficialSupervisorGraphFacade`、`OfficialSupervisorGraphFactory`。关联 LR-26、LR-15、KI-21。
+
 ## KI-26 [FIXED] 九个 Subagent 的 Nacos SDK 被 BOM 降为 3.0.3
 
 **确认日期**：2026-10-05（Maven 实际依赖树）。

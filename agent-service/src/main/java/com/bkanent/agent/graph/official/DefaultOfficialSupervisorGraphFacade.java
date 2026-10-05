@@ -52,6 +52,8 @@ public class DefaultOfficialSupervisorGraphFacade implements OfficialSupervisorG
     @Override
     public SupervisorTaskResponse execute(SupervisorTaskRequest request) {
         if (toolLoopRunner != null && StringUtils.hasText(request.continueRunId())) return toolLoopRunner.execute(request);
+        if (toolLoopRunner != null && StringUtils.hasText(request.requestId()) && toolLoopRunner.hasRun(request.requestId()))
+            return toolLoopRunner.execute(request);
         String sessionId = StringUtils.hasText(request.sessionId())
                 ? request.sessionId() : UUID.randomUUID().toString();
         String taskId = StringUtils.hasText(request.requestId())
@@ -70,6 +72,8 @@ public class DefaultOfficialSupervisorGraphFacade implements OfficialSupervisorG
         RunnableConfig graphConfig = migrationFacade.runnableConfig(sessionId, taskId);
         StateSnapshot existing = graphHolder.compiledGraph().lastStateOf(graphConfig).orElse(null);
         if (existing != null) {
+            String owner = existing.state().value(OfficialSupervisorGraphKeys.USER_ID, (String) null);
+            if (owner == null || !owner.equals(request.userId())) throw new IllegalStateException("LEGACY_RUN_OWNER_MISMATCH");
             // A repeated submission with the same task/thread must not restart
             // planning or invoke a child Agent a second time. Recovery of a
             // non-terminal RUNNING state is handled by the worker/recovery
@@ -181,6 +185,8 @@ public class DefaultOfficialSupervisorGraphFacade implements OfficialSupervisorG
     }
 
     private void validateCallback(SupervisorWorkflowState state, ApprovalCallbackRequest request) {
+        if (!StringUtils.hasText(state.userId()) || !state.userId().equals(request.reviewerId()))
+            throw new IllegalStateException("LEGACY_RUN_OWNER_MISMATCH");
         if (!StringUtils.hasText(state.taskId()) || !StringUtils.hasText(request.taskId())
                 || !request.taskId().equals(state.taskId())) {
             throw new IllegalArgumentException("Approval taskId does not match graph thread");

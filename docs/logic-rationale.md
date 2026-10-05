@@ -240,3 +240,13 @@
 **代码位置**：`common-a2a/NacosSkillCardMapper`、`SkillNacosCompatibilityAutoConfiguration`、`agent-service/registry/OfficialAgentCardDiscoveryClient`；真实混合协议验收 `SupervisorDistributedAcceptanceTest`。
 
 **关联**：LR-17、LR-19、LR-21；KI-22、KI-25、KI-26。
+
+## LR-26 新旧 runner 恢复按持久化身份分离，旧目标不可重新选择
+
+**结论**：新 timeline 的 run 由新 runner 读取；旧 timeline 保留原 graph 恢复。旧 checkpoint 已选 Agent 时只允许该目标，目标下线不按 domain 改选，查询和审批均验证原 owner。
+
+**根因**：用新图解释旧审批会改变已批准行为；灰度或注册表变化也不能把旧调用替换为另一个业务目标。恢复兼容代码必须等真实旧任务排空证据，验收库为空不能证明生产排空。
+
+**代码位置**：`DefaultOfficialSupervisorGraphFacade`、`OfficialSupervisorGraphFactory`；真实 MySQL `LegacyRunnerDockerRecoveryTest`。
+
+**关联**：LR-15、LR-22；KI-27。旧远端提交结果未知仍需人工或原协议对账，不能由恢复自动重发。

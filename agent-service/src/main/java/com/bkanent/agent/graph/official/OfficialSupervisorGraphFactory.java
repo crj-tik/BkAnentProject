@@ -353,7 +353,7 @@ public class OfficialSupervisorGraphFactory {
                 SupervisorGraphState graphState = OfficialGraphStateAdapters.toSupervisorGraphState(state);
                 RegisteredAgentDescriptor descriptor = StringUtils.hasText(graphState.selectedAgentId())
                         ? agentRegistry.getByAgentId(graphState.selectedAgentId())
-                        .orElseGet(() -> selectAgent(graphState.domain(), graphState.userMessage()))
+                        .orElseThrow(() -> new IllegalStateException("LEGACY_SELECTED_AGENT_UNAVAILABLE: " + graphState.selectedAgentId()))
                         : selectAgent(graphState.domain(), graphState.userMessage());
                 SingleAgentSubgraph.ExecutionResult execution = singleAgentSubgraph.execute(
                         requestOf(state), graphState, descriptor);

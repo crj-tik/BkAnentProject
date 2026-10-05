@@ -28,4 +28,8 @@
 
 ## 待验收
 
+## 2026-10-05 旧 runner 数据库恢复
+
+`LegacyRunnerDockerRecoveryTest` 的 `legacy-4f56e0a9-5424-4d83-bc08-34c6bb276568` 在旧 graph 产生待审批 checkpoint，重建 facade/graph 后仍走旧 timeline 和原 Agent；批准与重复回调最终仅执行一次。完成后再重建读取原结果，新请求进入 llm-tools-v1。原 Agent 撤销时失败且零业务执行，跨 owner 查询被拒绝。连同六个既有官方图回归，本轮七项通过。旧业务执行是计数夹具；生产旧 run 排空尚无证据，旧远端提交未知结果不能盲目重发。
+
 真实模型评估及存量旧 runner 的完整发布/回滚演练继续按 OpenSpec 清单。九生产实例与各业务后台全量联调未在本地协议夹具验收中声称完成。真实模型评估须记录型号/版本、请求、偏差、轮次、时延、token 与成本；确定性测试不能替代这一项，也不能证明 Markdown 顺序的强保证（KI-19）。
