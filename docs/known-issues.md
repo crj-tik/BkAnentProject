@@ -161,7 +161,7 @@
 
 **验收结论（2026-10-04）**：Docker Nacos `v3.1.0` + SDK `3.1.0` + A2A Starter `1.1.2.3` 已实测 releaseAgentCard→registerAgentEndpoint→NacosAgentCardProvider→官方 HTTP A2A 调用，HTTP Card fallback 也通过。Compose 升级 3.1.0；`agent.distributed.http-card-fallback-enabled` 默认 true，可显式关闭。调用账本接受关联与原地址对账见 `26cdeb4`；描述修复见 `0064b85`，地址缓存见 `b58b14d`。测试是确定性协议夹具，不代表真实模型或九服务业务联调全部通过。SDK 可选布尔字段限制见 KI-22。
 
-**关联**：KI-17；`realign-supervisor-tool-and-skill-orchestration/tasks.md` 第 2 组。
+**关联**：KI-17；`openspec/changes/archive/2026-10-05-realign-supervisor-tool-and-skill-orchestration/tasks.md` 第 2 组。
 
 ## 设计限制（LIMIT）
 
@@ -187,7 +187,7 @@
 
 **代码位置**：`agent-service/controller/AgentController.handleApprovalCallback`。
 
-**关联**：LR-15、LR-18；`realign-supervisor-tool-and-skill-orchestration/tasks.md` 6.3。
+**关联**：LR-15、LR-18；`openspec/changes/archive/2026-10-05-realign-supervisor-tool-and-skill-orchestration/tasks.md` 6.3。
 
 ## KI-21 [FIXED] 数据库 checkpoint 重启后读取了最早状态
 
@@ -293,7 +293,7 @@
 
 **处置**：保留 LIMIT，不将强制顺序校验列入本次实施任务；通过清晰的技能正文、模型真实调用评估和运行轨迹观察改善遵循质量。评估通过不能证明顺序强保证；如果后续业务必须保证先后关系，应重新讨论设计并更新变更范围，不能在通用节点中暗加业务步骤判断。
 
-**关联**：LR-17、LR-18、KI-17；`realign-supervisor-tool-and-skill-orchestration/design.md` 的非目标和验证边界。
+**关联**：LR-17、LR-18、KI-17；`openspec/changes/archive/2026-10-05-realign-supervisor-tool-and-skill-orchestration/design.md` 的非目标和验证边界。
 
 ---
 

@@ -8,7 +8,7 @@
 
 用户最终选择第一种方案：正常请求给 LLM 配上真实 A2A/MCP 等工具的 description/schema，由模型判断调用；本次显式指定 skill 时，平台首轮前校验、固定版本并加载全文和能力范围，模型仍理解原始请求、提取参数、处理缺失与冲突，按正文指引逐轮选择工具。AUTO 与 EXPLICIT_SKILL 使用同一通用 Graph，不引入 workflow/DAG、正文步骤调度或业务顺序/完成检查器。
 
-实现见 [realign-supervisor-tool-and-skill-orchestration](../openspec/changes/realign-supervisor-tool-and-skill-orchestration/design.md)，关联 LR-17/18、KI-17/18/19。2026-10-03 的 instruction/workflow 双执行器及结构化 DAG 版本已被本版取代。以下方向 1 的“LLM 失败后规则兜底”及方向 2/3 的入口规则扩展仅作历史记录。入口关键词、默认 Agent、自动 nextHint 交接和模型失败时关键词兜底已从执行路径移除。旧 Graph runner 已删除，历史 checkpoint 仅用于只读查询。本机独立验收库 7 条旧流程数据均已终态；该结果不代表生产排空。清理记录见 [旧执行链清理记录](supervisor-legacy-cleanup.md)。
+实现见 [realign-supervisor-tool-and-skill-orchestration](../openspec/changes/archive/2026-10-05-realign-supervisor-tool-and-skill-orchestration/design.md)，关联 LR-17/18、KI-17/18/19。2026-10-03 的 instruction/workflow 双执行器及结构化 DAG 版本已被本版取代。以下方向 1 的“LLM 失败后规则兜底”及方向 2/3 的入口规则扩展仅作历史记录。入口关键词、默认 Agent、自动 nextHint 交接和模型失败时关键词兜底已从执行路径移除。旧 Graph runner 已删除，历史 checkpoint 仅用于只读查询。本机独立验收库 7 条旧流程数据均已终态；该结果不代表生产排空。清理记录见 [旧执行链清理记录](supervisor-legacy-cleanup.md)。
 
 目录发现、权限、审批、通用并行容量和恢复仍保留为基础设施；Graph 的统一工具执行节点持有实际业务调用权，模型节点只提出调用。平台严格约束能力范围、参数、身份、权限、预算与审批；正文流程的顺序和完成质量由模型遵循，不承诺程序强保证（KI-19）。Subagent 需要同步显式技能契约并复用已有 ReAct，旧 hint 与访谈运行面边界保持独立。
 

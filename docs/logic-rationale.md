@@ -153,7 +153,7 @@
 
 **实现边界**：AUTO 与 EXPLICIT_SKILL 使用同一通用模型工具循环，不增加 workflow/DAG、技能步骤调度器或业务顺序/完成条件检查。explicit selection 与 LR-9 的建议性 hint 分开；平台硬约束能力范围、参数、身份、权限与审批，正文流程属于模型指引（LR-18、KI-19）。Subagent 同步共享技能契约并复用已有领域 ReAct；访谈运行面的 LR-3/4/5/8/13 边界继续有效。checkpoint、租约和调用账本记录执行事实，不能被模型或技能越过。
 
-**方案位置**：`openspec/changes/realign-supervisor-tool-and-skill-orchestration/`（proposal/design/specs/tasks）。2026-10-04 修订最终方案，替代 2026-10-03 的 instruction/workflow 双执行器方案。2026-10-05 新请求路径和九 Subagent 契约已实施；本机独立验收 MySQL 仅发现 7 条已终态旧流程记录（3 COMPLETED、4 FAILED），无待恢复旧任务。按 7.4 完成旧 Graph 执行链清理；历史 checkpoint 保留只读查询，不能再恢复执行。该本机结果不代表生产数据库排空。
+**方案位置**：`openspec/changes/archive/2026-10-05-realign-supervisor-tool-and-skill-orchestration/`（proposal/design/specs/tasks）。2026-10-04 修订最终方案，替代 2026-10-03 的 instruction/workflow 双执行器方案。2026-10-05 新请求路径和九 Subagent 契约已实施；本机独立验收 MySQL 仅发现 7 条已终态旧流程记录（3 COMPLETED、4 FAILED），无待恢复旧任务。按 7.4 完成旧 Graph 执行链清理；历史 checkpoint 保留只读查询，不能再恢复执行。该本机结果不代表生产数据库排空。
 
 **关联**：KI-17、KI-19；LR-9、LR-15、LR-18；`docs/supervisor-routing-roadmap.md` 的旧“LLM 失败后关键词兜底”方向由本方案替代。
 
@@ -167,7 +167,7 @@
 
 **验证边界**：契约测试验证模型节点无工具副作用、执行节点范围/参数/权限/审批守卫以及恢复不重复调用；真实模型场景评估检查正文遵循质量，但通过评估不能证明步骤顺序强保证。新增审批或状态转换调用点仍须遵守 KI-2 防回归要求。
 
-**关联**：LR-17、LR-9、LR-15；KI-17、KI-19；`openspec/changes/realign-supervisor-tool-and-skill-orchestration/`。
+**关联**：LR-17、LR-9、LR-15；KI-17、KI-19；`openspec/changes/archive/2026-10-05-realign-supervisor-tool-and-skill-orchestration/`。
 
 ## LR-19 能力身份按协议与连接隔离并转义分段
 
