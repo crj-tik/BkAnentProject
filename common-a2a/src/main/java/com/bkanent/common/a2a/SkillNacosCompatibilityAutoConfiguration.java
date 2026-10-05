@@ -11,19 +11,28 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.context.annotation.Bean;
 
-/** Decorates only an enabled Starter registration bean; does not enable registration or create another SDK client. */
+/** Reuses enabled Starter registration; the separate official update client is lazy and shares its configuration. */
 @AutoConfiguration
 @ConditionalOnClass(NacosA2aOperationService.class)
 public class SkillNacosCompatibilityAutoConfiguration {
     @Bean
+    @org.springframework.context.annotation.Lazy
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean(com.alibaba.nacos.maintainer.client.ai.AiMaintainerService.class)
+    com.alibaba.nacos.maintainer.client.ai.AiMaintainerService skillCardMaintainer(NacosA2aProperties properties)
+            throws com.alibaba.nacos.api.exception.NacosException {
+        return com.alibaba.nacos.maintainer.client.ai.AiMaintainerFactory.createAiMaintainerService(properties.getNacosProperties());
+    }
+
+    @Bean
     static BeanPostProcessor skillNacosRegistrationCompatibility(ObjectProvider<A2aService> service,
             ObjectProvider<NacosA2aProperties> nacos, ObjectProvider<A2aServerProperties> server,
-            ObjectProvider<NacosA2aRegistryProperties> registry) {
+            ObjectProvider<NacosA2aRegistryProperties> registry,
+            ObjectProvider<com.alibaba.nacos.maintainer.client.ai.AiMaintainerService> maintainer) {
         return new BeanPostProcessor() {
             @Override
             public Object postProcessAfterInitialization(Object bean, String name) {
                 if (bean.getClass() == NacosA2aOperationService.class) {
-                    return new SkillAwareNacosOperationService(service.getObject(), nacos.getObject(), server.getObject(), registry.getObject());
+                    return new SkillAwareNacosOperationService(service.getObject(), nacos.getObject(), server.getObject(), registry.getObject(), maintainer::getObject);
                 }
                 return bean;
             }

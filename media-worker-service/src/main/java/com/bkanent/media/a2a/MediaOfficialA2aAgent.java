@@ -71,8 +71,8 @@ public class MediaOfficialA2aAgent {
     }
 
     @Bean
-    public AgentExecutor mediaA2aAgentExecutor(ObjectMapper objectMapper) {
+    public AgentExecutor mediaA2aAgentExecutor(ObjectMapper objectMapper, com.bkanent.common.a2a.A2aExecutionProperties execution) {
         return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("media"),
-                skillRegistry, DOMAIN, executionTools);
+                skillRegistry, DOMAIN, executionTools, execution.getStreamTimeoutMs());
     }
 }

@@ -44,7 +44,8 @@ class ExplicitSkillAgentWiringTest {
                 .invoke(component, new com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerProperties(), new com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerAgentCardProperties());
         assertThat(card.capabilities().extensions()).anySatisfy(extension -> assertThat(extension.uri()).isEqualTo(SkillPublication.EXTENSION_URI));
         assertThat(card.skills()).anySatisfy(skill -> assertThat(skill.name()).isEqualTo(selected.name()));
-        var executor = (AgentExecutor) CompareOfficialA2aAgent.class.getMethod("compareA2aAgentExecutor", ObjectMapper.class).invoke(component, new ObjectMapper());
+        var executor = (AgentExecutor) CompareOfficialA2aAgent.class.getMethod("compareA2aAgentExecutor", ObjectMapper.class, com.bkanent.common.a2a.A2aExecutionProperties.class)
+                .invoke(component, new ObjectMapper(), new com.bkanent.common.a2a.A2aExecutionProperties());
         var selection = Map.of("name", selected.name(), "owner", "compare", "version", selected.version(), "contentHash", selected.contentHash(), "mode", "explicit");
         try (QueueScope explicit = new QueueScope()) {
             executor.execute(context("explicit", Map.of("supervisor", Map.of("skillSelection", selection))), explicit.queue);

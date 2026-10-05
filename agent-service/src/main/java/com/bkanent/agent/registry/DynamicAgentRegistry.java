@@ -29,6 +29,7 @@ public class DynamicAgentRegistry implements AgentRegistry {
     private final ObjectProvider<DiscoveryClient> discoveryClientProvider;
     private final Map<String, RegisteredAgentDescriptor> descriptors = new ConcurrentHashMap<>();
     private final Map<String, Long> refreshedAt = new ConcurrentHashMap<>();
+    private final Map<String, Long> failedAt = new ConcurrentHashMap<>();
 
     public DynamicAgentRegistry(DistributedAgentProperties properties,
                                 AgentCardDiscoveryClient agentCardDiscoveryClient,
@@ -99,10 +100,7 @@ public class DynamicAgentRegistry implements AgentRegistry {
     }
 
     private void refreshDescriptor(String agentId) {
-        if (!properties.isDiscoveryEnabled() || !StringUtils.hasText(agentId)) {
-            return;
-        }
-        if (!shouldRefresh(agentId)) {
+        if (!properties.isDiscoveryEnabled() || !StringUtils.hasText(agentId) || properties.getCatalog().isStrictNacos()) {
             return;
         }
         DistributedAgentProperties.AgentRegistration registration = findRegistration(agentId);
@@ -113,12 +111,12 @@ public class DynamicAgentRegistry implements AgentRegistry {
         if (registration == null || !StringUtils.hasText(resolvedBaseUrl)) {
             return;
         }
+        invalidateMovedEndpoint(agentId, resolvedBaseUrl, resolveCardPath(registration));
+        if (!shouldRefresh(agentId)) return;
         agentCardDiscoveryClient.fetchByAgentName(agentId)
                 .or(() -> httpFallback(resolvedBaseUrl, resolveCardPath(registration)))
                 .map(card -> buildDiscoveredDescriptor(registration, resolvedBaseUrl, card))
-                .ifPresentOrElse(descriptor -> descriptors.put(agentId, descriptor),
-                        () -> descriptors.remove(agentId));
-        refreshedAt.put(agentId, System.currentTimeMillis());
+                .ifPresentOrElse(descriptor -> accept(agentId, descriptor), () -> failedAt.put(agentId, System.currentTimeMillis()));
     }
 
     private boolean refreshAllFromDiscovery() {
@@ -131,6 +129,7 @@ public class DynamicAgentRegistry implements AgentRegistry {
             if (properties.getCatalog().isStrictNacos()) {
                 descriptors.clear();
                 refreshedAt.clear();
+                failedAt.clear();
             }
             return false;
         }
@@ -155,25 +154,39 @@ public class DynamicAgentRegistry implements AgentRegistry {
                 continue;
             }
             discoveredAgentIds.add(agentId);
+            String baseUrl = resolveInstanceBaseUrl(instance);
+            String cardPath = resolveCardPath(metadata, registration);
+            invalidateMovedEndpoint(agentId, baseUrl, cardPath);
             if (!shouldRefresh(agentId)) {
                 discoveredAny = true;
                 continue;
             }
-            String baseUrl = resolveInstanceBaseUrl(instance);
-            String cardPath = resolveCardPath(metadata, registration);
             agentCardDiscoveryClient.fetchByAgentName(agentId)
                     .or(() -> httpFallback(baseUrl, cardPath))
                     .map(card -> buildDiscoveredDescriptor(serviceId, registration, metadata, baseUrl, cardPath, card))
-                    .ifPresentOrElse(descriptor -> descriptors.put(agentId, descriptor),
-                            () -> descriptors.remove(agentId));
-            refreshedAt.put(agentId, System.currentTimeMillis());
+                    .ifPresentOrElse(descriptor -> accept(agentId, descriptor), () -> failedAt.put(agentId, System.currentTimeMillis()));
             discoveredAny = true;
         }
         if (properties.getCatalog().isStrictNacos()) {
             descriptors.keySet().retainAll(discoveredAgentIds);
             refreshedAt.keySet().retainAll(discoveredAgentIds);
+            failedAt.keySet().retainAll(discoveredAgentIds);
         }
         return discoveredAny;
+    }
+
+    private void accept(String agentId, RegisteredAgentDescriptor descriptor) {
+        descriptors.put(agentId, descriptor);
+        refreshedAt.put(agentId, System.currentTimeMillis());
+        failedAt.remove(agentId);
+    }
+
+    private void invalidateMovedEndpoint(String agentId, String baseUrl, String cardPath) {
+        RegisteredAgentDescriptor previous = descriptors.get(agentId);
+        if (previous != null && (!java.util.Objects.equals(previous.baseUrl(), baseUrl)
+                || !java.util.Objects.equals(previous.agentCardPath(), cardPath))) {
+            descriptors.remove(agentId, previous); refreshedAt.remove(agentId); failedAt.remove(agentId);
+        }
     }
 
     private Optional<AgentCard> httpFallback(String baseUrl, String path) {
@@ -302,7 +315,7 @@ public class DynamicAgentRegistry implements AgentRegistry {
         return Map.copyOf(result);
     }
 
-    private boolean resolveBoolean(Boolean discoveredValue, boolean fallbackValue) {
+    private Boolean resolveBoolean(Boolean discoveredValue, Boolean fallbackValue) {
         return discoveredValue != null ? discoveredValue : fallbackValue;
     }
 
@@ -396,18 +409,20 @@ public class DynamicAgentRegistry implements AgentRegistry {
         return List.of();
     }
 
-    private boolean resolveSupportsStreaming(Map<String, String> metadata,
+    private Boolean resolveSupportsStreaming(Map<String, String> metadata,
                                              DistributedAgentProperties.AgentRegistration registration) {
-        return registration != null && registration.isSupportsStreaming();
+        String advertised = metadata == null ? null : metadata.get("agent-supports-streaming");
+        if ("true".equalsIgnoreCase(advertised) || "false".equalsIgnoreCase(advertised)) return Boolean.parseBoolean(advertised);
+        return registration == null ? null : registration.isSupportsStreaming();
     }
 
-    private boolean resolveSupportsAsyncTask(Map<String, String> metadata,
+    private Boolean resolveSupportsAsyncTask(Map<String, String> metadata,
                                              DistributedAgentProperties.AgentRegistration registration) {
         String advertised = metadata == null ? null : metadata.get("agent-supports-async-task");
         if ("true".equalsIgnoreCase(advertised) || "false".equalsIgnoreCase(advertised)) {
             return Boolean.parseBoolean(advertised);
         }
-        return registration != null && registration.isSupportsAsyncTask();
+        return registration == null ? null : registration.isSupportsAsyncTask();
     }
 
     private List<String> resolveInputModes(Map<String, String> metadata,
@@ -462,6 +477,8 @@ public class DynamicAgentRegistry implements AgentRegistry {
 
     private boolean shouldRefresh(String agentId) {
         long intervalMillis = Math.max(properties.getRefreshIntervalSeconds(), 1) * 1000L;
+        Long lastFailure = failedAt.get(agentId);
+        if (lastFailure != null) return System.currentTimeMillis() - lastFailure >= 1000;
         Long lastRefreshedAt = refreshedAt.get(agentId);
         return lastRefreshedAt == null || System.currentTimeMillis() - lastRefreshedAt >= intervalMillis;
     }

@@ -181,6 +181,23 @@ class OfficialA2aAgentExecutorTest {
         queue.close();
     }
 
+    @Test
+    void neverEndingStreamTimesOutAndDisposesSubscription() throws Exception {
+        ReactAgent agent = mockAgent("{}");
+        var disposed = new java.util.concurrent.atomic.AtomicBoolean();
+        when(agent.stream(anyString(), any())).thenReturn(Flux.<com.alibaba.cloud.ai.graph.NodeOutput>never().doOnCancel(() -> disposed.set(true)));
+        var executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy, null, null, List.of(), 30);
+        EventQueue queue = EventQueue.create();
+        executor.execute(context("stream-timeout", Map.of("isStreaming", true), List.of("text")), queue);
+        assertThat(disposed).isTrue();
+        List<Event> events = drain(queue);
+        assertThat(events).filteredOn(event -> event instanceof TaskStatusUpdateEvent status && status.getStatus().state() == TaskState.FAILED)
+                .singleElement().isInstanceOfSatisfying(TaskStatusUpdateEvent.class,
+                        status -> assertThat(status.getStatus().message().getMetadata()).containsEntry("errorCode", "EXECUTION_TIMEOUT"));
+        assertThat(events).noneMatch(event -> event instanceof TaskStatusUpdateEvent status && status.getStatus().state() == TaskState.COMPLETED);
+        queue.close();
+    }
+
     private ReactAgent mockAgent(String output) throws Exception {
         ReactAgent agent = mock(ReactAgent.class);
         when(agent.name()).thenReturn("listing-agent");

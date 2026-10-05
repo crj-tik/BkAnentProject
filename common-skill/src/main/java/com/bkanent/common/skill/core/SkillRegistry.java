@@ -25,6 +25,7 @@ public class SkillRegistry {
 
     private final SkillFileLoader loader;
     private final String externalDir;
+    private final java.util.concurrent.CopyOnWriteArrayList<Runnable> reloadListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
 
     private volatile RegistrySnapshot snapshot = new RegistrySnapshot(List.of(), Map.of(), Map.of());
     private record RegistrySnapshot(List<SkillDefinition> skills, Map<String, SkillDefinition> byName,
@@ -54,6 +55,10 @@ public class SkillRegistry {
         Map<String, List<SkillDefinition>> immutableDomains = new LinkedHashMap<>();
         byDomain.forEach((domain, skills) -> immutableDomains.put(domain, List.copyOf(skills)));
         snapshot = new RegistrySnapshot(List.copyOf(loaded), Map.copyOf(byName), Map.copyOf(immutableDomains));
+        for (Runnable listener : reloadListeners) {
+            try { listener.run(); }
+            catch (RuntimeException exception) { log.warn("Skill reload listener failed; registry snapshot retained", exception); }
+        }
         log.info("SkillRegistry reloaded: {} skills across {} domains (externalDir={})",
                 loaded.size(), byDomain.size(), extDir);
     }
@@ -64,6 +69,12 @@ public class SkillRegistry {
         }
         Path path = Path.of(externalDir);
         return Files.isDirectory(path) ? path : null;
+    }
+
+    /** Listeners observe a fully replaced snapshot and must not perform blocking network work. */
+    public AutoCloseable onReload(Runnable listener) {
+        reloadListeners.add(listener);
+        return () -> reloadListeners.remove(listener);
     }
 
     public List<SkillDefinition> allSkills() {

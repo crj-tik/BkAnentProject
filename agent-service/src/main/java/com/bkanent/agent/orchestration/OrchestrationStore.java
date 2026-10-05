@@ -87,12 +87,17 @@ public class OrchestrationStore {
         return jdbc.update("UPDATE agent_tool_invocation SET status='EXECUTING',updated_at_ms=? WHERE run_id=? AND call_id=? AND status='PENDING'",
                 System.currentTimeMillis(), runId, callId) == 1;
     }
+    /** An unsent call is terminal; a competing execution claim must win before any side effect. */
+    public boolean reject(String runId, String callId, String result) {
+        return jdbc.update("UPDATE agent_tool_invocation SET status='REJECTED',result_json=?,updated_at_ms=? WHERE run_id=? AND call_id=? AND status='PENDING'",
+                result, System.currentTimeMillis(), runId, callId) == 1;
+    }
     public void complete(String runId, String callId, String result) {
         jdbc.update("UPDATE agent_tool_invocation SET status='COMPLETED',result_json=?,updated_at_ms=? WHERE run_id=? AND call_id=?",
                 result, System.currentTimeMillis(), runId, callId);
     }
     public void unknown(String runId, String callId) {
-        jdbc.update("UPDATE agent_tool_invocation SET status='OUTCOME_UNKNOWN',updated_at_ms=? WHERE run_id=? AND call_id=? AND status<>'COMPLETED'",
+        jdbc.update("UPDATE agent_tool_invocation SET status='OUTCOME_UNKNOWN',updated_at_ms=? WHERE run_id=? AND call_id=? AND status NOT IN ('COMPLETED','REJECTED')",
                 System.currentTimeMillis(), runId, callId);
     }
     public void remoteAccepted(String runId, String callId, Object association) {

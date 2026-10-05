@@ -94,6 +94,43 @@ class DynamicAgentRegistryTest {
         assertEquals(1, registry.listDescriptors().size());
     }
 
+    @Test
+    void transientCardFailureRetainsVerifiedTargetButMovedOrOfflineInstanceDoesNot() throws Exception {
+        var discovery = mock(DiscoveryClient.class);
+        var beans = new org.springframework.beans.factory.support.DefaultListableBeanFactory();
+        beans.registerSingleton("discovery", discovery);
+        var cards = mock(AgentCardDiscoveryClient.class);
+        var metadata = Map.of("agent-id", "interview-agent", "agent-card-path", "/.well-known/agent.json");
+        when(discovery.getServices()).thenReturn(List.of("interview-service"));
+        var original = serviceInstance("http://interview-service:9014", metadata);
+        var replacement = serviceInstance("http://replacement:9014", metadata);
+        when(discovery.getInstances("interview-service")).thenReturn(List.of(original));
+        when(cards.fetchByAgentName("interview-agent")).thenReturn(Optional.of(interviewCard()));
+        var properties = new DistributedAgentProperties();
+        properties.setRefreshIntervalSeconds(1); properties.setHttpCardFallbackEnabled(false);
+        var registration = new DistributedAgentProperties.AgentRegistration();
+        registration.setAgentId("interview-agent"); registration.setServiceId("interview-service");
+        registration.setBaseUrl("http://interview-service:9014");
+        properties.getAgents().put("interview", registration);
+        var registry = new DynamicAgentRegistry(properties, cards, mock(AgentInstanceResolver.class), beans.getBeanProvider(DiscoveryClient.class));
+        assertEquals(1, registry.listDescriptors().size());
+        Thread.sleep(1050);
+        when(cards.fetchByAgentName("interview-agent")).thenReturn(Optional.empty());
+        assertEquals(1, registry.listDescriptors().size());
+        assertEquals(1, registry.listDescriptors().size());
+        verify(cards, org.mockito.Mockito.times(2)).fetchByAgentName("interview-agent");
+        Thread.sleep(1050);
+        when(cards.fetchByAgentName("interview-agent")).thenReturn(Optional.of(interviewCard()));
+        assertEquals(1, registry.listDescriptors().size());
+        verify(cards, org.mockito.Mockito.times(3)).fetchByAgentName("interview-agent");
+        when(cards.fetchByAgentName("interview-agent")).thenReturn(Optional.empty());
+        when(discovery.getInstances("interview-service")).thenReturn(List.of(replacement));
+        assertEquals(0, registry.listDescriptors().size());
+        when(discovery.getInstances("interview-service")).thenReturn(List.of());
+        assertEquals(0, registry.listDescriptors().size());
+        org.junit.jupiter.api.Assertions.assertTrue(registry.getByAgentId("interview-agent").isEmpty());
+    }
+
     private ServiceInstance serviceInstance(String url, Map<String, String> metadata) {
         ServiceInstance instance = mock(ServiceInstance.class);
         when(instance.getUri()).thenReturn(URI.create(url));

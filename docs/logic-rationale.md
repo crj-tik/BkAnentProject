@@ -260,3 +260,29 @@
 **代码位置**：`SupervisorCapabilityCatalog.validateArguments`、`SupervisorToolLoopGraph.validateCall/prompt`；目录与 Graph 回归、真实模型评估。
 
 **关联**：LR-17、LR-18、LR-22；KI-28、KI-19。
+
+## LR-28 技能热加载需要同步更新发布面，执行快照仍固定
+
+**结论**：注册表完整替换后通知共享 Card 发布器，HTTP 读取最新不可变 Card，Nacos 通过已经启用的官方注册适配异步重发布；失败每 5 秒重试最新待发布版本。生成的本地技能条目按 owner 重建，新增、正文修改与删除均反映在技能描述及 version/contentHash 扩展中。九个服务的 YAML 不再重复声明本地技能。
+
+**根因**：只刷新本地注册表会使远端长期携带旧 hash；直接在文件监听线程注册则让网络故障阻塞目录加载。SDK Card 是不可变对象，必须更新 HTTP 提供者读取的引用，而不是仅重新创建一个未被引用的 Bean。连续更新只保留最新待发布版本，旧发布完成不能清除较新的待发布项。
+
+**代码位置**：`SkillRegistry.onReload`、`SkillAgentCardPublisher`、`LiveSkillAgentCards`、`LiveSkillAgentCardAutoConfiguration`；`LiveSkillAgentCardsTest` 覆盖启动接线、HTTP 路由、增改删和 Nacos 重试。
+
+**边界**：发布与发现为最终一致，Nacos 故障及 Supervisor 的成功缓存刷新间隔内仍可能观察到旧 Card；此时继续拒绝不匹配的显式身份，不猜测或降级。现有执行快照不随发布变化，注册关闭时不会主动开启 Nacos。
+
+**同版本更新**：真实 Nacos 3.1.0 证明 `releaseAgentCard` 对已存在版本不覆盖内容。启动时核对及热加载重发布先使用原 SDK 注册 Card/endpoint，再比对目标版本技能与能力；仅内容不同时调用官方 Maintainer `updateAgentCard`，维持原 version、namespace、SERVICE 寻址及 registerAsLatest 策略。更新客户端按需创建，复用 A2A Nacos 地址与凭据，需配置具有该命名空间 Card 更新权限的 `NACOS_USERNAME/NACOS_PASSWORD`；服务端关闭客户端鉴权也不能免去 Admin API 鉴权。Maintainer 依赖排除额外的非 shaded common/client-basic，使用现有匹配版本 SDK 中的类，避免运行时缺失 gRPC。
+
+**接口依据**：[Nacos 3.1 官方同版本更新 API](https://nacos.io/docs/v3.1/manual/admin/maintainer-sdk/#73-%E6%9B%B4%E6%96%B0agentcard)、[Nacos 3.1 鉴权说明](https://nacos.io/docs/v3.1/manual/admin/auth/)。
+
+**关联**：LR-21、LR-24、LR-25；KI-30、KI-31。
+
+## LR-29 未发送拒绝与已提交结果未知必须区别记录
+
+**结论**：新增调用账本终态 `REJECTED`，只允许从 `PENDING` 原子转入；与执行 claim 竞争时，只有取得 `EXECUTING` 的调用能进入实际工具。明确拒绝的记录不能再次 claim 或被对账覆盖为未知。并行批次使用提交时统一期限，队列中超时且未 claim 的调用记录未执行；已 claim 的调用无法证明取消时保留结果未知。
+
+**根因**：仅返回 EXECUTOR_BUSY 会让账本停在 PENDING；把所有本地超时都当作副作用未知又掩盖真实的未发送事实。目录、审批、执行器容量的治理只限制身份与执行安全，不决定业务步骤，不增加 Graph 节点或规则路由。
+
+**代码位置**：`OrchestrationStore.reject/claim/unknown`、`SupervisorToolLoopGraph.execute/executeCall/awaitUntil`、`OfficialA2aAgentExecutor.executeStream`。下游流式执行受 `agent.a2a.execution.stream-timeout-ms` 限制，默认 120000 毫秒，超时/中断释放订阅。
+
+**关联**：LR-18、LR-22、LR-23、LR-27；KI-32、KI-33、KI-35、KI-36。

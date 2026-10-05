@@ -64,8 +64,8 @@ public class TradeOfficialA2aAgent {
     }
 
     @Bean
-    public AgentExecutor tradeA2aAgentExecutor(ObjectMapper objectMapper) {
+    public AgentExecutor tradeA2aAgentExecutor(ObjectMapper objectMapper, com.bkanent.common.a2a.A2aExecutionProperties execution) {
         return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("trade"),
-                skillRegistry, "trade", executionTools);
+                skillRegistry, "trade", executionTools, execution.getStreamTimeoutMs());
     }
 }

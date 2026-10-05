@@ -100,7 +100,7 @@ public class SupervisorToolLoopGraph {
         graph.addConditionalEdges("GuardCall", AsyncEdgeAction.edge_async(state -> stateOf(state).route),
                 Map.of("valid", "ApprovalGate", "observe", "Observe", "complete", "Complete"));
         graph.addConditionalEdges("ApprovalGate", AsyncEdgeAction.edge_async(state -> stateOf(state).route),
-                Map.of("pending", "PauseApproval", "execute", "ExecuteTool"));
+                Map.of("pending", "PauseApproval", "execute", "ExecuteTool", "complete", "Complete"));
         graph.addEdge("PauseApproval", "ExecuteTool");
         graph.addConditionalEdges("WaitInput", AsyncEdgeAction.edge_async(state -> "WAITING_USER_INPUT".equals(stateOf(state).status) ? "wait" : "observe"),
                 Map.of("wait", "PauseInput", "observe", "Observe"));
@@ -121,20 +121,22 @@ public class SupervisorToolLoopGraph {
     private Map<String, Object> prepare(OverAllState raw) {
         ToolLoopState state = stateOf(raw);
         try {
-            var available = catalog.snapshot(state.userId, state.allowMcp);
+            var available = available(state);
             if (state.request.skill() != null) {
                 state.skillSnapshot = new SkillExecutionResolver(skills).resolve(state.request.skill(), "supervisor", names(available), true);
                 store.snapshot(state.runId, state.skillSnapshot);
             }
             state.messages.add(StoredModelMessage.user(state.request.userMessage()));
         } catch (SkillExecutionException exception) { fail(state, exception.code(), exception.getMessage()); }
+        catch (RuntimeException exception) { fail(state, "CONTEXT_PREPARATION_FAILED", "请求上下文加载失败。"); }
         return updates(state, "PrepareContext");
     }
 
     private Map<String, Object> model(OverAllState raw) {
         ToolLoopState state = stateOf(raw);
         if (!"RUNNING".equals(state.status)) return updates(state, "Model");
-        var available = available(state);
+        var available = currentOrFail(state);
+        if (available == null) return updates(state, "Model");
         state.visibleCapabilityIds = new ArrayList<>(available.keySet());
         state.visibleCapabilityVersions = new LinkedHashMap<>();
         available.forEach((id, capability) -> state.visibleCapabilityVersions.put(id, capability.version()));
@@ -202,7 +204,7 @@ public class SupervisorToolLoopGraph {
                 state.results.add(response(call, String.valueOf(saved.get("result"))));
             } else if (store.claim(state.runId, call.id())) {
                 Map<?, ?> arguments = mapper.readValue(call.arguments(), Map.class);
-                var available = catalog.snapshot(state.userId, state.allowMcp);
+                var available = catalogSnapshot(state);
                 Map<String, String> identities = names(available);
                 if (state.skillSnapshot != null) state.skillSnapshot.capabilityIds().forEach(id -> identities.putIfAbsent(id, SupervisorCapabilityCatalog.alias(id)));
                 var context = SkillExecutionContext.restored(skills, "supervisor", state.request.userMessage(), identities,
@@ -250,7 +252,8 @@ public class SupervisorToolLoopGraph {
 
     private Map<String, Object> guard(OverAllState raw) {
         ToolLoopState state = stateOf(raw);
-        var current = available(state);
+        var current = currentOrFail(state);
+        if (current == null) return updates(state, "GuardCall");
         for (var call : state.pendingCalls) {
             try { validateCall(state, call, current); }
             catch (Exception exception) { rejectBatch(state, error(exception)); state.route = "observe"; return updates(state, "GuardCall"); }
@@ -265,7 +268,10 @@ public class SupervisorToolLoopGraph {
 
     private Map<String, Object> approval(OverAllState raw) {
         ToolLoopState state = stateOf(raw);
-        var current = available(state);
+        var current = currentOrFail(state);
+        if (current == null) return updates(state, "ApprovalGate");
+        try { for (var call : state.pendingCalls) validateCall(state, call, current); }
+        catch (Exception exception) { stopUnsentBatch(state, exception); return updates(state, "ApprovalGate"); }
         boolean required = state.request.context() != null && Boolean.TRUE.equals(state.request.context().get("requireApproval"));
         required |= state.pendingCalls.stream().map(call -> byName(current, call.name()).capabilityId())
                 .anyMatch(properties.getApprovalCapabilities()::contains);
@@ -285,35 +291,64 @@ public class SupervisorToolLoopGraph {
 
     private Map<String, Object> execute(OverAllState raw) throws Exception {
         ToolLoopState state = stateOf(raw);
-        var current = available(state);
         if (state.pendingApproval != null) {
             ApprovalDecision decision = raw.value(LATEST_APPROVAL_DECISION).map(value -> mapper.convertValue(value, ApprovalDecision.class)).orElse(null);
-            if (decision == null || !decision.approvalId().equals(state.pendingApproval.approvalId())) throw new IllegalStateException("approval missing");
+            if (decision == null || !decision.approvalId().equals(state.pendingApproval.approvalId())) {
+                stopUnsentBatch(state, new IllegalStateException("APPROVAL_INVALID"));
+                return updates(state, "ExecuteTool");
+            }
             if (decision.status() != ApprovalStatus.APPROVED) {
                 state.status = "CANCELED"; state.errorCode = "APPROVAL_DENIED"; state.finalAnswer = "工具调用已拒绝或终止。";
+                state.pendingCalls.forEach(call -> store.reject(state.runId, call.id(), "APPROVAL_DENIED: 未执行"));
                 state.pendingApproval = null; state.pendingCalls.clear(); return updates(state, "ExecuteTool");
             }
-            if (!state.pendingApproval.subjectId().equals(batchHash(state, current))) throw new IllegalStateException("approval parameters changed");
-            state.approvedBatchHash = state.pendingApproval.subjectId(); state.pendingApproval = null; state.status = "RUNNING";
         }
+        var current = currentOrFail(state);
+        if (current == null) return updates(state, "ExecuteTool");
+        try {
+            for (var call : state.pendingCalls) validateCall(state, call, current);
+            if (state.pendingApproval != null) {
+                if (!state.pendingApproval.subjectId().equals(batchHash(state, current)))
+                    throw new IllegalStateException("APPROVAL_PARAMETERS_CHANGED");
+                state.approvedBatchHash = state.pendingApproval.subjectId(); state.pendingApproval = null; state.status = "RUNNING";
+            }
+        } catch (Exception exception) { stopUnsentBatch(state, exception); return updates(state, "ExecuteTool"); }
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(Math.max(1, properties.getToolTimeoutMs()));
         List<Future<ToolResponseMessage.ToolResponse>> futures = new ArrayList<>();
         for (var call : state.pendingCalls) {
+            var recorded = store.find(state.runId, call.id());
+            if (recorded != null && Set.of("COMPLETED", "REJECTED").contains(recorded.status())) {
+                futures.add(CompletableFuture.completedFuture(response(call, recorded.result())));
+                continue;
+            }
             try { futures.add(workers.submit(() -> executeCall(state, call))); }
-            catch (RejectedExecutionException exception) { futures.add(CompletableFuture.completedFuture(response(call, "EXECUTOR_BUSY: 未执行"))); }
+            catch (RejectedExecutionException exception) {
+                boolean rejected = store.reject(state.runId, call.id(), "EXECUTOR_BUSY: 未执行");
+                var latest = store.find(state.runId, call.id());
+                String result = rejected ? "EXECUTOR_BUSY: 未执行"
+                        : Set.of("COMPLETED", "REJECTED").contains(latest.status()) ? latest.result()
+                        : "OUTCOME_UNKNOWN: 原调用已提交，未重新发送";
+                futures.add(CompletableFuture.completedFuture(response(call, result)));
+            }
         }
         for (int index = 0; index < futures.size(); index++) {
             var call = state.pendingCalls.get(index);
-            try { state.results.add(await(futures.get(index), state, properties.getToolTimeoutMs())); }
+            try { state.results.add(awaitUntil(futures.get(index), state, deadline)); }
             catch (Exception exception) {
                 var completed = store.find(state.runId, call.id());
-                if (completed != null && "COMPLETED".equals(completed.status())) state.results.add(response(call, completed.result()));
-                else {
+                if (completed != null && Set.of("COMPLETED", "REJECTED").contains(completed.status())) state.results.add(response(call, completed.result()));
+                else if (store.reject(state.runId, call.id(), "CALL_DEADLINE_EXCEEDED: 未执行")) {
+                    state.results.add(response(call, "CALL_DEADLINE_EXCEEDED: 未执行"));
+                } else {
                     store.unknown(state.runId, call.id());
-                    state.results.add(response(call, "OUTCOME_UNKNOWN: " + error(exception) + "; 未重新发送"));
+                    var latest = store.find(state.runId, call.id());
+                    state.results.add(response(call, Set.of("COMPLETED", "REJECTED").contains(latest.status()) ? latest.result()
+                            : "OUTCOME_UNKNOWN: " + error(exception) + "; 未重新发送"));
                 }
             }
         }
         if (state.results.stream().anyMatch(result -> result.responseData().startsWith("OUTCOME_UNKNOWN"))) {
+            recordResults(state);
             state.uncertainCallIds = state.results.stream().filter(result -> result.responseData().startsWith("OUTCOME_UNKNOWN"))
                     .map(ToolResponseMessage.ToolResponse::id).toList();
             state.messages.add(StoredModelMessage.tools(List.copyOf(state.results)));
@@ -326,10 +361,18 @@ public class SupervisorToolLoopGraph {
     private ToolResponseMessage.ToolResponse executeCall(ToolLoopState state, AssistantMessage.ToolCall call) {
         SupervisorCapability capability;
         try { capability = validateCall(state, call, available(state)); }
-        catch (Exception exception) { return response(call, error(exception)); }
+        catch (Exception exception) {
+            String result = error(exception) + ": 未执行";
+            if (store.reject(state.runId, call.id(), result)) return response(call, result);
+            var existing = store.find(state.runId, call.id());
+            if (existing != null && Set.of("COMPLETED", "REJECTED").contains(existing.status())) return response(call, existing.result());
+            return response(call, "OUTCOME_UNKNOWN: 已提交调用需要核对，未重新发送");
+        }
         OrchestrationStore.Invocation invocation = store.prepare(state.runId, call.id(), capability.capabilityId(), call.arguments());
-        if ("COMPLETED".equals(invocation.status())) return response(call, invocation.result());
+        if (Set.of("COMPLETED", "REJECTED").contains(invocation.status())) return response(call, invocation.result());
         if (!store.claim(state.runId, call.id())) {
+            var latest = store.find(state.runId, call.id());
+            if (Set.of("COMPLETED", "REJECTED").contains(latest.status())) return response(call, latest.result());
             store.unknown(state.runId, call.id());
             if (invocation.remoteAssociation() != null && reconciler != null) {
                 var reconciled = reconciler.reconcile(state.runId, call.id(), state.userId, false);
@@ -376,10 +419,14 @@ public class SupervisorToolLoopGraph {
     }
 
     private <T> T await(Future<T> future, ToolLoopState state, long timeoutMs) throws Exception {
-        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(Math.max(1, timeoutMs));
+        return awaitUntil(future, state, System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(Math.max(1, timeoutMs)));
+    }
+
+    private <T> T awaitUntil(Future<T> future, ToolLoopState state, long deadline) throws Exception {
         try {
             while (true) {
                 store.assertActive(state.runId, state.leaseToken);
+                if (future.isDone()) return future.get();
                 long remaining = deadline - System.nanoTime();
                 if (remaining <= 0) throw new TimeoutException("CALL_DEADLINE_EXCEEDED");
                 try { return future.get(Math.min(remaining, TimeUnit.MILLISECONDS.toNanos(200)), TimeUnit.NANOSECONDS); }
@@ -391,6 +438,9 @@ public class SupervisorToolLoopGraph {
     private void recordResults(ToolLoopState state) {
         for (var result : state.results) {
             var invocation = store.find(state.runId, result.id());
+            if (invocation != null && "REJECTED".equals(invocation.status())) {
+                publish(state, "tool.rejected", Map.of("capabilityId", invocation.capabilityId(), "callId", result.id(), "result", result.responseData()));
+            }
             if (invocation == null || !"COMPLETED".equals(invocation.status())) continue;
         if (artifacts != null && invocation.capabilityId().startsWith("a2a:")) {
                 Map<?, ?> payload = store.read(invocation.result(), Map.class);
@@ -437,7 +487,8 @@ public class SupervisorToolLoopGraph {
 
     private SupervisorCapability validateCall(ToolLoopState state, AssistantMessage.ToolCall call, Map<String, SupervisorCapability> current) {
         var capability = byName(current, call.name());
-        if (capability == null || !state.visibleCapabilityIds.contains(capability.capabilityId())) throw new IllegalStateException("CAPABILITY_SCOPE_DENIED");
+        if (capability == null) throw new IllegalStateException("CAPABILITY_UNAVAILABLE");
+        if (!state.visibleCapabilityIds.contains(capability.capabilityId())) throw new IllegalStateException("CAPABILITY_SCOPE_DENIED");
         if (!Objects.equals(state.visibleCapabilityVersions.get(capability.capabilityId()), capability.version())) throw new IllegalStateException("CAPABILITY_VERSION_CHANGED");
         validateArguments(call.arguments(), capability.callback().getToolDefinition().inputSchema());
         catalog.validateArguments(capability, store.read(call.arguments(), Map.class));
@@ -451,10 +502,25 @@ public class SupervisorToolLoopGraph {
         catch (Exception exception) { throw new IllegalArgumentException("TOOL_ARGUMENTS_INVALID", exception); }
     }
     private Map<String, SupervisorCapability> available(ToolLoopState state) {
-        Map<String, SupervisorCapability> current = new LinkedHashMap<>(catalog.snapshot(state.userId, state.allowMcp));
+        Map<String, SupervisorCapability> current = new LinkedHashMap<>(catalogSnapshot(state));
         if (state.skillSnapshot != null) current.keySet().retainAll(state.skillSnapshot.capabilityIds());
         return current;
     }
+    private Map<String, SupervisorCapability> catalogSnapshot(ToolLoopState state) {
+        try { return catalog.snapshot(state.userId, state.allowMcp); }
+        catch (RuntimeException exception) { throw new SkillExecutionException("CAPABILITY_CATALOG_UNAVAILABLE", "能力目录暂时不可用。"); }
+    }
+    private Map<String, SupervisorCapability> currentOrFail(ToolLoopState state) {
+        try { return available(state); }
+        catch (SkillExecutionException exception) { stopUnsentBatch(state, exception); return null; }
+    }
+    private void stopUnsentBatch(ToolLoopState state, Exception exception) {
+        String code = exception instanceof SkillExecutionException skill ? skill.code() : error(exception);
+        state.pendingCalls.forEach(call -> store.reject(state.runId, call.id(), code + ": 未执行"));
+        state.pendingApproval = null; state.route = "complete";
+        fail(state, code, "工具调用已停止: " + code);
+    }
+
     private Map<String, String> names(Map<String, SupervisorCapability> capabilities) {
         Map<String, String> names = new LinkedHashMap<>(); capabilities.forEach((id, capability) -> names.put(id, capability.toolName())); return names;
     }
@@ -494,7 +560,11 @@ public class SupervisorToolLoopGraph {
     }
     private boolean controlName(String name) { return "skill".equals(name) || "request_input".equals(name); }
     private void rejectBatch(ToolLoopState state, String error) {
-        state.results.clear(); state.pendingCalls.forEach(call -> state.results.add(response(call, error + ": 未执行整批调用")));
+        state.results.clear(); state.pendingCalls.forEach(call -> {
+            String result = error + ": 未执行整批调用";
+            store.reject(state.runId, call.id(), result);
+            state.results.add(response(call, result));
+        });
     }
     private ToolResponseMessage.ToolResponse response(AssistantMessage.ToolCall call, String content) {
         return new ToolResponseMessage.ToolResponse(call.id(), call.name(), content == null ? "" : content);

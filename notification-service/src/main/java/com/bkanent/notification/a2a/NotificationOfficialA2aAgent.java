@@ -71,8 +71,8 @@ public class NotificationOfficialA2aAgent {
     }
 
     @Bean
-    public AgentExecutor notificationA2aAgentExecutor(ObjectMapper objectMapper) {
+    public AgentExecutor notificationA2aAgentExecutor(ObjectMapper objectMapper, com.bkanent.common.a2a.A2aExecutionProperties execution) {
         return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("notification"),
-                skillRegistry, DOMAIN, executionTools);
+                skillRegistry, DOMAIN, executionTools, execution.getStreamTimeoutMs());
     }
 }

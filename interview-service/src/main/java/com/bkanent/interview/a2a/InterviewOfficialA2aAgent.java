@@ -68,8 +68,8 @@ public class InterviewOfficialA2aAgent {
     }
 
     @Bean
-    public AgentExecutor interviewA2aAgentExecutor(ObjectMapper objectMapper) {
+    public AgentExecutor interviewA2aAgentExecutor(ObjectMapper objectMapper, com.bkanent.common.a2a.A2aExecutionProperties execution) {
         return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("interview"),
-                skillRegistry, DOMAIN, executionTools);
+                skillRegistry, DOMAIN, executionTools, execution.getStreamTimeoutMs());
     }
 }

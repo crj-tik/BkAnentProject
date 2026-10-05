@@ -15,10 +15,42 @@ public final class SkillAwareNacosOperationService extends NacosA2aOperationServ
     private final A2aService service;
     private final A2aServerProperties server;
     private final NacosA2aRegistryProperties registry;
+    private final String namespace;
+    private final java.util.function.Supplier<com.alibaba.nacos.maintainer.client.ai.AiMaintainerService> maintainer;
     public SkillAwareNacosOperationService(A2aService service, NacosA2aProperties nacos,
                                             A2aServerProperties server, NacosA2aRegistryProperties registry) {
+        this(service, nacos, server, registry, memoizedMaintainer(nacos));
+    }
+    public SkillAwareNacosOperationService(A2aService service, NacosA2aProperties nacos,
+                                            A2aServerProperties server, NacosA2aRegistryProperties registry,
+                                            java.util.function.Supplier<com.alibaba.nacos.maintainer.client.ai.AiMaintainerService> maintainer) {
         super(service, nacos, server, registry);
         this.service = service; this.server = server; this.registry = registry;
+        this.maintainer = maintainer;
+        this.namespace = org.springframework.util.StringUtils.hasText(nacos.getNamespace()) ? nacos.getNamespace() : "public";
+    }
+    private static java.util.function.Supplier<com.alibaba.nacos.maintainer.client.ai.AiMaintainerService> memoizedMaintainer(NacosA2aProperties properties) {
+        return new java.util.function.Supplier<>() {
+            private com.alibaba.nacos.maintainer.client.ai.AiMaintainerService client;
+            @Override public synchronized com.alibaba.nacos.maintainer.client.ai.AiMaintainerService get() {
+                if (client == null) {
+                    try { client = com.alibaba.nacos.maintainer.client.ai.AiMaintainerFactory.createAiMaintainerService(properties.getNacosProperties()); }
+                    catch (NacosException exception) { throw new NacosRuntimeException(exception.getErrCode(), exception.getErrMsg()); }
+                }
+                return client;
+            }
+        };
+    }
+    /** Nacos 3.1 release is create-only for an existing version; updates use the official update API. */
+    public void republishAgent(AgentCard card) {
+        registerAgent(card);
+        try {
+            var existing = NacosSkillCardMapper.toOfficial(service.getAgentCard(card.name(), card.version(), "URL"));
+            if (java.util.Objects.equals(existing.skills(), card.skills())
+                    && java.util.Objects.equals(existing.capabilities(), card.capabilities())) return;
+            if (!maintainer.get().updateAgentCard(NacosSkillCardMapper.toNacos(card), namespace, registry.isRegisterAsLatest(), "SERVICE"))
+                throw new IllegalStateException("NACOS_CARD_UPDATE_REJECTED");
+        } catch (NacosException exception) { throw new NacosRuntimeException(exception.getErrCode(), exception.getErrMsg()); }
     }
     @Override
     public void registerAgent(AgentCard card) {

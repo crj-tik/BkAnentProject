@@ -19,6 +19,8 @@ public final class SkillAgentCardPublisher {
 
     public static AgentCard publish(AgentCard card, SkillRegistry registry, String owner) {
         List<AgentSkill> skills = new ArrayList<>(card.skills() == null ? List.of() : card.skills());
+        // Rebuild our generated rows, including deletions, without touching unrelated declarations.
+        skills.removeIf(skill -> skill.id() != null && skill.id().startsWith("bk-skill/" + owner + "/"));
         Set<String> ids = new HashSet<>();
         skills.forEach(skill -> { if (!ids.add(skill.id())) throw new IllegalArgumentException("duplicate Card skill id"); });
         List<Map<String, Object>> publications = new ArrayList<>();

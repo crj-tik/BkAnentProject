@@ -8,6 +8,17 @@
 - Java 17；Spring AI 1.1.2，Graph/A2A Starter 1.1.2.3，Nacos SDK 3.1.0。
 - 本机既有 Kafka 未修改。数据库凭据仅保存在系统临时目录的验收配置文件中，不写入仓库。
 
+## 2026-10-05 联调缺陷修复补验（KI-30～KI-36）
+
+- 全项目测试共 332 项，331 项通过，1 项未配置真实模型评估而跳过；最终修改后的 `agent-service` 及公共模块另运行 202 项测试，201 项通过、同一模型评估跳过。所有模块编译及九服务实际装配测试通过。
+- `LiveSkillAgentCardsDockerTest` 使用现有本机 Nacos 3.1.0，保持 Agent version=1，验证真实注册表 reload 后正文 hash 更新、新增及删除技能。发现并修复同版本 release 不覆盖内容的问题：更新使用官方 Maintainer API；启动同时核对旧注册内容，保留 namespace、SERVICE 和 latest 策略。
+- `LiveSkillAgentCardsTest` 验证原 Starter HTTP 路由提供最新 Card、RPC 处理继续委托原处理器、注册未开启时不启用 Nacos，以及失败重试只发布最新快照。
+- Graph 回归注入准备/模型/守卫/审批目录异常；审批后目标删除或换版本均未发送调用，拒绝审批不依赖在线目录。单线程/单槽队列的阻塞批次验证统一期限、EXECUTOR_BUSY 与排队超时的 REJECTED 账本、已提交结果未知和已完成结果复用，混合停机仍输出确定结果事件。
+- 既有真实 Nacos 注册/升级、混合 A2A/MCP、MySQL checkpoint/租约/审批并发验收均通过。发现缓存回归验证瞬时失败保留同地址活跃实例、1 秒重试、地址变化及下线移除，strict 目录不会被静态配置填回；原始可空能力保留 unknown。
+- 下游永久不结束的流验证 EXECUTION_TIMEOUT 及订阅释放，九服务统一接入可配置期限，默认 120 秒。续接策略一致性契约仍保持；本次没有增加业务规则节点或 DAG 执行器。
+
+本机验收 Nacos 的 Admin 更新 API 需要登录，已初始化随机本地验收凭据并存入 `%TEMP%/bkagent-supervisor-acceptance-env.json`；仓库只保留环境变量占位。新增网络测试自动撤销自己的 endpoint/Card，前期失败测试留下的三份 Card 也已清理。以上为真实基础设施与协议/接线验收，未声称九个生产业务实例已经部署或完成真实模型评估。
+
 ## 已验证
 
 `NacosAgentRegistryDockerTest` 使用真实 SDK 发布 Card 与 endpoint，通过 NacosAgentCardProvider 获取实际描述、skills 和 URL，并由官方 A2AClient 完成 HTTP JSON-RPC 调用；检查远端 Task/Artifact ID、恰好一次请求和 HTTP Card fallback。HTTP 目标是确定性协议夹具，模型及房产业务服务没有在此测试中被冒充。

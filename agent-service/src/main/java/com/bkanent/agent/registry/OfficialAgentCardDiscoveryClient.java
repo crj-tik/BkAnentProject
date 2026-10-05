@@ -41,6 +41,16 @@ public class OfficialAgentCardDiscoveryClient implements AgentCardDiscoveryClien
                 if (published == null) return Optional.empty();
                 var card = convertWrapper(new com.alibaba.cloud.ai.a2a.registry.nacos.discovery.NacosAgentCardWrapper(
                         com.bkanent.common.a2a.NacosSkillCardMapper.toOfficial(published)));
+                // SDK conversion requires primitive defaults; restore raw optional facts at our boundary.
+                var raw = published.getCapabilities();
+                Map<String, Object> facts = new LinkedHashMap<>(card.capabilities());
+                optionalFact(facts, "streaming", raw == null ? null : raw.getStreaming());
+                optionalFact(facts, "pushNotifications", raw == null ? null : raw.getPushNotifications());
+                optionalFact(facts, "stateTransitionHistory", raw == null ? null : raw.getStateTransitionHistory());
+                card = new AgentCard(card.agentId(), card.name(), card.description(), card.version(), card.supportedSkills(),
+                        card.supportedDomains(), raw == null ? null : raw.getStreaming(), card.supportsAsyncTask(),
+                        card.a2aEndpoint(), card.inputModes(), card.outputModes(), card.skillDescriptors(), facts,
+                        card.preferredTransport(), card.protocolVersion());
                 return StringUtils.hasText(card.a2aEndpoint()) ? Optional.of(card) : Optional.empty();
             } catch (Exception exception) { return Optional.empty(); }
         }
@@ -78,6 +88,10 @@ public class OfficialAgentCardDiscoveryClient implements AgentCardDiscoveryClien
         } catch (RuntimeException exception) {
             return Optional.empty();
         }
+    }
+
+    private void optionalFact(Map<String, Object> facts, String name, Boolean value) {
+        if (value == null) facts.remove(name); else facts.put(name, value);
     }
 
     AgentCard convertWrapper(AgentCardWrapper wrapper) {

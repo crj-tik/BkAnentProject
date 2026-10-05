@@ -58,6 +58,27 @@ class OfficialAgentCardDiscoveryClientTest {
         assertThat(converted.capabilities()).isEmpty();
     }
 
+    @Test
+    void rawNacosUnknownFlagsSurviveSdkPrimitiveNormalization() throws Exception {
+        var service = mock(com.alibaba.nacos.api.ai.A2aService.class);
+        var beans = new DefaultListableBeanFactory(); beans.registerSingleton("service", service);
+        client.setRawNacosService(beans.getBeanProvider(com.alibaba.nacos.api.ai.A2aService.class));
+        var official = new io.a2a.spec.AgentCard.Builder().name("listing-agent").url("http://localhost:9999/a2a")
+                .version("1").description("listing").capabilities(new AgentCapabilities(false, false, false, List.of()))
+                .skills(List.of()).defaultInputModes(List.of("text")).defaultOutputModes(List.of("text"))
+                .supportsAuthenticatedExtendedCard(false).preferredTransport("JSONRPC").protocolVersion("0.2.5").build();
+        var raw = new com.fasterxml.jackson.databind.ObjectMapper().convertValue(
+                com.bkanent.common.a2a.NacosSkillCardMapper.toNacos(official), com.alibaba.nacos.api.ai.model.a2a.AgentCardDetailInfo.class);
+        raw.getCapabilities().setStreaming(null); raw.getCapabilities().setPushNotifications(null);
+        raw.getCapabilities().setStateTransitionHistory(null);
+        when(service.getAgentCard("listing-agent")).thenReturn(raw);
+        var result = client.fetchByAgentName("listing-agent").orElseThrow();
+        assertThat(result.supportsStreaming()).isNull();
+        assertThat(result.capabilities()).doesNotContainKeys("streaming", "pushNotifications", "stateTransitionHistory");
+        raw.getCapabilities().setStreaming(false);
+        assertThat(client.fetchByAgentName("listing-agent").orElseThrow().supportsStreaming()).isFalse();
+    }
+
     private AgentCardWrapper wrapper(AgentCapabilities capabilities, List<AgentSkill> skills) {
         return new AgentCardWrapper(new io.a2a.spec.AgentCard("listing-agent", "published description",
                 "http://localhost:9999/a2a", null, "2", null, capabilities,

@@ -28,14 +28,11 @@ spring:
               streaming: true
               push-notifications: false
               state-transition-history: true
-            skills:
-              - id: marketing.generate_copy
-                name: marketing-generate-copy
-                description: generate and adapt marketing copy for listings
-                tags: marketing,copy
         nacos:
           server-addr: ${NACOS_SERVER:127.0.0.1:8848}
           namespace: ${NACOS_NAMESPACE:}
+          username: ${NACOS_USERNAME:}
+          password: ${NACOS_PASSWORD:}
           registry:
             enabled: true
           discovery:

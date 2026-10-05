@@ -104,6 +104,23 @@ class SkillRegistryTest {
         assertThat(registry.size()).isEqualTo(1);
     }
 
+    @Test
+    void reloadListenersSeeCompleteSnapshotAndAreRemovableEvenAfterListenerFailure() throws Exception {
+        SkillRegistry registry = new SkillRegistry(loaderWith(skill("a", "trade", false)), "");
+        var observed = new java.util.concurrent.atomic.AtomicInteger();
+        registry.onReload(() -> { throw new IllegalStateException("listener failure"); });
+        AutoCloseable listener = registry.onReload(() -> {
+            assertThat(registry.getByName("a")).isNotNull();
+            assertThat(registry.findOperationalSkills("trade")).hasSize(1);
+            observed.incrementAndGet();
+        });
+        registry.reload();
+        assertThat(observed).hasValue(1);
+        listener.close();
+        registry.reload();
+        assertThat(observed).hasValue(1);
+    }
+
     private SkillFileLoader loaderWith(SkillDefinition... definitions) {
         return new SkillFileLoader() {
             @Override

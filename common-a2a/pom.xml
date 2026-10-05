@@ -14,6 +14,16 @@
 
     <dependencies>
         <dependency>
+            <groupId>com.alibaba.nacos</groupId>
+            <artifactId>nacos-maintainer-client</artifactId>
+            <version>${nacos.client.version}</version>
+            <exclusions>
+                <!-- Use the matching common/client classes already bundled in the full Nacos SDK. -->
+                <exclusion><groupId>com.alibaba.nacos</groupId><artifactId>nacos-common</artifactId></exclusion>
+                <exclusion><groupId>com.alibaba.nacos</groupId><artifactId>nacos-client-basic</artifactId></exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
             <groupId>com.bkanent</groupId>
             <artifactId>common-skill</artifactId>
             <version>${project.version}</version>

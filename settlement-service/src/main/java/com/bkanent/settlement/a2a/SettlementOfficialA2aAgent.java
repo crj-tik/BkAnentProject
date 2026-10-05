@@ -71,8 +71,8 @@ public class SettlementOfficialA2aAgent {
     }
 
     @Bean
-    public AgentExecutor settlementA2aAgentExecutor(ObjectMapper objectMapper) {
+    public AgentExecutor settlementA2aAgentExecutor(ObjectMapper objectMapper, com.bkanent.common.a2a.A2aExecutionProperties execution) {
         return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("settlement"),
-                skillRegistry, DOMAIN, executionTools);
+                skillRegistry, DOMAIN, executionTools, execution.getStreamTimeoutMs());
     }
 }

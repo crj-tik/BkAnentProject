@@ -64,8 +64,8 @@ public class MarketingOfficialA2aAgent {
     }
 
     @Bean
-    public AgentExecutor marketingA2aAgentExecutor(ObjectMapper objectMapper) {
+    public AgentExecutor marketingA2aAgentExecutor(ObjectMapper objectMapper, com.bkanent.common.a2a.A2aExecutionProperties execution) {
         return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("marketing"),
-                skillRegistry, "marketing", executionTools);
+                skillRegistry, "marketing", executionTools, execution.getStreamTimeoutMs());
     }
 }

@@ -64,8 +64,8 @@ public class CompareOfficialA2aAgent {
     }
 
     @Bean
-    public AgentExecutor compareA2aAgentExecutor(ObjectMapper objectMapper) {
+    public AgentExecutor compareA2aAgentExecutor(ObjectMapper objectMapper, com.bkanent.common.a2a.A2aExecutionProperties execution) {
         return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("compare"),
-                skillRegistry, "compare", executionTools);
+                skillRegistry, "compare", executionTools, execution.getStreamTimeoutMs());
     }
 }

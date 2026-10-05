@@ -16,6 +16,29 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class NacosSkillCardMapperTest {
+    @Test
+    void sameVersionUpdateUsesOwnNamespaceAndLatestPolicyAndSkipsUnchangedCard() throws Exception {
+        var service = mock(A2aService.class);
+        var maintainer = mock(com.alibaba.nacos.maintainer.client.ai.AiMaintainerService.class);
+        var nacos = new NacosA2aProperties(); nacos.setNamespace("team");
+        var registry = new NacosA2aRegistryProperties(); registry.setRegisterAsLatest(false);
+        var server = new A2aServerProperties(); server.setAddress("127.0.0.1"); server.setPort(8001);
+        var adapter = new SkillAwareNacosOperationService(service, nacos, server, registry, () -> maintainer);
+        var raw = new com.fasterxml.jackson.databind.ObjectMapper().convertValue(NacosSkillCardMapper.toNacos(card()),
+                com.alibaba.nacos.api.ai.model.a2a.AgentCardDetailInfo.class);
+        when(service.getAgentCard("listing-agent", "1", "URL")).thenReturn(raw);
+        adapter.republishAgent(card());
+        verifyNoInteractions(maintainer);
+        raw.setSkills(List.of());
+        when(maintainer.updateAgentCard(any(), eq("team"), eq(false), eq("SERVICE"))).thenReturn(true);
+        adapter.republishAgent(card());
+        var capture = org.mockito.ArgumentCaptor.forClass(com.alibaba.nacos.api.ai.model.a2a.AgentCard.class);
+        verify(maintainer).updateAgentCard(capture.capture(), eq("team"), eq(false), eq("SERVICE"));
+        assertThat(capture.getValue().getCapabilities().getExtensions()).hasSize(1);
+        when(maintainer.updateAgentCard(any(), eq("team"), eq(false), eq("SERVICE"))).thenReturn(false);
+        assertThatThrownBy(() -> adapter.republishAgent(card())).hasMessage("NACOS_CARD_UPDATE_REJECTED");
+    }
+
     private AgentCard card() {
         return new AgentCard.Builder().name("listing-agent").description("actual Card").url("http://localhost:8001/a2a").version("1")
                 .preferredTransport("JSONRPC").protocolVersion("0.2.5").supportsAuthenticatedExtendedCard(false)

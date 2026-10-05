@@ -41,6 +41,7 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
     );
 
     private final ReactAgent agent;
+    private final long streamTimeoutMs;
     private final A2aOutputPolicy outputPolicy;
     private final A2aInputParser inputParser;
     private final A2aOutputNormalizer outputNormalizer;
@@ -56,6 +57,14 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
     public OfficialA2aAgentExecutor(ReactAgent agent, ObjectMapper objectMapper, A2aOutputPolicy outputPolicy,
                                   com.bkanent.common.skill.core.SkillRegistry skillRegistry, String skillOwner,
                                   List<org.springframework.ai.tool.ToolCallback> tools) {
+        this(agent, objectMapper, outputPolicy, skillRegistry, skillOwner, tools, 120_000);
+    }
+
+    public OfficialA2aAgentExecutor(ReactAgent agent, ObjectMapper objectMapper, A2aOutputPolicy outputPolicy,
+                                  com.bkanent.common.skill.core.SkillRegistry skillRegistry, String skillOwner,
+                                  List<org.springframework.ai.tool.ToolCallback> tools, long streamTimeoutMs) {
+        if (streamTimeoutMs < 1) throw new IllegalArgumentException("stream timeout must be positive");
+        this.streamTimeoutMs = streamTimeoutMs;
         this.agent = agent;
         this.outputPolicy = outputPolicy;
         this.inputParser = new A2aInputParser(objectMapper);
@@ -191,7 +200,19 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
             subscription.dispose();
             finished.countDown();
         }
-        finished.await();
+        try {
+            if (!finished.await(streamTimeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+                subscription.dispose();
+                failExecution(execution, "EXECUTION_TIMEOUT", "SubAgent streaming execution timed out");
+            }
+        } catch (InterruptedException exception) {
+            subscription.dispose();
+            Thread.currentThread().interrupt();
+            throw exception;
+        } finally {
+            subscription.dispose();
+            execution.streamFinished = null;
+        }
     }
 
     private void completeExecution(RequestContext context, ExecutionState execution,

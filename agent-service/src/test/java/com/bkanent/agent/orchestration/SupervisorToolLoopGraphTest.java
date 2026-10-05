@@ -389,6 +389,106 @@ class SupervisorToolLoopGraphTest {
         assertThat(effects).hasValue(0);
     }
 
+    @Test
+    void catalogFailuresAtPrepareModelGuardAndApprovalBecomeDurableFailures() {
+        for (int failureAt = 0; failureAt < 4; failureAt++) {
+            AtomicInteger snapshots = new AtomicInteger();
+            int position = failureAt;
+            when(catalog.snapshot("1", true)).thenAnswer(invocation -> {
+                if (snapshots.getAndIncrement() == position) throw new IllegalStateException("duplicate catalog entry");
+                return Map.of("local:search", capability("search"));
+            });
+            when(model.call(anyList(), anyList())).thenReturn(calls(call("catalog-call", "search", "{}")));
+            var response = runner.execute(request("catalog-" + failureAt, null, null, "find"));
+            assertThat(response.status()).isEqualTo("FAILED");
+            assertThat(response.governanceMetadata()).containsEntry("errorCode", "CAPABILITY_CATALOG_UNAVAILABLE");
+            assertThat(state("catalog-" + failureAt).status).isEqualTo("FAILED");
+        }
+        assertThat(effects).hasValue(0);
+    }
+
+    @Test
+    void approvedTargetDisappearingOrChangingVersionFailsWithoutSending() {
+        for (boolean removed : List.of(true, false)) {
+            String id = "approved-" + removed;
+            when(catalog.snapshot("1", true)).thenReturn(Map.of("local:search", capability("search")));
+            when(model.call(anyList(), anyList())).thenReturn(calls(call("target", "search", "{}")));
+            runner.execute(new SupervisorTaskRequest("session", "1", id, "trace", "find", Map.of("requireApproval", true), "api", false));
+            var pending = state(id).pendingApproval;
+            when(catalog.snapshot("1", true)).thenReturn(removed ? Map.of() : Map.of("local:search",
+                    new SupervisorCapability("local:search", "local", "search", "2", capability("search").callback())));
+            var response = runner.resume(new com.bkanent.common.agent.ApprovalCallbackRequest(pending.approvalId(), id, "session",
+                    com.bkanent.common.agent.ApprovalStatus.APPROVED, "1", null, "trace", pending.subjectVersion()));
+            assertThat(response.status()).isEqualTo("FAILED");
+            assertThat(response.governanceMetadata()).containsEntry("errorCode", removed ? "CAPABILITY_UNAVAILABLE" : "CAPABILITY_VERSION_CHANGED");
+            assertThat(store.find(id, "target").status()).isEqualTo("REJECTED");
+            assertThat(state(id).pendingApproval).isNull();
+        }
+        assertThat(effects).hasValue(0);
+    }
+
+    @Test
+    void approvalRejectionDoesNotDependOnLiveCatalog() {
+        when(model.call(anyList(), anyList())).thenReturn(calls(call("denied", "search", "{}")));
+        runner.execute(new SupervisorTaskRequest("session", "1", "offline-deny", "trace", "find", Map.of("requireApproval", true), "api", false));
+        var pending = state("offline-deny").pendingApproval;
+        when(catalog.snapshot("1", true)).thenThrow(new IllegalStateException("offline"));
+        assertThat(runner.resume(new com.bkanent.common.agent.ApprovalCallbackRequest(pending.approvalId(), "offline-deny", "session",
+                com.bkanent.common.agent.ApprovalStatus.REJECTED, "1", null, "trace", pending.subjectVersion())).status()).isEqualTo("CANCELED");
+        assertThat(store.find("offline-deny", "denied").status()).isEqualTo("REJECTED");
+        assertThat(effects).hasValue(0);
+    }
+
+    @Test
+    void saturatedExecutorAuditsUnsentCallsAndSharedDeadlineBoundsWholeBatch() throws Exception {
+        factory.close(); runner.close();
+        properties.setMaxConcurrency(1); properties.setMaxQueuedCalls(1); properties.setToolTimeoutMs(200);
+        factory = new SupervisorToolLoopGraph(catalog, model, skills, store, mapper, properties,
+                events, new OfficialSupervisorGraphSchema(), mock(DatabaseCheckpointSaverFactory.class));
+        graph = factory.create(new MemorySaver());
+        runner = new SupervisorToolLoopRunner(factory, graph, store, properties, claims);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        ToolCallback blocking = new ToolCallback() {
+            public ToolDefinition getToolDefinition() { return capability("search").callback().getToolDefinition(); }
+            public String call(String input) {
+                effects.incrementAndGet();
+                // A submitted remote call cannot prove cancellation merely from a local interrupt.
+                boolean done = false;
+                while (!done) { try { done = release.await(2, java.util.concurrent.TimeUnit.SECONDS); } catch (InterruptedException ignored) { } }
+                return "actual";
+            }
+        };
+        when(catalog.snapshot("1", true)).thenReturn(Map.of("local:search", new SupervisorCapability("local:search", "local", "search", "1", blocking)));
+        var original = request("saturated", null, null, "find");
+        store.register("saturated", original);
+        store.prepare("saturated", "cached", "local:search", "{}");
+        store.complete("saturated", "cached", "known result");
+        when(model.call(anyList(), anyList())).thenReturn(calls(call("running", "search", "{}"), call("queued", "search", "{}"),
+                call("rejected", "search", "{}"), call("cached", "search", "{}")));
+        try {
+            long start = System.nanoTime();
+            var response = runner.execute(request("saturated", null, null, "find"));
+            assertThat(java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)).isLessThan(550);
+            assertThat(response.governanceMetadata()).containsEntry("errorCode", "OUTCOME_UNKNOWN");
+            assertThat(store.find("saturated", "running").status()).isEqualTo("OUTCOME_UNKNOWN");
+            assertThat(store.find("saturated", "queued").status()).isEqualTo("REJECTED");
+            assertThat(store.find("saturated", "queued").result()).contains("CALL_DEADLINE_EXCEEDED");
+            assertThat(store.find("saturated", "rejected").status()).isEqualTo("REJECTED");
+            assertThat(store.find("saturated", "rejected").result()).contains("EXECUTOR_BUSY");
+            assertThat(store.find("saturated", "cached").result()).isEqualTo("known result");
+            assertThat(state("saturated").messages.stream().filter(message -> "tool".equals(message.role()))
+                    .flatMap(message -> message.responses().stream()).filter(result -> "cached".equals(result.id())))
+                    .singleElement().satisfies(result -> assertThat(result.responseData()).isEqualTo("known result"));
+            var captured = org.mockito.ArgumentCaptor.forClass(com.bkanent.common.agent.SessionStreamEvent.class);
+            verify(events, atLeastOnce()).publish(captured.capture());
+            assertThat(captured.getAllValues()).anySatisfy(event -> {
+                assertThat(event.eventType()).isEqualTo("tool.rejected");
+                assertThat(event.metadata()).containsEntry("callId", "rejected");
+            });
+            assertThat(effects).hasValue(1);
+        } finally { release.countDown(); }
+    }
+
     private ToolLoopState state(String id) { return factory.stateOf(graph.lastStateOf(com.alibaba.cloud.ai.graph.RunnableConfig.builder().threadId(id).build()).orElseThrow().state()); }
     private SupervisorTaskRequest request(String id, SkillSelection skill, String continueId, String message) {
         return new SupervisorTaskRequest("session", "1", id, "trace", message, Map.of(), "api", false, skill, continueId, null);

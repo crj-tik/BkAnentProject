@@ -68,8 +68,8 @@ public class ContractOfficialA2aAgent {
     }
 
     @Bean
-    public AgentExecutor contractA2aAgentExecutor(ObjectMapper objectMapper) {
+    public AgentExecutor contractA2aAgentExecutor(ObjectMapper objectMapper, com.bkanent.common.a2a.A2aExecutionProperties execution) {
         return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("contract"),
-                skillRegistry, DOMAIN, executionTools);
+                skillRegistry, DOMAIN, executionTools, execution.getStreamTimeoutMs());
     }
 }

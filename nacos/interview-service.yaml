@@ -26,18 +26,11 @@ spring:
               streaming: true
               push-notifications: false
               state-transition-history: true
-            skills:
-              - id: interview.prep
-                name: interview-prep
-                description: pre-interview case setup and question design
-                tags: interview,prep
-              - id: interview.report
-                name: interview-report
-                description: case card report generation
-                tags: interview,report
         nacos:
           server-addr: ${NACOS_SERVER:127.0.0.1:8848}
           namespace: ${NACOS_NAMESPACE:}
+          username: ${NACOS_USERNAME:}
+          password: ${NACOS_PASSWORD:}
           registry:
             enabled: ${NACOS_A2A_AGENT_REGISTRY_ENABLED:false}
           discovery:
@@ -56,7 +49,6 @@ spring:
         metadata:
           agent-id: interview-agent
           agent-domains: interview
-          agent-default-intent: interview.deep_visit
           agent-runtime-provider: official
           agent-card-path: /.well-known/agent.json
           a2a-path: /a2a

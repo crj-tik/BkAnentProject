@@ -54,7 +54,10 @@
 - 连接层：`spring.ai.deepseek`
 - 业务层：`agent.deepseek`
 - 工具层：`agent.mcp`
-- 执行模式：`TOOL` / `PLANNER`
+- 默认由 LLM 根据 A2A/MCP 等能力描述选择工具；指定 skill 时加载正文与能力范围，业务步骤由模型理解执行。
+- 九个 Subagent 的本地技能由注册表动态生成 Card，`card.skills` 不再手工维护。技能热加载立即刷新 HTTP Card，Nacos 发布失败每 5 秒重试；Supervisor 成功目录缓存仍受刷新间隔影响。
+- Nacos 3.1 的同版本发布不会覆盖 Card，热更新使用官方更新 API。配置 `NACOS_USERNAME`、`NACOS_PASSWORD`，账号需具有目标命名空间 Card 更新权限；客户端注册鉴权关闭时 Admin 更新接口仍要求凭据。凭据仅从环境变量读取。
+- 下游流式执行期限配置为 `agent.a2a.execution.stream-timeout-ms`，默认 120000 毫秒；超时输出 `EXECUTION_TIMEOUT` 并取消本地订阅。
 
 ## 当前保留文档
 

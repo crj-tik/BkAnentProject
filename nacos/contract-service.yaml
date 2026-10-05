@@ -26,14 +26,11 @@ spring:
               streaming: true
               push-notifications: false
               state-transition-history: true
-            skills:
-              - id: contract.review
-                name: contract-review
-                description: review contract content and risks
-                tags: contract,review
         nacos:
           server-addr: ${NACOS_SERVER:127.0.0.1:8848}
           namespace: ${NACOS_NAMESPACE:}
+          username: ${NACOS_USERNAME:}
+          password: ${NACOS_PASSWORD:}
           registry:
             enabled: true
           discovery:
@@ -52,8 +49,6 @@ spring:
         metadata:
           agent-id: contract-agent
           agent-domains: contract
-          # Supervisor 默认 intent 解析第一级：显式钉住现用值（card 技能 contract.review 与其不一致）
-          agent-default-intent: contract.risk_review
           agent-runtime-provider: official
           agent-card-path: /.well-known/agent.json
           a2a-path: /a2a

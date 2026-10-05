@@ -12,6 +12,22 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.*;
 
 class OrchestrationStoreTest {
+    @Test
+    void rejectedCallCannotBeClaimedAndExecutingCallCannotBeRejected() throws Exception {
+        var store = database(new ObjectMapper());
+        store.register("run", new SupervisorTaskRequest("session", "1", "run", "trace", "request", Map.of(), "api", false));
+        store.prepare("run", "unsent", "local:search", "{}");
+        assertThat(store.reject("run", "unsent", "EXECUTOR_BUSY: 未执行")).isTrue();
+        assertThat(store.claim("run", "unsent")).isFalse();
+        store.unknown("run", "unsent");
+        assertThat(store.find("run", "unsent").status()).isEqualTo("REJECTED");
+        store.prepare("run", "sent", "local:search", "{}");
+        assertThat(store.claim("run", "sent")).isTrue();
+        assertThat(store.reject("run", "sent", "unsent")).isFalse();
+        store.unknown("run", "sent");
+        assertThat(store.find("run", "sent").status()).isEqualTo("OUTCOME_UNKNOWN");
+    }
+
     static OrchestrationStore database(ObjectMapper mapper) throws Exception {
         JdbcTemplate jdbc = new JdbcTemplate(new DriverManagerDataSource(
                 "jdbc:h2:mem:" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", ""));
