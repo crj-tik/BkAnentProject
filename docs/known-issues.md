@@ -175,7 +175,7 @@
 
 **代码位置**：`DefaultOfficialSupervisorGraphFacade`、`OfficialSupervisorGraphFactory`。修复 commit：`ce36246`。关联 LR-26、LR-15、KI-21。
 
-## KI-28 [FIXED] 下游技能身份错误在调用 claim 后才校验
+## KI-28 [FIXED·833c800] 下游技能身份错误在调用 claim 后才校验
 
 **确认日期**：2026-10-05（真实模型评估）。
 
