@@ -55,7 +55,7 @@
 - [x] 7.1 根据真实 Card/tools/list 编写显式专用 Markdown “找房→对比→营销草稿”技能，正文说明调用对象、参数来源和信息不足行为；通过解析、能力范围绑定和发布元数据契约验证，不添加 DAG/顺序校验配置。
 - [x] 7.2 将各 Supervisor 入口和普通 chat 接到统一核心，保留原响应字段、allowMcp和审批入口，提供旧 domain/requireParallel/workflowType 迁移说明；通过同步/异步/续接接口契约测试验证。
 - [x] 7.3 按 runnerVersion 保留旧未完成任务恢复，新请求停用关键词/default listing/default intent、trade 自动交接与 nextHints handoff；通过旧审批恢复、新请求调用链和灰度不替换业务目标测试验证。
-- [ ] 7.4 旧 run 排空后删除旧路由节点/配置/死链，更新 README、路线图、相交未完成变更并同步本 delta；通过配置/调用审计与严格校验验证，更新 LR-17/18 和 KI-17/18 状态，保留 KI-19 限制。
+- [x] 7.4 核对本机旧 run 数据后删除旧路由节点/配置/死链，更新 README、路线图、相交未完成变更并同步本 delta；通过配置/调用审计与严格校验验证，更新 LR-17/18 和 KI-17/18 状态，保留 KI-19 限制。
 
 ## 8. 验收与发布
 
@@ -66,4 +66,4 @@
 
 2026-10-05 验收：本机 Docker Nacos/MySQL、官方 HTTP A2A/MCP 混合协议、新旧 runner 重建与服务端 Card/endpoint 0→1 升级已验证；真实 Qwen3-4B-Instruct-2507 评估八组请求，记录可见调用、参数、偏差与 token/时间。服务端业务响应为协议/数据夹具，不声称九生产实例后台全量联调。记录见 `docs/supervisor-orchestration-acceptance.md`、`docs/acceptance/supervisor-real-model-20261005.json`。
 
-7.4 的 README/路线图/相交未完成变更、主规格同步及 LR/KI 状态已完成；删除旧图需要生产排空证据或用户明确同意调整完成范围，因此本项仍未勾选。具体核对与可审阅的清理范围见 `docs/supervisor-legacy-cleanup.md`。
+7.4 完成。经本机 MySQL 只读核对，7 条旧流程验收记录均已终态（3 COMPLETED、4 FAILED），未发现待恢复旧任务。旧 Graph 执行链及入口规则配置已删除；历史 checkpoint 只读查询、通用 checkpoint 存储与调用账本保留。源码配置/调用审计、agent-service Maven 全量测试（117 tests，0 failures/errors，6 skipped）、全模块 compile 与 OpenSpec `validate --all --strict` 通过。本机结果不代表生产数据库状态。

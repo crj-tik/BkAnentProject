@@ -8,7 +8,7 @@
 
 用户最终选择第一种方案：正常请求给 LLM 配上真实 A2A/MCP 等工具的 description/schema，由模型判断调用；本次显式指定 skill 时，平台首轮前校验、固定版本并加载全文和能力范围，模型仍理解原始请求、提取参数、处理缺失与冲突，按正文指引逐轮选择工具。AUTO 与 EXPLICIT_SKILL 使用同一通用 Graph，不引入 workflow/DAG、正文步骤调度或业务顺序/完成检查器。
 
-实现见 [realign-supervisor-tool-and-skill-orchestration](../openspec/changes/realign-supervisor-tool-and-skill-orchestration/design.md)，关联 LR-17/18、KI-17/18/19。2026-10-03 的 instruction/workflow 双执行器及结构化 DAG 版本已被本版取代。以下方向 1 的“LLM 失败后规则兜底”及方向 2/3 的入口规则扩展保留为历史记录，均已被模型工具循环替代。入口关键词、默认 Agent、自动 nextHint 交接和模型失败时关键词兜底已退出新请求路径。四份主规格已同步；旧 runner 仅供原 checkpoint 恢复，生产排空证据尚未提供，清理仍为待完成项。
+实现见 [realign-supervisor-tool-and-skill-orchestration](../openspec/changes/realign-supervisor-tool-and-skill-orchestration/design.md)，关联 LR-17/18、KI-17/18/19。2026-10-03 的 instruction/workflow 双执行器及结构化 DAG 版本已被本版取代。以下方向 1 的“LLM 失败后规则兜底”及方向 2/3 的入口规则扩展仅作历史记录。入口关键词、默认 Agent、自动 nextHint 交接和模型失败时关键词兜底已从执行路径移除。旧 Graph runner 已删除，历史 checkpoint 仅用于只读查询。本机独立验收库 7 条旧流程数据均已终态；该结果不代表生产排空。清理记录见 [旧执行链清理记录](supervisor-legacy-cleanup.md)。
 
 目录发现、权限、审批、通用并行容量和恢复仍保留为基础设施；Graph 的统一工具执行节点持有实际业务调用权，模型节点只提出调用。平台严格约束能力范围、参数、身份、权限、预算与审批；正文流程的顺序和完成质量由模型遵循，不承诺程序强保证（KI-19）。Subagent 需要同步显式技能契约并复用已有 ReAct，旧 hint 与访谈运行面边界保持独立。
 
@@ -87,14 +87,16 @@ RISK_ALERT/needsMoreDocuments → contract），且默认只在 listing+trade �
 - `HandoffNode`：第四份 `resolveIntent` switch（handoff 到新域会错误兜底成 `listing.search`）已改为 `DomainCatalog.resolveDefaultIntent`；`resolveExpectedOutput` 的 default 分支从 "listing search summaries" 改为领域中立文案；顺带删除未被调用的 `containsListingIntent`。
 - `LoadSessionNode`：系统约束标签搜索的领域集合（原 `Set.of(6 域)`，且漏了 media）改为 `DomainCatalog.domains()`，新域的约束标签自动可搜。
 
-**确认为死代码岛（整条链路无调用者，建议后续单独删除）：**
+**已完成清理（以下名称仅用于历史审计）：**
 - `WorkflowResumeSupport`（内含完整的第五份词表：关键词表 + intent switch + expectedOutput switch + mapNextHint switch + listing+trade 并行规则 + 默认 `"media"` 兜底）及其唯一消费者 `OfficialRouteGraphFactory`/`OfficialRouteGraphHolder`、`OfficialRegenerateGraphFactory`/`OfficialRegenerateGraphHolder`、`RouteDecisionSubgraph`、`RegenerateSubgraph`。这些是上一代 resume/route/regenerate 图架构的遗留，`execute()` 无任何 main/test 调用方。删除前需再确认无反射/条件装配依赖。
+
+这些上一代 resume/route/regenerate 图架构及旧执行链已在 7.4 删除，并通过源码调用审计确认不再装配。
 
 **评估后保留（属业务行为而非领域词表，新域优雅降级）：**
 - `RouteDecisionNode`：trade→contract handoff 是业务路由策略（见方向 3）。
 - `BuildNextAgentContextNode`：media/marketing/settlement 的下游上下文定制是业务行为，新域走通用上下文；若定制项增多再考虑元数据化。
 - `SupervisorGovernanceService.resolveDomain`：灰度匹配的消息→域启发式（含 publish/copy/media/risk 等英文词），未接入 rule-routing 配置。漂移后果仅限"新域无法按消息文本自动命中灰度"，显式 userId/sessionId/domain 上下文灰度不受影响；改造收益低、行为变化风险高，暂保留。
-- `SupervisorAgentRoutingService` 与旧图默认 Agent 选择策略：仅属于历史代码及旧 runner。新请求不使用；旧 checkpoint 已有 selectedAgentId 时，目标撤销即失败，不能按 domain 改选（KI-27）。
+- `SupervisorAgentRoutingService` 与旧图默认 Agent 选择策略：属于已删除的历史执行链；历史 selectedAgentId 仅在只读结果中展示，不触发调用。
 
 ## 迭代记录
 
@@ -102,4 +104,4 @@ RISK_ALERT/needsMoreDocuments → contract），且默认只在 listing+trade �
 - 2026-09-29：完成槽位化改造后的全量硬编码审计，结论记入方向 7。
 - 2026-10-03：形成 Supervisor 模型工具循环与显式 instruction/workflow 技能方案，仅文档，未实施。
 - 2026-10-04：用户最终选择模型遵循技能正文；修订为 AUTO/EXPLICIT_SKILL 同一通用 Graph，取消 DAG 和业务步骤检查，明确顺序不作强保证。仅更新规划文档和认知清单，代码未调整。
-- 2026-10-05：新入口、九 Subagent、共享显式范围与调用账本已实施；真实 Nacos/MySQL/HTTP A2A/MCP 混合协议及新旧审批重启回归通过，规格同步。验收边界与剩余排空项见验收记录。
+- 2026-10-05：新入口、九 Subagent、共享显式范围与调用账本已实施；真实 Nacos/MySQL/HTTP A2A/MCP 混合协议及新 runner 恢复通过。按本机旧 run 只读核对完成旧执行链删除与规格同步；生产数据未检查。

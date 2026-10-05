@@ -1,6 +1,6 @@
 <!-- 当前适用边界：2026-10-05 -->
 
-本变更保留旧 runner 的 graph/审批迁移历史。新请求不再使用 SkillMatch→Plan→Validate→领域 Route、业务 workflowType 或自动 handoff，改用 realign-supervisor-tool-and-skill-orchestration 的固定模型工具循环和实际调用级审批。旧 checkpoint 保留原 timeline、目标和恢复语义，必须待排空后清理；不能用新状态解释旧计划。正文不是步骤 DSL，不新增业务顺序/依赖/完成检查。历史尚未验证的任务不因本次改造被自动标记完成。
+本变更保留旧 runner 的 graph/审批迁移历史。新请求不再使用 SkillMatch→Plan→Validate→领域 Route、业务 workflowType 或自动 handoff，改用 realign-supervisor-tool-and-skill-orchestration 的固定模型工具循环和实际调用级审批。7.4 核对本机独立验收数据库后已退役旧 Graph 执行入口；历史 checkpoint 保留只读查询，不再恢复执行。此核对不代表生产数据库已排空。正文不是步骤 DSL，不新增业务顺序/依赖/完成检查。历史记录不会因本次改造而改写。
 
 ## 1. 建立迁移基线与依赖边界
 
@@ -39,14 +39,14 @@
 
 - [x] 6.1 基于现有 `AgentWorkflowCheckpointEntity`、Mapper 和数据库表实现官方 Graph Checkpointer 适配层，保存版本化状态 envelope、节点位置、线程信息和恢复输入。
 - [x] 6.2 将所有官方 Graph Factory 的独立 `MemorySaver` 替换为统一 Checkpointer 注入；内存保存器仅保留给明确的单元测试配置。
-- [ ] 6.3 为旧 checkpoint 增加读取兼容和状态 envelope 迁移逻辑，验证服务重启、多实例切换和等待审批状态恢复时不会重新执行已完成的规划或 Agent 节点。
+- [ ] 6.3 （已被 `realign-supervisor-tool-and-skill-orchestration` 7.4 取代）本变更原计划为旧 checkpoint 增加可执行恢复兼容；最终方案已退役旧 Graph，当前 checkpoint 历史只读、不做旧状态 envelope 迁移或执行恢复。
 - [x] 6.4 增加并发版本校验、审批唯一约束或等价幂等保护，覆盖相同审批在并发请求下只能推进一次 Graph。
 
 ## 7. 收敛 Service 为 Graph 门面
 
 - [x] 7.1 将 `SupervisorTaskService` 的单 Agent/并行分支和结果判断迁移到顶层 Graph 门面，Service 只保留请求校验、鉴权、限流、线程初始化和 Graph 调用。
 - [x] 7.2 将 `SupervisorWorkflowService` 的审批判断、回调 `switch`、并行执行、自动路由和完成判断迁移到 Graph 条件边与节点，删除或隔离绕过顶层 Graph 的主流程路径。
-- [x] 7.3 将同步、异步和工作流入口统一到同一个 Graph 执行/恢复协议，保留现有任务创建、审批回调、状态查询 DTO 和 A2A 对外契约。
+- [x] 7.3 将同步、异步和工作流入口统一到同一 Supervisor 执行门面，保留现有任务创建、审批回调、状态查询 DTO 和 A2A 对外契约；执行实现由后续模型工具循环变更收敛为 `SupervisorToolLoopRunner`。
 - [ ] 7.4 保留 `SupervisorWorkflowQueryService` 等查询服务的只读职责，确保查询从 checkpoint/审计状态读取，不重新推导或修改 Graph 主流程。
 
 ## 8. 统一节点事件与错误处理

@@ -24,7 +24,7 @@
 - Agent 主链路使用 `DeepSeek` 官方模型接入
 - 新请求由 LLM 根据真实 A2A/MCP/本地工具的描述和参数选择调用；模型节点不直接执行工具
 - 本次指定 skill 时首轮前固定正文、版本与能力范围，模型继续理解需求并遵循 Markdown 指引；不提供 DAG 或业务顺序强校验
-- AUTO 与 EXPLICIT_SKILL 使用同一通用 Graph，统一处理范围、身份、权限、预算、实际调用审批和恢复；旧 checkpoint 保留原 runner
+- AUTO 与 EXPLICIT_SKILL 使用同一通用 Graph，统一处理范围、身份、权限、预算、实际调用审批和恢复；历史 checkpoint 仅用于只读查询，不再恢复旧 Graph 执行
 - 业务服务之间的 RPC 仍通过 `Dubbo` 进行正常调用
 - 基础配置统一通过 `Nacos` 管理
 

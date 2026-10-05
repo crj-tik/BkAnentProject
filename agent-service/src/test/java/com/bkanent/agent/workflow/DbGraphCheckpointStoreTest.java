@@ -18,7 +18,7 @@ class DbGraphCheckpointStoreTest {
         AgentWorkflowCheckpointMapper mapper = mock(AgentWorkflowCheckpointMapper.class);
         AgentWorkflowCheckpointEntity entity = new AgentWorkflowCheckpointEntity();
         entity.setSnapshotJson("""
-                {"graphName":"official-supervisor","nodeId":"fail","nextNodeId":"__END__",
+                {"graphName":"historical-supervisor","nodeId":"fail","nextNodeId":"__END__",
                  "state":{"sessionId":"session-1","taskId":"task-1","traceId":"trace-1",
                  "userId":"2","userMessage":"访谈","workflowStatus":"FAILED",
                  "selectedAgentId":"interview-agent","sharedContext":{},"artifactIds":[]}}

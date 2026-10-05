@@ -71,11 +71,13 @@
 
 **现象**：默认 `llm-enabled=false`、`strategy=rule-first`，入口关键词与默认 listing/intent 选择 Agent，nextHints 和 trade 结果又可自动交接。现有 Supervisor 知识技能与 Subagent 正文加载是不同消费路径，改造前 Supervisor 未接入统一的 A2A/MCP 模型工具循环；skillHint 也不能承担本次显式选择、版本固定和严格能力范围契约。正文与工具白名单本身不提供业务步骤顺序强保证（KI-19）。
 
-**处置**：已修订 `realign-supervisor-tool-and-skill-orchestration` 为最终方案：统一可调用能力目录，AUTO/EXPLICIT_SKILL 使用同一通用模型工具循环；显式技能首轮前加载正文，但模型仍理解请求并选择工具。保留 Markdown 指引，严格约束调用范围、参数、权限与审批，同步 Subagent 契约及调用级恢复；不增加 workflow/DAG、步骤调度或正文顺序/完成检查器。2026-10-05 新请求与普通 chat 已切到 llm-tools-v1，范围和审批恢复已验证；旧代码保留仅供旧 checkpoint，排空清理独立跟踪。实现见 bfe48c2、21c8084，验收见 b18ab33、ce36246。
+**处置**：已修订 `realign-supervisor-tool-and-skill-orchestration` 为最终方案：统一可调用能力目录，AUTO/EXPLICIT_SKILL 使用同一通用模型工具循环；显式技能首轮前加载正文，但模型仍理解请求并选择工具。保留 Markdown 指引，严格约束调用范围、参数、权限与审批，同步 Subagent 契约及调用级恢复；不增加 workflow/DAG、步骤调度或正文顺序/完成检查器。2026-10-05 新请求与普通 chat 已切到 llm-tools-v1，范围和审批恢复已验证。本机验收 MySQL 7 条旧流程记录均为终态后，旧 Graph 执行链及旧入口配置已删除；历史 checkpoint 只读查询保留，不可恢复执行。该核对不代表生产数据已排空。实现见 bfe48c2、21c8084，验收见 b18ab33、ce36246。
 
 **关联**：LR-17、LR-18、LR-9、LR-15、KI-19；主规格 `supervisor-domain-catalog` 的冲突行为在本变更 delta 中明确替代。
 
 ## KI-18 [FIXED] 动态 Agent 能力目录存在信息损失和地址缓存限制
+
+**当前状态**：仍为 FIXED；7.4 清理的是 Supervisor 旧 Graph 路由执行器，不改变动态 Card/Nacos 注册发现及 endpoint/远端 Task 关联契约。
 
 **确认日期**：2026-10-03（静态代码/依赖检查，未连接部署环境）。
 

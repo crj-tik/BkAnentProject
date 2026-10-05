@@ -153,7 +153,7 @@
 
 **实现边界**：AUTO 与 EXPLICIT_SKILL 使用同一通用模型工具循环，不增加 workflow/DAG、技能步骤调度器或业务顺序/完成条件检查。explicit selection 与 LR-9 的建议性 hint 分开；平台硬约束能力范围、参数、身份、权限与审批，正文流程属于模型指引（LR-18、KI-19）。Subagent 同步共享技能契约并复用已有领域 ReAct；访谈运行面的 LR-3/4/5/8/13 边界继续有效。checkpoint、租约和调用账本记录执行事实，不能被模型或技能越过。
 
-**方案位置**：`openspec/changes/realign-supervisor-tool-and-skill-orchestration/`（proposal/design/specs/tasks）。2026-10-04 修订最终方案，替代 2026-10-03 的 instruction/workflow 双执行器方案。2026-10-05 已实施新请求路径和九 Subagent 契约，混合协议与新旧恢复已验证；旧 run 排空后清理仍待生产证据。
+**方案位置**：`openspec/changes/realign-supervisor-tool-and-skill-orchestration/`（proposal/design/specs/tasks）。2026-10-04 修订最终方案，替代 2026-10-03 的 instruction/workflow 双执行器方案。2026-10-05 新请求路径和九 Subagent 契约已实施；本机独立验收 MySQL 仅发现 7 条已终态旧流程记录（3 COMPLETED、4 FAILED），无待恢复旧任务。按 7.4 完成旧 Graph 执行链清理；历史 checkpoint 保留只读查询，不能再恢复执行。该本机结果不代表生产数据库排空。
 
 **关联**：KI-17、KI-19；LR-9、LR-15、LR-18；`docs/supervisor-routing-roadmap.md` 的旧“LLM 失败后关键词兜底”方向由本方案替代。
 
@@ -241,15 +241,15 @@
 
 **关联**：LR-17、LR-19、LR-21；KI-22、KI-25、KI-26。
 
-## LR-26 新旧 runner 恢复按持久化身份分离，旧目标不可重新选择
+## LR-26 新旧 runner 恢复按持久化身份分离（旧执行器已退役）
 
-**结论**：新 timeline 的 run 由新 runner 读取；旧 timeline 保留原 graph 恢复。旧 checkpoint 已选 Agent 时只允许该目标，目标下线不按 domain 改选，查询和审批均验证原 owner。
+**历史结论**：实施早期曾保留新旧 timeline 分别恢复，旧 checkpoint 已选 Agent 时仅允许原目标，目标下线不按 domain 改选，查询和审批均验证原 owner。2026-10-05 本机验收库只读核对发现的旧流程均为终态后，按 7.4 删除旧 graph 执行器；该旧目标绑定规则不再构成可恢复路径。
 
-**根因**：用新图解释旧审批会改变已批准行为；灰度或注册表变化也不能把旧调用替换为另一个业务目标。恢复兼容代码必须等真实旧任务排空证据，验收库为空不能证明生产排空。
+**根因**：当恢复兼容仍启用时，用新图解释旧审批会改变已批准行为；灰度或注册表变化也不能把旧调用替换为另一个业务目标。此次只检查了本机验收库，不能据此声称生产旧任务已排空。
 
-**代码位置**：`DefaultOfficialSupervisorGraphFacade`、`OfficialSupervisorGraphFactory`；真实 MySQL `LegacyRunnerDockerRecoveryTest`。
+**代码位置**：历史实现已删除；当前新 runner checkpoint 由 `DatabaseCheckpointSaver` 按 graphName 精确过滤，历史状态由 `DbGraphCheckpointStore` 只读查询。
 
-**关联**：LR-15、LR-22；KI-27。旧远端提交结果未知仍需人工或原协议对账，不能由恢复自动重发。
+**关联**：LR-15、LR-22；KI-27（历史问题）。旧远端提交结果未知仍需人工对账，不能由恢复自动重发。
 
 ## LR-27 下游显式身份校验属于调用治理，不是业务步骤规则
 

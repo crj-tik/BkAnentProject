@@ -1,8 +1,8 @@
 package com.bkanent.agent.service;
 
-import com.bkanent.agent.graph.official.OfficialSupervisorGraphFacade;
 import com.bkanent.agent.model.distributed.SupervisorTaskRequest;
 import com.bkanent.agent.model.distributed.SupervisorTaskResponse;
+import com.bkanent.agent.orchestration.SupervisorToolLoopRunner;
 import com.bkanent.common.agent.ApprovalCallbackRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -14,17 +14,17 @@ import org.springframework.util.StringUtils;
 @Service
 public class SupervisorWorkflowService implements ApprovalCommandService {
 
-    private final OfficialSupervisorGraphFacade supervisorGraphFacade;
+    private final SupervisorToolLoopRunner toolLoopRunner;
 
-    public SupervisorWorkflowService(OfficialSupervisorGraphFacade supervisorGraphFacade) {
-        this.supervisorGraphFacade = supervisorGraphFacade;
+    public SupervisorWorkflowService(SupervisorToolLoopRunner toolLoopRunner) {
+        this.toolLoopRunner = toolLoopRunner;
     }
 
     public SupervisorTaskResponse startWorkflow(SupervisorTaskRequest request) {
         if (request == null || !StringUtils.hasText(request.userMessage())) {
             throw new IllegalArgumentException("userMessage must not be blank");
         }
-        return supervisorGraphFacade.execute(request);
+        return toolLoopRunner.execute(request);
     }
 
     @Override
@@ -33,6 +33,6 @@ public class SupervisorWorkflowService implements ApprovalCommandService {
                 || !StringUtils.hasText(request.approvalId())) {
             throw new IllegalArgumentException("taskId and approvalId are required");
         }
-        return supervisorGraphFacade.resume(request);
+        return toolLoopRunner.resume(request);
     }
 }

@@ -34,12 +34,11 @@ class SupervisorGovernanceServiceTest {
                 List.of("compare", "listing"),
                 List.of(),
                 DomainCatalog.SOURCE_REGISTRY));
-        when(catalog.branchCapacity()).thenReturn(16);
 
         SupervisorGovernanceView view = service.viewGovernance();
 
         assertThat(view.domainCatalog()).containsEntry("vocabularySource", DomainCatalog.SOURCE_REGISTRY);
         assertThat(view.domainCatalog().get("domains")).isEqualTo(List.of("compare", "listing"));
-        assertThat(view.domainCatalog()).containsEntry("branchCapacity", 16);
+        assertThat(view.domainCatalog()).doesNotContainKey("branchCapacity");
     }
 }

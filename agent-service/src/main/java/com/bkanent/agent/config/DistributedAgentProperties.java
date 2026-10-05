@@ -27,7 +27,6 @@ public class DistributedAgentProperties {
     private final EventAuditProperties eventAudit = new EventAuditProperties();
     private final StreamingProperties streaming = new StreamingProperties();
     private final AsyncRuntimeProperties asyncRuntime = new AsyncRuntimeProperties();
-    private final PlanningProperties planning = new PlanningProperties();
     private final Map<String, AgentRegistration> agents = new LinkedHashMap<>();
 
     public String getSupervisorAgentId() {
@@ -88,52 +87,12 @@ public class DistributedAgentProperties {
         return asyncRuntime;
     }
 
-    public PlanningProperties getPlanning() {
-        return planning;
-    }
-
     public Map<String, AgentRegistration> getAgents() {
         return agents;
     }
 
     public static class CatalogProperties {
         private boolean strictNacos = true;
-        /**
-         * 并行图分支槽位容量（编译期拓扑概念）。未被路由的空槽位不执行、不耗资源；
-         * 修改后需重启重建图。必须不小于 planning.max-parallel-domains。
-         */
-        private int branchCapacity = 16;
-        /**
-         * 冷启动专用兜底领域词表：仅在 Agent 注册表首次成功刷新（返回至少一个 Agent）
-         * 之前生效，之后由注册表动态词表完全接管，本表不再参与合并。禁止向本表追加新域。
-         */
-        private List<String> coldStartFallbackDomains = new ArrayList<>(List.of(
-                "listing", "marketing", "media", "trade", "contract", "settlement", "notification"
-        ));
-        /**
-         * 存量领域的默认 intent 种子表，仅用于保持现状行为兼容。新领域必须经由注册元数据
-         * agent-default-intent 或 Agent Card supportedSkills 声明，禁止向本表追加新域。
-         */
-        private Map<String, String> defaultIntents = seededDefaultIntents();
-        /**
-         * nextHint 改写表：先改写再按 '.' 前缀切出目标领域。
-         */
-        private Map<String, String> hintRewrites = new LinkedHashMap<>(Map.of(
-                "settlement.batch", "settlement.prepare"
-        ));
-        private final RuleRoutingProperties ruleRouting = new RuleRoutingProperties();
-
-        private static Map<String, String> seededDefaultIntents() {
-            Map<String, String> seeds = new LinkedHashMap<>();
-            seeds.put("listing", "listing.search");
-            seeds.put("marketing", "marketing.generate_copy");
-            seeds.put("media", "media.generate_video_task");
-            seeds.put("trade", "trade.feasibility_analysis");
-            seeds.put("contract", "contract.risk_review");
-            seeds.put("notification", "notification.send");
-            seeds.put("settlement", "settlement.prepare");
-            return seeds;
-        }
 
         public boolean isStrictNacos() {
             return strictNacos;
@@ -143,130 +102,6 @@ public class DistributedAgentProperties {
             this.strictNacos = strictNacos;
         }
 
-        public int getBranchCapacity() {
-            return branchCapacity;
-        }
-
-        public void setBranchCapacity(int branchCapacity) {
-            this.branchCapacity = branchCapacity;
-        }
-
-        public List<String> getColdStartFallbackDomains() {
-            return coldStartFallbackDomains;
-        }
-
-        public void setColdStartFallbackDomains(List<String> coldStartFallbackDomains) {
-            this.coldStartFallbackDomains = coldStartFallbackDomains;
-        }
-
-        public Map<String, String> getDefaultIntents() {
-            return defaultIntents;
-        }
-
-        public void setDefaultIntents(Map<String, String> defaultIntents) {
-            this.defaultIntents = defaultIntents;
-        }
-
-        public Map<String, String> getHintRewrites() {
-            return hintRewrites;
-        }
-
-        public void setHintRewrites(Map<String, String> hintRewrites) {
-            this.hintRewrites = hintRewrites;
-        }
-
-        public RuleRoutingProperties getRuleRouting() {
-            return ruleRouting;
-        }
-    }
-
-    public static class RuleRoutingProperties {
-        /**
-         * 规则路由未命中任何关键词时回退的默认领域。
-         */
-        private String defaultDomain = "listing";
-        /**
-         * 规则路由加速层关键词表（按领域分组，按配置顺序匹配）。命中的领域必须是
-         * 当前领域目录成员，否则忽略。未来规划：规则路由整体降级为 LLM 规划失败的
-         * 兜底，关键词只保留高置信场景，见 docs/supervisor-routing-roadmap.md。
-         */
-        private Map<String, List<String>> keywords = seededKeywords();
-
-        private static Map<String, List<String>> seededKeywords() {
-            Map<String, List<String>> seeds = new LinkedHashMap<>();
-            seeds.put("contract", List.of("合同", "签约", "归档", "ocr", "OCR", "contract"));
-            seeds.put("notification", List.of("通知", "提醒", "消息", "notification"));
-            seeds.put("settlement", List.of("结算", "佣金", "出款", "打款", "settlement"));
-            seeds.put("marketing", List.of("文案", "营销", "广告", "推广", "小红书", "抖音"));
-            seeds.put("trade", List.of("交易", "成交", "风险", "可行性", "trade"));
-            return seeds;
-        }
-        /**
-         * 规则路由并行规则：请求上下文 requireParallel=true 且每个关键词组都至少
-         * 命中一个词时，返回配置的并行领域列表。
-         */
-        private List<ParallelRoutingRule> parallelRules = new ArrayList<>(List.of(
-                new ParallelRoutingRule(
-                        List.of(
-                                List.of("房源", "找房", "小区", "listing", "房子"),
-                                List.of("交易", "成交", "风险", "可行性", "trade")
-                        ),
-                        List.of("listing", "trade")
-                )
-        ));
-
-        public String getDefaultDomain() {
-            return defaultDomain;
-        }
-
-        public void setDefaultDomain(String defaultDomain) {
-            this.defaultDomain = defaultDomain;
-        }
-
-        public Map<String, List<String>> getKeywords() {
-            return keywords;
-        }
-
-        public void setKeywords(Map<String, List<String>> keywords) {
-            this.keywords = keywords;
-        }
-
-        public List<ParallelRoutingRule> getParallelRules() {
-            return parallelRules;
-        }
-
-        public void setParallelRules(List<ParallelRoutingRule> parallelRules) {
-            this.parallelRules = parallelRules;
-        }
-    }
-
-    public static class ParallelRoutingRule {
-        private List<List<String>> keywordGroups = new ArrayList<>();
-        private List<String> domains = new ArrayList<>();
-
-        public ParallelRoutingRule() {
-        }
-
-        public ParallelRoutingRule(List<List<String>> keywordGroups, List<String> domains) {
-            this.keywordGroups = keywordGroups;
-            this.domains = domains;
-        }
-
-        public List<List<String>> getKeywordGroups() {
-            return keywordGroups;
-        }
-
-        public void setKeywordGroups(List<List<String>> keywordGroups) {
-            this.keywordGroups = keywordGroups;
-        }
-
-        public List<String> getDomains() {
-            return domains;
-        }
-
-        public void setDomains(List<String> domains) {
-            this.domains = domains;
-        }
     }
 
     public static class RateLimitProperties {
@@ -351,10 +186,6 @@ public class DistributedAgentProperties {
         private Set<String> userIds = new LinkedHashSet<>();
         private Set<String> sessionIds = new LinkedHashSet<>();
         private Set<String> domains = new LinkedHashSet<>();
-        private Map<String, String> preferredAgentIds = new LinkedHashMap<>();
-        private Map<String, String> routeOverrideDomains = new LinkedHashMap<>();
-        private Map<String, Map<String, String>> versionedPreferredAgentIds = new LinkedHashMap<>();
-        private Map<String, Map<String, String>> versionedRouteOverrideDomains = new LinkedHashMap<>();
 
         public boolean isEnabled() {
             return enabled;
@@ -404,37 +235,6 @@ public class DistributedAgentProperties {
             this.domains = domains;
         }
 
-        public Map<String, String> getPreferredAgentIds() {
-            return preferredAgentIds;
-        }
-
-        public void setPreferredAgentIds(Map<String, String> preferredAgentIds) {
-            this.preferredAgentIds = preferredAgentIds;
-        }
-
-        public Map<String, String> getRouteOverrideDomains() {
-            return routeOverrideDomains;
-        }
-
-        public void setRouteOverrideDomains(Map<String, String> routeOverrideDomains) {
-            this.routeOverrideDomains = routeOverrideDomains;
-        }
-
-        public Map<String, Map<String, String>> getVersionedPreferredAgentIds() {
-            return versionedPreferredAgentIds;
-        }
-
-        public void setVersionedPreferredAgentIds(Map<String, Map<String, String>> versionedPreferredAgentIds) {
-            this.versionedPreferredAgentIds = versionedPreferredAgentIds;
-        }
-
-        public Map<String, Map<String, String>> getVersionedRouteOverrideDomains() {
-            return versionedRouteOverrideDomains;
-        }
-
-        public void setVersionedRouteOverrideDomains(Map<String, Map<String, String>> versionedRouteOverrideDomains) {
-            this.versionedRouteOverrideDomains = versionedRouteOverrideDomains;
-        }
     }
 
     public static class EventAuditProperties {
@@ -684,49 +484,6 @@ public class DistributedAgentProperties {
         }
     }
 
-    public static class PlanningProperties {
-        private boolean llmEnabled = false;
-        private boolean allowFallback = true;
-        private String strategy = "rule-first";
-        /**
-         * 运行期单次计划的并行扇出上限。必须不大于 catalog.branch-capacity，
-         * 否则启动失败。
-         */
-        private int maxParallelDomains = 7;
-
-        public boolean isLlmEnabled() {
-            return llmEnabled;
-        }
-
-        public void setLlmEnabled(boolean llmEnabled) {
-            this.llmEnabled = llmEnabled;
-        }
-
-        public boolean isAllowFallback() {
-            return allowFallback;
-        }
-
-        public void setAllowFallback(boolean allowFallback) {
-            this.allowFallback = allowFallback;
-        }
-
-        public int getMaxParallelDomains() {
-            return maxParallelDomains;
-        }
-
-        public void setMaxParallelDomains(int maxParallelDomains) {
-            this.maxParallelDomains = maxParallelDomains;
-        }
-
-        public String getStrategy() {
-            return strategy;
-        }
-
-        public void setStrategy(String strategy) {
-            this.strategy = strategy;
-        }
-    }
-
     public static class AgentRegistration {
         private String agentId;
         private String name;
@@ -739,11 +496,6 @@ public class DistributedAgentProperties {
         private String a2aPath = "/a2a";
         private List<String> supportedSkills = new ArrayList<>();
         private List<String> supportedDomains = new ArrayList<>();
-        /**
-         * 显式声明该 Agent 的默认 intent（等价于 Nacos 元数据 agent-default-intent），
-         * 优先级高于 catalog.default-intents 种子表与 Agent Card 技能派生。
-         */
-        private String defaultIntent;
         private boolean supportsStreaming;
         private boolean supportsAsyncTask;
         private List<String> inputModes = new ArrayList<>(List.of("text"));
@@ -835,14 +587,6 @@ public class DistributedAgentProperties {
 
         public void setSupportedDomains(List<String> supportedDomains) {
             this.supportedDomains = supportedDomains;
-        }
-
-        public String getDefaultIntent() {
-            return defaultIntent;
-        }
-
-        public void setDefaultIntent(String defaultIntent) {
-            this.defaultIntent = defaultIntent;
         }
 
         public boolean isSupportsStreaming() {

@@ -132,7 +132,7 @@ Supervisor 的模型决策 MUST 只产生回答、技能加载、补充输入请
 
 ### Requirement: 各入口保持一致语义和版本兼容
 
-Supervisor 同步与异步入口 SHALL 使用相同模式及能力选择语义，普通聊天兼容入口 SHALL 逐步接入同一核心并保留现有字段与 MCP 禁用选项。新任务 MUST 使用新模型循环，旧未完成任务 MUST 依据已记录的执行版本恢复；不能用新状态语义强行解释旧 checkpoint，或将新任务静默交给旧关键词 runner。
+Supervisor 同步与异步入口 SHALL 使用相同模式及能力选择语义，普通聊天兼容入口 SHALL 逐步接入同一核心并保留现有字段与 MCP 禁用选项。新任务 MUST 使用新模型循环。历史 checkpoint MAY 用于只读结果查询；系统 MUST NOT 将旧格式 checkpoint 交给新 runner 执行，也不再提供旧 graph runner 的恢复入口。
 
 #### Scenario: 异步执行不改变选择权
 - **WHEN** 相同无 skill 请求通过同步和异步入口提交
@@ -142,6 +142,6 @@ Supervisor 同步与异步入口 SHALL 使用相同模式及能力选择语义�
 - **WHEN** 请求的 MCP 禁用选项生效
 - **THEN** MCP 不作为有效可调用能力，模型和 skill 均不能越过该限制
 
-#### Scenario: 旧任务恢复
-- **WHEN** 新部署加载升级前的未完成 checkpoint
-- **THEN** 使用相容旧执行版本恢复，不用新模型循环解释旧计划状态
+#### Scenario: 历史 checkpoint 不恢复执行
+- **WHEN** 新部署加载升级前的旧格式 checkpoint
+- **THEN** 新 runner 忽略该执行快照，不运行旧计划或旧 Graph；历史状态仍可由只读查询适配器查看

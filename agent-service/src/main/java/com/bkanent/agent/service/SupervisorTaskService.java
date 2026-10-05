@@ -1,8 +1,8 @@
 package com.bkanent.agent.service;
 
-import com.bkanent.agent.graph.official.OfficialSupervisorGraphFacade;
 import com.bkanent.agent.model.distributed.SupervisorTaskRequest;
 import com.bkanent.agent.model.distributed.SupervisorTaskResponse;
+import com.bkanent.agent.orchestration.SupervisorToolLoopRunner;
 import com.bkanent.agent.registry.AgentRegistry;
 import com.bkanent.common.agent.AgentCard;
 import org.springframework.stereotype.Service;
@@ -21,14 +21,14 @@ import java.util.Map;
 public class SupervisorTaskService {
 
     private final AgentRegistry agentRegistry;
-    private final OfficialSupervisorGraphFacade supervisorGraphFacade;
+    private final SupervisorToolLoopRunner toolLoopRunner;
     private final SupervisorGovernanceService supervisorGovernanceService;
 
     public SupervisorTaskService(AgentRegistry agentRegistry,
-                                 OfficialSupervisorGraphFacade supervisorGraphFacade,
+                                 SupervisorToolLoopRunner toolLoopRunner,
                                  SupervisorGovernanceService supervisorGovernanceService) {
         this.agentRegistry = agentRegistry;
-        this.supervisorGraphFacade = supervisorGraphFacade;
+        this.toolLoopRunner = toolLoopRunner;
         this.supervisorGovernanceService = supervisorGovernanceService;
     }
 
@@ -37,7 +37,7 @@ public class SupervisorTaskService {
         if (!StringUtils.hasText(message)) {
             throw new IllegalArgumentException("userMessage must not be blank");
         }
-        SupervisorTaskResponse response = supervisorGraphFacade.execute(request);
+        SupervisorTaskResponse response = toolLoopRunner.execute(request);
         return withGovernanceMetadata(response,
                 supervisorGovernanceService.extractGovernanceMetadata(request));
     }

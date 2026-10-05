@@ -84,14 +84,6 @@ public class SupervisorGovernanceService {
         if (resolvePreferAsyncA2a(gray, override)) {
             merged.put("forceAsyncA2a", true);
         }
-        Map<String, String> effectivePreferredAgentIds = resolveEffectivePreferredAgentIds(gray, override);
-        if (!effectivePreferredAgentIds.isEmpty()) {
-            merged.put("preferredAgentIds", Map.copyOf(effectivePreferredAgentIds));
-        }
-        Map<String, String> effectiveRouteOverrideDomains = resolveEffectiveRouteOverrideDomains(gray, override);
-        if (!effectiveRouteOverrideDomains.isEmpty()) {
-            merged.put("routeOverrideDomains", Map.copyOf(effectiveRouteOverrideDomains));
-        }
         return new SupervisorTaskRequest(
                 request.sessionId(),
                 request.userId(),
@@ -122,31 +114,7 @@ public class SupervisorGovernanceService {
         if (forceAsyncA2a != null) {
             metadata.put("forceAsyncA2a", forceAsyncA2a);
         }
-        Object preferredAgentIds = context.get("preferredAgentIds");
-        if (preferredAgentIds instanceof Map<?, ?> preferredMap && !preferredMap.isEmpty()) {
-            metadata.put("preferredAgentIds", preferredMap);
-        }
-        Object routeOverrideDomains = context.get("routeOverrideDomains");
-        if (routeOverrideDomains instanceof Map<?, ?> routeMap && !routeMap.isEmpty()) {
-            metadata.put("routeOverrideDomains", routeMap);
-        }
         return Map.copyOf(metadata);
-    }
-
-    public String resolvePreferredAgentOverride(String domain, Map<String, Object> context) {
-        return resolvePreferredAgentId(domain, context);
-    }
-
-    public String resolveRouteOverrideDomain(Map<String, Object> context, String routeKey) {
-        if (context == null || !StringUtils.hasText(routeKey)) {
-            return null;
-        }
-        Object overrides = context.get("routeOverrideDomains");
-        if (!(overrides instanceof Map<?, ?> map)) {
-            return null;
-        }
-        Object value = map.get(routeKey);
-        return value == null || !StringUtils.hasText(String.valueOf(value)) ? null : String.valueOf(value);
     }
 
     public SupervisorGovernanceView viewGovernance() {
@@ -177,7 +145,6 @@ public class SupervisorGovernanceService {
         Map<String, Object> domainCatalogView = new LinkedHashMap<>();
         domainCatalogView.put("vocabularySource", catalogSnapshot.vocabularySource());
         domainCatalogView.put("domains", catalogSnapshot.domains());
-        domainCatalogView.put("branchCapacity", domainCatalog.branchCapacity());
 
         return new SupervisorGovernanceView(
                 Map.copyOf(rateLimit),
@@ -307,46 +274,6 @@ public class SupervisorGovernanceService {
             return "session:" + request.sessionId();
         }
         return "anonymous";
-    }
-
-    private String resolvePreferredAgentId(String domain, Map<String, Object> context) {
-        if (context == null || !StringUtils.hasText(domain)) {
-            return null;
-        }
-        Object preferred = context.get("preferredAgentIds");
-        if (!(preferred instanceof Map<?, ?> map)) {
-            return null;
-        }
-        Object value = map.get(domain);
-        return value == null || !StringUtils.hasText(String.valueOf(value)) ? null : String.valueOf(value);
-    }
-
-    private Map<String, String> resolveEffectivePreferredAgentIds(DistributedAgentProperties.GrayReleaseProperties gray,
-                                                                  PersistentGrayOverride override) {
-        Map<String, String> resolved = new LinkedHashMap<>(gray.getPreferredAgentIds());
-        String strategyVersion = resolveGrayStrategyVersion(gray, override);
-        if (!StringUtils.hasText(strategyVersion)) {
-            return resolved;
-        }
-        Map<String, String> versioned = gray.getVersionedPreferredAgentIds().get(strategyVersion);
-        if (versioned != null && !versioned.isEmpty()) {
-            resolved.putAll(versioned);
-        }
-        return resolved;
-    }
-
-    private Map<String, String> resolveEffectiveRouteOverrideDomains(DistributedAgentProperties.GrayReleaseProperties gray,
-                                                                     PersistentGrayOverride override) {
-        Map<String, String> resolved = new LinkedHashMap<>(gray.getRouteOverrideDomains());
-        String strategyVersion = resolveGrayStrategyVersion(gray, override);
-        if (!StringUtils.hasText(strategyVersion)) {
-            return resolved;
-        }
-        Map<String, String> versioned = gray.getVersionedRouteOverrideDomains().get(strategyVersion);
-        if (versioned != null && !versioned.isEmpty()) {
-            resolved.putAll(versioned);
-        }
-        return resolved;
     }
 
     private boolean isGrayEnabled(DistributedAgentProperties.GrayReleaseProperties gray, PersistentGrayOverride override) {

@@ -7,7 +7,7 @@ import java.util.Map;
 /**
  * RegisteredAgentDescriptor 注册 Agent 描述。
  *
- * @param metadata 注册来源附带的元数据（如 Nacos 实例元数据 agent-default-intent），
+ * @param metadata 注册来源附带的原始实例元数据，供协议扩展使用，
  *                 静态注册时由配置转换而来；不会为 null
  */
 public record RegisteredAgentDescriptor(

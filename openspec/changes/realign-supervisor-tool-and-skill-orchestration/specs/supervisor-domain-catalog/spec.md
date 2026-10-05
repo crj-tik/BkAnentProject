@@ -14,22 +14,6 @@
 - **WHEN** 声明某领域的所有 Agent 均从注册表消失且刷新成功
 - **THEN** 动态目录不再包含该领域；诊断兜底项不能保留为可调用 Agent
 
-### Requirement: 冷启动兜底词表
-
-系统 SHALL 支持 agent.distributed.catalog.cold-start-fallback-domains 作为首次发现非空注册表前的诊断兼容词表并标注来源；首次非空发现后动态词表完全接管。冷启动词表项 MUST NOT 生成不存在的可调用 Agent。空注册表 SHALL 告警，但模型可调用目录 MUST 只包含真实有效能力。
-
-#### Scenario: 启动早期使用兜底词表
-- **WHEN** 首次非空发现前收到目录诊断查询
-- **THEN** 显示兼容词表及 COLD_START_FALLBACK 来源，不存在相应实例的 Agent 不出现在可调用能力中
-
-#### Scenario: 首次刷新成功后兜底失效
-- **WHEN** 注册表首次返回至少一个 Agent
-- **THEN** 后续领域来自注册表，未声明领域不再由兜底合并
-
-#### Scenario: 注册表为空时保持兜底并告警
-- **WHEN** 首次非空发现前注册表为空
-- **THEN** 保留诊断词表并告警，模型只能使用其他真实能力或明确返回能力不足
-
 ### Requirement: LLM 规划 prompt 动态注入领域词表
 
 AUTO 与 EXPLICIT_SKILL 的模型可见能力 SHALL 根据已授权动态目录提供真实 A2A 工具的 description、schema、领域及发布技能信息，并包含有效 MCP/本地工具。目录 MUST 稳定排序且单轮快照一致；系统 MUST NOT 先以领域关键词或固定领域名单预选业务对象。显式技能可进一步限定有效能力集合，但不能跳过模型理解。
@@ -44,7 +28,7 @@ AUTO 与 EXPLICIT_SKILL 的模型可见能力 SHALL 根据已授权动态目录�
 
 ### Requirement: 计划校验白名单派生自领域目录
 
-模型提出的调用及技能能力范围 SHALL 按真实动态能力身份、参数、权限和请求选项校验，领域词表只供描述及合法性辅助。新模式 MUST NOT 强制先产出 domain/intent/workflowType，也 MUST NOT 将校验扩展为技能业务顺序、依赖或完成检查。并行限制 SHALL 约束 A2A/MCP/本地调用；旧任务 SHALL 保留相容旧版本的领域计划和容量校验。
+模型提出的调用及技能能力范围 SHALL 按真实动态能力身份、参数、权限和请求选项校验，领域词表只供描述及合法性辅助。新模式 MUST NOT 强制先产出 domain/intent/workflowType，也 MUST NOT 将校验扩展为技能业务顺序、依赖或完成检查。并行限制 SHALL 约束 A2A/MCP/本地调用；历史旧计划只供查询，不恢复执行。
 
 #### Scenario: 已注册域的计划通过校验
 - **WHEN** 模型提出已发现、授权且在有效技能范围内的 compare 调用
@@ -55,16 +39,16 @@ AUTO 与 EXPLICIT_SKILL 的模型可见能力 SHALL 根据已授权动态目录�
 - **THEN** 明确拒绝目标，不选择默认 listing Agent
 
 #### Scenario: 新域的审批型 workflowType 通过校验
-- **WHEN** 恢复旧任务的 compare_with_approval 计划且 compare 仍有效
-- **THEN** 旧执行版本保留原校验语义；新模式以实际调用的审批约束执行，不生成业务 workflowType
+- **WHEN** 历史 checkpoint 含 compare_with_approval 计划且 compare 仍有效
+- **THEN** 计划仅作为历史状态供查询；新模式以实际调用的审批约束执行，不生成业务 workflowType
 
 #### Scenario: 扇出上限配置错误时启动失败
-- **WHEN** 使用旧槽位 runner 的 max-parallel-domains 大于 branch-capacity
-- **THEN** 启动拒绝该 runner 配置，新模式同样校验自身执行容量，但不继承旧领域计划选择方式
+- **WHEN** 旧配置仍包含 max-parallel-domains 或 branch-capacity
+- **THEN** 新 runner 不读取这些旧领域计划配置，并按自身模型工具调用容量限制执行
 
 ### Requirement: 并行分支槽位化路由
 
-新模式的并行 SHALL 使用通用容量与结果聚合，由模型同轮提出的独立有效调用决定成员。系统 MUST NOT 根据入口关键词、技能正文步骤依赖或固定领域组合生成并行计划，不为 Agent 或技能增加专用业务分支。未分配调用的分支 MUST NOT 执行；超出容量 MUST 拒绝或按明确调度策略排队。旧任务 SHALL 继续使用相容槽位 runner 恢复。
+新模式的并行 SHALL 使用通用容量与结果聚合，由模型同轮提出的独立有效调用决定成员。系统 MUST NOT 根据入口关键词、技能正文步骤依赖或固定领域组合生成并行计划，不为 Agent 或技能增加专用业务分支。未分配调用的分支 MUST NOT 执行；超出容量 MUST 拒绝或按明确调度策略排队。历史旧任务不通过槽位 runner 恢复。
 
 #### Scenario: 新域可进入并行执行
 - **WHEN** 模型同轮提出 listing 和 compare 两项独立有效调用且容量允许
@@ -80,27 +64,27 @@ AUTO 与 EXPLICIT_SKILL 的模型可见能力 SHALL 根据已授权动态目录�
 
 ### Requirement: 默认 intent 统一解析
 
-系统 SHALL 保留按 Agent 元数据、配置、Card 技能解析默认 intent 的兼容能力，供旧任务及明确需要缺省 intent 的协议适配使用。新模式 MUST 以模型实际提出的调用为依据，不能通过默认 intent 或技能名称隐式选择业务动作。代码 MUST NOT 新增领域硬编码 intent switch。
+系统 MUST NOT 通过 Agent 元数据、配置或 Card 技能解析默认 intent 来选择新请求的业务动作。新模式 MUST 以模型实际提出的调用为依据，不能通过默认 intent 或技能名称隐式选择业务动作。代码 MUST NOT 新增领域硬编码 intent switch。
 
-#### Scenario: 配置种子保证现有域行为不变
-- **WHEN** 旧执行版本恢复既有七域任务
-- **THEN** 默认 intent 兼容解析保持原行为，新 AUTO 和 EXPLICIT_SKILL 不受种子表硬路由
+#### Scenario: 旧 intent 只供历史查询
+- **WHEN** 旧 checkpoint 含既有域的 intent
+- **THEN** 新执行路径不依据该值选择业务目标，历史查询保留原始字段
 
-#### Scenario: 新域从 Agent Card 技能派生 intent
-- **WHEN** 协议适配确需缺省 intent 且 Agent 发布了 compare.listings
-- **THEN** 可以解析该缺省值，但不会触发额外 Agent 或工具调用
+#### Scenario: 无默认 intent 路由
+- **WHEN** 请求未指定 skill 且目录中 Agent Card 发布了 compare.listings
+- **THEN** 仅由模型依据真实能力描述决定是否调用，不派生默认业务动作
 
 ### Requirement: nextHint 通用 handoff 规则
 
-系统 SHALL 保留 nextHints 与历史改写用于结果解释及旧任务恢复。在新 AUTO 和 EXPLICIT_SKILL 中，建议 MUST 返回模型，MUST NOT 自动 handoff 或覆盖有效技能范围；只有模型后续提出并通过治理的实际调用才能执行下游动作。系统 MUST NOT 通过 nextHint 自动推进技能正文下一过程。
+系统 SHALL 将 nextHints 作为结果信息提供给模型或历史查询。建议 MUST NOT 自动 handoff 或覆盖有效技能范围；只有模型后续提出并通过治理的实际调用才能执行下游动作。系统 MUST NOT 通过 nextHint 自动推进技能正文下一过程。
 
-#### Scenario: 已知域 hint 触发 handoff
+#### Scenario: 已知域 hint 交回模型
 - **WHEN** 新模式执行返回 notification.send
-- **THEN** 模型获得建议，平台在没有后续有效调用时不发送通知；存量旧 runner 的恢复仍使用其相容 handoff 语义
+- **THEN** 模型获得建议，平台在没有后续有效调用时不发送通知
 
-#### Scenario: 改写表承接历史特例
-- **WHEN** 旧任务恢复或模型解释收到 settlement.batch
-- **THEN** 可以按配置解释为 settlement.prepare，新模式仍不自动执行
+#### Scenario: 历史 hint 不恢复调用
+- **WHEN** 历史状态含 settlement.batch hint
+- **THEN** 只读查询展示原始 hint，不通过旧改写规则触发任何 Agent 或工具调用
 
 #### Scenario: 未知域 hint 被忽略
 - **WHEN** hint 前缀不在当前有效目录
@@ -108,8 +92,14 @@ AUTO 与 EXPLICIT_SKILL 的模型可见能力 SHALL 根据已授权动态目录�
 
 ## REMOVED Requirements
 
+### Requirement: 冷启动兜底词表
+
+**Reason**: 诊断 fallback 与旧路由配置一同退役，动态目录只应呈现真实注册能力，不应有与 Agent 清单分离的领域词表。
+
+**Migration**: 空 registry 时目录为空并告警；使用 Nacos 注册与发现状态排查，不配置冷启动业务领域。
+
 ### Requirement: 规则路由词表配置化
 
 **Reason**: 用户要求模型根据真实工具描述选择能力；指定技能后的过程来自正文指引，也仍由模型理解和提出调用。入口关键词、默认领域和模型失败后的关键词兜底偏离该边界。
 
-**Migration**: 新请求停用 rule-routing 的业务选择，需要跨服务过程指引时本次显式指定 Markdown skill，并使用同一模型循环，不增加 workflow 或 DAG。旧关键词配置只供旧 run 的相容恢复，不作为新模式失败兜底。主规格 Purpose 在实施和同步时调整为能力描述、动态发现与校验来源。
+**Migration**: 新请求使用真实能力 description/schema 与统一模型工具循环；跨服务过程指引通过 Markdown skill 提供，不增加 workflow 或 DAG。

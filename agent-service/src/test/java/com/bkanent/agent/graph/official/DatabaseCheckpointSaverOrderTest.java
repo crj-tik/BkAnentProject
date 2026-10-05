@@ -15,6 +15,34 @@ import static org.mockito.Mockito.*;
 
 class DatabaseCheckpointSaverOrderTest {
     @Test
+    void doesNotRestoreCheckpointFromRetiredGraphVersion() throws Exception {
+        var mapper = new ObjectMapper(); var persistence = mock(AgentWorkflowCheckpointMapper.class);
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), "test"), AgentWorkflowCheckpointEntity.class);
+        var legacy = new AgentWorkflowCheckpointEntity(); legacy.setId(1L); legacy.setTaskId("run"); legacy.setCheckpointVersion(1);
+        legacy.setSnapshotJson(mapper.writeValueAsString(Map.of("version", 1, "graphName", "historical-supervisor",
+                "id", "old-checkpoint", "nodeId", "InvokeAgent", "nextNodeId", "Resume", "state", Map.of("taskId", "run"))));
+        when(persistence.selectList(any())).thenReturn(List.of(legacy));
+
+        var saver = new DatabaseCheckpointSaver(persistence, mapper, "llm-tools-v1");
+
+        assertThat(saver.get(RunnableConfig.builder().threadId("run").build())).isEmpty();
+    }
+
+    @Test
+    void doesNotRestoreUnsupportedCheckpointEnvelopeVersion() throws Exception {
+        var mapper = new ObjectMapper(); var persistence = mock(AgentWorkflowCheckpointMapper.class);
+        TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), "test"), AgentWorkflowCheckpointEntity.class);
+        var unsupported = new AgentWorkflowCheckpointEntity(); unsupported.setId(1L); unsupported.setTaskId("run"); unsupported.setCheckpointVersion(1);
+        unsupported.setSnapshotJson(mapper.writeValueAsString(Map.of("version", 2, "graphName", "llm-tools-v1",
+                "id", "future-checkpoint", "nodeId", "Model", "nextNodeId", "Dispatch", "state", Map.of("taskId", "run"))));
+        when(persistence.selectList(any())).thenReturn(List.of(unsupported));
+
+        var saver = new DatabaseCheckpointSaver(persistence, mapper, "llm-tools-v1");
+
+        assertThat(saver.get(RunnableConfig.builder().threadId("run").build())).isEmpty();
+    }
+
+    @Test
     void reloadUsesLatestCheckpointFirstAsRequiredByMemorySaver() throws Exception {
         var mapper = new ObjectMapper(); var persistence = mock(AgentWorkflowCheckpointMapper.class);
         TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), "test"), AgentWorkflowCheckpointEntity.class);
