@@ -1,3 +1,7 @@
+<!-- 当前适用边界：2026-10-05 -->
+
+本变更保留旧 runner 的 graph/审批迁移历史。新请求不再使用 SkillMatch→Plan→Validate→领域 Route、业务 workflowType 或自动 handoff，改用 realign-supervisor-tool-and-skill-orchestration 的固定模型工具循环和实际调用级审批。旧 checkpoint 保留原 timeline、目标和恢复语义，必须待排空后清理；不能用新状态解释旧计划。正文不是步骤 DSL，不新增业务顺序/依赖/完成检查。历史尚未验证的任务不因本次改造被自动标记完成。
+
 ## Context
 
 See `proposal.md` for the motivation and scope. 当前 `agent-service` 已经使用 Spring AI Alibaba Graph 编译 Planning、Single Agent、Parallel、Approval、Resume 和 Completion 等局部图，但主流程仍由 `SupervisorWorkflowService`、`SupervisorTaskService` 以及多个自定义 Subgraph 通过 Service 逻辑拼接。官方 Graph 版本 `1.1.2.3` 已具备条件边、并行条件边、状态历史和 Checkpoint 能力；项目当前主要使用线性 `addEdge`、`invoke` 和独立的 `MemorySaver`。

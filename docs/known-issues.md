@@ -65,13 +65,13 @@
 
 **关联**：LR-15、LR-16
 
-## KI-17 [OPEN·P1] Supervisor 入口规则分流偏离显式 skill 的设计边界
+## KI-17 [FIXED·bfe48c2] Supervisor 入口规则分流偏离显式 skill 的设计边界
 
 **确认日期**：2026-10-03；最终方案于 2026-10-04 对齐。用户确认正常请求应由 LLM 根据 A2A/MCP 等能力 description 判断调用；本次指定 skill 后仍由模型理解原始请求，并遵循技能正文中的流程。
 
-**现象**：默认 `llm-enabled=false`、`strategy=rule-first`，入口关键词与默认 listing/intent 选择 Agent，nextHints 和 trade 结果又可自动交接。现有 Supervisor 知识技能与 Subagent 正文加载是不同消费路径，Supervisor 尚未接入统一的 A2A/MCP 模型工具循环；skillHint 也不能承担本次显式选择、版本固定和严格能力范围契约。正文与工具白名单本身不提供业务步骤顺序强保证（KI-19）。
+**现象**：默认 `llm-enabled=false`、`strategy=rule-first`，入口关键词与默认 listing/intent 选择 Agent，nextHints 和 trade 结果又可自动交接。现有 Supervisor 知识技能与 Subagent 正文加载是不同消费路径，改造前 Supervisor 未接入统一的 A2A/MCP 模型工具循环；skillHint 也不能承担本次显式选择、版本固定和严格能力范围契约。正文与工具白名单本身不提供业务步骤顺序强保证（KI-19）。
 
-**处置**：已修订 `realign-supervisor-tool-and-skill-orchestration` 为最终方案：统一可调用能力目录，AUTO/EXPLICIT_SKILL 使用同一通用模型工具循环；显式技能首轮前加载正文，但模型仍理解请求并选择工具。保留 Markdown 指引，严格约束调用范围、参数、权限与审批，同步 Subagent 契约及调用级恢复；不增加 workflow/DAG、步骤调度或正文顺序/完成检查器。2026-10-04 本次仅更新文档，代码未修复，状态保持 OPEN；按 tasks.md 后续实施。
+**处置**：已修订 `realign-supervisor-tool-and-skill-orchestration` 为最终方案：统一可调用能力目录，AUTO/EXPLICIT_SKILL 使用同一通用模型工具循环；显式技能首轮前加载正文，但模型仍理解请求并选择工具。保留 Markdown 指引，严格约束调用范围、参数、权限与审批，同步 Subagent 契约及调用级恢复；不增加 workflow/DAG、步骤调度或正文顺序/完成检查器。2026-10-05 新请求与普通 chat 已切到 llm-tools-v1，范围和审批恢复已验证；旧代码保留仅供旧 checkpoint，排空清理独立跟踪。实现见 bfe48c2、21c8084，验收见 b18ab33、ce36246。
 
 **关联**：LR-17、LR-18、LR-9、LR-15、KI-19；主规格 `supervisor-domain-catalog` 的冲突行为在本变更 delta 中明确替代。
 
@@ -81,7 +81,7 @@
 
 **现象**：`OfficialAgentCardDiscoveryClient.convertWrapper` 将 skills 置空、异步能力设为 false，并以 transport 存在简化流式能力；`OfficialA2aAgentClient.clientFor` 按 agentId 缓存客户端，endpoint 改变没有失效逻辑。Compose 配置 Nacos 3.0.3，本地 A2A Starter 使用 Agent Registry API，需实际验证服务端支持版本，不能把普通服务发现成功等同于 Agent Card 注册成功。
 
-**处置**：2026-10-04 已实现卡片 skills/description/原生 capabilities/协议字段保真，并在动态注册描述中保留这些字段和实例元数据（0064b85）；回归测试通过。原生 A2A Card 无独立 async 标志，保持未知并允许明确配置/实例元数据补充，不通过 transport 或 stateTransitionHistory 猜测。客户端已按 endpoint/版本/协议能力刷新，远端 Task 按 Agent+Task 关联原描述和客户端，查询/取消保留原地址；提供恢复原关联接口，17 项客户端/执行服务测试通过。部署冒烟及调用账本持久化继续实施，整体保持 OPEN；地址修复见本次“刷新A2A地址”提交。
+**处置**：2026-10-04 已实现卡片 skills/description/原生 capabilities/协议字段保真，并在动态注册描述中保留这些字段和实例元数据（0064b85）；回归测试通过。原生 A2A Card 无独立 async 标志，保持未知并允许明确配置/实例元数据补充，不通过 transport 或 stateTransitionHistory 猜测。客户端已按 endpoint/版本/协议能力刷新，远端 Task 按 Agent+Task 关联原描述和客户端，查询/取消保留原地址；提供恢复原关联接口，17 项客户端/执行服务测试通过。部署冒烟、原 Task 关联持久化与混合协议已验证；地址修复见 b58b14d，完整网络验收见 b18ab33。
 
 **代码位置**：`agent-service/registry/OfficialAgentCardDiscoveryClient`、`agent-service/client/OfficialA2aAgentClient`、`docker-compose.yml`。
 
@@ -97,7 +97,7 @@
 
 **现象**：Starter `1.1.2.3` 的 AgentCardConverterUtil 对 pushNotifications、stateTransitionHistory、supportsAuthenticatedExtendedCard 直接拆箱，外部 Card 未填这些可选值时可抛 NullPointerException。项目的官方 Card 构建器发布明确布尔值，验收已覆盖完整字段；省略字段的外部发布者需补齐，或开启 HTTP Card fallback。不能把发现失败当成 Agent 不支持业务任务。
 
-**项目修复（2026-10-05）**：共享 NacosSkillCardMapper 在副本中按协议默认值补齐可选布尔字段，再保真转换扩展；Supervisor 优先通过 SDK 读取原 Card，绕过 Starter 的有损转换。上游 Starter 缺陷仍存在，项目默认路径已修复，保留旧 provider 适配及 HTTP fallback。`NacosSkillCardMapperTest` 覆盖空字段且不修改原 Card。修复 commit：本次提交。
+**项目修复（2026-10-05）**：共享 NacosSkillCardMapper 在副本中按协议默认值补齐可选布尔字段，再保真转换扩展；Supervisor 优先通过 SDK 读取原 Card，绕过 Starter 的有损转换。上游 Starter 缺陷仍存在，项目默认路径已修复，保留旧 provider 适配及 HTTP fallback。`NacosSkillCardMapperTest` 覆盖空字段且不修改原 Card。修复 commit：`b18ab33`。
 
 **关联**：KI-18、KI-25；`NacosAgentRegistryDockerTest`。
 
@@ -145,7 +145,7 @@
 
 **现象**：主产物入库后，事件发布异常可中断衍生产物保存；重试发现主产物已存在便提前返回，使草稿正文等衍生产物永久缺失。
 
-**修复**：事件失败不覆盖持久事实；主产物存在时仍按独立来源身份检查并补存衍生产物。新增推送故障和主产物已存在、正文缺失两个回归。通用循环同时将 mode、capabilityId、callId 与 skill/version 传入主/衍生产物和事件。修复 commit：本次提交。
+**修复**：事件失败不覆盖持久事实；主产物存在时仍按独立来源身份检查并补存衍生产物。新增推送故障和主产物已存在、正文缺失两个回归。通用循环同时将 mode、capabilityId、callId 与 skill/version 传入主/衍生产物和事件。修复 commit：`993cb7e`。
 
 **代码位置**：`agent-service/graph/node/PersistArtifactsNode`、`PersistArtifactsNodeTest`。修复 commit：`993cb7e`。
 
@@ -157,7 +157,7 @@
 
 **现象**：Starter 1.1.2.3 的 CardConverter 在双向转换中丢弃 capabilities.extensions，发布技能在 Nacos 中缺少版本/内容身份契约，或发现后返回空扩展，导致真实下游委托报 EXPLICIT_SKILL_UNSUPPORTED。
 
-**修复**：共享 mapper 保留扩展原内容；只装饰已启用的 Starter 默认注册组件，使用同一个 SDK client、SERVICE 注册类型和 registerAsLatest 策略。Supervisor 注入实际 A2aService 后从 SDK 原 Card 转换，不再经过有损 provider；SDK 不可用时保留旧适配和已配置 HTTP fallback。自动装配和真实注册→发现→带子技能 A2A 调用均有回归。修复 commit：本次提交。
+**修复**：共享 mapper 保留扩展原内容；只装饰已启用的 Starter 默认注册组件，使用同一个 SDK client、SERVICE 注册类型和 registerAsLatest 策略。Supervisor 注入实际 A2aService 后从 SDK 原 Card 转换，不再经过有损 provider；SDK 不可用时保留旧适配和已配置 HTTP fallback。自动装配和真实注册→发现→带子技能 A2A 调用均有回归。修复 commit：`b18ab33`。
 
 **代码位置**：`common-a2a/NacosSkillCardMapper`、`SkillAwareNacosOperationService`、`SkillNacosCompatibilityAutoConfiguration`；`OfficialAgentCardDiscoveryClient`。
 
@@ -173,7 +173,7 @@
 
 **验证**：`LegacyRunnerDockerRecoveryTest` 在真实 MySQL 重建 graph/facade，原审批恢复仅执行一次；重复审批、完成后重启均不重执行，撤销目标零执行，伪造 owner 拒绝，新请求使用新 runner。测试业务执行为计数夹具，未声称旧远端未知请求具有 exactly-once。
 
-**代码位置**：`DefaultOfficialSupervisorGraphFacade`、`OfficialSupervisorGraphFactory`。关联 LR-26、LR-15、KI-21。
+**代码位置**：`DefaultOfficialSupervisorGraphFacade`、`OfficialSupervisorGraphFactory`。修复 commit：`ce36246`。关联 LR-26、LR-15、KI-21。
 
 ## KI-26 [FIXED] 九个 Subagent 的 Nacos SDK 被 BOM 降为 3.0.3
 
@@ -181,7 +181,7 @@
 
 **现象**：只有 agent-service 显式声明 3.1.0；公共 A2A Starter 在其余模块被 Spring Cloud BOM 管理为 nacos-client 3.0.3，缺少 A2aService/Agent Registry 契约，不能把 Supervisor 冒烟等同于九服务注册成功。
 
-**修复**：根 POM 统一管理 nacos-client 3.1.0，Supervisor 去除重复硬编码版本；全模块使用相同基线。修复 commit：本次提交。
+**修复**：根 POM 统一管理 nacos-client 3.1.0，Supervisor 去除重复硬编码版本；全模块使用相同基线。修复 commit：`b18ab33`。
 
 **关联**：KI-18、KI-25；本变更 2.5、8.1、8.4。
 
@@ -193,9 +193,9 @@
 
 **确认日期**：2026-10-04。
 
-**现象**：现有 Subagent 的 SkillTool/技能拦截器加载 Markdown 指引并收窄工具集合，不验证调用顺序。最终待实施的 Supervisor 方案延续这一边界：即使本次显式指定 skill，模型仍可能漏掉、提前执行或重复正文中的业务过程，工具允许清单本身不能证明流程正确完成。当前 Supervisor 尚未实现该统一循环，本条不代表新功能已经落地。
+**现象**：现有 Subagent 的 SkillTool/技能拦截器加载 Markdown 指引并收窄工具集合，不验证调用顺序。Supervisor 已实现的统一循环延续这一边界：即使本次显式指定 skill，模型仍可能漏掉、提前执行或重复正文中的业务过程，工具允许清单本身不能证明流程正确完成。平台不将该软约束转为业务顺序或完成检查。
 
-**根因与选择**：用户最终接受由模型遵循正文的方案，以避免步骤 DSL、DAG 或业务顺序/完成检查器与通用 Graph 耦合。平台在实施后应硬约束能力范围、参数、身份、权限、预算和审批，但这些调用级守卫不构成正文流程的顺序保证。
+**根因与选择**：用户最终接受由模型遵循正文的方案，以避免步骤 DSL、DAG 或业务顺序/完成检查器与通用 Graph 耦合。平台已经硬约束能力范围、参数、身份、权限、预算和审批，但这些调用级守卫不构成正文流程的顺序保证。
 
 **处置**：保留 LIMIT，不将强制顺序校验列入本次实施任务；通过清晰的技能正文、模型真实调用评估和运行轨迹观察改善遵循质量。评估通过不能证明顺序强保证；如果后续业务必须保证先后关系，应重新讨论设计并更新变更范围，不能在通用节点中暗加业务步骤判断。
 

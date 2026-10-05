@@ -1,3 +1,7 @@
+<!-- 当前适用边界：2026-10-05 -->
+
+本变更保留旧 runner 的 graph/审批迁移历史。新请求不再使用 SkillMatch→Plan→Validate→领域 Route、业务 workflowType 或自动 handoff，改用 realign-supervisor-tool-and-skill-orchestration 的固定模型工具循环和实际调用级审批。旧 checkpoint 保留原 timeline、目标和恢复语义，必须待排空后清理；不能用新状态解释旧计划。正文不是步骤 DSL，不新增业务顺序/依赖/完成检查。历史尚未验证的任务不因本次改造被自动标记完成。
+
 ## Why
 
 当前 Supervisor 已经使用 Spring AI Alibaba Graph 执行规划和部分子图，但审批、恢复、并行后的路由、handoff 和完成判断仍由 `SupervisorWorkflowService` 通过手工条件分支控制。这样会让 Graph 状态与业务 Service 的状态逐渐分叉，人工审批无法成为 Graph 的正式中断点，也难以保证服务重启、多实例和后续动态工作流的一致性。

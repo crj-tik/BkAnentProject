@@ -1,3 +1,7 @@
+<!-- 当前适用边界：2026-10-05 -->
+
+本变更保留共享模块与普通技能浏览的历史实施记录。自 2026-10-05 起，受管 A2A 执行的激活以成功的 SkillExecutionContext 快照为准，显式选择在首轮前固定正文、身份及范围，并优先于 hint/历史激活。无效加载不激活；显式选择不可换名、换版本或扩权；实际工具边界也校验范围。旧空 tools 的全量语义仅保留于未显式选择的兼容路径。当前契约以 realign-supervisor-tool-and-skill-orchestration 的 explicit-skill-execution / subagent-skill-contract 为准，不通过本次同步勾选此历史变更剩余任务。
+
 ## Why
 
 项目已具备完整的 Skills 基建原型（Loader/Registry/Matcher/Watcher/SubAgentSkillSupport），但全部滞留在 agent-service 内部：8 个子 Agent 服务在 Maven 依赖方向上不可达，且 `SubAgentSkillSupport` 连 agent-service 自身都没有装配 Bean——skills 层全程悬空。同时子 Agent 业务逻辑规则化（如 `ContractTools.reviewContractRisks` 纯 if/else），LLM 能力没有部署单元。本变更先解决"接线"：建立可共享的 skill 基建模块，并以 LLM 自主选择为主路由接入官方 A2A 运行时，为第二期 AI 化改造提供能力部署单元。

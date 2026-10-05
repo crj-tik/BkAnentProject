@@ -1,3 +1,7 @@
+<!-- 当前适用边界：2026-10-05 -->
+
+本变更保留共享模块与普通技能浏览的历史实施记录。自 2026-10-05 起，受管 A2A 执行的激活以成功的 SkillExecutionContext 快照为准，显式选择在首轮前固定正文、身份及范围，并优先于 hint/历史激活。无效加载不激活；显式选择不可换名、换版本或扩权；实际工具边界也校验范围。旧空 tools 的全量语义仅保留于未显式选择的兼容路径。当前契约以 realign-supervisor-tool-and-skill-orchestration 的 explicit-skill-execution / subagent-skill-contract 为准，不通过本次同步勾选此历史变更剩余任务。
+
 ## 1. Spike 验证
 
 - [x] 1.1 编写最小 spike（临时测试）：构造最小 ReactAgent + 自定义 ModelInterceptor，运行时确认 `ModelRequest.Builder.tools(List<String>)` 收窄语义（名称列表即允许清单）；若语义不符，确认 `dynamicToolCallbacks` 降级通道可行，并在此任务下记录结论

@@ -145,7 +145,7 @@
 
 **关联**：KI-16
 
-## LR-17 正常请求与显式技能都由模型理解并选择调用（设计已对齐，待实施）
+## LR-17 正常请求与显式技能都由模型理解并选择调用（已实施）
 
 **结论**：正常 Supervisor 请求的 Agent/MCP 调用由配有真实能力 description/schema 的 LLM 决定；本次显式指定 skill 时，平台在首轮模型调用前校验、固定版本并加载正文和有效能力范围，LLM 仍结合原始请求理解意图、提取参数、处理缺失与冲突，再逐轮选择调用。技能正文中的调用顺序、条件和结果使用方式由模型遵循，不由平台保证业务步骤顺序。入口关键词、默认 listing、默认 intent、trade 条件和 nextHint 自动交接不属于新默认路径，知识技能与旧 skillHint 只提供提示。
 
@@ -153,17 +153,17 @@
 
 **实现边界**：AUTO 与 EXPLICIT_SKILL 使用同一通用模型工具循环，不增加 workflow/DAG、技能步骤调度器或业务顺序/完成条件检查。explicit selection 与 LR-9 的建议性 hint 分开；平台硬约束能力范围、参数、身份、权限与审批，正文流程属于模型指引（LR-18、KI-19）。Subagent 同步共享技能契约并复用已有领域 ReAct；访谈运行面的 LR-3/4/5/8/13 边界继续有效。checkpoint、租约和调用账本记录执行事实，不能被模型或技能越过。
 
-**方案位置**：`openspec/changes/realign-supervisor-tool-and-skill-orchestration/`（proposal/design/specs/tasks）。2026-10-04 修订最终方案，替代 2026-10-03 的 instruction/workflow 双执行器方案。本次仅更新文档，业务代码与运行行为尚未调整，实施任务全部未完成。
+**方案位置**：`openspec/changes/realign-supervisor-tool-and-skill-orchestration/`（proposal/design/specs/tasks）。2026-10-04 修订最终方案，替代 2026-10-03 的 instruction/workflow 双执行器方案。2026-10-05 已实施新请求路径和九 Subagent 契约，混合协议与新旧恢复已验证；旧 run 排空后清理仍待生产证据。
 
 **关联**：KI-17、KI-19；LR-9、LR-15、LR-18；`docs/supervisor-routing-roadmap.md` 的旧“LLM 失败后关键词兜底”方向由本方案替代。
 
-## LR-18 技能正文为模型指引，调用治理由通用 Graph 执行（设计已对齐，待实施）
+## LR-18 技能正文为模型指引，调用治理由通用 Graph 执行（已实施）
 
 **结论**：skill 正文中的业务过程是模型遵循的软约束；有效能力范围、参数 schema、认证身份、权限、预算及审批是平台的硬边界。Supervisor 单轮模型节点只提出调用，通用 Graph 的工具执行节点持有业务调用的唯一执行权，避免模型客户端内隐式执行后外层再次执行。Graph 不检查正文步骤顺序、前置业务步骤是否完成或全部文字步骤是否完成。
 
 **根因**：2026-10-04 用户最终选择“模型遵循技能正文”的第一种方案，希望新增技能、Agent 和 MCP 时无需增加业务节点或维护步骤 DSL，降低业务流程与 Graph 的耦合。正文不转换成 DAG，也不增加隐藏的下一合法步骤或流程完成检查器；选择该方案意味着模型可能偏离正文顺序，这一限制已明确接受。
 
-**代码位置（现有复用点）**：`common-skill/runtime/SkillTool`、`common-skill/runtime/SkillRoutingModelInterceptor`；`agent-service/config/AgentServiceConfiguration` 的自动工具调用仅是当前行为，后续 Supervisor 单轮适配必须停止内部业务工具执行。拟议 PrepareContext/Model/LoadSkill/GuardCall/ApprovalGate/ExecuteTool/Observe 节点及调用账本见本变更 `design.md`，本次未实现。
+**代码位置**：`agent-service/orchestration/SupervisorModelTurn` 禁止内部执行，`SupervisorToolLoopGraph` 提供固定通用节点、调用级审批和执行边界；`SupervisorToolLoopRunner` 及 `OrchestrationStore` 保存恢复事实。`common-skill/runtime/SkillExecutionContext`、`SkillTool` 与模型/工具拦截器由九 Subagent 复用。基础实现见 `c2f5a4c` 之前的本变更提交，网络与事件修复见 `993cb7e`、`b18ab33`。
 
 **验证边界**：契约测试验证模型节点无工具副作用、执行节点范围/参数/权限/审批守卫以及恢复不重复调用；真实模型场景评估检查正文遵循质量，但通过评估不能证明步骤顺序强保证。新增审批或状态转换调用点仍须遵守 KI-2 防回归要求。
 
@@ -197,7 +197,7 @@
 
 **代码位置**：`common-skill/runtime/SkillExecutionContext`、`SkillRoutingToolInterceptor`；九服务 OfficialA2aAgent 接入共享拦截器和 executor。真实 ReAct 越界调用及显式不兼容无模型调用回归已验证。
 
-**关联**：LR-9、LR-17、LR-18；KI-19。持久化及 Supervisor 接入继续按本变更实施。
+**关联**：LR-9、LR-17、LR-18；KI-19。持久化与 Supervisor 已接入；部署验证见验收记录。
 
 ## LR-22 通用工具循环保存调用事实，不把不确定结果当作可重试任务
 

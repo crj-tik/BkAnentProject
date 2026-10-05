@@ -7,7 +7,7 @@
 - `common`：公共 DTO、基础模型、Dubbo 接口
 - `gateway`：统一入口网关
 - `auth-service`：认证与权限
-- `agent-service`：Agent 编排，包含 `DeepSeek + MCP + Planner`
+- `agent-service`：Supervisor 模型工具循环，统一调用 A2A、MCP 与本地能力
 - `listing-master-service`：房源主数据
 - `customer-service`：客源与业主管理
 - `notification-service`：统一消息通知
@@ -22,10 +22,13 @@
 ## 当前架构
 
 - Agent 主链路使用 `DeepSeek` 官方模型接入
-- 工具调用仅使用 `MCP server/client`
-- 复杂任务使用 `Planner` 串行规划与执行
+- 新请求由 LLM 根据真实 A2A/MCP/本地工具的描述和参数选择调用；模型节点不直接执行工具
+- 本次指定 skill 时首轮前固定正文、版本与能力范围，模型继续理解需求并遵循 Markdown 指引；不提供 DAG 或业务顺序强校验
+- AUTO 与 EXPLICIT_SKILL 使用同一通用 Graph，统一处理范围、身份、权限、预算、实际调用审批和恢复；旧 checkpoint 保留原 runner
 - 业务服务之间的 RPC 仍通过 `Dubbo` 进行正常调用
 - 基础配置统一通过 `Nacos` 管理
+
+部署顺序、迁移字段及暂停新接收见 [Supervisor 部署说明](docs/supervisor-orchestration-deployment.md)，本机 Docker 与模型验收见 [验收记录](docs/supervisor-orchestration-acceptance.md)。Nacos Server/SDK 基线为 3.1.0；九 Subagent 共享显式技能契约。正文流程遵循属于模型质量，不能把工具范围约束当作顺序保证。
 
 ## 配置约定
 
