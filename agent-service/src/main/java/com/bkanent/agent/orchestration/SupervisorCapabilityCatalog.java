@@ -30,8 +30,8 @@ import java.util.function.BiFunction;
 public class SupervisorCapabilityCatalog {
     private static final String A2A_SCHEMA = """
             {"type":"object","properties":{"instruction":{"type":"string","minLength":1},
-             "context":{"type":"object"},"skill":{"type":"object","properties":{
-              "name":{"type":"string"},"version":{"type":"string"}},"required":["name"],"additionalProperties":false}},
+             "context":{"type":"object"},"skill":{"type":"object","description":"可选的下游本地技能，只使用此 Agent Card 发布映射中的 name/version；不是能力 ID 或父技能。未明确需要时省略。","properties":{
+              "name":{"type":"string"},"version":{"type":"string","description":"仅填已发布版本，不确定时省略"}},"required":["name"],"additionalProperties":false}},
              "required":["instruction"],"additionalProperties":false}
             """;
     private final AgentRegistry agents;
@@ -108,6 +108,13 @@ public class SupervisorCapabilityCatalog {
             return json(execution.execute(descriptor, request, "tool", metadata, accepted));
         }
         return json(execution.execute(descriptor, request, "tool", metadata));
+    }
+
+    /** Pure target-contract validation, before approval or claiming a potentially effectful call. */
+    public void validateArguments(SupervisorCapability capability, Map<String, Object> arguments) {
+        if (!"a2a".equals(capability.protocol())) return;
+        var descriptor = agents.getByAgentId(capability.target()).orElseThrow(() -> new IllegalStateException("CAPABILITY_UNAVAILABLE"));
+        resolveChildSkill(descriptor, arguments.get("skill"));
     }
 
     private SkillSelection resolveChildSkill(RegisteredAgentDescriptor descriptor, Object selected) {

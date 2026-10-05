@@ -61,5 +61,9 @@
 
 - [x] 8.1 运行 common/common-skill/common-a2a/agent-service 和受影响服务的针对性测试，使用 mvn -gs .mvn-settings.xml -s .mvn-settings.xml compile 验证全模块装配；新增相关状态转换点同步补 KI-2 要求的回归用例。
 - [x] 8.2 在真实分布式环境执行 design 的确定性验收，交付动态发现、混合协议、技能范围、审批/待输入恢复及访谈边界的请求和调用记录。
-- [ ] 8.3 用代表性请求评估模型意图理解、正文顺序遵循、遗漏/重复动作、参数真实性和输出质量，记录模型版本、偏差、轮次、时延与成本并确定预算；报告明确评估通过不代表顺序强保证。
-- [ ] 8.4 演练先服务端后 Supervisor 的滚动升级、新旧 runner 分别恢复以及暂停新接收的回滚；交付任务与已完成调用不重复推进的演练记录。
+- [x] 8.3 用代表性请求评估模型意图理解、正文顺序遵循、遗漏/重复动作、参数真实性和输出质量，记录模型版本、偏差、轮次、时延与成本并确定预算；报告明确评估通过不代表顺序强保证。
+- [x] 8.4 演练先服务端后 Supervisor 的滚动升级、新旧 runner 分别恢复以及暂停新接收的回滚；交付任务与已完成调用不重复推进的演练记录。
+
+2026-10-05 验收：本机 Docker Nacos/MySQL、官方 HTTP A2A/MCP 混合协议、新旧 runner 重建与服务端 Card/endpoint 0→1 升级已验证；真实 Qwen3-4B-Instruct-2507 评估八组请求，记录可见调用、参数、偏差与 token/时间。服务端业务响应为协议/数据夹具，不声称九生产实例后台全量联调。记录见 `docs/supervisor-orchestration-acceptance.md`、`docs/acceptance/supervisor-real-model-20261005.json`。
+
+7.4 的 README/路线图/相交未完成变更、主规格同步及 LR/KI 状态已完成；删除旧图需要生产排空证据或用户明确同意调整完成范围，因此本项仍未勾选。具体核对与可审阅的清理范围见 `docs/supervisor-legacy-cleanup.md`。

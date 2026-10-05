@@ -47,6 +47,12 @@ class SupervisorCapabilityCatalogTest {
         when(execution.execute(eq(descriptor), any(), eq("tool"), anyMap())).thenReturn(new com.bkanent.common.agent.AgentTaskInvokeResponse(
                 "session", "child", "listing-agent", "COMPLETED", Map.of("listingIds", List.of(101)), List.of("artifact"), List.of(), "actual", "trace"));
         var callback = catalog.snapshot("1", false).get("a2a:listing-agent").callback();
+        var binding = catalog.snapshot("1", false).get("a2a:listing-agent");
+        assertThatThrownBy(() -> catalog.validateArguments(binding, Map.of("skill", Map.of("name", "a2a:listing-agent"))))
+                .hasMessage("SKILL_NOT_FOUND");
+        assertThatThrownBy(() -> catalog.validateArguments(binding, Map.of("skill", Map.of("name", "listing-search", "version", "2"))))
+                .hasMessage("SKILL_VERSION_MISMATCH");
+        verifyNoInteractions(execution);
         var context = new ToolContext(Map.of("userId", "1", "runId", "run", "callId", "first", "sessionId", "session", "traceId", "trace", "parentSkill", Map.of("name", "parent")));
         assertThat(callback.call("{\"instruction\":\"find\",\"context\":{\"userId\":\"2\",\"parentSkill\":\"forged\"}}", context)).contains("listingIds", "artifact");
         var capture = org.mockito.ArgumentCaptor.forClass(com.bkanent.common.agent.AgentTaskInvokeRequest.class);

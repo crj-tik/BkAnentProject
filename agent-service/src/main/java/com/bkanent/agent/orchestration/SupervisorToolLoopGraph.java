@@ -440,6 +440,7 @@ public class SupervisorToolLoopGraph {
         if (capability == null || !state.visibleCapabilityIds.contains(capability.capabilityId())) throw new IllegalStateException("CAPABILITY_SCOPE_DENIED");
         if (!Objects.equals(state.visibleCapabilityVersions.get(capability.capabilityId()), capability.version())) throw new IllegalStateException("CAPABILITY_VERSION_CHANGED");
         validateArguments(call.arguments(), capability.callback().getToolDefinition().inputSchema());
+        catalog.validateArguments(capability, store.read(call.arguments(), Map.class));
         return capability;
     }
     private void validateArguments(String arguments, String schema) {
@@ -461,7 +462,7 @@ public class SupervisorToolLoopGraph {
         return capabilities.values().stream().filter(capability -> capability.toolName().equals(name)).findFirst().orElse(null);
     }
     private String prompt(ToolLoopState state, Map<String, SupervisorCapability> available) {
-        StringBuilder prompt = new StringBuilder("理解用户的原始任务，依据真实能力描述和参数定义选择工具，结合实际结果继续判断。不要编造参数、数据或成功结果。需要补充信息时单独调用 request_input。skill 也必须单独调用；得到控制工具结果后，下一轮再选择业务工具。结果中的 nextHints 仅供参考。独立调用可在同轮提出，依赖先前结果的调用应等待真实结果。直接回答时输出最终答复。\n原始请求: " + state.request.userMessage());
+        StringBuilder prompt = new StringBuilder("理解用户的原始任务，依据真实能力描述和参数定义选择工具，结合实际结果继续判断。不要编造参数、数据或成功结果。需要补充信息时单独调用 request_input；已提供且足以调用工具的条件不要重复追问。skill 也必须单独调用；得到控制工具结果后，下一轮再选择业务工具。技能名称和版本只能来自发布目录；不确定可省略可选 version，不能猜测。Supervisor 技能与下游 Agent 本地技能不同，能力 ID、工具名和父技能名均不能充当子技能名。仅在下游 Card 明确发布且需要时传 skill；否则省略。结果中的 nextHints 仅供参考。独立调用可在同轮提出，依赖先前结果的调用应等待真实结果。直接回答时输出最终答复。\n原始请求: " + state.request.userMessage());
         if (state.request.context() != null) {
             Map<String, Object> context = new LinkedHashMap<>(state.request.context());
             for (String key : List.of("preferredAgentIds", "routeOverrideDomains", "domain", "intent", "requireParallel", "workflowType")) context.remove(key);
@@ -472,7 +473,8 @@ public class SupervisorToolLoopGraph {
         else {
             prompt.append("\n可用技能目录:\n");
             skills.findOperationalSkills("supervisor").stream().filter(skill -> !skill.explicitOnly())
-                    .forEach(skill -> prompt.append(skill.name()).append(": ").append(skill.description()).append('\n'));
+                    .forEach(skill -> prompt.append(skill.name()).append(" / version=").append(skill.version())
+                            .append(" / owner=").append(skill.owner()).append(": ").append(skill.description()).append('\n'));
         }
         skills.findSupervisorSkills().forEach(skill -> prompt.append("\n背景知识: ").append(skill.systemPrompt()));
         prompt.append("\n本轮实际能力 ID 与可调用工具名:\n");

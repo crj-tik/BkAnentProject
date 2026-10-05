@@ -1,0 +1,970 @@
+{
+  "modelTimeoutMs" : 30000,
+  "cases" : [ {
+    "case" : "greeting",
+    "request" : "你好，只打个招呼，不需要查询。",
+    "runId" : "eval-greeting-c4fcc64a-310c-44b1-b6f0-eb0c7de3d93c",
+    "initialStatus" : "COMPLETED",
+    "initialAnswer" : "你好！很高兴见到你，有什么我可以帮你的吗？\uD83D\uDE0A",
+    "initialEffects" : [ ],
+    "continuation" : null,
+    "status" : "COMPLETED",
+    "finalAnswer" : "你好！很高兴见到你，有什么我可以帮你的吗？\uD83D\uDE0A",
+    "metadata" : {
+      "toolCalls" : 0,
+      "runnerVersion" : "llm-tools-v1",
+      "calls" : [ ],
+      "mode" : "AUTO",
+      "rounds" : 1,
+      "runId" : "eval-greeting-c4fcc64a-310c-44b1-b6f0-eb0c7de3d93c"
+    },
+    "effects" : [ ],
+    "turns" : [ {
+      "latencyMs" : 9024,
+      "promptTokens" : 2930,
+      "completionTokens" : 14,
+      "text" : "你好！很高兴见到你，有什么我可以帮你的吗？\uD83D\uDE0A",
+      "toolCalls" : [ ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    } ],
+    "elapsedMs" : 9045
+  }, {
+    "case" : "negation-contract",
+    "request" : "不要发送通知，只分析这份合同：买方逾期一天即没收全部定金，卖方逾期不承担责任。指出条款风险。",
+    "runId" : "eval-negation-contract-825ce2f6-d20a-49cd-9be5-117f5133b64d",
+    "initialStatus" : "COMPLETED",
+    "initialAnswer" : "该合同条款存在明显风险：买方逾期一天即没收全部定金，而卖方逾期则不承担责任，导致违约责任严重不对等。\n\n分析指出，这种条款对买方极为不利，可能在实际交易中引发争议。建议明确双方的违约责任及交付期限，确保条款对等，以保障交易公平性与可执行性。",
+    "initialEffects" : [ {
+      "arguments" : {
+        "instruction" : "买方逾期一天即没收全部定金，卖方逾期不承担责任。指出条款风险。",
+        "context" : {
+          "userId" : "1",
+          "parentSkill" : { }
+        },
+        "skillSelection" : null
+      },
+      "capabilityId" : "a2a:contract-agent"
+    } ],
+    "continuation" : null,
+    "status" : "COMPLETED",
+    "finalAnswer" : "该合同条款存在明显风险：买方逾期一天即没收全部定金，而卖方逾期则不承担责任，导致违约责任严重不对等。\n\n分析指出，这种条款对买方极为不利，可能在实际交易中引发争议。建议明确双方的违约责任及交付期限，确保条款对等，以保障交易公平性与可执行性。",
+    "metadata" : {
+      "toolCalls" : 1,
+      "runnerVersion" : "llm-tools-v1",
+      "calls" : [ {
+        "callId" : "pknWyyE611D6IkuNW5zQQ8dv5sPEkDne",
+        "capabilityId" : "a2a:contract-agent",
+        "status" : "COMPLETED",
+        "result" : "{\"sessionId\":\"eval-session\",\"taskId\":\"call-3ca4784ec8dd1a88f452a4501afb89508154d0fba85c12237c249b0ee16d6306\",\"agentId\":\"contract-agent\",\"status\":\"COMPLETED\",\"structuredOutput\":{\"analysis\":\"买方与卖方逾期责任明显不对等，建议明确对等的违约责任及交付期限\",\"source\":\"evaluation-fixture\"},\"artifactIds\":[],\"nextHints\":[],\"summary\":\"fixture result\",\"traceId\":\"eval-negation-contract-825ce2f6-d20a-49cd-9be5-117f5133b64d\"}",
+        "toolContext" : {
+          "usedTool" : false,
+          "firstToolName" : null,
+          "firstToolQuery" : null,
+          "topK" : null,
+          "milvusResults" : [ ],
+          "toolContext" : ""
+        }
+      } ],
+      "mode" : "AUTO",
+      "rounds" : 2,
+      "runId" : "eval-negation-contract-825ce2f6-d20a-49cd-9be5-117f5133b64d"
+    },
+    "effects" : [ {
+      "arguments" : {
+        "instruction" : "买方逾期一天即没收全部定金，卖方逾期不承担责任。指出条款风险。",
+        "context" : {
+          "userId" : "1",
+          "parentSkill" : { }
+        },
+        "skillSelection" : null
+      },
+      "capabilityId" : "a2a:contract-agent"
+    } ],
+    "turns" : [ {
+      "latencyMs" : 1947,
+      "promptTokens" : 2968,
+      "completionTokens" : 63,
+      "text" : "",
+      "toolCalls" : [ {
+        "id" : "pknWyyE611D6IkuNW5zQQ8dv5sPEkDne",
+        "type" : "function",
+        "name" : "a2a_0007415ea6efb4c2503585d6",
+        "arguments" : "{\"instruction\":\"买方逾期一天即没收全部定金，卖方逾期不承担责任。指出条款风险。\"}"
+      } ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    }, {
+      "latencyMs" : 1168,
+      "promptTokens" : 3211,
+      "completionTokens" : 77,
+      "text" : "该合同条款存在明显风险：买方逾期一天即没收全部定金，而卖方逾期则不承担责任，导致违约责任严重不对等。\n\n分析指出，这种条款对买方极为不利，可能在实际交易中引发争议。建议明确双方的违约责任及交付期限，确保条款对等，以保障交易公平性与可执行性。",
+      "toolCalls" : [ ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    } ],
+    "elapsedMs" : 3153
+  }, {
+    "case" : "auto-direct",
+    "request" : "请委托合同 Agent 审阅以下原文并汇总实际结果：买方逾期一天即没收全部定金，卖方逾期不承担责任。不发送通知。",
+    "runId" : "eval-auto-direct-b5112a5c-3814-4968-9c01-cc3a4a4830d7",
+    "initialStatus" : "COMPLETED",
+    "initialAnswer" : "已委托合同 Agent 审阅原文，并汇总实际结果如下：\n\n**原文条款**：买方逾期一天即没收全部定金，卖方逾期不承担责任。\n\n**分析结果**：  \n买方与卖方逾期责任明显不对等，建议明确对等的违约责任及交付期限。\n\n**风险提示**：  \n该条款存在严重风险，因卖方逾期不承担责任，而买方仅逾期一天即被没收全部定金，明显偏向买方，违反公平原则，可能引发法律争议。\n\n**建议**：  \n应重新制定违约责任条款，确保买方与卖方的逾期责任对等，并明确交付期限与违约后果。\n\n**是否发送通知**：否（符合“不发送通知”要求）。\n\n✅ 任务已完成，结果已汇总。",
+    "initialEffects" : [ {
+      "arguments" : {
+        "instruction" : "买方逾期一天即没收全部定金，卖方逾期不承担责任。不发送通知。",
+        "context" : {
+          "userId" : "1",
+          "parentSkill" : { }
+        },
+        "skillSelection" : null
+      },
+      "capabilityId" : "a2a:contract-agent"
+    } ],
+    "continuation" : null,
+    "status" : "COMPLETED",
+    "finalAnswer" : "已委托合同 Agent 审阅原文，并汇总实际结果如下：\n\n**原文条款**：买方逾期一天即没收全部定金，卖方逾期不承担责任。\n\n**分析结果**：  \n买方与卖方逾期责任明显不对等，建议明确对等的违约责任及交付期限。\n\n**风险提示**：  \n该条款存在严重风险，因卖方逾期不承担责任，而买方仅逾期一天即被没收全部定金，明显偏向买方，违反公平原则，可能引发法律争议。\n\n**建议**：  \n应重新制定违约责任条款，确保买方与卖方的逾期责任对等，并明确交付期限与违约后果。\n\n**是否发送通知**：否（符合“不发送通知”要求）。\n\n✅ 任务已完成，结果已汇总。",
+    "metadata" : {
+      "toolCalls" : 1,
+      "runnerVersion" : "llm-tools-v1",
+      "calls" : [ {
+        "callId" : "viqimdzM6cDPm6hrzZuRh0GqSHOkNFhH",
+        "capabilityId" : "a2a:contract-agent",
+        "status" : "COMPLETED",
+        "result" : "{\"sessionId\":\"eval-session\",\"taskId\":\"call-83ab9dc069bcb3e946c43c8ffdac3fc3fc1e177af821fcf11de7e7569955a26b\",\"agentId\":\"contract-agent\",\"status\":\"COMPLETED\",\"structuredOutput\":{\"analysis\":\"买方与卖方逾期责任明显不对等，建议明确对等的违约责任及交付期限\",\"source\":\"evaluation-fixture\"},\"artifactIds\":[],\"nextHints\":[],\"summary\":\"fixture result\",\"traceId\":\"eval-auto-direct-b5112a5c-3814-4968-9c01-cc3a4a4830d7\"}",
+        "toolContext" : {
+          "usedTool" : false,
+          "firstToolName" : null,
+          "firstToolQuery" : null,
+          "topK" : null,
+          "milvusResults" : [ ],
+          "toolContext" : ""
+        }
+      } ],
+      "mode" : "AUTO",
+      "rounds" : 2,
+      "runId" : "eval-auto-direct-b5112a5c-3814-4968-9c01-cc3a4a4830d7"
+    },
+    "effects" : [ {
+      "arguments" : {
+        "instruction" : "买方逾期一天即没收全部定金，卖方逾期不承担责任。不发送通知。",
+        "context" : {
+          "userId" : "1",
+          "parentSkill" : { }
+        },
+        "skillSelection" : null
+      },
+      "capabilityId" : "a2a:contract-agent"
+    } ],
+    "turns" : [ {
+      "latencyMs" : 2153,
+      "promptTokens" : 2978,
+      "completionTokens" : 63,
+      "text" : "",
+      "toolCalls" : [ {
+        "id" : "viqimdzM6cDPm6hrzZuRh0GqSHOkNFhH",
+        "type" : "function",
+        "name" : "a2a_0007415ea6efb4c2503585d6",
+        "arguments" : "{\"instruction\":\"买方逾期一天即没收全部定金，卖方逾期不承担责任。不发送通知。\"}"
+      } ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    }, {
+      "latencyMs" : 2517,
+      "promptTokens" : 3216,
+      "completionTokens" : 167,
+      "text" : "已委托合同 Agent 审阅原文，并汇总实际结果如下：\n\n**原文条款**：买方逾期一天即没收全部定金，卖方逾期不承担责任。\n\n**分析结果**：  \n买方与卖方逾期责任明显不对等，建议明确对等的违约责任及交付期限。\n\n**风险提示**：  \n该条款存在严重风险，因卖方逾期不承担责任，而买方仅逾期一天即被没收全部定金，明显偏向买方，违反公平原则，可能引发法律争议。\n\n**建议**：  \n应重新制定违约责任条款，确保买方与卖方的逾期责任对等，并明确交付期限与违约后果。\n\n**是否发送通知**：否（符合“不发送通知”要求）。\n\n✅ 任务已完成，结果已汇总。",
+      "toolCalls" : [ ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    } ],
+    "elapsedMs" : 4713
+  }, {
+    "case" : "auto-load",
+    "request" : "请先使用目录中合同审阅指引理解任务，再审阅：双方交付延迟的责任应如何界定？不要通知他人。",
+    "runId" : "eval-auto-load-1b877f8a-a346-40c0-b402-518edf8e1d95",
+    "initialStatus" : "COMPLETED",
+    "initialAnswer" : "在合同中，双方交付延迟的责任应明确界定，以确保责任对等。当前条款显示买方与卖方的逾期责任明显不对等，建议在合同中明确对等的违约责任及具体的交付期限，以避免后续争议。此建议基于合同原文的审阅结果。",
+    "initialEffects" : [ {
+      "arguments" : {
+        "instruction" : "双方交付延迟的责任应如何界定？",
+        "context" : {
+          "userId" : "1",
+          "parentSkill" : {
+            "contentHash" : "c203e11efe435e63c42c033ada4d6b590983285882d11c04580d1c529d354077",
+            "version" : "1",
+            "name" : "contract-review",
+            "owner" : "supervisor"
+          }
+        },
+        "skillSelection" : {
+          "name" : "contract-risk-review",
+          "version" : "1",
+          "contentHash" : "evaluation-fixture-hash",
+          "owner" : "contract"
+        }
+      },
+      "capabilityId" : "a2a:contract-agent"
+    } ],
+    "continuation" : null,
+    "status" : "COMPLETED",
+    "finalAnswer" : "在合同中，双方交付延迟的责任应明确界定，以确保责任对等。当前条款显示买方与卖方的逾期责任明显不对等，建议在合同中明确对等的违约责任及具体的交付期限，以避免后续争议。此建议基于合同原文的审阅结果。",
+    "metadata" : {
+      "toolCalls" : 2,
+      "skill" : {
+        "contentHash" : "c203e11efe435e63c42c033ada4d6b590983285882d11c04580d1c529d354077",
+        "version" : "1",
+        "name" : "contract-review",
+        "source" : "MODEL"
+      },
+      "runnerVersion" : "llm-tools-v1",
+      "mode" : "AUTO",
+      "rounds" : 3,
+      "runId" : "eval-auto-load-1b877f8a-a346-40c0-b402-518edf8e1d95",
+      "calls" : [ {
+        "callId" : "qUiKSSR5y2Obw8oSWP2qeb9H2tDI4NFb",
+        "capabilityId" : "control:skill",
+        "status" : "COMPLETED",
+        "result" : "{\"snapshot\":{\"definition\":{\"name\":\"contract-review\",\"description\":\"理解合同文本、识别条款风险并委托合同 Agent 审阅的普通指引\",\"domain\":\"supervisor\",\"triggerKeywords\":[],\"tools\":[],\"systemPrompt\":\"先理解提供的合同原文与审阅目的；仅委托 contract Agent 分析已提供的条款，不发送通知；最终引用实际分析结果。\",\"priority\":5,\"supervisorSkill\":false,\"owner\":\"supervisor\",\"version\":\"1\",\"capabilities\":{\"policy\":\"allowlist\",\"refs\":[\"a2a:contract-agent\"]},\"explicitOnly\":false},\"contentHash\":\"c203e11efe435e63c42c033ada4d6b590983285882d11c04580d1c529d354077\",\"capabilityIds\":[\"a2a:contract-agent\"],\"source\":\"MODEL\"},\"result\":\"技能已加载: contract-review / 1\\n先理解提供的合同原文与审阅目的；仅委托 contract Agent 分析已提供的条款，不发送通知；最终引用实际分析结果。\\n原始请求: 请先使用目录中合同审阅指引理解任务，再审阅：双方交付延迟的责任应如何界定？不要通知他人。\\n本次技能任务: 双方交付延迟的责任应如何界定？\\n能力范围: [a2a:contract-agent]\"}"
+      }, {
+        "callId" : "Dw15zT4dkFv8INwZGEkHBlDZmsrzsnic",
+        "capabilityId" : "a2a:contract-agent",
+        "status" : "COMPLETED",
+        "result" : "{\"sessionId\":\"eval-session\",\"taskId\":\"call-7bdbd55b0b8e8d80f3fc1771a5ceeb124a719f957ea00ce1a00b2bab71d97025\",\"agentId\":\"contract-agent\",\"status\":\"COMPLETED\",\"structuredOutput\":{\"analysis\":\"买方与卖方逾期责任明显不对等，建议明确对等的违约责任及交付期限\",\"source\":\"evaluation-fixture\"},\"artifactIds\":[],\"nextHints\":[],\"summary\":\"fixture result\",\"traceId\":\"eval-auto-load-1b877f8a-a346-40c0-b402-518edf8e1d95\"}",
+        "toolContext" : {
+          "usedTool" : false,
+          "firstToolName" : null,
+          "firstToolQuery" : null,
+          "topK" : null,
+          "milvusResults" : [ ],
+          "toolContext" : ""
+        }
+      } ]
+    },
+    "effects" : [ {
+      "arguments" : {
+        "instruction" : "双方交付延迟的责任应如何界定？",
+        "context" : {
+          "userId" : "1",
+          "parentSkill" : {
+            "contentHash" : "c203e11efe435e63c42c033ada4d6b590983285882d11c04580d1c529d354077",
+            "version" : "1",
+            "name" : "contract-review",
+            "owner" : "supervisor"
+          }
+        },
+        "skillSelection" : {
+          "name" : "contract-risk-review",
+          "version" : "1",
+          "contentHash" : "evaluation-fixture-hash",
+          "owner" : "contract"
+        }
+      },
+      "capabilityId" : "a2a:contract-agent"
+    } ],
+    "turns" : [ {
+      "latencyMs" : 1663,
+      "promptTokens" : 2966,
+      "completionTokens" : 39,
+      "text" : "",
+      "toolCalls" : [ {
+        "id" : "qUiKSSR5y2Obw8oSWP2qeb9H2tDI4NFb",
+        "type" : "function",
+        "name" : "skill",
+        "arguments" : "{\"name\":\"contract-review\",\"task\":\"双方交付延迟的责任应如何界定？\",\"version\":\"1\"}"
+      } ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    }, {
+      "latencyMs" : 1791,
+      "promptTokens" : 1925,
+      "completionTokens" : 75,
+      "text" : "",
+      "toolCalls" : [ {
+        "id" : "Dw15zT4dkFv8INwZGEkHBlDZmsrzsnic",
+        "type" : "function",
+        "name" : "a2a_0007415ea6efb4c2503585d6",
+        "arguments" : "{\"instruction\":\"双方交付延迟的责任应如何界定？\",\"context\":{},\"skill\":{\"name\":\"contract-risk-review\",\"version\":\"1\"}}"
+      } ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    }, {
+      "latencyMs" : 935,
+      "promptTokens" : 2174,
+      "completionTokens" : 64,
+      "text" : "在合同中，双方交付延迟的责任应明确界定，以确保责任对等。当前条款显示买方与卖方的逾期责任明显不对等，建议在合同中明确对等的违约责任及具体的交付期限，以避免后续争议。此建议基于合同原文的审阅结果。",
+      "toolCalls" : [ ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    } ],
+    "elapsedMs" : 4438
+  }, {
+    "case" : "explicit-full-1",
+    "request" : "预算300万，在上海浦东找两套两居房对比。根据实际对比选总价较低的一套，为首次置业家庭写小红书草稿，只写草稿不发布。",
+    "runId" : "eval-explicit-full-1-f9ed1e3b-d7e7-49be-8828-70498a3b7107",
+    "initialStatus" : "COMPLETED",
+    "initialAnswer" : "已根据您的需求完成对比与草稿撰写：\n\n**候选房源对比：**  \n- 房源101：浦东两居，总价280万  \n- 房源102：浦东两居，总价295万  \n根据总价对比，**房源101（总价280万）为更优选择**，符合预算且性价比更高。\n\n**小红书营销草稿（仅草稿，未发布）：**  \n- **平台**：小红书  \n- **房源ID**：101  \n- **草稿内容**：浦东两居，总价280万，适合首次置业家庭。具体信息以核验为准。  \n- **事实来源**：evaluation-fixture  \n\n此草稿已基于真实房源数据与对比结果生成，专为首次置业家庭设计，突出性价比与地理位置优势。如需进一步调整或补充信息，请随时告知。",
+    "initialEffects" : [ {
+      "arguments" : {
+        "instruction" : "在上海市浦东新区，预算300万以内，寻找两居室的房源，提供真实房源详情和来源。",
+        "context" : {
+          "budget" : 3000000,
+          "purpose" : "首次置业家庭",
+          "region" : "上海浦东",
+          "room_type" : "两居",
+          "userId" : "1",
+          "parentSkill" : {
+            "contentHash" : "4a28c72bc2414a9e34046b5a1bef4166883ae101d672bbd1123dfbaae2121bb9",
+            "version" : "1",
+            "name" : "listing-compare-marketing-draft",
+            "owner" : "supervisor"
+          }
+        },
+        "skillSelection" : null
+      },
+      "capabilityId" : "a2a:listing-agent"
+    }, {
+      "arguments" : {
+        "listingIds" : "101,102"
+      },
+      "capabilityId" : "mcp:compare-mcp-server:compareListings"
+    }, {
+      "arguments" : {
+        "instruction" : "为首次置业家庭撰写小红书风格的营销草稿，内容需突出性价比、地理位置和适合家庭居住的特点。选中总价较低的房源（ID: 101，总价280万），对比信息已明确。草稿需包含contentType=copy_draft、draftText、platform、listingId和事实来源，仅写草稿不发布。",
+        "context" : {
+          "comparisonResult" : "101总价280万，102总价295万，均两居，101总价较低。",
+          "platform" : "小红书",
+          "selectedListingId" : 101,
+          "source" : "evaluation-fixture",
+          "userId" : "1",
+          "parentSkill" : {
+            "contentHash" : "4a28c72bc2414a9e34046b5a1bef4166883ae101d672bbd1123dfbaae2121bb9",
+            "version" : "1",
+            "name" : "listing-compare-marketing-draft",
+            "owner" : "supervisor"
+          }
+        },
+        "skillSelection" : null
+      },
+      "capabilityId" : "a2a:marketing-agent"
+    } ],
+    "continuation" : null,
+    "status" : "COMPLETED",
+    "finalAnswer" : "已根据您的需求完成对比与草稿撰写：\n\n**候选房源对比：**  \n- 房源101：浦东两居，总价280万  \n- 房源102：浦东两居，总价295万  \n根据总价对比，**房源101（总价280万）为更优选择**，符合预算且性价比更高。\n\n**小红书营销草稿（仅草稿，未发布）：**  \n- **平台**：小红书  \n- **房源ID**：101  \n- **草稿内容**：浦东两居，总价280万，适合首次置业家庭。具体信息以核验为准。  \n- **事实来源**：evaluation-fixture  \n\n此草稿已基于真实房源数据与对比结果生成，专为首次置业家庭设计，突出性价比与地理位置优势。如需进一步调整或补充信息，请随时告知。",
+    "metadata" : {
+      "toolCalls" : 4,
+      "skill" : {
+        "contentHash" : "4a28c72bc2414a9e34046b5a1bef4166883ae101d672bbd1123dfbaae2121bb9",
+        "version" : "1",
+        "name" : "listing-compare-marketing-draft",
+        "source" : "EXPLICIT"
+      },
+      "runnerVersion" : "llm-tools-v1",
+      "mode" : "EXPLICIT_SKILL",
+      "rounds" : 5,
+      "runId" : "eval-explicit-full-1-f9ed1e3b-d7e7-49be-8828-70498a3b7107",
+      "calls" : [ {
+        "callId" : "1OOJ6aCGuAV43QBUp3L1dlZyJSq0bMqV",
+        "capabilityId" : "control:skill",
+        "status" : "COMPLETED",
+        "result" : "{\"snapshot\":{\"definition\":{\"name\":\"listing-compare-marketing-draft\",\"description\":\"按真实找房结果进行房源对比，再形成营销草稿；仅接受本次请求显式指定\",\"domain\":\"supervisor\",\"triggerKeywords\":[],\"tools\":[],\"systemPrompt\":\"# 找房、对比与营销草稿\\n\\n先理解原始请求中的地区、预算、户型、营销平台和选择偏好。有冲突先说明；缺少关键条件时单独调用 request_input，不编造地址、房源 ID、平台或用户选择。技能是模型执行指引，平台不校验本文的业务顺序。\\n\\n通过 a2a:listing-agent 查询候选房源。instruction 写清自然语言条件，context 保留已确认的结构化条件；需要其本地找房流程时，通过实际 Card 发布映射显式选择 listing-search（版本以目录为准）。父技能名称不能当成子技能名称。只保留实际响应中的 listingIds、详情与来源；检索不到就如实停止或向用户补充条件。\\n\\n至少取得两套真实候选后，通过 mcp:compare-mcp-server:compareListings 对比。实际参数 listingIds 是逗号分隔的字符串，例如把上一步真实 ID 数组转换为字符串；示例数字不是默认输入。等待实际对比结果后再决定要介绍哪套房源。候选不足或用户尚未选择时先询问，不生成虚构比较。\\n\\n通过 a2a:marketing-agent 形成草稿，显式选择其 Card 发布的 marketing-draft 技能；context 传入已确认的平台、真实选中房源及比较结果，instruction 要求输出 contentType=copy_draft、draftText、platform、listingId 和事实来源。此子技能只提供读取既有内容的能力；不创建发布任务，也不调用 publishContent。缺少营销平台或待推广房源时先通过 request_input 询问用户。\\n\\n最终给出候选、比较依据和草稿，区分真实结果与文案建议；状态必须表示草稿，不能声称已发布。正文中的依赖由模型遵循，平台仅校验实际工具范围、参数、身份、权限、预算和审批。\",\"priority\":5,\"supervisorSkill\":false,\"owner\":\"supervisor\",\"version\":\"1\",\"capabilities\":{\"policy\":\"allowlist\",\"refs\":[\"a2a:listing-agent\",\"mcp:compare-mcp-server:compareListings\",\"a2a:marketing-agent\"]},\"explicitOnly\":true},\"contentHash\":\"4a28c72bc2414a9e34046b5a1bef4166883ae101d672bbd1123dfbaae2121bb9\",\"capabilityIds\":[\"a2a:listing-agent\",\"a2a:marketing-agent\",\"mcp:compare-mcp-server:compareListings\"],\"source\":\"EXPLICIT\"},\"result\":\"技能已加载: listing-compare-marketing-draft / 1\\n# 找房、对比与营销草稿\\n\\n先理解原始请求中的地区、预算、户型、营销平台和选择偏好。有冲突先说明；缺少关键条件时单独调用 request_input，不编造地址、房源 ID、平台或用户选择。技能是模型执行指引，平台不校验本文的业务顺序。\\n\\n通过 a2a:listing-agent 查询候选房源。instruction 写清自然语言条件，context 保留已确认的结构化条件；需要其本地找房流程时，通过实际 Card 发布映射显式选择 listing-search（版本以目录为准）。父技能名称不能当成子技能名称。只保留实际响应中的 listingIds、详情与来源；检索不到就如实停止或向用户补充条件。\\n\\n至少取得两套真实候选后，通过 mcp:compare-mcp-server:compareListings 对比。实际参数 listingIds 是逗号分隔的字符串，例如把上一步真实 ID 数组转换为字符串；示例数字不是默认输入。等待实际对比结果后再决定要介绍哪套房源。候选不足或用户尚未选择时先询问，不生成虚构比较。\\n\\n通过 a2a:marketing-agent 形成草稿，显式选择其 Card 发布的 marketing-draft 技能；context 传入已确认的平台、真实选中房源及比较结果，instruction 要求输出 contentType=copy_draft、draftText、platform、listingId 和事实来源。此子技能只提供读取既有内容的能力；不创建发布任务，也不调用 publishContent。缺少营销平台或待推广房源时先通过 request_input 询问用户。\\n\\n最终给出候选、比较依据和草稿，区分真实结果与文案建议；状态必须表示草稿，不能声称已发布。正文中的依赖由模型遵循，平台仅校验实际工具范围、参数、身份、权限、预算和审批。\\n原始请求: 预算300万，在上海浦东找两套两居房对比。根据实际对比选总价较低的一套，为首次置业家庭写小红书草稿，只写草稿不发布。\\n本次技能任务: 找房、对比与营销草稿\\n能力范围: [a2a:listing-agent, a2a:marketing-agent, mcp:compare-mcp-server:compareListings]\"}"
+      }, {
+        "callId" : "QJaGJipPhOXBh1DzuhV5niAWW1fucZVS",
+        "capabilityId" : "a2a:listing-agent",
+        "status" : "COMPLETED",
+        "result" : "{\"sessionId\":\"eval-session\",\"taskId\":\"call-0fee39c988925a49dd6b94ca821840438c0cabbe2f5d5fe862feebd3bc4ceb44\",\"agentId\":\"listing-agent\",\"status\":\"COMPLETED\",\"structuredOutput\":{\"listingIds\":[101,102],\"listings\":[{\"id\":101,\"district\":\"浦东\",\"rooms\":2,\"priceWan\":280},{\"id\":102,\"district\":\"浦东\",\"rooms\":2,\"priceWan\":295}],\"source\":\"evaluation-fixture\"},\"artifactIds\":[],\"nextHints\":[],\"summary\":\"fixture result\",\"traceId\":\"eval-explicit-full-1-f9ed1e3b-d7e7-49be-8828-70498a3b7107\"}",
+        "toolContext" : {
+          "usedTool" : false,
+          "firstToolName" : null,
+          "firstToolQuery" : null,
+          "topK" : null,
+          "milvusResults" : [ ],
+          "toolContext" : ""
+        }
+      }, {
+        "callId" : "4zZGiXGIRsW0AYA1eS8Ew9lE7OhhyaU7",
+        "capabilityId" : "mcp:compare-mcp-server:compareListings",
+        "status" : "COMPLETED",
+        "result" : "{\"serverName\":\"compare-mcp-server\",\"toolName\":\"compareListings\",\"text\":\"101总价280万，102总价295万，均两居，101总价较低。\",\"payload\":{\"source\":\"evaluation-fixture\",\"listingIds\":[101,102],\"lowerPriceListingId\":101}}",
+        "toolContext" : {
+          "usedTool" : false,
+          "firstToolName" : null,
+          "firstToolQuery" : null,
+          "topK" : null,
+          "milvusResults" : [ ],
+          "toolContext" : ""
+        }
+      }, {
+        "callId" : "AEtxli13HSvsE5vAGWWfaFAKkYsD3CVL",
+        "capabilityId" : "a2a:marketing-agent",
+        "status" : "COMPLETED",
+        "result" : "{\"sessionId\":\"eval-session\",\"taskId\":\"call-976ce8abf4986e19a28670e8dc002e330ea519e050a0cb0459110c95b3ca919a\",\"agentId\":\"marketing-agent\",\"status\":\"COMPLETED\",\"structuredOutput\":{\"contentType\":\"copy_draft\",\"platform\":\"小红书\",\"listingId\":101,\"draftText\":\"浦东两居，总价280万，适合首次置业家庭。具体信息以核验为准。\",\"published\":false,\"source\":\"evaluation-fixture\"},\"artifactIds\":[],\"nextHints\":[],\"summary\":\"fixture result\",\"traceId\":\"eval-explicit-full-1-f9ed1e3b-d7e7-49be-8828-70498a3b7107\"}",
+        "toolContext" : {
+          "usedTool" : false,
+          "firstToolName" : null,
+          "firstToolQuery" : null,
+          "topK" : null,
+          "milvusResults" : [ ],
+          "toolContext" : ""
+        }
+      } ]
+    },
+    "effects" : [ {
+      "arguments" : {
+        "instruction" : "在上海市浦东新区，预算300万以内，寻找两居室的房源，提供真实房源详情和来源。",
+        "context" : {
+          "budget" : 3000000,
+          "purpose" : "首次置业家庭",
+          "region" : "上海浦东",
+          "room_type" : "两居",
+          "userId" : "1",
+          "parentSkill" : {
+            "contentHash" : "4a28c72bc2414a9e34046b5a1bef4166883ae101d672bbd1123dfbaae2121bb9",
+            "version" : "1",
+            "name" : "listing-compare-marketing-draft",
+            "owner" : "supervisor"
+          }
+        },
+        "skillSelection" : null
+      },
+      "capabilityId" : "a2a:listing-agent"
+    }, {
+      "arguments" : {
+        "listingIds" : "101,102"
+      },
+      "capabilityId" : "mcp:compare-mcp-server:compareListings"
+    }, {
+      "arguments" : {
+        "instruction" : "为首次置业家庭撰写小红书风格的营销草稿，内容需突出性价比、地理位置和适合家庭居住的特点。选中总价较低的房源（ID: 101，总价280万），对比信息已明确。草稿需包含contentType=copy_draft、draftText、platform、listingId和事实来源，仅写草稿不发布。",
+        "context" : {
+          "comparisonResult" : "101总价280万，102总价295万，均两居，101总价较低。",
+          "platform" : "小红书",
+          "selectedListingId" : 101,
+          "source" : "evaluation-fixture",
+          "userId" : "1",
+          "parentSkill" : {
+            "contentHash" : "4a28c72bc2414a9e34046b5a1bef4166883ae101d672bbd1123dfbaae2121bb9",
+            "version" : "1",
+            "name" : "listing-compare-marketing-draft",
+            "owner" : "supervisor"
+          }
+        },
+        "skillSelection" : null
+      },
+      "capabilityId" : "a2a:marketing-agent"
+    } ],
+    "turns" : [ {
+      "latencyMs" : 1405,
+      "promptTokens" : 2656,
+      "completionTokens" : 38,
+      "text" : "",
+      "toolCalls" : [ {
+        "id" : "1OOJ6aCGuAV43QBUp3L1dlZyJSq0bMqV",
+        "type" : "function",
+        "name" : "skill",
+        "arguments" : "{\"name\":\"listing-compare-marketing-draft\",\"task\":\"找房、对比与营销草稿\"}"
+      } ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    }, {
+      "latencyMs" : 1797,
+      "promptTokens" : 3211,
+      "completionTokens" : 105,
+      "text" : "",
+      "toolCalls" : [ {
+        "id" : "QJaGJipPhOXBh1DzuhV5niAWW1fucZVS",
+        "type" : "function",
+        "name" : "a2a_79ff4f507f4829e8b1bbc9ce",
+        "arguments" : "{\"instruction\":\"在上海市浦东新区，预算300万以内，寻找两居室的房源，提供真实房源详情和来源。\",\"context\":{\"budget\":3000000,\"purpose\":\"首次置业家庭\",\"region\":\"上海浦东\",\"room_type\":\"两居\"}}"
+      } ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    }, {
+      "latencyMs" : 807,
+      "promptTokens" : 3525,
+      "completionTokens" : 49,
+      "text" : "",
+      "toolCalls" : [ {
+        "id" : "4zZGiXGIRsW0AYA1eS8Ew9lE7OhhyaU7",
+        "type" : "function",
+        "name" : "mcp_22a806496149ee8bf1e81ae4",
+        "arguments" : "{\"listingIds\":\"101,102\"}"
+      } ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    }, {
+      "latencyMs" : 2603,
+      "promptTokens" : 3661,
+      "completionTokens" : 183,
+      "text" : "",
+      "toolCalls" : [ {
+        "id" : "AEtxli13HSvsE5vAGWWfaFAKkYsD3CVL",
+        "type" : "function",
+        "name" : "a2a_31c2fc59eeeef7a4203e0270",
+        "arguments" : "{\"instruction\":\"为首次置业家庭撰写小红书风格的营销草稿，内容需突出性价比、地理位置和适合家庭居住的特点。选中总价较低的房源（ID: 101，总价280万），对比信息已明确。草稿需包含contentType=copy_draft、draftText、platform、listingId和事实来源，仅写草稿不发布。\",\"context\":{\"comparisonResult\":\"101总价280万，102总价295万，均两居，101总价较低。\",\"platform\":\"小红书\",\"selectedListingId\":101,\"source\":\"evaluation-fixture\"}}"
+      } ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    }, {
+      "latencyMs" : 2882,
+      "promptTokens" : 4049,
+      "completionTokens" : 197,
+      "text" : "已根据您的需求完成对比与草稿撰写：\n\n**候选房源对比：**  \n- 房源101：浦东两居，总价280万  \n- 房源102：浦东两居，总价295万  \n根据总价对比，**房源101（总价280万）为更优选择**，符合预算且性价比更高。\n\n**小红书营销草稿（仅草稿，未发布）：**  \n- **平台**：小红书  \n- **房源ID**：101  \n- **草稿内容**：浦东两居，总价280万，适合首次置业家庭。具体信息以核验为准。  \n- **事实来源**：evaluation-fixture  \n\n此草稿已基于真实房源数据与对比结果生成，专为首次置业家庭设计，突出性价比与地理位置优势。如需进一步调整或补充信息，请随时告知。",
+      "toolCalls" : [ ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    } ],
+    "elapsedMs" : 9598
+  }, {
+    "case" : "explicit-full-2",
+    "request" : "预算300万，在上海浦东找两套两居房对比。根据实际对比选总价较低的一套，为首次置业家庭写小红书草稿，只写草稿不发布。",
+    "runId" : "eval-explicit-full-2-ecff338f-7ddb-40d2-bb64-a5eac061a631",
+    "initialStatus" : "COMPLETED",
+    "initialAnswer" : "已根据您的需求完成找房、对比与营销草稿撰写：\n\n**候选房源对比：**  \n- 房源101：浦东两居，总价280万  \n- 房源102：浦东两居，总价295万  \n✅ 选中总价较低的房源（ID: 101，总价280万）作为推荐。\n\n**小红书营销草稿（仅草稿，未发布）：**  \n\uD83D\uDCCC 平台：小红书  \n\uD83D\uDCCC 房源ID：101  \n\uD83D\uDCCC 草稿内容：  \n“浦东两居，总价280万，适合首次置业家庭。具体信息以核验为准。”  \n\n\uD83D\uDCCC 事实来源：evaluation-fixture  \n\n此草稿基于真实房源数据与对比结果生成，内容真实、简洁，符合首次置业家庭的决策需求。如需进一步调整或补充，请随时告知。",
+    "initialEffects" : [ {
+      "arguments" : {
+        "instruction" : "在上海市浦东新区，预算300万以内，寻找两居室的房源，提供真实房源详情和来源。",
+        "context" : {
+          "budget" : 3000000,
+          "purpose" : "首次置业家庭",
+          "region" : "上海浦东",
+          "room_type" : "两居",
+          "userId" : "1",
+          "parentSkill" : {
+            "contentHash" : "4a28c72bc2414a9e34046b5a1bef4166883ae101d672bbd1123dfbaae2121bb9",
+            "version" : "1",
+            "name" : "listing-compare-marketing-draft",
+            "owner" : "supervisor"
+          }
+        },
+        "skillSelection" : null
+      },
+      "capabilityId" : "a2a:listing-agent"
+    }, {
+      "arguments" : {
+        "listingIds" : "101,102"
+      },
+      "capabilityId" : "mcp:compare-mcp-server:compareListings"
+    }, {
+      "arguments" : {
+        "instruction" : "为首次置业家庭撰写小红书风格的营销草稿，内容需真实、简洁、有温度，突出房源性价比和浦东区位优势。选中总价较低的房源（ID: 101，总价280万），对比信息已明确。输出格式为 contentType=copy_draft，包含 draftText、platform、listingId 和事实来源。",
+        "context" : {
+          "comparisonResult" : "101总价280万，102总价295万，均两居，101总价较低。",
+          "platform" : "小红书",
+          "selectedListingId" : 101,
+          "source" : "evaluation-fixture",
+          "userId" : "1",
+          "parentSkill" : {
+            "contentHash" : "4a28c72bc2414a9e34046b5a1bef4166883ae101d672bbd1123dfbaae2121bb9",
+            "version" : "1",
+            "name" : "listing-compare-marketing-draft",
+            "owner" : "supervisor"
+          }
+        },
+        "skillSelection" : null
+      },
+      "capabilityId" : "a2a:marketing-agent"
+    } ],
+    "continuation" : null,
+    "status" : "COMPLETED",
+    "finalAnswer" : "已根据您的需求完成找房、对比与营销草稿撰写：\n\n**候选房源对比：**  \n- 房源101：浦东两居，总价280万  \n- 房源102：浦东两居，总价295万  \n✅ 选中总价较低的房源（ID: 101，总价280万）作为推荐。\n\n**小红书营销草稿（仅草稿，未发布）：**  \n\uD83D\uDCCC 平台：小红书  \n\uD83D\uDCCC 房源ID：101  \n\uD83D\uDCCC 草稿内容：  \n“浦东两居，总价280万，适合首次置业家庭。具体信息以核验为准。”  \n\n\uD83D\uDCCC 事实来源：evaluation-fixture  \n\n此草稿基于真实房源数据与对比结果生成，内容真实、简洁，符合首次置业家庭的决策需求。如需进一步调整或补充，请随时告知。",
+    "metadata" : {
+      "toolCalls" : 4,
+      "skill" : {
+        "contentHash" : "4a28c72bc2414a9e34046b5a1bef4166883ae101d672bbd1123dfbaae2121bb9",
+        "version" : "1",
+        "name" : "listing-compare-marketing-draft",
+        "source" : "EXPLICIT"
+      },
+      "runnerVersion" : "llm-tools-v1",
+      "mode" : "EXPLICIT_SKILL",
+      "rounds" : 5,
+      "runId" : "eval-explicit-full-2-ecff338f-7ddb-40d2-bb64-a5eac061a631",
+      "calls" : [ {
+        "callId" : "KzTMyNhab75AlJKFV9e7Vjnp15u2PeeT",
+        "capabilityId" : "control:skill",
+        "status" : "COMPLETED",
+        "result" : "{\"snapshot\":{\"definition\":{\"name\":\"listing-compare-marketing-draft\",\"description\":\"按真实找房结果进行房源对比，再形成营销草稿；仅接受本次请求显式指定\",\"domain\":\"supervisor\",\"triggerKeywords\":[],\"tools\":[],\"systemPrompt\":\"# 找房、对比与营销草稿\\n\\n先理解原始请求中的地区、预算、户型、营销平台和选择偏好。有冲突先说明；缺少关键条件时单独调用 request_input，不编造地址、房源 ID、平台或用户选择。技能是模型执行指引，平台不校验本文的业务顺序。\\n\\n通过 a2a:listing-agent 查询候选房源。instruction 写清自然语言条件，context 保留已确认的结构化条件；需要其本地找房流程时，通过实际 Card 发布映射显式选择 listing-search（版本以目录为准）。父技能名称不能当成子技能名称。只保留实际响应中的 listingIds、详情与来源；检索不到就如实停止或向用户补充条件。\\n\\n至少取得两套真实候选后，通过 mcp:compare-mcp-server:compareListings 对比。实际参数 listingIds 是逗号分隔的字符串，例如把上一步真实 ID 数组转换为字符串；示例数字不是默认输入。等待实际对比结果后再决定要介绍哪套房源。候选不足或用户尚未选择时先询问，不生成虚构比较。\\n\\n通过 a2a:marketing-agent 形成草稿，显式选择其 Card 发布的 marketing-draft 技能；context 传入已确认的平台、真实选中房源及比较结果，instruction 要求输出 contentType=copy_draft、draftText、platform、listingId 和事实来源。此子技能只提供读取既有内容的能力；不创建发布任务，也不调用 publishContent。缺少营销平台或待推广房源时先通过 request_input 询问用户。\\n\\n最终给出候选、比较依据和草稿，区分真实结果与文案建议；状态必须表示草稿，不能声称已发布。正文中的依赖由模型遵循，平台仅校验实际工具范围、参数、身份、权限、预算和审批。\",\"priority\":5,\"supervisorSkill\":false,\"owner\":\"supervisor\",\"version\":\"1\",\"capabilities\":{\"policy\":\"allowlist\",\"refs\":[\"a2a:listing-agent\",\"mcp:compare-mcp-server:compareListings\",\"a2a:marketing-agent\"]},\"explicitOnly\":true},\"contentHash\":\"4a28c72bc2414a9e34046b5a1bef4166883ae101d672bbd1123dfbaae2121bb9\",\"capabilityIds\":[\"a2a:listing-agent\",\"a2a:marketing-agent\",\"mcp:compare-mcp-server:compareListings\"],\"source\":\"EXPLICIT\"},\"result\":\"技能已加载: listing-compare-marketing-draft / 1\\n# 找房、对比与营销草稿\\n\\n先理解原始请求中的地区、预算、户型、营销平台和选择偏好。有冲突先说明；缺少关键条件时单独调用 request_input，不编造地址、房源 ID、平台或用户选择。技能是模型执行指引，平台不校验本文的业务顺序。\\n\\n通过 a2a:listing-agent 查询候选房源。instruction 写清自然语言条件，context 保留已确认的结构化条件；需要其本地找房流程时，通过实际 Card 发布映射显式选择 listing-search（版本以目录为准）。父技能名称不能当成子技能名称。只保留实际响应中的 listingIds、详情与来源；检索不到就如实停止或向用户补充条件。\\n\\n至少取得两套真实候选后，通过 mcp:compare-mcp-server:compareListings 对比。实际参数 listingIds 是逗号分隔的字符串，例如把上一步真实 ID 数组转换为字符串；示例数字不是默认输入。等待实际对比结果后再决定要介绍哪套房源。候选不足或用户尚未选择时先询问，不生成虚构比较。\\n\\n通过 a2a:marketing-agent 形成草稿，显式选择其 Card 发布的 marketing-draft 技能；context 传入已确认的平台、真实选中房源及比较结果，instruction 要求输出 contentType=copy_draft、draftText、platform、listingId 和事实来源。此子技能只提供读取既有内容的能力；不创建发布任务，也不调用 publishContent。缺少营销平台或待推广房源时先通过 request_input 询问用户。\\n\\n最终给出候选、比较依据和草稿，区分真实结果与文案建议；状态必须表示草稿，不能声称已发布。正文中的依赖由模型遵循，平台仅校验实际工具范围、参数、身份、权限、预算和审批。\\n原始请求: 预算300万，在上海浦东找两套两居房对比。根据实际对比选总价较低的一套，为首次置业家庭写小红书草稿，只写草稿不发布。\\n本次技能任务: 找房、对比与营销草稿\\n能力范围: [a2a:listing-agent, a2a:marketing-agent, mcp:compare-mcp-server:compareListings]\"}"
+      }, {
+        "callId" : "dvyuA4oiMfGqk4Yj7aZ2bRtJldYPHHqa",
+        "capabilityId" : "a2a:listing-agent",
+        "status" : "COMPLETED",
+        "result" : "{\"sessionId\":\"eval-session\",\"taskId\":\"call-99d5027b9b79be9545751fec21c711c9ff7622b0afe1df9f5d8c12abe3590795\",\"agentId\":\"listing-agent\",\"status\":\"COMPLETED\",\"structuredOutput\":{\"listingIds\":[101,102],\"listings\":[{\"id\":101,\"district\":\"浦东\",\"rooms\":2,\"priceWan\":280},{\"id\":102,\"district\":\"浦东\",\"rooms\":2,\"priceWan\":295}],\"source\":\"evaluation-fixture\"},\"artifactIds\":[],\"nextHints\":[],\"summary\":\"fixture result\",\"traceId\":\"eval-explicit-full-2-ecff338f-7ddb-40d2-bb64-a5eac061a631\"}",
+        "toolContext" : {
+          "usedTool" : false,
+          "firstToolName" : null,
+          "firstToolQuery" : null,
+          "topK" : null,
+          "milvusResults" : [ ],
+          "toolContext" : ""
+        }
+      }, {
+        "callId" : "cVcDxJbGn5zxr8y1V0WGc5bjmEnLf8wg",
+        "capabilityId" : "mcp:compare-mcp-server:compareListings",
+        "status" : "COMPLETED",
+        "result" : "{\"serverName\":\"compare-mcp-server\",\"toolName\":\"compareListings\",\"text\":\"101总价280万，102总价295万，均两居，101总价较低。\",\"payload\":{\"source\":\"evaluation-fixture\",\"listingIds\":[101,102],\"lowerPriceListingId\":101}}",
+        "toolContext" : {
+          "usedTool" : false,
+          "firstToolName" : null,
+          "firstToolQuery" : null,
+          "topK" : null,
+          "milvusResults" : [ ],
+          "toolContext" : ""
+        }
+      }, {
+        "callId" : "PFCieT3jQP0JNLEupiD2oeHSugfglSBO",
+        "capabilityId" : "a2a:marketing-agent",
+        "status" : "COMPLETED",
+        "result" : "{\"sessionId\":\"eval-session\",\"taskId\":\"call-5bd8f87995be01834ff3c234561968ed462da4e950b324d12861323f6ea037a1\",\"agentId\":\"marketing-agent\",\"status\":\"COMPLETED\",\"structuredOutput\":{\"contentType\":\"copy_draft\",\"platform\":\"小红书\",\"listingId\":101,\"draftText\":\"浦东两居，总价280万，适合首次置业家庭。具体信息以核验为准。\",\"published\":false,\"source\":\"evaluation-fixture\"},\"artifactIds\":[],\"nextHints\":[],\"summary\":\"fixture result\",\"traceId\":\"eval-explicit-full-2-ecff338f-7ddb-40d2-bb64-a5eac061a631\"}",
+        "toolContext" : {
+          "usedTool" : false,
+          "firstToolName" : null,
+          "firstToolQuery" : null,
+          "topK" : null,
+          "milvusResults" : [ ],
+          "toolContext" : ""
+        }
+      } ]
+    },
+    "effects" : [ {
+      "arguments" : {
+        "instruction" : "在上海市浦东新区，预算300万以内，寻找两居室的房源，提供真实房源详情和来源。",
+        "context" : {
+          "budget" : 3000000,
+          "purpose" : "首次置业家庭",
+          "region" : "上海浦东",
+          "room_type" : "两居",
+          "userId" : "1",
+          "parentSkill" : {
+            "contentHash" : "4a28c72bc2414a9e34046b5a1bef4166883ae101d672bbd1123dfbaae2121bb9",
+            "version" : "1",
+            "name" : "listing-compare-marketing-draft",
+            "owner" : "supervisor"
+          }
+        },
+        "skillSelection" : null
+      },
+      "capabilityId" : "a2a:listing-agent"
+    }, {
+      "arguments" : {
+        "listingIds" : "101,102"
+      },
+      "capabilityId" : "mcp:compare-mcp-server:compareListings"
+    }, {
+      "arguments" : {
+        "instruction" : "为首次置业家庭撰写小红书风格的营销草稿，内容需真实、简洁、有温度，突出房源性价比和浦东区位优势。选中总价较低的房源（ID: 101，总价280万），对比信息已明确。输出格式为 contentType=copy_draft，包含 draftText、platform、listingId 和事实来源。",
+        "context" : {
+          "comparisonResult" : "101总价280万，102总价295万，均两居，101总价较低。",
+          "platform" : "小红书",
+          "selectedListingId" : 101,
+          "source" : "evaluation-fixture",
+          "userId" : "1",
+          "parentSkill" : {
+            "contentHash" : "4a28c72bc2414a9e34046b5a1bef4166883ae101d672bbd1123dfbaae2121bb9",
+            "version" : "1",
+            "name" : "listing-compare-marketing-draft",
+            "owner" : "supervisor"
+          }
+        },
+        "skillSelection" : null
+      },
+      "capabilityId" : "a2a:marketing-agent"
+    } ],
+    "turns" : [ {
+      "latencyMs" : 530,
+      "promptTokens" : 2656,
+      "completionTokens" : 38,
+      "text" : "",
+      "toolCalls" : [ {
+        "id" : "KzTMyNhab75AlJKFV9e7Vjnp15u2PeeT",
+        "type" : "function",
+        "name" : "skill",
+        "arguments" : "{\"name\":\"listing-compare-marketing-draft\",\"task\":\"找房、对比与营销草稿\"}"
+      } ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    }, {
+      "latencyMs" : 1673,
+      "promptTokens" : 3211,
+      "completionTokens" : 105,
+      "text" : "",
+      "toolCalls" : [ {
+        "id" : "dvyuA4oiMfGqk4Yj7aZ2bRtJldYPHHqa",
+        "type" : "function",
+        "name" : "a2a_79ff4f507f4829e8b1bbc9ce",
+        "arguments" : "{\"instruction\":\"在上海市浦东新区，预算300万以内，寻找两居室的房源，提供真实房源详情和来源。\",\"context\":{\"budget\":3000000,\"purpose\":\"首次置业家庭\",\"region\":\"上海浦东\",\"room_type\":\"两居\"}}"
+      } ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    }, {
+      "latencyMs" : 781,
+      "promptTokens" : 3526,
+      "completionTokens" : 49,
+      "text" : "",
+      "toolCalls" : [ {
+        "id" : "cVcDxJbGn5zxr8y1V0WGc5bjmEnLf8wg",
+        "type" : "function",
+        "name" : "mcp_22a806496149ee8bf1e81ae4",
+        "arguments" : "{\"listingIds\":\"101,102\"}"
+      } ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    }, {
+      "latencyMs" : 2669,
+      "promptTokens" : 3662,
+      "completionTokens" : 182,
+      "text" : "",
+      "toolCalls" : [ {
+        "id" : "PFCieT3jQP0JNLEupiD2oeHSugfglSBO",
+        "type" : "function",
+        "name" : "a2a_31c2fc59eeeef7a4203e0270",
+        "arguments" : "{\"instruction\":\"为首次置业家庭撰写小红书风格的营销草稿，内容需真实、简洁、有温度，突出房源性价比和浦东区位优势。选中总价较低的房源（ID: 101，总价280万），对比信息已明确。输出格式为 contentType=copy_draft，包含 draftText、platform、listingId 和事实来源。\",\"context\":{\"comparisonResult\":\"101总价280万，102总价295万，均两居，101总价较低。\",\"platform\":\"小红书\",\"selectedListingId\":101,\"source\":\"evaluation-fixture\"}}"
+      } ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    }, {
+      "latencyMs" : 2945,
+      "promptTokens" : 4046,
+      "completionTokens" : 197,
+      "text" : "已根据您的需求完成找房、对比与营销草稿撰写：\n\n**候选房源对比：**  \n- 房源101：浦东两居，总价280万  \n- 房源102：浦东两居，总价295万  \n✅ 选中总价较低的房源（ID: 101，总价280万）作为推荐。\n\n**小红书营销草稿（仅草稿，未发布）：**  \n\uD83D\uDCCC 平台：小红书  \n\uD83D\uDCCC 房源ID：101  \n\uD83D\uDCCC 草稿内容：  \n“浦东两居，总价280万，适合首次置业家庭。具体信息以核验为准。”  \n\n\uD83D\uDCCC 事实来源：evaluation-fixture  \n\n此草稿基于真实房源数据与对比结果生成，内容真实、简洁，符合首次置业家庭的决策需求。如需进一步调整或补充，请随时告知。",
+      "toolCalls" : [ ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    } ],
+    "elapsedMs" : 8681
+  }, {
+    "case" : "explicit-missing",
+    "request" : "帮我找两套房对比，然后写推广草稿。",
+    "runId" : "eval-explicit-missing-79d98519-0238-4ba0-ac64-6e33b58fbc40",
+    "initialStatus" : "WAITING_USER_INPUT",
+    "initialAnswer" : "您希望在哪个城市或区域找房？预算范围是多少？户型需求（如一室一厅、两室两厅）是什么？您希望推广的平台是哪个（如贝壳、链家、小红书）？",
+    "initialEffects" : [ ],
+    "continuation" : "预算300万，上海浦东，两居，小红书，选实际对比中总价较低的一套。",
+    "status" : "COMPLETED",
+    "finalAnswer" : "已为您完成找房、对比和推广草稿撰写，具体如下：\n\n### 房源对比结果\n- **房源101**：浦东新区，两居室，总价 **280万**  \n- **房源102**：浦东新区，两居室，总价 **295万**  \n✅ 选择总价较低的房源101作为推荐对象。\n\n### 推广草稿（小红书平台）\n**标题**：浦东两居，总价280万，适合首次置业家庭  \n**正文**：浦东两居，总价280万，适合首次置业家庭。具体信息以核验为准。  \n\n\uD83D\uDCCC 该草稿已基于真实房源数据和对比结果生成，适用于小红书平台，风格简洁、突出性价比，吸引首次置业家庭关注。\n\n> 注：此为推广草稿，尚未发布，需人工审核后方可发布。",
+    "metadata" : {
+      "toolCalls" : 6,
+      "skill" : {
+        "contentHash" : "4a28c72bc2414a9e34046b5a1bef4166883ae101d672bbd1123dfbaae2121bb9",
+        "version" : "1",
+        "name" : "listing-compare-marketing-draft",
+        "source" : "EXPLICIT"
+      },
+      "runnerVersion" : "llm-tools-v1",
+      "mode" : "EXPLICIT_SKILL",
+      "rounds" : 7,
+      "runId" : "eval-explicit-missing-79d98519-0238-4ba0-ac64-6e33b58fbc40",
+      "calls" : [ {
+        "callId" : "H3L9cbwcgmXGc8Q2llXRGJeg0ZtbkmzZ",
+        "capabilityId" : "control:request_input",
+        "status" : "COMPLETED",
+        "result" : "{\"status\":\"WAITING_USER_INPUT\",\"missingFields\":[\"地区\",\"预算\",\"户型\",\"营销平台\"],\"question\":\"您希望在哪个城市或区域找房？预算范围是多少？户型需求（如一室一厅、两室两厅）是什么？您希望推广的平台是哪个（如贝壳、链家、小红书）？\"}"
+      }, {
+        "callId" : "hdRmue6DV7V1KgdpTwDvDxKR5cz40rV6",
+        "capabilityId" : "control:skill",
+        "status" : "COMPLETED",
+        "result" : "{\"result\":\"SKILL_SELECTION_LOCKED: explicit skill cannot be replaced\"}"
+      }, {
+        "callId" : "ImCghM3CJFgnEhqYvqdgxLgD8V8RzdPr",
+        "capabilityId" : "a2a:listing-agent",
+        "status" : "COMPLETED",
+        "result" : "{\"sessionId\":\"eval-session\",\"taskId\":\"call-4d8bd21814c15e0760cb9043163dc47b74dd8ecfe3fca4aaa56ea7b888ac3543\",\"agentId\":\"listing-agent\",\"status\":\"COMPLETED\",\"structuredOutput\":{\"listingIds\":[101,102],\"listings\":[{\"id\":101,\"district\":\"浦东\",\"rooms\":2,\"priceWan\":280},{\"id\":102,\"district\":\"浦东\",\"rooms\":2,\"priceWan\":295}],\"source\":\"evaluation-fixture\"},\"artifactIds\":[],\"nextHints\":[],\"summary\":\"fixture result\",\"traceId\":\"eval-explicit-missing-79d98519-0238-4ba0-ac64-6e33b58fbc40\"}",
+        "toolContext" : {
+          "usedTool" : false,
+          "firstToolName" : null,
+          "firstToolQuery" : null,
+          "topK" : null,
+          "milvusResults" : [ ],
+          "toolContext" : ""
+        }
+      }, {
+        "callId" : "AJTWVXZiQJ3YipH33bkjORr7rIxWbZnI",
+        "capabilityId" : "mcp:compare-mcp-server:compareListings",
+        "status" : "COMPLETED",
+        "result" : "{\"serverName\":\"compare-mcp-server\",\"toolName\":\"compareListings\",\"text\":\"101总价280万，102总价295万，均两居，101总价较低。\",\"payload\":{\"source\":\"evaluation-fixture\",\"listingIds\":[101,102],\"lowerPriceListingId\":101}}",
+        "toolContext" : {
+          "usedTool" : false,
+          "firstToolName" : null,
+          "firstToolQuery" : null,
+          "topK" : null,
+          "milvusResults" : [ ],
+          "toolContext" : ""
+        }
+      }, {
+        "callId" : "hxfqGbiSGLtC2LPxvPxFFKCdAlO5TgpT",
+        "capabilityId" : "control:skill",
+        "status" : "COMPLETED",
+        "result" : "{\"result\":\"SKILL_SELECTION_LOCKED: explicit skill cannot be replaced\"}"
+      }, {
+        "callId" : "FYhafRo6iia8Lo5vtYuXxQRTVmV3mFTj",
+        "capabilityId" : "a2a:marketing-agent",
+        "status" : "COMPLETED",
+        "result" : "{\"sessionId\":\"eval-session\",\"taskId\":\"call-1835550d893db23197977e179f543aa43937974f34e454522adfb165eca4f9bb\",\"agentId\":\"marketing-agent\",\"status\":\"COMPLETED\",\"structuredOutput\":{\"contentType\":\"copy_draft\",\"platform\":\"小红书\",\"listingId\":101,\"draftText\":\"浦东两居，总价280万，适合首次置业家庭。具体信息以核验为准。\",\"published\":false,\"source\":\"evaluation-fixture\"},\"artifactIds\":[],\"nextHints\":[],\"summary\":\"fixture result\",\"traceId\":\"eval-explicit-missing-79d98519-0238-4ba0-ac64-6e33b58fbc40\"}",
+        "toolContext" : {
+          "usedTool" : false,
+          "firstToolName" : null,
+          "firstToolQuery" : null,
+          "topK" : null,
+          "milvusResults" : [ ],
+          "toolContext" : ""
+        }
+      } ]
+    },
+    "effects" : [ {
+      "arguments" : {
+        "instruction" : "在上海市浦东新区，预算300万以内，寻找两居室的房源，返回候选房源的ID、详情和来源。",
+        "context" : {
+          "budget" : 300,
+          "region" : "上海市浦东新区",
+          "roomType" : "两居",
+          "userId" : "1",
+          "parentSkill" : {
+            "contentHash" : "4a28c72bc2414a9e34046b5a1bef4166883ae101d672bbd1123dfbaae2121bb9",
+            "version" : "1",
+            "name" : "listing-compare-marketing-draft",
+            "owner" : "supervisor"
+          }
+        },
+        "skillSelection" : {
+          "name" : "listing-search",
+          "version" : "1",
+          "contentHash" : "evaluation-fixture-hash",
+          "owner" : "listing"
+        }
+      },
+      "capabilityId" : "a2a:listing-agent"
+    }, {
+      "arguments" : {
+        "listingIds" : "101,102"
+      },
+      "capabilityId" : "mcp:compare-mcp-server:compareListings"
+    }, {
+      "arguments" : {
+        "instruction" : "为上海浦东新区一套总价280万、两居室的房源撰写小红书平台的推广草稿。推广内容需包含房源亮点、价格优势和适合人群，风格简洁、吸引人，适合小红书用户阅读。",
+        "context" : {
+          "comparisonResult" : "101总价280万，102总价295万，均两居，101总价较低。",
+          "listingId" : 101,
+          "platform" : "小红书",
+          "source" : "evaluation-fixture",
+          "userId" : "1",
+          "parentSkill" : {
+            "contentHash" : "4a28c72bc2414a9e34046b5a1bef4166883ae101d672bbd1123dfbaae2121bb9",
+            "version" : "1",
+            "name" : "listing-compare-marketing-draft",
+            "owner" : "supervisor"
+          }
+        },
+        "skillSelection" : {
+          "name" : "marketing-draft",
+          "version" : "1",
+          "contentHash" : "evaluation-fixture-hash",
+          "owner" : "marketing"
+        }
+      },
+      "capabilityId" : "a2a:marketing-agent"
+    } ],
+    "turns" : [ {
+      "latencyMs" : 2348,
+      "promptTokens" : 2594,
+      "completionTokens" : 86,
+      "text" : "",
+      "toolCalls" : [ {
+        "id" : "H3L9cbwcgmXGc8Q2llXRGJeg0ZtbkmzZ",
+        "type" : "function",
+        "name" : "request_input",
+        "arguments" : "{\"question\":\"您希望在哪个城市或区域找房？预算范围是多少？户型需求（如一室一厅、两室两厅）是什么？您希望推广的平台是哪个（如贝壳、链家、小红书）？\",\"missingFields\":[\"地区\",\"预算\",\"户型\",\"营销平台\"]}"
+      } ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    }, {
+      "latencyMs" : 831,
+      "promptTokens" : 2794,
+      "completionTokens" : 55,
+      "text" : "",
+      "toolCalls" : [ {
+        "id" : "hdRmue6DV7V1KgdpTwDvDxKR5cz40rV6",
+        "type" : "function",
+        "name" : "skill",
+        "arguments" : "{\"name\":\"a2a_79ff4f507f4829e8b1bbc9ce\",\"task\":\"找房\",\"version\":\"1\"}"
+      } ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    }, {
+      "latencyMs" : 1577,
+      "promptTokens" : 2873,
+      "completionTokens" : 113,
+      "text" : "",
+      "toolCalls" : [ {
+        "id" : "ImCghM3CJFgnEhqYvqdgxLgD8V8RzdPr",
+        "type" : "function",
+        "name" : "a2a_79ff4f507f4829e8b1bbc9ce",
+        "arguments" : "{\"instruction\":\"在上海市浦东新区，预算300万以内，寻找两居室的房源，返回候选房源的ID、详情和来源。\",\"context\":{\"budget\":300,\"region\":\"上海市浦东新区\",\"roomType\":\"两居\"},\"skill\":{\"name\":\"listing-search\",\"version\":\"1\"}}"
+      } ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    }, {
+      "latencyMs" : 768,
+      "promptTokens" : 3196,
+      "completionTokens" : 49,
+      "text" : "",
+      "toolCalls" : [ {
+        "id" : "AJTWVXZiQJ3YipH33bkjORr7rIxWbZnI",
+        "type" : "function",
+        "name" : "mcp_22a806496149ee8bf1e81ae4",
+        "arguments" : "{\"listingIds\":\"101,102\"}"
+      } ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    }, {
+      "latencyMs" : 843,
+      "promptTokens" : 3332,
+      "completionTokens" : 57,
+      "text" : "",
+      "toolCalls" : [ {
+        "id" : "hxfqGbiSGLtC2LPxvPxFFKCdAlO5TgpT",
+        "type" : "function",
+        "name" : "skill",
+        "arguments" : "{\"name\":\"a2a_31c2fc59eeeef7a4203e0270\",\"task\":\"写推广草稿\",\"version\":\"1\"}"
+      } ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    }, {
+      "latencyMs" : 2431,
+      "promptTokens" : 3413,
+      "completionTokens" : 172,
+      "text" : "",
+      "toolCalls" : [ {
+        "id" : "FYhafRo6iia8Lo5vtYuXxQRTVmV3mFTj",
+        "type" : "function",
+        "name" : "a2a_31c2fc59eeeef7a4203e0270",
+        "arguments" : "{\"instruction\":\"为上海浦东新区一套总价280万、两居室的房源撰写小红书平台的推广草稿。推广内容需包含房源亮点、价格优势和适合人群，风格简洁、吸引人，适合小红书用户阅读。\",\"context\":{\"comparisonResult\":\"101总价280万，102总价295万，均两居，101总价较低。\",\"listingId\":101,\"platform\":\"小红书\",\"source\":\"evaluation-fixture\"},\"skill\":{\"name\":\"marketing-draft\",\"version\":\"1\"}}"
+      } ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    }, {
+      "latencyMs" : 2871,
+      "promptTokens" : 3788,
+      "completionTokens" : 192,
+      "text" : "已为您完成找房、对比和推广草稿撰写，具体如下：\n\n### 房源对比结果\n- **房源101**：浦东新区，两居室，总价 **280万**  \n- **房源102**：浦东新区，两居室，总价 **295万**  \n✅ 选择总价较低的房源101作为推荐对象。\n\n### 推广草稿（小红书平台）\n**标题**：浦东两居，总价280万，适合首次置业家庭  \n**正文**：浦东两居，总价280万，适合首次置业家庭。具体信息以核验为准。  \n\n\uD83D\uDCCC 该草稿已基于真实房源数据和对比结果生成，适用于小红书平台，风格简洁、突出性价比，吸引首次置业家庭关注。\n\n> 注：此为推广草稿，尚未发布，需人工审核后方可发布。",
+      "toolCalls" : [ ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    } ],
+    "elapsedMs" : 11772
+  }, {
+    "case" : "explicit-conflict",
+    "request" : "虽然指定了找房技能，但本次仅问候，请回答你好，不查询房源，也不生成草稿。",
+    "runId" : "eval-explicit-conflict-f00d624e-b36f-4561-bab8-b8f324f433e7",
+    "initialStatus" : "COMPLETED",
+    "initialAnswer" : "你好！",
+    "initialEffects" : [ ],
+    "continuation" : null,
+    "status" : "COMPLETED",
+    "finalAnswer" : "你好！",
+    "metadata" : {
+      "toolCalls" : 0,
+      "skill" : {
+        "contentHash" : "4a28c72bc2414a9e34046b5a1bef4166883ae101d672bbd1123dfbaae2121bb9",
+        "version" : "1",
+        "name" : "listing-compare-marketing-draft",
+        "source" : "EXPLICIT"
+      },
+      "runnerVersion" : "llm-tools-v1",
+      "mode" : "EXPLICIT_SKILL",
+      "rounds" : 1,
+      "runId" : "eval-explicit-conflict-f00d624e-b36f-4561-bab8-b8f324f433e7",
+      "calls" : [ ]
+    },
+    "effects" : [ ],
+    "turns" : [ {
+      "latencyMs" : 1071,
+      "promptTokens" : 2618,
+      "completionTokens" : 3,
+      "text" : "你好！",
+      "toolCalls" : [ ],
+      "modelReported" : "qwen3:4b-instruct-2507-q4_K_M"
+    } ],
+    "elapsedMs" : 1082
+  } ],
+  "temperature" : 0,
+  "modelRequested" : "qwen3:4b-instruct-2507-q4_K_M",
+  "runnerVersion" : "llm-tools-v1",
+  "maxRounds" : 12,
+  "maxToolCalls" : 24,
+  "businessData" : "deterministic fixtures; real model decisions"
+}

@@ -250,3 +250,13 @@
 **代码位置**：`DefaultOfficialSupervisorGraphFacade`、`OfficialSupervisorGraphFactory`；真实 MySQL `LegacyRunnerDockerRecoveryTest`。
 
 **关联**：LR-15、LR-22；KI-27。旧远端提交结果未知仍需人工或原协议对账，不能由恢复自动重发。
+
+## LR-27 下游显式身份校验属于调用治理，不是业务步骤规则
+
+**结论**：模型只提出发布目录中的本地 skill name/version；平台在审批和 claim 前验证该身份，不从能力 ID 或父技能猜测。确定的无效身份返回模型纠正，已发送调用才进入未知结果对账语义。
+
+**根因**：JSON schema 只能校验形状，不能确认目标实例的发布映射；把无效身份当作未知副作用会无谓停止执行。此校验只约束目标身份，不判断正文步骤顺序或强制调用某个 Agent。
+
+**代码位置**：`SupervisorCapabilityCatalog.validateArguments`、`SupervisorToolLoopGraph.validateCall/prompt`；目录与 Graph 回归、真实模型评估。
+
+**关联**：LR-17、LR-18、LR-22；KI-28、KI-19。

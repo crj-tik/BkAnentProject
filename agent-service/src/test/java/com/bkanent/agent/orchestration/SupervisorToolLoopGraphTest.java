@@ -47,6 +47,18 @@ class SupervisorToolLoopGraphTest {
     @AfterEach void cleanup() { factory.close(); runner.close(); }
 
     @Test
+    void invalidChildSkillIsRejectedBeforeApprovalAndClaimThenModelCanCorrectIt() {
+        doThrow(new IllegalArgumentException("SKILL_NOT_FOUND")).when(catalog).validateArguments(any(), eq(Map.of("skill", Map.of("name", "invalid"))));
+        when(model.call(anyList(), anyList())).thenReturn(calls(call("invalid", "search", "{\"skill\":{\"name\":\"invalid\"}}")),
+                calls(call("corrected", "search", "{}")), new AssistantMessage("done"));
+        var response = runner.execute(request("child-guard", null, null, "find"));
+        assertThat(response.status()).isEqualTo("COMPLETED");
+        assertThat(store.find("child-guard", "invalid")).isNull();
+        assertThat(store.find("child-guard", "corrected").status()).isEqualTo("COMPLETED");
+        assertThat(effects).hasValue(1);
+    }
+
+    @Test
     void waitingAndActualResultEventsCarryOwnerSkillIdentityAndRemainReplayable() {
         when(skills.getByName("find")).thenReturn(SkillDefinition.builder().name("find").description("find").domain("supervisor")
                 .tools(List.of("search")).systemPrompt("body").build());

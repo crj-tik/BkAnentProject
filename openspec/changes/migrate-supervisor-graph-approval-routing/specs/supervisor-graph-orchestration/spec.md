@@ -6,6 +6,8 @@
 
 ### Requirement: Supervisor tasks SHALL execute through one canonical workflow graph
 
+对于恢复升级前 checkpoint 的旧执行版本，以下要求保留原图的相容语义。新 run 使用 supervisor-tool-orchestration 的通用模型工具循环，不据此建立入口领域计划或技能步骤检查。
+
 Supervisor 的同步任务、工作流任务以及对应的异步执行 SHALL 使用同一套规范化工作流状态和节点转换规则。入口服务可以负责鉴权、限流和提交任务，但不得根据业务状态自行决定单 Agent、并行、审批、handoff 或完成节点。
 
 #### Scenario: Single-agent task is routed by the graph
@@ -28,6 +30,8 @@ Supervisor 的同步任务、工作流任务以及对应的异步执行 SHALL �
 
 ### Requirement: Approval SHALL pause the graph before protected execution
 
+对于恢复升级前 checkpoint 的旧执行版本，以下要求保留原图的相容语义。新 run 使用 supervisor-tool-orchestration 的通用模型工具循环，不据此建立入口领域计划或技能步骤检查。
+
 当计划或系统规则要求人工审批时，Graph SHALL 在受保护的业务节点之前创建审批请求并暂停执行。进入等待状态后，后续 Agent、handoff、发布或完成节点不得执行，审批状态 SHALL 与当前 Graph 线程和任务绑定。
 
 #### Scenario: Workflow enters approval wait state
@@ -44,6 +48,8 @@ Supervisor 的同步任务、工作流任务以及对应的异步执行 SHALL �
 - **AND** SHALL continue to the selected execution node
 
 ### Requirement: Approval decisions SHALL select the next graph transition
+
+对于恢复升级前 checkpoint 的旧执行版本，以下要求保留原图的相容语义。新 run 使用 supervisor-tool-orchestration 的通用模型工具循环，不据此建立入口领域计划或技能步骤检查。
 
 审批回调 SHALL 只通过当前任务关联的 Graph 线程恢复流程。Graph SHALL 根据审批结果和审批动作选择下一节点，而不是由入口 Service 重新拼接流程。
 
@@ -73,6 +79,8 @@ Supervisor 的同步任务、工作流任务以及对应的异步执行 SHALL �
 
 ### Requirement: Graph state SHALL survive process restart and support idempotent resume
 
+对于恢复升级前 checkpoint 的旧执行版本，以下要求保留原图的相容语义。新 run 使用 supervisor-tool-orchestration 的通用模型工具循环，不据此建立入口领域计划或技能步骤检查。
+
 处于运行中、等待审批、重试中或完成转换中的 Graph 状态 SHALL 使用持久化 Checkpointer 保存。`threadId`、`taskId` 和 `sessionId` 的映射 SHALL 稳定且可查询，服务重启或切换实例后可以恢复等待状态。
 
 #### Scenario: Waiting workflow resumes after restart
@@ -88,6 +96,8 @@ Supervisor 的同步任务、工作流任务以及对应的异步执行 SHALL �
 - **AND** SHALL NOT 重复调用 Agent、重复创建 artifact 或重复推进 Graph
 
 ### Requirement: Graph execution SHALL expose observable node transitions
+
+对于恢复升级前 checkpoint 的旧执行版本，以下要求保留原图的相容语义。新 run 使用 supervisor-tool-orchestration 的通用模型工具循环，不据此建立入口领域计划或技能步骤检查。
 
 Graph SHALL 为规划、路由、审批等待、审批恢复、Agent 调用、并行聚合、handoff、失败和完成等关键节点产生可关联的事件或审计信息。每条记录 SHALL 至少能够关联 `taskId`、`traceId`、`sessionId` 和 Graph 节点标识。
 

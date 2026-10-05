@@ -2,7 +2,7 @@
 
 先在目标库依次应用 `sql/migrations/20261004_supervisor_orchestration.sql`、`sql/migrations/20261004_supervisor_run_control.sql`，再发布已支持精确技能 Card 的九服务，最后发布 Supervisor。新增表记录 run 租约、调用事实及技能快照，不含技能业务步骤状态。
 
-新请求与普通 chat 默认使用 `llm-tools-v1`，没有关键词、默认 listing/default intent 或 nextHints/trade 自动交接。已有旧 checkpoint 继续由旧 runner 读取。完整发布演练仍按当前 OpenSpec 清单实施，不能把本文件当作全部任务已经完成的证明。
+新请求与普通 chat 默认使用 `llm-tools-v1`，没有关键词、默认 listing/default intent 或 nextHints/trade 自动交接。已有旧 checkpoint 继续由旧 runner 读取。本机 Nacos 契约/地址滚动升级与新旧 runner 持久化恢复、暂停新接收演练已通过；实际边界见验收记录，生产旧任务排空前保留恢复兼容代码。
 
 请求可选 `skill: {name, version, owner, contentHash}`、`allowMcp`、`continueRunId`。不传 skill 为 AUTO。指定技能在模型前加载，模型仍理解 userMessage。补充输入必须提供新的 requestId 和原 continueRunId，只能续接同 owner 的 WAITING_USER_INPUT；原快照、请求政策与累计预算沿用。同 session 的其他新请求不继承显式技能。
 
