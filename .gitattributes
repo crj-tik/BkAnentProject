@@ -1,0 +1,2 @@
+# Shell 脚本统一 LF 行尾：Linux 部署脚本在 Windows 上编辑时防止 CRLF 混入导致 `\r` 解析失败。
+*.sh text eol=lf
