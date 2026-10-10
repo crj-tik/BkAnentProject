@@ -38,5 +38,28 @@
     "springBootEmbeddingCall": "minimal Spring Boot 3.5.0 + spring-ai 1.1.2 app with identical config keys: embed() returned 1024 dims via real gateway; ChatModel bean list empty (no channel conflict)",
     "tests": "agent-service full suite 129 tests pass (0 failures) after starter addition",
     "yaml": "all 13 nacos/*.yaml parse OK (python yaml in isolated container)"
+  },
+  "supplementaryChatEvaluation": {
+    "reason": "initial screening covered only 6 models (anchored on s2-interviewer production picks, flash-tier latency bias, one representative per family); user challenged coverage - full GLM series, kimi series, and Deepseek-V4-Pro skill routing were missing",
+    "sameHarness": "four gates: tool call / structured JSON (max_tokens 2000) / no tool hallucination on greeting / skill-routing; latencies t1 (risk request turn) t2 (JSON generation) t3 (greeting)",
+    "results": [
+      {"model": "GLM-5.3", "tool": "WRONG (called skill then no valid getContractDetail)", "skill": "SKILL", "json": "FAIL", "t1": 23.8, "t2": 40.2, "t3": 9.4, "verdict": "rejected - invalid JSON and very slow"},
+      {"model": "GLM-5.2", "all": "PASS", "t1": 1.4, "t2": 5.3, "t3": 9.9, "verdict": "runner-up - fastest JSON, slow greeting"},
+      {"model": "GLM-5.1", "all": "PASS", "t1": 7.1, "t2": 47.3, "t3": 7.1, "verdict": "rejected - slow generation"},
+      {"model": "GLM-5", "all": "PASS", "t1": 3.1, "t2": 24.8, "t3": 11.6, "verdict": "rejected - slow"},
+      {"model": "kimi-k3", "skillRouting": "PASS (strict skill-first: only skill call, waits for guidance)", "json": "PASS", "t1": 6.8, "t2": 35.6, "t3": 14.7, "verdict": "rejected - slow"},
+      {"model": "kimi-k2.6", "all": "PASS (strict skill-first)", "t1": 1.3, "t2": 12.1, "t3": 2.5, "verdict": "strong alternate"},
+      {"model": "kimi-k2.5", "all": "PASS (strict skill-first)", "t1": 2.1, "t2": 26.0, "t3": 2.9, "verdict": "rejected - slow generation"},
+      {"model": "Deepseek-V4-Pro", "skillRouting": "PASS (skill then parallel getContractDetail + reviewContractRisks) - fills the gap skipped in initial screening", "json": "PASS", "t1": 5.1, "t2": 12.5, "t3": 6.1, "verdict": "rejected on latency only (t1 4x slower than qwen3.8-flash)"},
+      {"model": "Qwen3.6-plus", "all": "PASS", "t1": 5.3, "t2": 11.2, "t3": 96.6, "verdict": "rejected - one greeting took 96s"},
+      {"model": "qwen3.7-plus", "all": "PASS (strict skill-first)", "t1": 2.5, "t2": 6.5, "t3": 2.0, "verdict": "strong alternate"},
+      {"model": "Qwen3.8-Max", "all": "PASS (strict skill-first)", "t1": 1.4, "t2": 12.4, "t3": 1.8, "verdict": "quality fallback within same family - all gates pass, generation ~2x slower than flash"},
+      {"model": "MiniMax-M3", "json": "FAIL", "verdict": "rejected"},
+      {"model": "claude-sonnet-4-6", "all": "PASS", "t1": 1.9, "t2": 14.3, "t3": 3.1, "verdict": "viable but slower generation"},
+      {"model": "gpt-5.4", "all": "PASS (strict skill-first)", "t1": 2.8, "t2": 13.0, "t3": 5.7, "verdict": "viable but slower"},
+      {"model": "gpt-5.2", "json": "TIMEOUT after 180s", "verdict": "rejected"}
+    ],
+    "finalConclusion": "qwen3.8-flash remains the winner across all 21 evaluated models: all four gates pass with the best latency profile (t1 1.2s / t2 5.9s / t3 1.4s). Qwen3.8-Max is the same-family quality fallback (all gates pass, t1 1.4s, generation 2x slower); kimi-k2.6, qwen3.7-plus and GLM-5.2 are close alternates. NOTE: this harness measures routing behavior and format compliance, not deep reasoning quality - a Max-tier model may still review contracts better even though it is slower.",
+    "harnessBias": "models calling only the skill pseudo-tool first (strict skill-first) were initially marked tool=WRONG; that is correct production behavior, corrected in the supplementary runs (SKILLONLY)."
   }
 }
