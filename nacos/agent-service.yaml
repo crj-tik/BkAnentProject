@@ -141,9 +141,14 @@ agent:
     vector-top-k: ${AGENT_RAG_VECTOR_TOP_K:20}
     rerank-top-k: ${AGENT_RAG_RERANK_TOP_K:10}
     vector-similarity-threshold: ${AGENT_RAG_VECTOR_SIMILARITY_THRESHOLD:0.7}
-    rerank-endpoint: ${AGENT_RAG_RERANK_ENDPOINT:https://dashscope.aliyuncs.com/api/v1/services/rerank/text-rerank/text-rerank}
-    rerank-api-key: ${AGENT_RAG_RERANK_API_KEY:${DASHSCOPE_API_KEY}}
-    rerank-model: ${AGENT_RAG_RERANK_MODEL:qwen3-rerank}
+    # Docker development default targets the local bge-reranker container (host.docker.internal
+    # reaches the host-published port; the service itself lives in its own compose project).
+    # Production/cloud sets AGENT_RAG_RERANK_ENDPOINT to the DashScope URL and
+    # AGENT_RAG_RERANK_PROTOCOL=dashscope via environment, keeping secrets out of this file.
+    rerank-endpoint: ${AGENT_RAG_RERANK_ENDPOINT:http://host.docker.internal:18119/rerank}
+    rerank-api-key: ${AGENT_RAG_RERANK_API_KEY:${DASHSCOPE_API_KEY:}}
+    rerank-model: ${AGENT_RAG_RERANK_MODEL:bge-reranker-v2-m3-v1}
+    rerank-protocol: ${AGENT_RAG_RERANK_PROTOCOL:native}
   distributed:
     supervisor-agent-id: ${SUPERVISOR_AGENT_ID:supervisor-agent}
     refresh-interval-seconds: ${AGENT_DISCOVERY_REFRESH_INTERVAL_SECONDS:30}

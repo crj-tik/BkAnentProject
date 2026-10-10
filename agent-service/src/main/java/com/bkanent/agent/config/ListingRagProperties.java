@@ -44,6 +44,25 @@ public class ListingRagProperties {
     private String rerankModel = "qwen3-rerank";
 
     /**
+     * 字段：rerankProtocol：rerank 服务协议。dashscope（云端 DashScope 兼容）或 native（本地 bge-reranker /rerank）。
+     */
+    private RerankProtocol rerankProtocol = RerankProtocol.DASHSCOPE;
+
+    /**
+     * 枚举：RerankProtocol。
+     */
+    public enum RerankProtocol {
+        /**
+         * 值：DASHSCOPE。
+         */
+        DASHSCOPE,
+        /**
+         * 值：NATIVE。
+         */
+        NATIVE
+    }
+
+    /**
      * 获取keywordTopK。
      */
     public int getKeywordTopK() {
@@ -139,5 +158,19 @@ public class ListingRagProperties {
      */
     public void setRerankModel(String rerankModel) {
         this.rerankModel = rerankModel;
+    }
+
+    /**
+     * 获取rerankProtocol。
+     */
+    public RerankProtocol getRerankProtocol() {
+        return rerankProtocol;
+    }
+
+    /**
+     * 设置rerankProtocol。
+     */
+    public void setRerankProtocol(RerankProtocol rerankProtocol) {
+        this.rerankProtocol = rerankProtocol;
     }
 }

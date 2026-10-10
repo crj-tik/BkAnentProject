@@ -35,6 +35,7 @@
 - 服务本地 `application.yml` 只保留最小启动配置
 - 数据库、Redis、MQ、对象存储、Elasticsearch、Milvus、模型参数统一放在 `nacos/*.yaml`
 - `.env` 仅维护端口、连接地址、密钥和启动引导；集成模式、Token TTL、排行榜/流式 provider、Milvus/ES 搜索开关在 Nacos 中直接使用字面值，不与 `.env` 或 Compose 重复。宿主机工具使用的基础设施地址继续保留；连接与密钥占位符仍从环境变量或密钥管理系统读取，禁止把真实密钥写进 Nacos
+- 房源 RAG 重排默认指向本机独立部署的 bge-reranker（`http://host.docker.internal:18119/rerank`，native 协议，别名 `bge-reranker-v2-m3-v1`）。该容器由独立仓库 `D:\AI\Reranker-BGE-V2-M3` 的 compose 管理，不在本编排内；调用方密钥在该仓库 `config/api-keys.json` 维护，经 `AGENT_RAG_RERANK_API_KEY` 注入应用容器。云端 DashScope 重排通过 `AGENT_RAG_RERANK_ENDPOINT`（DashScope URL）、`AGENT_RAG_RERANK_PROTOCOL=dashscope` 与 `AGENT_RAG_RERANK_MODEL=qwen3-rerank` 环境变量切换
 - 配置类统一通过 `@ConfigurationProperties` 收口
 - 不在业务代码中硬编码连接地址、密钥和环境差异参数
 

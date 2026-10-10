@@ -9,6 +9,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 
@@ -49,24 +50,12 @@ public class BgeRerankService implements ListingRerankService {
         List<String> documents = candidates.stream()
                 .map(ListingRecallCandidate::getContent)
                 .toList();
-        DashScopeRerankResponse response = restClient.post()
-                .uri(listingRagProperties.getRerankEndpoint())
-                .contentType(MediaType.APPLICATION_JSON)
-                .headers(headers -> applyHeaders(headers, listingRagProperties.getRerankApiKey()))
-                .body(new DashScopeRerankRequest(
-                        listingRagProperties.getRerankModel(),
-                        query,
-                        documents,
-                        Math.min(topK, candidates.size()),
-                        true
-                ))
-                .retrieve()
-                .body(DashScopeRerankResponse.class);
-        if (response == null || response.output() == null || response.output().results() == null) {
-            return List.of();
-        }
+        List<RankedCandidate> ranked = listingRagProperties.getRerankProtocol()
+                == ListingRagProperties.RerankProtocol.NATIVE
+                ? rerankNative(query, documents, topK)
+                : rerankDashScope(query, documents, topK);
         List<ListingRecallCandidate> reranked = new ArrayList<>();
-        for (DashScopeRerankResult result : response.output().results()) {
+        for (RankedCandidate result : ranked) {
             if (result.index() != null && result.index() >= 0 && result.index() < candidates.size()) {
                 ListingRecallCandidate candidate = candidates.get(result.index());
                 candidate.setRerankScore(result.relevanceScore());
@@ -76,6 +65,50 @@ public class BgeRerankService implements ListingRerankService {
         return reranked.stream()
                 .sorted(Comparator.comparing(ListingRecallCandidate::getRerankScore, Comparator.nullsLast(Comparator.reverseOrder())))
                 .limit(Math.max(1, topK))
+                .toList();
+    }
+
+    /**
+     * DashScope 兼容协议：{model, input:{query, documents}, parameters:{top_n}} → {output:{results:[{index, relevance_score}]}}。
+     */
+    private List<RankedCandidate> rerankDashScope(String query, List<String> documents, int topK) {
+        DashScopeRerankResponse response = restClient.post()
+                .uri(listingRagProperties.getRerankEndpoint())
+                .contentType(MediaType.APPLICATION_JSON)
+                .headers(headers -> applyHeaders(headers, listingRagProperties.getRerankApiKey()))
+                .body(new DashScopeRerankRequest(
+                        listingRagProperties.getRerankModel(),
+                        query,
+                        documents,
+                        Math.min(topK, documents.size()),
+                        true
+                ))
+                .retrieve()
+                .body(DashScopeRerankResponse.class);
+        if (response == null || response.output() == null || response.output().results() == null) {
+            return List.of();
+        }
+        return response.output().results().stream()
+                .map(result -> new RankedCandidate(result.index(), result.relevanceScore()))
+                .toList();
+    }
+
+    /**
+     * 本地 bge-reranker /rerank 协议：{query, texts} → [{index, score}]（[0,1] sigmoid 分数）。
+     */
+    private List<RankedCandidate> rerankNative(String query, List<String> documents, int topK) {
+        NativeRerankResponse[] response = restClient.post()
+                .uri(listingRagProperties.getRerankEndpoint())
+                .contentType(MediaType.APPLICATION_JSON)
+                .headers(headers -> applyHeaders(headers, listingRagProperties.getRerankApiKey()))
+                .body(new NativeRerankRequest(query, documents))
+                .retrieve()
+                .body(NativeRerankResponse[].class);
+        if (response == null) {
+            return List.of();
+        }
+        return Arrays.stream(response)
+                .map(result -> new RankedCandidate(result.index(), result.score()))
                 .toList();
     }
 
@@ -114,5 +147,20 @@ public class BgeRerankService implements ListingRerankService {
             Integer index,
             @JsonProperty("relevance_score") Double relevanceScore
     ) {
+    }
+
+    /**
+     * 本地 bge-reranker /rerank 请求体：{query, texts}。raw_scores 缺省 false，返回 [0,1] sigmoid 分数。
+     */
+    private record NativeRerankRequest(String query, List<String> texts) {
+    }
+
+    private record NativeRerankResponse(Integer index, Double score) {
+    }
+
+    /**
+     * 两种协议统一后的排序结果。
+     */
+    private record RankedCandidate(Integer index, Double relevanceScore) {
     }
 }
