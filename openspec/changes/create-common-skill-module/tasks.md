@@ -36,6 +36,7 @@
 - [x] 5.3 新增 `contract-service/src/main/resources/skills/contract/contract-risk-review.md`：description 场景导向（何时需要风险审查），tools 引用 `getContractDetail`、`reviewContractRisks` 真实名，正文含执行步骤指引
 - [x] 5.4 `nacos/contract-service.yaml` 增加 `agent.skills` 段
 - [ ] 5.5 contract 冒烟验证：风险审查请求命中技能（日志含技能选中与 task）；普通合同详情请求走默认路径不受影响 —— 运行时冒烟需 Nacos/DeepSeek/MySQL 分布式环境，当前以单测（SkillTool 命中/纠错/收窄语义 + 拦截器换装/回退）与全模块编译代替，环境可用后补充端到端冒烟
+  - **2026-10-10 执行前置检查（未完成）**：本机 8848（Nacos）、3306（MySQL）、9012（contract-service）、11434（本地模型）均不可连接；运行中的 Docker 容器未包含本项目依赖，进程环境及仓库 `.env` 未提供 `DEEPSEEK_API_KEY` 或兼容模型验收地址。历史 Supervisor 真实模型评估使用下游业务夹具，不证明 contract 子 Agent 自主选技能或普通详情默认路径。源码检查另确认受管激活路径缺少技能名/task 日志（KI-46）。本次未发送真实模型请求、不修改技能语义、不以既有单测或历史验收勾选此项；需可用的独立验收 Nacos/MySQL、真实模型配置及授权使用的合同测试数据，并补齐受管激活观测后完成两类 A2A 冒烟。
 
 ## 6. 收尾验证与文档
 

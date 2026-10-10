@@ -123,6 +123,18 @@
 
 **处置方向**：读取选项值前检查剩余参数和空值，返回具体选项的用法错误；补充缺值、非法值和正常值的入口验证。
 
+## KI-46 [OPEN·P2] 受管 A2A 技能激活缺少技能名与任务锚点日志
+
+**确认日期**：2026-10-10（`create-common-skill-module` 5.5 冒烟前置检查，源码确认；尚未运行真实模型验收）。
+
+**现象与根因**：`SkillTool.call` 在成功加载时记录 `Skill '{}' activated (task={})`，但受管 A2A 的 `SkillRoutingToolInterceptor.interceptToolCall` 直接调用 `SkillExecutionContext.activate` 并返回技能正文，不调用原 handler，也不记录激活日志。快照已激活时，模型拦截器同样直接走快照分支。因此不能以该旧日志缺席判定受管请求没有激活技能，现有日志也不足以满足 5.5 的技能名与 task 验收要求。
+
+**处置方向**：在受管成功加载路径补齐可关联请求的激活观测，区分成功与拒绝，不改变成功快照、显式选择或实际工具范围守卫；记录任务内容时须考虑敏感信息及日志注入。补充成功加载、无效加载与默认未激活路径的日志回归，并在真实 contract A2A 冒烟中确认。
+
+**代码位置**：`common-skill/src/main/java/com/bkanent/common/skill/runtime/SkillTool.java:82`、`SkillRoutingToolInterceptor.java:33–44`；`SkillRoutingModelInterceptor` 的受管快照分支。
+
+**关联**：LR-21；`openspec/changes/create-common-skill-module/tasks.md` 5.5。
+
 ## KI-30 [FIXED·本提交·P1] 技能热更新未同步 HTTP/Nacos Card
 
 **发现日期**：2026-10-05。
