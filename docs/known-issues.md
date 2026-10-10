@@ -47,7 +47,7 @@
 - 打法卡生成（原声编号表机制）与共性提炼（`playbook_card`、`commonality_report` 表已建）
 - 语音模式（VoiceLoop 防抢话三层）、受访人公网链接（Token 状态机）
 
-定义见 `openspec/changes/create-interview-subagent/proposal.md` 的范围边界。
+定义见 `openspec/changes/archive/2026-10-10-create-interview-subagent/proposal.md` 的范围边界。
 
 ## KI-37 [OPEN·P1] Linux 增量迁移未选择目标数据库
 

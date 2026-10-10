@@ -1,6 +1,6 @@
 # Simulated Layer Remediation Plan
 
-> 2026-09-19 状态更新：A2A 运行时和 Agent Card 发现已完成 Alibaba 官方化。本文件中关于自定义 HTTP A2A、双路发现和旧兼容 endpoint 的描述是历史规划，当前契约以 `docs/official-a2a-runtime-migration.md` 和 `openspec/changes/standardize-alibaba-a2a-runtime/` 为准。
+> 2026-09-19 状态更新：A2A 运行时和 Agent Card 发现已完成 Alibaba 官方化。本文件中关于自定义 HTTP A2A、双路发现和旧兼容 endpoint 的描述是历史规划，当前契约以 `docs/official-a2a-runtime-migration.md` 和 `openspec/changes/archive/2026-10-10-standardize-alibaba-a2a-runtime/` 为准。
 
 ## 1. Purpose
 
