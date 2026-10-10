@@ -16,7 +16,7 @@ spring:
         base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
         completions-path: /chat/completions
         options:
-          model: ${MARKETING_AGENT_MODEL:qwen3.8-flash}
+          model: ${MARKETING_AGENT_MODEL:gpt-5.6-terra}
           temperature: 0.2
     alibaba:
       a2a:
@@ -103,7 +103,7 @@ marketing:
     index-name: ${MARKETING_SEARCH_INDEX:marketing_content}
     sync-mode: ${MARKETING_SEARCH_SYNC_MODE:CANAL}
   agent:
-    model: ${MARKETING_AGENT_MODEL:qwen3.8-flash}
+    model: ${MARKETING_AGENT_MODEL:gpt-5.6-terra}
     temperature: ${MARKETING_AGENT_TEMPERATURE:0.2}
     max-tokens: ${MARKETING_AGENT_MAX_TOKENS:2000}
     llm-generation-enabled: ${MARKETING_LLM_GENERATION_ENABLED:true}

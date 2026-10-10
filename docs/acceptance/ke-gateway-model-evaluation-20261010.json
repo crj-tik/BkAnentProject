@@ -61,5 +61,21 @@
     ],
     "finalConclusion": "qwen3.8-flash remains the winner across all 21 evaluated models: all four gates pass with the best latency profile (t1 1.2s / t2 5.9s / t3 1.4s). Qwen3.8-Max is the same-family quality fallback (all gates pass, t1 1.4s, generation 2x slower); kimi-k2.6, qwen3.7-plus and GLM-5.2 are close alternates. NOTE: this harness measures routing behavior and format compliance, not deep reasoning quality - a Max-tier model may still review contracts better even though it is slower.",
     "harnessBias": "models calling only the skill pseudo-tool first (strict skill-first) were initially marked tool=WRONG; that is correct production behavior, corrected in the supplementary runs (SKILLONLY)."
+  },
+  "qualityFirstReevaluation": {
+    "userDirectives": "1) only test the latest tier per family (skip GLM-5.2 etc.); 2) relax latency constraints - faster is not better; prioritize generation quality and reasoning depth",
+    "latestTierTested": ["Qwen3.8-Max", "qwen3.7-max", "GLM-5.3", "kimi-k3", "gpt-6.1-sol", "gpt-5.6-terra", "claude-opus-5 (gateway 400 no channel)", "claude-4.6-sonnet", "deepseek-v4.1-flash", "Deepseek-V4-Pro", "doubao-seed-2.1-pro", "gemini-3.8-flash", "MiniMax-M3", "ernie-5.0-thinking", "qwq-plus (gateway 400 no channel)"],
+    "harness": "Q1 deep contract risk analysis with 6 graded points (asymmetry/penalty-cap/interpretation-clause/jurisdiction/deposit-forfeiture/decision-enum), max_tokens 4000; Q2 trap transaction that must NOT be PROCEEDed, 4 hidden risk points; final round = full multi-turn ReactAgent simulation (tool call -> real synthetic contract data fed back -> strict decision enum + 5-point synthesis quality)",
+    "q1q2Results": {
+      "perfect6of6_and_blocked": ["Qwen3.8-Max (11.7s)", "qwen3.7-max (16.5s)", "kimi-k3 (67.2s)", "gpt-6.1-sol (31.1s)", "gpt-5.6-terra (12.0s)", "claude-4.6-sonnet (18.9s)", "deepseek-v4.1-flash (29.8s)", "Deepseek-V4-Pro (19.3s)", "doubao-seed-2.1-pro (18.0s)", "gemini-3.8-flash (16.8s)", "ernie-5.0-thinking (40.9s)"],
+      "failed": ["GLM-5.3 (Q1 NOT_JSON, 94s)", "MiniMax-M3 (NOT_JSON both)", "claude-opus-5 (400)", "qwq-plus (400)"]
+    },
+    "finalRoundMultiTurnToolChain": {
+      "gpt-5.6-terra": "round1 skill -> round2 getContractDetail -> round3 synthesis: decision=MANUAL_REVIEW (enum ok), quality 5/5, riskLevel HIGH, 4 risk factors, ~12s/turn",
+      "Qwen3.8-Max": "tool chain ok: decision=MANUAL_REVIEW (enum ok), quality 3/5, ~12s/turn",
+      "qwen3.8-flash": "FAILED - after multi-turn tool results the final output degraded to prose without valid JSON (previous selection only tested format compliance, not post-tool synthesis; user's caution about fast models confirmed empirically)",
+      "gemini-3.8-flash": "FAILED - gateway channel defect: any second turn containing tool results returns 400 Channel Exception (works for plain chat and first-turn tool calls); unusable in ReactAgent loops"
+    },
+    "finalDecision": "chat model switched from qwen3.8-flash to gpt-5.6-terra across all ten service yamls (20 placeholders). gpt-5.6-terra: perfect Q1 6/6, trap blocked with all 4 hidden risks identified, multi-turn synthesis 5/5 with strict decision enum, ~12s per turn (acceptable under relaxed latency). Qwen3.8-Max remains the same-gateway fallback via *_AGENT_MODEL env overrides. qwen3.8-flash demoted: format-compliant in isolation but output quality collapses after multi-turn tool chaining."
   }
 }

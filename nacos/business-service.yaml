@@ -27,7 +27,7 @@ spring:
         base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
         completions-path: /chat/completions
         options:
-          model: ${TRADE_AGENT_MODEL:qwen3.8-flash}
+          model: ${TRADE_AGENT_MODEL:gpt-5.6-terra}
           temperature: 0.2
     alibaba:
       a2a:
@@ -117,7 +117,7 @@ business:
 
 trade:
   agent:
-    model: ${TRADE_AGENT_MODEL:qwen3.8-flash}
+    model: ${TRADE_AGENT_MODEL:gpt-5.6-terra}
     temperature: ${TRADE_AGENT_TEMPERATURE:0.2}
     max-tokens: ${TRADE_AGENT_MAX_TOKENS:2000}
     system-prompt: |

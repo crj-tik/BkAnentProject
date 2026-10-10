@@ -16,7 +16,7 @@ spring:
         base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
         completions-path: /chat/completions
         options:
-          model: ${LISTING_AGENT_MODEL:qwen3.8-flash}
+          model: ${LISTING_AGENT_MODEL:gpt-5.6-terra}
           temperature: 0.2
     alibaba:
       a2a:
@@ -98,7 +98,7 @@ listing:
     write-enabled: ${LISTING_SEARCH_WRITE_ENABLED:false}
     index-name: ${LISTING_SEARCH_INDEX:listing_info}
   agent:
-    model: ${LISTING_AGENT_MODEL:qwen3.8-flash}
+    model: ${LISTING_AGENT_MODEL:gpt-5.6-terra}
     temperature: ${LISTING_AGENT_TEMPERATURE:0.2}
     max-tokens: ${LISTING_AGENT_MAX_TOKENS:2000}
     system-prompt: |

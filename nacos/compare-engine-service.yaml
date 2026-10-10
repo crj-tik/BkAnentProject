@@ -9,7 +9,7 @@ spring:
         base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
         completions-path: /chat/completions
         options:
-          model: ${COMPARE_AGENT_MODEL:qwen3.8-flash}
+          model: ${COMPARE_AGENT_MODEL:gpt-5.6-terra}
           temperature: 0.2
     alibaba:
       a2a:
@@ -82,7 +82,7 @@ compare:
   report:
     storage-dir: ${COMPARE_REPORT_STORAGE_DIR:/app/runtime/reports}
   agent:
-    model: ${COMPARE_AGENT_MODEL:qwen3.8-flash}
+    model: ${COMPARE_AGENT_MODEL:gpt-5.6-terra}
     temperature: ${COMPARE_AGENT_TEMPERATURE:0.2}
     max-tokens: ${COMPARE_AGENT_MAX_TOKENS:2000}
     ai-conclusion-enabled: ${COMPARE_AI_CONCLUSION_ENABLED:true}

@@ -14,7 +14,7 @@ spring:
         base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
         completions-path: /chat/completions
         options:
-          model: ${CONTRACT_AGENT_MODEL:qwen3.8-flash}
+          model: ${CONTRACT_AGENT_MODEL:gpt-5.6-terra}
           temperature: 0.2
     alibaba:
       a2a:
@@ -109,7 +109,7 @@ contract:
     ocr-provider: mock-ocr-provider
     esign-provider: mock-esign-provider
   agent:
-    model: ${CONTRACT_AGENT_MODEL:qwen3.8-flash}
+    model: ${CONTRACT_AGENT_MODEL:gpt-5.6-terra}
     temperature: 0.2
     max-tokens: 2000
     llm-risk-review-enabled: true

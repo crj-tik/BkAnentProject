@@ -14,7 +14,7 @@ spring:
         base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
         completions-path: /chat/completions
         options:
-          model: ${AGENT_CHAT_MODEL:${AGENT_DEEPSEEK_MODEL:qwen3.8-flash}}
+          model: ${AGENT_CHAT_MODEL:${AGENT_DEEPSEEK_MODEL:gpt-5.6-terra}}
           temperature: 0.2
     openai:
       # Embedding-only channel to the same gateway (chat stays on deepseek starter;
@@ -131,7 +131,7 @@ agent:
   memory:
     base-url: ${MEMORY_SERVICE_BASE_URL:http://127.0.0.1:9011}
   chat:
-    model: ${AGENT_CHAT_MODEL:${AGENT_DEEPSEEK_MODEL:qwen3.8-flash}}
+    model: ${AGENT_CHAT_MODEL:${AGENT_DEEPSEEK_MODEL:gpt-5.6-terra}}
     temperature: ${AGENT_CHAT_TEMPERATURE:${AGENT_DEEPSEEK_TEMPERATURE:0.2}}
     max-tokens: ${AGENT_CHAT_MAX_TOKENS:${AGENT_DEEPSEEK_MAX_TOKENS:1600}}
     top-p: ${AGENT_CHAT_TOP_P:${AGENT_DEEPSEEK_TOP_P:1.0}}

@@ -14,7 +14,7 @@ spring:
         base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
         completions-path: /chat/completions
         options:
-          model: ${NOTIFICATION_AGENT_MODEL:qwen3.8-flash}
+          model: ${NOTIFICATION_AGENT_MODEL:gpt-5.6-terra}
           temperature: 0.2
     alibaba:
       a2a:
@@ -123,7 +123,7 @@ notification:
     consumer-group: ${NOTIFICATION_WORKFLOW_EVENTS_CONSUMER_GROUP:notification-service-workflow-events}
     max-attempts: ${NOTIFICATION_WORKFLOW_EVENTS_MAX_ATTEMPTS:3}
   agent:
-    model: ${NOTIFICATION_AGENT_MODEL:qwen3.8-flash}
+    model: ${NOTIFICATION_AGENT_MODEL:gpt-5.6-terra}
     temperature: ${NOTIFICATION_AGENT_TEMPERATURE:0.2}
     max-tokens: ${NOTIFICATION_AGENT_MAX_TOKENS:2000}
     system-prompt: |
