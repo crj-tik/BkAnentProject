@@ -1,10 +1,20 @@
 package com.bkanent.common.skill.runtime;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import com.bkanent.common.skill.SkillDefinition;
 import com.bkanent.common.skill.core.SkillFileLoader;
 import com.bkanent.common.skill.core.SkillRegistry;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -32,6 +42,25 @@ class SkillToolTest {
 
     private final SkillTool tool = new SkillTool(registry, "contract");
 
+    private final Logger logger = (Logger) LoggerFactory.getLogger(SkillTool.class);
+    private final ListAppender<ILoggingEvent> appender = new ListAppender<>();
+    private Level previousLevel;
+
+    @BeforeEach
+    void captureLogs() {
+        previousLevel = logger.getLevel();
+        logger.setLevel(Level.INFO);
+        appender.start();
+        logger.addAppender(appender);
+    }
+
+    @AfterEach
+    void restoreLogger() {
+        logger.detachAppender(appender);
+        appender.stop();
+        logger.setLevel(previousLevel);
+    }
+
     @Test
     void activationResultCarriesBodyToolsAndTask() {
         String result = tool.call("{\"name\":\"contract-risk-review\",\"task\":\"审查合同101的风险\"}");
@@ -41,6 +70,21 @@ class SkillToolTest {
                 .contains("按步骤审查合同风险。")
                 .contains("[本技能可用工具] getContractDetail, reviewContractRisks")
                 .contains("[任务] 审查合同101的风险");
+    }
+
+    @Test
+    void activationLogsOnlyFingerprintNotTaskText() throws Exception {
+        String task = "客户张三手机号13800138000的合同风险";
+        String result = tool.call("{\"name\":\"contract-risk-review\",\"task\":\"" + task + "\"}");
+
+        assertThat(result).contains("[任务] " + task);
+        assertThat(appender.list).hasSize(1);
+        String message = appender.list.get(0).getFormattedMessage();
+        String fingerprint = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(task.getBytes(StandardCharsets.UTF_8)));
+        assertThat(message)
+                .contains("task=sha256:" + fingerprint, "taskChars=" + task.length(), "taskSummary=redacted")
+                .doesNotContain(task, "13800138000", "张三");
     }
 
     @Test
@@ -91,3 +135,4 @@ class SkillToolTest {
         assertThat(tool.getToolDefinition().name()).isEqualTo("skill");
     }
 }
+

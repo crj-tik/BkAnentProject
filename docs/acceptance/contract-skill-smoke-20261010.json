@@ -1,0 +1,59 @@
+{
+  "change": "create-common-skill-module",
+  "date": "2026-10-10",
+  "scope": "contract A2A skill-routing acceptance smoke (tasks 5.5 / 5.8)",
+  "environment": {
+    "nacos": "local docker nacos/nacos-server v3.1.0, standalone Derby, isolated namespace bk-acceptance-smoke",
+    "mysql": "local docker mysql 8.4, isolated synthetic database bk_contract_smoke_fe6bbaf091 (1 contract record id=101, SMOKE-20261010)",
+    "contractService": "host JVM (java 17), jar built from working tree at 12:22, port 9012, readiness UP, DB credentials supplied via environment only",
+    "model": "local real model via Ollama 0.35.1 (container removed after run), OpenAI-compatible endpoint, model qwen3:4b-instruct-2507-q4_K_M, temperature 0.2",
+    "modelIsRealLLM": true,
+    "cloudKeyUsed": "none - DEEPSEEK_API_KEY empty in this environment; local model is not a cloud provider and is not claimed as one",
+    "requestFormat": "A2A JSON-RPC message/send over official io.a2a SDK wire format (params without configuration field; hand-crafted configuration field is rejected as -32700 by the starter handler)"
+  },
+  "cases": [
+    {
+      "case": "risk-review-explicit-skill",
+      "request": "我需要做一次正式的合同风险审查，请先加载 contract-risk-review 技能获取审查指引，再按指引审查合同101。",
+      "outcome": "COMPLETED",
+      "skillActivated": "contract-risk-review",
+      "activationLog": "Skill 'contract-risk-review' activated (task=sha256:8414251584a57644e98ed9e84493f6d3454530c2c039bae4c42bbf64a32da4ea, taskChars=35, taskSummary=redacted, callId=rb3eT9FWt4JsRkCVxzhaeMXraQjwo3D4, threadId=b53975ea-438b-4b54-95a1-0118076b2622)",
+      "realToolEvidence": "DEBUG log ContractMapper.selectById(101) and attachment selectList executed against synthetic DB; ollama server log recorded real /v1/chat/completions inference (16-21s per turn)",
+      "structuredOutput": "decision=RISK_ALERT riskLevel=high riskFactors include sealStatus PENDING, archiveStatus PENDING, missing penalty clauses from ocr_summary; all values traceable to the synthetic row",
+      "elapsedSec": 159
+    },
+    {
+      "case": "risk-review-explicit-skill-repeat",
+      "request": "请使用 contract-risk-review 技能对合同101进行风险审查，给出风险等级与处置建议。",
+      "outcome": "COMPLETED",
+      "skillActivated": "contract-risk-review",
+      "activationLog": "Skill 'contract-risk-review' activated (task=sha256:de8febf280070626297a02d8b524da99c11025f2e99c24ef4f701939c402513e, taskChars=34, taskSummary=redacted, callId=OSoEipPrYJJ1Bq7w6hy0Sy4iZWyrAuNp, threadId=6da84143-c80e-4459-bb6c-ab4c5ab80aa3)",
+      "structuredOutput": "decision=RISK_ALERT, seal/archive PENDING flagged from real data",
+      "elapsedSec": 170
+    },
+    {
+      "case": "plain-detail-default-path",
+      "request": "查询合同101的当前状态、用印与归档情况。",
+      "outcome": "COMPLETED",
+      "skillActivated": "none - activation log count unchanged before/after request",
+      "realToolEvidence": "getContractDetail executed (ContractMapper.selectById), default path with full tool list",
+      "structuredOutput": "contract detail retrieved; no skill pseudo-tool call, no prompt swap, no narrowing",
+      "elapsedSec": 2.5
+    }
+  ],
+  "modelBehaviorBoundaries": [
+    "qwen3:4b does not always call the skill pseudo-tool on a plain risk-review phrasing; with an explicit instruction to load the skill it does (two consecutive runs activated and then completed a real risk review).",
+    "On plain detail queries the model sometimes summarised the request instead of calling getContractDetail; at least one verified run (and the final default-path run) did call the tool. Model decision quality limitations remain as KI-29 records.",
+    "No fixture, mock provider or scripted response was used for the model; business tools hit the real synthetic MySQL database."
+  ],
+  "fixesVerifiedHere": [
+    "KI-47 (new): custom AgentCard bean suppressed starter A2aServerAgentCardAutoConfiguration so A2aServerAgentCardProperties bean was missing - every *OfficialA2aAgent would fail startup in a real distributed run; fixed by registering the properties in common-a2a LiveSkillAgentCardAutoConfiguration (idempotent EnableConfigurationProperties).",
+    "KI-46: managed activation log carries skill name, task sha256 + char count, callId, threadId; task text, body, and argument secrets verified absent (unit tests + this smoke).",
+    "Legacy SkillTool log also switched to fingerprint form (no raw task text)."
+  ],
+  "residualBoundaries": [
+    "A2A wire format: starter JsonRpcA2aRequestHandler returns -32700 for any Jackson binding failure; a params.configuration field with blocking=true from the standard A2A examples is rejected - clients must follow the SDK serialization (no configuration field). Recorded as a client-compat note, not fixed in this change.",
+    "The local 4B model is not a substitute for production DeepSeek cloud quality; task 5.5 real-model criterion is met by a real LLM, and production model quality claims are not made here.",
+    "smoke namespace bk-acceptance-smoke and synthetic database bk_contract_smoke_fe6bbaf091 are left in the local environment for re-inspection; the acceptance dataId content has been replaced with a tombstone comment."
+  ]
+}

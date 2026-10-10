@@ -4,8 +4,8 @@ x-app-environment: &app-environment
   SPRING_PROFILES_ACTIVE: distributed
   NACOS_SERVER: nacos:8848
   NACOS_NAMESPACE: ""
-  NACOS_USERNAME: nacos
-  NACOS_PASSWORD: ""
+  NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
+  NACOS_PASSWORD: ${NACOS_PASSWORD:-}
   MYSQL_HOST: mysql
   MYSQL_PORT: "3306"
   MYSQL_USER: root
@@ -21,7 +21,7 @@ x-app-environment: &app-environment
   MINIO_ENDPOINT: http://minio:9000
   MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
   MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
-  MINIO_PUBLIC_BASE_URL: http://127.0.0.1:19000
+  MINIO_PUBLIC_BASE_URL: ${MINIO_PUBLIC_BASE_URL:-http://127.0.0.1:19000}
   MILVUS_HOST: milvus
   MILVUS_PORT: "19530"
   MILVUS_ENDPOINT: http://milvus:19530
@@ -39,16 +39,8 @@ x-app-environment: &app-environment
   AGENT_RAG_RERANK_API_KEY: ${AGENT_RAG_RERANK_API_KEY:-local-dev-placeholder}
   A2A_PUBLIC_BASE_URL: http://localhost
   SERVICE_READINESS_MODE: distributed
-  CONTRACT_INTEGRATION_MODE: local
-  NOTIFICATION_INTEGRATION_MODE: local
-  MEDIA_INTEGRATION_MODE: local
-  PROMOTION_INTEGRATION_MODE: local
-  BUSINESS_RANKING_USE_REDIS: "true"
-  AGENT_STREAM_PROVIDER: rocketmq
-  MILVUS_ENABLED: "true"
+  # Business modes, token TTLs, stream and search switches are owned by Nacos.
   MILVUS_DATABASE: default
-  LISTING_SEARCH_USE_ES: "true"
-  MARKETING_SEARCH_USE_ES: "true"
 
 x-app-service: &app-service
   image: bk-anent-services:dev
@@ -466,7 +458,6 @@ services:
       SETTLEMENT_MCP_ENDPOINT: http://settlement-service:9013/mcp
       NOTIFICATION_MCP_ENDPOINT: http://notification-service:9003/mcp
       MEDIA_MCP_ENDPOINT: http://media-worker-service:9007/mcp
-      MILVUS_ENABLED: "true"
 
   notification-service:
     <<: *app-service
@@ -498,7 +489,6 @@ services:
       <<: *app-environment
       SERVICE_ARTIFACT: listing-master-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://listing-master-service:9004
-      LISTING_SEARCH_USE_ES: "true"
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,elasticsearch
 
   customer-service:
@@ -552,7 +542,6 @@ services:
       <<: *app-environment
       SERVICE_ARTIFACT: marketing-content-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://marketing-content-service:9008
-      MARKETING_SEARCH_USE_ES: "true"
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,elasticsearch
 
   promotion-service:

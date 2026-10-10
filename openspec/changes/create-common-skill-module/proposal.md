@@ -17,6 +17,13 @@
 - contract-service 样板接入：pom 依赖 common-skill、`ContractOfficialA2aAgent` 拦截器链挂载 `SkillRoutingModelInterceptor`、新增 `skills/contract/contract-risk-review.md`、nacos 配置增加 `agent.skills` 段。
 - 不改动：A2A 协议与输出契约、Supervisor 官方图结构、ReactAgent 唯一执行体地位、AgentCard 的 Nacos 注册机制。
 
+## 2026-10-10 验收补充（KI-46）
+
+- 剩余 5.5 必须验证真实 contract 官方 A2A：风险请求由模型自主选技能，普通详情请求不加载技能；历史夹具或单测不替代此验收。
+- 逐个启动必要的 MySQL、Nacos 和配置导入任务；直接运行 contract-service，不启动完整服务集。缺少可用云模型凭据时，可以在独立验收 Nacos 配置中使用真实本地兼容模型，不改生产模型，也不把模型输出夹具称为真实验收。
+- `.env` 只保留启动连接、端口和秘密；业务开关、技能及模型调参由 Nacos 管理，不在 Compose 环境中重复覆盖。Nacos 中的秘密占位符仍需由安全环境提供，不能因配置中心存在而把密钥明文提交。
+- 修复 KI-46：受管技能成功加载后记录技能身份及可关联的调用、线程和 task 指纹；任务原文不写日志，拒绝和默认未激活路径不得误记成功。不修改 LR-21 快照及显式范围边界。
+
 ## Capabilities
 
 ### New Capabilities

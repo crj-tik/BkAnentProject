@@ -102,7 +102,8 @@ else
   log_warn "无法读取磁盘可用空间，跳过磁盘检查"
 fi
 
-# 5) .env 引导：缺失则从 .env.example 复制；为空密钥生成随机值；绝不覆盖已有非空值。
+# 5) .env 仅引导端口/连接/密钥/启动参数；业务配置在 Nacos，不在此补齐或覆盖。
+# 缺失则从 .env.example 复制；为空密钥生成随机值；绝不覆盖已有非空值。
 if [ ! -f "$BK_ENV_FILE" ]; then
   cp .env.example "$BK_ENV_FILE" || die "复制 .env.example 失败"
   log_info "已从 .env.example 创建 .env"
@@ -199,7 +200,10 @@ log_info "  - .env 已就绪（权限 600），真实模型密钥（DEEPSEEK_API
 if [ "$BIND_ADDR" != "0.0.0.0" ] && [ "$PROFILE" != "mcp" ]; then
   log_info "  - 默认只绑定 127.0.0.1；需要局域网访问时用 --bind 0.0.0.0 或手工改 .env 的 HOST_BIND_ADDRESS，并同步复查 A2A_PUBLIC_BASE_URL / MINIO_PUBLIC_BASE_URL"
 fi
-log_info "  - 生产/分布式集成模式必须显式设为 real：CONTRACT_INTEGRATION_MODE / NOTIFICATION_INTEGRATION_MODE / MEDIA_INTEGRATION_MODE / PROMOTION_INTEGRATION_MODE"
+log_info "  - .env 只放端口/连接/密钥/启动参数；Token TTL、模型、排行榜、流式和搜索开关在 Nacos 维护"
+log_info "  - 分布式生产必须在 Nacos 将 contract/notification/media/promotion 的 integration.mode 显式设为 real，并接入/选择真实 provider（合同需真实 OCR + 电子签）；不能在 .env 切换，不能削弱 readiness"
+log_info "  - nacos/*.yaml 默认为 Docker 开发配置；生产导入前准备环境专属配置，避免 config-init 覆盖生产 data ID"
+log_info "  - NACOS_USERNAME / NACOS_PASSWORD 可从 .env 传入应用容器；Admin 账号初始化与目标命名空间 Card 更新授权仍需另行完成"
 if [ "$SKIP_DOCKER" -eq 0 ]; then
   log_info "下一步："
   log_info "  - 全新数据卷：直接 ./scripts/deploy/start.sh --profile ${PROFILE}"

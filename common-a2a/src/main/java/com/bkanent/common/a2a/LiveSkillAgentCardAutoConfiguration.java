@@ -10,8 +10,17 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.annotation.Bean;
 
+/**
+ * KI-47：各服务用 SkillAgentCardPublisher 自定义 AgentCard bean 时会抑制 Starter 的
+ * A2aServerAgentCardAutoConfiguration（类级 ConditionalOnMissingBean(AgentCard)），其
+ * EnableConfigurationProperties 注册的 A2aServerProperties / A2aServerAgentCardProperties
+ * 随之消失，而服务自己的 Card bean 又以它们为参数。此处统一注册，注册器幂等，
+ * Starter 自动配置正常执行时不会重复注册。
+ */
 @AutoConfiguration(after = com.bkanent.common.skill.config.SkillAutoConfiguration.class)
-@org.springframework.boot.context.properties.EnableConfigurationProperties(A2aExecutionProperties.class)
+@org.springframework.boot.context.properties.EnableConfigurationProperties({A2aExecutionProperties.class,
+        com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerProperties.class,
+        com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerAgentCardProperties.class})
 public class LiveSkillAgentCardAutoConfiguration {
     @Bean
     @ConditionalOnBean(SkillRegistry.class)

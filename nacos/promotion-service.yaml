@@ -40,4 +40,4 @@ mybatis-plus:
 
 promotion:
   integration:
-    mode: ${PROMOTION_INTEGRATION_MODE:unconfigured}
+    mode: local # Docker development only; production requires real mode and an implemented real provider.

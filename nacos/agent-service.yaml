@@ -193,7 +193,7 @@ agent:
       child-task-poll-jitter-percent: ${AGENT_A2A_CHILD_TASK_POLL_JITTER_PERCENT:20}
       worker-id: ${AGENT_ASYNC_RUNTIME_WORKER_ID:agent-worker}
     stream:
-      provider: ${AGENT_STREAM_PROVIDER:rocketmq}
+      provider: rocketmq
       rocketmq:
         topic: ${AGENT_STREAM_ROCKETMQ_TOPIC:bk.agent.session.stream}
         consumer-group: ${AGENT_STREAM_ROCKETMQ_CONSUMER_GROUP:agent-service-session-stream}
@@ -208,7 +208,7 @@ rocketmq:
     group: ${AGENT_STREAM_ROCKETMQ_PRODUCER_GROUP:agent-service-session-stream-producer}
 
 milvus:
-  enabled: ${MILVUS_ENABLED:true}
+  enabled: true
   endpoint: ${MILVUS_ENDPOINT:http://127.0.0.1:19530}
   token: ${MILVUS_TOKEN}
   database: ${MILVUS_DATABASE:default}

@@ -34,6 +34,7 @@
 
 - 服务本地 `application.yml` 只保留最小启动配置
 - 数据库、Redis、MQ、对象存储、Elasticsearch、Milvus、模型参数统一放在 `nacos/*.yaml`
+- `.env` 仅维护端口、连接地址、密钥和启动引导；集成模式、Token TTL、排行榜/流式 provider、Milvus/ES 搜索开关在 Nacos 中直接使用字面值，不与 `.env` 或 Compose 重复。宿主机工具使用的基础设施地址继续保留；连接与密钥占位符仍从环境变量或密钥管理系统读取，禁止把真实密钥写进 Nacos
 - 配置类统一通过 `@ConfigurationProperties` 收口
 - 不在业务代码中硬编码连接地址、密钥和环境差异参数
 
@@ -93,7 +94,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\local\check-environment.ps1 -
 
 分布式部署时还必须为每个 Agent 设置可被其他服务访问的 `A2A_PUBLIC_BASE_URL`，不能使用其他主机上的 `127.0.0.1`。DeepSeek、DashScope、数据库和基础设施凭据必须通过环境变量或密钥管理系统提供。
 
-合同、通知、媒体和推广服务还必须显式设置集成模式：`CONTRACT_INTEGRATION_MODE`、`NOTIFICATION_INTEGRATION_MODE`、`MEDIA_INTEGRATION_MODE`、`PROMOTION_INTEGRATION_MODE`。只有明确的 `local` 模式允许模拟 provider；分布式/生产模式使用 `real`，未接入的真实 provider 会明确报告未实现，不会伪造成功。
+合同、通知、媒体和推广服务的集成模式由对应 Nacos data ID 中的 `contract.integration.mode`、`notification.integration.mode`、`media.integration.mode`、`promotion.integration.mode` 管理，不在 `.env` 中设置。仓库模板为保留 Docker 开发行为使用显式 `local`，仅该模式允许模拟 provider；分布式生产部署必须在 Nacos 显式改为 `real`，并接入/选择真实 provider（合同须同时配置真实 OCR 与电子签 provider，见 [Provider 规范](docs/contract-integration-providers.md)）。仅设置 `real` 或选择尚未实现的厂商占位 provider 不代表集成成功，未实现会明确失败。生产导入前准备环境专属配置；开发 `config-init` 会原样上传模板并覆盖同 data ID，不要覆盖生产设置。
 
 分布式服务提供 `/actuator/health/liveness` 和 `/actuator/health/readiness`。readiness 会检查当前模板中声明的 Nacos、数据库、Redis、RocketMQ 或 MinIO 依赖；应用进程存活不代表已经可以接收业务流量。
 
@@ -157,6 +158,6 @@ docker compose -f docker-compose.yml -f docker-compose.mysql-client.yml up -d my
 
 这会把 `3306` 绑定到 `127.0.0.1`（可通过 `MYSQL_EXPOSED_PORT` 调整）。MCP 对外绑定独立使用 `MYSQL_MCP_BIND_ADDRESS`，默认始终为 loopback；远程接入前配置 HTTPS 入口及 `MYSQL_MCP_ALLOWED_HOSTS`，客户端应能提供 Bearer 请求头。
 
-Docker 编排默认只用于开发演示：full profile 会启用 Milvus 和 Elasticsearch 搜索；MySQL 使用 `sql/mysql-init.sql` 初始化业务库和表，MinIO 创建 `generated-assets` bucket，Elasticsearch 创建 `listing_info`、`marketing_content` 索引。Redis、Elasticsearch、Milvus 开发模式不创建业务表空间或独立账号，MinIO 使用 root 开发账号；生产部署前必须通过环境变量或密钥管理系统提供 `MYSQL_ROOT_PASSWORD`、`AUTH_TOKEN_SECRET`、模型/API 密钥和独立的基础设施凭据，并接入真实 Provider。停止并删除容器（保留数据卷）使用 `docker compose down`，清理数据卷前请确认数据已备份。
+Docker 编排默认只用于开发演示：full profile 配套的 Nacos 模板启用 Milvus 和 Elasticsearch 搜索、Redis 排行榜、RocketMQ 流式 provider，Token TTL 为 3600/604800 秒，四类集成为 `local`；这些业务值不再由 Compose 环境覆盖。应用容器的 `NACOS_USERNAME`、`NACOS_PASSWORD`、`MINIO_PUBLIC_BASE_URL` 可通过 `.env` 覆盖，但 Nacos Admin 账号初始化和目标命名空间 Card 更新授权仍需独立配置，填入密码不等于已授权。MySQL 使用 `sql/mysql-init.sql` 初始化业务库和表，MinIO 创建 `generated-assets` bucket，Elasticsearch 创建 `listing_info`、`marketing_content` 索引。Redis、Elasticsearch、Milvus 开发模式不创建业务表空间或独立账号，MinIO 使用 root 开发账号；生产部署前必须通过环境变量或密钥管理系统提供 `MYSQL_ROOT_PASSWORD`、`AUTH_TOKEN_SECRET`、模型/API 密钥和独立的基础设施凭据，并接入真实 Provider。停止并删除容器（保留数据卷）使用 `docker compose down`，清理数据卷前请确认数据已备份。
 
 变量名称清单见 [.env.example](.env.example)。

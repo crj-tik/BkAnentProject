@@ -83,6 +83,14 @@ SKILL.md 正文以 SkillTool 工具结果返回（Claude Code 同款机制），
 
 回滚策略：拦截器挂载为各服务独立改动，从拦截器链移除即回退默认路径；common-skill 模块的存在不影响未接入服务。
 
+## 2026-10-10 验收与观测补充（KI-46）
+
+受管 `SkillRoutingToolInterceptor` 在成功激活时直接返回快照正文，不调用旧 `SkillTool.call`，所以旧激活日志缺席不能证明未激活。成功路径补充日志，字段包含技能名、callId、threadId、task 的 SHA-256 及字符数；对外部身份字段消除控制字符并限长，task 原文与正文不落日志。无效加载、参数错误和普通业务工具调用不产生成功激活日志；范围校验及显式选择语义不变。
+
+配置边界：Nacos 管理非秘密业务策略与模型/技能参数，`.env` 管理基础设施、启动引导及秘密。当前 Nacos 模板使用 `${DEEPSEEK_API_KEY}`，不是存储实际密钥；配置中心和秘密注入是互补关系。删除 `.env` 与 Compose 重复业务覆盖后，在 Nacos 明确选定本地开发 provider 模式；生产必须在其独立 data ID 中选择真实 provider，不能默默回退模拟实现。
+
+验收只启动 MySQL、Nacos、单 data ID 导入任务；contract-service 在宿主机运行。使用独立命名空间和独立合成合同数据库，不修改既有业务数据或覆盖生产配置；如使用本地真实模型，独立验收配置给出模型地址与选项，报告实际模型而非声称 DeepSeek 云验收。分别发送全新上下文的风险与详情 A2A 请求，不预选或 hint 技能；采集成功激活及实际工具结果，区分真实 LLM 评审和规则回退。
+
 ## Open Questions
 
 - `ModelRequest.tools()` 的精确收窄语义（名称列表 vs 其他）——由第一期 spike 解决，不影响 spec 行为定义。

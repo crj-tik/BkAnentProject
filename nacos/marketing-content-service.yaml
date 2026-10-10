@@ -91,7 +91,7 @@ mybatis-plus:
 
 marketing:
   search:
-    use-elasticsearch: ${MARKETING_SEARCH_USE_ES:true}
+    use-elasticsearch: true
     write-enabled: ${MARKETING_SEARCH_WRITE_ENABLED:false}
     index-name: ${MARKETING_SEARCH_INDEX:marketing_content}
     sync-mode: ${MARKETING_SEARCH_SYNC_MODE:CANAL}

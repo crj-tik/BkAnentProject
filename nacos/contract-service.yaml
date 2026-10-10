@@ -88,8 +88,8 @@ mybatis-plus:
 
 agent:
   skills:
-    external-dir: ${AGENT_SKILLS_EXTERNAL_DIR:}
-    watch-enabled: ${AGENT_SKILLS_WATCH_ENABLED:true}
+    external-dir: ""
+    watch-enabled: true
 
 contract:
   reminder:
@@ -97,14 +97,15 @@ contract:
     pending-sign-days: 3
     pending-sign-cron: 0 30 9 * * ?
   integration:
-    mode: ${CONTRACT_INTEGRATION_MODE:unconfigured}
-    ocr-provider: ${CONTRACT_OCR_PROVIDER:mock-ocr-provider}
-    esign-provider: ${CONTRACT_ESIGN_PROVIDER:mock-esign-provider}
+    # Docker development only; production must set real and select implemented real OCR/esign providers in Nacos.
+    mode: local
+    ocr-provider: mock-ocr-provider
+    esign-provider: mock-esign-provider
   agent:
-    model: ${CONTRACT_AGENT_MODEL:deepseek-chat}
-    temperature: ${CONTRACT_AGENT_TEMPERATURE:0.2}
-    max-tokens: ${CONTRACT_AGENT_MAX_TOKENS:2000}
-    llm-risk-review-enabled: ${CONTRACT_LLM_RISK_REVIEW_ENABLED:true}
+    model: deepseek-chat
+    temperature: 0.2
+    max-tokens: 2000
+    llm-risk-review-enabled: true
     system-prompt: |
       You are a contract review and risk analysis agent for a real estate brokerage platform.
       Your responsibilities:

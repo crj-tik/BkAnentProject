@@ -87,7 +87,7 @@ agent:
     watch-enabled: ${AGENT_SKILLS_WATCH_ENABLED:true}
 listing:
   search:
-    use-elasticsearch: ${LISTING_SEARCH_USE_ES:true}
+    use-elasticsearch: true
     write-enabled: ${LISTING_SEARCH_WRITE_ENABLED:false}
     index-name: ${LISTING_SEARCH_INDEX:listing_info}
   agent:

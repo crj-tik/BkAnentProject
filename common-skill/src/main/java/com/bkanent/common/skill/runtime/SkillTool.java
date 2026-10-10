@@ -79,7 +79,9 @@ public final class SkillTool implements ToolCallback {
                     + "。请修正后重试，或不使用技能直接执行。";
         }
 
-        log.info("Skill '{}' activated (task={})", name, task);
+        // KI-46：task 原文可能含个人信息或机密内容，日志只留指纹与长度。
+        log.info("Skill '{}' activated (task=sha256:{}, taskChars={}, taskSummary=redacted)",
+                name, SkillLogFingerprints.taskFingerprint(task), task.length());
         return renderActivation(skill, task);
     }
 

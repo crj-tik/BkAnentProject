@@ -277,6 +277,16 @@
 
 **关联**：LR-21、LR-24、LR-25；KI-30、KI-31。
 
+## LR-30 自定义 AgentCard 必须自带属性装配，Starter 条件装配不可依赖
+
+**结论**：子 Agent 以自定义 AgentCard bean（`SkillAgentCardPublisher.publish`）发布技能 Card 时，该 bean 自身的参数所依赖的 `A2aServerProperties`/`A2aServerAgentCardProperties` 不能指望 Starter 的 `A2aServerAgentCardAutoConfiguration` 提供——后者类级 `@ConditionalOnMissingBean(AgentCard)` 会因自定义 Card bean 存在而整体跳过。共享层（common-a2a）统一注册这两个属性 bean（幂等），九服务 Card bean 才能在真实容器装配下启动。
+
+**根因**：Starter 的"有自定义 Card 就不干预"语义与"自定义 Card 构造仍要消费 Starter 属性"并存，条件装配的短路会连带吞掉其 `@EnableConfigurationProperties`。既有接线测试用反射直接 new 参数对象，绕过了容器装配，掩盖了这一点；只有真实进程启动才暴露（KI-47）。
+
+**代码位置**：`common-a2a/src/main/java/com/bkanent/common/a2a/LiveSkillAgentCardAutoConfiguration.java`（属性注册）；九服务 `*OfficialA2aAgent.contractPublishedAgentCard`（消费方）。
+
+**关联**：KI-47、LR-28。
+
 ## LR-29 未发送拒绝与已提交结果未知必须区别记录
 
 **结论**：新增调用账本终态 `REJECTED`，只允许从 `PENDING` 原子转入；与执行 claim 竞争时，只有取得 `EXECUTING` 的调用能进入实际工具。明确拒绝的记录不能再次 claim 或被对账覆盖为未知。并行批次使用提交时统一期限，队列中超时且未 claim 的调用记录未执行；已 claim 的调用无法证明取消时保留结果未知。

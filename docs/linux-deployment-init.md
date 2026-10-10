@@ -64,7 +64,9 @@
 - `.env` 含真实密钥：权限 600、已被 `.gitignore` 与 `.dockerignore` 排除，禁止提交或打进镜像。
 - Compose 默认只绑定 `127.0.0.1`；`--bind 0.0.0.0` 对外开放前确认防火墙/安全组，并同步复查 `A2A_PUBLIC_BASE_URL`、`MINIO_PUBLIC_BASE_URL`（不能用对端不可达的 loopback 地址）。
 - 真实模型调用必须替换占位密钥：`DEEPSEEK_API_KEY`、`DASHSCOPE_API_KEY`、`AGENT_RAG_RERANK_API_KEY`（compose 中的占位值只保证容器可启动）。
-- 生产/分布式集成模式必须显式设为 `real`：`CONTRACT_INTEGRATION_MODE`、`NOTIFICATION_INTEGRATION_MODE`、`MEDIA_INTEGRATION_MODE`、`PROMOTION_INTEGRATION_MODE`（见 README 的模拟层说明）。
+- `.env` 只放端口、基础设施连接、密钥及启动引导参数；集成模式、Token TTL、模型参数、Redis 排行榜、流式 provider 和 Milvus/ES 搜索开关均在对应 Nacos data ID 中维护，不再放入 `.env`。
+- 分布式生产部署必须在 Nacos 将 `contract.integration.mode`、`notification.integration.mode`、`media.integration.mode`、`promotion.integration.mode` 显式设为 `real`，并接入/选择真实 provider（合同同时配置真实 OCR/电子签 provider）；仅改 `real` 而没有真实实现仍会报告未实现，不会伪造成功。仓库 YAML 默认保持 Docker 开发模式 `local`，导入前准备环境专属配置；开发 `config-init` 会原样上传并覆盖同 data ID，不能用开发模板覆盖生产设置。依赖 readiness 保持不变。
+- Compose 已允许 `.env` 中的 `NACOS_USERNAME`、`NACOS_PASSWORD`、`MINIO_PUBLIC_BASE_URL` 覆盖应用容器取值。Nacos Admin 账号初始化及目标命名空间 Card 更新权限须另行配置，设置或生成密码并不代表已有授权（LR-28）。
 - 旧库 `user_account.password_hash` 为明文的，先按 README 完成 BCrypt 迁移再开放认证。
 - 初始化随机生成的 `MYSQL_MCP_PASSWORD`/`MYSQL_MCP_TOKEN` 已就位，启用 MCP 只读服务：`docker compose --profile mcp run --rm mysql-mcp-init` 后 `./scripts/deploy/start.sh --profile mcp`。
 
@@ -74,7 +76,7 @@
 - **端口冲突**：释放端口或改 `.env` 中对应 `*_EXPOSED_PORT`；容器已运行时 init 会自动跳过该检查。
 - **full 首次启动很慢**：镜像构建在容器内执行 Maven 打包；重复启动加 `--no-build`。
 - **config-init 上传失败**：Nacos 未就绪时任务自带重试；配置文件缺失属初始化校验范围，init 阶段即会报错。
-- **内存不足**：降级用 `minimal` 档位，或拆分基础设施到独立主机（此时 `.env` 的 `*_HOST` 指向对应地址）。
+- **内存不足**：降级用 `minimal` 档位，或拆分基础设施到独立主机。裸机工具仍从 `.env` 的基础设施地址读取；Compose 容器内默认使用服务名连接，外置基础设施需显式调整容器连接配置，不能仅改宿主机 `*_HOST` 就认为已生效。
 
 ## 关联
 

@@ -83,7 +83,7 @@ agent:
     watch-enabled: ${AGENT_SKILLS_WATCH_ENABLED:true}
 media:
   integration:
-    mode: ${MEDIA_INTEGRATION_MODE:unconfigured}
+    mode: local # Docker development only; production requires real mode and an implemented real provider.
   rocketmq:
     generate-topic: ${MEDIA_GENERATE_TOPIC:media_generate_task}
     consumer-group: ${MEDIA_ROCKETMQ_CONSUMER_GROUP:media-worker-consumer-group}

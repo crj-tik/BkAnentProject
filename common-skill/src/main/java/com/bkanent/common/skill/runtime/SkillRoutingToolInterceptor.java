@@ -6,11 +6,14 @@ import com.alibaba.cloud.ai.graph.agent.interceptor.ToolCallResponse;
 import com.alibaba.cloud.ai.graph.agent.interceptor.ToolInterceptor;
 import com.bkanent.common.agent.SkillSelection;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
 /** Actual execution boundary, independent of which tools the model was shown. */
 public final class SkillRoutingToolInterceptor extends ToolInterceptor {
+    private static final Logger log = LoggerFactory.getLogger(SkillRoutingToolInterceptor.class);
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Override public String getName() { return "skill-execution-scope"; }
@@ -41,7 +44,14 @@ public final class SkillRoutingToolInterceptor extends ToolInterceptor {
             String result = "技能 " + snapshot.definition().name() + " 已激活。\n[执行指引]\n"
                     + snapshot.definition().systemPrompt() + "\n[原始请求]\n" + execution.originalTask()
                     + "\n[本次技能任务]\n" + task + "\n[可用工具]\n" + execution.availableCapabilities().values();
-            return ToolCallResponse.of(request.getToolCallId(), request.getToolName(), result);
+            var response = ToolCallResponse.of(request.getToolCallId(), request.getToolName(), result);
+            // KI-46: correlate the exact task without exposing confidential text or argument/body payloads.
+            log.info("Skill '{}' activated (task=sha256:{}, taskChars={}, taskSummary=redacted, callId={}, threadId={})",
+                    SkillLogFingerprints.safeField(snapshot.definition().name()),
+                    SkillLogFingerprints.taskFingerprint(task), task.length(),
+                    SkillLogFingerprints.safeField(request.getToolCallId()), SkillLogFingerprints.safeField(request.getExecutionContext()
+                            .flatMap(context -> context.threadId()).orElse(null)));
+            return response;
         } catch (SkillExecutionException exception) {
             return ToolCallResponse.error(request.getToolCallId(), request.getToolName(), exception.code() + ": " + exception.getMessage());
         } catch (Exception exception) {

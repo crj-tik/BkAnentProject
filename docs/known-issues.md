@@ -123,17 +123,33 @@
 
 **处置方向**：读取选项值前检查剩余参数和空值，返回具体选项的用法错误；补充缺值、非法值和正常值的入口验证。
 
-## KI-46 [OPEN·P2] 受管 A2A 技能激活缺少技能名与任务锚点日志
+## KI-46 [FIXED·本提交·P2] 受管 A2A 技能激活缺少技能名与任务锚点日志
 
-**确认日期**：2026-10-10（`create-common-skill-module` 5.5 冒烟前置检查，源码确认；尚未运行真实模型验收）。
+**确认日期**：2026-10-10（`create-common-skill-module` 5.5 冒烟前置检查，源码确认）。
 
-**现象与根因**：`SkillTool.call` 在成功加载时记录 `Skill '{}' activated (task={})`，但受管 A2A 的 `SkillRoutingToolInterceptor.interceptToolCall` 直接调用 `SkillExecutionContext.activate` 并返回技能正文，不调用原 handler，也不记录激活日志。快照已激活时，模型拦截器同样直接走快照分支。因此不能以该旧日志缺席判定受管请求没有激活技能，现有日志也不足以满足 5.5 的技能名与 task 验收要求。
+**现象与根因**：`SkillTool.call` 在成功加载时记录 `Skill '{}' activated (task={})`（task 原文），但受管 A2A 的 `SkillRoutingToolInterceptor.interceptToolCall` 直接调用 `SkillExecutionContext.activate` 并返回技能正文，不调用原 handler，也不记录激活日志。快照已激活时，模型拦截器同样直接走快照分支。旧日志既在受管路径缺席（不能以缺席判定未激活），又在未受管路径泄漏 task 原文（含个人信息风险）。
 
-**处置方向**：在受管成功加载路径补齐可关联请求的激活观测，区分成功与拒绝，不改变成功快照、显式选择或实际工具范围守卫；记录任务内容时须考虑敏感信息及日志注入。补充成功加载、无效加载与默认未激活路径的日志回归，并在真实 contract A2A 冒烟中确认。
+**修复**：受管成功加载路径记录技能名、task 的 SHA-256 指纹与字符数、callId、threadId；外部身份字段消除控制字符并限长（防日志注入），task 原文与技能正文不落日志；未受管 `SkillTool` 日志同步改为同一指纹形式。指纹逻辑抽取为共享 `SkillLogFingerprints`。不改变成功快照、显式选择或实际工具范围守卫（LR-21 不变）。
 
-**代码位置**：`common-skill/src/main/java/com/bkanent/common/skill/runtime/SkillTool.java:82`、`SkillRoutingToolInterceptor.java:33–44`；`SkillRoutingModelInterceptor` 的受管快照分支。
+**验证**：`SkillRoutingToolInterceptorTest` 8 用例（成功、Runnable 元数据、无效/拒绝不误记、切换保持快照、显式锁定、默认工具直通、未受管直通、日志注入与越界）；`SkillToolTest` 脱敏断言；真实 contract A2A 冒烟确认激活日志出现且默认路径零激活（`docs/acceptance/contract-skill-smoke-20261010.json`）。
 
-**关联**：LR-21；`openspec/changes/create-common-skill-module/tasks.md` 5.5。
+**代码位置**：`common-skill/src/main/java/com/bkanent/common/skill/runtime/SkillRoutingToolInterceptor.java`、`SkillTool.java`、`SkillLogFingerprints.java`。
+
+**关联**：LR-21；`openspec/changes/create-common-skill-module/tasks.md` 5.5、5.7。
+
+## KI-47 [FIXED·本提交·P1] 自定义 AgentCard bean 抑制 Starter 属性装配，九服务分布式启动即失败
+
+**确认日期**：2026-10-10（contract-service 真实分布式启动冒烟，首次真实启动暴露）。
+
+**现象与根因**：每个子 Agent 的 `*OfficialA2aAgent` 用 `SkillAgentCardPublisher.publish` 定义自己的 AgentCard bean；Starter 的 `A2aServerAgentCardAutoConfiguration` 类级带 `@ConditionalOnMissingBean(AgentCard)`，自定义 bean 使整个自动配置（含其 `@EnableConfigurationProperties` 的 `A2aServerProperties` / `A2aServerAgentCardProperties`）跳过；而服务自己的 Card bean 方法又以 `A2aServerAgentCardProperties` 为参数 → `UnsatisfiedDependencyException`，应用启动失败。既有 `ExplicitSkillAgentWiringTest` 用反射直接构造参数对象绕过容器，单测从未暴露该缺陷；旧 Docker 镜像构建于该 bean 方法加入之前，也未覆盖。九个服务全部受影响。
+
+**修复**：`common-a2a` 的 `LiveSkillAgentCardAutoConfiguration` 统一 `@EnableConfigurationProperties` 注册 `A2aServerProperties` 与 `A2aServerAgentCardProperties`（注册幂等，Starter 自动配置正常执行时不重复注册）。contract-service 真实分布式启动、Nacos Card 注册与 A2A 冒烟通过。
+
+**防回归提示**：以真实进程启动验证 A2A 装配，不再以反射构造参数的接线测试作为启动可行性证据。
+
+**代码位置**：`common-a2a/src/main/java/com/bkanent/common/a2a/LiveSkillAgentCardAutoConfiguration.java`；九服务 `*OfficialA2aAgent.contractPublishedAgentCard`。
+
+**关联**：LR-28（Card 发布链）；`openspec/changes/create-common-skill-module/tasks.md` 5.8。
 
 ## KI-30 [FIXED·本提交·P1] 技能热更新未同步 HTTP/Nacos Card
 

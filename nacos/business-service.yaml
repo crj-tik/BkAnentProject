@@ -102,7 +102,7 @@ mybatis-plus:
 
 business:
   ranking:
-    use-redis: ${BUSINESS_RANKING_USE_REDIS:true}
+    use-redis: true
   redis:
     enabled: ${BUSINESS_REDIS_ENABLED:true}
     ranking-key-prefix: ${BUSINESS_RANKING_KEY_PREFIX:business:ranking:}

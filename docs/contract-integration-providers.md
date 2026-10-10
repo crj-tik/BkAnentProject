@@ -59,19 +59,25 @@ Nacos 配置文件：
 
 - [contract-service.yaml](/D:/project/BkAnentProject/BkAnentProject/nacos/contract-service.yaml:1)
 
-关键配置项：
+关键配置项均在 Nacos 中直接维护字面值，不在 `.env` 重复定义：
 
+- `contract.integration.mode`
 - `contract.integration.ocr-provider`
 - `contract.integration.esign-provider`
 
-推荐默认值：
+Docker 开发默认值（仅显式 `local` 允许模拟）：
 
 ```yaml
 contract:
   integration:
-    ocr-provider: ${CONTRACT_OCR_PROVIDER:mock-ocr-provider}
-    esign-provider: ${CONTRACT_ESIGN_PROVIDER:mock-esign-provider}
+    mode: local
+    ocr-provider: mock-ocr-provider
+    esign-provider: mock-esign-provider
 ```
+
+分布式生产部署必须在 Nacos 显式设 `contract.integration.mode: real`，并同时选择已接入的真实 OCR 和电子签 provider。当前 `vendor-ocr-provider`、`esign-cn`、`fadada` 仍是占位实现，选择其名称或仅改为 `real` 不代表真实集成已就绪；未实现应明确失败，不能回退模拟成功。第三方密钥仍由环境变量或密钥管理系统提供，不得写入 Nacos YAML。
+
+合同技能目录/监听开关以及 `contract.agent` 的模型、温度、token 上限、LLM 风险审查开关也在 Nacos 中直接维护，默认分别为 `deepseek-chat`、`0.2`、`2000`、`true`；依赖 readiness 不因配置收口而降低。
 
 ## 5. 演进规则
 

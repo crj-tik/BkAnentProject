@@ -109,7 +109,7 @@ agent:
     watch-enabled: ${AGENT_SKILLS_WATCH_ENABLED:true}
 notification:
   integration:
-    mode: ${NOTIFICATION_INTEGRATION_MODE:unconfigured}
+    mode: local # Docker development only; production requires real mode and an implemented real provider.
   workflow-events:
     enabled: ${NOTIFICATION_WORKFLOW_EVENTS_ENABLED:true}
     topic: ${AGENT_STREAM_ROCKETMQ_TOPIC:bk.agent.session.stream}
