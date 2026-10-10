@@ -75,7 +75,7 @@ contract:
     esign-provider: mock-esign-provider
 ```
 
-分布式生产部署必须在 Nacos 显式设 `contract.integration.mode: real`，并同时选择已接入的真实 OCR 和电子签 provider。`vendor-ocr-provider` 已被 KE 网关百度通用文字识别替代（provider 名 `baidu-general`，`KeBaiduContractOcrExtractor`：服务端下载附件→base64→`POST {KE_OCR_BASE_URL}/ocr/general`，实测中文合同文本 5/5 行识别正确、延迟 0.4–0.8s；百度后端无法拉取内网 URL，因此不走 image_url）。`esign-cn`、`fadada` 仍是占位实现，选择其名称或仅改为 `real` 不代表真实集成已就绪；未实现应明确失败，不能回退模拟成功。第三方密钥仍由环境变量或密钥管理系统提供，不得写入 Nacos YAML。
+分布式生产部署必须在 Nacos 显式设 `contract.integration.mode: real`，并同时选择已接入的真实 OCR 和电子签 provider。`vendor-ocr-provider` 已被 KE 网关百度通用文字识别替代（provider 名 `baidu-general`，`KeBaiduContractOcrExtractor`：服务端下载附件→base64→`POST {KE_OCR_BASE_URL}/ocr/general`，实测中文合同文本 5/5 行识别正确、延迟 0.4–0.8s；百度后端无法拉取内网 URL，因此不走 image_url）。media-worker 的房源文生图已由 KE 网关豆包 Seedream 承接（`doubao-seedream-4.5-gen`，`KeSeedreamImageGenerationClient`：逐角度生成→TOS URL 下载→byte[] 上传 MinIO；实测 2048×2048、约 15s/张、三角度任务 45s 由 RocketMQ 异步消费吸收；Seedream 拒绝 size 参数）。电子签 `esign-cn`、`fadada` 仍是占位实现，选择其名称或仅改为 `real` 不代表真实集成已就绪；未实现应明确失败，不能回退模拟成功。第三方密钥仍由环境变量或密钥管理系统提供，不得写入 Nacos YAML。
 
 合同技能目录/监听开关以及 `contract.agent` 的模型、温度、token 上限、LLM 风险审查开关也在 Nacos 中直接维护，默认分别为 `deepseek-chat`、`0.2`、`2000`、`true`；依赖 readiness 不因配置收口而降低。
 

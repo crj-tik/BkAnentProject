@@ -96,7 +96,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\local\check-environment.ps1 -
 
 分布式部署时还必须为每个 Agent 设置可被其他服务访问的 `A2A_PUBLIC_BASE_URL`，不能使用其他主机上的 `127.0.0.1`。DeepSeek、DashScope、数据库和基础设施凭据必须通过环境变量或密钥管理系统提供。
 
-合同、通知、媒体和推广服务的集成模式由对应 Nacos data ID 中的 `contract.integration.mode`、`notification.integration.mode`、`media.integration.mode`、`promotion.integration.mode` 管理，不在 `.env` 中设置。仓库模板为保留 Docker 开发行为使用显式 `local`，仅该模式允许模拟 provider；分布式生产部署必须在 Nacos 显式改为 `real`，并接入/选择真实 provider（合同须同时配置真实 OCR 与电子签 provider，见 [Provider 规范](docs/contract-integration-providers.md)）。仅设置 `real` 或选择尚未实现的厂商占位 provider 不代表集成成功，未实现会明确失败。生产导入前准备环境专属配置；开发 `config-init` 会原样上传模板并覆盖同 data ID，不要覆盖生产设置。
+合同、通知、媒体和推广服务的集成模式由对应 Nacos data ID 中的 `contract.integration.mode`、`notification.integration.mode`、`media.integration.mode`、`promotion.integration.mode` 管理，不在 `.env` 中设置。仓库模板为保留 Docker 开发行为使用显式 `local`，仅该模式允许模拟 provider。**已实现的真实 provider**：合同 OCR（KE 网关百度通用文字识别 `baidu-general`，real 模式配 `contract.integration.ocr-provider: baidu-general`，服务端下载附件后 base64 上送——百度后端拉不到内网 MinIO 地址）与房源文生图（KE 网关豆包 Seedream `doubao-seedream-4.5-gen`，`media.integration.mode=real` 即启用，每角度一张 2048×2048、约 15s/张由 RocketMQ 异步消费吸收）。**仍为占位**：电子签（esign-cn/fadada）、通知渠道、推广发布平台——生产 `real` 模式须接入真实实现，未实现会明确失败，不能回退模拟成功。生产导入前准备环境专属配置；开发 `config-init` 会原样上传模板并覆盖同 data ID，不要覆盖生产设置。
 
 分布式服务提供 `/actuator/health/liveness` 和 `/actuator/health/readiness`。readiness 会检查当前模板中声明的 Nacos、数据库、Redis、RocketMQ 或 MinIO 依赖；应用进程存活不代表已经可以接收业务流量。
 

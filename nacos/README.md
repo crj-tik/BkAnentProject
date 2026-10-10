@@ -52,6 +52,7 @@
 
 - `auth-service.yaml`：`auth.token.access-ttl-seconds=3600`、`refresh-ttl-seconds=604800`
 - `contract-service.yaml`、`notification-service.yaml`、`media-worker-service.yaml`、`promotion-service.yaml`：各自 `*.integration.mode=local`
+- `contract-service.yaml`：OCR 真实实现配置 `ocr-gateway-base-url`/`ocr-model`（KE 百度 `baidu-general`）；`media-worker-service.yaml`：文生图真实实现配置 `image-gateway-base-url`/`image-model`（KE Seedream `doubao-seedream-4.5-gen`）。生产 `real` 模式分别将 `ocr-provider` 切为 `baidu-general`、`mode` 切为 `real` 即启用
 - `business-service.yaml`：`business.ranking.use-redis=true`
 - `agent-service.yaml`：`agent.distributed.stream.provider=rocketmq`、`milvus.enabled=true`
 - `listing-master-service.yaml`、`marketing-content-service.yaml`：各自 `*.search.use-elasticsearch=true`

@@ -90,7 +90,13 @@ agent:
     watch-enabled: ${AGENT_SKILLS_WATCH_ENABLED:true}
 media:
   integration:
-    mode: local # Docker development only; production requires real mode and an implemented real provider.
+    mode: local # Docker development only; production sets real to use the KE gateway image generation below.
+    # KE gateway (Bella) Doubao Seedream text-to-image is the implemented real provider
+    # (per-angle generation ~8-14s each, absorbed by the RocketMQ async consumer;
+    # Seedream rejects the size parameter, resolution is model-decided, measured 2048x2048).
+    # Production real mode: switch mode to real; credentials via KE_API_KEY env.
+    image-gateway-base-url: ${KE_IMAGE_BASE_URL:https://open-chatgpt.ke.com/v1}
+    image-model: ${KE_IMAGE_MODEL:doubao-seedream-4.5-gen}
   rocketmq:
     generate-topic: ${MEDIA_GENERATE_TOPIC:media_generate_task}
     consumer-group: ${MEDIA_ROCKETMQ_CONSUMER_GROUP:media-worker-consumer-group}
