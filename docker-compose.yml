@@ -38,6 +38,8 @@ x-app-environment: &app-environment
   KE_API_KEY: ${KE_API_KEY:-}
   KE_EMBEDDING_BASE_URL: ${KE_EMBEDDING_BASE_URL:-https://open-chatgpt.ke.com/v1}
   KE_EMBEDDING_MODEL: ${KE_EMBEDDING_MODEL:-baai-m3-1b-base-v1-embedding-20240619}
+  KE_OCR_BASE_URL: ${KE_OCR_BASE_URL:-https://open-chatgpt.ke.com/v1}
+  KE_OCR_MODEL: ${KE_OCR_MODEL:-baidu-general}
   AGENT_RAG_RERANK_API_KEY: ${AGENT_RAG_RERANK_API_KEY:-local-dev-placeholder}
   A2A_PUBLIC_BASE_URL: ${A2A_PUBLIC_BASE_URL:-http://localhost}
   SERVICE_READINESS_MODE: distributed

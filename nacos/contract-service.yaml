@@ -106,7 +106,13 @@ contract:
   integration:
     # Docker development only; production must set real and select implemented real OCR/esign providers in Nacos.
     mode: local
+    # KE gateway (Bella) Baidu general OCR is the implemented real provider:
+    # service downloads the attachment and uploads base64 (image_url is unusable -
+    # the Baidu backend cannot reach intranet MinIO); credentials via KE_API_KEY.
+    # Production real mode: ocr-provider: baidu-general.
     ocr-provider: mock-ocr-provider
+    ocr-gateway-base-url: ${KE_OCR_BASE_URL:https://open-chatgpt.ke.com/v1}
+    ocr-model: ${KE_OCR_MODEL:baidu-general}
     esign-provider: mock-esign-provider
   agent:
     model: ${CONTRACT_AGENT_MODEL:gpt-5.6-terra}
