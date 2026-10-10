@@ -6,16 +6,31 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
   ai:
     deepseek:
-      api-key: ${DEEPSEEK_API_KEY}
+      # KE OpenAI-compatible gateway (Bella). DeepSeek starter drives all chat traffic.
+      api-key: ${DEEPSEEK_API_KEY:${KE_API_KEY:}}
+      base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
       chat:
-        api-key: ${DEEPSEEK_API_KEY}
+        api-key: ${DEEPSEEK_API_KEY:${KE_API_KEY:}}
+        base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
+        completions-path: /chat/completions
+        options:
+          model: ${AGENT_CHAT_MODEL:${AGENT_DEEPSEEK_MODEL:qwen3.8-flash}}
+          temperature: 0.2
+    openai:
+      # Embedding-only channel to the same gateway (chat stays on deepseek starter;
+      # selection flags: spring.ai.model.chat=deepseek / embedding=openai below).
+      # base-url already contains /v1, so embeddings-path is relative to it.
+      api-key: ${KE_API_KEY:${DEEPSEEK_API_KEY:}}
+      base-url: ${KE_EMBEDDING_BASE_URL:https://open-chatgpt.ke.com/v1}
+      embedding:
+        embeddings-path: /embeddings
+        options:
+          model: ${KE_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
     dashscope:
       api-key: ${DASHSCOPE_API_KEY}
-      embedding:
-        enabled: true
-        options:
-          model: ${DASHSCOPE_EMBEDDING_MODEL:text-embedding-v3}
-          dimensions: ${DASHSCOPE_EMBEDDING_DIMENSIONS:1024}
+    model:
+      chat: deepseek
+      embedding: openai
     alibaba:
       a2a:
         nacos:
@@ -116,7 +131,7 @@ agent:
   memory:
     base-url: ${MEMORY_SERVICE_BASE_URL:http://127.0.0.1:9011}
   chat:
-    model: ${AGENT_CHAT_MODEL:${AGENT_DEEPSEEK_MODEL:deepseek-chat}}
+    model: ${AGENT_CHAT_MODEL:${AGENT_DEEPSEEK_MODEL:qwen3.8-flash}}
     temperature: ${AGENT_CHAT_TEMPERATURE:${AGENT_DEEPSEEK_TEMPERATURE:0.2}}
     max-tokens: ${AGENT_CHAT_MAX_TOKENS:${AGENT_DEEPSEEK_MAX_TOKENS:1600}}
     top-p: ${AGENT_CHAT_TOP_P:${AGENT_DEEPSEEK_TOP_P:1.0}}

@@ -6,9 +6,16 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
   ai:
     deepseek:
-      api-key: ${DEEPSEEK_API_KEY}
+      # KE OpenAI-compatible gateway (Bella). DeepSeek starter drives chat traffic.
+      api-key: ${DEEPSEEK_API_KEY:${KE_API_KEY:}}
+      base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
       chat:
-        api-key: ${DEEPSEEK_API_KEY}
+        api-key: ${DEEPSEEK_API_KEY:${KE_API_KEY:}}
+        base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
+        completions-path: /chat/completions
+        options:
+          model: ${CONTRACT_AGENT_MODEL:qwen3.8-flash}
+          temperature: 0.2
     alibaba:
       a2a:
         server:
@@ -102,7 +109,7 @@ contract:
     ocr-provider: mock-ocr-provider
     esign-provider: mock-esign-provider
   agent:
-    model: deepseek-chat
+    model: ${CONTRACT_AGENT_MODEL:qwen3.8-flash}
     temperature: 0.2
     max-tokens: 2000
     llm-risk-review-enabled: true

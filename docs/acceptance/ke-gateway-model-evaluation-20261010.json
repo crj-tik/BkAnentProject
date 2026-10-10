@@ -1,0 +1,42 @@
+{
+  "date": "2026-10-10",
+  "scope": "KE gateway (Bella, https://open-chatgpt.ke.com/v1) model evaluation for chat and embedding channels; rerank kept on local bge-reranker",
+  "auth": "Authorization: Bearer <KE_API_KEY>; key reused from s2-interviewer project env (not stored in this repo)",
+  "endpointDiscovery": {
+    "chat": "/v1/chat/completions (standard)",
+    "embeddings": "/v1/embeddings (standard)",
+    "rerank": "/v1/reranks (plural; discovered from Bella frontend JS chunk - /v1/rerank and dashscope paths all 404)"
+  },
+  "embeddingCandidates": [
+    {"model": "baai-m3-1b-base-v1-embedding-20240619", "dims": 1024, "latencySec": 0.54, "rankingCases": "4/4", "note": "same family as local Embedding-BGE-M3 project; SELECTED"},
+    {"model": "baai-bge-1b-large-v4-embedding-20240815", "dims": 1024, "latencySec": 1.77, "rankingCases": "4/4", "note": "ok but slower, smaller avg gap"},
+    {"model": "text-embedding-3-large", "dims": 3072, "latencySec": 2.27, "rankingCases": "4/4", "note": "dims mismatch with existing milvus collections (1024) - would require reindex; not selected"},
+    {"model": "hfl-roberta-1b-bella-v1-embedding-20240705", "status": "HTTP 404 no channel"},
+    {"model": "doubao-embedding-vision", "status": "HTTP 400 - vision-only model"},
+    {"model": "text-embedding-ada-002", "dims": 1536, "latencySec": 2.41, "note": "dims mismatch, slower, older"}
+  ],
+  "chatCandidates": [
+    {"model": "qwen3.8-flash", "toolCall": "PASS", "structuredJson": "PASS", "noToolHallucination": "PASS", "skillRouting": "PASS", "latencySec": 1.2, "verdict": "SELECTED - all four criteria pass with lowest latency"},
+    {"model": "deepseek-v4.1-flash", "toolCall": "PASS", "structuredJson": "PASS (needs max_tokens>=2000; truncated at 800)", "noToolHallucination": "PASS", "skillRouting": "PASS", "latencySec": 2.5, "verdict": "runner-up"},
+    {"model": "Deepseek-V4-Flash", "toolCall": "PASS", "structuredJson": "PASS", "noToolHallucination": "PASS", "skillRouting": "FAIL (skips skill pseudo-tool, calls business tool directly)", "latencySec": 4.0, "verdict": "rejected - would never trigger skill loading in production routing"},
+    {"model": "Deepseek-V4-Pro", "toolCall": "PASS", "structuredJson": "PASS", "noToolHallucination": "PASS", "skillRouting": "not tested", "latencySec": 21.4, "verdict": "rejected - latency too high for turn-based agents"},
+    {"model": "GLM-5.3-Flash", "structuredJson": "PASS at 2000 tokens", "latencySec": 16.6, "verdict": "rejected - slow generation"},
+    {"model": "gpt-5.6-luna", "toolCall": "PASS", "skillRouting": "PASS", "noToolHallucination": "FAIL-ish (replies to greeting with JSON contract format)", "latencySec": 2.3, "verdict": "rejected - over-fit to format instructions; s2-interviewer notes ~9s first-token for this family"}
+  ],
+  "rerankDecision": {
+    "tested": "qwen3-rerank-8b via /v1/reranks (cohere request shape, dashscope-style response)",
+    "result": "stable outputs, 0.3s latency, but 2/4 real-estate ranking cases WRONG when hard constraints present (budget cap and commute-time queries ranked constraint-violating candidates first); weak separation (unrelated text scored 0.19-0.27)",
+    "decision": "keep local bge-reranker container; gateway rerank NOT wired into config"
+  },
+  "wiringApplied": {
+    "chat": "all nine service yamls: spring.ai.deepseek.base-url=https://open-chatgpt.ke.com/v1 (DEEPSEEK_BASE_URL overridable), model default qwen3.8-flash per-service env (AGENT_CHAT_MODEL/CONTRACT_AGENT_MODEL/etc), temperature 0.2",
+    "embedding": "agent-service only: new spring.ai.openai block (embedding-only; spring.ai.model.chat=deepseek + embedding=openai selects channels), embeddings-path=/embeddings (base-url already has /v1), model baai-m3-1b-base-v1-embedding-20240619, 1024 dims matches existing milvus collections",
+    "keyFallback": "DEEPSEEK_API_KEY preferred, KE_API_KEY fallback for both channels; no secrets in yaml",
+    "dependency": "agent-service pom adds spring-ai-starter-model-openai; verified OpenAiChatModel NOT auto-configured (selection flag spring.ai.model.chat=deepseek)"
+  },
+  "verification": {
+    "springBootEmbeddingCall": "minimal Spring Boot 3.5.0 + spring-ai 1.1.2 app with identical config keys: embed() returned 1024 dims via real gateway; ChatModel bean list empty (no channel conflict)",
+    "tests": "agent-service full suite 129 tests pass (0 failures) after starter addition",
+    "yaml": "all 13 nacos/*.yaml parse OK (python yaml in isolated container)"
+  }
+}

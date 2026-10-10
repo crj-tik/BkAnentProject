@@ -19,9 +19,16 @@ spring:
           max-wait: ${REDIS_POOL_MAX_WAIT:3000ms}
   ai:
     deepseek:
-      api-key: ${DEEPSEEK_API_KEY}
+      # KE OpenAI-compatible gateway (Bella). DeepSeek starter drives chat traffic.
+      api-key: ${DEEPSEEK_API_KEY:${KE_API_KEY:}}
+      base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
       chat:
-        api-key: ${DEEPSEEK_API_KEY}
+        api-key: ${DEEPSEEK_API_KEY:${KE_API_KEY:}}
+        base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
+        completions-path: /chat/completions
+        options:
+          model: ${TRADE_AGENT_MODEL:qwen3.8-flash}
+          temperature: 0.2
     alibaba:
       a2a:
         server:
@@ -110,7 +117,7 @@ business:
 
 trade:
   agent:
-    model: ${TRADE_AGENT_MODEL:deepseek-chat}
+    model: ${TRADE_AGENT_MODEL:qwen3.8-flash}
     temperature: ${TRADE_AGENT_TEMPERATURE:0.2}
     max-tokens: ${TRADE_AGENT_MAX_TOKENS:2000}
     system-prompt: |

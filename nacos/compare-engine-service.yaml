@@ -1,9 +1,16 @@
 spring:
   ai:
     deepseek:
-      api-key: ${DEEPSEEK_API_KEY}
+      # KE OpenAI-compatible gateway (Bella). DeepSeek starter drives chat traffic.
+      api-key: ${DEEPSEEK_API_KEY:${KE_API_KEY:}}
+      base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
       chat:
-        api-key: ${DEEPSEEK_API_KEY}
+        api-key: ${DEEPSEEK_API_KEY:${KE_API_KEY:}}
+        base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
+        completions-path: /chat/completions
+        options:
+          model: ${COMPARE_AGENT_MODEL:qwen3.8-flash}
+          temperature: 0.2
     alibaba:
       a2a:
         server:
@@ -75,7 +82,7 @@ compare:
   report:
     storage-dir: ${COMPARE_REPORT_STORAGE_DIR:/app/runtime/reports}
   agent:
-    model: ${COMPARE_AGENT_MODEL:deepseek-chat}
+    model: ${COMPARE_AGENT_MODEL:qwen3.8-flash}
     temperature: ${COMPARE_AGENT_TEMPERATURE:0.2}
     max-tokens: ${COMPARE_AGENT_MAX_TOKENS:2000}
     ai-conclusion-enabled: ${COMPARE_AI_CONCLUSION_ENABLED:true}

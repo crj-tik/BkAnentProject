@@ -32,6 +32,7 @@
 - `spring.elasticsearch`
 - `milvus`
 - `spring.ai.deepseek`
+- `spring.ai.openai`（仅 agent-service embedding 通道，经 `spring.ai.model.chat=deepseek` / `embedding=openai` 选择）
 - `spring.ai.alibaba.a2a.*`
 - `spring.cloud.nacos.discovery.metadata`
 - `management.*`
@@ -54,14 +55,14 @@
 - `business-service.yaml`：`business.ranking.use-redis=true`
 - `agent-service.yaml`：`agent.distributed.stream.provider=rocketmq`、`milvus.enabled=true`
 - `listing-master-service.yaml`、`marketing-content-service.yaml`：各自 `*.search.use-elasticsearch=true`
-- `contract-service.yaml`：技能目录/监听、模型 `deepseek-chat`、温度 `0.2`、最大 token `2000`、风险审查开关 `true` 及 OCR/电子签 provider 名称
+- `contract-service.yaml`：技能目录/监听、模型 `qwen3.8-flash`（可经 `CONTRACT_AGENT_MODEL` 覆盖）、温度 `0.2`、最大 token `2000`、风险审查开关 `true` 及 OCR/电子签 provider 名称
 
 这些默认值保留 Docker 开发编排此前的有效行为。分布式生产部署前必须在 Nacos 显式配置四个服务的 `*.integration.mode=real`，并接入/选择真实 provider（合同须同时选择真实 OCR 与电子签 provider）；仅写 `real` 或选择尚未实现的厂商占位 provider 不代表集成可用。不得通过 `.env` 切换业务模式，也不得为绕过依赖失败而削弱 readiness。开发 `config-init` 原样上传本目录模板，重复运行会覆盖同 data ID；生产导入前应准备环境专属配置，避免用开发模板覆盖生产设置。
 
 ## Agent 当前方案
 
-- 连接层：`spring.ai.deepseek`
-- 业务层：`agent.deepseek`
+- 连接层：`spring.ai.deepseek`（chat，KE 网关 `qwen3.8-flash`）+ `spring.ai.openai`（embedding，KE 网关 `baai-m3-1b-base-v1-embedding-20240619`，1024 维）
+- 业务层：`agent.chat`（模型名逐次调用传入）
 - 工具层：`agent.mcp`
 - 默认由 LLM 根据 A2A/MCP 等能力描述选择工具；指定 skill 时加载正文与能力范围，业务步骤由模型理解执行。
 - 九个 Subagent 的本地技能由注册表动态生成 Card，`card.skills` 不再手工维护。技能热加载立即刷新 HTTP Card，Nacos 发布失败每 5 秒重试；Supervisor 成功目录缓存仍受刷新间隔影响。
