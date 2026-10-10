@@ -77,5 +77,13 @@
       "gemini-3.8-flash": "FAILED - gateway channel defect: any second turn containing tool results returns 400 Channel Exception (works for plain chat and first-turn tool calls); unusable in ReactAgent loops"
     },
     "finalDecision": "chat model switched from qwen3.8-flash to gpt-5.6-terra across all ten service yamls (20 placeholders). gpt-5.6-terra: perfect Q1 6/6, trap blocked with all 4 hidden risks identified, multi-turn synthesis 5/5 with strict decision enum, ~12s per turn (acceptable under relaxed latency). Qwen3.8-Max remains the same-gateway fallback via *_AGENT_MODEL env overrides. qwen3.8-flash demoted: format-compliant in isolation but output quality collapses after multi-turn tool chaining."
+  },
+  "endToEndSmokeGptTerra": {
+    "date": "2026-10-10 (after wiring)",
+    "setup": "host JVM contract-service (jar from commit c02f4aa build), local Nacos public namespace with new configs, synthetic DB bk_contract_smoke_fe6bbaf091, DEEPSEEK_API_KEY deliberately UNSET to exercise the ${DEEPSEEK_API_KEY:${KE_API_KEY:}} fallback chain",
+    "riskReviewCase": "COMPLETED in 20.8s; skill activation log present (contract-risk-review, task sha256 fingerprint + callId + threadId); decision=RISK_ALERT with enum compliance; 5 risk factors all traceable to real data (DRAFT status, seal PENDING, archive PENDING, zero attachments, OCR missing penalty/transfer terms)",
+    "plainDetailCase": "COMPLETED in 19.0s; model chose to load the skill for a status query mentioning seal/archive conditions - legitimate semantic match (skill description covers seal/archive assessment), execution correct; noted as behavior difference vs qwen3.8-flash which skipped the skill on the same phrasing",
+    "composeWiring": "x-app-environment now passes KE_API_KEY (empty default), KE_EMBEDDING_BASE_URL, KE_EMBEDDING_MODEL; DEEPSEEK_API_KEY uses nested interpolation ${DEEPSEEK_API_KEY:-${KE_API_KEY:-local-dev-placeholder}} so a lone KE_API_KEY still authenticates both channels while keeping the boot placeholder when neither is set; verified with compose config render in all three scenarios (KE only / neither / both)",
+    "localEnv": ".env gained the real KE_API_KEY (masked here, never committed); .env remains gitignored"
   }
 }

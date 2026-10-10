@@ -34,7 +34,10 @@ x-app-environment: &app-environment
   AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:-local-docker-auth-secret-change-before-production-please}
   # Spring AI validates provider keys during bean creation. The placeholders
   # only keep local containers bootable; real AI calls still require keys.
-  DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-local-dev-placeholder}
+  DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-${KE_API_KEY:-local-dev-placeholder}}
+  KE_API_KEY: ${KE_API_KEY:-}
+  KE_EMBEDDING_BASE_URL: ${KE_EMBEDDING_BASE_URL:-https://open-chatgpt.ke.com/v1}
+  KE_EMBEDDING_MODEL: ${KE_EMBEDDING_MODEL:-baai-m3-1b-base-v1-embedding-20240619}
   DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-local-dev-placeholder}
   AGENT_RAG_RERANK_API_KEY: ${AGENT_RAG_RERANK_API_KEY:-local-dev-placeholder}
   A2A_PUBLIC_BASE_URL: http://localhost
