@@ -3,8 +3,8 @@ name: bk-anent-dev
 x-app-environment: &app-environment
   SPRING_PROFILES_ACTIVE: distributed
   NACOS_SERVER: nacos:8848
-  NACOS_NAMESPACE: ""
-  NACOS_USERNAME: ${NACOS_USERNAME:-nacos}
+  NACOS_NAMESPACE: ${NACOS_NAMESPACE:-BK-AGENT}
+  NACOS_USERNAME: ${NACOS_USERNAME:-bkagent}
   NACOS_PASSWORD: ${NACOS_PASSWORD:-}
   MYSQL_HOST: mysql
   MYSQL_PORT: "3306"
@@ -38,9 +38,8 @@ x-app-environment: &app-environment
   KE_API_KEY: ${KE_API_KEY:-}
   KE_EMBEDDING_BASE_URL: ${KE_EMBEDDING_BASE_URL:-https://open-chatgpt.ke.com/v1}
   KE_EMBEDDING_MODEL: ${KE_EMBEDDING_MODEL:-baai-m3-1b-base-v1-embedding-20240619}
-  DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-local-dev-placeholder}
   AGENT_RAG_RERANK_API_KEY: ${AGENT_RAG_RERANK_API_KEY:-local-dev-placeholder}
-  A2A_PUBLIC_BASE_URL: http://localhost
+  A2A_PUBLIC_BASE_URL: ${A2A_PUBLIC_BASE_URL:-http://localhost}
   SERVICE_READINESS_MODE: distributed
   # Business modes, token TTLs, stream and search switches are owned by Nacos.
   MILVUS_DATABASE: default
@@ -151,12 +150,13 @@ services:
     restart: unless-stopped
     environment:
       MODE: standalone
+      # Server-to-server auth stays off in dev (identity header short-circuit); the
+      # console/admin user store still applies (bkagent/BK-AGENT namespace, see .env).
+      # Production: set NACOS_AUTH_ENABLE=true and rotate NACOS_AUTH_TOKEN.
       NACOS_AUTH_ENABLE: "false"
-      # Nacos 3.x requires a Base64 token even when auth is disabled.
-      # This value is for local development only; replace it in secured environments.
-      NACOS_AUTH_TOKEN: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
-      NACOS_AUTH_IDENTITY_KEY: "bk-anent-local"
-      NACOS_AUTH_IDENTITY_VALUE: "bk-anent-local"
+      NACOS_AUTH_TOKEN: ${NACOS_AUTH_TOKEN:-MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
+      NACOS_AUTH_IDENTITY_KEY: ${NACOS_AUTH_IDENTITY_KEY:-bk-anent-local}
+      NACOS_AUTH_IDENTITY_VALUE: ${NACOS_AUTH_IDENTITY_VALUE:-bk-anent-local}
       PREFER_HOST_MODE: hostname
       TZ: Asia/Shanghai
     ports:

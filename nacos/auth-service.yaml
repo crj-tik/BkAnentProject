@@ -1,11 +1,11 @@
 spring:
   data:
     redis:
-      host: ${REDIS_HOST:127.0.0.1}
+      host: ${REDIS_HOST:10.117.102.54}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
   datasource:
-    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_AUTH:bk_auth}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}/${MYSQL_DB_AUTH:bk_auth}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
     username: ${MYSQL_USER}
     password: ${MYSQL_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -39,9 +39,9 @@ service:
     mode: ${SERVICE_READINESS_MODE:distributed}
     required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database,redis}
     endpoints:
-      nacos: "${NACOS_SERVER:127.0.0.1:8848}"
-      database: "${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}"
-      redis: "${REDIS_HOST:127.0.0.1}:${REDIS_PORT:6379}"
+      nacos: "${NACOS_SERVER:10.117.102.54:8848}"
+      database: "${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}"
+      redis: "${REDIS_HOST:10.117.102.54}:${REDIS_PORT:6379}"
 
 mybatis-plus:
   mapper-locations: classpath:/mapper/*.xml

@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_NOTIFICATION:bk_notification}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}/${MYSQL_DB_NOTIFICATION:bk_notification}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
     username: ${MYSQL_USER}
     password: ${MYSQL_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -34,7 +34,7 @@ spring:
               push-notifications: false
               state-transition-history: true
         nacos:
-          server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+          server-addr: ${NACOS_SERVER:10.117.102.54:8848}
           namespace: ${NACOS_NAMESPACE:}
           username: ${NACOS_USERNAME:}
           password: ${NACOS_PASSWORD:}
@@ -91,12 +91,12 @@ service:
     mode: ${SERVICE_READINESS_MODE:distributed}
     required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database,rocketmq}
     endpoints:
-      nacos: "${NACOS_SERVER:127.0.0.1:8848}"
-      database: "${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}"
-      rocketmq: "${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}"
+      nacos: "${NACOS_SERVER:10.117.102.54:8848}"
+      database: "${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}"
+      rocketmq: "${ROCKETMQ_NAME_SERVER:10.117.102.54:9876}"
 
 rocketmq:
-  name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
+  name-server: ${ROCKETMQ_NAME_SERVER:10.117.102.54:9876}
   producer:
     group: ${NOTIFICATION_ROCKETMQ_PRODUCER_GROUP:notification-service-producer}
 
@@ -125,7 +125,7 @@ notification:
   agent:
     model: ${NOTIFICATION_AGENT_MODEL:gpt-5.6-terra}
     temperature: ${NOTIFICATION_AGENT_TEMPERATURE:0.2}
-    max-tokens: ${NOTIFICATION_AGENT_MAX_TOKENS:2000}
+    max-tokens: ${NOTIFICATION_AGENT_MAX_TOKENS:4000}
     system-prompt: |
       You are a notification delivery agent for a real estate brokerage platform.
       Your responsibilities:

@@ -55,9 +55,16 @@
 - `business-service.yaml`：`business.ranking.use-redis=true`
 - `agent-service.yaml`：`agent.distributed.stream.provider=rocketmq`、`milvus.enabled=true`
 - `listing-master-service.yaml`、`marketing-content-service.yaml`：各自 `*.search.use-elasticsearch=true`
-- `contract-service.yaml`：技能目录/监听、模型 `gpt-5.6-terra`（可经 `CONTRACT_AGENT_MODEL` 覆盖）、温度 `0.2`、最大 token `2000`、风险审查开关 `true` 及 OCR/电子签 provider 名称
+- `contract-service.yaml`：技能目录/监听、模型 `gpt-5.6-terra`（可经 `CONTRACT_AGENT_MODEL` 覆盖）、温度 `0.2`、最大 token `4000`、风险审查开关 `true` 及 OCR/电子签 provider 名称
 
 这些默认值保留 Docker 开发编排此前的有效行为。分布式生产部署前必须在 Nacos 显式配置四个服务的 `*.integration.mode=real`，并接入/选择真实 provider（合同须同时选择真实 OCR 与电子签 provider）；仅写 `real` 或选择尚未实现的厂商占位 provider 不代表集成可用。不得通过 `.env` 切换业务模式，也不得为绕过依赖失败而削弱 readiness。开发 `config-init` 原样上传本目录模板，重复运行会覆盖同 data ID；生产导入前应准备环境专属配置，避免用开发模板覆盖生产设置。
+
+### 5. 目标命名空间与账号（本机生产化基线，2026-10-10）
+
+- 命名空间 `BK-AGENT`（custom，quota 200）：全部 16 个 data ID 已发布，应用容器经 `NACOS_NAMESPACE` 默认接入。
+- 管理账号 `bkagent`（ROLE_ADMIN，`globalAdmin=true`，可登录 console/18080 与 admin/8848 并发布/更新配置）；密码存于 `.env` 的 `NACOS_PASSWORD`（本地文件不入库）。`nacos` 内置账号保留但密码未启用，不要依赖它。
+- 服务间鉴权（`NACOS_AUTH_ENABLE`）开发态保持关闭，identity 头直通 admin API；生产启用前须轮换 `NACOS_AUTH_TOKEN` 并确认 Card 更新走鉴权链（LR-28：设置密码不等于完成授权）。
+- 维护提示：Nacos 3.1 的 ROLE_ADMIN 只能经无鉴权初始化端点创建且"已有 admin 即拒绝"；本机曾因内置 `nacos` 账号密码未知陷入死锁，最终以停机 Derby 离线补 `bkagent` 角色行解决——生产重建账号时避免依赖该路径，初始化时直接创建自己的管理员。
 
 ## Agent 当前方案
 

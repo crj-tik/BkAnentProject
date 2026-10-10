@@ -293,6 +293,6 @@
 
 **根因**：仅返回 EXECUTOR_BUSY 会让账本停在 PENDING；把所有本地超时都当作副作用未知又掩盖真实的未发送事实。目录、审批、执行器容量的治理只限制身份与执行安全，不决定业务步骤，不增加 Graph 节点或规则路由。
 
-**代码位置**：`OrchestrationStore.reject/claim/unknown`、`SupervisorToolLoopGraph.execute/executeCall/awaitUntil`、`OfficialA2aAgentExecutor.executeStream`。下游流式执行受 `agent.a2a.execution.stream-timeout-ms` 限制，默认 120000 毫秒，超时/中断释放订阅。
+**代码位置**：`OrchestrationStore.reject/claim/unknown`、`SupervisorToolLoopGraph.execute/executeCall/awaitUntil`、`OfficialA2aAgentExecutor.executeStream`。下游流式执行受 `agent.a2a.execution.stream-timeout-ms` 限制，默认 300000 毫秒（2026-10-10 由 120000 放宽，适配 gpt-5.6-terra 多轮工具链的单请求时长），超时/中断释放订阅。
 
 **关联**：LR-18、LR-22、LR-23、LR-27；KI-32、KI-33、KI-35、KI-36。

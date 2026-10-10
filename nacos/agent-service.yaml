@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_AGENT:bk_agent}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}/${MYSQL_DB_AGENT:bk_agent}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
     username: ${MYSQL_USER}
     password: ${MYSQL_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -26,15 +26,13 @@ spring:
         embeddings-path: /embeddings
         options:
           model: ${KE_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
-    dashscope:
-      api-key: ${DASHSCOPE_API_KEY}
     model:
       chat: deepseek
       embedding: openai
     alibaba:
       a2a:
         nacos:
-          server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+          server-addr: ${NACOS_SERVER:10.117.102.54:8848}
           namespace: ${NACOS_NAMESPACE:}
           registry:
             enabled: false
@@ -43,37 +41,37 @@ spring:
     vectorstore:
       milvus:
         client:
-          host: ${MILVUS_HOST:127.0.0.1}
+          host: ${MILVUS_HOST:10.117.102.54}
           port: ${MILVUS_PORT:19530}
         initialize-schema: false
     mcp:
       client:
-        request-timeout: ${AGENT_MCP_REQUEST_TIMEOUT:15s}
-        initialization-timeout: ${AGENT_MCP_INITIALIZATION_TIMEOUT:10s}
+        request-timeout: ${AGENT_MCP_REQUEST_TIMEOUT:30s}
+        initialization-timeout: ${AGENT_MCP_INITIALIZATION_TIMEOUT:20s}
         connections:
           business-mcp-server:
-            url: ${BUSINESS_MCP_ENDPOINT:http://127.0.0.1:9010/mcp}
+            url: ${BUSINESS_MCP_ENDPOINT:http://10.117.102.54:9010/mcp}
             type: STREAMABLE
           compare-mcp-server:
-            url: ${COMPARE_MCP_ENDPOINT:http://127.0.0.1:9006/mcp}
+            url: ${COMPARE_MCP_ENDPOINT:http://10.117.102.54:9006/mcp}
             type: STREAMABLE
           marketing-mcp-server:
-            url: ${MARKETING_MCP_ENDPOINT:http://127.0.0.1:9008/mcp}
+            url: ${MARKETING_MCP_ENDPOINT:http://10.117.102.54:9008/mcp}
             type: STREAMABLE
           contract-mcp-server:
-            url: ${CONTRACT_MCP_ENDPOINT:http://127.0.0.1:9012/mcp}
+            url: ${CONTRACT_MCP_ENDPOINT:http://10.117.102.54:9012/mcp}
             type: STREAMABLE
           settlement-mcp-server:
-            url: ${SETTLEMENT_MCP_ENDPOINT:http://127.0.0.1:9013/mcp}
+            url: ${SETTLEMENT_MCP_ENDPOINT:http://10.117.102.54:9013/mcp}
             type: STREAMABLE
           notification-mcp-server:
-            url: ${NOTIFICATION_MCP_ENDPOINT:http://127.0.0.1:9003/mcp}
+            url: ${NOTIFICATION_MCP_ENDPOINT:http://10.117.102.54:9003/mcp}
             type: STREAMABLE
           media-mcp-server:
-            url: ${MEDIA_MCP_ENDPOINT:http://127.0.0.1:9007/mcp}
+            url: ${MEDIA_MCP_ENDPOINT:http://10.117.102.54:9007/mcp}
             type: STREAMABLE
           interview-mcp-server:
-            url: ${INTERVIEW_MCP_ENDPOINT:http://127.0.0.1:9014/mcp}
+            url: ${INTERVIEW_MCP_ENDPOINT:http://10.117.102.54:9014/mcp}
             type: STREAMABLE
 
 management:
@@ -107,12 +105,12 @@ service:
     mode: ${SERVICE_READINESS_MODE:distributed}
     required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database,redis,rocketmq,milvus,memory}
     endpoints:
-      nacos: "${NACOS_SERVER:127.0.0.1:8848}"
-      database: "${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}"
-      redis: "${REDIS_HOST:127.0.0.1}:${REDIS_PORT:6379}"
-      rocketmq: "${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}"
-      milvus: "${MILVUS_ENDPOINT:http://127.0.0.1:19530}"
-      memory: "${MEMORY_SERVICE_BASE_URL:http://127.0.0.1:9011}"
+      nacos: "${NACOS_SERVER:10.117.102.54:8848}"
+      database: "${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}"
+      redis: "${REDIS_HOST:10.117.102.54}:${REDIS_PORT:6379}"
+      rocketmq: "${ROCKETMQ_NAME_SERVER:10.117.102.54:9876}"
+      milvus: "${MILVUS_ENDPOINT:http://10.117.102.54:19530}"
+      memory: "${MEMORY_SERVICE_BASE_URL:http://10.117.102.54:9011}"
 
 mybatis-plus:
   mapper-locations: classpath:/mapper/*.xml
@@ -129,11 +127,11 @@ agent:
     external-dir: ${AGENT_SKILLS_EXTERNAL_DIR:}
     watch-enabled: ${AGENT_SKILLS_WATCH_ENABLED:true}
   memory:
-    base-url: ${MEMORY_SERVICE_BASE_URL:http://127.0.0.1:9011}
+    base-url: ${MEMORY_SERVICE_BASE_URL:http://10.117.102.54:9011}
   chat:
     model: ${AGENT_CHAT_MODEL:${AGENT_DEEPSEEK_MODEL:gpt-5.6-terra}}
     temperature: ${AGENT_CHAT_TEMPERATURE:${AGENT_DEEPSEEK_TEMPERATURE:0.2}}
-    max-tokens: ${AGENT_CHAT_MAX_TOKENS:${AGENT_DEEPSEEK_MAX_TOKENS:1600}}
+    max-tokens: ${AGENT_CHAT_MAX_TOKENS:${AGENT_DEEPSEEK_MAX_TOKENS:4000}}
     top-p: ${AGENT_CHAT_TOP_P:${AGENT_DEEPSEEK_TOP_P:1.0}}
     default-top-k: ${AGENT_CHAT_DEFAULT_TOP_K:${AGENT_DEEPSEEK_DEFAULT_TOP_K:4}}
     system-prompt: ${AGENT_CHAT_SYSTEM_PROMPT:${AGENT_DEEPSEEK_SYSTEM_PROMPT:}}
@@ -161,7 +159,7 @@ agent:
     # Production/cloud sets AGENT_RAG_RERANK_ENDPOINT to the DashScope URL and
     # AGENT_RAG_RERANK_PROTOCOL=dashscope via environment, keeping secrets out of this file.
     rerank-endpoint: ${AGENT_RAG_RERANK_ENDPOINT:http://host.docker.internal:18119/rerank}
-    rerank-api-key: ${AGENT_RAG_RERANK_API_KEY:${DASHSCOPE_API_KEY:}}
+    rerank-api-key: ${AGENT_RAG_RERANK_API_KEY:}
     rerank-model: ${AGENT_RAG_RERANK_MODEL:bge-reranker-v2-m3-v1}
     rerank-protocol: ${AGENT_RAG_RERANK_PROTOCOL:native}
   distributed:
@@ -173,17 +171,17 @@ agent:
       enabled: ${AGENT_RATE_LIMIT_ENABLED:true}
       provider: ${AGENT_RATE_LIMIT_PROVIDER:memory}
       window-seconds: ${AGENT_RATE_LIMIT_WINDOW_SECONDS:60}
-      default-per-window: ${AGENT_RATE_LIMIT_DEFAULT_PER_WINDOW:60}
-      supervisor-tasks-per-window: ${AGENT_RATE_LIMIT_SUPERVISOR_TASKS_PER_WINDOW:60}
-      supervisor-async-tasks-per-window: ${AGENT_RATE_LIMIT_SUPERVISOR_ASYNC_TASKS_PER_WINDOW:40}
-      supervisor-workflows-per-window: ${AGENT_RATE_LIMIT_SUPERVISOR_WORKFLOWS_PER_WINDOW:30}
-      supervisor-async-workflows-per-window: ${AGENT_RATE_LIMIT_SUPERVISOR_ASYNC_WORKFLOWS_PER_WINDOW:20}
+      default-per-window: ${AGENT_RATE_LIMIT_DEFAULT_PER_WINDOW:200}
+      supervisor-tasks-per-window: ${AGENT_RATE_LIMIT_SUPERVISOR_TASKS_PER_WINDOW:200}
+      supervisor-async-tasks-per-window: ${AGENT_RATE_LIMIT_SUPERVISOR_ASYNC_TASKS_PER_WINDOW:120}
+      supervisor-workflows-per-window: ${AGENT_RATE_LIMIT_SUPERVISOR_WORKFLOWS_PER_WINDOW:100}
+      supervisor-async-workflows-per-window: ${AGENT_RATE_LIMIT_SUPERVISOR_ASYNC_WORKFLOWS_PER_WINDOW:60}
     gray-release:
-      enabled: true
+      # v2 迁移已完成，默认不启用灰度；需要时经治理 API 动态开启（代码能力保留）。
+      enabled: false
       strategy-version: "v2"
       prefer-async-a2a: false
-      user-ids:
-        - "test-user-001"        # 只灰度测试用户
+      user-ids: []
       domains: {}
     event-audit:
       max-active-events: ${AGENT_EVENT_AUDIT_MAX_ACTIVE_EVENTS:5000}
@@ -199,9 +197,9 @@ agent:
       enabled: ${AGENT_ASYNC_RUNTIME_ENABLED:true}
       dispatch-interval-ms: ${AGENT_ASYNC_RUNTIME_DISPATCH_INTERVAL_MS:1000}
       dispatch-batch-size: ${AGENT_ASYNC_RUNTIME_DISPATCH_BATCH_SIZE:10}
-      max-concurrency: ${AGENT_ASYNC_RUNTIME_MAX_CONCURRENCY:4}
-      queue-capacity: ${AGENT_ASYNC_RUNTIME_QUEUE_CAPACITY:32}
-      lease-timeout-seconds: ${AGENT_ASYNC_RUNTIME_LEASE_TIMEOUT_SECONDS:300}
+      max-concurrency: ${AGENT_ASYNC_RUNTIME_MAX_CONCURRENCY:16}
+      queue-capacity: ${AGENT_ASYNC_RUNTIME_QUEUE_CAPACITY:128}
+      lease-timeout-seconds: ${AGENT_ASYNC_RUNTIME_LEASE_TIMEOUT_SECONDS:600}
       max-attempts: ${AGENT_ASYNC_RUNTIME_MAX_ATTEMPTS:3}
       retry-delay-seconds: ${AGENT_ASYNC_RUNTIME_RETRY_DELAY_SECONDS:5}
       child-task-submit-request-timeout-ms: ${AGENT_A2A_CHILD_TASK_SUBMIT_REQUEST_TIMEOUT_MS:15000}
@@ -223,13 +221,13 @@ agent:
     agents: {}
 
 rocketmq:
-  name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
+  name-server: ${ROCKETMQ_NAME_SERVER:10.117.102.54:9876}
   producer:
     group: ${AGENT_STREAM_ROCKETMQ_PRODUCER_GROUP:agent-service-session-stream-producer}
 
 milvus:
   enabled: true
-  endpoint: ${MILVUS_ENDPOINT:http://127.0.0.1:19530}
+  endpoint: ${MILVUS_ENDPOINT:http://10.117.102.54:19530}
   token: ${MILVUS_TOKEN}
   database: ${MILVUS_DATABASE:default}
   username: ${MILVUS_USERNAME}

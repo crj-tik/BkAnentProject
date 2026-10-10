@@ -1,7 +1,7 @@
 spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/bk_memory?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}/bk_memory?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
     username: ${MYSQL_USER}
     password: ${MYSQL_PASSWORD}
 
@@ -32,5 +32,5 @@ service:
     mode: ${SERVICE_READINESS_MODE:distributed}
     required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database}
     endpoints:
-      nacos: "${NACOS_SERVER:127.0.0.1:8848}"
-      database: "${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}"
+      nacos: "${NACOS_SERVER:10.117.102.54:8848}"
+      database: "${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}"
