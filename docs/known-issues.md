@@ -123,6 +123,70 @@
 
 **处置方向**：读取选项值前检查剩余参数和空值，返回具体选项的用法错误；补充缺值、非法值和正常值的入口验证。
 
+## KI-48 [OPEN·P2] agent-service 把 Redis 列为就绪必需但默认不使用，切到 redis 限流还会连错地址
+
+**确认日期**：2026-10-10（基础组件使用排查，配置与代码静态确认）。
+
+**现象与根因**：`nacos/agent-service.yaml` 全文没有 `spring.data.redis` 配置块，但 readiness 把 redis 列为必需依赖（`required-dependencies` 默认含 redis）；代码中唯一 Redis 用途 `RedisSupervisorRateLimiter` 带 `@ConditionalOnProperty(provider=redis)`（`agent-service/src/main/java/com/bkanent/agent/service/RedisSupervisorRateLimiter.java:10`），而默认 provider 是 memory（`nacos/agent-service.yaml:172`）——默认配置下 Redis 实际闲置却因 readiness 依赖它。若把 provider 切成 redis，Lettuce 因无配置回落 `localhost:6379`：compose 注入的是自定义 `REDIS_HOST`（`docker-compose.yml:13`），不是 Spring Boot 认识的 `SPRING_DATA_REDIS_HOST`，会出现 readiness 探活（用 REDIS_HOST）通过、真实读写失败的反差。
+
+**处置方向**：要么默认 provider 改 redis 并补 `spring.data.redis` 配置块（`host: ${REDIS_HOST:...}`），要么从 readiness 必需清单剔除 redis；compose 侧可统一改注入 `SPRING_DATA_REDIS_HOST`。修复时需真实切换 provider 验证客户端连的是配置地址。
+
+**关联**：KI-49（同类 readiness 误配）。
+
+## KI-49 [OPEN·P2] compare-engine 无数据库却把 database 列为就绪必需
+
+**确认日期**：2026-10-10（基础组件使用排查）。
+
+**现象与根因**：compare-engine-service 无 datasource、pom 无 mysql/mybatis 依赖（无状态模型计算服务），但 `nacos/compare-engine-service.yaml:76` 的 `required-dependencies` 默认含 database——MySQL 故障时该无状态服务被 readiness（纯 TCP 探活）误判 not ready，被编排层无谓摘流。
+
+**处置方向**：`SERVICE_READINESS_REQUIRED_DEPENDENCIES` 默认改为 `nacos`。
+
+**关联**：KI-48；KI-41（检查误报同族）。
+
+## KI-50 [OPEN·P3] mysql-common.yaml 是无人导入的死配置
+
+**确认日期**：2026-10-10（基础组件使用排查）。
+
+**现象与根因**：`config-init` 把 `nacos/mysql-common.yaml` 上传到 Nacos，`scripts/deploy/init-environment.sh:186` 还把它列为必需配置，但全仓库没有任何服务以 shared-configs / shared-dataids 导入它——各服务的 `spring.config.import` 只导入自己的 dataId；其 `spring.datasource` 块本身也无 url，纯模板。上传与校验给人"该配置在生效"的错觉，实际各服务 datasource 全部来自各自 yaml。
+
+**处置方向**：删除该文件及其上传/校验逻辑，或改造为真正的共享配置导入。
+
+## KI-51 [OPEN·P3] memory-service 数据库名硬编码，mysql-common 映射缺 memory/interview 条目
+
+**确认日期**：2026-10-10（基础组件使用排查）。
+
+**现象与根因**：`nacos/memory-service.yaml:4` 的 datasource url 直接写死 `bk_memory`，不经 `${MYSQL_DB_MEMORY:bk_memory}` 占位符，与全部其他服务 `${MYSQL_DB_*}` 占位的模式不一致，无法按环境改库名；`mysql-common.yaml` 的 databases/jdbc 映射也没有 memory 和 interview 条目（该文件目前是死配置，见 KI-50，若复活则缺口成立）。
+
+**处置方向**：改为占位符写法；如保留 mysql-common.yaml 则补齐条目。
+
+## KI-52 [OPEN·P3] 基础组件版本管理旁路：模块写死版本与根 dependencyManagement 并存
+
+**确认日期**：2026-10-10（19 个模块 pom 全量核对）。
+
+**现象与根因**：根 POM 已管理 `rocketmq-spring-boot-starter` 2.3.3 与 `nacos-client` 3.1.0，但 media-worker-service 的 rocketmq starter 写死 **2.3.2**（真实偏差，`media-worker-service/pom.xml:33-36`）；另有 9 个模块（notification、listing-master、compare-engine、media-worker、marketing-content、business、contract、settlement、interview）硬编码 nacos-client `<version>3.1.0</version>` 字面量，脱离根管理；agent-service 的 json-schema-validator 1.5.7 与 media-worker 的 minio 8.5.12 未纳入根管理直接写死。KI-26 正是版本漂移翻的车（BOM 降级 3.0.3），写死字面量会在未来升级根版本时重现同类漂移。
+
+**处置方向**：去掉与根管理重复的 `<version>` 标签；minio、json-schema-validator 纳入根 dependencyManagement。修复后用 `mvn dependency:tree` 核对各模块无版本分歧。
+
+**关联**：KI-26。
+
+## KI-53 [OPEN·P3] common 模块声明全量 dubbo 依赖但代码零使用，传染全部下游
+
+**确认日期**：2026-10-10（基础组件使用排查）。
+
+**现象与根因**：`common/pom.xml:33-36` 依赖 `org.apache.dubbo:dubbo`，但 `common/src/main/java` 全部 rpc/* 均为纯 Java 接口、无任何 `org.apache.dubbo` import。该依赖把 Dubbo 传递给全部 18 个服务模块及 common-* 公共库——memory-service、interview-service 等不接 Dubbo 的模块也被迫背上全量 Dubbo 类路径，"某服务不用 Dubbo"事实上无法成立。
+
+**处置方向**：移除 common 的 dubbo 依赖（各服务自带 dubbo-spring-boot-starter），全量编译验证。
+
+## KI-54 [OPEN·P3] mysql-init.sql 基线缺 bk_interview 库
+
+**确认日期**：2026-10-10（基础组件使用排查）。
+
+**现象与根因**：`sql/mysql-init.sql` 只创建 11 个 bk_* 库 + nacos，`bk_interview` 仅由 `sql/migrations/20260929_interview_subagent.sql` 创建。Compose 首启链挂载了该迁移（`docker-compose.yml:83`），容器环境不缺；但按 AGENTS.md 约定 init.sql 是 bootstrap 脚本，单独使用它初始化的新环境没有 interview 库，interview-service 起不来。
+
+**处置方向**：把 `CREATE DATABASE bk_interview` 并入 init.sql 基线，或在部署文档中明确"基线 = init + 全部迁移"。
+
+**关联**：KI-39（首启 schema 缺口同族）。
+
 ## KI-46 [FIXED·本提交·P2] 受管 A2A 技能激活缺少技能名与任务锚点日志
 
 **确认日期**：2026-10-10（`create-common-skill-module` 5.5 冒烟前置检查，源码确认）。
