@@ -1,9 +1,29 @@
 spring:
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}/bk_memory?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}/${MYSQL_DB_MEMORY:bk_memory}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
     username: ${MYSQL_USER}
     password: ${MYSQL_PASSWORD}
+
+memory:
+  rag:
+    key-id: memory-current
+    signing-secret: ${MEMORY_RAG_RPC_SECRET:}
+    auth-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}
+    auth-signing-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
+    trusted-callers:
+      agent-current:
+        caller-service: agent-service
+        secret: ${AGENT_RAG_RPC_SECRET:}
+    policy-version: memory-v1
+    constraint-read-roles: []
+    constraint-admin-roles: []
+    dispatcher-enabled: false
+    dispatch-batch-size: 25
+    max-attempts: 5
+    retry-delay-ms: 1000
+  system-constraint-bootstrap:
+    enabled: true
 
 mybatis-plus:
   global-config:

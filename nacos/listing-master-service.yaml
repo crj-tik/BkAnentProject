@@ -4,8 +4,6 @@ spring:
     username: ${MYSQL_USER}
     password: ${MYSQL_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
-  elasticsearch:
-    uris: ${ELASTICSEARCH_URIS:http://10.117.102.54:9200}
   ai:
     deepseek:
       # KE OpenAI-compatible gateway (Bella). DeepSeek starter drives chat traffic.
@@ -72,11 +70,10 @@ management:
 service:
   readiness:
     mode: ${SERVICE_READINESS_MODE:distributed}
-    required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database,elasticsearch}
+    required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database}
     endpoints:
       nacos: "${NACOS_SERVER:10.117.102.54:8848}"
       database: "${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}"
-      elasticsearch: "${ELASTICSEARCH_URIS:http://10.117.102.54:9200}"
 
 mybatis-plus:
   mapper-locations: classpath:/mapper/*.xml
@@ -93,10 +90,18 @@ agent:
     external-dir: ${AGENT_SKILLS_EXTERNAL_DIR:}
     watch-enabled: ${AGENT_SKILLS_WATCH_ENABLED:true}
 listing:
-  search:
-    use-elasticsearch: true
-    write-enabled: ${LISTING_SEARCH_WRITE_ENABLED:false}
-    index-name: ${LISTING_SEARCH_INDEX:listing_info}
+  rag:
+    space-id: listing.knowledge
+    schema-version: "1"
+    policy-version: listing-v1
+    key-id: listing-current
+    secret: ${LISTING_RAG_RPC_SECRET:}
+    auth-response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}
+    auth-response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
+    read-role-codes: []
+    admin-role-codes: []
+    dispatcher-enabled: false
+    legacy-reconciliation-enabled: false
   agent:
     model: ${LISTING_AGENT_MODEL:gpt-5.6-terra}
     temperature: ${LISTING_AGENT_TEMPERATURE:0.2}

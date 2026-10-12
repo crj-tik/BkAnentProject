@@ -1,272 +1,77 @@
 package com.bkanent.agent.milvus.listing;
 
-import com.bkanent.agent.config.AgentMilvusProperties;
-import com.bkanent.agent.config.ListingRagProperties;
-import com.bkanent.agent.milvus.core.MilvusDocumentStore;
-import com.bkanent.agent.milvus.core.model.MilvusCollectionInitRequest;
-import com.bkanent.agent.milvus.core.model.MilvusDeleteRequest;
-import com.bkanent.agent.milvus.core.model.MilvusSearchRequest;
-import com.bkanent.agent.milvus.core.model.MilvusSearchResult;
-import com.bkanent.agent.milvus.core.model.MilvusUpsertRequest;
-import com.bkanent.agent.milvus.core.model.MilvusVectorDocument;
-import com.bkanent.agent.model.rag.ListingIndexRequest;
-import com.bkanent.agent.model.rag.ListingRagMatch;
-import com.bkanent.agent.model.rag.ListingRagQueryRequest;
-import com.bkanent.agent.model.rag.ListingRagResponse;
-import com.bkanent.common.model.KnowledgeDocument;
-import com.bkanent.common.model.ListingDTO;
-import com.bkanent.common.model.ListingKeywordSearchResultDTO;
-import com.bkanent.common.rpc.ListingMasterRpcService;
+import com.bkanent.agent.config.AgentRagConsumerProperties;
+import com.bkanent.agent.model.rag.*;
+import com.bkanent.agent.rag.AgentRagCompatibility;
+import com.bkanent.agent.security.AgentRagCredentialLeaseStore;
+import com.bkanent.agent.security.AgentRagRequestAuthentication;
+import com.bkanent.common.rag.*;
+import com.bkanent.common.rpc.RagListingDomainRpcService;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
+import java.util.UUID;
 
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-
-/**
- * ListingMilvusService 服务类。
- */
+/** Old API shape; all search/index authority and latest-source checks remain in listing domain. */
 @Service
 public class ListingMilvusService {
-
-    /**
-     * 字段：milvusDocumentStore。
-     */
-    private final MilvusDocumentStore milvusDocumentStore;
-    /**
-     * 字段：agentMilvusProperties。
-     */
-    private final AgentMilvusProperties agentMilvusProperties;
-    /**
-     * 字段：listingRagProperties。
-     */
-    private final ListingRagProperties listingRagProperties;
-    /**
-     * 字段：listingMasterRpcService。
-     */
-    private final ListingMasterRpcService listingMasterRpcService;
-    /**
-     * 字段：listingKeywordRecallService。
-     */
-    private final ListingKeywordRecallService listingKeywordRecallService;
-    /**
-     * 字段：listingRerankService。
-     */
-    private final ListingRerankService listingRerankService;
-
-    /**
-     * 构造 ListingMilvusService 实例。
-     */
-    public ListingMilvusService(MilvusDocumentStore milvusDocumentStore,
-                                AgentMilvusProperties agentMilvusProperties,
-                                ListingRagProperties listingRagProperties,
-                                ListingKeywordRecallService listingKeywordRecallService,
-                                ListingRerankService listingRerankService,
-                                ObjectProvider<ListingMasterRpcService> listingMasterRpcServiceProvider) {
-        this.milvusDocumentStore = milvusDocumentStore;
-        this.agentMilvusProperties = agentMilvusProperties;
-        this.listingRagProperties = listingRagProperties;
-        this.listingKeywordRecallService = listingKeywordRecallService;
-        this.listingRerankService = listingRerankService;
-        this.listingMasterRpcService = listingMasterRpcServiceProvider.getIfAvailable();
+    private final ObjectProvider<RagListingDomainRpcService> domain;
+    private final AgentRagConsumerProperties properties;
+    private final AgentRagCredentialLeaseStore credentials;
+    private final AgentRagRequestAuthentication authentication;
+    public ListingMilvusService(ObjectProvider<RagListingDomainRpcService> domain, AgentRagConsumerProperties properties,
+                                AgentRagCredentialLeaseStore credentials, AgentRagRequestAuthentication authentication) {
+        this.domain = domain; this.properties = properties; this.credentials = credentials; this.authentication = authentication;
     }
-
-    /**
-     * 初始化 Milvus 集合。
-     */
-    public void initializeCollection(String collectionName) {
-        milvusDocumentStore.initializeCollection(new MilvusCollectionInitRequest(
-                resolveCollectionName(collectionName),
-                agentMilvusProperties.getEmbeddingDimension()
-        ));
-    }
-
-    /**
-     * 为房源建立向量索引。
-     */
-    public void indexListing(ListingIndexRequest request) {
-        indexListing(request.listingId(), request.collectionName());
-    }
-
-    /**
-     * 为房源建立向量索引。
-     */
-    public void indexListing(Long listingId, String collectionName) {
-        KnowledgeDocument document = getListingKnowledgeDocument(listingId);
-        if (document == null) {
-            throw new IllegalArgumentException("Listing not found: " + listingId);
-        }
-        initializeCollection(collectionName);
-        milvusDocumentStore.upsert(new MilvusUpsertRequest(
-                resolveCollectionName(collectionName),
-                List.of(toMilvusVectorDocument(document))
-        ));
-    }
-
-    /**
-     * 删除房源向量索引。
-     */
-    public void deleteListing(Long listingId, String collectionName) {
-        if (listingId == null) {
-            return;
-        }
-        milvusDocumentStore.delete(new MilvusDeleteRequest(
-                resolveCollectionName(collectionName),
-                List.of("listing:" + listingId)
-        ));
-    }
-
-    /**
-     * 执行双路召回并重排序。
-     */
-    public ListingRagResponse query(ListingRagQueryRequest request) {
-        int targetTopK = resolveTopK(request.topK(), listingRagProperties.getRerankTopK());
-        Map<Long, ListingRecallCandidate> merged = new LinkedHashMap<>();
-
-        for (ListingKeywordSearchResultDTO keywordResult
-                : listingKeywordRecallService.recall(request, resolveTopK(request.keywordTopK(), listingRagProperties.getKeywordTopK()))) {
-            ListingDTO listing = keywordResult.listing();
-            KnowledgeDocument document = getListingKnowledgeDocument(listing.id());
-            ListingRecallCandidate candidate = merged.computeIfAbsent(
-                    listing.id(),
-                    key -> new ListingRecallCandidate(listing, resolveRecallContent(listing, document))
-            );
-            candidate.getRecallSources().add("KEYWORD");
-            candidate.setKeywordScore(keywordResult.score());
-        }
-
-        List<MilvusSearchResult> vectorResults = milvusDocumentStore.search(new MilvusSearchRequest(
-                resolveCollectionName(request.collectionName()),
-                request.query(),
-                resolveTopK(request.vectorTopK(), listingRagProperties.getVectorTopK()),
-                listingRagProperties.getVectorSimilarityThreshold(),
-                buildMilvusFilterExpression(request)
-        ));
-        for (MilvusSearchResult vectorResult : vectorResults) {
-            Long listingId = parseListingId(vectorResult.sourceId());
-            if (listingId == null) {
-                continue;
-            }
-            ListingDTO listing = listingMasterRpcService == null ? null : listingMasterRpcService.getListingById(listingId);
-            if (listing == null || !ListingStructuredFilter.matches(listing, request)) {
-                continue;
-            }
-            ListingRecallCandidate candidate = merged.computeIfAbsent(
-                    listingId,
-                    key -> new ListingRecallCandidate(listing, vectorResult.content())
-            );
-            candidate.getRecallSources().add("VECTOR");
-            candidate.setVectorScore(vectorResult.score());
-        }
-
-        List<ListingRecallCandidate> reranked = listingRerankService.rerank(request.query(), new ArrayList<>(merged.values()), targetTopK);
-        String context = reranked.stream()
-                .map(ListingRecallCandidate::getContent)
-                .reduce((left, right) -> left + "\n---\n" + right)
-                .orElse("");
-        List<ListingRagMatch> matches = reranked.stream()
-                .map(candidate -> new ListingRagMatch(
-                        candidate.getListing().id(),
-                        candidate.getListing().title(),
-                        candidate.getListing().address(),
-                        candidate.getListing().layout(),
-                        candidate.getListing().area(),
-                        candidate.getListing().totalPrice(),
-                        new ArrayList<>(candidate.getRecallSources()),
-                        candidate.getKeywordScore(),
-                        candidate.getVectorScore(),
-                        candidate.getRerankScore(),
-                        candidate.getContent()
-                ))
-                .toList();
-        return new ListingRagResponse(request.query(), context, matches);
-    }
-
-    /**
-     * 解析 topK。
-     */
-    private int resolveTopK(Integer topK, int defaultTopK) {
-        return topK == null ? defaultTopK : Math.max(1, topK);
-    }
-
-    /**
-     * 构建 Milvus 过滤表达式。
-     */
-    private String buildMilvusFilterExpression(ListingRagQueryRequest request) {
-        List<String> clauses = new ArrayList<>();
-        if (StringUtils.hasText(request.layout())) {
-            clauses.add("layout == \"" + escape(request.layout()) + "\"");
-        }
-        if (request.minArea() != null) {
-            clauses.add("area >= " + request.minArea());
-        }
-        if (request.maxArea() != null) {
-            clauses.add("area <= " + request.maxArea());
-        }
-        if (request.minTotalPrice() != null) {
-            clauses.add("totalPrice >= " + request.minTotalPrice());
-        }
-        if (request.maxTotalPrice() != null) {
-            clauses.add("totalPrice <= " + request.maxTotalPrice());
-        }
-        return clauses.isEmpty() ? null : String.join(" && ", clauses);
-    }
-
-    /**
-     * 解析 listingId。
-     */
-    private Long parseListingId(String sourceId) {
-        if (!StringUtils.hasText(sourceId)) {
-            return null;
-        }
+    public void indexListing(ListingIndexRequest legacy) {
+        requireListingSpace(legacy.collectionName());
+        var request = new RagListingIndexRequest(1, UUID.randomUUID().toString(), legacy.listingId());
+        var token = credentials.credentials(legacy.userId());
         try {
-            return Long.valueOf(sourceId);
-        }
-        catch (NumberFormatException exception) {
-            return null;
-        }
+            var status = provider().index(request, authentication.user(request, request.requestId(), "listing-master-service",
+                    RagOperation.SUBMIT, legacy.userId(), token), token);
+            if (status == null) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
+            if (status.state() == RagIndexState.CONFLICT) throw new RagException(RagErrorCode.INDEX_CONFLICT);
+            if (status.state() == RagIndexState.STALE) throw new RagException(RagErrorCode.LEGACY_RECONCILIATION_REQUIRED);
+            if (status.state() == null) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
+        } catch (RagException exception) { throw exception; }
+        catch (RuntimeException exception) { throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE); }
     }
-
-    /**
-     * 转义查询值。
-     */
-    private String escape(String value) {
-        return value.replace("\"", "\\\"");
+    public ListingRagResponse query(ListingRagQueryRequest legacy) {
+        requireListingSpace(legacy.collectionName());
+        int top = AgentRagCompatibility.topK(legacy.topK(), properties.getFinalTopK());
+        int keyword = legacy.keywordTopK() == null ? properties.getKeywordTopK() : legacy.keywordTopK();
+        int vector = legacy.vectorTopK() == null ? properties.getVectorTopK() : legacy.vectorTopK();
+        AgentRagCompatibility.listingCounts(keyword, vector, top);
+        var request = new RagListingSearchRequest(1, UUID.randomUUID().toString(), legacy.query(), legacy.region(), legacy.layout(),
+                legacy.minArea(), legacy.maxArea(), legacy.minTotalPrice(), legacy.maxTotalPrice(), keyword, vector, top);
+        var token = credentials.credentials(legacy.userId());
+        try {
+            var response = provider().search(request, authentication.user(request, request.requestId(), "listing-master-service",
+                    RagOperation.SEARCH, legacy.userId(), token), token);
+            return new ListingRagResponse(legacy.query(), response.context(), response.matches().stream().map(match -> {
+                var listing = match.listing();
+                return new ListingRagMatch(listing.id(), listing.title(), listing.address(), listing.layout(), listing.area(),
+                        listing.totalPrice(), match.sources().stream().map(Enum::name).toList(), match.keywordScore(),
+                        match.vectorScore(), match.rerankScore(), match.candidate().content());
+            }).toList(), response.retrieval());
+        } catch (RagException exception) { throw exception; }
+        catch (RuntimeException exception) { throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE); }
     }
-
-    private KnowledgeDocument getListingKnowledgeDocument(Long listingId) {
-        return listingMasterRpcService == null ? null : listingMasterRpcService.getListingKnowledgeDocument(listingId);
+    // Original void RPC lacks authenticated source version/hash and cutover evidence.
+    // Never read latest state and reinterpret a stale delete as a fresh tombstone.
+    public void indexListing(Long listingId, String alias) { legacyReconciliationRequired(listingId, alias); }
+    public void deleteListing(Long listingId, String alias) { legacyReconciliationRequired(listingId, alias); }
+    private void legacyReconciliationRequired(Long id, String alias) {
+        requireListingSpace(alias);
+        if (id == null || id < 1) throw new RagException(RagErrorCode.INVALID_ARGUMENT, "listingId");
+        throw new RagException(RagErrorCode.LEGACY_RECONCILIATION_REQUIRED);
     }
-
-    private MilvusVectorDocument toMilvusVectorDocument(KnowledgeDocument document) {
-        return new MilvusVectorDocument(
-                document.documentId(),
-                document.bizType(),
-                document.bizId(),
-                document.content(),
-                null,
-                document.metadata()
-        );
+    private void requireListingSpace(String alias) {
+        if (!"listing.knowledge".equals(AgentRagCompatibility.space(alias, "listing.knowledge"))) throw new RagException(RagErrorCode.FORBIDDEN);
     }
-
-    private String resolveRecallContent(ListingDTO listing, KnowledgeDocument document) {
-        if (document != null && StringUtils.hasText(document.content())) {
-            return document.content();
-        }
-        return "房源标题: " + listing.title()
-                + "；地址: " + listing.address()
-                + "；户型: " + listing.layout()
-                + "；面积: " + listing.area()
-                + "；总价: " + listing.totalPrice();
-    }
-
-    /**
-     * 解析集合名称。
-     */
-    private String resolveCollectionName(String collectionName) {
-        return StringUtils.hasText(collectionName) ? collectionName : agentMilvusProperties.getListingCollection();
+    private RagListingDomainRpcService provider() {
+        var provider = domain.getIfAvailable();
+        if (provider == null) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
+        return provider;
     }
 }

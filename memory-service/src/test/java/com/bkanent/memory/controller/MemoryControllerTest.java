@@ -25,7 +25,7 @@ class MemoryControllerTest {
         when(sessions.find("session-1")).thenReturn(Optional.empty());
         when(artifacts.listByTaskId("task-1", "session-1")).thenReturn(List.of());
         MockMvc mvc = MockMvcBuilders.standaloneSetup(
-                new MemoryController(sessions, artifacts, null, null, null, null)).build();
+                new MemoryController(sessions, artifacts, null, null, null, null, null, null, null)).build();
 
         mvc.perform(get("/internal/memory/sessions").param("sessionId", "session-1"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.success").value(true));

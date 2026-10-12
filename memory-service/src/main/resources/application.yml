@@ -1,3 +1,33 @@
+memory:
+  rag:
+    key-id: ${MEMORY_RAG_RPC_KEY_ID:memory-current}
+    signing-secret: ${MEMORY_RAG_RPC_SECRET:}
+    auth-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:}
+    auth-signing-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
+    policy-version: ${MEMORY_RAG_POLICY_VERSION:memory-v1}
+    dispatcher-enabled: ${MEMORY_RAG_DISPATCHER_ENABLED:false}
+    # Explicit deployment-managed registration, never seed every active role.
+    constraint-read-roles: ${MEMORY_RAG_CONSTRAINT_READ_ROLES:}
+    constraint-admin-roles: ${MEMORY_RAG_CONSTRAINT_ADMIN_ROLES:}
+    semantic-scoring-versions: ${MEMORY_RAG_SEMANTIC_SCORING_VERSIONS:}
+    trusted-callers: {}
+  system-constraint-bootstrap:
+    enabled: ${MEMORY_CONSTRAINT_BOOTSTRAP_ENABLED:true}
+
+dubbo:
+  application:
+    name: memory-service
+    qos-enable: false
+  protocol:
+    name: dubbo
+    port: ${MEMORY_DUBBO_PORT:20891}
+  registry:
+    address: ${DUBBO_REGISTRY_ADDRESS:N/A}
+  consumer:
+    check: false
+    init: false
+    retries: 0
+
 server:
   port: 9011
 

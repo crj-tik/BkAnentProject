@@ -26,6 +26,9 @@ public class SupervisorToolLoopRunner {
     private final OrchestrationStore store;
     private final SupervisorOrchestrationProperties properties;
     private final ApprovalResumeClaimStore claims;
+    private com.bkanent.agent.security.AgentRagCredentialLeaseStore ragCredentials;
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setRagCredentials(com.bkanent.agent.security.AgentRagCredentialLeaseStore credentials) { ragCredentials = credentials; }
     private final ScheduledExecutorService renewals = Executors.newSingleThreadScheduledExecutor(runnable -> {
         Thread thread = new Thread(runnable, "supervisor-lease"); thread.setDaemon(true); return thread;
     });
@@ -44,14 +47,16 @@ public class SupervisorToolLoopRunner {
     public SupervisorTaskResponse execute(SupervisorTaskRequest request) {
         if (request == null || !StringUtils.hasText(request.userMessage()) || !StringUtils.hasText(request.userId()))
             throw new IllegalArgumentException("userMessage and authenticated user required");
+        com.bkanent.agent.security.AgentRagContextPolicy.normalize(request.context());
         if (StringUtils.hasText(request.continueRunId())) return continueRun(request);
         String runId = text(request.requestId(), UUID.randomUUID().toString());
         String sessionId = text(request.sessionId(), UUID.randomUUID().toString());
         String traceId = text(request.traceId(), runId);
         var normalized = new SupervisorTaskRequest(sessionId, request.userId(), runId, traceId, request.userMessage(),
-                request.context(), request.channel(), request.stream(), request.skill(), null, request.allowMcp());
+                com.bkanent.agent.security.AgentRagContextPolicy.normalize(request.context()), request.channel(), request.stream(), request.skill(), null, request.allowMcp());
         if (!hasRun(runId) && !properties.isAccepting()) throw new IllegalStateException("SUPERVISOR_ACCEPTANCE_PAUSED");
         store.register(runId, normalized);
+        if (ragCredentials != null) ragCredentials.capture(runId, normalized.userId());
         return leased(runId, token -> {
             StateSnapshot existing = snapshot(runId);
             if (existing != null) {
@@ -76,6 +81,7 @@ public class SupervisorToolLoopRunner {
         String runId = request.continueRunId();
         if (!StringUtils.hasText(request.requestId())) throw new IllegalArgumentException("continuation requestId required");
         store.assertOwner(runId, request.userId());
+        if (ragCredentials != null) ragCredentials.capture(runId, request.userId());
         return leased(runId, token -> {
             StateSnapshot existing = snapshot(runId);
             if (existing == null) throw new IllegalArgumentException("CONTINUATION_NOT_FOUND");
@@ -137,6 +143,8 @@ public class SupervisorToolLoopRunner {
 
     public SupervisorTaskResponse resume(ApprovalCallbackRequest request) {
         if (request.status() == null || request.status() == ApprovalStatus.PENDING) throw new IllegalArgumentException("approval decision required");
+        store.assertOwner(request.taskId(), request.reviewerId());
+        if (ragCredentials != null) ragCredentials.capture(request.taskId(), request.reviewerId());
         return leased(request.taskId(), token -> {
             StateSnapshot existing = snapshot(request.taskId());
             if (existing == null) throw new IllegalArgumentException("run not found");
@@ -214,6 +222,7 @@ public class SupervisorToolLoopRunner {
 
     public SupervisorTaskResponse reconcile(String runId, String userId) {
         store.assertOwner(runId, userId);
+        if (ragCredentials != null) ragCredentials.capture(runId, userId);
         return leased(runId, token -> {
             var existing = snapshot(runId);
             if (existing == null) throw new IllegalArgumentException("RUN_NOT_FOUND");
@@ -239,7 +248,11 @@ public class SupervisorToolLoopRunner {
         String token = UUID.randomUUID().toString();
         if (!store.lease(runId, token, LEASE_MS)) throw new IllegalStateException("run already being processed");
         Future<?> heartbeat = renewals.scheduleAtFixedRate(() -> store.renew(runId, token, LEASE_MS), LEASE_MS / 3, LEASE_MS / 3, TimeUnit.MILLISECONDS);
-        try { return operation.apply(token); }
+        try {
+            var response = operation.apply(token);
+            if (ragCredentials != null && AsyncRunStatus.terminal(response.status())) ragCredentials.discard(runId);
+            return response;
+        }
         finally { heartbeat.cancel(false); store.release(runId, token); }
     }
     private SupervisorTaskResponse invoke(Map<String, Object> input, RunnableConfig config) {

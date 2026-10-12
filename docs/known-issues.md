@@ -193,7 +193,7 @@
 
 **现象与根因**：`common/.../rpc/AuthenticatedPrincipal.java` 只返回 userId；`auth-service/.../rpc/AuthPermissionRpcServiceImpl.java:36-60` 验证账号/角色活跃，但 hasPermission 不按具体权限码授予资源范围。房源 brokerId 来自业务请求，当前未证明等于认证 userId。固定 gateway 标记、普通 userId 或 Dubbo 服务名不能作为新 RAG 的服务认证或跨空间授权证明。
 
-**处置方案（未实施）**：`extract-isolated-rag-service` 规划增加最小 RAG principal 事实契约、请求绑定服务签名、领域权威 scope 和房源资源 grant 真源；默认无授权拒绝，记忆强制 owner。保持现有一般认证接口，不借本次扩张为全系统 RBAC 重构。验收覆盖伪造身份、跨空间/跨用户、到期/撤销与认证依赖失败关闭。
+**处置（实施中）**：`2a3fa12` 已提交最小 RAG principal 事实契约、请求绑定 HMAC 及 auth 响应签名，common 全量 30 项、auth 全量 53 项无外部依赖测试通过。领域权威 scope、房源资源 grant 与服务/用户/操作交集已实现并经反例回归，真实部署接线仍待验收；偏好强制当前 owner，系统约束由显式角色和 active 规则授权。保持原一般认证接口，不扩张为全系统 RBAC 重构。真实跨服务密钥、资源基线及 A2A 凭据传播尚未验收，本项保持 OPEN。
 
 **关联**：LR-31；该 change 的 design D3、tasks 第 3 组。
 
@@ -203,7 +203,7 @@
 
 **现象与根因**：`ListingManagementServiceImpl` 在业务事务提交前写 ES 并调用 agent 索引 RPC，agent 再回调房源读取文档；外部写入不随事务回滚，失败主要告警。memory 的偏好 upsert/decay（含删除）及系统约束更新/停用没有覆盖全部向量同步，agent bootstrap 单独双写也不能保证一致。旧 ES 写入默认关闭，不能据配置推断旧索引完整。
 
-**处置方案（未实施）**：独立 RAG change 规划领域 revision/outbox 完整投影、RAG 应用账本、两路状态与补偿、tombstone/回填水位及真源最终检查。允许短暂漏检/延迟，不承诺跨 MySQL/ES/Milvus 原子事务或 exactly-once；实际回填、数据状态与同步结果需实施后验证。
+**处置（实施中）**：已实现领域 revision/outbox 完整投影及 RAG 应用账本、两路状态、补偿和 tombstone；账本侧 21 项 H2 测试通过，包括不可取消的迟到旧写、实际 hash 核对及失败关闭。领域入口覆盖已通过房源/记忆完整回归；真实 MySQL 8.4、ES/Milvus、回填水位与切流尚未完整验收。允许短暂漏检/延迟，不承诺跨后端原子事务或 exactly-once；本项保持 OPEN。
 
 **关联**：LR-31；design D7/D8、rag-index-lifecycle spec。
 
@@ -213,7 +213,7 @@
 
 **现象与根因**：`nacos/agent-service.yaml` 的本机重排 `host.docker.internal:18119` 和房源私网/Compose ES HTTP 目标不能满足本次要求的 host/DNS 校验及拒绝 localhost、环回、私有、保留地址。现有重排客户端只校验 endpoint 非空；Nacos/env 来源可信不构成地址豁免。
 
-**处置方案（未实施）**：在原客户端真实 transport 接入每次连接的地址校验，禁未校验重定向/DNS 换址；真实默认双路加重排验收与切流须具备经授权的合规目标。缺目标可完成规划和不发网的契约验证，但完整检索上线保持阻塞，不自行公开本机服务、更换提供方、修改网络或降级假报成功。
+**处置（实施中）**：已在原 HC5/HC4 transport 实现每次新连接的地址校验、全 DNS 答案检查与地址绑定，禁止重定向及代理；不发真实后端请求的 transport 测试 81 项已通过，全仓非外部联调回归通过；真实目标仍未访问。真实默认双路加重排验收与切流须具备经授权的合规目标，当前未提供。缺目标不自行公开本机服务、更换提供方、修改网络或降级假报成功，本项保持 OPEN。
 
 **实施前置核对**：本机项目依赖树确认 Spring AI 1.1.2 的 OpenAI embedding 经同步 Spring Web 6.2.7 RestClient / HttpClient5 5.4.4；ES 8.18.1 经 HttpAsyncClient 4.1.5 / HttpClient 4.5.14，须使用不同代的连接池 DNS 扩展。现有 BGE 自建 RestClient，不会自动消费受保护 Bean。连接层必须校验全部解析地址并绑定连接、禁重定向及代理；启动前一次解析不能覆盖换址。Milvus SDK 2.5.8 的 gRPC 不应被宣称由这些 HTTP 扩展保护。此核对不是实现或真实检索验收，合规 ES/重排目标仍未提供。
 
@@ -238,6 +238,88 @@
 **处置**：本次先实现受权 REST/Dubbo 消费与有界进程内凭据租约，缺少真实凭据的 A2A/模型工具路径明确要求重新认证且不发起 RAG 请求；token 不放模型参数、metadata、RunnableConfig、日志或 checkpoint。真实房源 Agent RAG 调用及跨 A2A 凭据生命周期仍未完成，tasks 3.5、6.2 的该部分保持阻塞。SDK 最小修补、升级或协议 transport 替换需要另行确认范围，不通过反射改 final 字段或暗建第三客户端绕过。
 
 **关联**：LR-18、LR-22、LR-31；KI-55；该 change domain-rag-consumption spec。
+
+## KI-60 [OPEN·P1] Spring AI Milvus 类型化过滤转换器未转义字符串字面量
+
+**确认依据**：独立 RAG apply 核对 Spring AI 1.1.2 的 `AbstractFilterExpressionConverter.doSingleValue`；字符串仅加双引号，不转义内含引号及反斜线。未访问后端或测试现存数据。
+
+**现象与根因**：构造类型化 AST 不等于其最终表达式安全。未经约束的领域字符串可能破坏 Milvus 字面量边界，影响与强制 owner/resource 条件相交的查询。不能将 Spring AI builder 本身作为防表达式注入的证据。
+
+**处置（实施中）**：在受控 typed filter 转换入口对字符串按 Milvus/JSON 字面量规则转义，仍通过原 Spring AI 存储执行，不开放原生 DSL。已增加实际 Milvus 转换器输出的引号、反斜线及控制字符回归，全仓非外部联调回归通过；真实过滤等价验证未执行，保持 OPEN。
+
+**关联**：LR-31；KI-55；tasks 3.4、4.2、8.2。
+
+## KI-61 [FIXED·本提交·P1] 新领域 RAG 包装的最终复核未同步收窄诊断正文
+
+**确认依据**：独立 RAG apply 集成审阅新增 `MemoryRagSearchFacade` 和 `ListingRagFacade`，尚未切流。
+
+**现象与根因**：记忆包装虽剔除 SQL 已失效候选，响应中的原 retrieval 仍携带全量旧正文；房源包装重建最新详情，却尚未复核领域最新 revision，可能将旧语义评分与新详情拼接。主结果复核不能代替对所有可见响应字段的复核。
+
+**修复（本次 RAG 实施提交）**：最终响应仅保留当前真源及 revision/hash 复核通过的候选；正文与允许 metadata 从真源重建，stageStats 统一为空，删除、撤权、阈值及更新后失效候选不进入 matches、正文或诊断列表。房源和记忆完整测试均通过，包含 RPC 返回后真源变化及非空上游统计的反例；最终数量与命令见本次 RAG 验收记录。源码缺陷已修，部署仍未切流。
+
+**关联**：LR-31；KI-55、KI-56；tasks 6.1、6.3。
+
+## KI-62 [FIXED·本提交·P1] 新 RAG 数值与时间编码可能移动硬过滤边界
+
+**确认日期**：2026-10-10（本次迁移实现审阅）。
+
+**现象与根因**：BigDecimal 转 double 可溢出、下溢或损失精度；变长/非 UTC 的 ISO 字符串在向量后端比较不保持 Instant 顺序，可能与 ES 硬过滤不等价。
+
+**修复**：NUMBER/NUMBER_LIST 严格有限及 round-trip 校验；INSTANT 固定 UTC 纳秒并限制 ES date_nanos 正 signed-long 范围。实际 Spring AI converter 输出及 ES mapping 单测覆盖；这是新 schema，不猜测旧投影兼容性。见 LR-35。
+
+## KI-63 [FIXED·本提交·P1] 记忆投影使用请求表示导致真源 hash 不一致
+
+**确认日期**：2026-10-10（H2 DATETIME 舍入回归确认）。
+
+**现象与根因**：请求纳秒/decimal 表示可被 SQL 持久化规范化；直接从请求生成投影，与最终 SQL 记录重建的 hash 不同，合法候选被剔除。
+
+**修复**：upsert、decay 与约束写入在相同事务锁内重新读取已持久化 SQL 表示再生成投影。领域生命周期与最终复核测试通过；真实 MySQL 精度与迁移仍未验收。见 LR-35。
+
+## KI-64 [FIXED·本提交·P1] 实际依赖权限拒绝误归不可用可被降级
+
+**确认日期**：2026-10-10（实际异常类型及 Spring AI 1.1.2 retry 源码核对，未发 Provider 请求）。
+
+**现象与根因**：HTTP 401/403、gRPC 权限错误及 Spring AI 丢失 typed cause 的 retry exception 若通用归类 DEPENDENCY_UNAVAILABLE，显式 ALLOW_DEGRADED 可绕过硬权限拒绝。
+
+**修复**：搜索与管理 probe 保留真实状态及 cause；对 typed AI retry exception 只匹配完整固定 HTTP 前缀。新增不可重试/降级、普通文本不误分类反例，实际后端权限联调仍未执行。见 LR-36。
+
+## KI-65 [FIXED·本提交·P1] SERVICE 域写 key 的管理操作绕过 adminRoles
+
+**确认日期**：2026-10-10（新配置与管理入口集成核对）。
+
+**现象与根因**：原 admin SERVICE 分支只验 operation grant，模板增加管理操作后空角色不再能阻断域 writer 管理。
+
+**修复**：本期所有管理操作强制 USER + signed principal + adminRoles；SERVICE 三管理操作全拒绝，真实 ADMIN 正向及空角色反例通过。不增加独立运维 key DSL，也不自动为部署设置管理角色。见 LR-36。
+
+## KI-66 [FIXED·本提交·P2] 新 RAG 模板健康名称及发现变量与应用不一致
+
+**确认日期**：2026-10-10（checked-in App/Compose/Nacos 静态核对）。
+
+**现象与根因**：readiness 引用了不存在的 dependencyReadiness；App 读取 NACOS_SERVER_ADDR/RAG_DUBBO_REGISTRY_ADDRESS，而 Compose 只给 NACOS_SERVER，可能上传成功却未接通发现。
+
+**修复**：健康组对齐 ragBaseReadiness/ragCapabilities，Compose 显式提供 App 所读地址/组/Dubbo registry aliases。最终模板核对另修正 memory 的 constraint-admin-roles 键、memory Dubbo registry，以及 listing 入站 AGENT_RAG_RPC_SECRET 的空默认透传；不启用角色或填入密钥。基础 readiness 文案对齐认证配置、两控制表可查询与至少三个已导出 RPC，不误称直接检查 Nacos。YAML 严格解析和逐值断言通过。实际 namespace/group/data ID、鉴权与 RPC 发现仍未验证，不据此声明配置已生效。
+
+## KI-67 [FIXED·本提交·P2] 只读知识工具迟到结果覆盖已完成失败审计
+
+**确认日期**：2026-10-10（新远程只读工具与现有账本集成核对）。
+
+**修复**：限定知识 capability 的 CAS 首终态写入；超时迟到、已完成复用和 legacy claim 不重发回归通过。一般副作用工具语义不变，无新增 transition。见 LR-37。
+
+## KI-68 [FIXED·本提交·P2] 旧房源显式召回数量被总数 500 额外拒绝
+
+**确认日期**：2026-10-10（最终设计 D9 对账）。
+
+**现象与根因**：每路 1–500 的契约被兼容层额外收紧为两路和不超过 500，合法显式 500+500 被拒绝。
+
+**修复**：保留显式每路数，rerankCandidates=min(500, 两路和)；默认两次域调用仍总预算不超过 500，显式首池超过 500 时只允许该次有界召回。新增默认/显式边界与有限扩池回归，不能静默改用户数量。
+
+## KI-69 [FIXED·本提交·P2] 记忆 outbox 回归假定初始时间戳立即到期
+
+**确认日期**：2026-10-10（H2 固定时钟复现，非真实 MySQL 验收）。
+
+**现象与根因**：全 reactor test 通过后，package 重跑时重试用例偶发 expected 2 / observed 1。H2 TIMESTAMP 精度为 6；`.123456700Z` 入库舍入为 `.123457Z`，可晚于首次派发 cutoff `.123456800Z`。首次派发正确跳过尚未到期事件，测试却将第二次派发当作第二次提交；无事件丢失或生产重试故障证据。
+
+**修复**：仅测试在首次启用派发前显式设置到期时间，保留 2/3 次提交、相同 eventId/revision、TIMEOUT 与 attempts 断言；新增固定时钟边界回归，确认未来行不变、到期后才应用。不修改生产时钟/签名/调度、不加 sleep 或弱化断言。复现与最终验证见 `docs/acceptance/isolated-rag-local-verification.md`。
 
 ## KI-46 [FIXED·本提交·P2] 受管 A2A 技能激活缺少技能名与任务锚点日志
 

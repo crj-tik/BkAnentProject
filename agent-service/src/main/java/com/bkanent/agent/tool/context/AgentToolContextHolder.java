@@ -24,7 +24,11 @@ public final class AgentToolContextHolder {
      * 初始化。
      */
     public static void init(String collectionName, Integer topK, boolean allowKnowledgeSearch) {
-        CONTEXT.set(new AgentToolContext(collectionName, topK, allowKnowledgeSearch));
+        init(null, collectionName, topK, allowKnowledgeSearch);
+    }
+
+    public static void init(String userId, String spaceId, Integer topK, boolean allowKnowledgeSearch) {
+        CONTEXT.set(new AgentToolContext(userId, spaceId, topK, allowKnowledgeSearch));
     }
 
     /**
@@ -33,7 +37,7 @@ public final class AgentToolContextHolder {
     public static AgentToolContext current() {
         AgentToolContext context = CONTEXT.get();
         if (context == null) {
-            context = new AgentToolContext(null, null, true);
+            context = new AgentToolContext(null, null, null, false);
             CONTEXT.set(context);
         }
         return context;
@@ -138,7 +142,11 @@ public final class AgentToolContextHolder {
         /**
          * 处理AgentToolContext。
          */
-        private AgentToolContext(String collectionName, Integer topK, boolean allowKnowledgeSearch) {
+        private final String userId;
+        public String getUserId() { return userId; }
+
+        private AgentToolContext(String userId, String collectionName, Integer topK, boolean allowKnowledgeSearch) {
+            this.userId = userId;
             this.collectionName = collectionName;
             this.topK = topK;
             this.allowKnowledgeSearch = allowKnowledgeSearch;

@@ -84,6 +84,7 @@ public class AgentPrincipalContext {
         }
         resolveUserId(request.userId());
         Map<String, Object> context = new LinkedHashMap<>(request.context() == null ? Map.of() : request.context());
+        context = new LinkedHashMap<>(AgentRagContextPolicy.normalize(context));
         context.put("userId", userId);
         String sessionId = StringUtils.hasText(request.sessionId())
                 ? request.sessionId().trim() : UUID.randomUUID().toString();

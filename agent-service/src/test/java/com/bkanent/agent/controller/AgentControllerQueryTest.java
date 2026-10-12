@@ -31,16 +31,54 @@ class AgentControllerQueryTest {
     private final AgentPermissionService permissionService = mock(AgentPermissionService.class);
     private final SessionStreamService streamService = mock(SessionStreamService.class);
     private final SupervisorSessionOwnershipService ownership = mock(SupervisorSessionOwnershipService.class);
+    private final com.bkanent.agent.milvus.memory.AgentMemoryMilvusService rag = mock(com.bkanent.agent.milvus.memory.AgentMemoryMilvusService.class);
+    private final com.bkanent.agent.milvus.listing.ListingMilvusService listing = mock(com.bkanent.agent.milvus.listing.ListingMilvusService.class);
     private MockMvc mvc;
 
     @BeforeEach
     void setUp() {
-        AgentController controller = new AgentController(null, null, null, null, null, null, null,
+        AgentController controller = new AgentController(rag, listing, null, null, null, null, null,
                 null, null, null, null, queryService, approvalTodoService, null, null, null, streamService,
                 permissionService, null, null, principal, ownership);
         mvc = MockMvcBuilders.standaloneSetup(controller).build();
         when(principal.resolveUserId("2")).thenReturn("2");
         when(principal.userId()).thenReturn("2");
+    }
+
+    @Test
+    void actualSixOldMethodPathsKeepSuccessShapesAndInitDimension() throws Exception {
+        when(rag.searchKnowledge("2", null, "query", 5)).thenReturn(List.of());
+        for (String prefix : List.of("/vector-store", "/mcp")) {
+            mvc.perform(get("/agent" + prefix + "/milvus/search").param("userId", "2").param("query", "query"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.success").value(true)).andExpect(jsonPath("$.data").isArray());
+            mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/agent" + prefix + "/milvus/collections/init")
+                            .param("userId", "2").contentType("application/json").content("{\"collectionName\":\"agent_knowledge\",\"dimension\":1024}"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.success").value(true));
+        }
+        verify(rag, org.mockito.Mockito.times(2)).initializeMemoryCollection("2", new com.bkanent.agent.milvus.core.model.MilvusCollectionInitRequest("agent_knowledge", 1024));
+        when(principal.bind(org.mockito.ArgumentMatchers.any(com.bkanent.agent.model.rag.ListingIndexRequest.class))).thenAnswer(call -> call.getArgument(0));
+        when(principal.bind(org.mockito.ArgumentMatchers.any(com.bkanent.agent.model.rag.ListingRagQueryRequest.class))).thenAnswer(call -> call.getArgument(0));
+        when(listing.query(org.mockito.ArgumentMatchers.any())).thenReturn(new com.bkanent.agent.model.rag.ListingRagResponse("query", "assembled", List.of()));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/agent/rag/listings/index")
+                        .contentType("application/json").content("{\"userId\":\"2\",\"listingId\":1}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.success").value(true));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/agent/rag/listings/query")
+                        .contentType("application/json").content("{\"userId\":\"2\",\"query\":\"query\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.data.query").value("query"))
+                .andExpect(jsonPath("$.data.assembledContext").value("assembled")).andExpect(jsonPath("$.data.matches").isArray());
+    }
+
+    @Test
+    void ragDependencyTimeoutPermissionAndMissingCredentialsRemainDistinct() throws Exception {
+        for (var code : List.of(com.bkanent.common.rag.RagErrorCode.DEPENDENCY_UNAVAILABLE, com.bkanent.common.rag.RagErrorCode.TIMEOUT,
+                com.bkanent.common.rag.RagErrorCode.FORBIDDEN, com.bkanent.common.rag.RagErrorCode.INVALID_ARGUMENT)) {
+            org.mockito.Mockito.doThrow(new com.bkanent.common.rag.RagException(code)).when(rag).searchKnowledge("2", null, "query", 5);
+            mvc.perform(get("/agent/mcp/milvus/search").param("userId", "2").param("query", "query"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.success").value(false)).andExpect(jsonPath("$.code").value(code.name()));
+        }
+        org.mockito.Mockito.doThrow(new com.bkanent.agent.security.AgentRagAuthenticationException("AUTHENTICATION_REQUIRED")).when(rag).searchKnowledge("2", null, "query", 5);
+        mvc.perform(get("/agent/mcp/milvus/search").param("userId", "2").param("query", "query"))
+                .andExpect(jsonPath("$.code").value("AUTHENTICATION_REQUIRED"));
     }
 
     @Test

@@ -33,6 +33,9 @@ public class SupervisorAsyncTaskService {
     private com.bkanent.agent.orchestration.SupervisorToolLoopRunner toolLoopRunner;
     @org.springframework.beans.factory.annotation.Autowired
     public void setToolLoopRunner(com.bkanent.agent.orchestration.SupervisorToolLoopRunner runner) { this.toolLoopRunner = runner; }
+    private com.bkanent.agent.security.AgentRagCredentialLeaseStore ragCredentials;
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setRagCredentials(com.bkanent.agent.security.AgentRagCredentialLeaseStore credentials) { ragCredentials = credentials; }
     private final AgentRegistry agentRegistry;
     private final A2aExecutionService a2aExecutionService;
     private final SupervisorTaskService supervisorTaskService;
@@ -103,7 +106,7 @@ public class SupervisorAsyncTaskService {
                 taskId,
                 traceId,
                 request.userMessage(),
-                request.context(),
+                com.bkanent.agent.security.AgentRagContextPolicy.normalize(request.context()),
                 request.channel(),
                 request.stream(), request.skill(), request.continueRunId(), request.allowMcp()
         );
@@ -222,6 +225,7 @@ public class SupervisorAsyncTaskService {
         entity.setOriginalRequestJson(writeJson(request));
         entity.setAttemptCount(0);
         entity.setNextAttemptAtMs(System.currentTimeMillis());
+        if (ragCredentials != null) ragCredentials.capture(entity.getTaskId(), entity.getUserId());
         agentAsyncTaskMapper.insert(entity);
         publish(sessionId, taskId, selectedAgentId, "supervisor.async.accepted", withGovernanceMetadata(Map.of(
                 "asyncTaskId", asyncTaskId,

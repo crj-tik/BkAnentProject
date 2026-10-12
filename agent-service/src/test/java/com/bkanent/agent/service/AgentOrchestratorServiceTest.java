@@ -21,12 +21,12 @@ class AgentOrchestratorServiceTest {
         when(runner.execute(any())).thenReturn(new SupervisorTaskResponse("session", "run", "WAITING_USER_INPUT", "地区?",
                 List.of(), "trace", null, Map.of("mode", "EXPLICIT_SKILL", "calls", List.of())));
         var selected = new SkillSelection("find", "1");
-        var response = service.chat(new AgentChatRequest("1", "find", "knowledge", 3, false, selected, null, "session", "run"));
+        var response = service.chat(new AgentChatRequest("1", "find", "agent_knowledge", 3, false, selected, null, "session", "run"));
         var capture = org.mockito.ArgumentCaptor.forClass(SupervisorTaskRequest.class);
         verify(runner).execute(capture.capture());
         assertThat(capture.getValue().skill()).isEqualTo(selected);
         assertThat(capture.getValue().allowMcp()).isFalse();
-        assertThat(capture.getValue().context()).containsEntry("collectionName", "knowledge").containsEntry("topK", 3);
+        assertThat(capture.getValue().context()).containsEntry("spaceId", "supervisor.knowledge").containsEntry("topK", 3);
         assertThat(mapper.readTree(mapper.writeValueAsString(response)).fieldNames()).toIterable()
                 .contains("answer", "model", "decision", "toolResults", "toolContext", "runId", "status");
         assertThat(response.status()).isEqualTo("WAITING_USER_INPUT");

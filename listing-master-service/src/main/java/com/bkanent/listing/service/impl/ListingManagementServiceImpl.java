@@ -4,7 +4,7 @@ import com.bkanent.common.model.KnowledgeDocument;
 import com.bkanent.common.model.ListingDTO;
 import com.bkanent.common.model.ListingKeywordSearchRequest;
 import com.bkanent.common.model.ListingKeywordSearchResultDTO;
-import com.bkanent.common.rpc.AgentRpcService;
+import com.bkanent.listing.rag.ListingRagOutbox;
 import com.bkanent.listing.converter.ListingConverter;
 import com.bkanent.listing.entity.ListingEntity;
 import com.bkanent.listing.enums.ListingStatusEnum;
@@ -22,7 +22,6 @@ import com.bkanent.listing.service.ListingManagementService;
 import com.bkanent.listing.service.ListingSearchService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -55,7 +54,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
      * 字段：listingKnowledgeDocumentAssembler。
      */
     private final ListingKnowledgeDocumentAssembler listingKnowledgeDocumentAssembler;
-    private final AgentRpcService agentRpcService;
+    private final ListingRagOutbox outbox;
 
     /**
      * 构造 ListingManagementServiceImpl 实例。
@@ -64,12 +63,12 @@ public class ListingManagementServiceImpl implements ListingManagementService {
                                         ListingConverter listingConverter,
                                         ListingSearchService listingSearchService,
                                         ListingKnowledgeDocumentAssembler listingKnowledgeDocumentAssembler,
-                                        ObjectProvider<AgentRpcService> agentRpcServiceProvider) {
+                                        ListingRagOutbox outbox) {
         this.listingDomainService = listingDomainService;
         this.listingConverter = listingConverter;
         this.listingSearchService = listingSearchService;
         this.listingKnowledgeDocumentAssembler = listingKnowledgeDocumentAssembler;
-        this.agentRpcService = agentRpcServiceProvider.getIfAvailable();
+        this.outbox = outbox;
     }
 
     /**
@@ -84,8 +83,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
         entity.setOcrStatus("PENDING");
         entity.setVerificationStatus(ListingVerificationStatusEnum.PENDING.name());
         listingDomainService.save(entity);
-        listingSearchService.indexListing(entity);
-        syncListingKnowledge(entity.getId());
+        outbox.publishCurrent(entity.getId());
         log.info("新增房源成功，listingId={}，title={}", entity.getId(), entity.getTitle());
         return listingConverter.toDetailResponse(entity);
     }
@@ -96,11 +94,11 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ListingDetailResponse updateListing(Long listingId, ListingUpsertRequest request) {
+        outbox.lock(listingId);
         ListingEntity entity = requireListing(listingId);
         applyUpsert(entity, request);
         listingDomainService.updateById(entity);
-        listingSearchService.indexListing(entity);
-        syncListingKnowledge(listingId);
+        outbox.publishCurrent(listingId);
         log.info("更新房源成功，listingId={}", listingId);
         return listingConverter.toDetailResponse(entity);
     }
@@ -111,10 +109,10 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deleteListing(Long listingId) {
+        outbox.lock(listingId);
         requireListing(listingId);
         listingDomainService.removeById(listingId);
-        listingSearchService.deleteListing(listingId);
-        deleteListingKnowledge(listingId);
+        outbox.publishCurrent(listingId);
         log.info("删除房源成功，listingId={}", listingId);
     }
 
@@ -147,7 +145,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     }
 
     /**
-     * 使用 ES BM25 查询房源摘要候选。
+     * 使用授权 RAG 默认混合重排查询房源摘要候选。
      */
     @Override
     public List<ListingKeywordSearchResultDTO> searchListingSummariesByKeyword(ListingKeywordSearchRequest request) {
@@ -180,11 +178,11 @@ public class ListingManagementServiceImpl implements ListingManagementService {
         if (!ListingStatusEnum.contains(request.status())) {
             throw new IllegalArgumentException("房源状态不合法: " + request.status());
         }
+        outbox.lock(listingId);
         ListingEntity entity = requireListing(listingId);
         entity.setStatus(request.status().toUpperCase());
         listingDomainService.updateById(entity);
-        listingSearchService.indexListing(entity);
-        syncListingKnowledge(listingId);
+        outbox.publishCurrent(listingId);
         log.info("更新房源状态成功，listingId={}，status={}", listingId, entity.getStatus());
         return listingConverter.toDetailResponse(entity);
     }
@@ -195,13 +193,13 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ListingDetailResponse bindAssets(Long listingId, ListingAssetBindRequest request) {
+        outbox.lock(listingId);
         ListingEntity entity = requireListing(listingId);
         entity.setImageUrls(listingConverter.joinValues(request.imageUrls()));
         entity.setFloorPlanUrls(listingConverter.joinValues(request.floorPlanUrls()));
         entity.setVideoUrls(listingConverter.joinValues(request.videoUrls()));
         listingDomainService.updateById(entity);
-        listingSearchService.indexListing(entity);
-        syncListingKnowledge(listingId);
+        outbox.publishCurrent(listingId);
         log.info("绑定房源媒资成功，listingId={}", listingId);
         return listingConverter.toDetailResponse(entity);
     }
@@ -212,6 +210,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ListingDetailResponse recognizeOcr(Long listingId, ListingOcrRecognizeRequest request) {
+        outbox.lock(listingId);
         ListingEntity entity = requireListing(listingId);
         entity.setPropertyCertificateUrl(request.propertyCertificateUrl());
         entity.setContractUrl(request.contractUrl());
@@ -223,8 +222,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
             entity.setOwnerName("OCR识别业主" + listingId);
         }
         listingDomainService.updateById(entity);
-        listingSearchService.indexListing(entity);
-        syncListingKnowledge(listingId);
+        outbox.publishCurrent(listingId);
         log.info("完成房源 OCR 识别，listingId={}", listingId);
         return listingConverter.toDetailResponse(entity);
     }
@@ -235,6 +233,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ListingDetailResponse verifyAuthenticity(Long listingId, ListingVerifyRequest request) {
+        outbox.lock(listingId);
         ListingEntity entity = requireListing(listingId);
         if (StringUtils.hasText(request.certificateNo())) {
             entity.setCertificateNo(request.certificateNo());
@@ -250,8 +249,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
                 : ListingVerificationStatusEnum.FAILED.name());
         entity.setVerificationRemark(verified ? "房源信息校验通过" : "证号或业主信息缺失，校验失败");
         listingDomainService.updateById(entity);
-        listingSearchService.indexListing(entity);
-        syncListingKnowledge(listingId);
+        outbox.publishCurrent(listingId);
         log.info("完成房源真实性核验，listingId={}，status={}", listingId, entity.getVerificationStatus());
         return listingConverter.toDetailResponse(entity);
     }
@@ -290,27 +288,4 @@ public class ListingManagementServiceImpl implements ListingManagementService {
         return entity;
     }
 
-    private void syncListingKnowledge(Long listingId) {
-        if (agentRpcService == null || listingId == null) {
-            return;
-        }
-        try {
-            agentRpcService.syncListingKnowledge(listingId);
-        }
-        catch (Exception exception) {
-            log.warn("房源同步 Milvus 失败，listingId={}，原因={}", listingId, exception.getMessage());
-        }
-    }
-
-    private void deleteListingKnowledge(Long listingId) {
-        if (agentRpcService == null || listingId == null) {
-            return;
-        }
-        try {
-            agentRpcService.deleteListingKnowledge(listingId);
-        }
-        catch (Exception exception) {
-            log.warn("房源删除 Milvus 文档失败，listingId={}，原因={}", listingId, exception.getMessage());
-        }
-    }
 }

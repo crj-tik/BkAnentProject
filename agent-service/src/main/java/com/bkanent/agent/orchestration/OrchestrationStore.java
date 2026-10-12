@@ -96,6 +96,12 @@ public class OrchestrationStore {
         jdbc.update("UPDATE agent_tool_invocation SET status='COMPLETED',result_json=?,updated_at_ms=? WHERE run_id=? AND call_id=?",
                 result, System.currentTimeMillis(), runId, callId);
     }
+    /** The named read-only compatibility tool has no side effects; first terminal result wins (LR-22). */
+    public Invocation completeKnowledgeRead(String runId, String callId, String result, Object metadata) {
+        jdbc.update("UPDATE agent_tool_invocation SET status='COMPLETED',result_json=?,execution_metadata_json=?,updated_at_ms=? WHERE run_id=? AND call_id=? AND capability_id='local:milvusKnowledgeSearch' AND status IN ('EXECUTING','OUTCOME_UNKNOWN')",
+                result, metadata == null ? null : json(metadata), System.currentTimeMillis(), runId, callId);
+        return find(runId, callId);
+    }
     public void unknown(String runId, String callId) {
         jdbc.update("UPDATE agent_tool_invocation SET status='OUTCOME_UNKNOWN',updated_at_ms=? WHERE run_id=? AND call_id=? AND status NOT IN ('COMPLETED','REJECTED')",
                 System.currentTimeMillis(), runId, callId);

@@ -29,6 +29,9 @@ public class SupervisorAsyncWorkflowService {
     private com.bkanent.agent.orchestration.SupervisorToolLoopRunner toolLoopRunner;
     @org.springframework.beans.factory.annotation.Autowired
     public void setToolLoopRunner(com.bkanent.agent.orchestration.SupervisorToolLoopRunner runner) { this.toolLoopRunner = runner; }
+    private com.bkanent.agent.security.AgentRagCredentialLeaseStore ragCredentials;
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setRagCredentials(com.bkanent.agent.security.AgentRagCredentialLeaseStore credentials) { ragCredentials = credentials; }
     private final SupervisorWorkflowService supervisorWorkflowService;
     private final SessionStreamService sessionStreamService;
     private final AgentMetricsService agentMetricsService;
@@ -93,7 +96,7 @@ public class SupervisorAsyncWorkflowService {
                 taskId,
                 traceId,
                 request.userMessage(),
-                request.context(),
+                com.bkanent.agent.security.AgentRagContextPolicy.normalize(request.context()),
                 request.channel(),
                 request.stream(), request.skill(), request.continueRunId(), request.allowMcp()
         );
@@ -109,6 +112,7 @@ public class SupervisorAsyncWorkflowService {
         entity.setCancelRequested(0);
         entity.setAttemptCount(0);
         entity.setNextAttemptAtMs(System.currentTimeMillis());
+        if (ragCredentials != null) ragCredentials.capture(entity.getTaskId(), entity.getUserId());
         agentAsyncWorkflowMapper.insert(entity);
         publish(sessionId, taskId, "supervisor-agent", "supervisor.workflow_async.accepted", withGovernanceMetadata(Map.of(
                 "asyncWorkflowId", asyncWorkflowId,

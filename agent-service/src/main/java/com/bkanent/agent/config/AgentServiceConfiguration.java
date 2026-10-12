@@ -17,13 +17,10 @@ import java.util.Map;
 
 @Configuration
 @EnableConfigurationProperties({
-        MilvusConnectionProperties.class,
-        AgentMilvusProperties.class,
         AgentChatProperties.class,
-        ListingRagProperties.class,
+        AgentRagConsumerProperties.class,
         DistributedAgentProperties.class,
-        MemoryServiceProperties.class,
-        SystemConstraintBootstrapProperties.class
+        MemoryServiceProperties.class
 })
 /**
  * AgentServiceConfiguration 配置类。

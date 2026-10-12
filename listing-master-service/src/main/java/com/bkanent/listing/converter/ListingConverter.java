@@ -3,7 +3,6 @@ package com.bkanent.listing.converter;
 import com.bkanent.common.model.ListingDTO;
 import com.bkanent.listing.entity.ListingEntity;
 import com.bkanent.listing.model.ListingDetailResponse;
-import com.bkanent.listing.search.ListingSearchDocument;
 import org.springframework.stereotype.Component;
 
 import java.util.Arrays;
@@ -86,31 +85,6 @@ public class ListingConverter {
                 .map(String::trim)
                 .reduce((left, right) -> left + "," + right)
                 .orElse(null);
-    }
-
-    /**
-     * 转换searchDocument。
-     */
-    public ListingSearchDocument toSearchDocument(ListingEntity entity) {
-        if (entity == null) {
-            return null;
-        }
-        return new ListingSearchDocument(
-                entity.getId(),
-                entity.getTitle(),
-                entity.getAddress(),
-                entity.getAddress(),
-                entity.getLayout(),
-                entity.getArea(),
-                entity.getTotalPrice(),
-                entity.getStatus(),
-                entity.getFloorLevel(),
-                entity.getDecoration(),
-                entity.getSchoolZone(),
-                entity.getTraffic(),
-                entity.getOwnerName(),
-                entity.getVerificationStatus()
-        );
     }
 
     /**

@@ -1,0 +1,247 @@
+# Deployment template only. No publish/provision/backfill or capability probe is implied.
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${MYSQL_HOST:mysql}:${MYSQL_PORT:3306}/${MYSQL_DB_RAG:bk_rag}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    username: ${MYSQL_USER:}
+    password: ${MYSQL_PASSWORD:}
+  elasticsearch:
+    uris: ${RAG_ELASTICSEARCH_URIS:}
+  ai:
+    model:
+      chat: none
+      embedding: openai
+      moderation: none
+      audio:
+        transcription: none
+        speech: none
+      image: none
+    vectorstore:
+      type: none
+    openai:
+      api-key: ${RAG_EMBEDDING_API_KEY:}
+      base-url: ${RAG_EMBEDDING_BASE_URL:}
+      embedding:
+        embeddings-path: /embeddings
+        options:
+          model: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,ragBaseReadiness
+        capabilities:
+          include: ragCapabilities
+service:
+  readiness:
+    mode: ${SERVICE_READINESS_MODE:distributed}
+    required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database}
+    endpoints:
+      nacos: "${NACOS_SERVER:nacos:8848}"
+      database: "${MYSQL_HOST:mysql}:${MYSQL_PORT:3306}"
+
+rag:
+  # Empty allowlist imposes no hostname restriction: public HTTP hosts still require URL/address validation.
+  # Empty endpoints are unconfigured; private/reserved targets remain denied even when allowlisted.
+  http:
+    allowed-hosts: ${RAG_HTTP_ALLOWED_HOSTS:}
+  milvus:
+    host: ${RAG_MILVUS_HOST:}
+    port: ${RAG_MILVUS_PORT:19530}
+    token: ${RAG_MILVUS_TOKEN:}
+    secure: ${RAG_MILVUS_SECURE:false}
+    connect-timeout-ms: 5000
+    rpc-deadline-ms: 5000
+  rerank:
+    endpoint: ${RAG_RERANK_ENDPOINT:}
+    api-key: ${RAG_RERANK_API_KEY:}
+    model: ${RAG_RERANK_MODEL:bge-reranker-v2-m3-v1}
+    protocol: ${RAG_RERANK_PROTOCOL:native}
+  security:
+    auth-request-key-id: rag-current
+    auth-request-secret: ${RAG_AUTH_RPC_SECRET:}
+    auth-response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}
+    auth-response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
+    trusted-keys:
+      listing-current:
+        caller-service: listing-master-service
+        owner-domain: listing-master-service
+        allowed-operations: [SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+        secret: ${LISTING_RAG_RPC_SECRET:}
+      memory-current:
+        caller-service: memory-service
+        owner-domain: memory-service
+        allowed-operations: [SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+        secret: ${MEMORY_RAG_RPC_SECRET:}
+      agent-current:
+        caller-service: agent-service
+        owner-domain: agent-service
+        allowed-operations: [SEARCH]
+        secret: ${AGENT_RAG_RPC_SECRET:}
+  index:
+    worker:
+      enabled: false
+      batch-size: 20
+      delay-ms: 1000
+      reconcile-delay-ms: 30000
+  # These proposed physical names are NOT legacy identity mappings or registered-ready evidence.
+  # Roles remain empty and rerank profile absent until authorized, verified deployment configuration exists.
+  # Unknown general/supervisor knowledge is intentionally not registered.
+  spaces:
+    '[listing.knowledge]':
+      space-id: listing.knowledge
+      owner-domain: listing-master-service
+      policy-version: listing-v1
+      schema-version: "1"
+      elasticsearch-index: rag_listing_knowledge_v1
+      vector-schema: &listing-vector-schema
+        database: default
+        collection: rag_listing_knowledge_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        listingId:
+          type: STRING
+          operators: [EQ, IN]
+          required: true
+        active: &active-field
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        ownerDomain: &stored-string
+          type: STRING
+          operators: []
+          required: false
+        policyVersion: *stored-string
+        allowedActorIds:
+          type: STRING_LIST
+          operators: []
+          required: false
+        title: *stored-string
+        address: *stored-string
+        region:
+          type: STRING
+          operators: [EQ, IN, CONTAINS_CI]
+          required: false
+        layout:
+          type: STRING
+          operators: [EQ, IN]
+          required: false
+        area: &range-number
+          type: NUMBER
+          operators: [EQ, GTE, LTE]
+          required: false
+        totalPrice: *range-number
+        status:
+          type: STRING
+          operators: [EQ, IN]
+          required: false
+        verified:
+          type: BOOLEAN
+          operators: [EQ]
+          required: false
+        imageUrls: *stored-string
+        floorPlanUrls: *stored-string
+        videoUrls: *stored-string
+        ocrStatus: *stored-string
+        verificationStatus: *stored-string
+      return-fields: [listingId, active, title, address, region, layout, area, totalPrice, status, verified]
+      search-roles: []
+      admin-roles: []
+      allowed-clients:
+        listing-master-service: [SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits: &space-limits
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile: null
+    '[memory.preference]':
+      space-id: memory.preference
+      owner-domain: memory-service
+      policy-version: memory-v1
+      schema-version: memory-v1
+      elasticsearch-index: rag_memory_preference_v1
+      vector-schema:
+        <<: *listing-vector-schema
+        collection: rag_memory_preference_v1
+      fields:
+        userId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        ownerId: *stored-string
+        preferenceKey:
+          type: STRING
+          operators: [EQ, IN]
+          required: true
+        category: &category-field
+          type: STRING
+          operators: [EQ, IN]
+          required: false
+        confidence: *range-number
+        observationCount:
+          type: NUMBER
+          operators: []
+          required: false
+        lastObservedAt:
+          type: INSTANT
+          operators: [GTE, LTE]
+          required: false
+        active: *active-field
+      return-fields: [preferenceKey, category, confidence, observationCount, lastObservedAt, active]
+      search-roles: []
+      admin-roles: []
+      allowed-clients:
+        memory-service: [SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits: *space-limits
+      rerank-profile: null
+    '[memory.constraint]':
+      space-id: memory.constraint
+      owner-domain: memory-service
+      policy-version: memory-v1
+      schema-version: memory-v1
+      elasticsearch-index: rag_memory_constraint_v1
+      vector-schema:
+        <<: *listing-vector-schema
+        collection: rag_memory_constraint_v1
+      fields:
+        constraintKey:
+          type: STRING
+          operators: [EQ, IN]
+          required: true
+        category: *category-field
+        tags: *stored-string
+        active: *active-field
+      return-fields: [constraintKey, category, tags, active]
+      search-roles: []
+      admin-roles: []
+      allowed-clients:
+        memory-service: [SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits: *space-limits
+      rerank-profile: null

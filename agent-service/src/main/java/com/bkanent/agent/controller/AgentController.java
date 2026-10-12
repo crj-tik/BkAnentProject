@@ -221,12 +221,12 @@ public class AgentController {
      * 处理milvusSearch。
      */
     @GetMapping({"/vector-store/milvus/search", "/mcp/milvus/search"})
-    public ApiResponse<List<MilvusSearchResult>> milvusSearch(@RequestParam String userId,
-                                                              @RequestParam String query) {
+    public ApiResponse<List<MilvusSearchResult>> milvusSearch(@RequestParam(name = "userId") String userId,
+                                                              @RequestParam(name = "query") String query) {
         String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return guarded(() -> {
             agentPermissionService.assertPermission(authenticatedUserId, "agent.rag.memory.search", "memory rag search");
-            return ApiResponse.ok(agentMemoryMilvusService.searchKnowledge(null, query, 5));
+            return ApiResponse.ok(agentMemoryMilvusService.searchKnowledge(authenticatedUserId, null, query, 5));
         });
     }
 
@@ -335,12 +335,12 @@ public class AgentController {
      * 初始化collection。
      */
     @PostMapping({"/vector-store/milvus/collections/init", "/mcp/milvus/collections/init"})
-    public ApiResponse<Void> initCollection(@RequestParam String userId,
+    public ApiResponse<Void> initCollection(@RequestParam(name = "userId") String userId,
                                             @RequestBody MilvusCollectionInitRequest request) {
         String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return guarded(() -> {
             agentPermissionService.assertPermission(authenticatedUserId, "agent.rag.memory.init", "memory collection init");
-            agentMemoryMilvusService.initializeMemoryCollection(request.collectionName());
+            agentMemoryMilvusService.initializeMemoryCollection(authenticatedUserId, request);
             return ApiResponse.ok(null);
         });
     }
@@ -622,6 +622,12 @@ public class AgentController {
     private <T> ApiResponse<T> guarded(java.util.function.Supplier<ApiResponse<T>> supplier) {
         try {
             return supplier.get();
+        } catch (com.bkanent.common.rag.RagException exception) {
+            return ApiResponse.fail(exception.code().name(), exception.code().name());
+        } catch (com.bkanent.agent.security.AgentRagAuthenticationException exception) {
+            return ApiResponse.fail(exception.code(), exception.code());
+        } catch (IllegalArgumentException exception) {
+            return ApiResponse.fail("INVALID_ARGUMENT", "INVALID_ARGUMENT");
         } catch (IllegalStateException exception) {
             if (exception.getMessage() != null && exception.getMessage().contains("rate limit exceeded")) {
                 return ApiResponse.fail(GovernanceErrorCodes.RATE_LIMITED, exception.getMessage());

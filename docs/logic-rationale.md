@@ -306,3 +306,63 @@
 **方案位置**：`openspec/changes/extract-isolated-rag-service/`（proposal/design/specs/tasks）。apply 已启动独立 `rag-service`、公共契约、授权及领域迁移实现；任务勾选以实际完成与验证为准。真实配置生效、旧数据映射、回填、排空、切流、兼容发布周期及水位回滚仍须单独验收；新增源码不代表运行环境已迁移。旧 change 原样保留仅供历史参考，不再作为本方向实施依据。营销未接入本次 RAG 的独立业务 ES 搜索不被声明已迁移。
 
 **关联**：LR-17、LR-18、LR-19、LR-22；KI-55、KI-56、KI-57。出站 URL 安全约束无内网配置豁免，现有目标冲突是实施/切流门禁而非放宽约束的理由。
+
+## LR-32 RAG 逻辑身份、物理键与可见版本分别管理
+
+**结论**：领域持久 revision/tombstone 不因源记录删除重建而归零；新 Milvus 空间使用稳定 UUID 物理键，逻辑 documentId 保存在 metadata。Spring AI delete/add 不被称为原子 upsert；融合与重排前每路命中必须匹配最新账本 revision/hash/schema 且两路已应用。允许暂时漏检，不允许迟到旧正文可见。
+
+**根因**：Spring AI 1.1.2 的默认主键上限为 36 字符，add 执行 insert，取消超时不能撤销已在网络中的旧写。数据库锁只能串行本进程正常执行，不能为多后端制造事务；持久身份及核对补偿才覆盖删除复活和迟到覆盖。旧集合映射不明时不能猜测或删除。
+
+**代码位置**：`common/rag/RagDocumentIds`、`rag-service/storage/SpringAiMilvusDocumentStore`、`rag-service/index/RagIndexService` / `RagIndexWorker`、`listing-master-service/rag/ListingRagOutbox`、`memory-service/service/MemoryRagProjectionService`。
+
+**关联**：LR-31；KI-56、KI-58；真实旧数据及回填/切流仍未验收。
+
+## LR-33 RAG 读取凭据是进程内租约，不是持久化工作流数据
+
+**结论**：真实用户凭据只经专用上下文/RPC 参数传播；异步 run 的有界进程内租约到期或进程重启后需重新认证，不从 userId 或 checkpoint 换发凭据。缺少受支持 A2A 传输路径时明确认证失败关闭，不将 token 塞入模型参数或 metadata。
+
+**根因**：身份定位信息不具持有凭据的证明能力；长期 token 入快照会扩大暴露面，并把已撤销用户的读取权固化到任务恢复。当前 SDK 无已经验证的专用 header 注入路径，不能用普通 HTTP 客户端能力推断真实 A2A 支持。
+
+**代码位置**：`agent-service/security/AgentRagCredentialLeaseStore`、`AgentRagCredentialFilter`、`common/rag/RagCredentialContext`；auth/领域/RAG 的 signed principal 与 scope 消费链。
+
+**关联**：LR-18、LR-22、LR-23、LR-31；KI-55、KI-59。
+
+## LR-34 HTTP 校验必须覆盖原始 DNS 答案和实际连接
+
+**结论**：允许的 hostname 不豁免私网；连接绑定已校验地址，校验全部 A/AAAA 答案并禁止代理/重定向。生产 DNS 保留 AAAA 原始形态，在构造 InetAddress 前拒绝 IPv4-mapped 等特殊地址，缺 DNS provider 失败关闭。
+
+**根因**：预解析后再次按 hostname 连接会产生换址窗口；JDK `getAllByName` 可将 mapped AAAA 折叠为 Inet4Address，之后只按字节长度检查无法证明拒绝全部映射地址。使用 JDK DNS provider 读取记录不等于新增业务 HTTP 客户端，部署须核验 `java.naming` / `jdk.naming.dns` 模块。
+
+**代码位置**：`rag-service/security/http/RagEndpointPolicy`、`RagPublicDnsResolver`、`RagDnsRecords`、两代受保护 transport；`storage/ElasticsearchDeadlineReader` 使用同一 ES RestClient 的可取消异步读取。
+
+**关联**：LR-31；KI-57；真实目标和镜像模块尚未实测。
+
+## LR-35 两路硬过滤必须保留数值边界与时间顺序
+
+**结论**：新 schema 的 NUMBER 使用 double，但仅接受有限、非零不下溢且 `BigDecimal.valueOf(double)` 数值 round-trip 相等的输入；不支持的精度明确拒绝。INSTANT 编码为固定 UTC 九位小数，ES 使用 date_nanos，限制 epoch nanos 在 [0, Long.MAX_VALUE]；不得将此新编码声明为兼容未知旧数据。
+
+**根因**：类型化 AST 仍可能在后端数值转换中移动硬过滤边界；ISO 时间字符串若小数位数或时区不固定，Milvus 字符串比较不等价于时间顺序。SQL DATETIME/DECIMAL 又可能规范化请求值，记忆领域必须在同一事务锁内重新读取持久化表示，再生成完整投影与 hash，否则合法候选会在最终真源核对中被误剔除。
+
+**代码位置**：`rag-service/storage/ProjectionFilters`、`ElasticsearchProjectionStore`；`memory-service/service/UserPreferenceMemoryService`、`SystemConstraintMemoryService`、`MemoryRagProjectionService` / `MemoryRagSearchFacade`。
+
+**关联**：LR-31、LR-32；KI-62、KI-63；旧数据时间编码与真实 MySQL 仍需独立验收。
+
+## LR-36 RAG 管理与依赖权限错误不能借服务写权限或降级放行
+
+**结论**：INSPECT/PROVISION/REPLAY 同时要求 key/空间允许操作、USER 身份、已验签真实 principal 与 adminRoles；SERVICE writer 即使获 operation grant 也不能管理。真实 HTTP 401/403 与 gRPC 认证/权限错误不可重试或降级。Spring AI 1.1.2 丢失 HTTP cause 时，只对其两种 typed retry exception 的完整固定前缀 `HTTP 401 - ` / `HTTP 403 - ` 分类，不扫描任意正文。
+
+**根因**：operation grant 仅验证调用服务，不替代用户角色授权；空 adminRoles 无法阻断原 SERVICE 管理分支。真实依赖权限拒绝若归入普通不可用，会被 ALLOW_DEGRADED 绕过，管理 probe 和实际搜索必须一致保留硬拒绝。
+
+**代码位置**：`rag-service/security/RagAccessControl.admin`、`config/RagRuntimeConfiguration.capabilityFailure`、`config/ManagedRagSpaceRegistry`、`retrieval/RagRetrievalService.classify`、ES/Milvus/BGE 边界及对应反例测试。
+
+**关联**：LR-31、LR-33；KI-64、KI-65；默认角色仍为空，不证明真实部署已授权。
+
+## LR-37 确定只读知识调用以首个终态结果为准
+
+**结论**：仅 `local:milvusKnowledgeSearch` 使用 `completeKnowledgeRead` 条件更新；超时、已 claim 的遗留只读调用及迟到结果不能覆写首个完成事实或重发。原一般工具 `complete`、副作用 OUTCOME_UNKNOWN 和 Graph 拓扑保持不变。
+
+**根因**：远程知识读取已无业务副作用，确定失败应作为已完成失败事实供模型观察；迟到成功覆盖超时审计会使 checkpoint 与调用事实不一致。不能据只读工具安全性顺带放宽所有业务工具重试或改变审批恢复。
+
+**代码位置**：`agent-service/orchestration/OrchestrationStore.completeKnowledgeRead`、`SupervisorToolLoopGraph`；生产 Graph 回归覆盖 timeout/late/reuse/legacy claim 与异步专用凭据租约。
+
+**关联**：LR-18、LR-22、LR-23、LR-33；KI-67；本次没有新增状态机 transition 调用点。

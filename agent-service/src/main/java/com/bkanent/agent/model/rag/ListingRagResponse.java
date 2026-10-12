@@ -8,6 +8,10 @@ import java.util.List;
 public record ListingRagResponse(
         String query,
         String assembledContext,
-        List<ListingRagMatch> matches
+        List<ListingRagMatch> matches,
+        com.bkanent.common.rag.RagSearchResponse retrieval
 ) {
+    public ListingRagResponse(String query, String assembledContext, List<ListingRagMatch> matches) {
+        this(query, assembledContext, matches, null);
+    }
 }

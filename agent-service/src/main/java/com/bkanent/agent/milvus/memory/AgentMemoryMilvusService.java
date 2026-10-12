@@ -1,99 +1,75 @@
 package com.bkanent.agent.milvus.memory;
 
-import com.bkanent.agent.config.AgentMilvusProperties;
-import com.bkanent.agent.milvus.core.MilvusDocumentStore;
 import com.bkanent.agent.milvus.core.model.MilvusCollectionInitRequest;
-import com.bkanent.agent.milvus.core.model.MilvusSearchRequest;
 import com.bkanent.agent.milvus.core.model.MilvusSearchResult;
-import com.bkanent.agent.milvus.core.model.MilvusUpsertRequest;
-import com.bkanent.agent.milvus.core.model.MilvusVectorDocument;
+import com.bkanent.agent.rag.AgentRagCompatibility;
+import com.bkanent.agent.security.AgentRagCredentialLeaseStore;
+import com.bkanent.agent.security.AgentRagRequestAuthentication;
+import com.bkanent.common.rag.*;
+import com.bkanent.common.rpc.*;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
-
 import java.util.List;
-import java.util.Map;
+import java.util.UUID;
 
-/**
- * AgentMemoryMilvusService 服务类。
- */
+/** Historical service name retained as a pure authorized RPC compatibility wrapper. */
 @Service
 public class AgentMemoryMilvusService {
+    private final ObjectProvider<RagRetrievalRpcService> retrieval;
+    private final ObjectProvider<MemoryRagRpcService> memory;
+    private final ObjectProvider<RagSpaceAdminRpcService> admin;
+    private final AgentRagCredentialLeaseStore credentials;
+    private final AgentRagRequestAuthentication authentication;
 
-    /**
-     * 字段：milvusDocumentStore。
-     */
-    private final MilvusDocumentStore milvusDocumentStore;
-    /**
-     * 字段：agentMilvusProperties。
-     */
-    private final AgentMilvusProperties agentMilvusProperties;
-
-    /**
-     * 构造 AgentMemoryMilvusService 实例。
-     */
-    public AgentMemoryMilvusService(MilvusDocumentStore milvusDocumentStore,
-                                    AgentMilvusProperties agentMilvusProperties) {
-        this.milvusDocumentStore = milvusDocumentStore;
-        this.agentMilvusProperties = agentMilvusProperties;
+    public AgentMemoryMilvusService(ObjectProvider<RagRetrievalRpcService> retrieval,
+                                    ObjectProvider<MemoryRagRpcService> memory,
+                                    ObjectProvider<RagSpaceAdminRpcService> admin,
+                                    AgentRagCredentialLeaseStore credentials, AgentRagRequestAuthentication authentication) {
+        this.retrieval = retrieval; this.memory = memory; this.admin = admin;
+        this.credentials = credentials; this.authentication = authentication;
     }
-
-    /**
-     * 初始化ializeMemoryCollection。
-     */
-    public void initializeMemoryCollection(String collectionName) {
-        milvusDocumentStore.initializeCollection(new MilvusCollectionInitRequest(
-                resolveCollectionName(collectionName),
-                agentMilvusProperties.getEmbeddingDimension()
-        ));
+    public List<MilvusSearchResult> searchKnowledge(String userId, String collectionName, String query, int topK) {
+        String space = AgentRagCompatibility.space(collectionName, "supervisor.knowledge");
+        if ("listing.knowledge".equals(space)) throw new RagException(RagErrorCode.FORBIDDEN);
+        var request = AgentRagCompatibility.knowledge(space, query, topK);
+        var token = credentials.credentials(userId);
+        try {
+            if (space.startsWith("memory.")) {
+                var provider = memory.getIfAvailable();
+                if (provider == null) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
+                var domainRequest = new MemoryRagSearchRequest(request, topK, null, null);
+                var response = provider.search(domainRequest, authentication.user(domainRequest, request.requestId(),
+                        "memory-service", RagOperation.SEARCH, userId, token), token);
+                // Only domain-final-checked matches, never raw retrieval candidates.
+                return response.matches().stream().map(match -> AgentRagCompatibility.result(space, match.candidate(), response.retrieval())).toList();
+            }
+            var scope = authentication.supervisorScope(request, userId);
+            var provider = retrieval.getIfAvailable();
+            if (provider == null) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
+            var response = provider.search(request, authentication.user(request, request.requestId(), "rag-service",
+                    RagOperation.SEARCH, userId, token), token, scope);
+            return response.candidates().stream().map(candidate -> AgentRagCompatibility.result(space, candidate, response)).toList();
+        } catch (RagException exception) { throw exception; }
+        catch (RuntimeException exception) { throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE); }
     }
-
-    /**
-     * 写入或更新memory。
-     */
-    public void upsertMemory(MilvusUpsertRequest request) {
-        milvusDocumentStore.upsert(new MilvusUpsertRequest(
-                resolveCollectionName(request.collectionName()),
-                request.documents()
-        ));
-    }
-
-    /**
-     * 检索knowledge。
-     */
-    public List<MilvusSearchResult> searchKnowledge(String collectionName, String query, int topK) {
-        return milvusDocumentStore.search(new MilvusSearchRequest(
-                resolveCollectionName(collectionName),
-                query,
-                topK,
-                0.0D,
-                null
-        ));
-    }
-
-    /**
-     * 获取默认memoryCollection。
-     */
-    public String defaultMemoryCollection() {
-        return agentMilvusProperties.getDefaultCollection();
-    }
-
-    /**
-     * 便捷方法：按 documentId 写入或更新文本内容及元数据。
-     */
-    public void upsertMemory(String collectionName, String documentId, String content, Map<String, Object> metadata) {
-        MilvusVectorDocument doc = new MilvusVectorDocument(
-                documentId, "memory", documentId, content, null,
-                metadata != null ? metadata : Map.of()
-        );
-        upsertMemory(new MilvusUpsertRequest(collectionName, List.of(doc)));
-    }
-
-    /**
-     * 解析collectionName。
-     */
-    private String resolveCollectionName(String collectionName) {
-        if (collectionName == null || collectionName.isBlank()) {
-            return agentMilvusProperties.getDefaultCollection();
-        }
-        return collectionName;
+    public void initializeMemoryCollection(String userId, MilvusCollectionInitRequest legacy) {
+        String space = AgentRagCompatibility.space(legacy.collectionName(), "supervisor.knowledge");
+        if (legacy.dimension() == null || legacy.dimension() < 1) throw new RagException(RagErrorCode.INVALID_ARGUMENT, "dimension");
+        var token = credentials.credentials(userId);
+        var provider = admin.getIfAvailable();
+        if (provider == null) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
+        try {
+            var inspect = new RagInspectRequest(1, UUID.randomUUID().toString(), space);
+            var inspection = provider.inspect(inspect, authentication.user(inspect, inspect.requestId(), "rag-service",
+                    RagOperation.INSPECT, userId, token), token);
+            if (inspection == null || !space.equals(inspection.spaceId())) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
+            if (inspection.dimension() != legacy.dimension()) throw new RagException(RagErrorCode.INVALID_ARGUMENT, "dimension");
+            var provision = new RagProvisionRequest(1, UUID.randomUUID().toString(), space, inspection.schemaVersion(), legacy.dimension());
+            var provisioned = provider.provision(provision, authentication.user(provision, provision.requestId(), "rag-service",
+                    RagOperation.PROVISION, userId, token), token);
+            if (provisioned == null || !space.equals(provisioned.spaceId()) || !provisioned.ready()
+                    || provisioned.dimension() != legacy.dimension()) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
+        } catch (RagException exception) { throw exception; }
+        catch (RuntimeException exception) { throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE); }
     }
 }

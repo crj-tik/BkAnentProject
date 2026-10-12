@@ -31,3 +31,20 @@ dubbo:
     port: 20884
   registry:
     address: nacos://${bk.nacos.server-addr}?namespace=${bk.nacos.namespace}
+
+listing:
+  rag:
+    key-id: ${LISTING_RAG_RPC_KEY_ID:listing-current}
+    secret: ${LISTING_RAG_RPC_SECRET:}
+    auth-response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-response-current}
+    auth-response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
+    policy-version: listing-v1
+    schema-version: "1"
+    read-role-codes: []
+    admin-role-codes: []
+    dispatcher-enabled: ${LISTING_RAG_DISPATCHER_ENABLED:false}
+    legacy-reconciliation-enabled: ${LISTING_RAG_LEGACY_RECONCILIATION_ENABLED:false}
+    trusted-callers:
+      agent-current:
+        caller-service: agent-service
+        secret: ${AGENT_RAG_RPC_SECRET:}

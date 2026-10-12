@@ -489,6 +489,98 @@ class SupervisorToolLoopGraphTest {
         } finally { release.countDown(); }
     }
 
+    @Test
+    void definiteKnowledgeFailureCompletesAndFinishedLedgerDoesNotResend() {
+        ToolCallback read = new ToolCallback() {
+            public ToolDefinition getToolDefinition() { return ToolDefinition.builder().name("milvusKnowledgeSearch").description("read").inputSchema("{\"type\":\"object\"}").build(); }
+            public String call(String input) { effects.incrementAndGet(); throw new com.bkanent.common.rag.RagException(com.bkanent.common.rag.RagErrorCode.DEPENDENCY_UNAVAILABLE); }
+        };
+        when(catalog.snapshot("1", true)).thenReturn(Map.of("local:milvusKnowledgeSearch", new SupervisorCapability("local:milvusKnowledgeSearch", "local", "milvusKnowledgeSearch", "1", read)));
+        when(model.call(anyList(), anyList())).thenReturn(calls(call("read", "milvusKnowledgeSearch", "{}")),
+                calls(call("read", "milvusKnowledgeSearch", "{}")), new AssistantMessage("dependency unavailable"));
+        assertThat(runner.execute(request("knowledge-failure", null, null, "find")).status()).isEqualTo("COMPLETED");
+        assertThat(store.find("knowledge-failure", "read").status()).isEqualTo("COMPLETED");
+        assertThat(store.find("knowledge-failure", "read").result()).contains("DEPENDENCY_UNAVAILABLE", "readOnly").doesNotContain("OUTCOME_UNKNOWN", "PERMISSION_DENIED");
+        runner.execute(request("knowledge-failure", null, null, "find"));
+        assertThat(effects).hasValue(1);
+    }
+
+    @Test
+    void knowledgeTimeoutAndLateSuccessKeepFirstTerminalResult() throws Exception {
+        properties.setToolTimeoutMs(100);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        var returned = new java.util.concurrent.CountDownLatch(1);
+        ToolCallback read = new ToolCallback() {
+            public ToolDefinition getToolDefinition() { return ToolDefinition.builder().name("milvusKnowledgeSearch").description("read").inputSchema("{\"type\":\"object\"}").build(); }
+            public String call(String input) {
+                effects.incrementAndGet();
+                while (release.getCount() != 0) { try { release.await(); } catch (InterruptedException ignored) { } }
+                returned.countDown(); return "late success";
+            }
+        };
+        when(catalog.snapshot("1", true)).thenReturn(Map.of("local:milvusKnowledgeSearch", new SupervisorCapability("local:milvusKnowledgeSearch", "local", "milvusKnowledgeSearch", "1", read)));
+        when(model.call(anyList(), anyList())).thenReturn(calls(call("read", "milvusKnowledgeSearch", "{}")), new AssistantMessage("timeout"));
+        try {
+            assertThat(runner.execute(request("knowledge-timeout", null, null, "find")).status()).isEqualTo("COMPLETED");
+            assertThat(store.find("knowledge-timeout", "read").result()).contains("TIMEOUT").doesNotContain("OUTCOME_UNKNOWN");
+            release.countDown(); assertThat(returned.await(2, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            store.completeKnowledgeRead("knowledge-timeout", "read", "late success", null);
+            assertThat(store.find("knowledge-timeout", "read").result()).contains("TIMEOUT").doesNotContain("late success");
+            runner.execute(request("knowledge-timeout", null, null, "find"));
+            assertThat(effects).hasValue(1);
+        } finally { release.countDown(); }
+    }
+
+    @Test
+    void knowledgeMissingCredentialsIsNotPermissionOrUnknownAndOrdinarySupervisorNeedsNoRag() {
+        ToolCallback read = new ToolCallback() {
+            public ToolDefinition getToolDefinition() { return ToolDefinition.builder().name("milvusKnowledgeSearch").description("read").inputSchema("{\"type\":\"object\"}").build(); }
+            public String call(String input) { throw new com.bkanent.agent.security.AgentRagAuthenticationException("AUTHENTICATION_REQUIRED"); }
+        };
+        when(catalog.snapshot("1", true)).thenReturn(Map.of("local:milvusKnowledgeSearch", new SupervisorCapability("local:milvusKnowledgeSearch", "local", "milvusKnowledgeSearch", "1", read)));
+        when(model.call(anyList(), anyList())).thenReturn(calls(call("read", "milvusKnowledgeSearch", "{}")), new AssistantMessage("authenticate"), new AssistantMessage("ordinary response"));
+        runner.execute(request("knowledge-missing", null, null, "find"));
+        assertThat(store.find("knowledge-missing", "read").result()).contains("AUTHENTICATION_REQUIRED").doesNotContain("PERMISSION_DENIED", "OUTCOME_UNKNOWN");
+        assertThat(runner.execute(request("no-knowledge", null, null, "hello")).finalAnswer()).isEqualTo("ordinary response");
+    }
+
+    @Test
+    void abandonedKnowledgeReadIsDefiniteFailureWithoutResendingOriginalClaim() {
+        store.register("read-recovery", request("read-recovery", null, null, "find"));
+        store.prepare("read-recovery", "read", "local:milvusKnowledgeSearch", "{}");
+        store.claim("read-recovery", "read");
+        when(catalog.snapshot("1", true)).thenReturn(Map.of("local:milvusKnowledgeSearch", capability("milvusKnowledgeSearch")));
+        when(model.call(anyList(), anyList())).thenReturn(calls(call("read", "milvusKnowledgeSearch", "{}")), new AssistantMessage("not resent"));
+        assertThat(runner.execute(request("read-recovery", null, null, "find")).status()).isEqualTo("COMPLETED");
+        assertThat(store.find("read-recovery", "read").result()).contains("DEPENDENCY_UNAVAILABLE").doesNotContain("OUTCOME_UNKNOWN");
+        assertThat(effects).hasValue(0);
+    }
+
+    @Test
+    void workerUsesBoundedDedicatedLeaseWithoutCredentialsInModelOrCheckpoint() throws Exception {
+        var auth = mock(com.bkanent.common.rpc.AuthPermissionRpcService.class);
+        when(auth.resolvePrincipal("transport-only-value")).thenReturn(new com.bkanent.common.rpc.AuthenticatedPrincipal(1L));
+        var beans = new org.springframework.beans.factory.support.DefaultListableBeanFactory();
+        beans.registerSingleton("auth", auth);
+        var leases = new com.bkanent.agent.security.AgentRagCredentialLeaseStore(new com.bkanent.agent.config.AgentRagConsumerProperties(), beans.getBeanProvider(com.bkanent.common.rpc.AuthPermissionRpcService.class));
+        factory.setRagCredentials(leases); runner.setRagCredentials(leases);
+        try (var header = leases.openAuthorization("Bearer transport-only-value")) { leases.capture("async-read", "1"); }
+        ToolCallback read = new ToolCallback() {
+            public ToolDefinition getToolDefinition() { return ToolDefinition.builder().name("milvusKnowledgeSearch").description("read").inputSchema("{\"type\":\"object\"}").build(); }
+            public String call(String input) { assertThat(leases.credentials("1").accessToken()).isEqualTo("transport-only-value"); effects.incrementAndGet(); return "safe result"; }
+        };
+        when(catalog.snapshot("1", true)).thenReturn(Map.of("local:milvusKnowledgeSearch", new SupervisorCapability("local:milvusKnowledgeSearch", "local", "milvusKnowledgeSearch", "1", read)));
+        when(model.call(anyList(), anyList())).thenAnswer(call -> {
+            assertThat(mapper.writeValueAsString(call.getArgument(0))).doesNotContain("transport-only-value");
+            return effects.get() == 0 ? calls(call("read", "milvusKnowledgeSearch", "{}")) : new AssistantMessage("done");
+        });
+        assertThat(runner.execute(request("async-read", null, null, "find")).status()).isEqualTo("COMPLETED");
+        assertThat(mapper.writeValueAsString(state("async-read"))).doesNotContain("transport-only-value");
+        assertThat(store.json(store.originalRequest("async-read"))).doesNotContain("transport-only-value");
+        try (var lease = leases.openLease("async-read", "1")) { assertThatThrownBy(() -> leases.credentials("1")).hasMessage("AUTHENTICATION_REQUIRED"); }
+        assertThat(effects).hasValue(1);
+    }
+
     private ToolLoopState state(String id) { return factory.stateOf(graph.lastStateOf(com.alibaba.cloud.ai.graph.RunnableConfig.builder().threadId(id).build()).orElseThrow().state()); }
     private SupervisorTaskRequest request(String id, SkillSelection skill, String continueId, String message) {
         return new SupervisorTaskRequest("session", "1", id, "trace", message, Map.of(), "api", false, skill, continueId, null);

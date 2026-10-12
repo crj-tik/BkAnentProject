@@ -45,11 +45,12 @@ public class ListingMasterRpcServiceImpl implements ListingMasterRpcService {
     }
 
     /**
-     * 使用 ES BM25 检索房源候选。
+     * 无专用凭据的旧检索 RPC 安全拒绝；使用 RagListingDomainRpcService。
      */
     @Override
     public List<ListingKeywordSearchResultDTO> searchListingsByKeyword(ListingKeywordSearchRequest request) {
-        return listingManagementService.searchListingSummariesByKeyword(request);
+        // This legacy RPC has no dedicated credential parameter and cannot prove authority.
+        throw new com.bkanent.common.rag.RagException(com.bkanent.common.rag.RagErrorCode.AUTHENTICATION_FAILED);
     }
 
     /**

@@ -27,13 +27,13 @@ public class ListingTools {
         return listingManagementService.getListingDetail(listingId);
     }
 
-    @Tool(description = "Search property listings by keyword using ES BM25 full-text search. Returns scored candidates with listing summaries.")
+    @Tool(description = "Search authorized active property listings using default hybrid keyword/vector recall and semantic rerank in the isolated RAG service. Requires current authenticated request credentials; never accepts user IDs as authentication. Returns latest SQL-verified listing summaries and relevance scores, or an explicit authentication/dependency failure.")
     public List<ListingKeywordSearchResultDTO> searchListingsByKeyword(
             @ToolParam(description = "Search keyword, e.g. community name, district, or property features") String keyword,
             @ToolParam(description = "Maximum number of results to return, default 5") int topK) {
         return listingManagementService.searchListingSummariesByKeyword(
                 new ListingKeywordSearchRequest(keyword, null, null, null, null, null, null,
-                        Math.max(1, Math.min(topK <= 0 ? 5 : topK, 20))));
+                        topK == 0 ? 5 : topK));
     }
 
     @Tool(description = "Search property listing summaries. Returns basic info (title, community, price) for matching listings.")

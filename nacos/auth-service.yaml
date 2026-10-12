@@ -11,6 +11,20 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
 
 auth:
+  rag:
+    rpc:
+      trusted-keys:
+        rag-current:
+          caller-service: rag-service
+          secret: ${RAG_AUTH_RPC_SECRET:}
+        listing-current:
+          caller-service: listing-master-service
+          secret: ${LISTING_RAG_RPC_SECRET:}
+        memory-current:
+          caller-service: memory-service
+          secret: ${MEMORY_RAG_RPC_SECRET:}
+      response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}
+      response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
   token:
     secret: ${AUTH_TOKEN_SECRET:}
     access-ttl-seconds: 3600

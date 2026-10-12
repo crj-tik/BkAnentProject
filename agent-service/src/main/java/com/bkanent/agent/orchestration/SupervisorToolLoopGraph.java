@@ -50,6 +50,12 @@ public class SupervisorToolLoopGraph {
     private final ExecutorService modelWorkers;
     private RemoteTaskReconciler reconciler;
     private PersistArtifactsNode artifacts;
+    private com.bkanent.agent.security.AgentRagCredentialLeaseStore ragCredentials;
+    private com.bkanent.agent.config.AgentRagConsumerProperties ragPolicy = new com.bkanent.agent.config.AgentRagConsumerProperties();
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setRagCredentials(com.bkanent.agent.security.AgentRagCredentialLeaseStore credentials) { ragCredentials = credentials; }
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setRagPolicy(com.bkanent.agent.config.AgentRagConsumerProperties policy) { ragPolicy = policy; }
 
     @org.springframework.beans.factory.annotation.Autowired
     public void setReconciler(RemoteTaskReconciler reconciler) { this.reconciler = reconciler; }
@@ -339,6 +345,10 @@ public class SupervisorToolLoopGraph {
                 if (completed != null && Set.of("COMPLETED", "REJECTED").contains(completed.status())) state.results.add(response(call, completed.result()));
                 else if (store.reject(state.runId, call.id(), "CALL_DEADLINE_EXCEEDED: 未执行")) {
                     state.results.add(response(call, "CALL_DEADLINE_EXCEEDED: 未执行"));
+                } else if ("local:milvusKnowledgeSearch".equals(completed == null ? null : completed.capabilityId())) {
+                    String failure = knowledgeFailure(exception);
+                    var terminal = store.completeKnowledgeRead(state.runId, call.id(), failure, null);
+                    state.results.add(response(call, terminal.result()));
                 } else {
                     store.unknown(state.runId, call.id());
                     var latest = store.find(state.runId, call.id());
@@ -373,6 +383,11 @@ public class SupervisorToolLoopGraph {
         if (!store.claim(state.runId, call.id())) {
             var latest = store.find(state.runId, call.id());
             if (Set.of("COMPLETED", "REJECTED").contains(latest.status())) return response(call, latest.result());
+            if ("local:milvusKnowledgeSearch".equals(capability.capabilityId())) {
+                var terminal = store.completeKnowledgeRead(state.runId, call.id(),
+                        "{\"status\":\"FAILED\",\"code\":\"DEPENDENCY_UNAVAILABLE\",\"readOnly\":true}", null);
+                return response(call, terminal.result());
+            }
             store.unknown(state.runId, call.id());
             if (invocation.remoteAssociation() != null && reconciler != null) {
                 var reconciled = reconciler.reconcile(state.runId, call.id(), state.userId, false);
@@ -388,17 +403,40 @@ public class SupervisorToolLoopGraph {
         context.put("acceptedTaskRecorder", (java.util.function.Consumer<com.bkanent.agent.client.AcceptedA2aTask>)
                 accepted -> store.remoteAccepted(state.runId, call.id(), accepted));
         Map<String, Object> settings = state.request.context() == null ? Map.of() : state.request.context();
-        AgentToolContextHolder.init((String) settings.get("collectionName"), settings.get("topK") instanceof Number value ? value.intValue() : null, true);
-        try {
+        String space = settings.get("spaceId") instanceof String value ? value : null;
+        boolean allowKnowledge = ragPolicy.isKnowledgeEnabled()
+                && (!settings.containsKey("allowKnowledgeSearch") || Boolean.TRUE.equals(settings.get("allowKnowledgeSearch")));
+        AgentToolContextHolder.init(state.userId, space, settings.get("topK") instanceof Number value ? value.intValue() : null, allowKnowledge);
+        try (AutoCloseable ignored = ragCredentials == null ? () -> { } : ragCredentials.openLease(state.runId, state.userId)) {
             store.assertActive(state.runId, state.leaseToken);
             String result = capability.callback().call(call.arguments(), new ToolContext(Map.copyOf(context)));
+            if ("local:milvusKnowledgeSearch".equals(capability.capabilityId())) {
+                var terminal = store.completeKnowledgeRead(state.runId, call.id(), result, AgentToolContextHolder.snapshot());
+                return response(call, terminal.result());
+            }
             store.executionMetadata(state.runId, call.id(), AgentToolContextHolder.snapshot());
             store.complete(state.runId, call.id(), result);
             return response(call, result);
         } catch (Exception exception) {
+            if ("local:milvusKnowledgeSearch".equals(capability.capabilityId())) {
+                String failure = knowledgeFailure(exception);
+                var terminal = store.completeKnowledgeRead(state.runId, call.id(), failure, AgentToolContextHolder.snapshot());
+                return response(call, terminal.result());
+            }
             store.unknown(state.runId, call.id());
             return response(call, "OUTCOME_UNKNOWN: " + exception.getClass().getSimpleName() + "; 未重新发送，需核对原调用");
         } finally { AgentToolContextHolder.clear(); }
+    }
+
+    private String knowledgeFailure(Exception exception) {
+        String code;
+        if (exception instanceof com.bkanent.common.rag.RagException rag) code = rag.code().name();
+        else if (exception instanceof com.bkanent.agent.security.AgentRagAuthenticationException auth) code = auth.code();
+        else if (exception instanceof TimeoutException) code = "TIMEOUT";
+        else if (exception instanceof IllegalArgumentException) code = "INVALID_ARGUMENT";
+        else if ("RUN_CANCELLED".equals(exception.getMessage())) code = "RUN_CANCELLED";
+        else code = "DEPENDENCY_UNAVAILABLE";
+        return "{\"status\":\"FAILED\",\"code\":\"" + code + "\",\"readOnly\":true}";
     }
 
     private Map<String, Object> observe(OverAllState raw) {

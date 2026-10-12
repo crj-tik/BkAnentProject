@@ -17,6 +17,11 @@ import com.bkanent.memory.service.SessionSharedMemoryService;
 import com.bkanent.memory.service.SystemConstraintMemoryService;
 import com.bkanent.memory.service.TaskArtifactMemoryService;
 import com.bkanent.memory.service.UserPreferenceMemoryService;
+import com.bkanent.memory.service.MemoryRagSecurity;
+import com.bkanent.memory.service.MemoryRagSearchFacade;
+import com.bkanent.memory.service.MemoryRagBackfillService;
+import com.bkanent.common.rag.*;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -40,19 +45,27 @@ public class MemoryController {
     private final UserPreferenceMemoryService userPreferenceMemoryService;
     private final SystemConstraintMemoryService systemConstraintMemoryService;
     private final SessionMemorySnapshotService sessionMemorySnapshotService;
+    private final MemoryRagSecurity ragSecurity;
+    private final MemoryRagSearchFacade ragSearch;
+    private final MemoryRagBackfillService ragBackfill;
 
     public MemoryController(SessionSharedMemoryService sessionSharedMemoryService,
                             TaskArtifactMemoryService taskArtifactMemoryService,
                             HandoffRelationMemoryService handoffRelationMemoryService,
                             UserPreferenceMemoryService userPreferenceMemoryService,
                             SystemConstraintMemoryService systemConstraintMemoryService,
-                            SessionMemorySnapshotService sessionMemorySnapshotService) {
+                            SessionMemorySnapshotService sessionMemorySnapshotService,
+                            MemoryRagSecurity ragSecurity, MemoryRagSearchFacade ragSearch,
+                            MemoryRagBackfillService ragBackfill) {
         this.sessionSharedMemoryService = sessionSharedMemoryService;
         this.taskArtifactMemoryService = taskArtifactMemoryService;
         this.handoffRelationMemoryService = handoffRelationMemoryService;
         this.userPreferenceMemoryService = userPreferenceMemoryService;
         this.systemConstraintMemoryService = systemConstraintMemoryService;
         this.sessionMemorySnapshotService = sessionMemorySnapshotService;
+        this.ragSecurity = ragSecurity;
+        this.ragSearch = ragSearch;
+        this.ragBackfill = ragBackfill;
     }
 
     @PostMapping("/sessions/upsert")
@@ -102,7 +115,9 @@ public class MemoryController {
     // --- User Preference Memory ---
 
     @PostMapping("/user-preferences/upsert")
-    public ApiResponse<Void> upsertUserPreference(@RequestBody UserPreferenceRecord record) {
+    public ApiResponse<Void> upsertUserPreference(@RequestBody UserPreferenceRecord record,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        ragSecurity.requireOwner(ragSecurity.authenticate(credentials(authorization)), record.userId());
         userPreferenceMemoryService.upsert(record);
         return ApiResponse.ok(null);
     }
@@ -110,14 +125,18 @@ public class MemoryController {
     @GetMapping("/user-preferences/{userId}")
     public ApiResponse<List<UserPreferenceRecord>> getUserPreferences(
             @PathVariable("userId") String userId,
-            @RequestParam(value = "category", required = false) String category) {
+            @RequestParam(value = "category", required = false) String category,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        ragSecurity.requireOwner(ragSecurity.authenticate(credentials(authorization)), userId);
         return ApiResponse.ok(userPreferenceMemoryService.findByUserId(userId, category));
     }
 
     @PostMapping("/user-preferences/{userId}/decay")
     public ApiResponse<Void> decayUserPreferences(
             @PathVariable("userId") String userId,
-            @RequestParam(value = "excludePreferenceKey", required = false) String excludePreferenceKey) {
+            @RequestParam(value = "excludePreferenceKey", required = false) String excludePreferenceKey,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        ragSecurity.requireOwner(ragSecurity.authenticate(credentials(authorization)), userId);
         userPreferenceMemoryService.decayConfidence(userId, excludePreferenceKey);
         return ApiResponse.ok(null);
     }
@@ -125,21 +144,44 @@ public class MemoryController {
     // --- System Constraint Memory ---
 
     @PostMapping("/system-constraints/upsert")
-    public ApiResponse<Void> upsertSystemConstraint(@RequestBody SystemConstraintRecord record) {
+    public ApiResponse<Void> upsertSystemConstraint(@RequestBody SystemConstraintRecord record,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        ragSecurity.requireAdmin(ragSecurity.authenticate(credentials(authorization)));
         systemConstraintMemoryService.upsert(record);
         return ApiResponse.ok(null);
     }
 
     @GetMapping("/system-constraints")
     public ApiResponse<List<SystemConstraintRecord>> getSystemConstraints(
-            @RequestParam(value = "category", required = false) String category) {
+            @RequestParam(value = "category", required = false) String category,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        ragSecurity.requireConstraintRead(ragSecurity.authenticate(credentials(authorization)));
         return ApiResponse.ok(systemConstraintMemoryService.findByCategory(category));
     }
 
     @GetMapping("/system-constraints/search")
     public ApiResponse<List<SystemConstraintRecord>> searchSystemConstraints(
-            @RequestParam(value = "tags", required = false) String tags) {
+            @RequestParam(value = "tags", required = false) String tags,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        ragSecurity.requireConstraintRead(ragSecurity.authenticate(credentials(authorization)));
         return ApiResponse.ok(systemConstraintMemoryService.searchByTags(tags));
+    }
+
+    @PostMapping("/rag/search")
+    public ApiResponse<MemoryRagSearchResponse> searchMemory(@RequestBody MemoryRagSearchRequest request,
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        var credentials = credentials(authorization);
+        return ApiResponse.ok(ragSearch.search(request, ragSecurity.authenticate(credentials), credentials));
+    }
+
+    @PostMapping("/rag/backfill")
+    public ApiResponse<Integer> backfillMemory(@RequestHeader(value = "Authorization", required = false) String authorization) {
+        return ApiResponse.ok(ragBackfill.backfill(credentials(authorization)));
+    }
+
+    private static RagCredentialContext credentials(String authorization) {
+        if (authorization == null || !authorization.startsWith("Bearer ") || authorization.substring(7).isBlank()) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+        return new RagCredentialContext(authorization.substring(7));
     }
 
     // --- Session Memory Snapshot ---

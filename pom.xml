@@ -20,6 +20,7 @@
         <module>auth-service</module>
         <module>agent-service</module>
         <module>memory-service</module>
+        <module>rag-service</module>
         <module>notification-service</module>
         <module>listing-master-service</module>
         <module>customer-service</module>

@@ -35,8 +35,8 @@
 - 服务本地 `application.yml` 只保留最小启动配置
 - 数据库、Redis、MQ、对象存储、Elasticsearch、Milvus、模型参数统一放在 `nacos/*.yaml`
 - `.env` 仅维护端口、连接地址、密钥和启动引导；集成模式、Token TTL、排行榜/流式 provider、Milvus/ES 搜索开关在 Nacos 中直接使用字面值，不与 `.env` 或 Compose 重复。宿主机工具使用的基础设施地址继续保留；连接与密钥占位符仍从环境变量或密钥管理系统读取，禁止把真实密钥写进 Nacos
-- 房源 RAG 重排默认指向本机独立部署的 bge-reranker（`http://host.docker.internal:18119/rerank`，native 协议，别名 `bge-reranker-v2-m3-v1`）。该容器由独立仓库 `D:\AI\Reranker-BGE-V2-M3` 的 compose 管理，不在本编排内；调用方密钥在该仓库 `config/api-keys.json` 维护，经 `AGENT_RAG_RERANK_API_KEY` 注入应用容器。云端 DashScope 重排通过 `AGENT_RAG_RERANK_ENDPOINT`（DashScope URL）、`AGENT_RAG_RERANK_PROTOCOL=dashscope` 与 `AGENT_RAG_RERANK_MODEL=qwen3-rerank` 环境变量切换
-- 文本模型与向量模型统一走 KE 网关（Bella OpenAI 兼容，`https://open-chatgpt.ke.com/v1`）：九个子 Agent 与 Supervisor 的 chat 经 DeepSeek starter 使用 `gpt-5.6-terra`（2026-10-10 质量优先评估：各家族最新梯队 15 个候选，深度合同风险识别 6/6、陷阱交易拦截、多轮工具链综合输出 5/5 且决策枚举合规，单轮约 12s；完整记录见 `docs/acceptance/ke-gateway-model-evaluation-20261010.json`。早期按延迟选的 `qwen3.8-flash` 在多轮工具链后输出退化为散文，已弃用；`Qwen3.8-Max` 为同网关质量回退，经各服务 `*_AGENT_MODEL` 环境变量切换；`gemini-3.8-flash` 因网关 tool 回传 400 通道缺陷不可用于 ReactAgent 循环）；agent-service 的 embedding 经 OpenAI starter 使用 `baai-m3-1b-base-v1-embedding-20240619`（1024 维，与 Milvus 集合维度一致，实测 4/4 排序正确）。密钥优先 `DEEPSEEK_API_KEY`，回退 `KE_API_KEY`，两者均不写入 Nacos。rerank 评估过网关 `qwen3-rerank-8b`（`/v1/reranks`），因带硬约束的房源场景排序不稳（预算/通勤用例排序错误）保留本地 bge-reranker，不接入
+- 独立 RAG 的重排配置使用 `RAG_RERANK_ENDPOINT`/`RAG_RERANK_API_KEY`/`RAG_RERANK_PROTOCOL`/`RAG_RERANK_MODEL`，后端 URL 与受管 allowlist 默认空，评分 profile 未验证时能力关闭。历史本机 bge-reranker（`http://host.docker.internal:18119/rerank`）属外部独立项目，不符合此次 HTTP 出站安全策略，不能自动继承旧目标、加内网豁免、操作其容器或公开服务。DashScope 等候选也须实际授权、URL/DNS/协议与模型能力验收后才使用。
+- 文本模型与向量模型统一走 KE 网关（Bella OpenAI 兼容，`https://open-chatgpt.ke.com/v1`）：九个子 Agent 与 Supervisor 的 chat 经 DeepSeek starter 使用 `gpt-5.6-terra`（2026-10-10 质量优先评估：各家族最新梯队 15 个候选，深度合同风险识别 6/6、陷阱交易拦截、多轮工具链综合输出 5/5 且决策枚举合规，单轮约 12s；完整记录见 `docs/acceptance/ke-gateway-model-evaluation-20261010.json`。早期按延迟选的 `qwen3.8-flash` 在多轮工具链后输出退化为散文，已弃用；`Qwen3.8-Max` 为同网关质量回退，经各服务 `*_AGENT_MODEL` 环境变量切换；`gemini-3.8-flash` 因网关 tool 回传 400 通道缺陷不可用于 ReactAgent 循环）；历史 agent-service embedding 使用 `baai-m3-1b-base-v1-embedding-20240619`（记录维度 1024）；执行迁至独立 RAG 后使用专属 `RAG_EMBEDDING_*`，旧记录不能证明新配置/实际集合维度一致。chat 密钥优先 `DEEPSEEK_API_KEY`，回退 `KE_API_KEY`，两者均不写入 Nacos。rerank 评估过网关 `qwen3-rerank-8b`（`/v1/reranks`），因带硬约束的房源场景排序不稳（预算/通勤用例排序错误）保留本地 bge-reranker，不接入
 - 配置类统一通过 `@ConfigurationProperties` 收口
 - 不在业务代码中硬编码连接地址、密钥和环境差异参数
 
@@ -96,9 +96,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\local\check-environment.ps1 -
 
 分布式部署时还必须为每个 Agent 设置可被其他服务访问的 `A2A_PUBLIC_BASE_URL`，不能使用其他主机上的 `127.0.0.1`。DeepSeek、DashScope、数据库和基础设施凭据必须通过环境变量或密钥管理系统提供。
 
-合同、通知、媒体和推广服务的集成模式由对应 Nacos data ID 中的 `contract.integration.mode`、`notification.integration.mode`、`media.integration.mode`、`promotion.integration.mode` 管理，不在 `.env` 中设置。仓库模板为保留 Docker 开发行为使用显式 `local`，仅该模式允许模拟 provider。**已实现的真实 provider**：合同 OCR（KE 网关百度通用文字识别 `baidu-general`，real 模式配 `contract.integration.ocr-provider: baidu-general`，服务端下载附件后 base64 上送——百度后端拉不到内网 MinIO 地址）与房源文生图（KE 网关豆包 Seedream `doubao-seedream-4.5-gen`，`media.integration.mode=real` 即启用，每角度一张 2048×2048、约 15s/张由 RocketMQ 异步消费吸收）。**仍为占位**：电子签（esign-cn/fadada）、通知渠道、推广发布平台——生产 `real` 模式须接入真实实现，未实现会明确失败，不能回退模拟成功。生产导入前准备环境专属配置；开发 `config-init` 会原样上传模板并覆盖同 data ID，不要覆盖生产设置。
+合同、通知、媒体和推广服务的集成模式由对应 Nacos data ID 中的 `contract.integration.mode`、`notification.integration.mode`、`media.integration.mode`、`promotion.integration.mode` 管理，不在 `.env` 中设置。仓库模板为保留 Docker 开发行为使用显式 `local`，仅该模式允许模拟 provider。**已实现的真实 provider**：合同 OCR（KE 网关百度通用文字识别 `baidu-general`，real 模式配 `contract.integration.ocr-provider: baidu-general`，服务端下载附件后 base64 上送——百度后端拉不到内网 MinIO 地址）与房源文生图（KE 网关豆包 Seedream `doubao-seedream-4.5-gen`，`media.integration.mode=real` 即启用，每角度一张 2048×2048、约 15s/张由 RocketMQ 异步消费吸收）。**仍为占位**：电子签（esign-cn/fadada）、通知渠道、推广发布平台——生产 `real` 模式须接入真实实现，未实现会明确失败，不能回退模拟成功。生产导入前准备环境专属配置；`config-init` 只发布明确选择的 data ID 到实际 namespace，仍会覆盖所选内容；默认不发布，不要用开发模板覆盖生产设置。
 
-分布式服务提供 `/actuator/health/liveness` 和 `/actuator/health/readiness`。readiness 会检查当前模板中声明的 Nacos、数据库、Redis、RocketMQ 或 MinIO 依赖；应用进程存活不代表已经可以接收业务流量。
+分布式服务提供 `/actuator/health/liveness` 和 `/actuator/health/readiness`。一般业务服务的 readiness 检查当前模板中声明的 Nacos、数据库、Redis、RocketMQ 或 MinIO 依赖；独立 RAG 的 `ragBaseReadiness` 检查安全配置、控制 DB 的 `rag_index_event`/`rag_document_state` 两表查询权限及至少三个已导出 RPC provider，不直接探测 Nacos 或检索后端。应用进程存活或基础 readiness 通过不代表空间、检索能力与切流水位已验收。
 
 提交前可执行：
 
@@ -119,7 +119,7 @@ mvn -pl auth-service "-Dspring-boot.run.profiles=distributed" spring-boot:run
 
 ### Docker 开发部署
 
-仓库提供了 Docker Compose 开发编排。`minimal` profile 只启动 MySQL、Nacos、配置导入、认证服务和网关，并使用 `bk-anent-services:minimal` 镜像，只编译 `common`、`gateway`、`auth-service` 三个模块，适合接口、认证和基础链路测试；`full` profile 会额外启动 Redis、RocketMQ、MinIO、Elasticsearch、Milvus（含 etcd 和内部 MinIO）及其余业务服务，并使用包含全部模块的 `bk-anent-services:dev` 镜像。启动时会自动把 `nacos/` 下的 YAML 导入 Nacos 公共命名空间，同时初始化 MinIO bucket 和两个 Elasticsearch 索引。
+仓库提供了 Docker Compose 开发编排。`minimal` profile 只启动 MySQL、Nacos、配置导入、认证服务和网关，并使用 `bk-anent-services:minimal` 镜像，只编译 `common`、`gateway`、`auth-service` 三个模块，适合接口、认证和基础链路测试；`full` profile 会额外启动 Redis、RocketMQ、MinIO、Elasticsearch、Milvus（含 etcd 和内部 MinIO）及其余业务服务，并使用包含全部模块的 `bk-anent-services:dev` 镜像。配置发布必须显式设置 `NACOS_CONFIG_DATA_IDS` 为此次授权的空格分隔 YAML data ID 列表；默认空列表拒绝发布，不再全目录上传 public。`NACOS_NAMESPACE` 使用实际 namespace ID（Compose 默认 `BK-AGENT`），group 固定 `DEFAULT_GROUP`。MinIO bucket 与营销 `marketing_content` 索引保留初始化；房源 RAG 索引仅经受权 provision 创建。独立 `rag` profile 不由 full 隐式启动，使用 `--profile rag` 或 `start.sh --with-rag` 显式选择，基础 readiness 不代表默认双路/重排能力或切流水位通过，完整门禁见 [RAG 部署与迁移](docs/linux-deployment-init.md)。
 
 ```powershell
 docker compose --profile minimal up -d --build
@@ -160,6 +160,6 @@ docker compose -f docker-compose.yml -f docker-compose.mysql-client.yml up -d my
 
 这会把 `3306` 绑定到 `127.0.0.1`（可通过 `MYSQL_EXPOSED_PORT` 调整）。MCP 对外绑定独立使用 `MYSQL_MCP_BIND_ADDRESS`，默认始终为 loopback；远程接入前配置 HTTPS 入口及 `MYSQL_MCP_ALLOWED_HOSTS`，客户端应能提供 Bearer 请求头。
 
-Docker 编排默认只用于开发演示：full profile 配套的 Nacos 模板启用 Milvus 和 Elasticsearch 搜索、Redis 排行榜、RocketMQ 流式 provider，Token TTL 为 3600/604800 秒，四类集成为 `local`；这些业务值不再由 Compose 环境覆盖。应用容器的 `NACOS_USERNAME`、`NACOS_PASSWORD`、`MINIO_PUBLIC_BASE_URL` 可通过 `.env` 覆盖，但 Nacos Admin 账号初始化和目标命名空间 Card 更新授权仍需独立配置，填入密码不等于已授权。MySQL 使用 `sql/mysql-init.sql` 初始化业务库和表，MinIO 创建 `generated-assets` bucket，Elasticsearch 创建 `listing_info`、`marketing_content` 索引。Redis、Elasticsearch、Milvus 开发模式不创建业务表空间或独立账号，MinIO 使用 root 开发账号；生产部署前必须通过环境变量或密钥管理系统提供 `MYSQL_ROOT_PASSWORD`、`AUTH_TOKEN_SECRET`、模型/API 密钥和独立的基础设施凭据，并接入真实 Provider。合同 OCR 已实现 KE 网关百度通用文字识别（`baidu-general`，real 模式配 `contract.integration.ocr-provider: baidu-general`，服务端下载附件后 base64 上送——百度后端拉不到内网 MinIO 地址，不能直接传 image_url）；电子签仍为占位。停止并删除容器（保留数据卷）使用 `docker compose down`，清理数据卷前请确认数据已备份。
+Docker 编排默认只用于开发演示：full profile 配套的 Nacos 模板保留营销 Elasticsearch 搜索、Redis 排行榜、RocketMQ 流式 provider；独立 RAG 模板默认关闭知识/派发、缺少已验证后端与角色/评分能力配置，不能作为真实切流版本，Token TTL 为 3600/604800 秒，四类集成为 `local`；这些业务值不再由 Compose 环境覆盖。应用容器的 `NACOS_USERNAME`、`NACOS_PASSWORD`、`MINIO_PUBLIC_BASE_URL` 可通过 `.env` 覆盖，但 Nacos Admin 账号初始化和目标命名空间 Card 更新授权仍需独立配置，填入密码不等于已授权。MySQL 使用 `sql/mysql-init.sql` 初始化业务库和表，MinIO 创建 `generated-assets` bucket，Elasticsearch 开发初始化只创建 `marketing_content` 索引，RAG 索引/集合由受权管理流程另行 provision。Redis、Elasticsearch、Milvus 开发模式不创建业务表空间或独立账号，MinIO 使用 root 开发账号；生产部署前必须通过环境变量或密钥管理系统提供 `MYSQL_ROOT_PASSWORD`、`AUTH_TOKEN_SECRET`、模型/API 密钥和独立的基础设施凭据，并接入真实 Provider。合同 OCR 已实现 KE 网关百度通用文字识别（`baidu-general`，real 模式配 `contract.integration.ocr-provider: baidu-general`，服务端下载附件后 base64 上送——百度后端拉不到内网 MinIO 地址，不能直接传 image_url）；电子签仍为占位。停止并删除容器（保留数据卷）使用 `docker compose down`，清理数据卷前请确认数据已备份。
 
 变量名称清单见 [.env.example](.env.example)。

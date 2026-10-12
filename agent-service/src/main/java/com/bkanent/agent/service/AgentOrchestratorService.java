@@ -23,8 +23,8 @@ public class AgentOrchestratorService {
     public AgentChatResponse chat(AgentChatRequest request) {
         Map<String, Object> context = new LinkedHashMap<>();
         if (request.continueRunId() == null || request.collectionName() != null || request.topK() != null) {
-            context.put("collectionName", request.collectionName() == null ? "agent_knowledge" : request.collectionName());
-            context.put("topK", request.topK() == null ? properties.getDefaultTopK() : Math.max(1, request.topK()));
+            context.put("spaceId", com.bkanent.agent.rag.AgentRagCompatibility.space(request.collectionName(), "supervisor.knowledge"));
+            context.put("topK", com.bkanent.agent.rag.AgentRagCompatibility.topK(request.topK(), properties.getDefaultTopK()));
         }
         var response = runner.execute(new SupervisorTaskRequest(request.sessionId(), request.userId(), request.requestId(), null,
                 request.message(), context, "chat", false, request.skill(), request.continueRunId(), request.allowMcp()));

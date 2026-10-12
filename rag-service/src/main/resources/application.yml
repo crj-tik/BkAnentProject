@@ -1,0 +1,106 @@
+server:
+  port: ${RAG_HTTP_PORT:9018}
+spring:
+  application:
+    name: rag-service
+  config:
+    import: optional:nacos:rag-service.yaml?group=${NACOS_GROUP:DEFAULT_GROUP}
+  cloud:
+    nacos:
+      server-addr: ${NACOS_SERVER_ADDR:}
+      username: ${NACOS_USERNAME:}
+      password: ${NACOS_PASSWORD:}
+      config:
+        namespace: ${NACOS_NAMESPACE:}
+        group: ${NACOS_GROUP:DEFAULT_GROUP}
+        file-extension: yaml
+      discovery:
+        namespace: ${NACOS_NAMESPACE:}
+        group: ${NACOS_GROUP:DEFAULT_GROUP}
+  datasource:
+    url: ${RAG_DATASOURCE_URL:}
+    username: ${RAG_DATASOURCE_USERNAME:}
+    password: ${RAG_DATASOURCE_PASSWORD:}
+    hikari:
+      initialization-fail-timeout: -1
+      connection-timeout: 5000
+  ai:
+    model:
+      chat: none
+      embedding: openai
+      image: none
+      moderation: none
+      audio:
+        transcription: none
+        speech: none
+    vectorstore:
+      type: none
+    openai:
+      base-url: ${RAG_EMBEDDING_BASE_URL:}
+      api-key: ${RAG_EMBEDDING_API_KEY:}
+      embedding:
+        options:
+          model: ${RAG_EMBEDDING_MODEL:}
+          dimensions: ${RAG_EMBEDDING_DIMENSIONS:1024}
+    retry:
+      max-attempts: 1
+dubbo:
+  application:
+    name: rag-service
+    qos-enable: false
+  registry:
+    address: ${RAG_DUBBO_REGISTRY_ADDRESS:N/A}
+    check: false
+  protocol:
+    name: dubbo
+    port: ${RAG_DUBBO_PORT:20898}
+  consumer:
+    check: false
+    init: false
+    retries: 0
+    timeout: 5000
+rag:
+  spaces: {}
+  security:
+    trusted-keys: {}
+    auth-request-key-id: ${RAG_AUTH_RPC_KEY_ID:rag-current}
+    auth-request-secret: ${RAG_AUTH_RPC_SECRET:}
+    auth-response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:}
+    auth-response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
+  index:
+    worker:
+      enabled: ${RAG_INDEX_WORKER_ENABLED:false}
+      batch-size: ${RAG_INDEX_WORKER_BATCH_SIZE:20}
+      delay-ms: ${RAG_INDEX_WORKER_DELAY_MS:1000}
+      reconcile-delay-ms: ${RAG_INDEX_RECONCILE_DELAY_MS:30000}
+  execution:
+    max-concurrency: ${RAG_MAX_CONCURRENCY:8}
+  milvus:
+    host: ${RAG_MILVUS_HOST:}
+    port: ${RAG_MILVUS_PORT:19530}
+    token: ${RAG_MILVUS_TOKEN:}
+    secure: ${RAG_MILVUS_SECURE:false}
+    connect-timeout-ms: 5000
+    rpc-deadline-ms: 5000
+  rerank:
+    endpoint: ${RAG_RERANK_ENDPOINT:}
+    api-key: ${RAG_RERANK_API_KEY:}
+    model: ${RAG_RERANK_MODEL:}
+    protocol: ${RAG_RERANK_PROTOCOL:}
+  http:
+    allowed-hosts: ${RAG_HTTP_ALLOWED_HOSTS:}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,ragBaseReadiness
+        capabilities:
+          include: ragCapabilities

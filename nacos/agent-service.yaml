@@ -16,19 +16,8 @@ spring:
         options:
           model: ${AGENT_CHAT_MODEL:${AGENT_DEEPSEEK_MODEL:gpt-5.6-terra}}
           temperature: 0.2
-    openai:
-      # Embedding-only channel to the same gateway (chat stays on deepseek starter;
-      # selection flags: spring.ai.model.chat=deepseek / embedding=openai below).
-      # base-url already contains /v1, so embeddings-path is relative to it.
-      api-key: ${KE_API_KEY:${DEEPSEEK_API_KEY:}}
-      base-url: ${KE_EMBEDDING_BASE_URL:https://open-chatgpt.ke.com/v1}
-      embedding:
-        embeddings-path: /embeddings
-        options:
-          model: ${KE_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
     model:
       chat: deepseek
-      embedding: openai
     alibaba:
       a2a:
         nacos:
@@ -38,12 +27,6 @@ spring:
             enabled: false
           discovery:
             enabled: true
-    vectorstore:
-      milvus:
-        client:
-          host: ${MILVUS_HOST:10.117.102.54}
-          port: ${MILVUS_PORT:19530}
-        initialize-schema: false
     mcp:
       client:
         request-timeout: ${AGENT_MCP_REQUEST_TIMEOUT:30s}
@@ -103,13 +86,12 @@ management:
 service:
   readiness:
     mode: ${SERVICE_READINESS_MODE:distributed}
-    required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database,redis,rocketmq,milvus,memory}
+    required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database,redis,rocketmq,memory}
     endpoints:
       nacos: "${NACOS_SERVER:10.117.102.54:8848}"
       database: "${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}"
       redis: "${REDIS_HOST:10.117.102.54}:${REDIS_PORT:6379}"
       rocketmq: "${ROCKETMQ_NAME_SERVER:10.117.102.54:9876}"
-      milvus: "${MILVUS_ENDPOINT:http://10.117.102.54:19530}"
       memory: "${MEMORY_SERVICE_BASE_URL:http://10.117.102.54:9011}"
 
 mybatis-plus:
@@ -135,33 +117,20 @@ agent:
     top-p: ${AGENT_CHAT_TOP_P:${AGENT_DEEPSEEK_TOP_P:1.0}}
     default-top-k: ${AGENT_CHAT_DEFAULT_TOP_K:${AGENT_DEEPSEEK_DEFAULT_TOP_K:4}}
     system-prompt: ${AGENT_CHAT_SYSTEM_PROMPT:${AGENT_DEEPSEEK_SYSTEM_PROMPT:}}
-  milvus:
-    default-collection: ${MILVUS_COLLECTION:agent_knowledge}
-    listing-collection: ${MILVUS_LISTING_COLLECTION:listing_knowledge}
-    primary-field: ${MILVUS_PRIMARY_FIELD:doc_id}
-    vector-field: ${MILVUS_VECTOR_FIELD:embedding}
-    text-field: ${MILVUS_TEXT_FIELD:content}
-    source-type-field: ${MILVUS_SOURCE_TYPE_FIELD:source_type}
-    source-id-field: ${MILVUS_SOURCE_ID_FIELD:source_id}
-    metadata-field: ${MILVUS_METADATA_FIELD:metadata}
-    metric-type: ${MILVUS_METRIC_TYPE:COSINE}
-    index-type: ${MILVUS_INDEX_TYPE:IVF_FLAT}
-    index-parameters: ${MILVUS_INDEX_PARAMETERS:{"nlist":1024}}
-    embedding-dimension: ${MILVUS_EMBEDDING_DIMENSION:1024}
-    max-text-length: ${MILVUS_MAX_TEXT_LENGTH:8192}
-  rag:
-    keyword-top-k: ${AGENT_RAG_KEYWORD_TOP_K:20}
-    vector-top-k: ${AGENT_RAG_VECTOR_TOP_K:20}
-    rerank-top-k: ${AGENT_RAG_RERANK_TOP_K:10}
-    vector-similarity-threshold: ${AGENT_RAG_VECTOR_SIMILARITY_THRESHOLD:0.7}
-    # Docker development default targets the local bge-reranker container (host.docker.internal
-    # reaches the host-published port; the service itself lives in its own compose project).
-    # Production/cloud sets AGENT_RAG_RERANK_ENDPOINT to the DashScope URL and
-    # AGENT_RAG_RERANK_PROTOCOL=dashscope via environment, keeping secrets out of this file.
-    rerank-endpoint: ${AGENT_RAG_RERANK_ENDPOINT:http://host.docker.internal:18119/rerank}
-    rerank-api-key: ${AGENT_RAG_RERANK_API_KEY:}
-    rerank-model: ${AGENT_RAG_RERANK_MODEL:bge-reranker-v2-m3-v1}
-    rerank-protocol: ${AGENT_RAG_RERANK_PROTOCOL:native}
+  rag-consumer:
+    knowledge-enabled: false
+    supervisor-owner-confirmed: false
+    supervisor-owner-domain: agent-service
+    supervisor-policy-version: ""
+    supervisor-read-user-ids: []
+    key-id: agent-current
+    signing-secret: ${AGENT_RAG_RPC_SECRET:}
+    credential-lease-seconds: 300
+    max-credential-leases: 1000
+    keyword-top-k: 20
+    vector-top-k: 20
+    final-top-k: 10
+    # Physical targets and embedding/rerank execution belong exclusively to RAG.
   distributed:
     supervisor-agent-id: ${SUPERVISOR_AGENT_ID:supervisor-agent}
     refresh-interval-seconds: ${AGENT_DISCOVERY_REFRESH_INTERVAL_SECONDS:30}
@@ -224,12 +193,3 @@ rocketmq:
   name-server: ${ROCKETMQ_NAME_SERVER:10.117.102.54:9876}
   producer:
     group: ${AGENT_STREAM_ROCKETMQ_PRODUCER_GROUP:agent-service-session-stream-producer}
-
-milvus:
-  enabled: true
-  endpoint: ${MILVUS_ENDPOINT:http://10.117.102.54:19530}
-  token: ${MILVUS_TOKEN}
-  database: ${MILVUS_DATABASE:default}
-  username: ${MILVUS_USERNAME}
-  password: ${MILVUS_PASSWORD}
-  uri: ${MILVUS_URI:}

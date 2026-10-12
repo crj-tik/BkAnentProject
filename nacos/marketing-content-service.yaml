@@ -5,7 +5,7 @@ spring:
     password: ${MYSQL_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
   elasticsearch:
-    uris: ${ELASTICSEARCH_URIS:http://10.117.102.54:9200}
+    uris: ${MARKETING_ELASTICSEARCH_URIS:http://10.117.102.54:9200}
   ai:
     deepseek:
       # KE OpenAI-compatible gateway (Bella). DeepSeek starter drives chat traffic.
@@ -84,7 +84,7 @@ service:
     endpoints:
       nacos: "${NACOS_SERVER:10.117.102.54:8848}"
       database: "${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}"
-      elasticsearch: "${ELASTICSEARCH_URIS:http://10.117.102.54:9200}"
+      elasticsearch: "${MARKETING_ELASTICSEARCH_URIS:http://10.117.102.54:9200}"
 
 mybatis-plus:
   mapper-locations: classpath:/mapper/*.xml

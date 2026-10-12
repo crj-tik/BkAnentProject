@@ -182,8 +182,9 @@ else
   log_info "端口检查通过，无冲突"
 fi
 
-# 7) Nacos 配置完整性：compose 的 config-init 会原样上传 nacos/*.yaml，缺文件即缺 data ID。
-required_configs="mysql-common.yaml auth-service.yaml gateway.yaml"
+# 7) Nacos 模板完整性只检查文件存在，不证明已发布或在目标 namespace 生效。
+# config-init 仅发布 NACOS_CONFIG_DATA_IDS 显式选择的文件，默认空列表拒绝发布。
+required_configs="auth-service.yaml gateway.yaml"
 if [ "$PROFILE" = "full" ]; then
   required_configs="$required_configs agent-service.yaml business-service.yaml compare-engine-service.yaml contract-service.yaml customer-service.yaml interview-service.yaml listing-master-service.yaml marketing-content-service.yaml media-worker-service.yaml memory-service.yaml notification-service.yaml promotion-service.yaml settlement-service.yaml"
 fi
