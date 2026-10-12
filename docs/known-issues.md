@@ -187,6 +187,36 @@
 
 **关联**：KI-39（首启 schema 缺口同族）。
 
+## KI-55 [OPEN·P1] 现有身份基线不足以支撑 RAG 空间和资源授权
+
+**确认依据**：独立 RAG 规划阶段静态核对，未测试运行环境或宣称已利用漏洞。
+
+**现象与根因**：`common/.../rpc/AuthenticatedPrincipal.java` 只返回 userId；`auth-service/.../rpc/AuthPermissionRpcServiceImpl.java:36-60` 验证账号/角色活跃，但 hasPermission 不按具体权限码授予资源范围。房源 brokerId 来自业务请求，当前未证明等于认证 userId。固定 gateway 标记、普通 userId 或 Dubbo 服务名不能作为新 RAG 的服务认证或跨空间授权证明。
+
+**处置方案（未实施）**：`extract-isolated-rag-service` 规划增加最小 RAG principal 事实契约、请求绑定服务签名、领域权威 scope 和房源资源 grant 真源；默认无授权拒绝，记忆强制 owner。保持现有一般认证接口，不借本次扩张为全系统 RBAC 重构。验收覆盖伪造身份、跨空间/跨用户、到期/撤销与认证依赖失败关闭。
+
+**关联**：LR-31；该 change 的 design D3、tasks 第 3 组。
+
+## KI-56 [OPEN·P1] 房源与记忆索引生命周期缺少可靠事件和双索引补偿
+
+**确认依据**：RAG 规划阶段源码核对，未验证现存后端数据完整性。
+
+**现象与根因**：`ListingManagementServiceImpl` 在业务事务提交前写 ES 并调用 agent 索引 RPC，agent 再回调房源读取文档；外部写入不随事务回滚，失败主要告警。memory 的偏好 upsert/decay（含删除）及系统约束更新/停用没有覆盖全部向量同步，agent bootstrap 单独双写也不能保证一致。旧 ES 写入默认关闭，不能据配置推断旧索引完整。
+
+**处置方案（未实施）**：独立 RAG change 规划领域 revision/outbox 完整投影、RAG 应用账本、两路状态与补偿、tombstone/回填水位及真源最终检查。允许短暂漏检/延迟，不承诺跨 MySQL/ES/Milvus 原子事务或 exactly-once；实际回填、数据状态与同步结果需实施后验证。
+
+**关联**：LR-31；design D7/D8、rag-index-lifecycle spec。
+
+## KI-57 [OPEN·P1] 现有 RAG HTTP 目标与本次出站地址安全约束冲突
+
+**确认依据**：checked-in 模板及客户端调用静态核对，未发请求、未修改容器或配置中心。
+
+**现象与根因**：`nacos/agent-service.yaml` 的本机重排 `host.docker.internal:18119` 和房源私网/Compose ES HTTP 目标不能满足本次要求的 host/DNS 校验及拒绝 localhost、环回、私有、保留地址。现有重排客户端只校验 endpoint 非空；Nacos/env 来源可信不构成地址豁免。
+
+**处置方案（未实施）**：在原客户端真实 transport 接入每次连接的地址校验，禁未校验重定向/DNS 换址；真实默认双路加重排验收与切流须具备经授权的合规目标。缺目标可完成规划和不发网的契约验证，但完整检索上线保持阻塞，不自行公开本机服务、更换提供方、修改网络或降级假报成功。
+
+**关联**：LR-31；design D11、rag-service-runtime spec。
+
 ## KI-46 [FIXED·本提交·P2] 受管 A2A 技能激活缺少技能名与任务锚点日志
 
 **确认日期**：2026-10-10（`create-common-skill-module` 5.5 冒烟前置检查，源码确认）。

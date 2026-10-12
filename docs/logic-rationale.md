@@ -296,3 +296,13 @@
 **代码位置**：`OrchestrationStore.reject/claim/unknown`、`SupervisorToolLoopGraph.execute/executeCall/awaitUntil`、`OfficialA2aAgentExecutor.executeStream`。下游流式执行受 `agent.a2a.execution.stream-timeout-ms` 限制，默认 300000 毫秒（2026-10-10 由 120000 放宽，适配 gpt-5.6-terra 多轮工具链的单请求时长），超时/中断释放订阅。
 
 **关联**：LR-18、LR-22、LR-23、LR-27；KI-32、KI-33、KI-35、KI-36。
+
+## LR-31 RAG 执行集中与领域权责分离（规划，未实施）
+
+**结论**：`extract-isolated-rag-service` 选定独立 RAG 服务唯一执行本次 ES 关键词召回、Spring AI Milvus/embedding、融合及通用语义重排，默认双路加重排。领域保留真源、语料、资源授权、生命周期及最终业务排序；通过受控契约影响候选/策略开关，不自己执行某一路。不同知识空间使用独立 ES 索引和 Milvus 集合，集合名称仍不等于访问授权。
+
+**根因**：旧 `split-rag-by-domain` 的共享 common-milvus、域内执行路线会让检索执行继续分散；用户后续明确改为独立服务并迁出清理旧逻辑，且不能将 ES 留在房源域。已有 Spring AI 封装与 embedding 接入应直接复用，不为集中化重写裸 SDK/HTTP 或引入双实现适配器。通用语义排序不能替代领域时间衰减/重要性；足量候选、评分尺度、真源最终检查和可靠事件须分别定义。
+
+**方案位置**：`openspec/changes/extract-isolated-rag-service/`（proposal/design/specs/tasks）。本条记录规划决定，未新增应用模块、未修改业务实现或部署；旧 change 原样保留仅供历史参考，不再作为本方向实施依据。营销未接入本次 RAG 的独立业务 ES 搜索不被声明已迁移。
+
+**关联**：LR-17、LR-18、LR-19、LR-22；KI-55、KI-56、KI-57。出站 URL 安全约束无内网配置豁免，现有目标冲突是实施/切流门禁而非放宽约束的理由。
