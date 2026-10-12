@@ -1,0 +1,5 @@
+package com.bkanent.common.rag;
+
+public enum RagOperation {
+    SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY, RESOLVE_PRINCIPAL, RESOLVE_PRINCIPAL_RESPONSE
+}

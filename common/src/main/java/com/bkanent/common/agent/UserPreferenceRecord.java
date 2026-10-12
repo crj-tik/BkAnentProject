@@ -1,5 +1,6 @@
 package com.bkanent.common.agent;
 
+import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
@@ -16,5 +17,6 @@ public record UserPreferenceRecord(
         String sourceSessionId,
         LocalDateTime lastObservedAt,
         Integer observationCount
-) {
+) implements Serializable {
+    private static final long serialVersionUID = 1L;
 }

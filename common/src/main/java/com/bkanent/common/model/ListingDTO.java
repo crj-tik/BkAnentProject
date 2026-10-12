@@ -1,5 +1,6 @@
 package com.bkanent.common.model;
 
+import java.io.Serializable;
 import java.math.BigDecimal;
 
 /**
@@ -31,6 +32,7 @@ public record ListingDTO(
         String traffic,
         /** 业务属性：verificationStatus。 */
         String verificationStatus
-) {
+) implements Serializable {
+    private static final long serialVersionUID = 1L;
 }
 

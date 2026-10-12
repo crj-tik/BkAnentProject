@@ -10,6 +10,11 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AuthTokenServiceTest {
@@ -59,12 +64,55 @@ class AuthTokenServiceTest {
     }
 
     @Test
+    void classifiesOnlyAuthenticallySignedExpiredAccessTokensWithoutGrantingPrincipal() {
+        String access = authTokenService.issueAccessToken(account);
+        assertFalse(authTokenService.isExpiredAccessToken(access));
+        AuthTokenProperties expiredProperties = new AuthTokenProperties();
+        expiredProperties.setSecret("unit-test-auth-secret");
+        expiredProperties.setAccessTtlSeconds(0);
+        expiredProperties.setRefreshTtlSeconds(0);
+        AuthTokenService expiredTokens = new AuthTokenService(expiredProperties, new InMemoryTokenRevocationStore());
+        expiredTokens.initialize();
+        String expired = expiredTokens.issueAccessToken(account);
+
+        assertTrue(authTokenService.isExpiredAccessToken(expired));
+        assertNull(authTokenService.parse(expired));
+        assertFalse(authTokenService.isExpiredAccessToken(expiredTokens.issueRefreshToken(account)));
+        assertFalse(authTokenService.isExpiredAccessToken("gateway-userId-7"));
+        assertFalse(authTokenService.isExpiredAccessToken(null));
+        assertFalse(authTokenService.isExpiredAccessToken(expired + "tampered"));
+    }
+
+    @Test
     void revokesToken() {
         String token = authTokenService.issueAccessToken(account);
 
         authTokenService.revoke(token);
 
         assertFalse(authTokenService.isValidAccessToken(token));
+    }
+
+    @Test
+    void parseReturnsNoPrincipalForRevokedAccessToken() {
+        String token = authTokenService.issueAccessToken(account);
+        assertNotNull(authTokenService.parse(token));
+
+        authTokenService.revoke(token);
+
+        assertNull(authTokenService.parse(token));
+    }
+
+    @Test
+    void unavailableRevocationStoreDoesNotReturnPrincipal() {
+        TokenRevocationStore unavailableStore = mock(TokenRevocationStore.class);
+        when(unavailableStore.isRevoked(anyString())).thenThrow(new IllegalStateException("store unavailable"));
+        AuthTokenProperties properties = new AuthTokenProperties();
+        properties.setSecret("unit-test-auth-secret");
+        AuthTokenService instance = new AuthTokenService(properties, unavailableStore);
+        instance.initialize();
+        String token = instance.issueAccessToken(account);
+
+        assertThrows(IllegalStateException.class, () -> instance.parse(token));
     }
 
     @Test

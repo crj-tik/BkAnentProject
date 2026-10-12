@@ -21,6 +21,24 @@ spring:
         namespace: ${bk.nacos.namespace}
         file-extension: yaml
 
+# RAG-only RPC credentials. Empty secrets fail closed, including in the local profile.
+# Additional trusted-keys entries can be supplied by secret-managed config for rotation.
+auth:
+  rag:
+    rpc:
+      trusted-keys:
+        rag-current:
+          caller-service: rag-service
+          secret: ${RAG_AUTH_RPC_SECRET:}
+        listing-current:
+          caller-service: listing-master-service
+          secret: ${LISTING_RAG_RPC_SECRET:}
+        memory-current:
+          caller-service: memory-service
+          secret: ${MEMORY_RAG_RPC_SECRET:}
+      response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:}
+      response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
+
 dubbo:
   application:
     name: auth-service

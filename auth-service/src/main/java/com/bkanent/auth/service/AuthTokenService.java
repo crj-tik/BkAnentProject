@@ -82,7 +82,21 @@ public class AuthTokenService {
         return principal;
     }
 
+    /**
+     * Classifies only authentic expired access tokens, for RAG's explicit reauthentication error.
+     * It never grants a principal and leaves parse/legacy RPC expiry behavior unchanged.
+     */
+    public boolean isExpiredAccessToken(String token) {
+        TokenPrincipal principal = verify(token, true);
+        return principal != null && "access".equals(principal.tokenType())
+                && principal.expiresAt() <= Instant.now().getEpochSecond();
+    }
+
     private TokenPrincipal verify(String token) {
+        return verify(token, false);
+    }
+
+    private TokenPrincipal verify(String token, boolean allowExpired) {
         if (!StringUtils.hasText(token) || signingKey == null) {
             return null;
         }
@@ -108,7 +122,7 @@ public class AuthTokenService {
         try {
             long userId = Long.parseLong(fields[0]);
             long expiresAt = Long.parseLong(fields[1]);
-            if (expiresAt <= Instant.now().getEpochSecond()) {
+            if (!allowExpired && expiresAt <= Instant.now().getEpochSecond()) {
                 return null;
             }
             return new TokenPrincipal(userId, fields[2], expiresAt);

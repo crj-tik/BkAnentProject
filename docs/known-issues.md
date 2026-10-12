@@ -215,7 +215,29 @@
 
 **处置方案（未实施）**：在原客户端真实 transport 接入每次连接的地址校验，禁未校验重定向/DNS 换址；真实默认双路加重排验收与切流须具备经授权的合规目标。缺目标可完成规划和不发网的契约验证，但完整检索上线保持阻塞，不自行公开本机服务、更换提供方、修改网络或降级假报成功。
 
+**实施前置核对**：本机项目依赖树确认 Spring AI 1.1.2 的 OpenAI embedding 经同步 Spring Web 6.2.7 RestClient / HttpClient5 5.4.4；ES 8.18.1 经 HttpAsyncClient 4.1.5 / HttpClient 4.5.14，须使用不同代的连接池 DNS 扩展。现有 BGE 自建 RestClient，不会自动消费受保护 Bean。连接层必须校验全部解析地址并绑定连接、禁重定向及代理；启动前一次解析不能覆盖换址。Milvus SDK 2.5.8 的 gRPC 不应被宣称由这些 HTTP 扩展保护。此核对不是实现或真实检索验收，合规 ES/重排目标仍未提供。
+
 **关联**：LR-31；design D11、rag-service-runtime spec。
+
+## KI-58 [OPEN·P1] 手工构建 Spring AI Milvus 存储未显式初始化及逻辑 ID 不适配默认 schema
+
+**确认依据**：独立 RAG apply 阶段只读核对项目使用的 Spring AI Milvus 1.1.2 JAR API/实现与旧 `SpringAiMilvusDocumentStore`，未访问现存集合。
+
+**现象与根因**：旧封装以 `initializeSchema(true)` 构建 VectorStore 后未调用 `InitializingBean.afterPropertiesSet()`，手工 builder 的构建不等于已执行 schema 初始化。该版本初始化主键为最大 36 字符的 VarChar；任意偏好复合逻辑 ID 不能据此假定可原样存储。`add` 实际调用 insert，不能当作按逻辑 ID 原子 upsert；Milvus 过滤转换器使用固定 metadata 字段，旧任意字段配置也不等于查询支持。
+
+**处置**：新服务保留 Spring AI 数据执行，显式受权 provision 与检索分离、只读核对真实 schema；新空间使用稳定 UUID 物理键并在 metadata 保存无歧义逻辑身份，固定兼容的 metadata 字段。更新/删除通过 Spring AI 对安全物理键操作，并由版本账本遮蔽迟到旧投影。旧集合的真实主键、文档映射与模型维度须另行盘点；未经确认不得猜测旧映射或删除数据。本问题尚未完成真实旧数据验证，保持 OPEN。
+
+**关联**：LR-31；KI-56；该 change tasks 1.2、4.1、4.2、5.6、8.2。
+
+## KI-59 [OPEN·P1] 当前 A2A SDK 无专用凭据头的受支持注入路径
+
+**确认依据**：独立 RAG apply 阶段只读核对本机 `a2a-java-sdk-client 0.2.5.Beta2` sources/JAR，以及 `OfficialA2aAgentClient` 和 `common-a2a/OfficialA2aAgentExecutor`；未发送请求或修改 SDK。
+
+**现象与根因**：现用 `A2AClient` 构造器仅接收 URL 或 AgentCard，任务发送/流式发送/查询/取消没有自定义 headers 或 transport 参数。`getClientFromAgentCardUrl(customHttpClient, ...)` 的自定义客户端仅获取 Card，返回的新 `A2AClient` 未保留该 transport。Starter 的 JSON-RPC 请求处理和异步 executor 也未提供已经验证的专用 token 上下文传播。不能据一般 HttpClient 支持 headers 就宣称实际 A2A 调用能携带凭据。
+
+**处置**：本次先实现受权 REST/Dubbo 消费与有界进程内凭据租约，缺少真实凭据的 A2A/模型工具路径明确要求重新认证且不发起 RAG 请求；token 不放模型参数、metadata、RunnableConfig、日志或 checkpoint。真实房源 Agent RAG 调用及跨 A2A 凭据生命周期仍未完成，tasks 3.5、6.2 的该部分保持阻塞。SDK 最小修补、升级或协议 transport 替换需要另行确认范围，不通过反射改 final 字段或暗建第三客户端绕过。
+
+**关联**：LR-18、LR-22、LR-31；KI-55；该 change domain-rag-consumption spec。
 
 ## KI-46 [FIXED·本提交·P2] 受管 A2A 技能激活缺少技能名与任务锚点日志
 
