@@ -249,7 +249,7 @@
 
 **关联**：LR-31；KI-55；tasks 3.4、4.2、8.2。
 
-## KI-61 [FIXED·本提交·P1] 新领域 RAG 包装的最终复核未同步收窄诊断正文
+## KI-61 [FIXED·74c8d92·P1] 新领域 RAG 包装的最终复核未同步收窄诊断正文
 
 **确认依据**：独立 RAG apply 集成审阅新增 `MemoryRagSearchFacade` 和 `ListingRagFacade`，尚未切流。
 
@@ -259,7 +259,7 @@
 
 **关联**：LR-31；KI-55、KI-56；tasks 6.1、6.3。
 
-## KI-62 [FIXED·本提交·P1] 新 RAG 数值与时间编码可能移动硬过滤边界
+## KI-62 [FIXED·74c8d92·P1] 新 RAG 数值与时间编码可能移动硬过滤边界
 
 **确认日期**：2026-10-10（本次迁移实现审阅）。
 
@@ -267,7 +267,7 @@
 
 **修复**：NUMBER/NUMBER_LIST 严格有限及 round-trip 校验；INSTANT 固定 UTC 纳秒并限制 ES date_nanos 正 signed-long 范围。实际 Spring AI converter 输出及 ES mapping 单测覆盖；这是新 schema，不猜测旧投影兼容性。见 LR-35。
 
-## KI-63 [FIXED·本提交·P1] 记忆投影使用请求表示导致真源 hash 不一致
+## KI-63 [FIXED·74c8d92·P1] 记忆投影使用请求表示导致真源 hash 不一致
 
 **确认日期**：2026-10-10（H2 DATETIME 舍入回归确认）。
 
@@ -275,7 +275,7 @@
 
 **修复**：upsert、decay 与约束写入在相同事务锁内重新读取已持久化 SQL 表示再生成投影。领域生命周期与最终复核测试通过；真实 MySQL 精度与迁移仍未验收。见 LR-35。
 
-## KI-64 [FIXED·本提交·P1] 实际依赖权限拒绝误归不可用可被降级
+## KI-64 [FIXED·74c8d92·P1] 实际依赖权限拒绝误归不可用可被降级
 
 **确认日期**：2026-10-10（实际异常类型及 Spring AI 1.1.2 retry 源码核对，未发 Provider 请求）。
 
@@ -283,7 +283,7 @@
 
 **修复**：搜索与管理 probe 保留真实状态及 cause；对 typed AI retry exception 只匹配完整固定 HTTP 前缀。新增不可重试/降级、普通文本不误分类反例，实际后端权限联调仍未执行。见 LR-36。
 
-## KI-65 [FIXED·本提交·P1] SERVICE 域写 key 的管理操作绕过 adminRoles
+## KI-65 [FIXED·74c8d92·P1] SERVICE 域写 key 的管理操作绕过 adminRoles
 
 **确认日期**：2026-10-10（新配置与管理入口集成核对）。
 
@@ -291,7 +291,7 @@
 
 **修复**：本期所有管理操作强制 USER + signed principal + adminRoles；SERVICE 三管理操作全拒绝，真实 ADMIN 正向及空角色反例通过。不增加独立运维 key DSL，也不自动为部署设置管理角色。见 LR-36。
 
-## KI-66 [FIXED·本提交·P2] 新 RAG 模板健康名称及发现变量与应用不一致
+## KI-66 [FIXED·74c8d92·P2] 新 RAG 模板健康名称及发现变量与应用不一致
 
 **确认日期**：2026-10-10（checked-in App/Compose/Nacos 静态核对）。
 
@@ -299,13 +299,13 @@
 
 **修复**：健康组对齐 ragBaseReadiness/ragCapabilities，Compose 显式提供 App 所读地址/组/Dubbo registry aliases。最终模板核对另修正 memory 的 constraint-admin-roles 键、memory Dubbo registry，以及 listing 入站 AGENT_RAG_RPC_SECRET 的空默认透传；不启用角色或填入密钥。基础 readiness 文案对齐认证配置、两控制表可查询与至少三个已导出 RPC，不误称直接检查 Nacos。YAML 严格解析和逐值断言通过。实际 namespace/group/data ID、鉴权与 RPC 发现仍未验证，不据此声明配置已生效。
 
-## KI-67 [FIXED·本提交·P2] 只读知识工具迟到结果覆盖已完成失败审计
+## KI-67 [FIXED·74c8d92·P2] 只读知识工具迟到结果覆盖已完成失败审计
 
 **确认日期**：2026-10-10（新远程只读工具与现有账本集成核对）。
 
 **修复**：限定知识 capability 的 CAS 首终态写入；超时迟到、已完成复用和 legacy claim 不重发回归通过。一般副作用工具语义不变，无新增 transition。见 LR-37。
 
-## KI-68 [FIXED·本提交·P2] 旧房源显式召回数量被总数 500 额外拒绝
+## KI-68 [FIXED·74c8d92·P2] 旧房源显式召回数量被总数 500 额外拒绝
 
 **确认日期**：2026-10-10（最终设计 D9 对账）。
 
@@ -313,7 +313,7 @@
 
 **修复**：保留显式每路数，rerankCandidates=min(500, 两路和)；默认两次域调用仍总预算不超过 500，显式首池超过 500 时只允许该次有界召回。新增默认/显式边界与有限扩池回归，不能静默改用户数量。
 
-## KI-69 [FIXED·本提交·P2] 记忆 outbox 回归假定初始时间戳立即到期
+## KI-69 [FIXED·74c8d92·P2] 记忆 outbox 回归假定初始时间戳立即到期
 
 **确认日期**：2026-10-10（H2 固定时钟复现，非真实 MySQL 验收）。
 
