@@ -388,3 +388,13 @@
 **完成边界复核**：任务8.1验收受权回填实现、同锁完整快照/outbox及更新/删除交错测试；未知通用知识按规格保持隔离，不要求建设新语料，也不宣称该空间迁移完成。真实回填、两路APPLIED/实际投影水位与切流由1.2/8.2/8.3等运行任务单独验收。同理7.2验收首次消费者切流版本源码/配置清理，不以未部署重复阻塞已完成实现；1.3的实际有效grant和角色基线仍需核对，不能据测试ADMIN替代。
 
 **关联**：LR-32、LR-35；KI-73、KI-74、KI-75；逐空间本地清单见 `docs/acceptance/isolated-rag-migration-inventory.md`，真实数据水位、停写排空和旧 RPC 成功路径仍待验收。必要人工决定与授权后执行步骤见 `docs/acceptance/isolated-rag-unblocking-steps.md`。
+
+## LR-43 治理重排按响应钉扎模型身份，同 alias 漂移失败关闭
+
+**结论**：`rag-service` 对外部 Reranker-BGE-V2-M3 治理接口（`/api/v1/rerank`，`RAG_RERANK_PROTOCOL=governed`）的重排调用在每次响应上核对 `model.alias/revision/scoring_version/artifact_digest` 与 `score_semantics` 必须精确等于受管配置（`RAG_RERANK_EXPECTED_REVISION`/`EXPECTED_ARTIFACT_DIGEST` 与空间 rerank-profile 的 provider/modelVersion/scoringVersion/scale）。任何一项不匹配抛 SCORING_PROFILE_MISMATCH，不尝试重新归一化或继续用旧分数。请求固定 `truncate=false`，响应声明截断发生即 RERANK_PROTOCOL_ERROR；400/413 映射为不可重试的 INVALID_ARGUMENT，401/403 仍为身份错误。
+
+**根因**：外部服务的模型 alias 是部署级标识，不是推理身份；同一 alias 下 revision、评分实现或 artifact 变化会改变分数尺度（logit vs sigmoid、数值分布）。若客户端只按 URL/alias 信任，模型热替换后旧 profile 的 sigmoid/范围校验会在错误尺度上运行，产生静默的排序偏差而非显式失败。`truncate=false` 若被服务端静默截断，重排分数对应的文本与候选实际内容不一致，无法通过事后校验发现。400/413 是请求参数/预算漂移（配置与预算不匹配），重试只会重复失败并白耗阶段预算。
+
+**代码位置**：`rag-service/src/main/java/com/bkanent/rag/rerank/BgeRerankService.java`（governed 分支与身份核对）、`RerankEndpoint.java`（钉扎字段）、`config/RagRuntimeConfiguration.java`（端点装配）；`nacos/rag-service.yaml`（expected-revision/artifact-digest 与三空间 measured-governed-profile 锚点）、`docker-compose.yml`/`.env.example`（env 接线与 bkanent-rerank-dev 网络声明）。
+
+**关联**：LR-31、LR-34；KI-57（目标合规部分已接线，真实联调未做）。分数归一化仍由 `RerankProfile.normalize` 单点执行（LR-31）；身份钉扎值来自外部项目 `docs/capability-results-dev.json` 实测记录，外部升级模型时必须同步更新三处（endpoint env、nacos rerank 段、空间 rerank-profile 的 scoring-version），漏改即失败关闭而非漂移。

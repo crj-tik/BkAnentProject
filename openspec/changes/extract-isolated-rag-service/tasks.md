@@ -29,7 +29,7 @@
 - [ ] 4.2 调整按空间 schema 身份缓存的 VectorStore 实例，校验 database/collection/field/model/维度不混用；验证初始化、旧文档读/更新/删除及维度错误。
 - [x] 4.3 从房源迁移 ES 索引/关键词召回执行到 RAG，使用统一领域投影、显式 mapping 和类型化过滤，去除房源 Mapper/RPC 回调及 ES→SQL 召回 fallback。
 - [x] 4.4 实现两路召回、文档去重、版本化 RRF/同分稳定顺序与有界候选池；增加异量纲分数、重复候选、单路开关及数量不足测试。
-- [x] 4.5 迁移现有 BGE native/DashScope 重排协议并校验候选完整性、下标/分数，接线明确评分 profile/logit或bounded转换，覆盖 scoreKind 与关闭重排语义。
+- [x] 4.5 迁移现有 BGE native/DashScope 重排协议并校验候选完整性、下标/分数，接线明确评分 profile/logit或bounded转换，覆盖 scoreKind 与关闭重排语义。追加外部 Reranker-BGE-V2-M3 治理协议适配（governed，/api/v1/rerank）：请求 model/query/passages + raw_scores + truncate=false，每次响应钉扎 alias/revision/scoring_version/artifact_digest 与 score_semantics，漂移即 SCORING_PROFILE_MISMATCH、意外截断即 RERANK_PROTOCOL_ERROR、400/413 映射不可重试 INVALID_ARGUMENT；三空间登记实测 LOGIT profile 锚点，endpoint/CIDR/env 接线完成，协议单测通过。真实容器联调与默认重排能力验收未执行，见 8.2。
 - [x] 4.6 在 ES/Spring AI embedding/重排真实 HTTP transport 接入每次连接的 host/DNS 地址安全守卫，拒绝私网/环回/保留/映射地址，禁自动重定向，覆盖 DNS 换址、重连、重试与配置刷新；不能仅启动校验或增加可信配置例外。
 - [x] 4.7 实现 STRICT/ALLOW_DEGRADED、阶段错误、整体 deadline、有界重试/并发/文本预算；覆盖一路/两路/重排失败与安全拒绝不可降级、不把失败当 NO_MATCH。
 

@@ -52,10 +52,14 @@ service:
       database: "${MYSQL_HOST:mysql}:${MYSQL_PORT:3306}"
 
 rag:
-  # Empty allowlist imposes no hostname restriction: public HTTP hosts still require URL/address validation.
-  # Empty endpoints are unconfigured; private/reserved targets remain denied even when allowlisted.
+  # Managed development targets only; every connection still validates all DNS answers.
   http:
-    allowed-hosts: ${RAG_HTTP_ALLOWED_HOSTS:}
+    mode: MANAGED_INTERNAL
+    allowed-hosts: [elasticsearch, host.docker.internal, open-chatgpt.ke.com, bkanent-reranker-dev]
+    internal-networks:
+      '[host.docker.internal]': [192.168.65.254/32]
+      elasticsearch: [172.24.0.0/16]
+      bkanent-reranker-dev: [10.253.240.0/24]
   milvus:
     host: ${RAG_MILVUS_HOST:}
     port: ${RAG_MILVUS_PORT:19530}
@@ -67,7 +71,10 @@ rag:
     endpoint: ${RAG_RERANK_ENDPOINT:}
     api-key: ${RAG_RERANK_API_KEY:}
     model: ${RAG_RERANK_MODEL:bge-reranker-v2-m3-v1}
-    protocol: ${RAG_RERANK_PROTOCOL:native}
+    protocol: ${RAG_RERANK_PROTOCOL:governed}
+    # Identity pins verified against every governed response; drift fails closed (SCORING_PROFILE_MISMATCH).
+    expected-revision: ${RAG_RERANK_EXPECTED_REVISION:324cc40576b08b305b9c65a867c26c173a477ae2}
+    expected-artifact-digest: ${RAG_RERANK_EXPECTED_ARTIFACT_DIGEST:76cd4a977b9001bf8e28e41bac6ce53b2d334d0c567f6928a9b88655bafc833f}
   security:
     auth-request-key-id: rag-current
     auth-request-secret: ${RAG_AUTH_RPC_SECRET:}
@@ -180,7 +187,14 @@ rag:
         overall-timeout-millis: 20000
         recall-timeout-millis: 5000
         rerank-timeout-millis: 8000
-      rerank-profile: null
+      # Measured provider identity (docs/capability-results-dev.json): alias bge-reranker-v2-m3-v1,
+      # revision 324cc40..., scoring_version 12ab257..., artifact_digest 76cd4a9..., LOGIT scale.
+      # Same pin for every space; still requires per-space capability inspection before ready.
+      rerank-profile: &measured-governed-profile
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
     '[memory.preference]':
       space-id: memory.preference
       owner-domain: memory-service
@@ -220,7 +234,7 @@ rag:
       allowed-clients:
         memory-service: [SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
       limits: *space-limits
-      rerank-profile: null
+      rerank-profile: *measured-governed-profile
     '[memory.constraint]':
       space-id: memory.constraint
       owner-domain: memory-service
@@ -244,4 +258,4 @@ rag:
       allowed-clients:
         memory-service: [SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
       limits: *space-limits
-      rerank-profile: null
+      rerank-profile: *measured-governed-profile

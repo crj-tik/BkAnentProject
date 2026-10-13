@@ -648,7 +648,7 @@ services:
       MYSQL_PASSWORD: ${RAG_MYSQL_PASSWORD:-}
       MYSQL_DB_RAG: ${MYSQL_DB_RAG:-bk_rag}
       RAG_ELASTICSEARCH_URIS: ${RAG_ELASTICSEARCH_URIS:-}
-      RAG_HTTP_ALLOWED_HOSTS: ${RAG_HTTP_ALLOWED_HOSTS:-}
+      RAG_HTTP_ALLOWED_HOSTS: ${RAG_HTTP_ALLOWED_HOSTS:-elasticsearch,host.docker.internal,open-chatgpt.ke.com,bkanent-reranker-dev}
       RAG_MILVUS_HOST: ${RAG_MILVUS_HOST:-}
       RAG_MILVUS_PORT: ${RAG_MILVUS_PORT:-19530}
       RAG_MILVUS_TOKEN: ${RAG_MILVUS_TOKEN:-}
@@ -656,10 +656,13 @@ services:
       RAG_EMBEDDING_API_KEY: ${RAG_EMBEDDING_API_KEY:-}
       RAG_EMBEDDING_BASE_URL: ${RAG_EMBEDDING_BASE_URL:-}
       RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-baai-m3-1b-base-v1-embedding-20240619}
-      RAG_RERANK_ENDPOINT: ${RAG_RERANK_ENDPOINT:-}
+      # Governed reranker on the dedicated internal network; identity pins fail closed on drift.
+      RAG_RERANK_ENDPOINT: ${RAG_RERANK_ENDPOINT:-http://bkanent-reranker-dev:18111/api/v1/rerank}
       RAG_RERANK_API_KEY: ${RAG_RERANK_API_KEY:-}
       RAG_RERANK_MODEL: ${RAG_RERANK_MODEL:-bge-reranker-v2-m3-v1}
-      RAG_RERANK_PROTOCOL: ${RAG_RERANK_PROTOCOL:-native}
+      RAG_RERANK_PROTOCOL: ${RAG_RERANK_PROTOCOL:-governed}
+      RAG_RERANK_EXPECTED_REVISION: ${RAG_RERANK_EXPECTED_REVISION:-324cc40576b08b305b9c65a867c26c173a477ae2}
+      RAG_RERANK_EXPECTED_ARTIFACT_DIGEST: ${RAG_RERANK_EXPECTED_ARTIFACT_DIGEST:-76cd4a977b9001bf8e28e41bac6ce53b2d334d0c567f6928a9b88655bafc833f}
       RAG_AUTH_RPC_SECRET: ${RAG_AUTH_RPC_SECRET:-}
       AGENT_RAG_RPC_SECRET: ${AGENT_RAG_RPC_SECRET:-}
       LISTING_RAG_RPC_SECRET: ${LISTING_RAG_RPC_SECRET:-}
@@ -674,7 +677,10 @@ services:
       timeout: 5s
       retries: 30
       start_period: 30s
-    networks: [bk]
+    # bkanent-rerank-dev is the external reranker network created by that project's deploy script.
+    networks:
+      - bk
+      - bkanent-rerank-dev
 
   interview-service:
     <<: *app-service
@@ -707,3 +713,8 @@ volumes:
 networks:
   bk:
     driver: bridge
+  # External dedicated reranker network (10.253.240.0/24, internal=true), owned by the
+  # Reranker-BGE-V2-M3 project; only rag-service joins it. Never attach the whole bk network.
+  bkanent-rerank-dev:
+    external: true
+    name: bkanent-rerank-dev

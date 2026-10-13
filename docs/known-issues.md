@@ -213,7 +213,7 @@
 
 **现象与根因**：`nacos/agent-service.yaml` 的本机重排 `host.docker.internal:18119` 和房源私网/Compose ES HTTP 目标不能满足本次要求的 host/DNS 校验及拒绝 localhost、环回、私有、保留地址。现有重排客户端只校验 endpoint 非空；Nacos/env 来源可信不构成地址豁免。
 
-**处置（实施中）**：已在原 HC5/HC4 transport 实现每次新连接的地址校验、全 DNS 答案检查与地址绑定，禁止重定向及代理；不发真实后端请求的 transport 测试 81 项已通过，全仓非外部联调回归通过；真实目标仍未访问。真实默认双路加重排验收与切流须具备经授权的合规目标，当前未提供。缺目标不自行公开本机服务、更换提供方、修改网络或降级假报成功，本项保持 OPEN。
+**处置（实施中）**：已在原 HC5/HC4 transport 实现每次新连接的地址校验、全 DNS 答案检查与地址绑定，禁止重定向及代理；不发真实后端请求的 transport 测试 81 项已通过，全仓非外部联调回归通过。重排目标已由外部 Reranker-BGE-V2-M3 项目交付专用合规目标：仅经 external Docker 网络 `bkanent-rerank-dev`（10.253.240.0/24）以 `http://bkanent-reranker-dev:18111/api/v1/rerank` 访问，本仓模板/Compose 已登记该 host 的精确 CIDR map 并以治理协议加 revision/artifact_digest/scoring_version 钉扎（见 LR-43），不再引用旧 `host.docker.internal:18119`。该专用网络与本仓 compose 引用为配置接线，真实容器联调（rag-service 接网运行、governed 协议真实调用、能力探活）尚未执行，不宣称端到端通过。ES 公开/私网合规目标仍未提供，缺目标不自行公开本机服务、更换提供方、修改网络或降级假报成功，本项保持 OPEN。
 
 **实施前置核对**：本机项目依赖树确认 Spring AI 1.1.2 的 OpenAI embedding 经同步 Spring Web 6.2.7 RestClient / HttpClient5 5.4.4；ES 8.18.1 经 HttpAsyncClient 4.1.5 / HttpClient 4.5.14，须使用不同代的连接池 DNS 扩展。现有 BGE 自建 RestClient，不会自动消费受保护 Bean。连接层必须校验全部解析地址并绑定连接、禁重定向及代理；启动前一次解析不能覆盖换址。Milvus SDK 2.5.8 的 gRPC 不应被宣称由这些 HTTP 扩展保护。此核对不是实现或真实检索验收，合规 ES/重排目标仍未提供。
 

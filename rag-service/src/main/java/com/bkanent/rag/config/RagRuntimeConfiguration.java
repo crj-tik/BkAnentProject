@@ -44,14 +44,16 @@ public class RagRuntimeConfiguration {
 
     @Bean RerankEndpoint ragRerankEndpoint(@Value("${rag.rerank.endpoint:}") String endpoint,
             @Value("${rag.rerank.api-key:}") String apiKey, @Value("${rag.rerank.model:}") String model,
-            @Value("${rag.rerank.protocol:}") String protocol) {
+            @Value("${rag.rerank.protocol:}") String protocol,
+            @Value("${rag.rerank.expected-revision:}") String expectedRevision,
+            @Value("${rag.rerank.expected-artifact-digest:}") String expectedArtifactDigest) {
         URI uri = null;
         RerankEndpoint.Protocol type = null;
         try { if (!endpoint.isBlank()) uri = URI.create(endpoint); }
         catch (IllegalArgumentException invalid) { /* Invalid deployment target is a capability gate, not a base outage. */ }
         try { if (!protocol.isBlank()) type = RerankEndpoint.Protocol.valueOf(protocol.toUpperCase(Locale.ROOT)); }
         catch (IllegalArgumentException invalid) { /* No guessed protocol. */ }
-        return new RerankEndpoint(uri, apiKey, model, type);
+        return new RerankEndpoint(uri, apiKey, model, type, expectedRevision, expectedArtifactDigest);
     }
 
     /** Keep the existing starter model, but do not require its credentials/network during base startup. */

@@ -3,6 +3,7 @@ package com.bkanent.rag.config;
 import com.bkanent.common.rag.*;
 import com.bkanent.rag.index.*;
 import com.bkanent.rag.rerank.BgeRerankService;
+import com.bkanent.rag.rerank.RerankEndpoint;
 import com.bkanent.rag.storage.*;
 import java.sql.*;
 import java.util.*;
@@ -43,6 +44,31 @@ class RagRuntimeConfigurationTest {
     @Test void authReferenceDefersDiscoveryAndDisablesRetries() throws Exception {
         DubboReference ref = RagRuntimeConfiguration.class.getDeclaredField("auth").getAnnotation(DubboReference.class);
         assertThat(ref.check()).isFalse(); assertThat(ref.init()).isFalse(); assertThat(ref.retries()).isZero();
+    }
+    @Test void rerankEndpointBindsGovernedProtocolAndIdentityPins() {
+        DataSource db = new DriverManagerDataSource("jdbc:h2:mem:rerank-endpoint;DB_CLOSE_DELAY=-1", "sa", "");
+        var keyword = mock(ElasticsearchProjectionStore.class);
+        var vector = mock(SpringAiMilvusDocumentStore.class);
+        var rerank = mock(BgeRerankService.class);
+        var embedding = mock(EmbeddingModel.class);
+        when(keyword.backend()).thenReturn(IndexSink.Backend.KEYWORD);
+        when(vector.backend()).thenReturn(IndexSink.Backend.VECTOR);
+        new ApplicationContextRunner().withUserConfiguration(RagRuntimeConfiguration.class)
+                .withBean(DataSource.class, () -> db)
+                .withBean(ElasticsearchProjectionStore.class, () -> keyword)
+                .withBean(SpringAiMilvusDocumentStore.class, () -> vector)
+                .withBean(BgeRerankService.class, () -> rerank)
+                .withBean("openAiEmbeddingModel", EmbeddingModel.class, () -> embedding)
+                .withPropertyValues("rag.rerank.endpoint=http://bkanent-reranker-dev:18111/api/v1/rerank",
+                        "rag.rerank.model=bge-reranker-v2-m3-v1", "rag.rerank.protocol=governed",
+                        "rag.rerank.expected-revision=rev-1", "rag.rerank.expected-artifact-digest=digest-1")
+                .run(context -> {
+                    RerankEndpoint endpoint = context.getBean(RerankEndpoint.class);
+                    assertThat(endpoint.protocol()).isEqualTo(RerankEndpoint.Protocol.GOVERNED);
+                    assertThat(endpoint.model()).isEqualTo("bge-reranker-v2-m3-v1");
+                    assertThat(endpoint.expectedRevision()).isEqualTo("rev-1");
+                    assertThat(endpoint.expectedArtifactDigest()).isEqualTo("digest-1");
+                });
     }
     @Test void controlReadinessRequiresRealSchemaNotJustDatabasePort() throws Exception {
         DriverManagerDataSource db = new DriverManagerDataSource("jdbc:h2:mem:readiness;DB_CLOSE_DELAY=-1", "sa", "");

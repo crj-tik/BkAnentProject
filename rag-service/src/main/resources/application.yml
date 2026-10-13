@@ -87,6 +87,9 @@ rag:
     api-key: ${RAG_RERANK_API_KEY:}
     model: ${RAG_RERANK_MODEL:}
     protocol: ${RAG_RERANK_PROTOCOL:}
+    # Governed provider identity pins; same-alias model drift fails closed, never re-normalizes.
+    expected-revision: ${RAG_RERANK_EXPECTED_REVISION:}
+    expected-artifact-digest: ${RAG_RERANK_EXPECTED_ARTIFACT_DIGEST:}
   http:
     allowed-hosts: ${RAG_HTTP_ALLOWED_HOSTS:}
 management:
