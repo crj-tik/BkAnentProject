@@ -3,7 +3,7 @@
 - 变更：`extract-isolated-rag-service`，分支 `dev-fix`。
 - 本记录区分源码/本地测试验证与真实运行迁移；不构成上线、安全完整审计或真实默认检索验收。
 - 前序公共契约及 auth 实施提交：`2a3fa12`；后续迁移实施及本地验收提交：`74c8d92`，已推送 `origin/dev-fix`。历史 `split-rag-by-domain` 不实施、不归档或改写。
-- 本地实施任务完成 30/49；其余 19 项含真实环境/旧数据/身份传输/切流门禁，保持未勾选。本变更未归档。
+- 当前本地实施任务完成 32/49；其余17项含真实环境/旧数据/身份传输/旧调用证明/切流门禁，保持未勾选。本变更未归档。ee4c9b9实施后的30/49是历史统计；本次按原任务边界独立复核补勾7.2、8.1，详见“任务完成边界复核”。
 
 ## 实施边界
 
@@ -125,7 +125,7 @@ listing-master-service  30bd7cffbd6af923f22f87a38e4b9f3e3a943f09d6f4e7fce7b03bc1
 memory-service          d6eb61f9c9732b543fff6ee1d661ff5ad69c611e1f41351f0928cb96fdc74e55
 ```
 
-OpenSpec strict与diff whitespace通过。本轮没有模板配置改动、Docker/发布/真实SQL/backend操作、完整安全审计或状态机transition新增。任务仍30/49：补齐本地子项不替代实际环境/profile/身份传输/旧调用证明/切流要求。
+OpenSpec strict与diff whitespace通过。本轮没有模板配置改动、Docker/发布/真实SQL/backend操作、完整安全审计或状态机transition新增。ee4c9b9提交时任务统计为30/49；该历史计数在下文按原完整任务边界复核后纠正为32/49。实现任务不追加“先部署”条件，运行环境/profile/身份传输/旧调用证明/切流要求仍独立保留。
 
 ## 真实环境未执行与切流阻塞
 
@@ -137,4 +137,29 @@ OpenSpec strict与diff whitespace通过。本轮没有模板配置改动、Docke
 6. 真实 backfill/删除水位、停写及旧 writer/在途 RPC 排空、消费者切流、RAG 停机的实际可用性、兼容发布周期及按事件水位回滚未执行。全部索引/集合/卷和旧部署保留，未进行 Docker/Nacos/SQL 运维、delete/prune/down-v。
 7. 目标镜像 JRE 的 java.naming/jdk.naming.dns 模块未实测；HTTP 守卫不保护 Milvus gRPC 或业务 Dubbo，不能扩大安全声明。
 
-LR-31～37、KI-55～60 记录持续开放门禁；KI-61～69 只记录本次已确认源码/测试缺陷的修复范围。没有得到完整 Mimosa 深度安全扫描结论；本次未擅自发起完整审计。OpenSpec 仅勾选本地实际完成部分，保持未归档。
+LR-31～39、KI-55～60、KI-75记录持续开放门禁；KI-61～74、KI-76～77只记录已确认源码/测试缺陷的修复范围。没有得到完整 Mimosa 深度安全扫描结论；本次未擅自发起完整审计。OpenSpec仅勾选实际完成部分，保持未归档。
+
+## 任务完成边界复核
+
+本次按原任务、design及四份spec对ee4c9b9完整相关源码/POM/应用/Nacos/Compose/测试作只读独立复核。只补勾7.2、8.1，进度从30/49变为32/49；未拆任务凑数量，未更换架构或实际发布。
+
+### 7.2：首次消费者切流版本的来源执行清理已完成
+
+- `agent-service/pom.xml`、`listing-master-service/pom.xml`、`memory-service/pom.xml`及对应应用/Nacos/Compose中，本次后端执行依赖和配置已迁出；rag独立环境不向消费者泄漏后端，chat与marketing独立ES保留。
+- `agent-service/src/main/java/com/bkanent/agent/config/AgentServiceConfiguration.java:18–24`仅注册消费/业务配置；`AgentRagConsumerProperties.java:6–20`不含后端寻址或模型执行配置。`rag-service/pom.xml:25–59`集中后端依赖。
+- 来源执行类、旧索引触发和重复bootstrap已清理；旧Milvus名称包装只调用RPC。前次真实依赖树、四可执行JAR隔离证据见本记录上文。
+- 本项验收已准备首次切流版本的源码/配置清理，实际配置生效、RPC发现/镜像部署和切流仍由7.1/7.3/8.3验收；6.7条件成功代理和8.5兼容周期不被代替。
+
+### 8.1：受权回填实现与交错回归已完成
+
+- `listing-master-service/src/main/java/com/bkanent/listing/rag/ListingRagBackfillService.java:20–31`扫描真源与持久revision身份并集；`ListingRagOutbox.java:37–74`同锁事务重新读取完整当前投影并经相同outbox发布，覆盖物理删除身份。
+- `memory-service/src/main/java/com/bkanent/memory/service/MemoryRagBackfillService.java:24–80`受权、有界单页、领域锁后当前快照和持久身份；同`MemoryRagProjectionService` writer lock及投影/outbox逻辑。
+- 完整`ListingRagOutboxTest`和`MemoryRagLifecycleTest`覆盖回填等待writer提交、完整快照重读、更新/删除交错、跨页删除、持久tombstone与事务回滚，683项既有报告已通过。
+- `rag-index-lifecycle/spec.md:69–77`要求未知通用知识隔离不激活。模板不注册supervisor.knowledge，agent默认禁用；这是按规格处理未知归属，不要求新建行业语料，也不宣称通用空间迁移完成。
+- 本项是实现/回归验收，真实旧数据盘点/回填、APPLIED/实际物理投影水位和切流仍保持未完成。QUEUED及nextCursor=null不是双后端应用证据。
+
+### 1.3及剩余17项：保留具体未完成门禁
+
+listing权威grant与memory owner/scope路径已有实现；`ListingRagProperties.java:19–20`、`MemoryRagProperties.java:20–21`默认角色为空，真实active actor/grant、读取/管理角色基线未核对。不能拿测试ADMIN替代实际权限事实，因此1.3不勾选。A2A传输KI-59、旧ID-only证明入口KI-75、合规目标/模型评分/schema、实际SQL/Nacos/部署与切流周期也不被本次复核消除。
+
+必要人工输入、范围决定及授权后由实施方执行的迁移/回填/水位/切流/回滚步骤见[解除阻塞说明](isolated-rag-unblocking-steps.md)。本次只变更文档与checkbox；重新核对既有Surefire报告为683项、0failures/errors/skipped，并运行OpenSpec strict、任务总数/链接/引用范围及diff检查，不声称重新执行Maven或真实后端测试。此前七个外部联调类仍被排除。本轮KI-70～74、KI-76～77修复记录关联实际实施commit ee4c9b9，其他历史条目不改。

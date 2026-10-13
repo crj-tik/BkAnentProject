@@ -385,4 +385,6 @@
 
 **代码位置**：`memory-service/service/MemoryRagBackfillService` / `controller/MemoryController`；`listing-master-service/rag/ListingRagBackfillService` / `ListingRagOutbox`。
 
-**关联**：LR-32、LR-35；KI-73、KI-74、KI-75；逐空间本地清单见 `docs/acceptance/isolated-rag-migration-inventory.md`，真实数据水位、停写排空和旧 RPC 成功路径仍待验收。
+**完成边界复核**：任务8.1验收受权回填实现、同锁完整快照/outbox及更新/删除交错测试；未知通用知识按规格保持隔离，不要求建设新语料，也不宣称该空间迁移完成。真实回填、两路APPLIED/实际投影水位与切流由1.2/8.2/8.3等运行任务单独验收。同理7.2验收首次消费者切流版本源码/配置清理，不以未部署重复阻塞已完成实现；1.3的实际有效grant和角色基线仍需核对，不能据测试ADMIN替代。
+
+**关联**：LR-32、LR-35；KI-73、KI-74、KI-75；逐空间本地清单见 `docs/acceptance/isolated-rag-migration-inventory.md`，真实数据水位、停写排空和旧 RPC 成功路径仍待验收。必要人工决定与授权后执行步骤见 `docs/acceptance/isolated-rag-unblocking-steps.md`。

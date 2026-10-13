@@ -4,6 +4,7 @@
 - [ ] 1.2 盘点旧 REST/RPC/工具/技能/审计 JSON、现有集合与 ES 索引、文档 ID/PK/schema、实际模型维度及旧 ES 写入完整性，形成逐空间迁移清单。
   - 本地源码/历史模板逐空间清单已建立：`docs/acceptance/isolated-rag-migration-inventory.md`。真实 PK/schema/模型与数量/hash/权限/删除水位未盘点，不据本地名称完成本项。
 - [ ] 1.3 核对各知识空间的真源与权限依据；明确 listing 资源授权签发路径、memory owner/管理基线与通用知识归属，未知归属数据隔离不激活。
+  - 权威grant/owner/scope路径和未知通用知识隔离已实现；真实有效grant、读取/管理角色基线仍未核对，默认空角色不凭测试ADMIN放行。必要人工输入与授权后执行步骤见`docs/acceptance/isolated-rag-unblocking-steps.md`。
 - [ ] 1.4 检查实际 namespace/group/data ID、生效配置、端口清单、镜像/config 快照与依赖树；记录 KI-37/38/39/42/48/50/51/53 对受影响路径的门禁，不扩张为全仓修复。
 - [x] 1.5 识别所有 RAG HTTP transport 与 DNS/连接扩展点，记录合规真实目标缺口；内网 ES/host.docker.internal 不放行、不擅自替换或公开，未满足时阻塞真实联调/切流但可继续非联网实现。
 
@@ -57,15 +58,16 @@
 ## 7. 配置、部署与能力诊断
 
 - [ ] 7.1 新增 rag-service Nacos及应用配置，独立bk_rag/RPC/空间/后端/安全/评分策略；验证数据ID、namespace/group与实际生效一致，不依赖无人导入mysql-common。
-- [ ] 7.2 在首次消费者切流版本同步迁走/删除来源执行类、bean、初始化及执行依赖，不能只关配置或删starter留源码；拆分Compose环境锚点，后端配置仅归RAG，保留chat与营销业务配置。
+- [x] 7.2 在首次消费者切流版本同步迁走/删除来源执行类、bean、初始化及执行依赖，不能只关配置或删starter留源码；拆分Compose环境锚点，后端配置仅归RAG，保留chat与营销业务配置。
+  - 以ee4c9b9完整源码/POM/应用/Nacos/Compose及可执行JAR重新核验，来源执行已实质迁出，chat/营销独立配置保留；本项验收首切版本代码与模板，不代替7.1/7.3/8.3真实生效、部署与切流。见本地验收记录“任务完成边界复核”。
 - [ ] 7.3 沿用项目Dockerfile模块构建新增独立bk-anent-rag镜像/JAR、受管端口与RPC发现，明确memory Dubbo接线；不混用外部reranker镜像规则或操作其容器。
 - [x] 7.4 实现基础readiness与每空间/检索阶段能力诊断、schema/模型维度/重排协议与安全gate；消费者不以RAG后端作为全局硬启动/就绪依赖。
 - [x] 7.5 更新仅受影响服务的启动/诊断/迁移清单，记录配置/镜像水位及默认混合路径真实验收命令，失败保留非零结果，不以TCP/running或strict validate证明完成。
 
 ## 8. 回填、切流、清理与验证
 
-- [ ] 8.1 实现受权backfill：在领域事务中一致读取/锁定revision和完整快照，经相同outbox发布，水位含持久删除身份；测试回填与更新/删除交错收敛，通用知识先整理归属，未知语料不公开。
-  - memory原POST改为默认100/最大500的分阶段keyset单页，返回cursor/nextCursor/scanned/QUEUED receipts，覆盖持久删除与更新交错；nextCursor=null不是双后端APPLIED或跨页原子快照。通用知识归属、真实回填和水位未验收。
+- [x] 8.1 实现受权backfill：在领域事务中一致读取/锁定revision和完整快照，经相同outbox发布，水位含持久删除身份；测试回填与更新/删除交错收敛，通用知识先整理归属，未知语料不公开。
+  - listing与memory受权回填、领域锁内完整真源投影及统一outbox、持久删除身份和更新/删除交错回归已完成；memory默认100/最大500的分阶段keyset单页返回cursor/nextCursor/scanned/QUEUED receipts。未知通用知识按spec保持隔离、supervisor.knowledge未注册/激活，不宣称通用语料迁移完成。nextCursor=null不是双后端APPLIED或跨页原子快照；真实盘点/回填/应用水位和切流仍属1.2/8.2/8.3等未完成门禁。见本地验收记录“任务完成边界复核”。
 - [ ] 8.2 在经授权且URL合规的真实目标验证新索引/集合、旧身份映射、两路过滤等价、删除/更新/partial写补偿和默认重排；缺目标时标阻塞，不用单路或stub替代完整验收。
 - [ ] 8.3 执行短暂停写、旧writer/在途RPC排空、增量追平、配置/镜像备份及消费者切流；仅全部安全/身份/数据/能力gate通过才恢复写入。
 - [ ] 8.4 验证RAG停机时领域结构化功能与无知识Supervisor仍可用；验证显式降级标记、旧接口/技能、跨域跨用户反例及历史审计恢复。
