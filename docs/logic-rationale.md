@@ -366,3 +366,23 @@
 **代码位置**：`agent-service/orchestration/OrchestrationStore.completeKnowledgeRead`、`SupervisorToolLoopGraph`；生产 Graph 回归覆盖 timeout/late/reuse/legacy claim 与异步专用凭据租约。
 
 **关联**：LR-18、LR-22、LR-23、LR-33；KI-67；本次没有新增状态机 transition 调用点。
+
+## LR-38 记忆扩池累计预算与最终评分快照分开管理
+
+**结论**：一次领域 search 的所有候选和最多两次远程池共用一个评分 asOf；首池与扩池按 documentId 合并、重复身份采用后次候选，合并后重新核对当前 SQL。最终 topK 不提前裁剪候选池，公共候选 metadata 只包含领域声明的返回字段。召回总预算为 max(500, 首次选中路数量之和)；合法显式首池数量不改写，耗尽则不扩池，首池未填满也不盲目追加。
+
+**根因**：逐候选采样时间可把相同输入评分变成遍历时序差异；只用第二池会丢首池幸存者，逐次有界不等于总成本有界。保留候选不能跳过第二次真源变化核对，也不能为补足 topK 重新执行域内召回。owner/user 字段存在于授权索引不等于允许全部公开为候选 metadata。
+
+**代码位置**：`memory-service/service/MemoryRagSearchFacade` 及确定时钟/合池/预算/公共 metadata 回归。
+
+**关联**：LR-31、LR-35；KI-70、KI-71、KI-72；实际评分 profile 注册和真实双路验收仍未完成。
+
+## LR-39 回填页与遗留重建证明均不等于迁移完成
+
+**结论**：memory 回填按源身份和持久投影身份分阶段 keyset 游标做至多500项的单页，包含持久删除身份，在同一领域锁事务重新读取快照并发布同一 outbox；返回游标与 QUEUED receipts，不宣称双后端已应用。listing 遗留 reconcile 除 revision/intent/存储 hash 外，必须复用当前完整投影装配并匹配证明 hash，任何不一致不得推进 revision 或写事件。
+
+**根因**：全表扫描持有全局 writer 锁会把迁移成本转成无界在线阻塞。持久 revision 行的 hash 不能独立证明当前正文/grant 未被遗留写路径改变；重复装配逻辑会引入另一套投影。ID-only 旧调用没有认证和证明参数，配置开关不是排空事实，不能让 agent 查询最新状态后自行认定旧事务已提交。
+
+**代码位置**：`memory-service/service/MemoryRagBackfillService` / `controller/MemoryController`；`listing-master-service/rag/ListingRagBackfillService` / `ListingRagOutbox`。
+
+**关联**：LR-32、LR-35；KI-73、KI-74、KI-75；逐空间本地清单见 `docs/acceptance/isolated-rag-migration-inventory.md`，真实数据水位、停写排空和旧 RPC 成功路径仍待验收。

@@ -62,7 +62,7 @@ git diff --check
 - `D:/project/rag-reactor-verified-test.log`。
 - `D:/project/rag-reactor-verified-package.log`。
 
-### 最终结果
+### 首次实施验证结果（74c8d92）
 
 全 reactor 21 个项目的 clean compile、test、package 均 BUILD SUCCESS。选中测试 647 项，test 与 package 重跑各自均 0 failures / 0 errors / 0 skipped；七个真实联调类在选择器中显式排除，不能称所有真实联调通过。
 
@@ -95,6 +95,37 @@ memory-service          827c9e06884bc1d1ee6c032e136979074d0e8e4d04e2ea5cfa973764
 ```
 
 严格 OpenSpec validation、diff whitespace 检查通过；最终模板代理离线严格解析 10 个 YAML、35 项选中断言，三部署脚本 bash -n/LF 与 chat/MCP 保留断言通过。最终静态漏接修复涉及 memory 管理角色键/registry、listing 入站 agent key 透传及精确 readiness 文案，仍留空角色/密钥，不表示环境已配置。旧首轮 JAR hash 因最终源码变化不再作为交付证据。
+
+## 继续 apply：有界领域处理与迁移盘点
+
+本轮新增36项测试，不更换架构或启用实际提供方。修复记忆逐候选采样时刻、第二池丢首池与累计召回无预算、最终metadata白名单、null语义版本错误；memory回填改为默认100/最大500的分阶段keyset单页；listing reconcile在同锁事务中复用装配并匹配当前完整projection hash后才推进revision。旧ID-only索引RPC仍失败关闭，不据配置开关补造旧事务/排空证明。新逐空间源码/历史模板盘点见 [isolated-rag-migration-inventory.md](isolated-rag-migration-inventory.md)。
+
+memory原 `POST /internal/memory/rag/backfill` 保留，增加可选cursor/limit。默认cursor=`p:0`，依次扫描偏好源、约束源、持久投影身份；响应为cursor/nextCursor/scanned/hasMore/receipts，每receipt只声明QUEUED。空阶段页仍可能有nextCursor；客户端必须续页，nextCursor=null仅表示本轮扫描结束，不能当跨页原子快照或双后端APPLIED水位。旧返回count不再表示无界全库操作。
+
+### 本轮失败和修复
+
+定向首跑在新同分评分测试抛UnfinishedStubbing：mock Instant的thenReturn参数内计算plusSeconds触发被mock的静态构造。将第二时刻提前构造后，第二跑的全局now次数断言计入H2内部时钟而失败（25次，领域search实际1次）。最终测试不统计数据库内部时钟，保留向后前进的时钟、反向上游同分顺序、两候选精确.36分数及三次重复断言；若退回逐候选SQL后采样，分数会成为.18并被断言拒绝。未改生产clock、加sleep或放宽业务评分断言。见KI-77。
+
+定向最终9个测试类89项通过（agent8/memory39/rag23/listing19）。随后所有代理冻结，串行执行本记录相同的全仓离线clean compile/test/package命令及同样七类外部排除；21个reactor项目全部BUILD SUCCESS。test与package各683项，0 failures/errors/skipped；memory46、rag184、listing31，其余模块数量不变。新增测试包含实际H2事务、Mockito签名/RPC边界和本机夹具，不作为真实MySQL/ES/Milvus证明。
+
+原始日志：
+- `D:/project/rag-followup-targeted-test.log`（首次夹具错误）。
+- `D:/project/rag-followup-targeted-fixed.log`（全局时钟次数错误）。
+- `D:/project/rag-followup-targeted-final.log`（89项通过）。
+- `D:/project/rag-followup-reactor-compile.log`。
+- `D:/project/rag-followup-reactor-test.log`。
+- `D:/project/rag-followup-reactor-package.log`。
+
+四个新可执行JAR的Boot JarLauncher、对应实际Start-Class、BOOT-INF/classes与后端依赖隔离均重新核验。源码/POM依赖声明本轮未变；前三消费者仍无实际Milvus/OpenAI embedding/ES后端库，通用Spring AI接口/HttpClient5不被误删。当前SHA-256（替代本记录前次构建hash）：
+
+```text
+rag-service             01c9c128e5b77357e435c2d51f1192fdfe6179814640e93b05a7bd505c550258
+agent-service           b3e0a3a3556febc1ab6ed20d38f20d24e0e1fa80d458b687f68536ee46c9c3b9
+listing-master-service  30bd7cffbd6af923f22f87a38e4b9f3e3a943f09d6f4e7fce7b03bc12f302794
+memory-service          d6eb61f9c9732b543fff6ee1d661ff5ad69c611e1f41351f0928cb96fdc74e55
+```
+
+OpenSpec strict与diff whitespace通过。本轮没有模板配置改动、Docker/发布/真实SQL/backend操作、完整安全审计或状态机transition新增。任务仍30/49：补齐本地子项不替代实际环境/profile/身份传输/旧调用证明/切流要求。
 
 ## 真实环境未执行与切流阻塞
 

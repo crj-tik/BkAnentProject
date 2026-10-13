@@ -44,11 +44,22 @@ public class ListingRagOutbox {
         ListingEntity current = listings.selectById(id);
         return publishLocked(id, current);
     }
+    /** Reconciliation must prove the complete current payload, not only the stored revision hash. */
+    public RagIndexEvent publishCurrent(Long id, String expectedHash) {
+        lock(id);
+        return publishLocked(id, listings.selectById(id), expectedHash);
+    }
     public RagIndexEvent publishLocked(Long id, ListingEntity current) {
-        long revision = jdbc.queryForObject("SELECT revision FROM listing_rag_revision WHERE listing_id=? FOR UPDATE", Long.class, id) + 1;
+        return publishLocked(id, current, null);
+    }
+    private RagIndexEvent publishLocked(Long id, ListingEntity current, String expectedHash) {
         RagIndexOperation operation = current == null ? RagIndexOperation.DELETE : RagIndexOperation.UPSERT;
         RagDocument document = current == null ? null : document(current);
         String hash = RagCanonicalHash.documentHash(operation, document);
+        if (expectedHash != null && !expectedHash.equals(hash)) {
+            throw new RagException(RagErrorCode.LEGACY_RECONCILIATION_REQUIRED);
+        }
+        long revision = jdbc.queryForObject("SELECT revision FROM listing_rag_revision WHERE listing_id=? FOR UPDATE", Long.class, id) + 1;
         String eventId = UUID.randomUUID().toString();
         Instant now = Instant.now();
         RagIndexEvent event = new RagIndexEvent(1, eventId, eventId, ListingRagIdentity.SPACE,

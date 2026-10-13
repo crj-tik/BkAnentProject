@@ -321,6 +321,84 @@
 
 **修复**：仅测试在首次启用派发前显式设置到期时间，保留 2/3 次提交、相同 eventId/revision、TIMEOUT 与 attempts 断言；新增固定时钟边界回归，确认未来行不变、到期后才应用。不修改生产时钟/签名/调度、不加 sleep 或弱化断言。复现与最终验证见 `docs/acceptance/isolated-rag-local-verification.md`。
 
+## KI-70 [FIXED·本提交·P2] 记忆领域衰减逐候选采样时间导致排序依赖遍历时序
+
+**确认依据**：独立 RAG 继续 apply 的本地源码核对，未调用真实提供方。
+
+**现象与根因**：MemoryRagSearchFacade 在候选循环内调用 Instant.now，且扩池再次采样；相同相关度、confidence、观测时间可能因处理先后得到不同分数，破坏确定同分顺序。
+
+**修复（本提交）**：一次领域 search 捕获统一 asOf，所有池共用；补充固定时钟的精确半衰期与同分顺序测试。见 LR-38。
+
+**验证**：本轮定向89项和全reactor683项test/package均通过，实际运行门禁仍开放；见 `docs/acceptance/isolated-rag-local-verification.md`。
+
+## KI-71 [FIXED·本提交·P2] 记忆扩池替换首池且未累计召回预算
+
+**确认依据**：本地源码及 D6 对账，未执行真实召回。
+
+**现象与根因**：第二次 retrieval 整体替换第一次，首池有效但第二池未出现的候选丢失；每次合法数量仍可能累计超过域预算，显式500+500可再次请求。首池不足额时仍扩池也没有足量依据。
+
+**修复（本提交）**：最多两池按documentId合并、后次重复身份覆盖，最终全池再次SQL核对；预算max(500,首池选中路数量和)，保留显式初始数量，不足池或预算耗尽不扩。补充候选保留、重复、真源更新、单路及最大显式数量回归。见 LR-38。
+
+**验证**：本轮定向89项和全reactor683项test/package均通过，实际运行门禁仍开放；见 `docs/acceptance/isolated-rag-local-verification.md`。
+
+## KI-72 [FIXED·本提交·P2] 记忆最终候选 metadata 超出领域公共返回集合
+
+**确认依据**：本地MemoryRagSearchFacade与空间模板字段核对，不代表跨用户数据泄漏。
+
+**现象与根因**：偏好从SQL重建后直接返回全部projection attributes，包括索引授权userId/ownerId；真源重建保证内容正确，但不自动保证公共metadata白名单。
+
+**修复（本提交）**：偏好只返回preferenceKey/category/confidence/observationCount/lastObservedAt/active；约束constraintKey/category/tags/active，保留索引授权属性及独立已授权业务record响应。添加精确typed字段集合断言，stageStats仍为空。见 LR-38。
+
+**验证**：本轮定向89项和全reactor683项test/package均通过，实际运行门禁仍开放；见 `docs/acceptance/isolated-rag-local-verification.md`。
+
+## KI-73 [FIXED·本提交·P2] 记忆回填全表扫描持有全局 writer 锁
+
+**确认依据**：MemoryRagBackfillService本地源码，与设计分批回填要求对账，未运行真实回填。
+
+**现象与根因**：原入口无cursor/limit，一次事务扫描全部偏好、约束和持久投影表并持有writer锁；数据量增长时在线写入阻塞无界，仅返回count也不能表达分页或应用水位。
+
+**修复（本提交）**：稳定keyset分阶段单页，默认100、最大500，每页保留锁后当前SQL快照、完整outbox和持久删除身份；返回cursor/nextCursor/QUEUED receipts，非APPLIED水位。补分页边界、缺失源tombstone与更新/删除交错回归。见 LR-39。
+
+**验证**：本轮定向89项和全reactor683项test/package均通过，实际运行门禁仍开放；见 `docs/acceptance/isolated-rag-local-verification.md`。
+
+## KI-74 [FIXED·本提交·P1] 房源遗留 reconcile 未把证明 hash 与当前完整投影比较
+
+**确认依据**：ListingRagBackfillService/ListingRagOutbox本地源码核对，旧代理尚未切流。
+
+**现象与根因**：expectedHash只与持久revision行比较，publishCurrent另行装配当前source/grant并推进revision；若遗留未受管写改变正文/授权而未同步revision，可接受不匹配证明的重建。
+
+**修复（本提交）**：复用Outbox装配，在同一锁事务、任何revision/outbox写入前比较当前完整投影hash；不一致返回LEGACY_RECONCILIATION_REQUIRED。补成功upsert/delete、正文/grant漂移、源重建、签名拒绝及提交后派发失败回归。见 LR-39。
+
+**验证**：本轮定向89项和全reactor683项test/package均通过，实际运行门禁仍开放；见 `docs/acceptance/isolated-rag-local-verification.md`。
+
+## KI-75 [OPEN·P1] 旧 ID-only 索引 RPC 缺可信遗留重建输入路径
+
+**确认依据**：旧AgentRpcService签名/provider与领域reconcile契约本地核对，没有真实排空或调用证据。
+
+**现象与根因**：syncListingKnowledge(Long)/deleteListingKnowledge(Long)无入站认证、expected revision/hash及排空证据，当前有效调用总是LEGACY_RECONCILIATION_REQUIRED，没有D9要求的条件成功路径。独立signed reconcile contract存在，但无生产旧入口能提供可信证明；由agent查询当前状态自签名不能证明原事务或顺序。
+
+**处置**：维持ID-only路径失败关闭、不发事件；task6.7未完成。需另确认获准证明输入路径及真实stop-write/drain事实，不能用配置boolean、反射、模型metadata或新认证DSL补造证据。见LR-39与逐空间迁移清单。
+
+## KI-76 [FIXED·本提交·P2] 记忆语义版本缺失触发允许集合 NPE
+
+**确认依据**：本地评分反例补充时核对Set.copyOf允许集与null候选版本，未调用真实模型。
+
+**现象与根因**：immutable允许集合的contains(null)可抛NullPointerException，缺失scoringVersion未稳定返回约定的SCORING_PROFILE_MISMATCH；不能将这种输入错误当依赖不可用或通过默认模型版本掩盖。
+
+**修复（本提交）**：先检查null版本，再校验受管允许集合与相关度字段；补非空允许集下未知/null版本、缺分数和两rank模式阈值反例。真实版本仍须独立profile证据注册。
+
+**验证**：本轮定向89项和全reactor683项test/package均通过，实际运行门禁仍开放；见 `docs/acceptance/isolated-rag-local-verification.md`。
+
+## KI-77 [FIXED·本提交·P2] 新记忆评分回归误把全进程 Instant 调用当领域时钟次数
+
+**确认依据**：本轮串行定向Maven实际失败日志，纯本地夹具。
+
+**现象与根因**：static mock的thenReturn参数内调用Instant.plusSeconds触发另一个被mock的静态构造，造成UnfinishedStubbing；移出参数后全局verify(now,times(1))又计入H2事务的24次内部时钟调用。领域评分没有重复采样的生产故障证据。
+
+**修复（本提交）**：预先构造第二时刻，保留会前进的静态时钟、反向上游顺序、两条精确半衰期分数与重复运行断言；不统计数据库内部时钟，不加sleep或改生产clock。若恢复逐候选SQL后采样，其分数将从.36变为.18，精确断言仍能拒绝该回归。原始失败与重跑见本地验收记录。
+
+**验证**：本轮定向89项和全reactor683项test/package均通过，实际运行门禁仍开放；见 `docs/acceptance/isolated-rag-local-verification.md`。
+
 ## KI-46 [FIXED·本提交·P2] 受管 A2A 技能激活缺少技能名与任务锚点日志
 
 **确认日期**：2026-10-10（`create-common-skill-module` 5.5 冒烟前置检查，源码确认）。

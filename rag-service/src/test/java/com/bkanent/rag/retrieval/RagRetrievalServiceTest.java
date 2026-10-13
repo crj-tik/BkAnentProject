@@ -1,7 +1,10 @@
 package com.bkanent.rag.retrieval;
 
 import com.bkanent.common.rag.*;
+import com.bkanent.rag.storage.RagSpaceDefinition;
+import com.bkanent.rag.storage.RagSpaceRegistry;
 import org.junit.jupiter.api.Test;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -128,6 +131,63 @@ class RagRetrievalServiceTest {
             assertThrows(RagException.class, () -> service.search(request(false, RagFailurePolicy.STRICT),
                     List.of(new RagFilter("nativeFilter", RagFilterOperator.EQ, RagValue.string("*")))));
             assertEquals(2, calls.get());
+        } finally { service.close(); }
+    }
+    @Test void memoryCategoryAndInclusiveTimeFiltersReachBothRoutesWithMandatoryOwner() {
+        var base = space();
+        Map<String, RagSpaceDefinition.FilterField> fields = new HashMap<>(base.fields());
+        fields.put("userId", new RagSpaceDefinition.FilterField(RagValueType.STRING, Set.of(RagFilterOperator.EQ), true));
+        fields.put("category", new RagSpaceDefinition.FilterField(RagValueType.STRING,
+                Set.of(RagFilterOperator.EQ, RagFilterOperator.IN), true));
+        fields.put("lastObservedAt", new RagSpaceDefinition.FilterField(RagValueType.INSTANT,
+                Set.of(RagFilterOperator.GTE, RagFilterOperator.LTE), true));
+        var memory = new RagSpaceDefinition("memory.preference", "memory", base.policyVersion(), base.schemaVersion(),
+                "rag_memory_preference_v1", base.vectorSchema(), fields, Set.of("category", "lastObservedAt"),
+                base.searchRoles(), base.adminRoles(), base.allowedClients(), base.limits(), base.rerankProfile());
+        RagSpaceRegistry memoryRegistry = new RagSpaceRegistry() {
+            public RagSpaceDefinition require(String id) { assertEquals(memory.spaceId(), id); return memory; }
+            public RagSpaceDefinition requireReady(String id) { return require(id); }
+        };
+        var owner = new RagFilter("userId", RagFilterOperator.EQ, RagValue.string("7"));
+        var active = new RagFilter("active", RagFilterOperator.EQ, RagValue.bool(true));
+        var category = new RagFilter("category", RagFilterOperator.IN, RagValue.strings(List.of("deployment")));
+        var lower = new RagFilter("lastObservedAt", RagFilterOperator.GTE,
+                RagValue.instant(Instant.parse("2026-10-10T00:00:00.000000001Z")));
+        var upper = new RagFilter("lastObservedAt", RagFilterOperator.LTE,
+                RagValue.instant(Instant.parse("2026-10-12T00:00:00.999999999Z")));
+        var input = request(false, RagFailurePolicy.STRICT);
+        var search = new RagSearchRequest(1, input.requestId(), memory.spaceId(), input.query(),
+                List.of(category, lower, upper), input.recall(), input.fusion(), false, null,
+                input.candidateLimit(), input.failurePolicy());
+        Map<RagRecallMode, List<RagFilter>> received = new java.util.concurrent.ConcurrentHashMap<>();
+        var service = new RagRetrievalService(memoryRegistry,
+                (s, q, f, n, d) -> { received.put(RagRecallMode.KEYWORD, List.copyOf(f)); return List.of(); },
+                (s, q, f, n, d) -> { received.put(RagRecallMode.VECTOR, List.copyOf(f)); return List.of(); },
+                rank, (s, c) -> true, 2);
+        try {
+            assertTrue(service.search(search, List.of(owner, active)).candidates().isEmpty());
+            var expected = List.of(owner, active, category, lower, upper);
+            assertEquals(Map.of(RagRecallMode.KEYWORD, expected, RagRecallMode.VECTOR, expected), received);
+            assertEquals(List.of(category, lower, upper), search.filters());
+        } finally { service.close(); }
+    }
+    @Test void candidateLimitIsAppliedOnlyAfterRerankingTheFullFusionPool() {
+        var service = new RagRetrievalService(registry(),
+                (s, q, f, n, d) -> List.of(hit("a", 100, RagRecallMode.KEYWORD), hit("b", 90, RagRecallMode.KEYWORD)),
+                (s, q, f, n, d) -> List.of(hit("c", .9, RagRecallMode.VECTOR), hit("d", .8, RagRecallMode.VECTOR)),
+                (q, candidates, p) -> {
+                    assertEquals(List.of("a", "c", "b", "d"), candidates.stream().map(RagCandidate::documentId).toList());
+                    var reordered = new ArrayList<>(candidates);
+                    Collections.reverse(reordered);
+                    return reordered;
+                }, (s, c) -> true, 2);
+        try {
+            var result = service.search(request(true, RagFailurePolicy.STRICT), List.of());
+            assertEquals(List.of("d", "b"), result.candidates().stream().map(RagCandidate::documentId).toList());
+            assertEquals(RagSearchMode.HYBRID_RERANK, result.effectiveMode());
+            assertFalse(result.degraded());
+            assertEquals(4, result.stageStats().stream().filter(s -> s.stage() == RagStage.FUSION).findFirst().orElseThrow().candidateCount());
+            assertEquals(4, result.stageStats().stream().filter(s -> s.stage() == RagStage.RERANK).findFirst().orElseThrow().candidateCount());
         } finally { service.close(); }
     }
     @Test void knownProbeDownStillAllowsOnlyExplicitDegradedRuntimeRecall() {

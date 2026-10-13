@@ -2,6 +2,7 @@
 
 - [x] 1.1 重新读取 LR/KI、主规格及本设计，核对真实源码/消费者清单；确认旧 split-rag-by-domain 不实施，不归档或覆盖其历史工件。
 - [ ] 1.2 盘点旧 REST/RPC/工具/技能/审计 JSON、现有集合与 ES 索引、文档 ID/PK/schema、实际模型维度及旧 ES 写入完整性，形成逐空间迁移清单。
+  - 本地源码/历史模板逐空间清单已建立：`docs/acceptance/isolated-rag-migration-inventory.md`。真实 PK/schema/模型与数量/hash/权限/删除水位未盘点，不据本地名称完成本项。
 - [ ] 1.3 核对各知识空间的真源与权限依据；明确 listing 资源授权签发路径、memory owner/管理基线与通用知识归属，未知归属数据隔离不激活。
 - [ ] 1.4 检查实际 namespace/group/data ID、生效配置、端口清单、镜像/config 快照与依赖树；记录 KI-37/38/39/42/48/50/51/53 对受影响路径的门禁，不扩张为全仓修复。
 - [x] 1.5 识别所有 RAG HTTP transport 与 DNS/连接扩展点，记录合规真实目标缺口；内网 ES/host.docker.internal 不放行、不擅自替换或公开，未满足时阻塞真实联调/切流但可继续非联网实现。
@@ -45,10 +46,12 @@
 - [x] 6.1 实现房源授权检索 facade：请求 RAG、按 ID 批量读取最新详情并重验权限/状态/条件、映射旧 match/context；最多一次有界扩大候选，不反向从 RAG 读业务。
 - [ ] 6.2 将 searchListingsByKeyword 保留为领域包装的默认混合检索工具，更新 description/listing-search 技能并验证真实房源 Agent 调用；SQL 列表/详情与营销独立搜索不变。
 - [ ] 6.3 实现记忆检索消费与真源可用性/最终排序分层，注册实际评分元数据；覆盖相关度尺度、阈值、时间硬过滤与软衰减区别、候选池不提前裁成最终topK，不强制示例权重或新评分 DSL。
+  - 本地统一评分时刻、两池去重/再次真源复核、累计预算、返回metadata白名单和评分/时间/RPC反例已补齐；实际rerank profile及memory允许scoringVersion尚未验证注册，本项未完成。
 - [x] 6.4 将约束 bootstrap/YAML资源迁入 memory，遵守启用开关、仅补缺、人工修改/停用不覆盖；所有更新生成领域事件，agent 不再重复执行初始化或双写。
 - [x] 6.5 将 milvusKnowledgeSearch 改为远程代理，保留能力身份/格式化/recordMilvus及工具审计；在生产Graph接线真实知识禁用和授权空间，不固定true或允许模型物理寻址。
 - [x] 6.6 保留真实六组旧REST方法/路径/成功字段，接线权限/别名/schema维度及房源facade；实现旧数量映射20+20/最终10、工具topK候选池，覆盖新旧默认、显式边界及非法关系，不静默改显式数量。
 - [ ] 6.7 实现旧Agent索引RPC的停写排空后有限纯代理，依据已确认真源/revision生成事件；未提交/回滚/删除次序不明返回LEGACY_RECONCILIATION_REQUIRED，覆盖旧删除不误删较新状态，不创建无限待处理队列。
+  - 领域signed reconcile已补当前完整投影hash证明和正向/拒绝/提交后派发失败回归；旧ID-only入口仍无可信认证与证明输入路径，不能自签名补造，保持失败关闭。见KI-74/75；真实排空及条件成功代理未完成。
 - [x] 6.8 区分确定只读失败/权限拒绝/参数错/结果未知，验证旧 chat/milvusResults/checkpoint只读反序列化、已完成调用不重发；如新增transition，按KI-2逐调用点增加测试。
 
 ## 7. 配置、部署与能力诊断
@@ -62,6 +65,7 @@
 ## 8. 回填、切流、清理与验证
 
 - [ ] 8.1 实现受权backfill：在领域事务中一致读取/锁定revision和完整快照，经相同outbox发布，水位含持久删除身份；测试回填与更新/删除交错收敛，通用知识先整理归属，未知语料不公开。
+  - memory原POST改为默认100/最大500的分阶段keyset单页，返回cursor/nextCursor/scanned/QUEUED receipts，覆盖持久删除与更新交错；nextCursor=null不是双后端APPLIED或跨页原子快照。通用知识归属、真实回填和水位未验收。
 - [ ] 8.2 在经授权且URL合规的真实目标验证新索引/集合、旧身份映射、两路过滤等价、删除/更新/partial写补偿和默认重排；缺目标时标阻塞，不用单路或stub替代完整验收。
 - [ ] 8.3 执行短暂停写、旧writer/在途RPC排空、增量追平、配置/镜像备份及消费者切流；仅全部安全/身份/数据/能力gate通过才恢复写入。
 - [ ] 8.4 验证RAG停机时领域结构化功能与无知识Supervisor仍可用；验证显式降级标记、旧接口/技能、跨域跨用户反例及历史审计恢复。

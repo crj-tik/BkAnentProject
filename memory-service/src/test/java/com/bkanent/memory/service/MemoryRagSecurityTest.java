@@ -2,14 +2,18 @@ package com.bkanent.memory.service;
 
 import com.bkanent.common.rag.*;
 import com.bkanent.memory.config.MemoryRagProperties;
+import com.bkanent.memory.rpc.MemoryRagRpcServiceImpl;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 class MemoryRagSecurityTest {
     @Test
@@ -48,6 +52,105 @@ class MemoryRagSecurityTest {
         var signed = RagRequestSigner.sign(unsigned, caller.getSecret().getBytes(StandardCharsets.UTF_8));
         assertEquals(RagErrorCode.FORBIDDEN, assertThrows(RagException.class, () -> f.security.verifyCaller(business, "request", signed, f.credentials)).code());
     }
+    @Test
+    void defaultsAndNullAllowedSetsRemainFailClosed() {
+        var properties = new MemoryRagProperties();
+        assertTrue(properties.getSemanticScoringVersions().isEmpty());
+        assertTrue(properties.getConstraintReadRoles().isEmpty());
+        assertTrue(properties.getConstraintAdminRoles().isEmpty());
+        assertTrue(properties.getTrustedCallers().isEmpty());
+        assertNull(properties.getSigningSecret());
+        assertNull(properties.getAuthSigningSecret());
+        assertFalse(properties.isDispatcherEnabled());
+        var security = new MemoryRagSecurity(properties, (c, a) -> { fail("no principal RPC"); return null; });
+        var principal = MemoryRagTestSupport.principal("ADMIN");
+        assertEquals(RagErrorCode.FORBIDDEN, assertThrows(RagException.class, () -> security.requireConstraintRead(principal)).code());
+        assertEquals(RagErrorCode.FORBIDDEN, assertThrows(RagException.class, () -> security.requireAdmin(principal)).code());
+        properties.setSemanticScoringVersions(Set.of("test-only-version"));
+        properties.setConstraintReadRoles(Set.of("ADMIN"));
+        properties.setConstraintAdminRoles(Set.of("ADMIN"));
+        properties.setSemanticScoringVersions(null);
+        properties.setConstraintReadRoles(null);
+        properties.setConstraintAdminRoles(null);
+        assertTrue(properties.getSemanticScoringVersions().isEmpty());
+        assertTrue(properties.getConstraintReadRoles().isEmpty());
+        assertTrue(properties.getConstraintAdminRoles().isEmpty());
+        assertEquals(RagErrorCode.FORBIDDEN, assertThrows(RagException.class, () -> security.requireConstraintRead(principal)).code());
+        assertEquals(RagErrorCode.FORBIDDEN, assertThrows(RagException.class, () -> security.requireAdmin(principal)).code());
+    }
+
+    private MemoryRagProperties.TrustedCaller caller(MemoryRagTestSupport f) {
+        var caller = new MemoryRagProperties.TrustedCaller();
+        caller.setCallerService("agent-service");
+        caller.setSecret("agent-test-independent-secret-32-bytes");
+        f.properties.setTrustedCallers(Map.of("agent-current", caller));
+        return caller;
+    }
+
+    private RagAuthEnvelope signed(MemoryRagSearchRequest business, MemoryRagTestSupport f,
+                                   MemoryRagProperties.TrustedCaller caller, RagActorMode mode, String actor) {
+        long now = Instant.now().getEpochSecond();
+        var envelope = new RagAuthEnvelope(1, "agent-current", "memory-service", "agent-service", RagOperation.SEARCH,
+                business.search().requestId(), RagCanonicalHash.requestHash(business), mode, actor, now, now + 60,
+                mode == RagActorMode.USER ? RagCanonicalHash.credentialDigest(f.credentials) : null, null);
+        return RagRequestSigner.sign(envelope, caller.getSecret().getBytes(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void rpcDirectBoundaryDelegatesSignedUserRequestWithResolvedPrincipal() {
+        var f = new MemoryRagTestSupport();
+        var caller = caller(f);
+        var business = new MemoryRagSearchRequest(RagSearchRequest.defaults("rpc", "memory.preference", "query"), 5, .7, 30.0);
+        var facade = mock(MemoryRagSearchFacade.class);
+        var expected = new MemoryRagSearchResponse(MemoryRagTestSupport.response(business.search(), List.of()), List.of(), MemoryRagSearchFacade.SCORING);
+        when(facade.search(eq(business), any(AuthRagPrincipal.class), same(f.credentials))).thenAnswer(invocation -> {
+            AuthRagPrincipal principal = invocation.getArgument(1);
+            assertEquals(42L, principal.userId());
+            assertEquals("ADMIN", principal.roleCode());
+            assertNotNull(principal.attestation());
+            return expected;
+        });
+        var rpc = new MemoryRagRpcServiceImpl(f.security, facade);
+        assertSame(expected, rpc.search(business, signed(business, f, caller, RagActorMode.USER, "42"), f.credentials));
+        verify(facade, times(1)).search(eq(business), any(AuthRagPrincipal.class), same(f.credentials));
+        verifyNoMoreInteractions(facade);
+    }
+
+    @Test
+    void rpcDirectBoundaryRejectsTamperedDomainOptionsBeforeFacade() {
+        var f = new MemoryRagTestSupport();
+        var caller = caller(f);
+        var search = RagSearchRequest.defaults("rpc", "memory.preference", "query");
+        var business = new MemoryRagSearchRequest(search, 5, .7, 30.0);
+        var authentication = signed(business, f, caller, RagActorMode.USER, "42");
+        var facade = mock(MemoryRagSearchFacade.class);
+        var rpc = new MemoryRagRpcServiceImpl(f.security, facade);
+        var tampered = List.of(new MemoryRagSearchRequest(search, 6, .7, 30.0),
+                new MemoryRagSearchRequest(search, 5, .8, 30.0), new MemoryRagSearchRequest(search, 5, .7, 31.0));
+        for (var changed : tampered) {
+            assertEquals(RagErrorCode.AUTHENTICATION_FAILED, assertThrows(RagException.class, () -> rpc.search(changed, authentication, f.credentials)).code());
+        }
+        verifyNoInteractions(facade);
+    }
+
+    @Test
+    void rpcDirectBoundaryRejectsServiceActorWrongUserAndDifferentCredentialsBeforeFacade() {
+        var f = new MemoryRagTestSupport();
+        var caller = caller(f);
+        var business = new MemoryRagSearchRequest(RagSearchRequest.defaults("rpc", "memory.preference", "query"), 5, null, null);
+        var facade = mock(MemoryRagSearchFacade.class);
+        var rpc = new MemoryRagRpcServiceImpl(f.security, facade);
+        assertEquals(RagErrorCode.FORBIDDEN, assertThrows(RagException.class, () -> rpc.search(business,
+                signed(business, f, caller, RagActorMode.SERVICE, "agent-service"), f.credentials)).code());
+        assertEquals(RagErrorCode.FORBIDDEN, assertThrows(RagException.class, () -> rpc.search(business,
+                signed(business, f, caller, RagActorMode.USER, "99"), f.credentials)).code());
+        var signed = signed(business, f, caller, RagActorMode.USER, "42");
+        assertEquals(RagErrorCode.AUTHENTICATION_FAILED, assertThrows(RagException.class, () -> rpc.search(business,
+                signed, new RagCredentialContext("different-test-token"))).code());
+        assertEquals(RagErrorCode.AUTHENTICATION_FAILED, assertThrows(RagException.class, () -> rpc.search(business, null, f.credentials)).code());
+        verifyNoInteractions(facade);
+    }
+
     @Test
     void authRequestUsesMemoryIdentityNotSharedRagKey() {
         var f = new MemoryRagTestSupport();

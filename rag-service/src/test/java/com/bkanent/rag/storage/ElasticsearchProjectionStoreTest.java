@@ -35,6 +35,48 @@ class ElasticsearchProjectionStoreTest {
         assertEquals("strict", mapping.get("dynamic"));
         verifyNoMoreInteractions(operations);
     }
+    @Test void memoryLastObservedAtHasExplicitNanosecondMappingAndRejectsMillisecondSchema() {
+        var base = space();
+        Map<String, RagSpaceDefinition.FilterField> fields = new HashMap<>(base.fields());
+        fields.put("lastObservedAt", new RagSpaceDefinition.FilterField(RagValueType.INSTANT,
+                Set.of(RagFilterOperator.GTE, RagFilterOperator.LTE), true));
+        var memory = new RagSpaceDefinition("memory.preference", "memory", base.policyVersion(), base.schemaVersion(),
+                "rag_memory_preference_v1", base.vectorSchema(), fields, Set.of("lastObservedAt"),
+                base.searchRoles(), base.adminRoles(), base.allowedClients(), base.limits(), base.rerankProfile());
+        ElasticsearchOperations operations = mock(ElasticsearchOperations.class);
+        IndexOperations index = mock(IndexOperations.class);
+        ElasticsearchDeadlineReader reader = mock(ElasticsearchDeadlineReader.class);
+        when(operations.indexOps(IndexCoordinates.of(memory.elasticsearchIndex()))).thenReturn(index);
+        when(index.exists()).thenReturn(true);
+        var store = new ElasticsearchProjectionStore(registry(), operations, new ObjectMapper(), reader);
+        Map<String, Object> mapping = store.mapping(memory);
+        var json = new ObjectMapper().valueToTree(mapping);
+        assertEquals("strict", json.path("dynamic").asText());
+        assertEquals("strict", json.path("properties").path("metadata").path("dynamic").asText());
+        assertEquals(Map.of("type", "date_nanos", "format", "strict_date_optional_time_nanos"),
+                new ObjectMapper().convertValue(json.path("properties").path("metadata").path("properties").path("lastObservedAt"), Map.class));
+        when(index.getMapping()).thenReturn(mapping);
+        assertDoesNotThrow(() -> store.inspectSchema(memory));
+        for (Map<String, String> incompatible : List.of(
+                Map.of("type", "date", "format", "strict_date_optional_time_nanos"),
+                Map.of("type", "date_nanos", "format", "strict_date_optional_time"))) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> actual = new ObjectMapper().convertValue(mapping, Map.class);
+            @SuppressWarnings("unchecked")
+            var properties = (Map<String, Object>) actual.get("properties");
+            @SuppressWarnings("unchecked")
+            var metadata = (Map<String, Object>) properties.get("metadata");
+            @SuppressWarnings("unchecked")
+            var metadataFields = (Map<String, Object>) metadata.get("properties");
+            metadataFields.put("lastObservedAt", incompatible);
+            when(index.getMapping()).thenReturn(actual);
+            assertEquals(RagErrorCode.SPACE_NOT_READY,
+                    assertThrows(RagException.class, () -> store.inspectSchema(memory)).code());
+        }
+        verify(index, never()).create(anyMap(), any());
+        verify(index, never()).putMapping(any(org.springframework.data.elasticsearch.core.document.Document.class));
+        verifyNoInteractions(reader);
+    }
     @Test void inspectRefusesWrongFieldMappingAndProvisionDoesNotOverwriteExistingMapping() {
         ElasticsearchOperations operations = mock(ElasticsearchOperations.class);
         IndexOperations index = mock(IndexOperations.class);

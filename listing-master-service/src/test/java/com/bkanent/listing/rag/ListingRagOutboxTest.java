@@ -109,6 +109,106 @@ class ListingRagOutboxTest {
         assertNull(outbox.revision(99L));
         assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM listing_rag_outbox", Integer.class));
     }
+    @Test void reconciliationAcceptsMatchingCompleteLiveProjectionAndCommittedTombstone() {
+        var backfill = new ListingRagBackfillService(jdbc, mock(ListingRagIdentity.class), outbox, transaction);
+        RagIndexEvent current = transaction.execute(s -> outbox.publishCurrent(11L));
+        RagIndexEvent replay = backfill.reconcile(11L, current.revision(), current.contentHash(), false);
+        assertEquals(2, replay.revision());
+        assertEquals(RagIndexOperation.UPSERT, replay.operation());
+        assertEquals(current.document(), replay.document());
+        assertEquals(current.contentHash(), replay.contentHash());
+        assertEquals(RagErrorCode.LEGACY_RECONCILIATION_REQUIRED, assertThrows(RagException.class,
+                () -> backfill.reconcile(11L, current.revision(), current.contentHash(), false)).code());
+        entity = null;
+        jdbc.update("DELETE FROM listing_info WHERE id=11");
+        RagIndexEvent deletion = transaction.execute(s -> outbox.publishCurrent(11L));
+        RagIndexEvent tombstone = backfill.reconcile(11L, deletion.revision(), deletion.contentHash(), true);
+        assertEquals(4, tombstone.revision());
+        assertEquals(RagIndexOperation.DELETE, tombstone.operation());
+        assertNull(tombstone.document());
+        assertEquals(deletion.contentHash(), tombstone.contentHash());
+        assertEquals(4, jdbc.queryForObject("SELECT COUNT(*) FROM listing_rag_outbox", Integer.class));
+    }
+
+    @Test void reconstructedBodyMetadataAndGrantDriftRejectBeforeAnyRevisionOrOutboxWrite() {
+        var backfill = new ListingRagBackfillService(jdbc, mock(ListingRagIdentity.class), outbox, transaction);
+        RagIndexEvent current = transaction.execute(s -> outbox.publishCurrent(11L));
+        entity.setTitle("drifted body");
+        assertReconciliationRejectedWithoutWrites(backfill, current, false);
+        entity.setTitle("old");
+        entity.setImageUrls("drifted asset metadata");
+        assertReconciliationRejectedWithoutWrites(backfill, current, false);
+        entity.setImageUrls(null);
+        jdbc.update("INSERT INTO listing_rag_grant VALUES(7,11,'SEARCH',TRUE,1,1,CURRENT_TIMESTAMP)");
+        assertReconciliationRejectedWithoutWrites(backfill, current, false);
+        jdbc.update("DELETE FROM listing_rag_grant");
+        assertEquals(RagErrorCode.LEGACY_RECONCILIATION_REQUIRED, assertThrows(RagException.class,
+                () -> backfill.reconcile(11L, current.revision(), "f".repeat(64), false)).code());
+        assertEquals(1, outbox.revision(11L).revision());
+        assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM listing_rag_outbox", Integer.class));
+        // The original online writer still accepts a legitimate new complete projection.
+        entity.setTitle("legitimate update");
+        assertEquals(2, transaction.execute(s -> outbox.publishCurrent(11L)).revision());
+    }
+
+    @Test void sourceDeletionAndRecreationCannotReuseOldLiveOrTombstoneProof() {
+        var backfill = new ListingRagBackfillService(jdbc, mock(ListingRagIdentity.class), outbox, transaction);
+        RagIndexEvent live = transaction.execute(s -> outbox.publishCurrent(11L));
+        ListingEntity saved = entity;
+        entity = null;
+        jdbc.update("DELETE FROM listing_info WHERE id=11");
+        assertReconciliationRejectedWithoutWrites(backfill, live, false);
+        RagIndexEvent tombstone = transaction.execute(s -> outbox.publishCurrent(11L));
+        entity = saved;
+        jdbc.update("INSERT INTO listing_info VALUES(11,0)");
+        assertReconciliationRejectedWithoutWrites(backfill, tombstone, true);
+        // Even with the source restored byte-for-byte, durable tombstone/revision cannot rewind.
+        assertReconciliationRejectedWithoutWrites(backfill, live, false);
+        RagIndexEvent recreated = transaction.execute(s -> outbox.publishCurrent(11L));
+        assertEquals(3, recreated.revision());
+        assertEquals(4, backfill.reconcile(11L, recreated.revision(), recreated.contentHash(), false).revision());
+    }
+
+    @Test void reconciliationWaitsForWriterAndRejectsProofSupersededWhileWaiting() throws Exception {
+        RagIndexEvent initial = transaction.execute(s -> outbox.publishCurrent(11L));
+        var backfill = new ListingRagBackfillService(jdbc, mock(ListingRagIdentity.class), outbox, transaction);
+        var locked = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        var started = new java.util.concurrent.CountDownLatch(1);
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+        try {
+            var writer = pool.submit(() -> transaction.execute(s -> {
+                outbox.lock(11L);
+                entity.setTitle("new committed source");
+                locked.countDown();
+                try { assertTrue(release.await(5, java.util.concurrent.TimeUnit.SECONDS)); }
+                catch (InterruptedException e) { throw new AssertionError(e); }
+                return outbox.publishCurrent(11L);
+            }));
+            assertTrue(locked.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            var reconcile = pool.submit(() -> {
+                started.countDown();
+                return assertThrows(RagException.class, () -> backfill.reconcile(11L, initial.revision(), initial.contentHash(), false)).code();
+            });
+            assertTrue(started.await(5, java.util.concurrent.TimeUnit.SECONDS));
+            assertThrows(java.util.concurrent.TimeoutException.class, () -> reconcile.get(100, java.util.concurrent.TimeUnit.MILLISECONDS));
+            release.countDown();
+            assertEquals(2, writer.get(5, java.util.concurrent.TimeUnit.SECONDS).revision());
+            assertEquals(RagErrorCode.LEGACY_RECONCILIATION_REQUIRED, reconcile.get(5, java.util.concurrent.TimeUnit.SECONDS));
+            assertEquals(2, jdbc.queryForObject("SELECT COUNT(*) FROM listing_rag_outbox", Integer.class));
+            assertEquals(2, outbox.revision(11L).revision());
+        } finally { release.countDown(); pool.shutdownNow(); }
+    }
+
+    private void assertReconciliationRejectedWithoutWrites(ListingRagBackfillService backfill, RagIndexEvent proof, boolean deleteIntent) {
+        ListingRagOutbox.Revision before = outbox.revision(11L);
+        int count = jdbc.queryForObject("SELECT COUNT(*) FROM listing_rag_outbox", Integer.class);
+        assertEquals(RagErrorCode.LEGACY_RECONCILIATION_REQUIRED, assertThrows(RagException.class,
+                () -> backfill.reconcile(11L, proof.revision(), proof.contentHash(), deleteIntent)).code());
+        assertEquals(before, outbox.revision(11L));
+        assertEquals(count, jdbc.queryForObject("SELECT COUNT(*) FROM listing_rag_outbox", Integer.class));
+    }
+
     @Test void dispatcherHasZeroPrecommitCallsAndRetriesSameImmutableEventAfterUnknownOutcome() {
         RagIndexEvent event = transaction.execute(s -> outbox.publishCurrent(11L));
         RagIndexRpcService rpc = mock(RagIndexRpcService.class);

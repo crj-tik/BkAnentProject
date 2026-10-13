@@ -51,7 +51,7 @@ public class ListingRagBackfillService {
             if ((exists != null && exists > 0) == deleteIntent) {
                 throw new RagException(RagErrorCode.LEGACY_RECONCILIATION_REQUIRED);
             }
-            return outbox.publishCurrent(id);
+            return outbox.publishCurrent(id, hash);
         });
     }
 }

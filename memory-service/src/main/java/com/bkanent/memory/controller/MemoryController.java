@@ -175,8 +175,11 @@ public class MemoryController {
     }
 
     @PostMapping("/rag/backfill")
-    public ApiResponse<Integer> backfillMemory(@RequestHeader(value = "Authorization", required = false) String authorization) {
-        return ApiResponse.ok(ragBackfill.backfill(credentials(authorization)));
+    public ApiResponse<MemoryRagBackfillService.BackfillPage> backfillMemory(
+            @RequestHeader(value = "Authorization", required = false) String authorization,
+            @RequestParam(value = "cursor", required = false) String cursor,
+            @RequestParam(value = "limit", defaultValue = "" + MemoryRagBackfillService.DEFAULT_LIMIT) int limit) {
+        return ApiResponse.ok(ragBackfill.backfill(cursor, limit, credentials(authorization)));
     }
 
     private static RagCredentialContext credentials(String authorization) {
