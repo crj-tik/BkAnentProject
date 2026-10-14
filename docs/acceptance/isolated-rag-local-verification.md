@@ -129,6 +129,14 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - 新证明D:/project/rag-contract-reactor-artifact-verification-20261014.json，SHA-256 f268669435709950c0f108cdb74ee499e87b31138c32aa70c56e9eb1ca225a0c；1219输入LF指纹9d4161fae609fae71be327d7e83c4c4ba1a8eac8ed1753063d8f953876220457。14Boot嵌套common.jar逐字节一致，common SHA-256 aadd6988f6445b774a522fedd0d477eaaf2a7d327ba6b141eb3e1fb239f21fa5；javap四接口七方法throws metadata、九官方未改class、两官方source精确重建、license／后端隔离、十共享运行库及当前私有probe Java17编译全部通过。8.7重新闭合，当前30/49；构建不关闭KI-103／104／105实际运行边界。
 - 部署范围为Auth／RAG／Listing／Memory／Agent／Customer／Marketing七release，消费者必须刷新common.jar反射异常契约，不沿用旧仅两个image范围。旧混合回滚基线为RAG／Listing的22f9fe2a，其余五服务4356c418。尚未执行本轮新镜像、PROVISION、worker／backfill；新proof的source_head=2106456、dirty_source=true是构建前提交状态，须另核对冻结执行输入与提交绑定，不能伪称构建已对应未来commit。
 
+### 2026-10-14 新异常契约与生命周期的实际部署
+
+- 实施提交1ee06f255e7f03084e1ced51cc994e73afec6720已推送；仅文档后继28fef9e不改变执行指纹。1215执行输入已逐LF绑定index及实施commit，四ignored IDEA XML未提交，14JAR重新核对不变。Docker独立核验proof／source／精确common后，七9d4161fa不可变镜像全部build0且source／JAR labels匹配；全镜像门禁通过后七服务串行up0，最终running／healthy／restart0／readinessHTTP200顶层UP。
+- 原有效ADMIN seed实际login／me成功；生产Listing POST797ms返回HTTP503／SPACE_NOT_READY，business_success=false、transport_failure_class=null。本次真实返回恢复官方Throwable解码和定向HTTP失败包络，KI-103／105关闭于1ee06f2；不是默认检索成功。
+- 三当前INSPECT分别1690／330／370ms，consumer仍30000，全部RETURNED且操作前后signed ADMIN通过，dimension1024；protected embedding／governed rerank probe均通过。ready=false仅KEYWORD SPACE_NOT_READY／VECTOR DEPENDENCY_UNAVAILABLE。原生产保护reader的三SCHEMA_HEAD分别404／SPACE_NOT_READY、112／7／6ms；HEAD已失败，未执行mapping，不能称mapping通过。旧ES reactor TIMEOUT已不再出现。
+- 三Milvus SCHEMA_DESCRIBE实际rStatus=100／serverStatus=100／compatibleCode=UnexpectedError／grpcCode=null，不是此前兼容CollectionNotExists；数字100不能独立推定missing。KI-104保持OPEN，须核对当前服务器现代错误命名空间和实际操作证据；未PROVISION／worker／backfill／fixture。固定日志只能按串行调用时间窗关联空间，不含request／space identity，相关性限制保留。
+- release env／security／tmpfs／healthclass及RAG两网络、.20及registry pins一致；23历史镜像ID、五原停止容器及25原项目基础资源未变。混合回滚Compose及interpolation单独保存，只回滚七release，不删除旧数据、卷或历史。安全证据根D:/project/rag-dev-backups/42a55bf-20261014-release-prep/，文件contract-reactor-build-bound-safe.json、contract-reactor-images-built-safe.json、contract-reactor-release-start-safe.json、contract-reactor-domain-discovery-call-safe.json、contract-reactor-domain-inspect-safe.json、contract-reactor-backend-diagnostics-safe.json、contract-reactor-release-preservation-safe.json、contract-reactor-runtime-gates-safe.json。commit／push hook的scanner_enobufs不是完整安全审计。
+
 ### 本轮仍待完成的验证
 
 以下1／2为c338b7e部署时点保留记录，已由上方accf97f实测及本轮增量推进覆盖，不作为当前仍阻塞的DNS／REST／Bean／整体INSPECT原因。
