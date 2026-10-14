@@ -195,7 +195,11 @@ public class ElasticsearchProjectionStore implements IndexSink {
     private boolean containsMapping(Object actual, Object expected) {
         if (expected instanceof Map<?, ?> map) {
             if (!(actual instanceof Map<?, ?> actualMap)) return false;
-            return map.entrySet().stream().allMatch(e -> containsMapping(actualMap.get(e.getKey()), e.getValue()));
+            return map.entrySet().stream().allMatch(e ->
+                    (e.getKey().equals("type") && e.getValue().equals("object")
+                            && !actualMap.containsKey("type")
+                            && actualMap.get("properties") instanceof Map<?, ?> properties && !properties.isEmpty())
+                            || containsMapping(actualMap.get(e.getKey()), e.getValue()));
         }
         return Objects.equals(actual, expected);
     }

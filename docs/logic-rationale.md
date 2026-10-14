@@ -493,6 +493,26 @@
 
 **关联**：LR-36、LR-47、LR-49；KI-104。真实运行typed值仍须新制品取证，历史collection_count=0不代替当前错误；HTTP200但mapping不兼容也不是missing-only。安全日志只作为原生产路径证据，不引入旁路客户端或放行PROVISION。
 
+## LR-51 A2A拒绝响应ID须转换为官方支持的Java标量
+
+**结论**：认证／任务访问拒绝沿现有JSONRPCErrorResponse返回固定-32001和安全枚举；请求String／32位Integer id转换为Java String／Integer，null／missing／其他类型使用Java null，不把Jackson节点对象传入官方响应构造器。不扩张SDK支持类型或绕过原鉴权。
+
+**根因**：官方SDK的响应父类Assert仅接受null／String／Integer；JsonNode即使表示合法String仍不属于这些类型，会在处理原RagException时二次抛异常，Starter返回HTTP500空正文。只用malformed body测试使解析失败、id保持null，会错过正常JSON拒绝路径。
+
+**代码位置**：common-a2a/LiveSkillAgentCardAutoConfiguration及LiveSkillAgentCardsTest的官方序列化／Starter Router MockMvc参数化回归。官方Utils ObjectMapper省略Java null id，回归断言缺失而非强行序列化id:null；String和Integer仍核对原值。14组参数化及两个既有Card测试16项、实际guard8项，共24定向通过，不含不存在的A2aInflightRequestGuardTest。
+
+**关联**：LR-41、KI-106；实际正确Listing端点的修复前500证据保留，零delegate交互由本地回归验证，不能据HTTP500补造真实队列或模型零执行。
+
+## LR-52 ES对象schema验证兼容官方隐式object表示但不弱化字段约束
+
+**结论**：创建mapping仍显式type=object；读回递归比较仅在expected type为object、actual确实没有type键且具有非空properties Map时接受省略。显式null、nested或其他type不等价；所有properties子字段、两个dynamic strict、date_nanos及格式继续严格校验。已有索引不PUT／覆盖，初始化只复用兼容schema。
+
+**根因**：ES v8.15.3官方ObjectMapper序列化在存在子字段时省略type=object，由properties隐式识别对象；空对象才显式输出type。parser同样只对properties对象推断object。创建的正确mapping与读回JSON并非逐叶相同，原递归subset比较在metadata.type上误拒绝。当前实际单次读回唯一差异正是该省略，25受管字段与双strict均匹配，不能推广为任意missing字段可忽略或放宽数值／日期等价。
+
+**代码位置**：rag-service/storage/ElasticsearchProjectionStore.containsMapping及ElasticsearchProjectionStoreTest的创建读回／已有兼容／冲突回归。官方来源：https://github.com/elastic/elasticsearch/blob/v8.15.3/server/src/main/java/org/elasticsearch/index/mapper/ObjectMapper.java#L701-L744（序列化）、L260-L308（解析）；Spring Data5.5.0 IndicesTemplate／RequestConverter将Document作为TypeMapping传入，不额外嵌套mapping。
+
+**关联**：KI-107、LR-36、LR-47、LR-49；首次PROVISION失败与partial原样保留。官方归一化兼容不证明新发布或三空间ready，不借此开启worker或直接写后端。
+
 ## LR-43 治理重排按响应钉扎模型身份，同 alias 漂移失败关闭
 
 **结论**：`rag-service` 对外部 Reranker-BGE-V2-M3 治理接口（`/api/v1/rerank`，`RAG_RERANK_PROTOCOL=governed`）的重排调用在每次响应上核对 `model.alias/revision/scoring_version/artifact_digest` 与 `score_semantics` 必须精确等于受管配置（`RAG_RERANK_EXPECTED_REVISION`/`EXPECTED_ARTIFACT_DIGEST` 与空间 rerank-profile 的 provider/modelVersion/scoringVersion/scale）。任何一项不匹配抛 SCORING_PROFILE_MISMATCH，不尝试重新归一化或继续用旧分数。请求固定 `truncate=false`，响应声明截断发生即 RERANK_PROTOCOL_ERROR；400/413 映射为不可重试的 INVALID_ARGUMENT，401/403 仍为身份错误。

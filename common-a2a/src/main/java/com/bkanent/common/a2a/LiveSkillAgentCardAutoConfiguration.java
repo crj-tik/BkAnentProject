@@ -57,8 +57,11 @@ public class LiveSkillAgentCardAutoConfiguration {
                         try { return guard.getObject().handle(body, headers, () -> delegate.onHandler(body, headers)); }
                         catch (com.bkanent.common.rag.RagException failure) {
                             Object id = null;
-                            try { id = io.a2a.util.Utils.OBJECT_MAPPER.readTree(body).path("id"); }
-                            catch (Exception ignored) { }
+                            try {
+                                var node = io.a2a.util.Utils.OBJECT_MAPPER.readTree(body).path("id");
+                                if (node.isTextual()) id = node.textValue();
+                                else if (node.isIntegralNumber() && node.canConvertToInt()) id = node.intValue();
+                            } catch (Exception ignored) { }
                             return new io.a2a.spec.JSONRPCErrorResponse(id, new io.a2a.spec.JSONRPCError(-32001,
                                     "Authentication or task access denied", java.util.Map.of("errorCode", failure.code().name())));
                         }

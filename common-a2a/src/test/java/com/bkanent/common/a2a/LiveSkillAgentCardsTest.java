@@ -66,6 +66,63 @@ class LiveSkillAgentCardsTest {
         } finally { live.destroy(); }
     }
 
+    static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments> errorResponseIds() {
+        return java.util.stream.Stream.of(
+                org.junit.jupiter.params.provider.Arguments.of("\"request-id\"", "\"request-id\""),
+                org.junit.jupiter.params.provider.Arguments.of("\"\"", "\"\""),
+                org.junit.jupiter.params.provider.Arguments.of("42", "42"),
+                org.junit.jupiter.params.provider.Arguments.of("-1", "-1"),
+                org.junit.jupiter.params.provider.Arguments.of("2147483647", "2147483647"),
+                org.junit.jupiter.params.provider.Arguments.of("-2147483648", "-2147483648"),
+                org.junit.jupiter.params.provider.Arguments.of("null", "null"),
+                org.junit.jupiter.params.provider.Arguments.of(null, "null"),
+                org.junit.jupiter.params.provider.Arguments.of("2147483648", "null"),
+                org.junit.jupiter.params.provider.Arguments.of("-2147483649", "null"),
+                org.junit.jupiter.params.provider.Arguments.of("1.5", "null"),
+                org.junit.jupiter.params.provider.Arguments.of("true", "null"),
+                org.junit.jupiter.params.provider.Arguments.of("{}", "null"),
+                org.junit.jupiter.params.provider.Arguments.of("[]", "null"));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.MethodSource("errorResponseIds")
+    void authenticationFailurePreservesOnlyOfficialScalarIdsThroughHttp(String inputId, String expectedId) {
+        var jsonRpc = mock(io.a2a.server.requesthandlers.JSONRPCHandler.class);
+        String body = "{\"jsonrpc\":\"2.0\",\"method\":\"message/send\",\"params\":{}"
+                + (inputId == null ? "" : ",\"id\":" + inputId) + "}";
+        new ApplicationContextRunner().withConfiguration(AutoConfigurations.of(LiveSkillAgentCardAutoConfiguration.class))
+                .withBean(JsonRpcA2aRequestHandler.class, () -> new JsonRpcA2aRequestHandler(jsonRpc))
+                .run(context -> {
+                    assertThat(context).hasNotFailed();
+                    var handler = context.getBean(JsonRpcA2aRequestHandler.class);
+                    var http = org.springframework.test.web.servlet.setup.MockMvcBuilders.routerFunctions(
+                            new com.alibaba.cloud.ai.a2a.core.route.JsonRpcA2aRouterProvider().getRouter(handler)).build();
+                    try {
+                        var response = handler.onHandler(body, mock(org.springframework.web.servlet.function.ServerRequest.Headers.class));
+                        assertThat(response).isInstanceOf(io.a2a.spec.JSONRPCErrorResponse.class);
+                        var mapper = io.a2a.util.Utils.OBJECT_MAPPER;
+                        var serialized = mapper.readTree(mapper.writeValueAsString(response));
+                        if ("null".equals(expectedId)) assertThat(serialized.has("id")).isFalse();
+                        else assertThat(serialized.path("id")).isEqualTo(mapper.readTree(expectedId));
+                        assertThat(serialized.path("error").path("code").intValue()).isEqualTo(-32001);
+                        var result = http.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/a2a")
+                                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content(body))
+                                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk())
+                                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                                        .contentTypeCompatibleWith(org.springframework.http.MediaType.APPLICATION_JSON))
+                                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.jsonrpc").value("2.0"))
+                                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.error.code").value(-32001))
+                                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.error.data.errorCode")
+                                        .value("AUTHENTICATION_FAILED"))
+                                .andReturn();
+                        var httpResponse = mapper.readTree(result.getResponse().getContentAsString());
+                        if ("null".equals(expectedId)) assertThat(httpResponse.has("id")).isFalse();
+                        else assertThat(httpResponse.path("id")).isEqualTo(mapper.readTree(expectedId));
+                        verifyNoInteractions(jsonRpc);
+                    } catch (Exception exception) { throw new AssertionError(exception); }
+                });
+    }
+
     @Test
     void autoConfigurationServesLiveCardAndDelegatesRpcWithoutEnablingNacos() {
         assertThat(LiveSkillAgentCardAutoConfiguration.class

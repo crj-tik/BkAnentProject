@@ -152,6 +152,32 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - 原两临时账号均精确softdelete，成功偏好写0，业务／artifact／选定checkpoint计数和memory outbox17未变；两原seed指纹及BROKER login／me保持。auth总行2→4因保留两条softdeleted历史，live仍2；凭据丢弃，未物理抹历史、PROVISION／worker／backfill。safe文件位于release-prep：ragperm-contract-reactor-api-matrix-safe.json、ragperm-contract-reactor-a2a-matrix-safe.json、ragperm-contract-reactor-cleanup-preservation-safe.json。
 - 当前REST collections/list的default三个配置项均list0，但physical_absent_proven=false／notAvailable_excluded=false。后续全状态盘点须同etcd revision覆盖新collection-info/1/及legacy collection/当前前缀并确认db-info/1有效default映射，不能用可用列表或历史空集合放行初始化。
 
+### 2026-10-14 新RAG运行、当前全状态目录与窄权限复验
+
+- d9b63e643feeb23305c5729a96292bf215e78715已推送且本地／origin/dev-fix一致；1219输入全部LF快照验证，其中1215绑定commit、4 ignored IDEA独立披露；14冻结JAR全部hash匹配。新旧common包装不同但144个class及四接口字节完全相同，因此只更新RAG，其余六服务不重建。新source668860a／RAG JAR1b9e48cf不可变镜像build/up0，两次healthy／restart0／readiness200顶层UP；保存当前9d4161新契约RAG rollback，未回滚。
+- 三实际INSPECT2034／316／296ms（consumer30000）均RETURNED、前后signed ADMIN、dimension1024／ready=false，仅KEYWORD与VECTOR SPACE_NOT_READY，protected EMBEDDING／RERANK全过。ES原保护HEAD三次404／SPACE_NOT_READY、71／4／3ms，mapping未执行；Milvus同一typed100／UnexpectedError现已正确分类。KI-104后端错误遮蔽关闭，不等于默认检索已就绪。安全文件根milvus-modern-d9b63e，snapshot／runtime-gates／domain-inspect／backend-diagnostics均已读取。
+- 当前etcd revision299669的新default collection-info/1/与legacy collection/两个完整keys-only前缀均0；exact db-info/1单记录匹配default／ID1／DatabaseCreated1，同revision。官方v2.4.17确认DatabaseState1是Created及唯一available态；该证据覆盖当前不可用collection记录，证明当前catalog不存在集合，未查历史snapshot／object。初始化前仍执行fresh同revision复核，不用可用列表或旧0条替代。
+- 窄权限新矩阵29 pass／0 fail：真实v1 token、服务器接受原access、前后未过期谓词；MANAGER拒绝、B六稳定字段userId／username／displayName／roleCode／tenantCode／accountStatus不变；A降为BROKER原token失去ADMIN目录权；B停用／删除在Auth、Memory、Agent直接入口被拒绝。未做本地签名验签，不将解码当验签。原28／6与原整DTO失败UNKNOWN保留；新矩阵只补窄证据，不关闭全入口／最终输出／A2A权限任务。
+- 两个新临时账号精确softdelete，Auth total4→6／live2→2，原两seed指纹不变；listing／preference／artifact／选定checkpoint0及memory outbox17不变，无偏好写或A2A调用。三次oversized尝试在API前解析失败；最终Python完成矩阵／清理，但外层Bash尾引号退出2，独立只读核验确认结果；不伪称整命令exit0或重复写API。safe为ragperm-narrow-token-role-matrix、cleanup-preservation、milvus-allstate-metadata文件。
+- 六服务container／image／env／security／network与原30容器及旧镜像全部保留。RAG原raw Env数组与Config比较false保留；resolved证据逐键值相同、仅Env排序与Docker自动Hostname变化，安全／HostConfig／固定.20和两网保持；未以重写旧文件消除失败。只读取safe JSON，不读private环境／rollback interpolation。
+
+### 2026-10-14 正确业务A2A端点的独立错误与最小修复
+
+- 仅一次POST listing-master-service:9004/a2a，合法String JSONRPC id／message/send最小合成形状、无beacon／binding／bearer；max-time15秒、无redirect／retry。实际500／500ms、Content-Type缺失／body0／非JSONRPC，无返回id或error code；curl exit0不代表验收通过。队列／模型执行UNKNOWN，停止五操作扩展。safe证据milvus-modern-Listing-A2A-negative-once-safe.json，旧Agent9002的0/5原失败保留。
+- KI-106／LR-51：原认证拒绝wrapper将Jackson JsonNode交官方JSONRPCErrorResponse，其父类只接受Java null／String／Integer，合法请求亦触发二次异常。仅转换支持的String和32位integral ID，missing／null／其他类型用Java null；guard／SDK／缓存不改。新增14组官方序列化及实际Starter HTTP路由回归，首轮8组null断言失败：官方Utils mapper省略Java null id，并非生成id:null；仅纠正断言，未修改SDK。修正后Card16＋guard8共24定向通过，0失败／错误／跳过，支持的ID保值、HTTP200 JSONRPC认证错误及零delegate交互已验证；不含不存在的Inflight测试类。原失败及fixed日志均保留（rag-a2a-error-id-focused-20261014.log／rag-a2a-error-id-focused-fixed-20261014.log）。8.7因执行源码改变重开为29/49，918仅为已冻结历史版本，必须新proof后重闭合。
+
+### 2026-10-14 首空间PROVISION停止与ES官方对象mapping归一化
+
+- fresh revision300994当前两个Milvus prefix均0且default／ID1／Created1，三空间生产preflight INSPECT342／315／308ms：两后端missing-only，protected models通过。仅listing.knowledge PROVISION一次，schema1／dimension1024，exit1／SPACE_NOT_READY／7312ms，非外层timeout；无structured结果及post-ADMIN确认，停止另外两空间和后续INSPECT。未retry／drop／覆盖／启用worker、dispatcher或fixture。
+- 原受保护生产日志HEAD200／NONE23ms及MAPPING200／SPACE_NOT_READY30ms，无Milvus describe；postfailure revision301070两个当前prefix仍0。仅一次独立只读mapping GET200／170ms证明唯一受管差异metadata.type缺失、properties存在，25字段类型、顶层keyword／text与双String strict匹配；此GET不是protected应用成功证明。ES v8.15.3官方ObjectMapper在有子字段时省略type=object，KI-107／LR-52记录根因。最小比较器兼容只接受确实无type键及非空properties Map，其余严格校验；ES24项及A2A Card16／guard8共48定向通过，0失败／错误／跳过（rag-schema-a2a-focused-20261014.log），新增ES16组覆盖创建／已有兼容及14冲突，日期测试使用隐式object仍拒错误type／format。冻结后22模块串行clean test及package均BUILD SUCCESS，各948项／142 XML，0失败／错误／跳过；不把source修复算ready。
+- ES partial保留，Milvus未新建current集合；七服务healthy／restart0、RAG readiness200UP，env／安全配置／两seed指纹及业务计数不变，memory outbox17。safe文件位于schema-init-d9b63e的PROVISION-and-INSPECT／failure-backend／ES-mapping-diff／postfailure-catalog／preservation。实际异常field/frame未日志化，keywordMapping只标为源分支推断。
+
+### 2026-10-14 ES／A2A当前948项制品与发布门禁
+
+- 当前clean test与package按142份实际XML各948项，0失败／错误／跳过，22模块通过；选择器仍明确排除七外部类：ApprovalClaimDatabaseConcurrencyTest、SupervisorDockerDatabaseTest、SupervisorDistributedAcceptanceTest、NacosAgentRegistryDockerTest、NacosRollingUpgradeDockerTest、SupervisorRealModelEvaluationTest、LiveSkillAgentCardsDockerTest，未执行这些类。新日志rag-schema-a2a-clean-test-20261014.log／package及test-proof／artifact-proof位于D:/project，历史失败与918证明未覆盖。
+- 新制品证明rag-schema-a2a-artifact-verification-20261014.json SHA-256为465dc44a7c739ce462e42639be31753445098c74ba206d6508fc30657e447501；1219执行格式输入LF指纹3c39145488241d3254aa7e5ad1f19fa8d2eec8d3b2c22a58f2a3227205901004。14Boot、common／十消费者common-a2a逐字节一致、四接口七throws、九官方未改class／两官方源重建／license／后端依赖隔离／唯一SDK及共享运行库、当前probe Java17编译全部通过。source_head=d9b63e6、dirty=true是构建前状态，提交绑定另验。8.7重闭合为30/49，不补勾运行任务。
+- 只读发布准备确认当前四服务rollback混合基线RAG668860a／Agent、Listing、Marketing9d4161，七服务env与安全配置保持。RAG document／event账本均0；Memory outbox17全部memory.constraint／PENDING／attempt0／errorNONE，schema memory-v1及payload space控制字段均匹配、17均到期可选。这不证明正文兼容，也不允许把全局dispatcher启用当空操作；当前不启用、不写fixture。safe根es-a2a-four-service-prep-20261014。四服务新发布与后续PROVISION尚未执行。
+
 ### 本轮仍待完成的验证
 
 以下1／2为c338b7e部署时点保留记录，已由上方accf97f实测及本轮增量推进覆盖，不作为当前仍阻塞的DNS／REST／Bean／整体INSPECT原因。

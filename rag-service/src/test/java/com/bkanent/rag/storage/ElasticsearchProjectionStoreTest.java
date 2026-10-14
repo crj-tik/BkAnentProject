@@ -35,6 +35,72 @@ class ElasticsearchProjectionStoreTest {
         assertEquals("strict", mapping.get("dynamic"));
         verifyNoMoreInteractions(operations);
     }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void provisionAcceptsImplicitObjectReadbackWithoutChangingExistingSchema(boolean exists) {
+        var operations = mock(ElasticsearchOperations.class);
+        var index = mock(IndexOperations.class);
+        when(operations.indexOps(any(IndexCoordinates.class))).thenReturn(index);
+        when(index.exists()).thenReturn(exists);
+        if (!exists) when(index.create(anyMap(), any())).thenReturn(true);
+        var reader = mock(ElasticsearchDeadlineReader.class);
+        var store = new ElasticsearchProjectionStore(registry(), operations, new ObjectMapper(), reader);
+        var actual = new ObjectMapper().valueToTree(store.mapping(space()));
+        ((com.fasterxml.jackson.databind.node.ObjectNode) actual.path("properties").path("metadata")).remove("type");
+        schemaResponses(reader, space(), new ObjectMapper().convertValue(actual, Map.class));
+        assertDoesNotThrow(() -> store.provision(space()));
+        if (exists) verify(index, never()).create(anyMap(), any());
+        else {
+            var mapping = ArgumentCaptor.forClass(org.springframework.data.elasticsearch.core.document.Document.class);
+            verify(index).create(eq(Map.of()), mapping.capture());
+            assertEquals(store.mapping(space()), mapping.getValue());
+        }
+        verify(index, never()).putMapping(any(org.springframework.data.elasticsearch.core.document.Document.class));
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "nullType", "nestedType", "keywordType", "missingProperties", "emptyProperties", "nonMapProperties",
+            "missingMetadata", "missingDynamic", "booleanDynamic", "looseDynamic",
+            "looseRootDynamic", "missingLeafType", "wrongLeafType", "wrongContentType"})
+    void implicitObjectReadbackStillRejectsIncompatibleManagedSchema(String mismatch) {
+        var operations = mock(ElasticsearchOperations.class);
+        var index = mock(IndexOperations.class);
+        when(operations.indexOps(any(IndexCoordinates.class))).thenReturn(index);
+        when(index.exists()).thenReturn(true);
+        var reader = mock(ElasticsearchDeadlineReader.class);
+        var store = new ElasticsearchProjectionStore(registry(), operations, new ObjectMapper(), reader);
+        var actual = (com.fasterxml.jackson.databind.node.ObjectNode) new ObjectMapper().valueToTree(store.mapping(space()));
+        var properties = (com.fasterxml.jackson.databind.node.ObjectNode) actual.path("properties");
+        var metadata = (com.fasterxml.jackson.databind.node.ObjectNode) properties.path("metadata");
+        metadata.remove("type");
+        switch (mismatch) {
+            case "nullType" -> metadata.putNull("type");
+            case "nestedType" -> metadata.put("type", "nested");
+            case "keywordType" -> metadata.put("type", "keyword");
+            case "missingProperties" -> metadata.remove("properties");
+            case "emptyProperties" -> metadata.putObject("properties");
+            case "nonMapProperties" -> metadata.put("properties", "invalid");
+            case "missingMetadata" -> properties.remove("metadata");
+            case "missingDynamic" -> metadata.remove("dynamic");
+            case "booleanDynamic" -> metadata.put("dynamic", false);
+            case "looseDynamic" -> metadata.put("dynamic", "true");
+            case "looseRootDynamic" -> actual.put("dynamic", "true");
+            case "missingLeafType" -> ((com.fasterxml.jackson.databind.node.ObjectNode)
+                    metadata.path("properties").path("projectionVersion")).remove("type");
+            case "wrongLeafType" -> ((com.fasterxml.jackson.databind.node.ObjectNode)
+                    metadata.path("properties").path("projectionVersion")).put("type", "double");
+            case "wrongContentType" -> ((com.fasterxml.jackson.databind.node.ObjectNode)
+                    properties.path("content")).put("type", "keyword");
+            default -> throw new AssertionError(mismatch);
+        }
+        schemaResponses(reader, space(), new ObjectMapper().convertValue(actual, Map.class));
+        assertEquals(RagErrorCode.SPACE_NOT_READY,
+                assertThrows(RagException.class, () -> store.provision(space())).code());
+        verify(index, never()).create(anyMap(), any());
+        verify(index, never()).putMapping(any(org.springframework.data.elasticsearch.core.document.Document.class));
+    }
+
     @Test void memoryLastObservedAtHasExplicitNanosecondMappingAndRejectsMillisecondSchema() {
         var base = space();
         Map<String, RagSpaceDefinition.FilterField> fields = new HashMap<>(base.fields());
@@ -55,13 +121,16 @@ class ElasticsearchProjectionStoreTest {
         assertEquals("strict", json.path("properties").path("metadata").path("dynamic").asText());
         assertEquals(Map.of("type", "date_nanos", "format", "strict_date_optional_time_nanos"),
                 new ObjectMapper().convertValue(json.path("properties").path("metadata").path("properties").path("lastObservedAt"), Map.class));
-        schemaResponses(reader, memory, mapping);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> normalized = new ObjectMapper().convertValue(mapping, Map.class);
+        ((Map<?, ?>) ((Map<?, ?>) normalized.get("properties")).get("metadata")).remove("type");
+        schemaResponses(reader, memory, normalized);
         assertDoesNotThrow(() -> store.inspectSchema(memory));
         for (Map<String, String> incompatible : List.of(
                 Map.of("type", "date", "format", "strict_date_optional_time_nanos"),
                 Map.of("type", "date_nanos", "format", "strict_date_optional_time"))) {
             @SuppressWarnings("unchecked")
-            Map<String, Object> actual = new ObjectMapper().convertValue(mapping, Map.class);
+            Map<String, Object> actual = new ObjectMapper().convertValue(normalized, Map.class);
             @SuppressWarnings("unchecked")
             var properties = (Map<String, Object>) actual.get("properties");
             @SuppressWarnings("unchecked")
