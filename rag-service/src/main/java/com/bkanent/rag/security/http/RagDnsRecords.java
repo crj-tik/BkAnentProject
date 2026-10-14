@@ -26,13 +26,23 @@ final class RagDnsRecords implements RagPublicDnsResolver.Lookup {
         environment.put("java.naming.provider.url", "dns:");
         environment.put("com.sun.jndi.dns.timeout.initial", "1000");
         environment.put("com.sun.jndi.dns.timeout.retries", "1");
+        long deadline = RagHttpDeadline.capture(java.time.Duration.ofSeconds(5));
         InitialDirContext context = null;
         try {
+            RagHttpDeadline.remainingNanos(deadline);
             context = new InitialDirContext(environment);
-            Attributes attributes = context.getAttributes(host.endsWith(".") ? host : host + ".", new String[]{"A", "AAAA"});
+            String name = host.endsWith(".") ? host : host + ".";
+            // JNDI combines different requested RR types into QTYPE=ANY, which does not
+            // guarantee all A/AAAA records and bypasses Docker's internal A/AAAA handling.
+            RagHttpDeadline.remainingNanos(deadline);
+            Attributes ipv4 = context.getAttributes(name, new String[]{"A"});
+            RagHttpDeadline.remainingNanos(deadline);
+            Attributes ipv6 = context.getAttributes(name, new String[]{"AAAA"});
+            RagHttpDeadline.remainingNanos(deadline);
             List<InetAddress> addresses = new ArrayList<>();
-            append(addresses, attributes.get("A"), false);
-            append(addresses, attributes.get("AAAA"), true);
+            append(addresses, ipv4.get("A"), false);
+            append(addresses, ipv6.get("AAAA"), true);
+            RagHttpDeadline.remainingNanos(deadline);
             return addresses.toArray(InetAddress[]::new);
         } catch (NamingException ex) {
             throw new UnknownHostException("RAG_DNS_UNAVAILABLE");

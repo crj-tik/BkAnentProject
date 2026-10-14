@@ -31,3 +31,5 @@ dubbo:
     port: 20889
   registry:
     address: nacos://${bk.nacos.server-addr}?namespace=${bk.nacos.namespace}
+  consumer:
+    protocol: dubbo

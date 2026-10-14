@@ -55,6 +55,7 @@ dubbo:
     name: dubbo
     port: ${RAG_DUBBO_PORT:20898}
   consumer:
+    protocol: dubbo
     check: false
     init: false
     retries: 0

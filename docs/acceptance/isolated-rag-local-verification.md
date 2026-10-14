@@ -100,10 +100,18 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - RAG Dubbo注册及Listing连接已实际验证172.24.0.12:20898；HTTP discovery仍10.253.240.3:9018，下一次仅stage修正并验证，KI-93保持OPEN。只读实际ES三个新索引404、Milvus collection list HTTP200／code0且0集合，无PROVISION／schema写入；实际容器DNS匹配host maps不是guard验收。
 - 本轮执行源／POM／probe改变后曾重开8.7为27/49；冻结后22模块串行clean test及package均BUILD SUCCESS，各855项、140份XML、0失败／错误／跳过，19个有测试模块。新增7项为Agent1、营销2、共享运行4；日志rag-runtime-repairs-clean-test-20261014.log、rag-runtime-repairs-package-20261014.log，七个外部联调类仍按上述选择器显式排除。当前1216个源输入LF指纹977fd9b2ba50968fcd7dfcbd626502ab15c9cecc51412c7f4d610ea9376b188e；14Boot JAR、唯一SDK／两个源精确还原／九官方binary一致／license／后端隔离、Java17实际probe编译全通过，十个实际A2A消费者运行包都具唯一OkHttp4.12／Okio-jvm3.6／Kotlin1.9.25。报告D:/project/rag-runtime-repairs-artifact-verification-20261014.json，日志rag-runtime-repairs-artifact-proof-20261014.log；原报告／目录未覆盖。8.7重新关闭为28/49，不证明真实身份／模型／五操作。worker／两个dispatcher仍false，是有意门禁而非缺陷。
 
+### 2026-10-14 重新发布与执行修复收尾
+
+- 7bd7a52及977fd9源证明对应七个不可变镜像全部构建，六服务healthy／restart0／readinessHTTP200，Agent进一步因未选AudioSpeech模型缺key失败并精确停止。旧五容器、首批七镜像、根及历史环境hash全部保留。证据repair-wave-stable-state-preservation-safe.json，实际Agent历史restart_count最终4，不沿用中间快照。
+- 当前RAG业务地址为172.24.0.20；并行重建时.12被新Memory自动分配，故仅RAG固定地址及官方Dubbo／HTTP发现统一.20。认证Nacos实际HTTP9018、Dubbo20898和三RPC均.20且healthy/enabled；见repair-wave-nacos-discovery-safe.json，KI-93地址故障关闭。未改变其他业务网或将消费者接入rerank网络。
+- 三空间冻结INSPECT均经真实signed ADMIN与操作后复验，ready=false／dimension1024／四阶段失败，独立诊断确认签名链。偏好EMBEDDING为ENDPOINT_POLICY_DENIED，其他EMBEDDING及全部KEYWORD／VECTOR／RERANK为DEPENDENCY_UNAVAILABLE。不能把非就绪当鉴权失败、不能统一归为缺schema。未PROVISION／backfill／enable workers；见repair-wave-domain-inspect-safe.json。
+- 实际同JRE／同网络JNDI组合A+AAAA三个host均超时，而各自A和AAAA查询成功；官方JDK将组合转换为ANY。源码已改同context分类型查询及整体deadline，保留全部原始地址校验和pinning；新增16次JNDI facade回归通过。Agent一次排除九个未选默认DashScope模型，保留DeepSeek／Graph／A2A及AsyncToolCallingManager；两模块定向共89项通过，日志D:/project/rag-dns-model-focused-20261014.log。不宣称新制品运行通过。
+- Listing同名HTTP9018被官方SC-only通知REST通配适配，而真正provider为Dubbo20898；消费者不指定协议可误匹配。限定纯Dubbo consumer.protocol，保留HTTP发现／provider／group／REST SPI及序列化。错误归属与标准修复见KI-100／LR-45；不再重复DNS或provider根因调查。新执行修复使8.7暂重开，855项历史证据原样保留。
+
 ### 本轮仍待完成的验证
 
-1. 当前增量完整回归／package／source-JAR证明已通过855项，8.7关闭。下方683 tests和首轮848项均有明确源版本边界；七外部联调类仍显式排除，真实Auth／模型／五操作不能据构建补勾；后续执行源码改变必须重新构建。
-2. 七扩展配置认证读回已通过；应用实际生效、images/digest、限定服务deploy、JRE DNS模块、真实Dubbo/provider/consumer发现验签仍待执行，不能拿配置发布替代。
+1. 当前DNS／模型／consumer协议修复完整回归与package均通过，各886项／142份XML，0失败／错误／跳过；14Boot JAR、唯一SDK／两源精确重建／九官方类／license／后端隔离／十共享运行库／Java17私有probe编译通过。源LF指纹4356c418965cfe851cdbdc118ae672ec7416b62beed20b4a9f6e7c4ac98a0cd5，1218输入（1214待提交执行输入及四个ignored IDEA XML），当前证明D:/project/rag-dns-protocol-artifact-verification-20261014.json；日志rag-dns-protocol-clean-test-20261014.log、rag-dns-protocol-package-20261014.log、rag-dns-protocol-artifact-proof-20261014.log。8.7重新关闭为28/49，下方855／848／683有明确源边界；七外部联调类仍显式排除，实际Auth／模型／五操作不能据构建补勾。
+2. 七扩展配置认证读回、七镜像build、六基础健康、固定JRE命名模块、三空间真实signed ADMIN及RAG双协议注册已实际通过；Agent新制品启动与发现消费者真实选Dubbo仍须修复版运行，不拿直连探针替代发现成功。
 3. 公司模型真实调用、provider/model/version/dimension、rerank协议/scale/profile/scoringVersion、ES/Milvus真实schema/身份/权限、默认双路+融合+rerank及两路硬过滤等价。
 4. owner-aware回填、revision/hash/schema/tombstone、APPLIED及实际两后端物理水位/删除结果、迟到写/partial补偿、领域最终排序与真源复核。
 5. stop-write/drain、增量追平、实际消费者切流、知识关闭零RAG调用、RAG outage下正常业务可用性、事件水位rollback及备份恢复演练。不建旧兼容周期，但不豁免这些运行门禁；不删除旧index/collection/volume、不prune/down-v。

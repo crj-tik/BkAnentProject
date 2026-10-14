@@ -25,6 +25,7 @@ dubbo:
   registry:
     address: ${DUBBO_REGISTRY_ADDRESS:N/A}
   consumer:
+    protocol: dubbo
     check: false
     init: false
     retries: 0

@@ -38,6 +38,8 @@ dubbo:
     port: 20888
   registry:
     address: nacos://${bk.nacos.server-addr}?namespace=${bk.nacos.namespace}
+  consumer:
+    protocol: dubbo
 
 marketing:
   listing-read:

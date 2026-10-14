@@ -433,6 +433,16 @@
 
 **关联**：LR-33、LR-41；KI-94～97。真实调用栈仅证明REST扩展加载链，不推断具体provider metadata；无网络链接/round-trip/扫描测试、当前完整制品与实际签名调用分别取证。
 
+## LR-45 DNS记录类型与RPC消费者协议须显式，不靠可达性推定
+
+**结论**：受保护HTTP以同一平台JNDI上下文分别请求A／AAAA，在一个整体deadline内两次成功并校验完整原始答案后连接；不使用混合属性生成ANY、不忽略AAAA错误。纯Dubbo消费者显式consumer.protocol=dubbo，provider协议与HTTP发现保留，不给纯RPC补REST注解或删除官方REST扩展。
+
+**根因**：OpenJDK17多属性查询会转成ANY，Docker内部地址服务处理A／AAAA而当前ANY超时；getent结果不能代替实际守卫。Dubbo3.2.15可把同名HTTP-only通知合成REST通配服务，未限定消费者协议会匹配并触发先HTTP工厂、后REST注解解析。端口或provider name=dubbo正确仍不足以限定消费者。两处修复均用官方受支持机制，不扩大地址／身份权限。
+
+**代码位置**：rag-service/security/http/RagDnsRecords及RagDnsRecordsTest；已有纯Dubbo消费者application.yml及common-a2a官方适配器／配置绑定回归。
+
+**关联**：LR-34、LR-44；KI-98～100。实际旧制品失败与新源码测试分别保存，默认检索与发现调用必须经新制品验证后才完成。
+
 ## LR-43 治理重排按响应钉扎模型身份，同 alias 漂移失败关闭
 
 **结论**：`rag-service` 对外部 Reranker-BGE-V2-M3 治理接口（`/api/v1/rerank`，`RAG_RERANK_PROTOCOL=governed`）的重排调用在每次响应上核对 `model.alias/revision/scoring_version/artifact_digest` 与 `score_semantics` 必须精确等于受管配置（`RAG_RERANK_EXPECTED_REVISION`/`EXPECTED_ARTIFACT_DIGEST` 与空间 rerank-profile 的 provider/modelVersion/scoringVersion/scale）。任何一项不匹配抛 SCORING_PROFILE_MISMATCH，不尝试重新归一化或继续用旧分数。请求固定 `truncate=false`，响应声明截断发生即 RERANK_PROTOCOL_ERROR；400/413 映射为不可重试的 INVALID_ARGUMENT，401/403 仍为身份错误。
