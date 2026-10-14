@@ -5,7 +5,8 @@ target/
 *.iml
 .agents/
 .env
-.env.local
+.env.*
+!.env.example
 .codex-temp-*
 __pycache__/
 .codex/config.toml
