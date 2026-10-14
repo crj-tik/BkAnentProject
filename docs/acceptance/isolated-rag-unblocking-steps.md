@@ -1,5 +1,15 @@
 # 独立隔离 RAG：已授权执行与剩余真实门禁
 
+## 2026-10-14 最新执行边界
+
+- 当前已推送实施提交为`1ee06f255e7f03084e1ced51cc994e73afec6720`，远端`origin/dev-fix`完整HEAD已核对。四RAG接口七方法的精确异常契约、唯一ES客户端reactor生命周期、Milvus schema-only类型分类及Listing结构化HTTP错误均已实施。
+- 新22模块串行clean test及package各916项／142份XML，0失败／错误／跳过；七外部类仍显式排除，未执行。14Boot嵌套common.jar一致、七方法throws、官方SDK保留与精确重建、后端隔离、十共享运行库及Java17私有probe编译已通过。1219输入中1215个执行输入已与Git index／commit逐LF指纹绑定，四个ignored IDEA XML未提交；14JAR再次核对未变化。证明与日志详见[本地验收记录](isolated-rag-local-verification.md)。
+- 进度30/49。本轮部署必须更新Auth／RAG／Listing／Memory／Agent／Customer／Marketing七release，因为消费端需要新的common.jar反射异常声明。下方较早的848项、28/49及首轮启动描述仅为历史时点，不能覆盖本段。
+- JNDI混合ANY和Dubbo同名HTTP实例误选REST已关闭，不再作为当前排查对象。上轮accf97f实测已恢复Listing接线与有界INSPECT，真实embedding／governed rerank通过；残余ES／Milvus及RPC／HTTP错误分别由KI-103／104／105跟踪。
+- 新实际结果以七镜像绑定、健康、真实Listing POST、三空间INSPECT及操作后signed ADMIN、原生产路径的安全ES HTTP状态和Milvus兼容枚举为准。仅当实际失败完全为缺schema且模型能力通过才显式PROVISION；不得把旧空catalog、构建成功或未知错误当初始化门禁。默认混合检索、权限正反例、APPLIED水位和回滚仍未完成，不归档。
+
+## 前序执行与范围记录（历史时点）
+
 - 变更：`extract-isolated-rag-service`；分支：`dev-fix`；本轮交接基线 HEAD：`42a55bf`。
 - 本文件替代原“必须人工决定的阻塞”说明。最新用户授权和范围决定已明确，不再要求用户重复批准，也不把实施方可执行的工作交还用户。
 - 证据分层：2026-10-14当前22模块串行clean test／package均通过，每轮848项／137份Surefire XML，0失败／错误／跳过；七个外部联调类仍显式排除。14个Boot JAR、两官方SDK源精确重建／其余9官方类不变／license、后端依赖隔离及Java17私有probe编译已证，源LF指纹4e5307ef818d1263896ced5f78ea872e69523e87903cc156bc1ee833d40f476d。先前定向结果覆盖重叠，不能相加；历史失败保留。七个独立release镜像在原实例保留前提下开始构建，配置读回／制品编译仍不是应用已加载或默认检索成功。
