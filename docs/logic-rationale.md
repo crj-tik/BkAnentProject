@@ -485,9 +485,9 @@
 
 ## LR-50 Milvus集合缺失只按schema操作的兼容枚举分类
 
-**结论**：describeCollection的官方ServerException兼容枚举CollectionNotExists才映射SPACE_NOT_READY／vectorSchema；原revision query仍按依赖错误处理。先遍历cause链保留认证、权限、期限和原RagException，再分类缺schema。诊断仅固定操作、nullable数字和枚举，不打印reason／message／目标或异常。
+**结论**：describeCollection的官方ServerException兼容枚举CollectionNotExists，或同一异常的精确组合getStatus=100且compatibleCode=UnexpectedError，映射SPACE_NOT_READY／vectorSchema；原revision query仍按依赖错误处理。裸R.status=100、DataCoordNA、null兼容枚举及异常文本均不是分类依据。先遍历cause链保留认证、权限、期限和原RagException，再分类缺schema。诊断仅固定操作、nullable数字和枚举，不打印reason／message／目标或异常。
 
-**根因**：SDK2.5.8把现代Status.code和旧error_code合并为ServerException.getStatus，两个命名空间数字不能混同；兼容enum的100是DataCoordNA，不能把裸100或异常文本当缺集合。schema不存在可通过受权初始化解决，revision查询失败却不能自动初始化或变成成功空记录。
+**根因**：SDK2.5.8把现代Status.code和旧error_code合并为ServerException.getStatus，两个命名空间数字不能混同；兼容enum的100是DataCoordNA。v2.4.17官方merr.ErrCollectionNotFound的现代code为100，原merr.Status映射兼容CollectionNotExists，但DescribeCollection proxy为PyMilvus兼容明确把旧enum改UnexpectedError而保留现代100。UnexpectedError旧值为1，同一异常merged100／compatibleUnexpectedError不可能来自legacy fallback，因此该组合确证现代collection-not-found。它仍可能表示notAvailable，不自动证明物理集合缺失或允许覆盖；显式初始化前须结合当前只读catalog。revision查询失败不能自动初始化或变成成功空记录。固定来源：milvus-io/milvus v2.4.17 pkg/util/merr/errors.go:64-66、utils.go:72-91／148-149、internal/proxy/task.go:632-649、internal/rootcoord/meta_table.go:597-633；milvus-proto v2.4.17 common.proto旧enum与独立code字段。
 
 **代码位置**：rag-service/storage/SpringAiMilvusDocumentStore的schema-only检查及既有SpringAiMilvusDocumentStoreTest；ElasticsearchProjectionStore沿原受保护reader输出固定SCHEMA_HEAD／SCHEMA_MAPPING状态、错误码和单调耗时。
 

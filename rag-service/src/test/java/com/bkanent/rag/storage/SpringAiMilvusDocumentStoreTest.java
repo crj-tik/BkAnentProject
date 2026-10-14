@@ -105,16 +105,47 @@ class SpringAiMilvusDocumentStoreTest {
         }
     }
 
+    @Test void officialModernDescribeTupleMapsOnlySchemaToNotReady() {
+        for (boolean wrapped : List.of(false, true)) {
+            var client = inspectionClient();
+            var modern = new ServerException("provider text must not classify", 100, ErrorCode.UnexpectedError);
+            Exception failure = wrapped ? new IllegalStateException("provider wrapper", modern) : modern;
+            R<DescribeCollectionResponse> response = R.failed(failure);
+            assertSame(failure, response.getException());
+            assertEquals(Integer.valueOf(100), modern.getStatus());
+            assertEquals(ErrorCode.UnexpectedError, modern.getCompatibleCode());
+            when(client.describeCollection(any())).thenReturn(response);
+            when(client.query(any(io.milvus.param.dml.QueryParam.class))).thenReturn(R.failed(failure));
+            var embedding = mock(EmbeddingModel.class);
+            var store = new SpringAiMilvusDocumentStore(registry(), client, embedding);
+            var schemaFailure = assertThrows(RagException.class, () -> store.verifySchema(space()));
+            assertEquals(RagErrorCode.SPACE_NOT_READY, schemaFailure.code());
+            assertEquals("vectorSchema", schemaFailure.field());
+            var queryFailure = assertThrows(RagException.class, () -> store.inspect(space().spaceId(), "listing:1"));
+            assertEquals(RagErrorCode.DEPENDENCY_UNAVAILABLE, queryFailure.code());
+            assertNull(queryFailure.field());
+            verify(client).withRetry(any(io.milvus.param.RetryParam.class));
+            verify(client).withTimeout(anyLong(), eq(java.util.concurrent.TimeUnit.NANOSECONDS));
+            verify(client).describeCollection(any());
+            verify(client).query(any(io.milvus.param.dml.QueryParam.class));
+            verifyNoMoreInteractions(client);
+            verifyNoInteractions(embedding);
+        }
+    }
+
     @Test void modernNumbersOtherNamespacesUnknownAndMissingMessagesRemainUnavailable() {
         List<R<DescribeCollectionResponse>> responses = new ArrayList<>();
-        for (ErrorCode compatible : Arrays.asList(ErrorCode.DataCoordNA, ErrorCode.UnexpectedError,
+        for (ErrorCode compatible : Arrays.asList(ErrorCode.DataCoordNA,
                 ErrorCode.Success, ErrorCode.UNRECOGNIZED, null)) {
             responses.add(R.failed(new ServerException("collection not exist", 100, compatible)));
         }
-        responses.add(R.failed(new ServerException("collection not exist", 4, ErrorCode.UnexpectedError)));
+        for (int status : List.of(1, 4, -3, 987654)) {
+            responses.add(R.failed(new ServerException("collection not exist", status, ErrorCode.UnexpectedError)));
+        }
+        responses.add(R.failed(new ServerException("collection not exist", null, ErrorCode.UnexpectedError)));
+        responses.add(R.failed(ErrorCode.DataCoordNA, "collection not exist"));
         responses.add(R.failed(new ServerException("collection not exist", null, null)));
         responses.add(R.failed(new ServerException("collection not exist", 28, ErrorCode.CollectionNameNotFound)));
-        responses.add(R.failed(new ServerException("collection not exist", -3, ErrorCode.UnexpectedError)));
         responses.add(R.failed(new ServerException("collection not exist", 987654, ErrorCode.UNRECOGNIZED)));
         responses.add(R.failed(new Exception("collection not exist code=100 error_code=CollectionNotExists")));
         responses.add(R.failed(ErrorCode.CollectionNotExists, "collection not exist"));
@@ -128,6 +159,26 @@ class SpringAiMilvusDocumentStoreTest {
             var failure = assertThrows(RagException.class, () -> store.verifySchema(space()));
             assertEquals(RagErrorCode.DEPENDENCY_UNAVAILABLE, failure.code());
             assertNull(failure.field());
+        }
+    }
+
+    @Test void modernDescribeTupleNeverCombinesFieldsFromDifferentServerExceptions() {
+        var codeOnly = new ServerException("provider text must not classify", 100, null);
+        codeOnly.initCause(new ServerException("provider text must not classify", 1, ErrorCode.UnexpectedError));
+        var enumOnly = new ServerException("provider text must not classify", 1, ErrorCode.UnexpectedError);
+        enumOnly.initCause(new ServerException("provider text must not classify", 100, ErrorCode.DataCoordNA));
+        for (ServerException failure : List.of(codeOnly, enumOnly)) {
+            var client = inspectionClient();
+            R<DescribeCollectionResponse> response = R.failed(failure);
+            assertSame(failure, response.getException());
+            when(client.describeCollection(any())).thenReturn(response);
+            when(client.query(any(io.milvus.param.dml.QueryParam.class))).thenReturn(R.failed(failure));
+            var store = new SpringAiMilvusDocumentStore(registry(), client, mock(EmbeddingModel.class));
+            var schemaFailure = assertThrows(RagException.class, () -> store.verifySchema(space()));
+            assertEquals(RagErrorCode.DEPENDENCY_UNAVAILABLE, schemaFailure.code());
+            assertNull(schemaFailure.field());
+            assertEquals(RagErrorCode.DEPENDENCY_UNAVAILABLE,
+                    assertThrows(RagException.class, () -> store.inspect(space().spaceId(), "listing:1")).code());
         }
     }
 
@@ -152,15 +203,18 @@ class SpringAiMilvusDocumentStoreTest {
             hardFailures.add(new RagException(code));
             expected.add(code);
         }
-        for (int i = 0; i < hardFailures.size(); i++) {
-            var missing = new ServerException("collection not exist", 100, ErrorCode.CollectionNotExists);
-            missing.initCause(new IllegalStateException("nested provider text", hardFailures.get(i)));
-            var client = inspectionClient();
-            when(client.describeCollection(any())).thenReturn(R.failed(missing));
-            var store = new SpringAiMilvusDocumentStore(registry(), client, mock(EmbeddingModel.class));
-            var failure = assertThrows(RagException.class, () -> store.verifySchema(space()));
-            assertEquals(expected.get(i), failure.code());
-            assertNull(failure.field());
+        for (ErrorCode compatible : List.of(ErrorCode.CollectionNotExists, ErrorCode.UnexpectedError)) {
+            for (int i = 0; i < hardFailures.size(); i++) {
+                var missing = new ServerException("collection not exist", 100, compatible);
+                missing.initCause(new IllegalStateException("nested provider text", hardFailures.get(i)));
+                var client = inspectionClient();
+                when(client.describeCollection(any())).thenReturn(R.failed(missing));
+                var store = new SpringAiMilvusDocumentStore(registry(), client, mock(EmbeddingModel.class));
+                var failure = assertThrows(RagException.class, () -> store.verifySchema(space()));
+                assertEquals(expected.get(i), failure.code());
+                assertNull(failure.field());
+                if (hardFailures.get(i) instanceof RagException) assertSame(hardFailures.get(i), failure);
+            }
         }
         var existing = new RagException(RagErrorCode.INDEX_CONFLICT);
         existing.initCause(io.grpc.Status.UNAUTHENTICATED.asRuntimeException());
@@ -173,6 +227,18 @@ class SpringAiMilvusDocumentStoreTest {
 
     @Test void schemaDescribePreservesExistingRagFailuresAndCompatiblePermission() {
         var client = inspectionClient();
+        for (boolean ragOutside : List.of(false, true)) {
+            var preserved = new RagException(RagErrorCode.INDEX_CONFLICT);
+            var modern = new ServerException("provider text must not classify", 100, ErrorCode.UnexpectedError);
+            if (ragOutside) preserved.initCause(modern);
+            else modern.initCause(new IllegalStateException("provider wrapper", preserved));
+            Exception failure = ragOutside ? preserved : modern;
+            when(client.describeCollection(any())).thenReturn(R.failed(failure));
+            when(client.query(any(io.milvus.param.dml.QueryParam.class))).thenReturn(R.failed(failure));
+            var store = new SpringAiMilvusDocumentStore(registry(), client, mock(EmbeddingModel.class));
+            assertSame(preserved, assertThrows(RagException.class, () -> store.verifySchema(space())));
+            assertSame(preserved, assertThrows(RagException.class, () -> store.inspect(space().spaceId(), "listing:1")));
+        }
         var existing = new RagException(RagErrorCode.INDEX_CONFLICT);
         when(client.describeCollection(any())).thenReturn(R.failed(existing));
         var store = new SpringAiMilvusDocumentStore(registry(), client, mock(EmbeddingModel.class));

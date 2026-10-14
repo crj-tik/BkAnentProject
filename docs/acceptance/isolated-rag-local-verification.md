@@ -137,6 +137,21 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - 三Milvus SCHEMA_DESCRIBE实际rStatus=100／serverStatus=100／compatibleCode=UnexpectedError／grpcCode=null，不是此前兼容CollectionNotExists；数字100不能独立推定missing。KI-104保持OPEN，须核对当前服务器现代错误命名空间和实际操作证据；未PROVISION／worker／backfill／fixture。固定日志只能按串行调用时间窗关联空间，不含request／space identity，相关性限制保留。
 - release env／security／tmpfs／healthclass及RAG两网络、.20及registry pins一致；23历史镜像ID、五原停止容器及25原项目基础资源未变。混合回滚Compose及interpolation单独保存，只回滚七release，不删除旧数据、卷或历史。安全证据根D:/project/rag-dev-backups/42a55bf-20261014-release-prep/，文件contract-reactor-build-bound-safe.json、contract-reactor-images-built-safe.json、contract-reactor-release-start-safe.json、contract-reactor-domain-discovery-call-safe.json、contract-reactor-domain-inspect-safe.json、contract-reactor-backend-diagnostics-safe.json、contract-reactor-release-preservation-safe.json、contract-reactor-runtime-gates-safe.json。commit／push hook的scanner_enobufs不是完整安全审计。
 
+### 2026-10-14 Milvus现代错误组合的最小修复与新证明
+
+- 固定官方Milvus v2.4.17源码确认现代collection-not-found code=100，DescribeCollection proxy为了PyMilvus兼容把旧enum改为UnexpectedError=1但保留现代code。SDK2.5.8同一ServerException的getStatus=100／compatibleCode=UnexpectedError可精确识别现代缺schema；不能用裸R.status、其他异常字段、DataCoordNA或文本替代，notAvailable仍不等于物理缺失。仅原schema describe分类改变，revision query、认证／权限／期限优先、SpringAI实现和安全日志不变，见LR-50／KI-104。
+- 两新增方法及正负／优先级矩阵使Milvus16项，加ES8项共24定向通过，日志D:/project/rag-milvus-modern-focused-20261014.log。冻结后22模块串行clean test及package各918项／142份Surefire XML，0失败／错误／跳过；七外部类仍显式排除，未执行：ApprovalClaimDatabaseConcurrencyTest、SupervisorDockerDatabaseTest、SupervisorDistributedAcceptanceTest、NacosAgentRegistryDockerTest、NacosRollingUpgradeDockerTest、SupervisorRealModelEvaluationTest、LiveSkillAgentCardsDockerTest。日志D:/project/rag-milvus-modern-clean-test-20261014.log、rag-milvus-modern-package-20261014.log及对应test-proof／artifact-proof日志。此次不重跑已完成构建，也不将两轮918相加为独立1836项。
+- 新证明D:/project/rag-milvus-modern-artifact-verification-20261014.json，SHA-256为14d42371ee8c37cbab8d2ba2aff434b68f80dbea4073971144ac885b9757defe；1219输入LF指纹668860a838ef0da892211e0a13b5f8a9d37aa04e497e81857a29ad206092d2c1。14Boot内common.jar逐字节相同，SHA-256为1d54e4fd4e5c8ab8cca0aebeef9f10f88b307e6a20fecaa0a313b4118a2cd408；javap四接口七throws、九官方未改class／两个source精确重建／license／唯一ZIP及SDK／后端隔离／十共享运行库／Java17当前probe均通过。RAG JAR SHA-256为1b9e48cfabaa6e9f90bf952801f334d5fe4aecdeea850f7641094257be90e58b。source_head=e298673且dirty_source=true如实记录构建时点，提交绑定另验；包装hash变化不表示common契约源码变化，本次仅RAG生产源码改变。
+- 8.7按新证明重新闭合，恢复30/49。此时运行仍为916／1ee06f2；新RAG部署、当前catalog全状态、PROVISION和默认双路正命中未验，KI-104保持OPEN，未开启worker／backfill。
+
+### 2026-10-14 独立权限矩阵的通过、失败与清理边界
+
+- 原API矩阵实际28 pass／6 fail，不重写成全过。ADMIN角色目录200、BROKER403／AUTH_FORBIDDEN、MANAGER更新400／AUTH_ROLE_INVALID；六个跨owner GET／decay／upsert均403／FORBIDDEN，缺owner401、伪owner403。停用／删除原token在auth、memory及Agent直接filter返回预期拒绝码；但五项附加“原token未到期”谓词误把实际v1 token当JWT，证据失败仍保留，已丢弃原token不能补造。第六项整UserItem相等失败未保存逐字段差异，原因UNKNOWN，不能猜lastLogin或createdAt。
+- 源码定位真实token为v1.base64url(UTF8(userId|expiresAt epoch秒|type)).HMAC，不含角色状态；窄重验只内存核对本次服务器已接受原token的主体／access／未到期布尔值，禁止打印token／payload／时间／ID，不将解码当本地验签。用户管理拒绝前后按精确ID取唯一列表项比较六个稳定权限字段，整DTO和分页对象不作为权限事实。
+- 原A2A矩阵0 pass／5 fail：9002 Agent是Supervisor消费者，源码未装配业务root Agent／AgentCard，/a2a不是正确guard验收端点。首send的error为string触发AttributeError，原HTTP／contentType未保存记UNKNOWN；余四请求HTTP404且非JSONRPC。不能当guard拒绝，也不能声明task／queue副作用为零。业务端点与实际错误包络需另外确认，旧失败证据保留。
+- 原两临时账号均精确softdelete，成功偏好写0，业务／artifact／选定checkpoint计数和memory outbox17未变；两原seed指纹及BROKER login／me保持。auth总行2→4因保留两条softdeleted历史，live仍2；凭据丢弃，未物理抹历史、PROVISION／worker／backfill。safe文件位于release-prep：ragperm-contract-reactor-api-matrix-safe.json、ragperm-contract-reactor-a2a-matrix-safe.json、ragperm-contract-reactor-cleanup-preservation-safe.json。
+- 当前REST collections/list的default三个配置项均list0，但physical_absent_proven=false／notAvailable_excluded=false。后续全状态盘点须同etcd revision覆盖新collection-info/1/及legacy collection/当前前缀并确认db-info/1有效default映射，不能用可用列表或历史空集合放行初始化。
+
 ### 本轮仍待完成的验证
 
 以下1／2为c338b7e部署时点保留记录，已由上方accf97f实测及本轮增量推进覆盖，不作为当前仍阻塞的DNS／REST／Bean／整体INSPECT原因。

@@ -26,6 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class SpringAiMilvusDocumentStore implements IndexSink {
     private static final Logger log = LoggerFactory.getLogger(SpringAiMilvusDocumentStore.class);
+    private static final int MODERN_COLLECTION_NOT_FOUND_CODE = 100;
     private final RagSpaceRegistry registry;
     private final MilvusServiceClient client;
     private final EmbeddingModel embeddingModel;
@@ -177,10 +178,14 @@ public class SpringAiMilvusDocumentStore implements IndexSink {
                 if (server.getCompatibleCode() == io.milvus.grpc.ErrorCode.PermissionDenied) {
                     throw new RagException(RagErrorCode.FORBIDDEN);
                 }
-                // KI-104 / LR-36: only describe-schema compatibility enum proves this classification.
-                // SDK 2.5.8 getStatus() merges modern code and legacy error_code; numeric 100 is not a predicate.
+                // KI-104 / LR-50: official v2.4.17 internal/proxy/task.go:637-649 rewrites describe's
+                // collection-not-found legacy enum to UnexpectedError (1), retaining modern code 100;
+                // SDK 2.5.8 merged status 100 + UnexpectedError must come from the same ServerException,
+                // not bare R status, legacy DataCoordNA (100), or exception text; schema describe only.
                 collectionMissing |= schemaDescribe
-                        && server.getCompatibleCode() == io.milvus.grpc.ErrorCode.CollectionNotExists;
+                        && (server.getCompatibleCode() == io.milvus.grpc.ErrorCode.CollectionNotExists
+                            || (Objects.equals(server.getStatus(), MODERN_COLLECTION_NOT_FOUND_CODE)
+                                && server.getCompatibleCode() == io.milvus.grpc.ErrorCode.UnexpectedError));
             }
         }
         // Scan the entire cause chain for hard failures before applying the schema-only missing classification.
