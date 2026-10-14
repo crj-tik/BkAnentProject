@@ -9,7 +9,7 @@ x-app-environment: &app-environment
   MYSQL_HOST: mysql
   MYSQL_PORT: "3306"
   MYSQL_USER: root
-  MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-bk_dev_password}
+  MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Explicit MYSQL_ROOT_PASSWORD required}
   REDIS_HOST: redis
   REDIS_PORT: "6379"
   REDIS_PASSWORD: ""
@@ -19,13 +19,14 @@ x-app-environment: &app-environment
   MINIO_HOST: minio
   MINIO_PORT: "9000"
   MINIO_ENDPOINT: http://minio:9000
-  MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-  MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
+  MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-}
+  MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?Explicit MINIO_ROOT_PASSWORD required}
   MINIO_PUBLIC_BASE_URL: ${MINIO_PUBLIC_BASE_URL:-http://127.0.0.1:19000}
-  AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:-local-docker-auth-secret-change-before-production-please}
+  AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:?Explicit AUTH_TOKEN_SECRET required}
   # Spring AI validates provider keys during bean creation. The placeholders
   # only keep local containers bootable; real AI calls still require keys.
   DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-${KE_API_KEY:-local-dev-placeholder}}
+  DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://open-chatgpt.ke.com/v1}
   KE_API_KEY: ${KE_API_KEY:-}
   KE_OCR_BASE_URL: ${KE_OCR_BASE_URL:-https://open-chatgpt.ke.com/v1}
   KE_OCR_MODEL: ${KE_OCR_MODEL:-baidu-general}
@@ -62,19 +63,18 @@ services:
     image: mysql:8.4
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-bk_dev_password}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Explicit MYSQL_ROOT_PASSWORD required}
       TZ: Asia/Shanghai
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
     volumes:
       - mysql-data:/var/lib/mysql
-      - ./sql/mysql-init.sql:/docker-entrypoint-initdb.d/001-mysql-init.sql:ro
-      - ./sql/migrations/20260929_interview_subagent.sql:/docker-entrypoint-initdb.d/002-interview-subagent.sql:ro
-      - ./sql/migrations/20260930_interview_report_task_asset_id.sql:/docker-entrypoint-initdb.d/003-interview-report-task-asset-id.sql:ro
-      - ./docker/mysql/004-supervisor.sql:/docker-entrypoint-initdb.d/004-supervisor.sql:ro
-      - ./sql/migrations/20261004_supervisor_orchestration.sql:/opt/bk-migrations/supervisor-orchestration.sql:ro
-      - ./sql/migrations/20261004_supervisor_run_control.sql:/opt/bk-migrations/supervisor-run-control.sql:ro
+      # Fresh and existing volumes share the reviewed versioned manifest, not a SQL glob.
+      - ./docker/mysql/001-manifest.sh:/docker-entrypoint-initdb.d/001-manifest.sh:ro
+      - ./docker/mysql:/opt/bk-init/docker/mysql:ro
+      - ./sql:/opt/bk-init/sql:ro
+      - ./scripts/deploy/run-init-manifest.sh:/opt/bk-init/scripts/deploy/run-init-manifest.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
       interval: 5s
@@ -93,7 +93,7 @@ services:
     environment:
       MYSQL_HOST: mysql
       MYSQL_PORT: "3306"
-      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:-bk_dev_password}
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Explicit MYSQL_ROOT_PASSWORD required}
       MYSQL_MCP_PASSWORD: ${MYSQL_MCP_PASSWORD:-}
       MYSQL_MCP_DATABASES: ${MYSQL_MCP_DATABASES:-bk_auth,bk_listing,bk_customer,bk_notification,bk_marketing,bk_promotion,bk_business,bk_agent,bk_memory,bk_contract,bk_settlement,bk_interview}
     depends_on:
@@ -145,9 +145,9 @@ services:
       # console/admin user store still applies (bkagent/BK-AGENT namespace, see .env).
       # Production: set NACOS_AUTH_ENABLE=true and rotate NACOS_AUTH_TOKEN.
       NACOS_AUTH_ENABLE: "false"
-      NACOS_AUTH_TOKEN: ${NACOS_AUTH_TOKEN:-MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
-      NACOS_AUTH_IDENTITY_KEY: ${NACOS_AUTH_IDENTITY_KEY:-bk-anent-local}
-      NACOS_AUTH_IDENTITY_VALUE: ${NACOS_AUTH_IDENTITY_VALUE:-bk-anent-local}
+      NACOS_AUTH_TOKEN: ${NACOS_AUTH_TOKEN:-}
+      NACOS_AUTH_IDENTITY_KEY: ${NACOS_AUTH_IDENTITY_KEY:-}
+      NACOS_AUTH_IDENTITY_VALUE: ${NACOS_AUTH_IDENTITY_VALUE:-}
       PREFER_HOST_MODE: hostname
       TZ: Asia/Shanghai
     ports:
@@ -164,7 +164,7 @@ services:
     networks: [bk]
 
   config-init:
-    image: curlimages/curl:8.10.1
+    image: python:3.12-alpine
     depends_on:
       nacos:
         condition: service_healthy
@@ -172,35 +172,14 @@ services:
       NACOS_NAMESPACE: ${NACOS_NAMESPACE:-BK-AGENT}
       NACOS_CONFIG_GROUP: DEFAULT_GROUP
       NACOS_CONFIG_DATA_IDS: ${NACOS_CONFIG_DATA_IDS:-}
-    entrypoint: ["/bin/sh", "-ec"]
-    command:
-      - |
-        test -n "$${NACOS_NAMESPACE}" || { printf '%s\n' 'Explicit custom namespace ID is required'; exit 64; }
-        test -n "$${NACOS_CONFIG_DATA_IDS}" || { printf '%s\n' 'Set NACOS_CONFIG_DATA_IDS to an explicitly authorized space-separated list; no templates were published'; exit 64; }
-        selected=0
-        for data_id in $${NACOS_CONFIG_DATA_IDS}; do
-          selected=$$((selected + 1))
-          case "$${data_id}" in
-            *[!a-zA-Z0-9_.-]*|.*) printf '%s\n' 'Invalid data ID'; exit 64 ;;
-          esac
-          case "$${data_id}" in *.yaml) ;; *) printf '%s\n' 'Only YAML data IDs are accepted'; exit 64 ;; esac
-          test -f "/config/$${data_id}" || { printf 'Missing selected data ID: %s\n' "$${data_id}"; exit 66; }
-        done
-        test "$${selected}" -gt 0 || { printf '%s\n' 'No data IDs selected'; exit 64; }
-        for data_id in $${NACOS_CONFIG_DATA_IDS}; do
-          printf 'Publishing selected %s to namespace %s, group %s\n' "$${data_id}" "$${NACOS_NAMESPACE}" "$${NACOS_CONFIG_GROUP}"
-          result=$$(curl --fail --silent --show-error --retry 10 --retry-delay 2 \
-            -X POST "http://nacos:8848/nacos/v1/cs/configs" \
-            --data-urlencode "tenant=$${NACOS_NAMESPACE}" \
-            --data-urlencode "dataId=$${data_id}" \
-            --data-urlencode "group=$${NACOS_CONFIG_GROUP}" \
-            --data-urlencode "type=yaml" \
-            --data-urlencode "content@/config/$${data_id}")
-          test "$${result}" = true || { printf 'Nacos rejected selected data ID: %s\n' "$${data_id}"; exit 1; }
-        done
-        printf '%s\n' 'Selected templates published; runtime namespace/config verification is still required'
+      NACOS_USERNAME: ${NACOS_USERNAME:-bkagent}
+      NACOS_PASSWORD: ${NACOS_PASSWORD:-}
+    entrypoint: ["python", "/scripts/publish-nacos.py"]
     volumes:
       - ./nacos:/config:ro
+      - ./scripts/deploy/publish-nacos.py:/scripts/publish-nacos.py:ro
+    read_only: true
+    tmpfs: [/tmp]
     networks: [bk]
     restart: "no"
 
@@ -251,8 +230,8 @@ services:
     restart: unless-stopped
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Explicit MINIO_ROOT_PASSWORD required}
     volumes:
       - minio-data:/data
     ports:
@@ -278,8 +257,8 @@ services:
         mc mb --ignore-existing "local/$${MINIO_BUCKET}"
         echo "MinIO bucket $${MINIO_BUCKET} is ready"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Explicit MINIO_ROOT_PASSWORD required}
       MINIO_BUCKET: ${MINIO_BUCKET:-generated-assets}
     networks: [bk]
     restart: "no"
@@ -360,8 +339,8 @@ services:
     restart: unless-stopped
     command: ["server", "/data"]
     environment:
-      MINIO_ROOT_USER: ${MILVUS_MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MILVUS_MINIO_ROOT_PASSWORD:-minioadmin}
+      MINIO_ROOT_USER: ${MILVUS_MINIO_ROOT_USER:-}
+      MINIO_ROOT_PASSWORD: ${MILVUS_MINIO_ROOT_PASSWORD:?Explicit MILVUS_MINIO_ROOT_PASSWORD required}
     volumes:
       - milvus-minio-data:/data
     healthcheck:
@@ -414,6 +393,17 @@ services:
       RAG_AUTH_RPC_SECRET: ${RAG_AUTH_RPC_SECRET:-}
       LISTING_RAG_RPC_SECRET: ${LISTING_RAG_RPC_SECRET:-}
       MEMORY_RAG_RPC_SECRET: ${MEMORY_RAG_RPC_SECRET:-}
+      AGENT_A2A_SIGNING_SECRET: ${AGENT_A2A_SIGNING_SECRET:-}
+      LISTING_A2A_SIGNING_SECRET: ${LISTING_A2A_SIGNING_SECRET:-}
+      CUSTOMER_A2A_SIGNING_SECRET: ${CUSTOMER_A2A_SIGNING_SECRET:-}
+      MARKETING_A2A_SIGNING_SECRET: ${MARKETING_A2A_SIGNING_SECRET:-}
+      BUSINESS_A2A_SIGNING_SECRET: ${BUSINESS_A2A_SIGNING_SECRET:-}
+      COMPARE_A2A_SIGNING_SECRET: ${COMPARE_A2A_SIGNING_SECRET:-}
+      CONTRACT_A2A_SIGNING_SECRET: ${CONTRACT_A2A_SIGNING_SECRET:-}
+      SETTLEMENT_A2A_SIGNING_SECRET: ${SETTLEMENT_A2A_SIGNING_SECRET:-}
+      NOTIFICATION_A2A_SIGNING_SECRET: ${NOTIFICATION_A2A_SIGNING_SECRET:-}
+      MEDIA_A2A_SIGNING_SECRET: ${MEDIA_A2A_SIGNING_SECRET:-}
+      INTERVIEW_A2A_SIGNING_SECRET: ${INTERVIEW_A2A_SIGNING_SECRET:-}
       AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
       AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
       A2A_PUBLIC_BASE_URL: http://auth-service:9101
@@ -469,6 +459,10 @@ services:
       A2A_PUBLIC_BASE_URL: http://agent-service:9002
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,redis,rocketmq,memory
       AGENT_RAG_RPC_SECRET: ${AGENT_RAG_RPC_SECRET:-}
+      AGENT_A2A_KEY_ID: ${AGENT_A2A_KEY_ID:-agent-a2a-current}
+      AGENT_A2A_SIGNING_SECRET: ${AGENT_A2A_SIGNING_SECRET:-}
+      AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
+      AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
       MEMORY_SERVICE_BASE_URL: http://memory-service:9011
       BUSINESS_MCP_ENDPOINT: http://business-service:9010/mcp
       COMPARE_MCP_ENDPOINT: http://compare-engine-service:9006/mcp
@@ -492,6 +486,10 @@ services:
       <<: *app-environment
       SERVICE_ARTIFACT: notification-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://notification-service:9003
+      NOTIFICATION_A2A_KEY_ID: ${NOTIFICATION_A2A_KEY_ID:-notification-a2a-current}
+      NOTIFICATION_A2A_SIGNING_SECRET: ${NOTIFICATION_A2A_SIGNING_SECRET:-}
+      AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
+      AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,rocketmq
 
   listing-master-service:
@@ -504,6 +502,10 @@ services:
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database
       LISTING_RAG_RPC_SECRET: ${LISTING_RAG_RPC_SECRET:-}
       AGENT_RAG_RPC_SECRET: ${AGENT_RAG_RPC_SECRET:-}
+      CUSTOMER_LISTING_READ_SECRET: ${CUSTOMER_LISTING_READ_SECRET:-}
+      MARKETING_LISTING_READ_SECRET: ${MARKETING_LISTING_READ_SECRET:-}
+      LISTING_A2A_KEY_ID: ${LISTING_A2A_KEY_ID:-listing-a2a-current}
+      LISTING_A2A_SIGNING_SECRET: ${LISTING_A2A_SIGNING_SECRET:-}
       AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
       AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
 
@@ -514,6 +516,11 @@ services:
       <<: *app-environment
       SERVICE_ARTIFACT: customer-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://customer-service:9005
+      CUSTOMER_LISTING_READ_SECRET: ${CUSTOMER_LISTING_READ_SECRET:-}
+      CUSTOMER_A2A_KEY_ID: ${CUSTOMER_A2A_KEY_ID:-customer-a2a-current}
+      CUSTOMER_A2A_SIGNING_SECRET: ${CUSTOMER_A2A_SIGNING_SECRET:-}
+      AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
+      AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
 
   compare-engine-service:
     <<: *app-service
@@ -524,6 +531,10 @@ services:
       <<: *app-environment
       SERVICE_ARTIFACT: compare-engine-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://compare-engine-service:9006
+      COMPARE_A2A_KEY_ID: ${COMPARE_A2A_KEY_ID:-compare-a2a-current}
+      COMPARE_A2A_SIGNING_SECRET: ${COMPARE_A2A_SIGNING_SECRET:-}
+      AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
+      AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
       COMPARE_REPORT_STORAGE_DIR: /app/runtime/reports
 
   media-worker-service:
@@ -542,6 +553,10 @@ services:
       <<: *app-environment
       SERVICE_ARTIFACT: media-worker-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://media-worker-service:9007
+      MEDIA_A2A_KEY_ID: ${MEDIA_A2A_KEY_ID:-media-a2a-current}
+      MEDIA_A2A_SIGNING_SECRET: ${MEDIA_A2A_SIGNING_SECRET:-}
+      AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
+      AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,rocketmq,minio
 
   marketing-content-service:
@@ -559,6 +574,11 @@ services:
       SERVICE_ARTIFACT: marketing-content-service-1.0.0-SNAPSHOT.jar
       MARKETING_ELASTICSEARCH_URIS: ${MARKETING_ELASTICSEARCH_URIS:-http://elasticsearch:9200}
       A2A_PUBLIC_BASE_URL: http://marketing-content-service:9008
+      MARKETING_LISTING_READ_SECRET: ${MARKETING_LISTING_READ_SECRET:-}
+      MARKETING_A2A_KEY_ID: ${MARKETING_A2A_KEY_ID:-marketing-a2a-current}
+      MARKETING_A2A_SIGNING_SECRET: ${MARKETING_A2A_SIGNING_SECRET:-}
+      AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
+      AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,elasticsearch
 
   promotion-service:
@@ -583,6 +603,10 @@ services:
       <<: *app-environment
       SERVICE_ARTIFACT: business-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://business-service:9010
+      BUSINESS_A2A_KEY_ID: ${BUSINESS_A2A_KEY_ID:-business-a2a-current}
+      BUSINESS_A2A_SIGNING_SECRET: ${BUSINESS_A2A_SIGNING_SECRET:-}
+      AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
+      AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,redis
 
   memory-service:
@@ -606,6 +630,10 @@ services:
       <<: *app-environment
       SERVICE_ARTIFACT: contract-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://contract-service:9012
+      CONTRACT_A2A_KEY_ID: ${CONTRACT_A2A_KEY_ID:-contract-a2a-current}
+      CONTRACT_A2A_SIGNING_SECRET: ${CONTRACT_A2A_SIGNING_SECRET:-}
+      AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
+      AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
 
   settlement-service:
     <<: *app-service
@@ -614,6 +642,10 @@ services:
       <<: *app-environment
       SERVICE_ARTIFACT: settlement-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://settlement-service:9013
+      SETTLEMENT_A2A_KEY_ID: ${SETTLEMENT_A2A_KEY_ID:-settlement-a2a-current}
+      SETTLEMENT_A2A_SIGNING_SECRET: ${SETTLEMENT_A2A_SIGNING_SECRET:-}
+      AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
+      AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
 
   # Opt-in deployment structure only: no backend is provisioned or authorized by this definition.
   rag-service:
@@ -647,14 +679,15 @@ services:
       MYSQL_USER: ${RAG_MYSQL_USER:-}
       MYSQL_PASSWORD: ${RAG_MYSQL_PASSWORD:-}
       MYSQL_DB_RAG: ${MYSQL_DB_RAG:-bk_rag}
-      RAG_ELASTICSEARCH_URIS: ${RAG_ELASTICSEARCH_URIS:-}
+      RAG_ELASTICSEARCH_URIS: ${RAG_ELASTICSEARCH_URIS:-http://elasticsearch:9200}
+      RAG_HTTP_MODE: MANAGED_INTERNAL
       RAG_HTTP_ALLOWED_HOSTS: ${RAG_HTTP_ALLOWED_HOSTS:-elasticsearch,host.docker.internal,open-chatgpt.ke.com,bkanent-reranker-dev}
-      RAG_MILVUS_HOST: ${RAG_MILVUS_HOST:-}
+      RAG_MILVUS_HOST: ${RAG_MILVUS_HOST:-milvus}
       RAG_MILVUS_PORT: ${RAG_MILVUS_PORT:-19530}
       RAG_MILVUS_TOKEN: ${RAG_MILVUS_TOKEN:-}
       RAG_MILVUS_SECURE: ${RAG_MILVUS_SECURE:-false}
       RAG_EMBEDDING_API_KEY: ${RAG_EMBEDDING_API_KEY:-}
-      RAG_EMBEDDING_BASE_URL: ${RAG_EMBEDDING_BASE_URL:-}
+      RAG_EMBEDDING_BASE_URL: ${RAG_EMBEDDING_BASE_URL:-https://open-chatgpt.ke.com/v1}
       RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-baai-m3-1b-base-v1-embedding-20240619}
       # Governed reranker on the dedicated internal network; identity pins fail closed on drift.
       RAG_RERANK_ENDPOINT: ${RAG_RERANK_ENDPOINT:-http://bkanent-reranker-dev:18111/api/v1/rerank}
@@ -677,7 +710,8 @@ services:
       timeout: 5s
       retries: 30
       start_period: 30s
-    # bkanent-rerank-dev is the external reranker network created by that project's deploy script.
+    # bkanent-rerank-dev is the external reranker network created by that project's deploy script;
+    # it is optional so environments without the reranker still start (rerank capability stays closed).
     networks:
       - bk
       - bkanent-rerank-dev
@@ -695,6 +729,10 @@ services:
       <<: *app-environment
       SERVICE_ARTIFACT: interview-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://interview-service:9014
+      INTERVIEW_A2A_KEY_ID: ${INTERVIEW_A2A_KEY_ID:-interview-a2a-current}
+      INTERVIEW_A2A_SIGNING_SECRET: ${INTERVIEW_A2A_SIGNING_SECRET:-}
+      AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
+      AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database
       MYSQL_DB_INTERVIEW: bk_interview
       NACOS_A2A_AGENT_REGISTRY_ENABLED: ${NACOS_A2A_AGENT_REGISTRY_ENABLED:-false}

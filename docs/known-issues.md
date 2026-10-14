@@ -399,6 +399,72 @@
 
 **验证**：本轮定向89项和全reactor683项test/package均通过，实际运行门禁仍开放；见 `docs/acceptance/isolated-rag-local-verification.md`。
 
+## KI-78 [OPEN·P1] 个人回填游标、计数和持久身份未全部限定 owner
+
+**确认依据**：本次授权 ADMIN 也只能访问自身个人记忆后，对现有回填分页实现进行源码复核。
+
+**现象与根因**：仅限制偏好源或最终正文不足以保护跨用户持久 projection identity、扫描计数、回执和 r 游标；具有 ADMIN 的调用方可能观察或重建他人的删除身份。个人记忆强隔离包括这些控制事实，不只是内容。
+
+**处置（当前实施，待验证）**：源与持久身份 SQL 在 LIMIT 前参数绑定当前 owner，foreign-owner preference 游标拒绝；输出前重验当前身份/admin/owner，失效时事务回滚 revision/outbox。新增 H2 分页、他人删除身份不影响计数/游标/回执、撤销回滚反例，当前尚未运行；不据源码新增标为已修。见 LR-39、LR-40。
+
+## KI-79 [OPEN·P1] 内部记忆部分查询与后续写入缺持久 session owner 校验
+
+**确认依据**：本次 memory 内部入口源码审阅，未在真实个人数据上利用。
+
+**现象与根因**：artifact/by-id 省略 sessionId、handoffs/by-task 和 workflow/history 原先仅检查已认证 principal，没有依据持久 artifact/packet 的 session owner 限定输出；不存在 session 的后续 artifact/handoff/snapshot 写入也未拒绝。入口缓存 principal 不是返回前实时身份。此前关于既存会话可被直接覆盖的推断不成立：SessionSharedMemoryService 已拒绝变更既存 userId，session_id 唯一约束使并发新 ID 的失败插入不能覆盖已有记录；controller 前置校验不足不等于已证明服务层接管漏洞。
+
+**处置（当前实施，待验证）**：内部请求强制真实 Bearer + X-Memory-Owner，以 requestURI/contextPath 限定路径；既存 session 不属本人即拒绝。三查询路由逐个核对持久 artifact/packet 的实际 session owner，workflow 内部 artifact 再核对实际所属；后续写入要求 session 已存在且属于本人。所有正常 controller 响应返回前重新认证 Bearer，核对 OWNER 及入口 actor。新增跨 owner、孤儿/缺 session、查询后撤销拒绝输出及本人正向回归，当前尚未执行；不新增 service/schema/锁，不声称跨查询写入原子隔离。见 LR-40。
+
+## KI-80 [OPEN·P1] A2A task lease 非原子容量检查及覆盖可破坏任务归属
+
+**确认依据**：当前专用 A2aCredentialContext 新实现集成审阅。
+
+**现象与根因**：并发 map size 检查后直接 put 不保证容量上限，且 taskId 相同的另一请求可替换原 owner/caller 的有效 lease；只在 AgentExecutor 校验还会漏 TaskStore 查询、取消和 resubscribe。
+
+**处置（当前实施，待验证）**：原子注册/容量检查、拒绝另一在途 lease 和跨 owner/caller/task 覆盖、条件 remove；official handler 在所有受支持任务操作访问 store 前核对原 owner，明确不支持操作失败关闭。新增跨 owner/并发/查询取消和线程恢复反例，当前尚未构建。见 LR-41。
+
+## KI-81 [OPEN·P1] A2A 默认 JDK transport 重定向可能转发专用凭据头
+
+**确认依据**：当前官方 SDK JdkA2AHttpClient 源码核对，未向外部地址发送信标。
+
+**现象与根因**：官方默认 Redirect.NORMAL 并非专用凭据安全策略；在任务 transport 装饰器添加头后，自动跟随跳转可能把信标发到原任务目标外。固定 Task endpoint 与请求签名不等于禁止 HTTP 转发。
+
+**处置（当前实施，待验证）**：在已授权最小 SDK patch 制品中增加安全官方 JDK transport 构造路径，专用 beacon 使用 Redirect.NEVER，普通无凭据 SDK 默认行为不改；补302/307不转发回归。不反射改 final、不暗写缓存或重写 JSON-RPC。见 LR-41。
+
+## KI-82 [OPEN·P2] 版本初始化 LF checksum 首次不一致在 DDL 前失败
+
+**确认依据**：本次真实开发库首次 manifest upgrade 返回 checksum mismatch。
+
+**现象与根因**：Windows CRLF 未完全按 manifest 的规范 LF 字节归一，第一轮验证拒绝且未执行 DDL；不是迁移已成功或表已损坏。
+
+**处置（已修运行流程，待本轮提交）**：统一 SQL/check LF hash 后，现存 MySQL8.4.11 六步升级及重跑全部 Verified，种子/历史计数不变；独立空新卷首启九步、fresh 重跑两次和 upgrade 六步均 schema check 通过。已应用 migration SQL/check 修改必须追加新版本，不绕 checksum。当前 scripts/应用回归未完，保留 OPEN 直到提交验证关联。见 LR-42。
+
+## KI-83 [OPEN·P1] 生产 PUBLIC_ONLY 空 allowlist 继承测试兼容的任意公开 host 行为
+
+**确认依据**：本次实际 RagHttpTransportConfiguration configured 路径与 RagEndpointPolicy 源码复核，无外部未授权请求。
+
+**现象与根因**：旧 Supplier<Set<String>> 测试接口允许空集合代表全部合规公开地址，生产 configured factory 共用该 snapshot 时仅在 MANAGED_INTERNAL 检查非空；生产缺失 allowed-hosts 未失败关闭，违背精确 host 授权。
+
+**处置（当前实施，待验证）**：区分旧测试入口和生产 configured 路径，生产两种模式空 host 集合立即拒绝，真实 transport 不绕过该 factory。新增实际工厂缺配置/空 PUBLIC_ONLY 的公开 hostname/IP 反例，要求 DNS 零调用、HC5 连接 delegate 零交互；回归尚未执行。见 LR-34。
+
+## KI-84 [OPEN·P2] A2A 流式回调丢失认证失败错误码
+
+**确认依据**：本次 current reactor test 后对 OfficialA2aAgentExecutor.executeStream 的定点源码核对。
+
+**现象与根因**：流式 chunk 输出前 authLease.verify 抛出 RagException，订阅 error callback 却固定映射 EXECUTION_FAILED；最终同步/完成分支保留认证错误，但异步失败不能与普通模型故障区分。当前 blocking 撤销测试的首轮 NPE 另为夹具 anySatisfy 解引用 WORKING 空 message，并非生产未发 FAILED 的证据。
+
+**处置（当前实施，待验证）**：流式回调只对 RagException 保留其结构化 code，其他错误仍 EXECUTION_FAILED；增加撤销后零 progress/final 正文与安全认证错误反例。blocking 夹具精确核对 WORKING/FAILED、终态安全 error 和无 artifact，不删撤销断言。当前尚未重跑。见 LR-41。
+
+## KI-85 [FIXED·本提交·P3] chat 模型网关地址无法经 .env 配置，.env.example 存在失实条目
+
+**发现日期**：2026-10-14（用户反馈「模型 URL 不固定、需要可配置」后全仓占位符级核对确认）。
+
+**现象与根因**：各服务 chat 通道（deepseek starter）的 Nacos 模板均引用 `${DEEPSEEK_BASE_URL:...}`，但 Compose 公共环境锚点 `x-app-environment` 未透传该变量、`.env.example` 亦无对应条目——部署侧无法通过 `.env` 切换 chat 网关地址。同时 `.env.example` 有 9 个条目（`KE_EMBEDDING_BASE_URL`/`KE_EMBEDDING_MODEL`、`MILVUS_ENDPOINT`/`MILVUS_TOKEN`/`MILVUS_USERNAME`/`MILVUS_PASSWORD`、`ELASTICSEARCH_URIS`、`AGENT_RAG_RERANK_API_KEY`、`MYSQL_EXPOSED_PORT`——MySQL 服务未发布宿主端口）在 nacos/、docker-compose.yml、scripts/ 与各模块 application.yml 中均无消费方（embedding 已收口到 `RAG_EMBEDDING_*`），而 6 个实际被消费的变量（`DEEPSEEK_BASE_URL`、`RAG_AUTH_RPC_SECRET`、`MARKETING_ELASTICSEARCH_URIS`、`RAG_HTTP_ALLOWED_HOSTS`、`NACOS_A2A_AGENT_REGISTRY_ENABLED`、`MYSQL_DB_MEMORY`）反而缺失，误导部署与排障。
+
+**修复**：`.env.example` 按 10 个分组重写并全量中文注释，补齐 6 个缺失条目、移除 9 个死条目；`docker-compose.yml` 的 `x-app-environment` 锚点新增 `DEEPSEEK_BASE_URL` 透传（默认值与 Nacos 模板默认一致）。
+
+**验证**：`docker compose config` 通过；对全部新增/保留条目逐一占位符级核对消费方（nacos 模板、compose、预检脚本、application.yml），移除条目确认零引用。
+
 ## KI-46 [FIXED·本提交·P2] 受管 A2A 技能激活缺少技能名与任务锚点日志
 
 **确认日期**：2026-10-10（`create-common-skill-module` 5.5 冒烟前置检查，源码确认）。

@@ -42,7 +42,7 @@
 
 `.env` 只维护端口、连接地址、凭据和启动引导参数；宿主机预检/启动工具使用的基础设施地址继续保留。Nacos 中的连接与密钥占位符由应用进程环境变量或密钥管理系统提供，禁止把真实密钥写进 YAML。
 
-- 连接与凭据：`MYSQL_*`、`REDIS_*`、`ROCKETMQ_*`、`MINIO_*`、`ELASTICSEARCH_URIS`、`MILVUS_*`（不含业务开关）、模型 API 密钥、`AUTH_TOKEN_SECRET`
+- 连接与凭据：`MYSQL_*`、`REDIS_*`、`ROCKETMQ_*`、`MINIO_*`、`*_ELASTICSEARCH_URIS`（如 `RAG_ELASTICSEARCH_URIS`、`MARKETING_ELASTICSEARCH_URIS`）、`MILVUS_*`/`RAG_MILVUS_*`（不含业务开关）、模型 API 密钥与网关地址（`DEEPSEEK_BASE_URL`、`KE_*`）、`AUTH_TOKEN_SECRET`
 - 启动引导：`NACOS_SERVER`、`NACOS_NAMESPACE`、`NACOS_USERNAME`、`NACOS_PASSWORD`、profile/readiness 和 A2A 地址
 - Compose 容器使用服务名连接内部基础设施；宿主机 `.env` 中的 loopback 地址不自动替换容器内连接。应用的 `NACOS_USERNAME`、`NACOS_PASSWORD` 和 `MINIO_PUBLIC_BASE_URL` 可通过 Compose 插值覆盖。账号初始化及目标命名空间 Card 更新授权仍需独立完成，设置密码不等于授权。
 
