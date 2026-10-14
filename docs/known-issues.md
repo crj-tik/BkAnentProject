@@ -403,13 +403,29 @@
 
 14个Boot JAR已核对：含SDK的制品仅有唯一patch、两份改动源码可精确还原官方源、九个未改官方二进制class一致、许可证保留、后端依赖隔离及私有probe的javac release17通过；证据 `D:/project/rag-current-artifact-verification.json`、`D:/project/rag-current-artifact-proof-final-20261014.log`。这些仅关闭本地实现缺陷，不代表部署／真实身份、五操作、排序及readiness矩阵完成；原失败日志与历史事实保留，KI-90运行修复另行取证。
 
-## KI-91 [OPEN·P2] 受限发布镜像的源码模式健康检查依赖 JRE 缺失的编译器
+## KI-91 [FIXED·本提交·P2] 受限发布镜像的源码模式健康检查依赖 JRE 缺失的编译器
 
 **发现日期**：2026-10-14（当前发布运行准备）。
 
 **现象与根因**：新受限release Dockerfile以源码模式执行 `ReadinessCheck`，需要 `jdk.compiler`；不可变digest `ec72…` 对应实际JRE17.0.20缺该模块，两个naming模块存在、SHA核对通过。此前离线模块字符串包含判断误报compiler存在；实际命令安全证据 `runtime-actual-module-predicates-safe.json` 覆盖该推断，不据离线检查声明健康检查可运行。
 
-**处置（待验证）**：仅在构建stage预编译Java17 class并改用class模式healthcheck；应用JRE保持不变、私有probe继续使用独立真实JDK，不改变业务源码行为。修复与实际healthcheck结果尚待验证，保持OPEN。
+**修复与验证（本提交）**：仅受限release构建stage使用预编译Java17 class（major61、SHA-256为3334279557d7ff455abea1aeafe18accaae1e9280064d6e9688349f0d4a6b499）及class模式healthcheck，实际Compose config-q0；应用JRE固定digest不变，仅核对真实java.naming／jdk.naming.dns。Auth／RAG／Memory新实例实际healthy／running／restart0，消除该源码模式故障，不代表检索能力或其余应用已验。私有probe独立固定maven@sha256:f58d59b6273e785ac0a4477f6e9b5ba1d7731c75b906c0f7b34076f1851318cc，实际java17／javac17／两个命名模块／jdk.compiler均通过，不运行Maven。证据release-class-health-and-probe-jdk-safe.json、release-four-current-health-safe.json；首镜像失败及错误离线compiler推断保留，未改业务源码或降低健康判断。
+
+## KI-92 [FIXED·本提交·P2] 受限发布的数字 UID 缺少可写 user.home 导致 Nacos／Dubbo 缓存初始化失败
+
+**发现日期**：2026-10-14（独立新release实例实启）。
+
+**现象与根因**：固定运行UID10001无passwd home映射，Java user.home为`?`；Nacos尝试`/app/?/logs/nacos`，Dubbo服务缓存尝试`?/.dubbo`。只读rootfs下这些目录不可创建，实际抛FileNotFoundException／Invalid service store file，不是业务SQL或鉴权失败。
+
+**修复与验证（本提交）**：仅受限stage Compose显式`java -Duser.home=/app/runtime -jar /app/application.jar`，复用既有tmpfs；实际目录10001:10001／0755且可写，rootfs只读及no-new-privileges不变。Auth／RAG／Memory新实例healthy／restart0且无该异常，实际ADMIN／BROKER登录与/auth/me通过，未改seed。证据release-initial-start-failures-safe.json、release-four-current-health-safe.json、actual-seed-auth-safe.json；关闭该缓存路径故障，不据此关闭Listing发现或检索能力门禁。
+
+## KI-93 [OPEN·P2] RAG双网络默认Dubbo地址被注册到仅重排网络
+
+**发现日期**：2026-10-14（新Listing消费者实启）。
+
+**现象与根因**：仅RAG额外加入既有rerank网络后，Dubbo自动选10.253.240.3:20898；Listing仅在业务bk网络，实际RpcException／RemotingException无法访问该地址。不是HTTP guard拒绝，不能把全部业务服务接到rerank网络作为修复。
+
+**处置（待发现验证）**：受限stage仅RAG在bk网络固定已检查空闲的172.24.0.12，官方DUBBO_IP_TO_REGISTRY与DUBBO_IP_TO_BIND同值；config-q0／新RAG重建exit0，实际bk IP和两个变量相等，rerank网络及其HTTP CIDR不变。证据release-rag-registry-stage-fix-safe.json；实际导出地址／Nacos发现／Listing消费尚待核对，直连probe不替代发现验收，保持OPEN。
 
 ## KI-78 [FIXED·本提交·P1] 个人回填游标、计数和持久身份未全部限定 owner
 
@@ -433,7 +449,7 @@
 
 **现象与根因**：并发 map size 检查后直接 put 不保证容量上限，且 taskId 相同的另一请求可替换原 owner/caller 的有效 lease；只在 AgentExecutor 校验还会漏 TaskStore 查询、取消和 resubscribe。
 
-**修复与验证（本提交）**：`A2aCredentialContext` 原子注册/容量检查、拒绝另一在途 lease 和跨 owner/caller/task 覆盖、条件 remove；`A2aAuthenticatedRequestGuard` 在所有受支持任务操作访问 store 前核对原 owner，明确不支持操作失败关闭。对应Test分别4/8项通过，含跨 owner/并发/查询取消和线程恢复反例；当前test/package与制品验证见上，真实五操作身份矩阵仍待部署。见 LR-41。
+**修复与验证（本提交）**：`A2aCredentialContext` 原子注册/容量检查、拒绝另一在途 lease 和跨 owner/caller/task 覆盖、条件 remove；`A2aAuthenticatedRequestGuard` 在所有受支持任务操作访问 store 前核对原 owner，明确不支持操作失败关闭。对应Test全部通过，含跨 owner/并发/查询取消和线程恢复反例；当前common-a2a全模块42项；当前test/package与制品验证见上，真实五操作身份矩阵仍待部署。见 LR-41。
 
 ## KI-81 [FIXED·本提交·P1] A2A 默认 JDK transport 重定向可能转发专用凭据头
 
@@ -467,13 +483,13 @@
 
 **修复与验证（本提交）**：`OfficialA2aAgentExecutor.executeStream` 回调只对 RagException 保留其结构化 code，其他错误仍 EXECUTION_FAILED；对应Test 11项通过，含撤销后零 progress/final 正文与安全认证错误、普通错误不泄漏provider正文反例。blocking 夹具精确核对 WORKING/FAILED、终态安全 error 和无 artifact，不删撤销断言；首轮失败事实保留，当前全量验证见上，部署流式身份矩阵仍待执行。见 LR-41。
 
-## KI-90 [OPEN·P2] 开发 RocketMQ broker 启动时存储异常，未完成注册
+## KI-90 [FIXED·本提交·P2] 开发 RocketMQ broker 卷根权限阻止存储初始化与注册
 
 **发现日期**：2026-10-14（当前独立RAG发布前依赖准备）。
 
 **现象与根因**：按原配置启动现有Redis／namesrv／broker，前两者协议或健康检查成功；broker在限定deadline未开放10911，mqadmin未确认注册，后续exit255／RestartCount9／OOMKilled=false。只读定位实际运行uid/gid=3000:3000、原store卷根0:0／0755不可写，日志同批确认commitlog／consumequeue mkdir Failed与store/lock Permission denied；盘仅23%使用。shutdown NullPointerException为初始化失败后的次级错误，不是已证卷损坏／OOM；原unless-stopped自动循环不是人工连续重启。
 
-**处置（进行中）**：仅修复原卷根ownership为3000:3000、保留0755；停原broker一次后受限维护，再启动同一原id／mount并限时验证注册。禁止递归chown/chmod、删除commitlog、重索引、格式化或盲改MQ配置／restart policy。agent事件总线和readiness正向运行待实际协议成功；已健康Redis／namesrv保持，其他六服务独立验收。安全证据为release-prep内broker-root-cause-safe.json、broker-store-metadata-safe.json；修复结果未取得前保持OPEN。
+**修复与验证（本提交）**：实际停原broker一次、仅原卷根非递归chown为3000:3000、同一原容器启动一次，三个步骤均exit0，0755／id／mount／restart policy保持，未读取或删除数据文件。TCP10911 ready，真实mqadmin clusterList exit0且broker-a注册，running／restart0／OOMfalse；原Redis／namesrv保持。安全证据为release-prep内broker-permission-repair-safe.json、broker-after-repair-health-safe.json。后者store_failed分类仍true，不声称所有日志无错；关闭已证权限及注册故障，不替代Agent事件总线验收。禁止递归chown/chmod、删除commitlog、重索引、格式化或盲改MQ配置／restart policy。
 
 **关联**：任务7.3、8.3、8.4；当前应用运行未完成。
 

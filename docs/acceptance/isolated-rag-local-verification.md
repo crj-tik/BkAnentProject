@@ -82,6 +82,15 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - 制品核验 exit0：14个Boot JAR、唯一patched SDK嵌套包和hash、两份官方source精确重建、其余9个官方binary class逐字节一致、LICENSE、无重复ZIP条目及后端依赖隔离通过。源LF指纹 `4e5307ef818d1263896ced5f78ea872e69523e87903cc156bc1ee833d40f476d`，1213个输入逐项可核对；SDK SHA-256 `15ec8c131773bdfd695b6be6febbcc46f47792ff3e7aea74965f67a77e11456c`。Java17私有probe针对当前Agent包编译通过，尚不等于运行。仓库外报告 `D:/project/rag-current-artifact-verification.json`，日志 `D:/project/rag-current-artifact-proof-final-20261014.log`；原javac stderr解码线程报UnicodeDecodeError，编译return0不变；复验先因误查根目录class而断言失败，修正实际包路径后在新目录字节捕获编译exit0／class存在，保存 `D:/project/rag-probe-compile-safe.json`，未修改Java源或抹去失败。
 - KI-90原broker主因已只读闭合：rocketmq运行uid/gid=3000:3000，store卷根0:0／0755不可写，commitlog／consumequeue创建失败及store/lock Permission denied；shutdown NPE是次级错误。实际stop一次／仅原卷根chown3000:3000／同原broker start一次成功，0755、id／mount／restart policy不变、无数据删除／读取。TCP10911 ready、真实mqadmin clusterList exit0且broker-a注册，running／restart0／OOMfalse；safe证据为release-prep内broker-permission-repair-safe.json及broker-after-repair-health-safe.json。日志仍有store_failed分类，需区分早期缓冲，不能称所有日志无错；协议成功不等于Agent事件总线验收。七个独立新release镜像在验证JAR／全部源指纹一致后开始构建，不覆盖旧实例或tag；首auth镜像RUN exit1，失败记录 `D:/project/rag-dev-backups/42a55bf-20261014-release-prep/release-build-failure-safe.json`，原marker只匹配组合命令文本；后续实际JAR checksum明确OK，真实java --list-modules确认命名两模块存在但jdk.compiler缺失（固定digest是JRE，不是JDK），source-mode健康检查需要compiler而失败。早期java17-runtime-module-safe.json按字符串contains误报compiler，已由runtime-actual-module-predicates-safe.json覆盖；保留原误判，不作通过证据。限定修复为已编译Java17健康检查class-mode，probe另用实际JDK，尚未启动新app。
 
+### 2026-10-14 已推送制品与独立实例运行增量
+
+- 实施commit `8fed832` 已推送 `origin/dev-fix`，本地与远端完整HEAD均为 `8fed83219238cadfe80d47ed3ea1752d56a1f38d`。192个路径经限定staging核对，174个执行／配置输入与上述构建证明一致，未纳入私密env／缓存／生成SDK源。commit／push hook均返回scanner_enobufs，没有完整安全审计结论，不宣称项目安全。
+- 受限stage预编译ReadinessCheck.class（Java17 major61）并改class模式，实际配置校验exit0；应用JRE仍固定ec72…digest，仅保留真实命名模块门禁。独立probe JDK固定 `maven@sha256:f58d59b6273e785ac0a4477f6e9b5ba1d7731c75b906c0f7b34076f1851318cc`，实际java／javac17及命名／compiler模块通过；没有运行Maven。见release-class-health-and-probe-jdk-safe.json，KI-91。
+- 六个独立镜像（auth／rag／listing／memory／agent／customer）已build exit0，source／JAR label逐项相符，运行UID10001:10001；marketing仍待build结果，不覆盖旧tag。见release-images-class-mode-built-safe.json。
+- 首批实例暴露数字UID无home，Nacos／Dubbo试写`?`目录失败；仅stage显式user.home=/app/runtime，复用10001:10001／0755可写tmpfs，rootfs只读／no-new-privileges不变。Auth／RAG／Memory实测healthy／running／restart0；Listing仍在发现验证，不将三服务健康当七服务完成。见release-initial-start-failures-safe.json、release-four-current-health-safe.json，KI-92。
+- 原有两个ADMIN／BROKER经参数绑定SQL核对ACTIVE／非删除／角色后，实际 `/auth/login` HTTP200／code0／角色相符，`/auth/me` HTTP200成功；未改密码、账号或撤销原用户，所有token／密码仅受限private环境，未输出正文。见actual-seed-auth-safe.json。这是正向登录事实，不代替无效用户／个人owner反例矩阵。
+- RAG双网卡默认注册10.253.240.3:20898使仅bk网络Listing不能访问；仅stage RAG固定已核对唯一bk IP172.24.0.12，并设置官方bind／registry变量同值，新RAG重建exit0，实际IP一致、rerank网络保留。见release-rag-registry-stage-fix-safe.json，KI-93；真实Nacos发现／消费者连接待验，直连probe不代替发现成功。
+
 ### 本轮仍待完成的验证
 
 1. 当前完整构建已取得上述848项／14个Boot制品证明，8.7据此完成；后续任何执行源码或构建配置变动须重跑对应回归／package／hash证明。下方683 tests和JAR hash仅历史，七外部联调类仍显式排除，真实Auth／模型／五操作不能据构建补勾。
