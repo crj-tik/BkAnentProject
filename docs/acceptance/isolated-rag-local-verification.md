@@ -1,5 +1,105 @@
 # 独立隔离 RAG 本地实施验收
 
+## 本轮状态（当前构建已通过，真实运行验收继续执行）
+
+本轮仍为 `extract-isolated-rag-service` / `dev-fix`。本文件将**本轮交接事实、待执行验证和历史原始记录**分开；下方 `74c8d92` / `ee4c9b9` 的测试、失败、命令、JAR hash、任务统计及当时阻塞原样保留为历史，不证明当前实现通过。任务重开不是退步，主会按最新证据维护计数；本编辑不改 tasks、不重算/补勾任务，也不把旧32/49或683项写成当前验收。
+
+本文件由主会整合当前源码、构建日志与 Docker 代理实证，历史文档编辑代理的只读/范围约束不是当前实施限制。已读取安全 fresh/backend/Nacos/script/restore JSON 摘要，均与本轮命令结果分开记录。备份内 `runtime.env`、inspect/env/dump 私密内容严禁读取或打印。
+
+### 已授权与已明确的验收口径
+
+- 个人开发环境、本地/本项目容器可变更。公司 embedding/rerank/LLM 为预定目的地，不要求新脱敏项目或重新批准；范围决定不是模型/协议/能力已验证。
+- ADMIN 可读所有未删除房源，含非ON_SALE；BROKER仅ON_SALE；MANAGER不默认准入。`rag.scope.v2` 加 `businessWideRead`，房源 policy `listing-v2`；实际作用与跨角色反例待当前测试。
+- 个人记忆**所有读、写、回填 ADMIN 亦 owner-only**；失效用户 token 无效。READ最终仅真实USER，common signer拒SERVICE READ，领域删不可达SERVICE public分支，实际消费者无fallback。上述是主会交接的源码修订，不是已通过测试/部署。
+- KI-79 的实际缺口是内部 artifact/by-id（省略sessionId）、handoffs/by-task、workflow/history 未按持久session owner限定，以及缺session的后续写入未拒绝、最终输出只使用入口缓存身份。controller已定点补齐并加回归，尚未执行。既有session service已拒绝owner reassignment且session_id唯一，不能据controller前置缺口声称已证明会话接管。
+- A2A最小真实SDK transport patch/auth beacon已授权；仓库模块 `a2a-sdk-transport-patch` / `0.2.5.Beta2-bk-transport1`，原binary unpack、两个选定官方source加patch compile，不改`.m2`、不反射、不第三JSON-RPC。`rag.credential.v2`兼token/beacon，当前SDK路径和凭据生命周期待验证。
+- 直接删除无消费者 `AgentRpcService.syncListingKnowledge(Long)` / `deleteListingKnowledge(Long)` 和无消费者signed listing legacy reconcile，不建旧兼容周期/成功代理。**正常REST/工具/业务READ/生命周期/outbox/回填与worker物理hash reconcile保留**；删除完整性和正常入口回归待当前tests。
+- HTTP仅`mode`/`allowed-hosts`/`internal-networks`：PUBLIC_ONLY默认，精确公开host `open-chatgpt.ke.com`；MANAGED_INTERNAL精确host对应RFC1918/ULA，项目Docker `172.24.0.0/16`。`host.docker.internal`容器 `192.168.65.254/32`、Windows `10.117.102.54/32`用不同map。全raw DNS/实际地址绑定/重连/TLS及proxy/redirect deny保留；HTTP不覆盖Milvus gRPC/Dubbo。
+- supervisor.knowledge未注册/未激活，未知语料不公开、不新建语料；营销独立ES在范围外。旧LR/KI中待授权SDK/私网一律拒绝/旧RPC兼容周期等内容保留历史，权威清单和spec同步由主会处理，本编辑不改它们。
+
+### 实际初始化、备份与最小权限（Docker代理交接）
+
+| 证据 | 本轮已确认摘要 | 限定范围 |
+|---|---|---|
+| 原MySQL | `8.4.11`；四库受限dump `168764` bytes | 未读取payload，不代表ES/Milvus备份/迁移或恢复已验收 |
+| 原Nacos | 十二原config，在`BK-AGENT`/`public`各六，原无rag | 不披露config内容/凭据 |
+| Nacos快照 | docker commit pause snapshot + docker save archive `293634560` bytes，有archive checksum | 隔离internal网络实例恢复12原config/hash成功；crash-consistent，**非cold Derby** |
+| 原运行资源 | Nacos `978571137a06`、MySQL `325cc757feb7`未重建；根`.env`未改 | 不表示新应用部署 |
+| 初始化manifest | `v20261013.1`，fresh九步/upgrade六步，固定DB/SQL、LF SHA-256/shared runner+check | 不依据旧脚本说明声明真实SQL全未执行 |
+| 升级失败保留 | 首次checksum因CRLF未归一，在DDL前拒绝 | 不能抹除失败或说第一次即成功 |
+| 升级修正 | LF修正后六步actual twice Verified | 不是当前应用回归/默认检索 |
+| 原计数保持 | listing0/preference0/constraints17/shared memory3/users2/roles3/workflows3/checkpoints46 | 不代表旧索引为空/水位已追平 |
+| runtime权限 | `rag_runtime`仅两个`bk_rag`控制表SELECT/INSERT/UPDATE，无DDL；跨`bk_auth` SELECT实测1142 | 不等于角色scope/个人owner权限验收 |
+| 独立fresh | `bk-anent-dev-initcheck`，新空卷`bk-anent-dev-initcheck_fresh-data`，首启healthy九步；fresh重跑两次各九步，upgrade再六步均check | 原卷未重建，非回填/应用运行 |
+
+安全备份根为 `D:/project/rag-dev-backups/42a55bf-20261013-init`，含秘密文件，只引用非秘密摘要。本编辑未独立重算dump/archive checksum或读取原始SQL日志。
+
+**已读取的fresh JSON范围**：`fresh-init-verification.json`记录容器`bk-anent-dev-initcheck-mysql-1`、项目/保留新卷、manifest、healthy、replays=[fresh,fresh,upgrade]、counts_unchanged=true；auth users2/roles3、contract template1、settlement rules2/tier1、memory lock1；listing/preference/constraint/shared memory与RAG document states/index events均0。history facts auth/interview/agent/rag/listing/memory为1/2/3/1/1/1，合计9；active_admin_broker2/auth_other_user0。JSON未附各步SQL原始输出或checksum值，不说成本编辑独立运行全部check。fresh约束0与原环境约束17属于不同环境，不覆盖或抹去原数据。
+
+### 七配置发布的逐时点事实（不混同应用生效）
+
+七选中模板为rag/auth/listing/memory/agent/customer/marketing，已接READ/A2A密钥与managed HTTP。Docker实测`bkagent`登录HTTP200，顶层accessToken未回显；auth发布/readback成功。rag POST true后立即GET404，是新配置异步可见性观察；采用限定deadline readback retry，不能将上传响应当最终生效证据，也不抹历史404。
+
+最新实证：**11域key ID/env扩展后，七模板再次认证发布且全部readback SHA-256一致，Nacos未重建**。主会已读取安全 `nacos-publication-verification.json`：namespace=BK-AGENT、group=DEFAULT_GROUP、authenticated_login/readback_equal=true、a2a_domains=11。只七dataID，不整目录；应用实际读取和运行身份仍未验证。
+
+env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUTH_RAG_RPC_RESPONSE_KEY_ID` / `AUTH_RAG_RPC_RESPONSE_SECRET`，不用新的AUTH前缀。其他六app YAML扩展保留九域真实guard能力、非全拒，六服务未部署；模板扩展不等于部署验收。密钥不回显、不写文档。
+
+### 当前新增验证记录
+
+- 全仓 `git diff --check` 通过，仅 Git LF/CRLF 提示。现存严格 YAML parser 非零计数校验16份 application、2份 Compose、17份 Nacos共35份，explicit duplicate key 检查通过；只证明解析，不证明配置运行生效。
+- 原 `mysql-before.sql` 已恢复到独立空卷 `bk-anent-dev-restorecheck_restore-data` / `bk-anent-dev-restorecheck-mysql-1`；允许读取的 `mysql-restore-verification.json` 证明 original_counts_match=true，约束17/shared3/auth2/roles3/workflows3/checkpoints46。没有恢复/覆盖主库。随后主会读取 `nacos-restore-verification.json`：隔离internal网络实例ready、12原config逐hash匹配，无有效host端口/mount，原Nacos未修改；第一次network-none实例因无非环回接口在Derby前失败且保留证据。证明paused快照crash recovery，不是graceful cold备份或当前应用/config/事件水位回滚。
+- 当前第一次 offline reactor compile：common编译成功，SDK patch module 因 antrun/plugin 本地缓存的 repository ID 不属于当前 aliyun-public 而失败，后续模块 skipped；未改 Maven settings 或缓存metadata。
+- 正常 online reactor compile 下载/验证所需plugin与official source后，SDK patch 两个官方 source成功生成并编译；common-skill通过，common-a2a失败：`A2aServerHandlerAutoConfiguration` 类不存在、`A2aAuthenticationToolInterceptor` 缺 `getName()`。定点API修复中，剩余模块 skipped。这不是完整compile通过，更不是tests通过。
+- 第三次 offline compile：SDK/common-a2a/auth通过，agent 的 Graph checked Exception 不符合 Supplier 类型而失败，下游 skipped。定点改用官方 NodeAction，保留原异常传播及 lease 自动恢复。
+- 当前 `clean compile`：22模块全部 BUILD SUCCESS，日志 `D:/project/rag-current-reactor-clean-compile.log`。此前三失败日志仍保留：`rag-current-reactor-compile.log`、`rag-current-reactor-compile-online.log`、`rag-current-reactor-compile-fixed.log`（均在 `D:/project`）。
+- 当前首轮 reactor test：common32、common-skill54通过；common-a2a35项中1 error，撤销凭据测试 anySatisfy 对 WORKING 事件的空 TaskStatus.message 解引用。实际 SDK 专用 transport 的302/307同步及SSE不转发测试通过，其余下游未执行。正在定点核对/修复事件断言，不能报完整测试通过；日志 `D:/project/rag-current-reactor-test.log`。
+- 先前 Python YAML 检查因缺PyYAML失败；独立Java validator两次被安全hook拒绝，均不作通过证据，改用已可用严格parser完成只读校验。
+- 主会已读取安全 backend JSON：旧 ES green，listing_info/marketing_content 各0文档且mapping为空对象，保留原UUID/hash；Milvus默认库空集合且精确catalog仅1库、0collection/partition，旧模型/PK/schema身份不存在，不能拿配置模板补造。四旧后端先只读归档停止卷再启动原容器，没有删除旧存储。脚本实际 mysql+nacos状态成功，缺rag/停止auth均非零，错误host超时124、实际本地MySQL0；不等于当前应用或默认RAG能力已验证。
+- 第二轮 `-fae` current test：RAG279、auth60、common32、common-skill54、gateway5、promotion2全部通过；common-a2a37中redirect loopback夹具I/O error、memory55中独立security mock未stub当前认证error、customer4中null默认值/抛错mock重新stub共1 failure/1 error，下游依赖模块skipped。同步及流式撤销测试11项通过。实际修复保留安全断言，不放宽生产授权；日志 `D:/project/rag-current-reactor-test-fixed.log`。
+- redirect夹具完整消费HTTP request body后，当前A2A定向test BUILD SUCCESS（`D:/project/rag-current-a2a-focused-test.log`）；完整reactor仍需重跑。
+- `model-preflight-verification.json`：仅合成非个人文本，旁路公司embedding HTTP200、返回模型与配置一致、dimension1024且全finite；未经过应用HTTP guard。现有RAG rerank caller key在models验证返回401，未发送rerank正文、未读外项目secret或修改外项目；profile仍null，不能声明默认检索通过。
+
+### 2026-10-14 当前配置与定向回归
+
+- 用户补齐配置后重新认证读取 `BK-AGENT/DEFAULT_GROUP` 的14个精确 dataID，全部HTTP200；13个与当前模板一致，只有rag模板仍为先前发布内容。live三个rerank-profile为null且缺governed身份钉扎、新host/CIDR；根环境已具备新的非空caller key、governed端点及身份字段。历史备份runtime不是最新发布来源，不能把其空key继续报告为当前根配置缺失。
+- 专用 `bkanent-rerank-dev` 已存在，internal网络 `10.253.240.0/24` 仅有外部reranker；本项目现有运行容器尚未接入。当前宿主governed请求DNS失败，现有项目容器getent退出2/curl退出6/HTTP000。这是当前部署网络路径未接入，不是401、模型协议失败或经过应用guard的成功证据。外部既有能力实测只作历史身份依据。
+- 记忆域 `memory.rag.semantic-scoring-versions` 已有application空默认，但Nacos及Compose漏透传；已补齐同一环境变量且维持空集合失败关闭。发布只明确注册当前三个governed profile的精确scoringVersion，不引入通配或自动接受。见KI-86。
+- Agent index测试先因AutoCloseable隐式close的检查异常无法编译；加throws后实跑暴露循环重新`when`触发旧Answer，对matcher空payload求hash失败。改为`doAnswer(...).when(...)`，保留请求签名、USER/actor/token、ACCEPTED成功与STALE/CONFLICT拒绝断言。最新定向9项通过，日志 `D:/project/rag-agent-current-focused-fixed.log`；先前失败保留 `rag-agent-current-focused.log`。
+- 九服务技能装配测试使用各自独立的专用测试lease，并增加无lease时零模型/零事件认证拒绝；保留真实服务组件、技能发布、显式正文、default完成、版本不符零新增模型调用。当前定向138项通过，包括九服务、官方SDK重定向、执行撤销、managed HTTP及governed重排；日志 `D:/project/rag-current-auth-wiring-focused.log`。这是本地mock/loopback回归，不是实际Auth/Dubbo/模型/容器验收。
+- 当前22模块源码冻结后串行`clean test`在agent模块失败：生产版本SQL显式`USE bk_agent`，H2夹具未创建该schema，三编排类共34个error；package及制品证明因前置失败未执行。日志 `D:/project/rag-current-reactor-clean-test-20261014.log`。正在定点适配夹具，不删除真实MySQL目标库/修改已应用manifest；见KI-87。选择器仍显式排除下述七外部联调类。
+- 当前A2A定点审阅核对官方SDK源发现两项生产缺口：push实际字段为`pushNotification`而非guard检查的`pushNotificationConfig`；同owner重复send在executor拒绝前，官方handler可能已更新TaskStore/队列/runningAgents。已安排guard早拒绝及原子在途预留的最小修复和回归，未以先前绿色测试声明不存在这些问题；见KI-88。
+- 独立串行`-pl memory-service,rag-service -am test`通过：common32、memory58、rag288，合计378项，0失败/0错误；包含新增评分配置3项、owner/controller/生命周期及当前governed/managed HTTP回归。日志 `D:/project/rag-memory-current-test-20261014.log`。不含尚在修复的agent编排及common-a2a增量，不是完整reactor通过。
+
+- 2026-10-14 Docker代理已限定备份旧live rag/memory，仅发布两份当前模板并认证读回一致：rag LF SHA-256 `58a3963bfd3b1bf3c0bc12dae6a6cfb53815cbf9f142ab70406481c248a33a3c`，memory `88b41e0b6309e0fd60c5f1f0c88ccb55997ff86f7bd21f506e3a5d3484093e6d`。受限阶段目录 `D:/project/rag-dev-backups/42a55bf-20261014-release-prep` 不读取私密payload；未构建或启动新应用。
+- 当前实际MySQL固定账户事实确认 `rag_runtime` 零行，不应将1045继续归因为旧密码错误。原账户未重置；单独创建 `rag_release_20261014` 并通过受支持driver参数绑定秘密，仅两个控制表SELECT/INSERT/UPDATE，实际项目host登录及两表SELECT通过、跨`bk_auth.user_account`拒绝1142。实际host映射为 `10.117.102.54:3306`，不是根配置的127.0.0.1；根及历史环境未改。
+- 五旧app（agent/listing/memory/customer/marketing）逐源docker commit均因containerd缺失同一原blob失败；无镜像tar/save成功，原停止容器全部保留。不能宣称完整应用回滚，未转export/import或删除源容器。后续仅独立新release实例，不重建或覆盖这些原实例。
+- 新A2A guard/lease定向测试12项中1error：首次实际stream handler转交被包装为AUTHENTICATION_FAILED，另11项通过。精确cause为测试JSONRPCHandler传null AgentCard，SDK在stream try块前读取capabilities触发NPE；仅换真实streaming-capable Card，生产不放宽。原失败日志 `D:/project/rag-current-repair-focused-20261014.log` 保留。独立编排Maven Store4/Reconciler2/Graph30共36项全部通过，日志 `D:/project/rag-orchestration-repair-focused-20261014.log`。新增领域单房源SQL后与memory最终writer锁等待后重认证修复和7项回归已冻结，见KI-89，当前串行复验中。
+
+- 单独串行领域输出回归通过：ListingBusinessAuthorizationTest7项、MemoryRagSearchFacadeTest24项，共31项，包含KI-89新增7项。日志 `D:/project/rag-domain-output-focused-20261014.log`。第二轮A2A测试失败保留：真实stream Flux未消费，官方producer等待poller启动，故awaitTermination失败及相同测试task静态污染；生产预留仍正确保持，夹具改为消费真实Flux并发终态和唯一task，不放宽租约。
+
+- 最终common-a2a定向36项通过，包含真实SDK push配置拒绝、在途重复send/stream零store/queue副作用、转交失败/拒绝dispatch和两侧完成后释放、官方transport重定向拒绝及同步/流式撤销；日志 `D:/project/rag-a2a-repair-final-focused-20261014.log`。
+- 当前22模块串行 `clean test` 和 `package` 均 BUILD SUCCESS（2026-10-14 12:42／12:44 +08:00）。每轮按137份Surefire XML统计 **848项**，0失败／错误／跳过，19个模块具有测试；日志控制台同时含逐类和逐模块汇总，不能把重复的1696计为独立测试。七个外部联调类仍显式排除：ApprovalClaimDatabaseConcurrencyTest、SupervisorDockerDatabaseTest、SupervisorDistributedAcceptanceTest、NacosAgentRegistryDockerTest、NacosRollingUpgradeDockerTest、SupervisorRealModelEvaluationTest、LiveSkillAgentCardsDockerTest。日志为 `D:/project/rag-current-reactor-clean-test-final-20261014.log` 和 `D:/project/rag-current-reactor-package-final-20261014.log`。
+- 制品核验 exit0：14个Boot JAR、唯一patched SDK嵌套包和hash、两份官方source精确重建、其余9个官方binary class逐字节一致、LICENSE、无重复ZIP条目及后端依赖隔离通过。源LF指纹 `4e5307ef818d1263896ced5f78ea872e69523e87903cc156bc1ee833d40f476d`，1213个输入逐项可核对；SDK SHA-256 `15ec8c131773bdfd695b6be6febbcc46f47792ff3e7aea74965f67a77e11456c`。Java17私有probe针对当前Agent包编译通过，尚不等于运行。仓库外报告 `D:/project/rag-current-artifact-verification.json`，日志 `D:/project/rag-current-artifact-proof-final-20261014.log`；原javac stderr解码线程报UnicodeDecodeError，编译return0不变；复验先因误查根目录class而断言失败，修正实际包路径后在新目录字节捕获编译exit0／class存在，保存 `D:/project/rag-probe-compile-safe.json`，未修改Java源或抹去失败。
+- KI-90原broker主因已只读闭合：rocketmq运行uid/gid=3000:3000，store卷根0:0／0755不可写，commitlog／consumequeue创建失败及store/lock Permission denied；shutdown NPE是次级错误。实际stop一次／仅原卷根chown3000:3000／同原broker start一次成功，0755、id／mount／restart policy不变、无数据删除／读取。TCP10911 ready、真实mqadmin clusterList exit0且broker-a注册，running／restart0／OOMfalse；safe证据为release-prep内broker-permission-repair-safe.json及broker-after-repair-health-safe.json。日志仍有store_failed分类，需区分早期缓冲，不能称所有日志无错；协议成功不等于Agent事件总线验收。七个独立新release镜像在验证JAR／全部源指纹一致后开始构建，不覆盖旧实例或tag；首auth镜像RUN exit1，失败记录 `D:/project/rag-dev-backups/42a55bf-20261014-release-prep/release-build-failure-safe.json`，原marker只匹配组合命令文本；后续实际JAR checksum明确OK，真实java --list-modules确认命名两模块存在但jdk.compiler缺失（固定digest是JRE，不是JDK），source-mode健康检查需要compiler而失败。早期java17-runtime-module-safe.json按字符串contains误报compiler，已由runtime-actual-module-predicates-safe.json覆盖；保留原误判，不作通过证据。限定修复为已编译Java17健康检查class-mode，probe另用实际JDK，尚未启动新app。
+
+### 本轮仍待完成的验证
+
+1. 当前完整构建已取得上述848项／14个Boot制品证明，8.7据此完成；后续任何执行源码或构建配置变动须重跑对应回归／package／hash证明。下方683 tests和JAR hash仅历史，七外部联调类仍显式排除，真实Auth／模型／五操作不能据构建补勾。
+2. 七扩展配置认证读回已通过；应用实际生效、images/digest、限定服务deploy、JRE DNS模块、真实Dubbo/provider/consumer发现验签仍待执行，不能拿配置发布替代。
+3. 公司模型真实调用、provider/model/version/dimension、rerank协议/scale/profile/scoringVersion、ES/Milvus真实schema/身份/权限、默认双路+融合+rerank及两路硬过滤等价。
+4. owner-aware回填、revision/hash/schema/tombstone、APPLIED及实际两后端物理水位/删除结果、迟到写/partial补偿、领域最终排序与真源复核。
+5. stop-write/drain、增量追平、实际消费者切流、知识关闭零RAG调用、RAG outage下正常业务可用性、事件水位rollback及备份恢复演练。不建旧兼容周期，但不豁免这些运行门禁；不删除旧index/collection/volume、不prune/down-v。
+
+历史七外部联调类的显式排除和排除时的原因仍保留，不把新授权当它们已运行通过，也不把历史选择器中的0 skipped当全外部覆盖。任何新构建选择器/失败/排除必须另有当前记录。本轮不发起完整深度安全扫描，不以初始化或发布摘要声明完整安全审计、默认检索或切流通过。
+
+实施方已授权的继续执行步骤见[执行与剩余门禁](isolated-rag-unblocking-steps.md)，逐空间SQL/身份与水位事实见[迁移清单](isolated-rag-migration-inventory.md)。可执行工作由实施方推进，不交还用户或重复要求批准。
+
+---
+
+## 历史原始记录（以下为前序时点，非当前验收状态）
+
+以下原命令、失败/修复、测试统计、JAR hash及任务边界按历史保留。文中的“当前/本次/未授权/未执行/仍阻塞”等措辞仅指各段当时，不能覆盖上方本轮状态；32/49及剩余17项是历史复核，真实SQL全未执行、SDK待授权、旧成功代理/兼容周期等旧说明不是当前门禁。`ee4c9b9`的683项及四JAR hash未对新HEAD/并行修改重跑。
+
 - 变更：`extract-isolated-rag-service`，分支 `dev-fix`。
 - 本记录区分源码/本地测试验证与真实运行迁移；不构成上线、安全完整审计或真实默认检索验收。
 - 前序公共契约及 auth 实施提交：`2a3fa12`；后续迁移实施及本地验收提交：`74c8d92`，已推送 `origin/dev-fix`。历史 `split-rag-by-domain` 不实施、不归档或改写。

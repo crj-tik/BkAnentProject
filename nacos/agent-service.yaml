@@ -23,6 +23,8 @@ spring:
         nacos:
           server-addr: ${NACOS_SERVER:10.117.102.54:8848}
           namespace: ${NACOS_NAMESPACE:}
+          username: ${NACOS_USERNAME:}
+          password: ${NACOS_PASSWORD:}
           registry:
             enabled: false
           discovery:
@@ -103,6 +105,13 @@ mybatis-plus:
       logic-delete-field: deleted
       logic-delete-value: 1
       logic-not-delete-value: 0
+
+a2a:
+  auth:
+    key-id: ${AGENT_A2A_KEY_ID:agent-a2a-current}
+    signing-secret: ${AGENT_A2A_SIGNING_SECRET:}
+    response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}
+    response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
 
 agent:
   skills:

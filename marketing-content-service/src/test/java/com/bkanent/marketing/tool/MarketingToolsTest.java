@@ -26,7 +26,7 @@ class MarketingToolsTest {
 
     private final MarketingAssetService assetService = Mockito.mock(MarketingAssetService.class);
     private final MarketingAgentService agentService = Mockito.mock(MarketingAgentService.class);
-    private final ListingMasterRpcService listingRpcService = Mockito.mock(ListingMasterRpcService.class);
+    private final com.bkanent.marketing.service.MarketingListingReadClient listingRpcService = Mockito.mock(com.bkanent.marketing.service.MarketingListingReadClient.class);
     @SuppressWarnings("unchecked")
     private final ObjectProvider<MarketingAgentService> agentServiceProvider = Mockito.mock(ObjectProvider.class);
     private final MarketingAgentProperties properties = new MarketingAgentProperties();
@@ -47,7 +47,7 @@ class MarketingToolsTest {
 
     @Test
     void blankCopywritingTriggersGenerationWithLlmSource() {
-        when(listingRpcService.getListingById(5L)).thenReturn(listing());
+        when(listingRpcService.get(5L)).thenReturn(listing());
         when(agentServiceProvider.getObject()).thenReturn(agentService);
         when(agentService.generateCopy(anyString(), eq("DOUYIN"))).thenReturn("LLM 生成的文案正文");
         when(assetService.createContent(any())).thenReturn(null);
@@ -61,7 +61,7 @@ class MarketingToolsTest {
 
     @Test
     void generationFailurePropagatesAndNothingIsSaved() {
-        when(listingRpcService.getListingById(5L)).thenReturn(listing());
+        when(listingRpcService.get(5L)).thenReturn(listing());
         when(agentServiceProvider.getObject()).thenReturn(agentService);
         when(agentService.generateCopy(anyString(), anyString())).thenThrow(new IllegalStateException("LLM down"));
 
@@ -72,7 +72,7 @@ class MarketingToolsTest {
 
     @Test
     void missingListingRejectsGeneration() {
-        when(listingRpcService.getListingById(404L)).thenReturn(null);
+        when(listingRpcService.get(404L)).thenReturn(null);
 
         assertThatThrownBy(() -> tools.createMarketingContent(404L, "DOUYIN", "标题", "TEXT", "", null, null))
                 .isInstanceOf(IllegalArgumentException.class)

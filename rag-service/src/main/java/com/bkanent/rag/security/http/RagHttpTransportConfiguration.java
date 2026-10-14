@@ -14,6 +14,8 @@ import org.apache.hc.core5.http.io.SocketConfig;
 import org.apache.hc.core5.util.Timeout;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
+import org.springframework.boot.context.properties.bind.Bindable;
+import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -21,25 +23,29 @@ import org.springframework.context.annotation.Scope;
 import org.springframework.core.env.Environment;
 import org.springframework.web.client.RestClient;
 
-import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 /** Real synchronous HC5 transport; deliberately does not configure WebClient or Milvus gRPC. */
 @Configuration(proxyBeanMethods = false)
 public class RagHttpTransportConfiguration {
     @Bean
     public RagEndpointPolicy ragEndpointPolicy(Environment environment) {
-        // Re-read on use so a changed allowlist cannot leave a permanently allowed cached hostname.
-        return new RagEndpointPolicy(() -> {
-            String configured = environment.getProperty("rag.http.allowed-hosts", "");
-            return Arrays.stream(configured.split(","))
-                    .map(String::trim).filter(value -> !value.isEmpty()).collect(Collectors.toUnmodifiableSet());
+        // Bind all three settings together on every use, then freeze host/CIDR authorization.
+        // Bracketed map keys preserve dots: internal-networks.[host.docker.internal][0].
+        return RagEndpointPolicy.configured(() -> {
+            try {
+                return Binder.get(environment).bind("rag.http", Bindable.of(RagHttpPolicyConfiguration.class))
+                        .orElseGet(() -> new RagHttpPolicyConfiguration("PUBLIC_ONLY", List.of(), Map.of()));
+            } catch (RuntimeException ex) {
+                throw RagEndpointPolicy.denied(); // do not retain untrusted values or Binder causes
+            }
         });
     }
 

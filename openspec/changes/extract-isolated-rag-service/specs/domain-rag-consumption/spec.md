@@ -1,69 +1,65 @@
 ## Purpose
 
-本能力定义业务域和 Supervisor 消费独立 RAG 的边界，使领域继续掌握语料、权限、生命周期与最终业务排序，而检索执行集中在唯一服务。它同时保护工具身份、历史审计与实际旧接口的过渡兼容，并要求最终清理来源服务中的旧执行路径。
+本能力定义业务域与Supervisor消费独立RAG的职责，保留领域真源、最终校验和排序、工具身份及历史审计，规定真实REST兼容、A2A专用身份传播和无消费者旧索引RPC的直接清理，避免多处执行或隐式放宽认证。
 
 ## ADDED Requirements
 
 ### Requirement: 域消费统一 RAG 而不保留后端执行链
 
-房源域、记忆域及本次接入的 SubAgent SHALL 仅向 RAG 提交文档变更和检索请求，不直接执行关键词召回、向量召回、embedding、融合或通用语义重排。领域 SHALL 保留真源、语料装配、业务权限、生命周期及最终结果校验。房源 SQL 列表/详情接口保持领域职责；未接入此次 RAG 的营销独立业务搜索不作为本次混合召回来源，也不宣称已迁移。
+房源、记忆及本次SubAgent SHALL 只通过RAG执行关键词/向量/embedding/融合/通用重排，保留语料、生命周期、权限及最终检查。房源SQL详情/列表与未接入的营销独立搜索 SHALL 保持原职责，不作为混合兜底。
 
-#### Scenario: 房源 Agent 执行知识搜索
-- **WHEN** 房源 Agent 调用保留名称的 searchListingsByKeyword 工具
-- **THEN** 工具作为领域包装调用默认混合加重排的 RAG，技能正文及描述说明其升级语义，房源进程没有执行 ES 召回
+#### Scenario: 房源知识工具执行
+- **WHEN** 房源Agent调用searchListingsByKeyword
+- **THEN** 工具以领域包装执行默认混合加重排，描述及技能说明升级语义，房源不执行ES召回
 
-#### Scenario: 后端故障不恢复旧实现
-- **WHEN** RAG 不可用
-- **THEN** 消费者返回明确检索不可用，不切回域内 ES/Milvus、旧 agent RAG 或本地 SQL 的混合召回替代实现；原有独立 SQL 列表操作仍可使用
+#### Scenario: RAG故障
+- **WHEN** RAG不可用
+- **THEN** 检索明确失败，不恢复旧后端实现，独立SQL功能仍可用
 
-### Requirement: 领域最终排序与语义重排分离
+### Requirement: 领域最终检查和排序不可被通用重排替代
 
-域 SHALL 能取得足量候选及评分元数据，并按本域规则决定最终结果；时间衰减和重要性不得被硬过滤冒充，也不得自动在 RAG 执行。域 SHALL 依据声明的 scoreKind/scoringVersion 使用相关度，缺失评分字段时采用显式领域规则或拒绝该评分策略，不混用原始 BM25/向量分数。最终输出前 SHALL 依据最新真源检查权限、有效性和请求条件；淘汰候选需要补取时 SHALL 使用有界的扩大候选请求或返回不足事实，不无限重试或提前裁成最终 topK。
+域 SHALL 取得有界足量候选及scoreKind/scoringVersion，按领域规则决定最终topK，不混用原始异量纲分数、硬过滤与软衰减。返回正文、匹配与诊断前 SHALL 检查当前有效身份、资源状态、权限、投影版本和条件；ADMIN房源全读未删除（含非ON_SALE），BROKER仅ON_SALE；个人偏好包括ADMIN绝对self-only。补取 SHALL 至多一次且受累计预算约束，结果不足如实返回。
 
-#### Scenario: 旧但相关的记忆仍可入选
-- **WHEN** 记忆域启用领域时间衰减且一条较旧记忆仍高度相关
-- **THEN** 时间衰减影响最终顺序而非直接删除该候选，除非请求另有明确时间硬过滤
+#### Scenario: 真源变化或用户失效
+- **WHEN** 候选返回前房源删除/状态变化、偏好失效或用户停用/删除/离职/角色失效
+- **THEN** 无效内容不进入任何输出字段；无效用户整个操作被拒绝，不凭旧token或旧scope继续
 
-#### Scenario: 过期房源命中索引
-- **WHEN** RAG 返回的房源在真源中已下架、删除或不再有权限
-- **THEN** 房源域不返回该项或其详情，并在预算内补取或明确说明候选不足
+#### Scenario: 领域时间衰减
+- **WHEN** 记忆启用软时间衰减且较旧候选高度相关
+- **THEN** 时间影响排序而非自动删除，除非另有明确时间硬过滤
 
-### Requirement: Supervisor 知识工具保留治理和审计身份
+### Requirement: A2A 认证使用专用可验证信标与真实传输
 
-Supervisor 的 milvusKnowledgeSearch SHALL 保留稳定本地能力身份、query 输入、会话 topK、知识开关、格式化内容以及工具/向量结果审计字段，底层仅调用获准知识空间的远程 RAG。生产执行入口 SHALL 尊重请求政策，不能固定开启知识检索或由模型指定物理集合。远程检索成功、无匹配和确定的不可用 SHALL 有可区分的工具结果；确定的只读失败 MUST NOT 伪装为权限拒绝或副作用结果未知。已完成工具结果及历史 checkpoint 的只读查询 SHALL 保持字段兼容，不恢复旧 runner 或重发已完成检索。
+A2A调用 SHALL 通过真实受支持transport传播专用auth可验信标，绑定可信服务/当前用户/请求/audience/短有效期，并在同步、流式、任务查询取消及异步续接操作验证。凭据及专用上下文 MUST NOT 进入模型metadata、工具参数、普通structuredContext、日志或checkpoint。进程内租约过期/重启 SHALL 要求原owner重新认证，不按userId换发；缺专用transport/信标或当前身份失效 SHALL 在业务操作前失败关闭。
 
-#### Scenario: 生产请求关闭知识检索
-- **WHEN** 请求政策禁止知识检索且模型提出该工具
-- **THEN** 治理层拒绝执行，RAG 调用次数为零，拒绝事实仍可审计
+#### Scenario: 真实房源Agent读取RAG
+- **WHEN** 有效用户经Supervisor委托房源Agent
+- **THEN** 实际A2A调用携带可验专用身份并完成领域RAG调用，模型上下文/持久快照没有凭据
 
-#### Scenario: 读取迁移前工具快照
-- **WHEN** chat 或诊断查询读取含 milvusResults 的历史完成记录
-- **THEN** 内容、分数及文档关联仍可反序列化展示，不需要旧存储客户端或旧 Graph 执行器
+#### Scenario: 伪造metadata或恢复旧凭据
+- **WHEN** 模型提供userId/auth metadata，或旧任务重启后没有当前有效专用凭据
+- **THEN** 不接受其为身份，业务/RAG调用零执行并要求认证
 
-### Requirement: 实际旧 REST 入口有受控兼容期
+### Requirement: Supervisor知识工具保留治理和审计身份
 
-系统 SHALL 在首个切流发布保留 GET /agent/vector-store/milvus/search 及 /agent/mcp/milvus/search、POST /agent/vector-store/milvus/collections/init 及 /agent/mcp/milvus/collections/init、POST /agent/rag/listings/index 及 /agent/rag/listings/query 的方法、路径、成功响应字段和既有权限入口。代理 SHALL 绑定可信身份并转换为新领域/RAG 请求，不继续执行旧后端逻辑。旧 collectionName SHALL 仅通过受控别名映射到获准逻辑空间；未注册/未获准值明确拒绝。旧初始化的维度输入 SHALL 与空间 schema 校验，不再忽略；初始化仅开放给获准管理身份，不因普通检索自动创建。接口退役 SHALL 在所有已知消费者迁移及至少一个兼容发布周期后单独执行并提供公告。
+milvusKnowledgeSearch SHALL 保留稳定能力、query/topK/知识开关/格式化及审计字段，只代理获准空间；模型不得选择物理目标。成功、无匹配和确定只读失败 SHALL 区分，不把失败伪装权限拒绝或副作用未知。历史checkpoint SHALL 只读兼容，已完成结果不重发，不恢复旧runner。
 
-#### Scenario: 旧房源查询脚本继续使用
-- **WHEN** 获准旧客户端调用 /agent/rag/listings/query
-- **THEN** 代理调用新房源领域入口取得检索及最新详情，以原响应字段返回，没有 agent 本地 RAG 执行
+#### Scenario: 禁用知识或读取历史
+- **WHEN** 请求关闭知识工具，或查询迁移前milvusResults记录
+- **THEN** 禁用时零RAG执行并可审计；历史字段仍可展示但不依赖旧客户端或恢复执行
 
-#### Scenario: 旧数量参数保留最终返回语义
-- **WHEN** 旧房源调用缺省两路数量和topK，或知识工具提供受支持topK
-- **THEN** 兼容层使用旧房源基线20+20/最终10，或以工具topK设置最终候选池，并显式生成合法重排池，不直接套新50/100默认造成参数错误；非法显式数量关系被明确拒绝
+### Requirement: 真实旧REST保持受鉴权纯代理兼容
 
-#### Scenario: 旧集合初始化试图扩权
-- **WHEN** 旧客户端提交任意集合名或与获准空间不一致的 dimension
-- **THEN** 返回权限或 schema 错误，不自动创建新物理集合，不将受控兼容解释为保留旧任意寻址行为
+六组旧GET搜索、POST集合初始化及房源index/query路径方法和成功字段 SHALL 在真实消费者兼容期保留纯代理；身份校验与ADMIN唯一管理/偏好self-only规则不可绕过。collectionName SHALL 仅固定别名转换，维度严格匹配，任意物理目标拒绝；退役另行公告，不和无消费者旧RPC捆绑。
 
-### Requirement: 索引 RPC 迁移按消费者版本分阶段退役
+#### Scenario: 旧客户端数量和别名
+- **WHEN** 获准旧房源查询缺省数量或提交受支持工具topK
+- **THEN** 保留旧20+20/最终10或工具最终topK语义并生成合法重排池，非法数量/集合/维度明确拒绝
 
-首个切流发布 SHALL 将旧索引 RPC 转为纯代理兼容，仅在停写排空后依据房源域已确认真源生成授权完整投影事件，不继续执行 agent 的索引代码；无法证明原事务提交/删除或次序的调用 SHALL 返回 LEGACY_RECONCILIATION_REQUIRED，不宣称自动可靠兼容。升级后的房源写入口 SHALL 直接产生事件交付 RAG，不经过 agent 或反向文档读取环。旧 RPC 的删除 SHALL 等到所有消费者升级、在途旧调用清空且新事件水位追平后实施。首次切流发布 SHALL 同步清除来源服务的后端执行类/bean/依赖、旧索引触发、重复初始化及 RAG 本地 fallback，不能只关闭配置保留第二执行路径；后续清理发布只退役旧 RPC 签名/引用及残余纯包装。
+### Requirement: 无消费者旧索引RPC及遗留证明直接清理
 
-#### Scenario: 切换后核对遗留索引调用
-- **WHEN** 停写排空后收到旧 syncListingKnowledge 或 deleteListingKnowledge 遗留调用
-- **THEN** 只有当前真源及持久版本能证明该操作时才生成并确认领域事件；当前仍存在的文档不得被旧删除意图删除，提交不明或回滚的调用明确要求核对，不自动重试为成功
+确认没有旧消费者后系统 SHALL 直接删除syncListingKnowledge/deleteListingKnowledge的签名、实现和引用，同时清理无生产调用的signed listing legacy reconcile/证明路径，不创建条件成功、永久失败兼容或等待虚构RPC兼容周期。新writer SHALL 直接领域outbox到RAG；正常index/backfill/outbox及RAG实际hash补偿 SHALL 保留。来源执行类/bean/依赖/重复bootstrap及fallback SHALL 同次清理，真实REST/工具纯包装可继续保留。
 
-#### Scenario: 最终清理发布
-- **WHEN** 消费者已完成升级并通过迁移门禁
-- **THEN** 已在首次切流删除的来源 RAG 实现不会恢复，旧索引 RPC 签名/引用被删除，允许保留的 REST/工具包装仅通过新契约执行
+#### Scenario: 清理无调用入口
+- **WHEN** 全量调用方搜索确认旧RPC/遗留证明无消费者
+- **THEN** 在本次开发发布删除该路径，不新增LEGACY_RECONCILIATION_REQUIRED成功验收要求，不误删其他AgentRpcService方法或worker补偿

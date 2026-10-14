@@ -303,9 +303,9 @@
 
 **根因**：旧 `split-rag-by-domain` 的共享 common-milvus、域内执行路线会让检索执行继续分散；用户后续明确改为独立服务并迁出清理旧逻辑，且不能将 ES 留在房源域。已有 Spring AI 封装与 embedding 接入应直接复用，不为集中化重写裸 SDK/HTTP 或引入双实现适配器。通用语义排序不能替代领域时间衰减/重要性；足量候选、评分尺度、真源最终检查和可靠事件须分别定义。
 
-**方案位置**：`openspec/changes/extract-isolated-rag-service/`（proposal/design/specs/tasks）。apply 已启动独立 `rag-service`、公共契约、授权及领域迁移实现；任务勾选以实际完成与验证为准。真实配置生效、旧数据映射、回填、排空、切流、兼容发布周期及水位回滚仍须单独验收；新增源码不代表运行环境已迁移。旧 change 原样保留仅供历史参考，不再作为本方向实施依据。营销未接入本次 RAG 的独立业务 ES 搜索不被声明已迁移。
+**方案位置**：`openspec/changes/extract-isolated-rag-service/`（proposal/design/specs/tasks）。apply 已启动独立 `rag-service`、公共契约、授权及领域迁移实现；任务勾选以实际完成与验证为准。真实配置生效、旧数据映射、回填、在途核对、有界开发切流及水位回滚仍须单独验收；真实 REST 包装继续兼容，无消费者旧 RPC 不要求兼容周期；新增源码不代表运行环境已迁移。旧 change 原样保留仅供历史参考，不再作为本方向实施依据。营销未接入本次 RAG 的独立业务 ES 搜索不被声明已迁移。
 
-**关联**：LR-17、LR-18、LR-19、LR-22；KI-55、KI-56、KI-57。出站 URL 安全约束无内网配置豁免，现有目标冲突是实施/切流门禁而非放宽约束的理由。
+**关联**：LR-17、LR-18、LR-19、LR-22；KI-55、KI-56、KI-57。最新个人开发授权明确公司模型为预定目的地，受管内网按 LR-34 的精确 host/CIDR 模式准入，不再要求公开 ES/重排或更换提供方；凭据保护、逐连接校验及真实运行验收仍不可省略。
 
 ## LR-32 RAG 逻辑身份、物理键与可见版本分别管理
 
@@ -319,9 +319,9 @@
 
 ## LR-33 RAG 读取凭据是进程内租约，不是持久化工作流数据
 
-**结论**：真实用户凭据只经专用上下文/RPC 参数传播；异步 run 的有界进程内租约到期或进程重启后需重新认证，不从 userId 或 checkpoint 换发凭据。缺少受支持 A2A 传输路径时明确认证失败关闭，不将 token 塞入模型参数或 metadata。
+**结论**：真实用户凭据只经专用上下文/RPC 参数传播；异步 run 的有界进程内租约到期或进程重启后需重新认证，不从 userId 或 checkpoint 换发凭据。A2A 使用 auth 所有的短期不透明信标和实际 SDK transport，请求、工具执行及输出前均重新核对当前账号/角色/token，不将 token 或信标塞入模型参数、metadata、RunnableConfig 或 checkpoint。
 
-**根因**：身份定位信息不具持有凭据的证明能力；长期 token 入快照会扩大暴露面，并把已撤销用户的读取权固化到任务恢复。当前 SDK 无已经验证的专用 header 注入路径，不能用普通 HTTP 客户端能力推断真实 A2A 支持。
+**根因**：身份定位信息不具持有凭据的证明能力；长期 token 入快照会扩大暴露面，并把已撤销用户的读取权固化到任务恢复。原 SDK 的 Card 自定义客户端未被任务 transport 保留，最小构造器修补已获用户授权，由仓库模块可复核生成而非修改缓存或反射。源码接线不代替当前构建及真实 send/stream/query/cancel/recovery 验收；具体 transport 和任务绑定见 LR-41。
 
 **代码位置**：`agent-service/security/AgentRagCredentialLeaseStore`、`AgentRagCredentialFilter`、`common/rag/RagCredentialContext`；auth/领域/RAG 的 signed principal 与 scope 消费链。
 
@@ -329,13 +329,13 @@
 
 ## LR-34 HTTP 校验必须覆盖原始 DNS 答案和实际连接
 
-**结论**：允许的 hostname 不豁免私网；连接绑定已校验地址，校验全部 A/AAAA 答案并禁止代理/重定向。生产 DNS 保留 AAAA 原始形态，在构造 InetAddress 前拒绝 IPv4-mapped 等特殊地址，缺 DNS provider 失败关闭。
+**结论**：HTTP 仅使用 `rag.http.mode/allowed-hosts/internal-networks`。PUBLIC_ONLY 默认只允许精确获准 host 的公开地址；MANAGED_INTERNAL 显式额外允许该 host 对应的规范 RFC1918/IPv6 ULA CIDR，不能借其他 host 的范围。受管单标签和 host.docker.internal 还须有自己的非空 CIDR map。localhost、环回、链接本地、mapped、组播和其他保留/特殊地址始终禁止；通配、0/0、任意 URL、代理及自动重定向不支持。每次新连接使用不可变策略快照检查全部原始 A/AAAA，绑定已校验地址，保留原 host 的 TLS/SNI/证书校验。
 
-**根因**：预解析后再次按 hostname 连接会产生换址窗口；JDK `getAllByName` 可将 mapped AAAA 折叠为 Inet4Address，之后只按字节长度检查无法证明拒绝全部映射地址。使用 JDK DNS provider 读取记录不等于新增业务 HTTP 客户端，部署须核验 `java.naming` / `jdk.naming.dns` 模块。
+**根因**：预解析后再次按 hostname 连接会产生换址窗口；JDK `getAllByName` 可将 mapped AAAA 折叠为 Inet4Address，之后只按字节长度检查无法证明拒绝全部映射地址。使用 JDK DNS provider 读取记录不等于新增业务 HTTP 客户端，部署须核验 `java.naming` / `jdk.naming.dns` 模块。生产 configured 路径在两种模式都要求非空精确 host 集合；旧公开地址测试入口的空集合兼容语义不能成为缺配置的生产授权。
 
 **代码位置**：`rag-service/security/http/RagEndpointPolicy`、`RagPublicDnsResolver`、`RagDnsRecords`、两代受保护 transport；`storage/ElasticsearchDeadlineReader` 使用同一 ES RestClient 的可取消异步读取。
 
-**关联**：LR-31；KI-57；真实目标和镜像模块尚未实测。
+**关联**：LR-31；KI-57、KI-83；固定Java17 JRE实际命令已核对java.naming／jdk.naming.dns，应用目标与默认检索仍单独验收。私有probe编译需另用真实JDK，不能据JRE版本推断含jdk.compiler。
 
 ## LR-35 两路硬过滤必须保留数值边界与时间顺序
 
@@ -355,7 +355,7 @@
 
 **代码位置**：`rag-service/security/RagAccessControl.admin`、`config/RagRuntimeConfiguration.capabilityFailure`、`config/ManagedRagSpaceRegistry`、`retrieval/RagRetrievalService.classify`、ES/Milvus/BGE 边界及对应反例测试。
 
-**关联**：LR-31、LR-33；KI-64、KI-65；默认角色仍为空，不证明真实部署已授权。
+**关联**：LR-31、LR-33；KI-64、KI-65；应用默认角色仍为空以失败关闭，选定开发 Nacos 模板明确 ADMIN/BROKER；模板发布不证明运行实例已读取或授权已生效。
 
 ## LR-37 确定只读知识调用以首个终态结果为准
 
@@ -379,15 +379,49 @@
 
 ## LR-39 回填页与遗留重建证明均不等于迁移完成
 
-**结论**：memory 回填按源身份和持久投影身份分阶段 keyset 游标做至多500项的单页，包含持久删除身份，在同一领域锁事务重新读取快照并发布同一 outbox；返回游标与 QUEUED receipts，不宣称双后端已应用。listing 遗留 reconcile 除 revision/intent/存储 hash 外，必须复用当前完整投影装配并匹配证明 hash，任何不一致不得推进 revision 或写事件。
+**结论**：memory 回填按源身份和持久投影身份分阶段 keyset 游标做至多500项的单页，包含持久删除身份，在同一领域锁事务重新读取快照并发布同一 outbox；返回游标与 QUEUED receipts，不宣称双后端已应用。个人偏好源、持久身份、游标、scanned 和 receipts 都严格限定当前 owner，ADMIN 亦不例外。最新用户已确认旧索引 RPC 无真实调用方，直接清理 ID-only RPC 与无消费者的 signed listing legacy reconcile/证明链，不再建设旧事务证明或兼容周期。
 
-**根因**：全表扫描持有全局 writer 锁会把迁移成本转成无界在线阻塞。持久 revision 行的 hash 不能独立证明当前正文/grant 未被遗留写路径改变；重复装配逻辑会引入另一套投影。ID-only 旧调用没有认证和证明参数，配置开关不是排空事实，不能让 agent 查询最新状态后自行认定旧事务已提交。
+**根因**：全表扫描持有全局 writer 锁会把迁移成本转成无界在线阻塞；只过滤最终正文仍可能通过游标、扫描计数或回执泄漏他人偏好。历史 ID-only 入口无法证明旧事务，增加无调用方的证明适配只会制造无效迁移负担。正常 index/backfill/outbox 的完整真源装配及 RAG worker 对实际 revision/hash 的核对补偿仍是必要职责，不能因 reconcile 同名而删除。
 
 **代码位置**：`memory-service/service/MemoryRagBackfillService` / `controller/MemoryController`；`listing-master-service/rag/ListingRagBackfillService` / `ListingRagOutbox`。
 
-**完成边界复核**：任务8.1验收受权回填实现、同锁完整快照/outbox及更新/删除交错测试；未知通用知识按规格保持隔离，不要求建设新语料，也不宣称该空间迁移完成。真实回填、两路APPLIED/实际投影水位与切流由1.2/8.2/8.3等运行任务单独验收。同理7.2验收首次消费者切流版本源码/配置清理，不以未部署重复阻塞已完成实现；1.3的实际有效grant和角色基线仍需核对，不能据测试ADMIN替代。
+**完成边界复核**：任务8.1验收受权回填实现、同锁完整快照/outbox及更新/删除交错测试；未知通用知识按规格保持隔离，不要求建设新语料，也不宣称该空间迁移完成。真实回填、两路APPLIED/实际投影水位与切流由1.2/8.2/8.3等运行任务单独验收。同理7.2验收首次消费者切流版本源码/配置清理，不以未部署重复阻塞已完成实现；1.3的当前有效 ADMIN/BROKER、MANAGER 拒绝和个人 owner-only 基线仍需核对，不建设资源 grant 规范，也不能据测试 ADMIN 替代真实身份。
 
-**关联**：LR-32、LR-35；KI-73、KI-74、KI-75；逐空间本地清单见 `docs/acceptance/isolated-rag-migration-inventory.md`，真实数据水位、停写排空和旧 RPC 成功路径仍待验收。必要人工决定与授权后执行步骤见 `docs/acceptance/isolated-rag-unblocking-steps.md`。
+**关联**：LR-32、LR-35、LR-40；KI-73、KI-74、KI-75；逐空间清单见 `docs/acceptance/isolated-rag-migration-inventory.md`。旧 RPC 成功路径要求由最新无消费者直接删除决策替代，真实应用水位、开发切流及回滚仍需验收。已授权执行范围与尚缺真实证据见 `docs/acceptance/isolated-rag-unblocking-steps.md`。
+
+## LR-40 最小业务全读与个人记忆 owner-only 是两种不同权限
+
+**结论**：本期只有 ADMIN 和 BROKER；MANAGER/未知角色不因配置列入允许集就自动准入。ADMIN 全读未删除房源（包括非 ON_SALE），BROKER 仅 ON_SALE。listing-v2 的显式 businessWideRead/activeOnly 与 rag.scope.v2 签名表达业务范围，空资源列表不是通配；RAG 和领域分别按当前 signed principal 复核。个人记忆的所有读写、会话/产物内部访问、回填游标/计数/回执均只属于真实 owner，ADMIN 也不得跨用户；后台维护不能获得用户访问权。
+
+**根因**：用户明确暂不建设业务资源 grant 规范，但对个人记忆要求强隔离。broker_id 是业务归属不是认证 userId；将管理员业务全读推广到偏好会破坏该边界。仅验证入站 owner/body 还不够，更新既存 session 必须检查当前持久 owner；输出前重新认证并核对授权条件，避免执行期间离职、停用、删除、角色失效或 token 撤销后仍获得内容。
+
+**代码位置**：`common/rag/RagAuthorizationScope` / `RagScopeSigner`；`rag-service/security/RagAccessControl` / `rpc/RagRetrievalRpcServiceImpl`；`listing-master-service/rag/ListingRagIdentity` / `ListingRagFacade`；`memory-service/controller/MemoryRequestAuthenticationFilter` / `MemoryController`、`service/MemoryRagSecurity` / `MemoryRagBackfillService`。
+
+**输出复验位置**：最后一次 SQL 或锁内真源评分完成后再认证原凭据并保持 actor 不变，不能将召回后、等待 writer 锁之前的认证当作最终输出认证。房源单 ID 同样依据 SQL 后的当前角色检查，ADMIN 降为 BROKER 后不得输出非 ON_SALE 项；HTTP controller 的响应保护不能替代直接 Dubbo 路径。
+
+**关联**：LR-31、LR-33、LR-39；KI-55、KI-78、KI-79、KI-89；当前源码及运行验收分别记录，不据授权声明测试通过。
+
+## LR-41 A2A 请求信标、任务归属和模型上下文分别保存
+
+**结论**：auth 先验证真实 access token/current account/role，再签发绑定 method/task/requestId/bodyHash/caller/audience/actor 的不透明短期信标。每个 send/stream/get/cancel/resubscribe 都重新签发精确请求绑定，官方 handler 在 TaskStore/队列访问前验证并核对原任务 owner/caller/context；线程、工具与输出使用专用有界租约且前后重新认证。请求签名最长60秒，身份租约最多300秒且不得超过原 token/agent 租约；二者不能混作长期授权。任何 task lease 不得被另一 owner 或在途 lease 覆盖，容量与注册须原子化。
+
+**根因**：A2A 不经过网关，SDK ServerCallContext 也没有自动承载可信凭据。只保护 AgentExecutor 会漏掉查询/取消；ThreadLocal 不会自动跨 SDK/Graph executor 或 SSE callback，metadata 则会进模型和快照。原 SDK 的 URL/Card 构造器及默认重定向 transport 需最小受管修补；仓库生成官方 A2AClient/JdkA2AHttpClient 两个选定源文件的补丁制品并复用 JSON-RPC，不改 .m2、final 字段或重写业务客户端。专用信标不发给 Card discovery，也不得随 redirect 转发。
+
+**发送生命周期边界**：按 SDK 实际序列化的 `configuration.pushNotification` 在官方 handler 前拒绝未支持推送，不能只检查相似字段名。在途 send/stream 必须在 TaskStore／队列副作用之前原子预留；同 owner 也不能替换租约。预留仅在原 guard forwarding 和整个 SDK executor command 均结束后条件释放，不能在模型 executor 返回时释放，否则旧队列关闭或 runningAgents 清理可能干扰新任务。未成功转交的请求可释放其自身预留，但原 owner/caller/context 仍不可更换。
+
+**代码位置**：`a2a-sdk-transport-patch`；`common-a2a/BeaconA2aHttpClient` / `A2aAuthenticatedRequestGuard` / `A2aCredentialContext` / `A2aContextExecutorProvider` / `A2aAuthenticationToolInterceptor`；`auth-service/service/A2aBeaconStore` / `rpc/A2aBeaconRpcServiceImpl`；`agent-service/client/OfficialA2aAgentClient`及专用 executor/Graph lease 接线。
+
+**关联**：LR-18、LR-20、LR-22、LR-23、LR-33；KI-59、KI-80、KI-81、KI-88。当前SDK制品已精确重建／逐字节核验，并经完整本地回归；真实五操作和跨服务当前身份联调仍单独验收，不以 fail-closed stub 宣称正向能力完成。
+
+## LR-42 同一版本清单驱动首启和升级，但不重放历史种子
+
+**结论**：`docker/mysql/init-manifest.tsv` 以固定顺序、目标数据库、不可变版本、SQL 和 schema check 的规范 LF SHA-256 定义初始化；首启执行九步，既有库升级执行六步。共用 runner 先验证全清单、再执行 DDL/检查并记 checksum history，已应用版本不能静默改 SQL/check。fresh-only 种子不对现存库重新播放；本次只补 RAG 与 agent 当前编排结构，不把全仓历史迁移当升级链。
+
+**根因**：MySQL CLI 的 USE 不跨独立连接，MySQL8.4 不支持历史 ADD COLUMN IF NOT EXISTS 写法；Windows CRLF 又能使正确 SQL 的字节 hash 不一致。版本/checksum/schema 三者必须一起验证，容器 healthy 不是结构完成。现有开发库虽房源/偏好为空，仍有17约束、3共享记忆、2用户、3workflow及46checkpoint，不能删库重建。RAG runtime 仅两个控制表 SELECT/INSERT/UPDATE，DDL/备份由单独管理身份完成。
+
+**代码位置**：`scripts/deploy/run-init-manifest.sh` / `apply-migrations.sh`；`docker/mysql/001-manifest.sh` / `init-manifest.tsv` / `checks`；六份受管 SQL；`docker-compose.yml` 首启挂载。
+
+**关联**：KI-37、KI-38、KI-39、KI-82；实际 MySQL 首启、升级、重复执行及保种子已验，隔离恢复副本原计数一致；Nacos paused快照已在独立internal网络恢复，12原config/hash一致且无有效host端口/mount；这不是graceful cold备份。当前应用/config/索引事件水位回滚另验，不把历史全仓初始化债务一并标已修。
 
 ## LR-43 治理重排按响应钉扎模型身份，同 alias 漂移失败关闭
 

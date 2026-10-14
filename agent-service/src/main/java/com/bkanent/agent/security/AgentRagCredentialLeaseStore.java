@@ -79,6 +79,28 @@ public class AgentRagCredentialLeaseStore {
         } catch (RagException exception) { throw exception; }
         catch (RuntimeException exception) { throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE); }
     }
+    public long expiresAtEpochSecond(String originalUserId) {
+        credentials(originalUserId);
+        return CURRENT.get().expiresAt / 1000;
+    }
+    public java.util.function.Supplier<AutoCloseable> snapshot() {
+        Lease captured = CURRENT.get();
+        return () -> {
+            Lease previous = CURRENT.get();
+            if (captured == null) CURRENT.remove(); else CURRENT.set(captured);
+            return () -> { if (previous == null) CURRENT.remove(); else CURRENT.set(previous); };
+        };
+    }
+    public String currentUserId() {
+        Lease lease = CURRENT.get();
+        if (lease == null) throw new AgentRagAuthenticationException("AUTHENTICATION_REQUIRED");
+        try {
+            var principal = auth.getObject().resolvePrincipal(lease.credentials.accessToken());
+            if (principal == null) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+            String owner = String.valueOf(principal.userId()); verify(lease, owner); return owner;
+        } catch (RagException ex) { throw ex; }
+        catch (RuntimeException ex) { throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE); }
+    }
     public synchronized void discard(String key) { leases.remove(key); }
     private static final class Lease {
         private final String owner;

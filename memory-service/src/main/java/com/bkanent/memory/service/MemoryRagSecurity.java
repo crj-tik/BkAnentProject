@@ -31,7 +31,10 @@ public class MemoryRagSecurity {
         if (principal == null || principal.attestation() == null || principal.userId() == null) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
         RagSigningKey key = new RagSigningKey(properties.getAuthKeyId(), "auth-service", null, Set.of(RagOperation.RESOLVE_PRINCIPAL_RESPONSE), secret(properties.getAuthSigningSecret()));
         RagRequestSigner.verify(principal.attestation(), RagCanonicalHash.principalHash(principal), "memory-service", RagOperation.RESOLVE_PRINCIPAL_RESPONSE, id, credentials, key, Instant.now());
-        if (!principal.accountActive() || !principal.roleActive() || !principal.userId().toString().equals(principal.attestation().actorId())) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+        if (principal.userId() <= 0 || principal.attestation().actorMode() != RagActorMode.USER
+                || !principal.accountActive() || !principal.roleActive()
+                || !principal.userId().toString().equals(principal.attestation().actorId())) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+        if (!"ADMIN".equals(principal.roleCode()) && !"BROKER".equals(principal.roleCode())) throw new RagException(RagErrorCode.FORBIDDEN);
         if (principal.expiresAtEpochSecond() <= Instant.now().getEpochSecond()) throw new RagException(RagErrorCode.AUTHENTICATION_EXPIRED);
         return principal;
     }
@@ -48,19 +51,30 @@ public class MemoryRagSecurity {
         return principal;
     }
 
+    private static void requireCurrent(AuthRagPrincipal principal) {
+        if (principal == null || principal.userId() == null || principal.userId() <= 0
+                || !principal.accountActive() || !principal.roleActive()) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+        if (principal.expiresAtEpochSecond() <= Instant.now().getEpochSecond()) throw new RagException(RagErrorCode.AUTHENTICATION_EXPIRED);
+        if (!"ADMIN".equals(principal.roleCode()) && !"BROKER".equals(principal.roleCode())) throw new RagException(RagErrorCode.FORBIDDEN);
+    }
+
     public void requireOwner(AuthRagPrincipal principal, String ownerId) {
+        requireCurrent(principal);
         if (!principal.userId().toString().equals(ownerId)) throw new RagException(RagErrorCode.FORBIDDEN);
     }
 
     public void requireConstraintRead(AuthRagPrincipal principal) {
+        requireCurrent(principal);
         if (!properties.getConstraintReadRoles().contains(principal.roleCode())) throw new RagException(RagErrorCode.FORBIDDEN);
     }
 
     public void requireAdmin(AuthRagPrincipal principal) {
-        if (!Set.of("ADMIN", "MANAGER").contains(principal.roleCode()) || !properties.getConstraintAdminRoles().contains(principal.roleCode())) throw new RagException(RagErrorCode.FORBIDDEN);
+        requireCurrent(principal);
+        if (!"ADMIN".equals(principal.roleCode()) || !properties.getConstraintAdminRoles().contains(principal.roleCode())) throw new RagException(RagErrorCode.FORBIDDEN);
     }
 
     public RagAuthorizationScope scope(RagSearchRequest request, AuthRagPrincipal principal) {
+        requireCurrent(principal);
         String owner = null;
         if (MemoryRagProjectionService.PREFERENCE.equals(request.spaceId())) owner = principal.userId().toString();
         else if (MemoryRagProjectionService.CONSTRAINT.equals(request.spaceId())) requireConstraintRead(principal);

@@ -1,6 +1,6 @@
 ## Context
 
-动机与范围见 [proposal.md](proposal.md)。本设计是 `extract-isolated-rag-service` 的规划，不是已实施或已部署的事实；替代旧 `split-rag-by-domain`，不修改其历史工件。
+动机与范围见 [proposal.md](proposal.md)。本设计是 `extract-isolated-rag-service` 的目标契约，已有部分实现但未完成真实部署门禁；替代旧 `split-rag-by-domain`，不修改其历史工件。既有规划已修订完成，当前 apply 按最新授权执行源码、初始化和限定开发验证，维护 docs/LR/KI 并在验证后 commit/push。既有勾选不证明新增要求已经实现。
 
 当前与迁移直接相关的事实：
 
@@ -10,9 +10,11 @@
 - 记忆 MySQL 在 memory-service，向量初始化、系统约束 bootstrap 与偏好相关旧类在 agent。偏好 upsert/decay、约束 upsert/active 更新没有完整向量同步。偏好 collector/retriever 当前无业务调用方。约束 bootstrap 属性存在但旧 runner 未遵守，不应照搬重启覆盖人工数据的行为。
 - 旧集合配置为 `agent_knowledge`、`listing_knowledge`，偏好/约束使用 `user_preference_knowledge`、`system_constraint_knowledge`；向量配置为 1024 维、COSINE、IVF_FLAT。真实 schema/现存数据未在线核验；逻辑 ID、source_type、source_id 实际位于 metadata，迁移不可假设为顶层 schema。房源 ID 是 `listing:{id}`，旧偏好 ID 的下划线拼接不保证无歧义。
 - 根声明 Java 17、Spring Boot 3.5.0、Spring AI 1.1.2、Alibaba 1.1.2.3、Dubbo 3.2.15，实施时以有效依赖树为准。现有网关注入的固定标记和普通 userId 不形成服务认证；`hasPermission` 仅验证账号/角色活跃，不能作为 RAG 空间授权的充分条件。
-- 当前 `host.docker.internal:18119` 重排与容器/私网 ES HTTP 不符合本次出站 URL 约束。只做 TCP 的公共 readiness 不能证明模型、schema、过滤与重排协议可用。
+- 最新报告实证：MySQL 8.4.11，bk_rag 不存在；listing_rag_revision/grant/outbox 与 memory_rag_lock/projection/outbox 各三表缺失。listing_info=0、user_preference_memory=0，但 system_constraint_memory=17、session_shared_memory=3；auth 两个活跃用户为 ADMIN/BROKER，三角色包含遗留 MANAGER；agent_async_workflow=3、历史 checkpoint=46，agent_orchestration_run/agent_tool_invocation/agent_skill_snapshot 及 run_control 所需结构缺失。只补齐当前代码所需版本结构，不能称全部空库或删除历史。
+- 原始实施基线为旧ES/Milvus停止、Nacos DEFAULT_GROUP BK-AGENT16/public21且旧空namespace实际public、无持久mount。当前受限备份后原后端已启动，旧ES两个索引均0且mapping空；Milvus REST与精确catalog核对仅default库、0集合/分区。七模板十一域A2A扩展后认证发布/读回一致，原MySQL/Nacos未重建；共享manifest fresh九步/upgrade六步及重复已实测。当前应用读取、模型/新schema与默认检索能力仍需独立验证，不以基线过时缺口阻塞已完成盘点，也不将发布/初始化当切流成功。
+- 项目 Docker 网段报告为 172.24.0.0/16；host.docker.internal 在容器解析 192.168.65.254、Windows 解析 10.117.102.54，不可将两部署形态混用。公司 open-chatgpt.ke.com 当前公开 A 记录为 43.144.246.193/81.70.125.41，HTTPS 443 可走精确受管 host 的公开地址分支，不需私网 CIDR map。全部仅为连接策略验收输入，不是已验证模型/协议健康；每次新连接仍须验证所有 A/AAAA。受管私网 ES/宿主重排可按 D11 显式授权，不再一律禁止。只做 TCP 的 readiness 不能证明模型、schema、过滤与重排协议可用。
 
-关联约束：LR-17/18/19（模型选择、Graph 唯一执行、稳定能力身份）、LR-22/23/29（事实恢复与确定失败）；KI-2（真实状态转换调用点单测）、KI-13（行业语料未建）、KI-37/38/39/42（迁移/启动验收）、KI-48/49/50/51/53（依赖/配置误配）。本次实施不顺带修复所有存量债务。
+关联约束：LR-17/18/19（模型选择、Graph 唯一执行、稳定能力身份）、LR-22/23/29（事实恢复与确定失败）、LR-31～39（集中执行、版本/凭据/过滤）；KI-2（真实转换调用点单测）、KI-13（不建行业语料）、KI-37/38/39/42/48/50/51/53（迁移/配置门禁）。最新授权替代 LR-31/34、KI-57 的一律禁私网假设，以及 LR-33/KI-59 的 SDK 接线需另行批准、LR-39/KI-75 的旧 RPC 条件成功兼容假设；凭据隔离、全部 DNS/实际连接核对、版本水位等根因仍保留。当前 apply 已读取并同步维护 LR/KI，修复结论待当前验证后关联实施提交，不顺带修复全部债务。
 
 ## Goals / Non-Goals
 
@@ -31,7 +33,7 @@
 - 不默认每用户一个集合；用户隔离在独立知识空间内使用强制授权条件，不把用户数直接转成集合数。
 - 不建设新的 episodic/行业知识采集流程，不激活偏好死代码，不实现任意评分 DSL、Milvus 原生 decay ranker或新 chunking pipeline。
 - 不新增 Supervisor 业务节点、技能步骤调度器、A2A RAG Agent 或旧 Graph 恢复路径，不进行全项目 RBAC 重构。
-- 不上线、不改现有容器/配置中心、不公开语料或删除旧数据；当前阶段只生成规划。
+- 当前 apply 已获授权修改实现、个人开发本地/本项目容器及必要配置中心目标，采用无生产真实业务的有界发布窗口，保留种子/历史数据和旧存储。公司内网 embedding/rerank/LLM 暂不开展新的语料脱敏项目，但凭据绝不可硬编码、打印或进入模型/checkpoint；不修改访谈 LR-6 既有脱敏、不擅自改用第三方或公开服务/语料。
 
 ## Decisions
 
@@ -39,7 +41,7 @@
 
 新增 `rag-service` Maven 子模块，普通 Spring Boot 可执行 JAR，package `com.bkanent.rag`。将现有 Spring AI 存储接口、模型、实现及必需配置迁入服务；既有 BGE native/DashScope 两种重排响应处理迁入并补充协议校验。ES 的 `ElasticsearchOperations` 执行逻辑从房源服务迁入，去除业务 Mapper 依赖，改以领域提交的检索投影写入/返回。
 
-common 仅新增纯 Java RAG DTO 和 RPC 契约；不让消费者依赖服务 JAR 或后端客户端。原 Milvus 审计 JSON 字段保留，序列化位置与运行位置分开决定。首次消费者切流版本必须同步迁走/删除原执行类、Spring bean、初始化与对应依赖，不能删除starter却保留直接import它的执行源码；下一清理发布只延后退役旧RPC签名及不执行后端的包装。agent 的 chat/Graph/A2A 依赖不因 embedding 迁出而随意改装配；确认 OpenAI starter 是否还有 chat 用途后再删除，不只按包名判断。
+common 仅新增纯 Java RAG DTO 和 RPC 契约；不让消费者依赖服务 JAR 或后端客户端。原 Milvus 审计 JSON 字段保留，序列化位置与运行位置分开决定。本次有界开发发布必须同步迁走/删除原执行类、Spring bean、初始化与对应依赖，不能删除starter却保留直接import它的执行源码；无消费者的旧 Agent 索引 RPC 及 signed legacy reconcile 同窗删除，不建设过渡代理，真实 REST/工具纯包装另保留。agent 的 chat/Graph/A2A 依赖不因 embedding 迁出而随意改装配；确认 OpenAI starter 是否还有 chat 用途后再删除，不只按包名判断。
 
 保持 1024 维及现有 embedding 模型配置；实际模型维度要验收。集合实例缓存以不可变空间 schema 身份（database+collection+schemaVersion+modelVersion）为键，禁止同一物理集合被不同维度/字段配置重用。Spring AI 未暴露的行为先核对当前版本；本设计不假设 SDK 原生 decay ranker 已可用。
 
@@ -70,11 +72,15 @@ common 新增 `RagRetrievalRpcService.search`、`RagIndexRpcService.submit/getSt
 
 内部服务认证采用按服务独立的 HMAC-SHA256 密钥，RAG 持有受管 keyId→callerService/允许 domain/operation 映射，密钥仅在秘密管理/环境提供。认证 envelope 签名覆盖协议版本、audience=rag-service、callerService、operation、requestId、规范请求哈希、actorMode、有效期限（最长 60 秒）和凭据摘要；RAG 验证签名、时间窗、请求绑定与允许操作。身份来自 key 映射，不来自 Dubbo application name、gateway 字符串或模型。幂等索引允许签名重新生成但事件 ID 不变；重复检索只读允许受同一有界策略执行，不以 nonce 承诺索引 exactly-once。
 
-用户检索另携带现有 access token，作为 RPC 的专用凭据上下文。现有 `AuthenticatedPrincipal` 只有userId，不能据此获得角色事实；common/auth新增仅RAG需要的 `resolveRagPrincipal` 契约，返回当前userId、真实roleCode及角色活跃事实，复用现有token解析与auth表读取，不改变原 `resolvePrincipal` 返回结构或扩张为通用RBAC重构。RAG验证该结果并核对签名envelope的actorId；RAG→auth RPC同样校验受管服务签名，伪造认证响应不得被接受。网关/调用入口从已验证 Authorization 得到凭据，模型、技能参数、普通 structuredContext 不能提供或覆盖它。凭据不进入工具 schema、日志、审计快照/checkpoint。异步/续接每次检索仍需有效认证；已过期时明确返回 AUTHENTICATION_EXPIRED，原 owner 重新认证后才可续接，不永久存储 token 或凭 userId 自动换发。后台索引可 actorMode=SERVICE，只获本域写/状态权限，不得转为用户搜索。
+用户检索另携带现有 access token，作为 RPC 专用凭据上下文。common/auth 最小 `resolveRagPrincipal` 返回当前 userId、真实 roleCode 及当前账号/角色有效事实，复用 token 与 auth 真源，不改变原 `resolvePrincipal` 或扩张全系统 RBAC。仅 ADMIN 为管理员，BROKER 是当前普通成员别名；遗留 MANAGER/未知角色不得默认准入。停用、删除、离职或角色失效用户即使持有未过期 token，也禁止本次所有 REST/RPC/A2A/工具/管理/异步续接操作，入口和最终输出前复核当前事实，不缓存永久权限。RAG 验 signed principal 并核对 envelope actorId；RAG→auth 亦校验受管服务签名。
 
-RAG 专属权限依据受管空间 policy 中的 caller 操作、活跃 principal 的角色读取/管理基线与领域授权 scope 三者交集；**不以当前宽松 hasPermission 返回 true 作为空间授权**。房源域作为 listing.knowledge 的授权权威。现有brokerId来自业务请求，未证明与认证userId相等，因此新增仅用于本域的 `listing_rag_grant` 真源授权表（actorUserId、resourceId、operation、active、version），由受管管理角色维护；域按已验证principal和该表交集生成有界签名 `allowedResourceIds`，默认无grant即拒绝。ADMIN管理基线及其他允许角色由受管policy明确列出，首次切流由部署方核对并配置授权种子，不用brokerId/userId相等推断或自动向全部活跃账号授权。该表不改变原SQL列表API或全系统认证，只闭合新RAG资源读取边界；所有grant变更进入投影/outbox及scope版本核对。记忆域为自身空间授权权威，用户偏好强制 ownerId=principal.userId，约束仅明确平台读取基线/管理角色开放。agent 直接读取 supervisor.knowledge 只能使用其空间已定义策略。
+A2A 采用专用 auth 可验证信标：绑定调用服务、audience、actor、请求身份/摘要与短有效期，从验证后的 Authorization 专用上下文签发并在真实 SDK transport 发送、接收和任务操作边界验签。信标不是普通 metadata 或模型可填 userId；不把 token/密钥/原始信标放入模型 metadata、structuredContext、工具 schema、RunnableConfig、日志、审计或 checkpoint。最小真实 SDK 升级/修补及受支持 transport 已获准，需验证发送/流式/查询/取消及线程异步传播，不用 Card 获取专用 HttpClient 冒充任务 transport 支持或反射改 final 字段。使用有界进程内租约，续接/审批每次需要当前有效身份；重启/过期要求原 owner 重新认证，不从 userId/checkpoint 自动换发。后台 actorMode=SERVICE 仅本域写/状态，不获得用户读取或管理权。
 
-授权 scope 绑定 spaceId、actorId、operation、requestHash、policyVersion、expiry，签发权仅归该空间注册的 ownerDomain key；普通消费者不能自己签发别域 scope。范围无法由既有真源证明时拒绝，不用“所有活跃账号可读”弥补业务权限缺口。v1 对 allowedResourceIds 设有界长度（默认 5000）；无法在此范围表达的权限请求明确 RESOURCE_SCOPE_TOO_LARGE，不去除过滤或引入脚本。本次仅实现 RAG 必需的域授权接线，不扩张为全系统认证重构。
+RAG 权限取受管 caller/operation、当前有效 principal 角色与 ownerDomain scope 交集，不以宽松 hasPermission 为充分依据。采用最小已授权业务规则：房源域 ADMIN 全读未删除房源，含非 ON_SALE；普通成员 BROKER 只读 ON_SALE。不要求 brokerId=userId，不建设资源 grant 规范，不因缺 grant 将 ADMIN 全读或成员正常公开在售读取阻塞。scope 明确 businessWide=true，普通成员 activeOnly=true、ADMIN activeOnly=false，并绑定角色/策略版本；这不是 resourceId 通配，空 allowedResourceIds 亦不等于全读。RAG 独立以当前 signed principal 校验 businessWide/activeOnly，强制两路未删除条件，BROKER 强制 ON_SALE；领域最终再核对真源及当前角色。
+
+记忆域为自身空间权威：个人偏好所有读写/管理/回填响应及兼容入口绝对 ownerId=principal.userId，ADMIN 不享有跨用户例外，通用管理不得读取其他人的偏好正文；内部受管 SERVICE 生命周期派发不等于用户跨人访问。系统约束普通读取 active=true，只有有效 ADMIN 可管理，MANAGER 不映射管理员。agent 的 supervisor.knowledge 仅使用显式已定义策略，未知语料保持隔离。
+
+授权 scope 绑定 spaceId、actorId、operation、requestHash、policyVersion、expiry 及上述明确范围语义，签发权仅归空间 ownerDomain key；普通消费者不能签别域 scope。若使用受限 allowedResourceIds，仍设有界长度（默认5000），但不得拿空集/任意值表达 ADMIN 全读，最小 business-wide 分支不枚举全量资源或新增授权 DSL。无法证明当前角色/owner/范围时拒绝，不引入不存在组织体系。
 
 **替代方案**：裸内网直连、userId/headers 或只用服务发现不可信；复制用户签名密钥到 RAG不必要；本次新增通用授权平台/身份 DSL 超范围。选择现有用户认证 RPC加最小 RAG 服务认证与领域 scope。
 
@@ -187,11 +193,11 @@ worker 使用数据库文档行锁/事务串行化同一文档的外部应用，
 | POST /agent/vector-store/milvus/collections/init，/agent/mcp/milvus/collections/init | 显式管理权限 + 旧别名映射 + schema维度校验后调用管理RPC；不接受任意物理创建 |
 | POST /agent/rag/listings/query | 调房源领域检索facade，再由房源域调用RAG及真源详情映射，保留旧match/context响应 |
 | POST /agent/rag/listings/index | 调房源领域授权投影入口，生成可靠事件；返回保留成功字段但附状态，明确接收不等于两路完成 |
-| AgentRpcService.syncListingKnowledge/deleteListingKnowledge | 过渡代理到领域持久化事件入口；新房源writer不再调用这些方法 |
+| AgentRpcService.syncListingKnowledge/deleteListingKnowledge | 无旧消费者确认后直接删签名/实现/引用，同步删除无消费者 signed listing legacy reconcile/证明链；正常 index/backfill/outbox 保留 |
 | local:milvusKnowledgeSearch | 保留名称、query、会话topK、recordMilvus/recordTool，改走授权域/空间RPC |
 | 房源searchListingsByKeyword工具 | 名称兼容，语义升级为默认混合+重排，修改description及listing-search技能，不留房源ES执行 |
 
-旧索引RPC本来没有完整payload且可能发生在事务提交前；兼容只服务停写、排空后可核对的遗留调用/重建，不承诺旧writer与新writer长期并行可靠。调用到达时先验证服务、稳定ID与当前真源：UPSERT仅在已确认提交且不存在删除事实时由领域事务生成完整投影事件；DELETE仅在当前真源已不存在/已删除且存在持久revision身份时生成新tombstone；若当前真源仍存在或已有较新更新，不应用旧删除。原事务回滚、提交结果不明、删除身份不可核实或次序不明时返回 LEGACY_RECONCILIATION_REQUIRED，不自动排队无限等待或确认成功，记录待人工/受权重新核对事实。部署切换前短暂停止房源写入口、排空旧实例/在途调用并追平事件，使正常新写不依赖上述限制；删除旧RPC在下一清理发布、全消费者升级后执行。
+盘点确认旧 ID-only 索引 RPC 无消费者后直接清理，不新建条件成功或始终 LEGACY_RECONCILIATION_REQUIRED 的兼容包装，不要求无实际消费者的延迟发布/旧事务证明。无生产调用的 signed listing legacy reconcile 及其证明 DTO/入口/配置/测试随旧 RPC 清理，保留正常受权 index、backfill 和 outbox；RAG worker 的实际 revision/hash 核对与补偿是不同职责，绝不能因名称 reconcile 一并删掉。发布前仍短暂停止受影响开发写入口并核对旧实例/在途调用，保留事件水位，但不虚构旧业务需排空事实。
 
 旧数量兼容转换独立于新RPC缺省值：旧房源topK缺省取当前受管rerankTopK（迁移基线10），两路缺省取当前受管keywordTopK/vectorTopK（基线各20）；candidateLimit=旧最终topK，rerankCandidates=两路请求数之和（默认40，若超过服务重排上限则为500且须>=candidateLimit），保留显式每路数量不自动改写。不满足最终topK<=候选容量/200上限时明确INVALID_ARGUMENT。旧知识工具topK缺省沿用AgentChatProperties，candidateLimit=topK，rerankCandidates=max(topK,100)，未显式每路数时各至少max(topK,100)，均须在空间上限内；旧HTTP通用搜索保持最终5条，不使用新默认50。旧字段collectionName只做别名授权转换，不透传物理目标。增加默认20+20/10、显式100/200边界及非法关系测试。
 
@@ -209,19 +215,21 @@ worker 使用数据库文档行锁/事务串行化同一文档的外部应用，
 
 **替代方案**：继承ES→SQL fallback而vector硬失败使混合模式含糊；自动任意降级无法让域判断相关度质量，均不采用。
 
-### D11: 出站URL安全不可因内网默认值豁免
+### D11: HTTP 默认公开地址，受管内网显式且按 host 限定
 
-rag-service的ES HTTP transport、Spring AI embedding实际HTTP transport、重排RestClient以及任何HTTP重定向/URI连接分支统一遵守：仅http/https；校验host及全部解析A/AAAA结果；拒绝localhost、环回、私有、保留、IPv4映射IPv6、未明确允许的特殊范围；userinfo/畸形authority拒绝。禁用自动重定向，重定向若未来开放也要重新同等校验。每次新连接用经过校验的目标地址并保持原host的TLS/SNI验证，不由客户端再次不受控解析，避免DNS检查/使用脱节；连接池重连、重试、配置刷新也走守卫。
+只使用三项受管配置：`rag.http.mode`（默认 PUBLIC_ONLY，显式 MANAGED_INTERNAL）、`rag.http.allowed-hosts`（精确 host allowlist）和 `rag.http.internal-networks`（精确 host→对应 CIDR 列表 map，不是共享全局网段池）。仅 http/https，拒绝 userinfo、畸形 authority、通配 host、0.0.0.0/0、::/0、任意 URL 覆盖。PUBLIC_ONLY 只允许获准 host 的公开地址；MANAGED_INTERNAL 可额外允许该 host 对应 RFC1918/IPv6 ULA，CIDR 缺失或不匹配即失败关闭，host A 不得借 host B 的网络范围。受管 Docker 单标签和 host.docker.internal 仅在精确 allowlist/map 下允许；localhost、全部环回、链接本地、IPv4-mapped IPv6、组播及其他保留/特殊地址始终禁止。公开地址仍走公开分支，不要求为公司公开 HTTPS host 添加私网 map。
 
-需要在现有客户端真实transport扩展点接入安全守卫，不是新增业务存储适配器或HTTP embedding实现。当前版本如果无法在不重写底座的情况下保证连接目标，先标为实施阻塞并使用该客户端受支持的连接/DNS扩展，不能弱化为仅启动时字符串检查。Milvus host/port的gRPC与业务Dubbo不是本设计的HTTP URL请求，但若其URI分支实际发HTTP则同样验证，不能用`http://`字符串或“SDK调用”臆断豁免。内部管理健康检查使用本进程状态/JMX/进程命令，避免新增违反约束的服务端HTTP探测。
+ES、Spring AI embedding、rerank 的真实 HTTP transport 每次新连接核对全部原始 A/AAAA，任一答案不合规整体拒绝；保留 AAAA 原始形态防映射折叠，固定已验证地址并维持原 host TLS/SNI/证书验证。禁代理和自动重定向，重连/重试/刷新亦校验，不仅启动时检查。现有客户端受支持 DNS/连接扩展承接守卫，不新写 embedding HTTP/裸 Milvus 客户端；SDK transport 能力不足如实阻塞，不以仅字符串校验替代。Milvus gRPC/Dubbo 不冒称已被 HTTP 守卫覆盖，真实 HTTP URI 分支同样受控。
 
-现有私网ES与host.docker.internal重排**不能原样作为合规部署目标**。实施可完成非联网单测与契约stub，但真实默认路径验收/切流须部署方提供满足约束且有授权的目标；本设计不擅自公开本机服务、替换模型/协议、传语料到第三方或修改网络。安全拒绝不接受ALLOW_DEGRADED绕过，缺合规目标属于明确部署门禁，不是方案未选架构。
+后续 apply 可配置本项目开发容器/本地目标并验证：Docker 项目网 172.24.0.0/16、容器 host.docker.internal=192.168.65.254 与 Windows=10.117.102.54 分别按实际部署 host map 授权，不混用。公司 open-chatgpt.ke.com 的当前公开 A 记录走精确 host 公开分支，连接时重新验证。仅内网模式开关而未配置 host/CIDR 不足以授权；安全拒绝不允许 ALLOW_DEGRADED 绕过。允许公司内网语料不代表允许凭据入模/日志或改用第三方公开目标，亦不新增脱敏项目或更改访谈既有脱敏。
 
-**替代方案**：Nacos/env/local“可信配置例外”违反用户约束；手写embedding客户端不是解决地址校验的必要手段；让房源继续执行内网ES规避约束且违背集中边界，均不采用。
+**替代方案**：一律禁内网已被最新授权替代；Nacos/env/local 可信即可访问任意内网、全局 CIDR 池或新网络 DSL 均过宽；域继续执行旧 ES 规避守卫违背唯一执行边界。
 
 ### D12: 配置、依赖与能力健康分开归属
 
-新增 `nacos/rag-service.yaml`，独立bk_rag数据源、RPC、空间、ES/Milvus/embedding/rerank配置及超时策略。配置实效通过实际namespace/group/dataID核对，不把无人导入的mysql-common当共享配置依据。bk_rag迁移SQL明确目标库，支持当前MySQL基线并验证重复执行；不借此次修复所有历史SQL。
+新增 `nacos/rag-service.yaml`，独立 bk_rag/RPC/空间/后端及三项 HTTP 安全配置。配置实效核对 namespace/group/dataID 与实际应用，旧空 namespace 指 public，不盲目把全部 public 配置搬到 BK-AGENT；config-init 必须接 Nacos 管理认证并验证读取实效，凭据不打印。Nacos 无持久 mount，变更前受管导出备份，不能盲重建。
+
+初始化是与最新代码绑定的版本化计划：显式目标库和版本/校验记录，首启接入 `20261012_rag_control.sql`、`20261012_listing_rag.sql`、`20261012_memory_rag.sql`，已有库按同版本升级；只补齐 agent 的三张新 orchestration 表及 run_control 必要字段，处理其原脚本无目标库/ALTER 不可重入问题，不全仓重放历史 SQL。验收 MySQL 8.4.11 的首启、已有17约束/3共享记忆/2用户/3workflow/46checkpoint升级和重复执行，版本/实际表列与最新代码一致且种子/历史不丢；bootstrap 仍仅补缺不覆盖人工/停用数据。由任务5.3/7.1/7.5承接，不以SQL存在或容器healthy替代完成。
 
 运行端口候选 HTTP管理9018、Dubbo20898（不启用公网搜索），实施先核对全端口清单与实际占用，冲突可在部署配置选择空闲端口，不改变契约。QoS默认关闭。镜像采用独立 `bk-anent-rag:dev`，沿用Dockerfile模块构建 `MAVEN_MODULES=rag-service`及可执行SERVICE_ARTIFACT；新服务不继承包含不相关DB/凭据的全量环境锚点。仅RAG获得相关执行配置，营销保留自身业务ES配置而非借RAG变量。agent移除Milvus直接depends_on/readiness，listing移除本次ES初始化/必需readiness，memory新增RPC消费而不引后端starter。
 
@@ -234,14 +242,14 @@ RAG基础readiness要求有效配置、认证接线、控制数据库与RPC prov
 ## Risks / Trade-offs
 
 - [独立服务增加一次RPC及索引控制库依赖] → 控制预算/并发、保持domain只批量取详情、监控阶段耗时；可靠补偿需要持久事实，不宣称仍是纯无状态迁移。
-- [现有URL目标与安全政策冲突，当前环境不能直接联调] → 明确部署gate，保留不发网契约验证，未具合规目标不切流，不改安全要求或自动发布语料。
+- [受管内网配置或部署解析形态不匹配] → 精确host与逐host CIDR map、每连接全部DNS/地址绑定及真实transport验收；PUBLIC_ONLY默认失败关闭，内网显式授权不等于全面豁免。
 - [服务HMAC权威scope由领域代码签发，错误授权仍可造成越权] → 每空间限定签发服务/操作、RAG principal复核与强制owner、真源scope路径测试；固定gateway标记和普通userId不能获得签发权。
 - [双索引应用并非原子，迟到旧向量写可能暂时漏检] → 最新revision/两路完成账本过滤、同文档串行写、定期实际hash核对及补偿；不暴露旧正文，不承诺瞬时全量可见。
 - [迁移中旧ES不完整、旧知识owner缺失、旧偏好ID碰撞] → 从真源backfill，未知归属隔离整理，规范身份映射核对；不宣称零迁移或默认公开。
 - [严格默认故障比旧ES→SQL兜底更显式] → 文档与响应公告，允许受控显式降级，保持独立SQL业务入口；不偷换混合搜索模式。
 - [候选扩展增加embedding/重排成本] → 有界数量、两次域查询上限、限流与整体deadline；回填分批且不挤占在线检索资源。
 - [Bootstrap迁移改变重启覆盖行为] → 明确仅补缺/开关、停用与人工修改回归，不把修正当静默搬迁。
-- [旧provider/consumer不同步发布会断索引同步] → 停写短窗、过渡纯代理、事件水位追平后再清理；保留配置和镜像快照，不能提前删RPC。
+- [开发发布代码/配置/结构不一致] → 一个有界停写窗口内版本初始化、替换消费者并直接删除无消费者旧RPC/遗留证明；保留种子/历史和镜像/config/事件水位，不搭建不必要过渡发布。
 - [当前依赖/启动脚本债务影响验收] → 仅对新RAG与受影响服务增加真实生效/成功门禁，引用已知KI并如实记录未修范围。
 
 ## Migration Plan
@@ -266,9 +274,9 @@ RAG基础readiness要求有效配置、认证接线、控制数据库与RPC prov
 3. 升级房源工具/技能语义，验证知识禁用、真实旧REST/权限与historyDTO；默认模式真实ES+Milvus+rerank烟测，跨空间/跨用户反例、一路故障与RAG停机反例必须通过。
 4. 新配置/数据生效与默认能力gate全部通过才恢复写入口；严格检查实际namespace，不执行全项目配置目录覆盖或数据卷删除。
 
-### Phase 3 — 清理发布
+### Phase 3 — 同窗清理核对
 
-首次切流发布已经同步迁走/删除旧执行包、bean、重复bootstrap及对应执行依赖；至少经过一个兼容发布周期且所有消费者升级后，再删除旧Agent索引RPC签名/引用及残余无执行职责代码，允许旧REST/工具纯包装继续存在。检查源码与有效依赖/配置没有本次后端fallback。旧数据/集合自动删除不属于本任务，后续需单独授权。
+本次无生产真实业务，清理与有界开发切流同窗完成：无消费者旧 Agent 索引 RPC 与 signed legacy reconcile/证明路径直接删除，不等待旧 RPC 兼容周期；来源执行包/bean/重复bootstrap/依赖同步迁走删除。真实 REST/工具纯包装继续兼容，其退役另行公告。核查不存在本次后端fallback，保留正常index/backfill/outbox和RAG worker实际hash补偿。旧数据/集合不自动删除。
 
 ### Rollback
 

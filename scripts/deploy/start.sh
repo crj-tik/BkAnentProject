@@ -2,7 +2,7 @@
 # 启动指定档位的完整环境，并等待全部容器健康。
 # 首次启动会构建镜像（容器内 Maven 打包，耗时较长）；重复启动可加 --no-build 跳过。
 #
-# 用法：start.sh [--profile minimal|full|mcp] [--with-mcp] [--with-rag] [--no-build] [--wait-timeout SEC] [--no-wait]
+# 用法：start.sh [--profile minimal|full|mcp|rag] [--with-mcp] [--with-rag] [--service NAME ...] [--no-deps] [--no-build] [--wait-timeout SEC] [--no-wait]
 #   --profile       启动档位（默认 full；minimal 只含 MySQL/Nacos/认证/网关）
 #   --with-mcp      附加启动 MySQL MCP 只读服务（mcp profile）
 #   --no-build      跳过镜像构建，直接使用本地已有镜像
@@ -20,12 +20,16 @@ WITH_RAG=0
 NO_BUILD=0
 WAIT_TIMEOUT=600
 NO_WAIT=0
+NO_DEPS=0
+SERVICES=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --profile) PROFILE="$2"; shift 2 ;;
     --with-mcp) WITH_MCP=1; shift ;;
     --with-rag) WITH_RAG=1; shift ;;
+    --service) [ "$#" -ge 2 ] || die "--service 缺少名称"; SERVICES+=("$2"); shift 2 ;;
+    --no-deps) NO_DEPS=1; shift ;;
     --no-build) NO_BUILD=1; shift ;;
     --wait-timeout) WAIT_TIMEOUT="$2"; shift 2 ;;
     --no-wait) NO_WAIT=1; shift ;;
@@ -33,20 +37,21 @@ while [ $# -gt 0 ]; do
     *) die "未知参数：$1" ;;
   esac
 done
-case "$PROFILE" in minimal|full|mcp) ;; *) die "--profile 只支持 minimal|full|mcp" ;;
+case "$PROFILE" in minimal|full|mcp|rag) ;; *) die "--profile 只支持 minimal|full|mcp|rag" ;;
 esac
 case "$WAIT_TIMEOUT" in ''|*[!0-9]*) die "--wait-timeout 需要非负整数秒" ;; esac
 
 cd "$BK_REPO_ROOT"
 require_docker
 
-if [ ! -f "$BK_ENV_FILE" ]; then
-  log_warn "尚未初始化 .env，将使用 compose 默认值启动。建议先运行 scripts/deploy/init-environment.sh 生成随机密钥。"
-fi
+[ -f "$BK_ENV_FILE" ] || die "缺少启动 env；先初始化或通过 BK_ENV_FILE 指定受限外部 env。"
 
 profile_flags=(--profile "$PROFILE")
 [ "$WITH_MCP" -eq 1 ] && profile_flags+=(--profile mcp)
 [ "$WITH_RAG" -eq 1 ] && profile_flags+=(--profile rag)
+if [ "$WITH_RAG" -eq 1 ] && [ "${#SERVICES[@]}" -gt 0 ] && ! printf '%s\n' "${SERVICES[@]}" | grep -qxF rag-service; then
+  SERVICES+=(rag-service)
+fi
 if [ "$WITH_RAG" -eq 1 ]; then
   log_warn "RAG 基础 readiness 检查安全配置、控制DB两表查询权限和至少三个已导出RPC provider；不直接探测 Nacos 或检索后端，不证明空间、双路检索、embedding/重排能力或数据水位通过。"
 fi
@@ -54,7 +59,13 @@ fi
 log_info "启动 ${PROFILE} 档位环境（$( [ "$NO_BUILD" -eq 1 ] && echo '跳过构建' || echo '包含镜像构建' )）…"
 build_flags=()
 [ "$NO_BUILD" -eq 1 ] || build_flags+=(--build)
-if ! docker compose "${profile_flags[@]}" up -d "${build_flags[@]+"${build_flags[@]}"}"; then
+compose "${profile_flags[@]}" config -q || die "Compose配置校验失败。"
+available="$(compose "${profile_flags[@]}" config --services)" || die "无法取得预期服务。"
+for service in "${SERVICES[@]}"; do
+  [[ "$service" =~ ^[a-z0-9-]+$ ]] && grep -qxF "$service" <<< "$available" || die "服务不在选定profile：${service}"
+done
+[ "$NO_DEPS" -eq 0 ] || { [ "${#SERVICES[@]}" -gt 0 ] || die "--no-deps必须配合--service"; build_flags+=(--no-deps); }
+if ! compose "${profile_flags[@]}" up -d "${build_flags[@]}" "${SERVICES[@]}"; then
   die "docker compose up 失败，请查看上方 compose 输出定位（常见原因：端口占用、镜像构建失败、磁盘不足）。"
 fi
 
@@ -85,7 +96,9 @@ if [ "$NO_WAIT" -eq 1 ]; then
 fi
 
 log_info "等待容器健康（超时 ${WAIT_TIMEOUT}s）…"
-if wait_all_healthy "$WAIT_TIMEOUT" "${profile_flags[@]}"; then
+wait_targets=()
+[ "${#SERVICES[@]}" -eq 0 ] || wait_targets=(-- "${SERVICES[@]}")
+if wait_all_healthy "$WAIT_TIMEOUT" "${profile_flags[@]}" "${wait_targets[@]}"; then
   log_info "环境启动完成。"
   print_endpoints "$PROFILE"
 else

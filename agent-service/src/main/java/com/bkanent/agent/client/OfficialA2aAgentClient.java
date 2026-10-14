@@ -66,9 +66,52 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
     private final OfficialA2aResponseNormalizer responseNormalizer;
     private final Function<String, A2AClient> clientFactory;
 
+    private com.bkanent.agent.security.AgentRagCredentialLeaseStore credentials;
+    private static final ThreadLocal<com.bkanent.common.a2a.BeaconA2aHttpClient.Identity> TRANSPORT_IDENTITY = new ThreadLocal<>();
+
     @Autowired
-    public OfficialA2aAgentClient(OfficialA2aResponseNormalizer responseNormalizer) {
-        this(responseNormalizer, A2AClient::new);
+    public OfficialA2aAgentClient(OfficialA2aResponseNormalizer responseNormalizer,
+            com.bkanent.agent.security.AgentRagCredentialLeaseStore credentials,
+            com.bkanent.common.a2a.A2aBeaconAuthentication authentication) {
+        this(responseNormalizer, url -> new A2AClient(new com.bkanent.common.a2a.BeaconA2aHttpClient(
+                new io.a2a.http.JdkA2AHttpClient(java.net.http.HttpClient.Redirect.NEVER), authentication, () -> {
+                    var identity = TRANSPORT_IDENTITY.get();
+                    if (identity == null) throw new com.bkanent.common.rag.RagException(com.bkanent.common.rag.RagErrorCode.AUTHENTICATION_FAILED);
+                    return identity;
+                }), url));
+        this.credentials = credentials;
+    }
+
+    private TransportScope authenticate(RegisteredAgentDescriptor descriptor, AgentTaskInvokeRequest request) {
+        if (credentials == null) return new TransportScope(null); // Test-only injected SDK factory.
+        String actor = String.valueOf(request.structuredContext().get("userId"));
+        String audience = switch (descriptor.agentId()) {
+            case "listing-agent" -> "listing-master-service";
+            case "trade-agent" -> "business-service";
+            case "marketing-agent" -> "marketing-content-service";
+            case "compare-agent" -> "compare-engine-service";
+            case "contract-agent" -> "contract-service";
+            case "settlement-agent" -> "settlement-service";
+            case "notification-agent" -> "notification-service";
+            case "media-agent" -> "media-worker-service";
+            case "interview-agent" -> "interview-service";
+            default -> throw new com.bkanent.common.rag.RagException(com.bkanent.common.rag.RagErrorCode.FORBIDDEN);
+        };
+        return new TransportScope(new com.bkanent.common.a2a.BeaconA2aHttpClient.Identity(actor, audience,
+                credentials.credentials(actor), credentials.expiresAtEpochSecond(actor)));
+    }
+    private void verifyCurrent(AgentTaskInvokeRequest request) {
+        if (credentials != null) credentials.credentials(String.valueOf(request.structuredContext().get("userId")));
+    }
+    private java.util.function.Supplier<AutoCloseable> credentialSnapshot() {
+        return credentials == null ? () -> () -> { } : credentials.snapshot();
+    }
+    private static final class TransportScope implements AutoCloseable {
+        private final com.bkanent.common.a2a.BeaconA2aHttpClient.Identity previous = TRANSPORT_IDENTITY.get();
+        TransportScope(com.bkanent.common.a2a.BeaconA2aHttpClient.Identity identity) {
+            if (identity == null) TRANSPORT_IDENTITY.remove(); else TRANSPORT_IDENTITY.set(identity);
+        }
+        @Override public void close() { if (previous == null) TRANSPORT_IDENTITY.remove(); else TRANSPORT_IDENTITY.set(previous); }
     }
 
     OfficialA2aAgentClient(OfficialA2aResponseNormalizer responseNormalizer,
@@ -79,9 +122,10 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
 
     @Override
     public AgentTaskInvokeResponse invoke(RegisteredAgentDescriptor descriptor, AgentTaskInvokeRequest request) {
-        try {
+        try (var identity = authenticate(descriptor, request)) {
             A2AClient client = clientFor(descriptor);
             SendMessageResponse response = client.sendMessage(buildMessageSendParams(request, true));
+            verifyCurrent(request);
             EventKind result = response.getResult();
             if (result instanceof Message message) {
                 return responseNormalizer.normalize(descriptor, request, extractMessageText(message), "COMPLETED",
@@ -117,16 +161,25 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
         Set<String> artifactIds = new LinkedHashSet<>();
         List<Part<?>> responseParts = new ArrayList<>();
         AtomicBoolean completed = new AtomicBoolean();
-        try {
+        var snapshot = credentialSnapshot();
+        try (var identity = authenticate(descriptor, request)) {
             A2AClient client = clientFor(descriptor);
             client.sendStreamingMessage(
                     buildMessageSendParams(request, false),
-                    event -> handleStreamingEvent(descriptor, request, eventConsumer, result, output,
-                            artifactIds, responseParts, completed, client, event),
+                    event -> {
+                        try (var ignored = snapshot.get()) {
+                            verifyCurrent(request);
+                            handleStreamingEvent(descriptor, request, eventConsumer, result, output,
+                                    artifactIds, responseParts, completed, client, event);
+                        } catch (Exception failure) {
+                            completed.set(true);
+                            result.completeExceptionally(failure);
+                        }
+                    },
                     error -> {
                         completed.set(true);
                         result.completeExceptionally(new IllegalStateException(
-                                "official a2a streaming error for " + descriptor.agentId() + ": " + error));
+                                "official a2a streaming error for " + descriptor.agentId()));
                     },
                     () -> {
                         completed.set(true);
@@ -140,7 +193,9 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
                     "official a2a streaming invoke failed for " + descriptor.agentId(), exception));
         }
         try {
-            return result.get();
+            AgentTaskInvokeResponse response = result.get();
+            verifyCurrent(request);
+            return response;
         } catch (InterruptedException exception) {
             completed.set(true);
             Thread.currentThread().interrupt();
@@ -344,7 +399,7 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
 
     @Override
     public A2aAsyncTaskCreateResponse submitAsync(RegisteredAgentDescriptor descriptor, AgentTaskInvokeRequest request) {
-        try {
+        try (var identity = authenticate(descriptor, request)) {
             A2AClient client = clientFor(descriptor);
             SendMessageResponse response = client.sendMessage(buildMessageSendParams(request, false));
             if (!(response.getResult() instanceof Task task)) {
@@ -353,6 +408,7 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
             }
             String asyncTaskId = task.getId();
             rememberTask(descriptor, asyncTaskId, request, client);
+            verifyCurrent(request);
             return new A2aAsyncTaskCreateResponse(
                     request.sessionId(),
                     request.taskId(),
@@ -368,9 +424,10 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
 
     @Override
     public A2aAsyncTaskStatusResponse queryAsyncStatus(RegisteredAgentDescriptor descriptor, String asyncTaskId) {
-        try {
-            TaskBinding binding = bindingFor(descriptor, asyncTaskId);
+        TaskBinding binding = bindingFor(descriptor, asyncTaskId);
+        try (var identity = authenticate(binding.descriptor(), binding.request())) {
             GetTaskResponse response = binding.client().getTask(asyncTaskId);
+            verifyCurrent(binding.request());
             Task task = response.getResult();
             if (task == null) {
                 throw new IllegalStateException("official a2a task not found: " + asyncTaskId);
@@ -400,8 +457,10 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
 
     @Override
     public void cancelAsyncTask(RegisteredAgentDescriptor descriptor, String asyncTaskId) {
-        try {
-            bindingFor(descriptor, asyncTaskId).client().cancelTask(asyncTaskId);
+        TaskBinding binding = bindingFor(descriptor, asyncTaskId);
+        try (var identity = authenticate(binding.descriptor(), binding.request())) {
+            binding.client().cancelTask(asyncTaskId);
+            verifyCurrent(binding.request());
         } catch (A2AServerException exception) {
             throw new IllegalStateException("official a2a async cancellation failed for " + descriptor.agentId(), exception);
         }

@@ -26,6 +26,46 @@ class RagRpcBoundaryTest {
         rpc.search(request, null, null, null);
         verify(retrieval).search(request, mandatory);
     }
+    @Test void searchRechecksCurrentIdentityBeforeReturningBackendContent() {
+        var access = mock(RagAccessControl.class);
+        var retrieval = mock(RagRetrievalService.class);
+        var rpc = new RagRetrievalRpcServiceImpl(access, retrieval);
+        var request = RagSearchRequest.defaults("req", "memory.preference", "query");
+        List<RagFilter> mandatory = List.of(new RagFilter("userId", RagFilterOperator.EQ, RagValue.string("7")));
+        doReturn(mandatory).doThrow(new RagException(RagErrorCode.AUTHENTICATION_FAILED))
+                .when(access).search(request, null, null, null);
+        assertThatThrownBy(() -> rpc.search(request, null, null, null))
+                .isInstanceOfSatisfying(RagException.class, failure ->
+                        assertThat(failure.code()).isEqualTo(RagErrorCode.AUTHENTICATION_FAILED));
+        var order = inOrder(access, retrieval);
+        order.verify(access).search(request, null, null, null);
+        order.verify(retrieval).search(request, mandatory);
+        order.verify(access).search(request, null, null, null);
+    }
+    @Test void changedMandatoryScopeCannotExposePreviouslyRecalledContent() {
+        var access = mock(RagAccessControl.class);
+        var retrieval = mock(RagRetrievalService.class);
+        var rpc = new RagRetrievalRpcServiceImpl(access, retrieval);
+        var request = RagSearchRequest.defaults("req", "listing.knowledge", "query");
+        when(access.search(request, null, null, null)).thenReturn(List.of(),
+                List.of(new RagFilter("active", RagFilterOperator.EQ, RagValue.bool(true))));
+        assertThatThrownBy(() -> rpc.search(request, null, null, null))
+                .isInstanceOfSatisfying(RagException.class, failure ->
+                        assertThat(failure.code()).isEqualTo(RagErrorCode.FORBIDDEN));
+        verify(retrieval).search(request, List.of());
+    }
+    @Test void successfulSearchReturnsSameResponseAfterIndependentIdentityRecheck() {
+        var access = mock(RagAccessControl.class);
+        var retrieval = mock(RagRetrievalService.class);
+        var rpc = new RagRetrievalRpcServiceImpl(access, retrieval);
+        var request = RagSearchRequest.defaults("req", "listing.knowledge", "query");
+        var response = new RagSearchResponse(1, "req", request.spaceId(), "rrf-v1",
+                RagSearchMode.HYBRID_RERANK, RagSearchMode.HYBRID_RERANK, false, List.of(), List.of(), List.of());
+        when(access.search(request, null, null, null)).thenReturn(List.of());
+        when(retrieval.search(request, List.of())).thenReturn(response);
+        assertThat(rpc.search(request, null, null, null)).isSameAs(response);
+        verify(access, times(2)).search(request, null, null, null);
+    }
     @Test void indexStatusCannotCallLedgerWhenUnauthorized() {
         var access = mock(RagAccessControl.class);
         var ledger = mock(RagIndexService.class);

@@ -103,13 +103,13 @@ rag:
       delay-ms: 1000
       reconcile-delay-ms: 30000
   # These proposed physical names are NOT legacy identity mappings or registered-ready evidence.
-  # Roles remain empty and rerank profile absent until authorized, verified deployment configuration exists.
+  # Development ADMIN/BROKER roles are explicit; rerank profile still needs measured evidence.
   # Unknown general/supervisor knowledge is intentionally not registered.
   spaces:
     '[listing.knowledge]':
       space-id: listing.knowledge
       owner-domain: listing-master-service
-      policy-version: listing-v1
+      policy-version: listing-v2
       schema-version: "1"
       elasticsearch-index: rag_listing_knowledge_v1
       vector-schema: &listing-vector-schema
@@ -173,8 +173,8 @@ rag:
         ocrStatus: *stored-string
         verificationStatus: *stored-string
       return-fields: [listingId, active, title, address, region, layout, area, totalPrice, status, verified]
-      search-roles: []
-      admin-roles: []
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
       allowed-clients:
         listing-master-service: [SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
       limits: &space-limits
@@ -229,8 +229,8 @@ rag:
           required: false
         active: *active-field
       return-fields: [preferenceKey, category, confidence, observationCount, lastObservedAt, active]
-      search-roles: []
-      admin-roles: []
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
       allowed-clients:
         memory-service: [SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
       limits: *space-limits
@@ -253,8 +253,8 @@ rag:
         tags: *stored-string
         active: *active-field
       return-fields: [constraintKey, category, tags, active]
-      search-roles: []
-      admin-roles: []
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
       allowed-clients:
         memory-service: [SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
       limits: *space-limits

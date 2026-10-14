@@ -1,0 +1,1 @@
+SELECT (SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='bk_agent' AND ((table_name='agent_orchestration_run' AND column_name='cancel_requested' AND data_type='int' AND is_nullable='NO' AND column_default='0') OR (table_name='agent_tool_invocation' AND column_name='execution_metadata_json' AND data_type='longtext')))=2;

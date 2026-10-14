@@ -14,12 +14,11 @@ public class ListingRagProperties {
     private String secret;
     private String authResponseKeyId = "auth-response-current";
     private String authResponseSecret;
-    private String policyVersion = "listing-v1";
+    private String policyVersion = "listing-v2";
     private String schemaVersion = "1";
     private Set<String> readRoleCodes = Set.of();
     private Set<String> adminRoleCodes = Set.of();
     private boolean dispatcherEnabled;
-    private boolean legacyReconciliationEnabled;
     private Map<String, TrustedCaller> trustedCallers = new LinkedHashMap<>();
     public String getKeyId() { return keyId; }
     public void setKeyId(String value) { keyId = value; }
@@ -39,8 +38,6 @@ public class ListingRagProperties {
     public void setAdminRoleCodes(Set<String> value) { adminRoleCodes = value == null ? Set.of() : Set.copyOf(value); }
     public boolean isDispatcherEnabled() { return dispatcherEnabled; }
     public void setDispatcherEnabled(boolean value) { dispatcherEnabled = value; }
-    public boolean isLegacyReconciliationEnabled() { return legacyReconciliationEnabled; }
-    public void setLegacyReconciliationEnabled(boolean value) { legacyReconciliationEnabled = value; }
     public Map<String, TrustedCaller> getTrustedCallers() { return trustedCallers; }
     public void setTrustedCallers(Map<String, TrustedCaller> value) { trustedCallers = value == null ? new LinkedHashMap<>() : new LinkedHashMap<>(value); }
     public static class TrustedCaller {

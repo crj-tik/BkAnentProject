@@ -1,27 +1,27 @@
 ## 1. 基线盘点与实施前置检查
 
-- [x] 1.1 重新读取 LR/KI、主规格及本设计，核对真实源码/消费者清单；确认旧 split-rag-by-domain 不实施，不归档或覆盖其历史工件。
-- [ ] 1.2 盘点旧 REST/RPC/工具/技能/审计 JSON、现有集合与 ES 索引、文档 ID/PK/schema、实际模型维度及旧 ES 写入完整性，形成逐空间迁移清单。
-  - 本地源码/历史模板逐空间清单已建立：`docs/acceptance/isolated-rag-migration-inventory.md`。真实 PK/schema/模型与数量/hash/权限/删除水位未盘点，不据本地名称完成本项。
-- [ ] 1.3 核对各知识空间的真源与权限依据；明确 listing 资源授权签发路径、memory owner/管理基线与通用知识归属，未知归属数据隔离不激活。
-  - 权威grant/owner/scope路径和未知通用知识隔离已实现；真实有效grant、读取/管理角色基线仍未核对，默认空角色不凭测试ADMIN放行。必要人工输入与授权后执行步骤见`docs/acceptance/isolated-rag-unblocking-steps.md`。
-- [ ] 1.4 检查实际 namespace/group/data ID、生效配置、端口清单、镜像/config 快照与依赖树；记录 KI-37/38/39/42/48/50/51/53 对受影响路径的门禁，不扩张为全仓修复。
-- [x] 1.5 识别所有 RAG HTTP transport 与 DNS/连接扩展点，记录合规真实目标缺口；内网 ES/host.docker.internal 不放行、不擅自替换或公开，未满足时阻塞真实联调/切流但可继续非联网实现。
+已结束规划修订并进入授权 apply，执行源码、初始化、限定配置与开发运行验证，维护 docs/LR/KI 并在验证后中文提交推送。保留49个稳定编号，不增删/复用编号；旧验证仅证明旧要求，新增要求不得自动勾选。此前重开原[x]：1.5、3.2、3.3、3.4、4.6、7.5、8.7、8.9，使基线为24/49；仅按当前完整证据继续勾选，不以源码、授权或历史测试代替新验收。
+
+- [x] 1.1 重新读取 LR/KI、主规格及设计，确认旧 split-rag-by-domain 不实施、不覆盖历史；当前已读取并同步维护 LR/KI，未改旧 change 的历史工件。
+- [ ] 1.2 盘点旧 REST/RPC/工具/技能/审计、真实 ES/Milvus schema/PK/模型维度/身份/hash/水位。旧后端已备份后启动：ES两个旧索引均0且mapping空，Milvus REST与精确catalog仅default库、0集合/分区/实体；不存在旧PK/model/schema可补造。6.7已全量核对无旧Agent索引RPC调用方并清理；新模型维度/投影身份和应用水位仍需实测，不据模板完成。
+- [ ] 1.3 按最小业务基线核对 ADMIN唯一管理员、BROKER普通成员、MANAGER不默认准入；ADMIN全未删除房源含非ON_SALE，BROKER仅ON_SALE；偏好包括ADMIN绝对self-only，未知Supervisor语料隔离，不再要求资源grant规范/授权种子。
+- [x] 1.4 已读取operations-inventory-safe/configuration-validation/Nacos恢复证据，核对DEFAULT_GROUP原BK-AGENT16/public21/acceptance5、现BK17/public21/5，旧空namespace实际public；七selected十一域key扩展后认证发布/逐hash读回一致。实际端口/旧imageID/digest/原volume与受限archive checksum已记录，无mount原Nacos未重建；隔离internal实例12原config恢复匹配。旧listing/memory/agent imageID本地缺失明确非可重建rollback；应用生效另验，不全目录覆盖。
+- [ ] 1.5 重验所有HTTP真实transport与新双模式配置/目标：仅mode/allowed-hosts/internal-networks逐host map；项目网172.24.0.0/16，host.docker.internal容器192.168.65.254/Windows10.117.102.54分别核对，公司公开HTTPS host走公开分支。旧一律禁内网验证不证明新要求完成。
 
 ## 2. 独立模块与纯契约
 
-- [x] 2.1 创建 rag-service Java 17 Spring Boot 可执行模块并纳入根 reactor，使用根管理版本及独立应用名，不建立 common-milvus 或多实现 profile。
-- [x] 2.2 在 common 增加版本化 search/submit/getStatus/inspect/provision/replay RPC 与纯 DTO，严格定义请求字段、结果状态及错误码，不泄漏客户端或服务 JAR 依赖。
-- [x] 2.3 实现 v1 数量/模式/策略/字段校验、类型化过滤模型、响应 scoreKind/scoringVersion/degraded 元数据，覆盖未知字段/原生脚本/非法容量关系单测。
-- [x] 2.4 实现受管空间注册校验与管理权限入口，禁止不同空间共用物理索引/集合、任意目标寻址或 search 自动初始化；增加注册和跨空间测试。
+- [x] 2.1 创建rag-service Java17可执行模块并纳入reactor，不建立common-milvus或多实现profile。
+- [x] 2.2 common增加版本化search/submit/getStatus/inspect/provision/replay纯RPC/DTO，定义状态/错误，不泄漏服务JAR或后端客户端。
+- [x] 2.3 v1数量/模式/策略/类型化字段校验及scoreKind/scoringVersion/degraded元数据，覆盖非法关系/未知字段/脚本。
+- [x] 2.4 受管空间注册/管理入口，禁止跨空间共享物理目标、任意寻址或search自动初始化。
 
 ## 3. 可信身份与空间授权
 
-- [x] 3.1 实现按服务独立密钥的请求绑定签名 envelope 校验，覆盖 audience/operation/hash/expiry/key rotation，凭据仅来自环境或秘密管理，不进入模型/日志/快照。
-- [x] 3.2 复用现有access token解析，在auth/common新增最小resolveRagPrincipal返回真实userId/roleCode/活跃事实，保持原principal结构；校验RAG→auth服务身份并接线专用凭据上下文、到期/撤销/账号失效失败关闭，增加伪造gateway/userId/serviceName反例。
-- [x] 3.3 在房源域建立最小listing_rag_grant真源及受管管理入口，默认无授权拒绝，不推断brokerId=userId；接线房源/记忆scope签发与ownerDomain权限、actor/space/request/policy/expiry绑定，RAG校验交集，不依赖宽松hasPermission。
-- [x] 3.4 实现强制 owner/resource/active 条件及双方过滤等价校验，覆盖 scope 超上限、越域、跨用户、普通consumer伪造别域授权、后台写服务越权搜索。
-- [ ] 3.5 接线 agent/房源/记忆的同步与异步读取凭据生命周期；续接过期明确要求重新认证，不把长期 access token 落 checkpoint，不以 userId 换发身份。
+- [x] 3.1 按服务独立密钥的请求绑定签名envelope，覆盖audience/operation/hash/expiry/rotation，凭据只来自环境/秘密管理，不进模型/日志/快照。
+- [ ] 3.2 复用auth最小signed principal并重验当前账号/角色事实：停用/删除/离职/角色失效在全部相关REST/RPC/A2A/工具/管理/异步续接入口禁操作，未过期token不豁免，MANAGER不默认ADMIN；补伪造及入口/最终输出失效反例。旧局部认证测试非新全入口完成证据。
+- [ ] 3.3 改房源scope为显式businessWide及activeOnly语义：ADMIN未删除全读，BROKER仅ON_SALE，RAG独立按当前signed role核对；移除资源grant必需/空集即全读假设，不用资源通配，不扩张授权DSL；保留ownerDomain/actor/space/request/policy/expiry绑定。
+- [ ] 3.4 重验两路强制owner/未删除/active条件等价；个人偏好读写及用户管理/回填响应绝对self-only（ADMIN亦不得跨用户），跨域/伪scope/后台写身份不能获得用户搜索/管理权。
+- [ ] 3.5 接通A2A专用可验auth信标和真实SDK受支持transport（必要最小升级/修补已授权），覆盖同步/流式/任务查询取消/异步/审批续接；专用上下文不进模型metadata/工具参数/RunnableConfig/checkpoint，进程内租约过期/重启须原owner重新认证，不以userId换发。
 
 ## 4. 迁移检索执行与出站安全
 
@@ -29,50 +29,46 @@
 - [ ] 4.2 调整按空间 schema 身份缓存的 VectorStore 实例，校验 database/collection/field/model/维度不混用；验证初始化、旧文档读/更新/删除及维度错误。
 - [x] 4.3 从房源迁移 ES 索引/关键词召回执行到 RAG，使用统一领域投影、显式 mapping 和类型化过滤，去除房源 Mapper/RPC 回调及 ES→SQL 召回 fallback。
 - [x] 4.4 实现两路召回、文档去重、版本化 RRF/同分稳定顺序与有界候选池；增加异量纲分数、重复候选、单路开关及数量不足测试。
-- [x] 4.5 迁移现有 BGE native/DashScope 重排协议并校验候选完整性、下标/分数，接线明确评分 profile/logit或bounded转换，覆盖 scoreKind 与关闭重排语义。追加外部 Reranker-BGE-V2-M3 治理协议适配（governed，/api/v1/rerank）：请求 model/query/passages + raw_scores + truncate=false，每次响应钉扎 alias/revision/scoring_version/artifact_digest 与 score_semantics，漂移即 SCORING_PROFILE_MISMATCH、意外截断即 RERANK_PROTOCOL_ERROR、400/413 映射不可重试 INVALID_ARGUMENT；三空间登记实测 LOGIT profile 锚点，endpoint/CIDR/env 接线完成，协议单测通过。真实容器联调与默认重排能力验收未执行，见 8.2。
-- [x] 4.6 在 ES/Spring AI embedding/重排真实 HTTP transport 接入每次连接的 host/DNS 地址安全守卫，拒绝私网/环回/保留/映射地址，禁自动重定向，覆盖 DNS 换址、重连、重试与配置刷新；不能仅启动校验或增加可信配置例外。
+- [x] 4.5 迁移现有 BGE native/DashScope 重排协议并校验候选完整性、下标/分数，接线明确评分 profile/logit或bounded转换，覆盖 scoreKind 与关闭重排语义。追加外部 Reranker-BGE-V2-M3 治理协议适配（governed，/api/v1/rerank）：请求 model/query/passages + raw_scores + truncate=false，每次响应钉扎 alias/revision/scoring_version/artifact_digest 与 score_semantics，漂移即 SCORING_PROFILE_MISMATCH、意外截断即 RERANK_PROTOCOL_ERROR、400/413 映射不可重试 INVALID_ARGUMENT；三空间登记实测 LOGIT profile 锚点，endpoint/CIDR/env 接线完成，协议与模板单测通过（rag-service 288 项）。真实容器联调与默认重排能力验收未执行，见 8.2。
+- [ ] 4.6 改真实 HTTP transport 为 PUBLIC_ONLY 默认/MANAGED_INTERNAL 显式；精确 host allowlist+该 host 对应 RFC1918/ULA CIDR，每连接校验全部原始 A/AAAA 并固定地址/TLS；允许明确受管 Docker 单标签/host.docker.internal，禁 localhost/环回/链接本地/映射/组播/保留、通配/0/0、代理/自动重定向/任意 URL 覆盖。补 host 跨网、缺配置、DNS 混答/换址/重连/重试/刷新及两部署形态反例。
 - [x] 4.7 实现 STRICT/ALLOW_DEGRADED、阶段错误、整体 deadline、有界重试/并发/文本预算；覆盖一路/两路/重排失败与安全拒绝不可降级、不把失败当 NO_MATCH。
 
 ## 5. 领域事务事件与 RAG 应用账本
 
-- [x] 5.1 为房源域新增真源版本/事务 outbox，覆盖创建、更新、删除、状态、资产绑定及所有改变语料/权限的活跃入口；外部发送发生在提交后，回滚零事件。
-- [x] 5.2 为记忆偏好/约束新增版本与 outbox，覆盖 upsert、衰减、阈值失效、物理删除、停用与重新激活，使用无歧义稳定身份。
-- [ ] 5.3 新增 bk_rag 控制数据库迁移及事件/文档状态，明确目标库、敏感payload最小权限/保留期，验证当前 MySQL 语法及重复执行，不修改无关历史迁移。
-- [x] 5.4 实现提交持久化确认、事件状态查询、revision/hash 幂等/冲突/过期与 tombstone规则，发送超时可用相同eventId核对并重试。
-- [x] 5.5 实现同文档串行worker、两路应用状态、有界重试/告警/授权 replay与实际hash核对补偿，覆盖并发、崩溃、网络迟到及部分成功，不承诺跨后端原子写。
-- [x] 5.6 在融合/重排前依据最新账本剔除旧版本、部分应用与删除候选，禁止不同版本合并，测试账本不可用失败关闭及迟到旧向量只导致漏检不暴露旧正文。
+- [x] 5.1 房源revision/outbox覆盖活跃创建更新删除状态资产等投影变更，提交后派发、回滚零事件；新角色scope回归另在3.3验收，不依旧grant基线。
+- [x] 5.2 记忆偏好/约束revision/outbox覆盖upsert/衰减/阈值/删除/停用重激活，无歧义稳定身份。
+- [x] 5.3 版本化bk_rag控制库及领域初始化，明确目标库/版本校验/敏感payload最小权限保留期；接入三份20261012 SQL，MySQL8.4.11新库/已有种子升级/重复执行实测。限定补齐agent三orchestration表和run_control必要列，不全仓重放历史SQL。v20261013.1 六步现存升级及重复实测通过；独立空新卷九步首启、两次fresh重跑/一次upgrade通过，SQL/check LF hash及history校验。runtime仅两控制表SELECT/INSERT/UPDATE，跨bk_auth查询1142；现存17约束/3共享记忆/2用户/3workflow/46checkpoint不变，payload/tombstone保留规则不清数据。
+- [x] 5.4 持久化确认/getStatus及revision/hash幂等冲突过期/tombstone，超时按同eventId核对。
+- [x] 5.5 同文档串行worker、双路状态/重试/告警/授权replay及实际hash核对补偿；此worker职责不得被旧signed listing legacy reconcile清理误删。
+- [x] 5.6 融合/重排前按最新账本剔除旧/部分/删除，账本故障失败关闭，迟到旧向量只漏检不暴露旧正文。
 
 ## 6. 领域消费、Bootstrap 与兼容包装
 
-- [x] 6.1 实现房源授权检索 facade：请求 RAG、按 ID 批量读取最新详情并重验权限/状态/条件、映射旧 match/context；最多一次有界扩大候选，不反向从 RAG 读业务。
-- [ ] 6.2 将 searchListingsByKeyword 保留为领域包装的默认混合检索工具，更新 description/listing-search 技能并验证真实房源 Agent 调用；SQL 列表/详情与营销独立搜索不变。
-- [ ] 6.3 实现记忆检索消费与真源可用性/最终排序分层，注册实际评分元数据；覆盖相关度尺度、阈值、时间硬过滤与软衰减区别、候选池不提前裁成最终topK，不强制示例权重或新评分 DSL。
-  - 本地统一评分时刻、两池去重/再次真源复核、累计预算、返回metadata白名单和评分/时间/RPC反例已补齐；实际rerank profile及memory允许scoringVersion尚未验证注册，本项未完成。
-- [x] 6.4 将约束 bootstrap/YAML资源迁入 memory，遵守启用开关、仅补缺、人工修改/停用不覆盖；所有更新生成领域事件，agent 不再重复执行初始化或双写。
-- [x] 6.5 将 milvusKnowledgeSearch 改为远程代理，保留能力身份/格式化/recordMilvus及工具审计；在生产Graph接线真实知识禁用和授权空间，不固定true或允许模型物理寻址。
-- [x] 6.6 保留真实六组旧REST方法/路径/成功字段，接线权限/别名/schema维度及房源facade；实现旧数量映射20+20/最终10、工具topK候选池，覆盖新旧默认、显式边界及非法关系，不静默改显式数量。
-- [ ] 6.7 实现旧Agent索引RPC的停写排空后有限纯代理，依据已确认真源/revision生成事件；未提交/回滚/删除次序不明返回LEGACY_RECONCILIATION_REQUIRED，覆盖旧删除不误删较新状态，不创建无限待处理队列。
-  - 领域signed reconcile已补当前完整投影hash证明和正向/拒绝/提交后派发失败回归；旧ID-only入口仍无可信认证与证明输入路径，不能自签名补造，保持失败关闭。见KI-74/75；真实排空及条件成功代理未完成。
-- [x] 6.8 区分确定只读失败/权限拒绝/参数错/结果未知，验证旧 chat/milvusResults/checkpoint只读反序列化、已完成调用不重发；如新增transition，按KI-2逐调用点增加测试。
+- [x] 6.1 房源facade请求RAG、批量最新真源检查及旧match/context，至多一次有界扩池；新ADMIN/BROKER规则待3.3/3.4回归，不据旧grant测试宣称完成。
+- [ ] 6.2 searchListingsByKeyword领域默认混合工具/description/技能，真实房源Agent凭3.5专用A2A认证调用；SQL详情与营销独立搜索不变。
+- [ ] 6.3 记忆消费/真源有效性/领域最终排序，验证真实rerank profile及scoringVersion注册，保持统一asOf/两池去重/累计预算/metadata白名单；不强制示例权重或新评分DSL。
+- [x] 6.4 bootstrap/YAML唯一迁memory，开关/仅补缺/人工及停用不覆盖，所有更新事件化。
+- [x] 6.5 milvusKnowledgeSearch纯代理，保留能力/recordMilvus/审计/知识开关，不允许模型物理寻址。
+- [x] 6.6 六组真实旧REST方法路径成功字段纯代理兼容及旧数量20+20/最终10/工具topK，维度和别名检查；新增全入口身份/个人偏好要求另待3.2/3.4验收。
+- [x] 6.7 全量源码搜索核对：旧syncListingKnowledge/deleteListingKnowledge生产声明/实现/调用零命中，仅反射否定测试；无消费者signed listing legacy reconcile/证明DTO/配置/错误码/测试清除，provider遗留死注入同步删除。不建旧兼容路径；其他AgentRpcService四方法、正常index/backfill/outbox和worker实际双路hash补偿保留。当前统一编译已通过，完整回归另由8.7验收。
+- [x] 6.8 确定只读失败/权限/参数/未知分离，historyDTO/checkpoint只读、已完成不重发；如新增transition按KI-2逐点单测。
 
 ## 7. 配置、部署与能力诊断
 
-- [ ] 7.1 新增 rag-service Nacos及应用配置，独立bk_rag/RPC/空间/后端/安全/评分策略；验证数据ID、namespace/group与实际生效一致，不依赖无人导入mysql-common。
-- [x] 7.2 在首次消费者切流版本同步迁走/删除来源执行类、bean、初始化及执行依赖，不能只关配置或删starter留源码；拆分Compose环境锚点，后端配置仅归RAG，保留chat与营销业务配置。
-  - 以ee4c9b9完整源码/POM/应用/Nacos/Compose及可执行JAR重新核验，来源执行已实质迁出，chat/营销独立配置保留；本项验收首切版本代码与模板，不代替7.1/7.3/8.3真实生效、部署与切流。见本地验收记录“任务完成边界复核”。
-- [ ] 7.3 沿用项目Dockerfile模块构建新增独立bk-anent-rag镜像/JAR、受管端口与RPC发现，明确memory Dubbo接线；不混用外部reranker镜像规则或操作其容器。
-- [x] 7.4 实现基础readiness与每空间/检索阶段能力诊断、schema/模型维度/重排协议与安全gate；消费者不以RAG后端作为全局硬启动/就绪依赖。
-- [x] 7.5 更新仅受影响服务的启动/诊断/迁移清单，记录配置/镜像水位及默认混合路径真实验收命令，失败保留非零结果，不以TCP/running或strict validate证明完成。
+- [ ] 7.1 新RAG应用/Nacos配置和三项HTTP策略，实际namespace/group/dataID/角色/密钥/评分生效；config-init接Nacos管理认证，版本初始化与首启链/现存升级一致，敏感值不打印；无持久mount先受管导出，不盲重建。
+- [x] 7.2 来源执行源码/bean/初始化/依赖已实质迁出（历史ee4c9b9核验），Compose拆后端归属，chat/营销保留；不代替7.1/7.3/8.3真实生效部署。
+- [ ] 7.3 项目Dockerfile独立rag镜像/JAR/端口/RPC及memory Dubbo，后续apply可修改本地/本项目容器，不牵连外部reranker项目。
+- [x] 7.4 基础readiness/每空间能力诊断、schema/维度/profile及安全gate，消费者不以RAG后端全局硬依赖；新双模式真实验收另待4.6/8.2。
+- [ ] 7.5 重验受影响启动/诊断/版本初始化链：Compose首启三RAG SQL及agent当前结构齐备，已有数据升级+重复执行不丢17约束/3共享记忆/2auth用户/3workflow/46checkpoint；记录镜像/config/版本/事件水位，默认混合真实验收失败保留非零。旧脚本/清单验证不证明新增初始化验收。
 
 ## 8. 回填、切流、清理与验证
 
-- [x] 8.1 实现受权backfill：在领域事务中一致读取/锁定revision和完整快照，经相同outbox发布，水位含持久删除身份；测试回填与更新/删除交错收敛，通用知识先整理归属，未知语料不公开。
-  - listing与memory受权回填、领域锁内完整真源投影及统一outbox、持久删除身份和更新/删除交错回归已完成；memory默认100/最大500的分阶段keyset单页返回cursor/nextCursor/scanned/QUEUED receipts。未知通用知识按spec保持隔离、supervisor.knowledge未注册/激活，不宣称通用语料迁移完成。nextCursor=null不是双后端APPLIED或跨页原子快照；真实盘点/回填/应用水位和切流仍属1.2/8.2/8.3等未完成门禁。见本地验收记录“任务完成边界复核”。
-- [ ] 8.2 在经授权且URL合规的真实目标验证新索引/集合、旧身份映射、两路过滤等价、删除/更新/partial写补偿和默认重排；缺目标时标阻塞，不用单路或stub替代完整验收。
-- [ ] 8.3 执行短暂停写、旧writer/在途RPC排空、增量追平、配置/镜像备份及消费者切流；仅全部安全/身份/数据/能力gate通过才恢复写入。
-- [ ] 8.4 验证RAG停机时领域结构化功能与无知识Supervisor仍可用；验证显式降级标记、旧接口/技能、跨域跨用户反例及历史审计恢复。
-- [ ] 8.5 首次切流已无旧执行底座；完成一个兼容发布周期并确认消费者升级后再删除旧索引RPC签名/引用及残余无调用代码，确认偏好collector/retriever已清理，保留允许的纯包装。
-- [x] 8.6 核查有效依赖/配置与源码：agent/listing/memory无本次ES/Milvus/embedding/rerank执行依赖和重复bootstrap，其他领域业务依赖不误删。
-- [x] 8.7 执行受影响模块及上游的Maven compile/test/package，再执行全量既有编排/认证/领域回归；验证可执行JAR，逐项记录真实后端未执行/失败项。
-- [ ] 8.8 演练按事件水位恢复新兼容版本；若需旧版本先重放差异且符合最新URL策略，不仅改路由；保留全部索引/集合/卷，不自动删除、prune或公开服务。
-- [x] 8.9 将新增设计根因与确认缺陷更新到LR/KI并关联验收记录，在各已验证实施提交按项目规则中文commit及push；所有任务真实完成后才归档本变更，不以规划完成勾选实施任务。
+- [x] 8.1 受权有界backfill（默认100/最大500单页）、锁内完整快照/outbox及持久删除身份、更新删除交错测试；未知supervisor未激活，游标终止不等于两路APPLIED。真实数据/权限水位待1.2/8.2；新用户self-only边界待3.4。
+- [ ] 8.2 在授权且双模式地址合规的真实目标验独立索引/集合/身份映射/两路等价/更新删除partial补偿和默认重排；缺目标/协议时阻塞，不用stub/单路无重排代替。
+- [ ] 8.3 无生产真实业务采用一个有界开发窗口：备份配置/镜像/种子历史/事件水位，暂停受影响写入、核对实例/在途并追平；版本初始化和新身份/地址/数据/默认能力gate全过才恢复，不要求虚构旧RPC消费者兼容发布。
+- [ ] 8.4 RAG停机结构化功能/无知识Supervisor可用、显式降级、真实REST/技能、ADMIN/BROKER/无效用户/跨偏好反例及历史审计恢复。
+- [ ] 8.5 同窗确认旧执行底座及6.7无消费者RPC/遗留证明全清，偏好collector/retriever死代码清理，REST/工具纯包装保留；不等待旧RPC兼容周期，其他AgentRpcService方法及worker补偿不可误删。
+- [x] 8.6 已核查来源本次执行依赖/配置/源码及重复bootstrap清理，其他业务依赖不误删；新SDK/配置增量需8.7重新验证。
+- [x] 8.7 当前源码冻结后22模块串行clean test及package均BUILD SUCCESS，各848项测试、0失败/错误/跳过；以137份Surefire XML计数，不重复累加控制台汇总。14个Boot JAR、唯一SDK补丁、两官方源精确重建、其余9个官方类逐字节一致及license、后端依赖隔离、Java17私有probe编译已验证。源指纹4e5307ef818d1263896ced5f78ea872e69523e87903cc156bc1ee833d40f476d；日志及七项显式外部测试排除详见本地验收记录。此前失败保留，实际部署/模型/五操作验收不在此项内，后续执行源码改动必须重新构建。
+- [ ] 8.8 演练按版本/config/事件水位恢复新兼容版本，若退旧先重放差异并符合最新双模式安全；保留所有索引/集合/卷/种子历史，不down-v/prune/drop或公开服务。
+- [ ] 8.9 后续已验证实施提交维护新增/替代LR/KI及验收记录，依主会话授权中文commit/push；当前apply维护docs/LR/KI和已验证实施提交，旧[x]已按新要求重开，所有实施门禁真实完成才归档。

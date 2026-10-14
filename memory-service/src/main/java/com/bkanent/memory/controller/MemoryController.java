@@ -70,46 +70,108 @@ public class MemoryController {
 
     @PostMapping("/sessions/upsert")
     public ApiResponse<Void> upsertSessionMemory(@RequestBody SessionMemoryUpsertRequest request) {
+        ragSecurity.requireOwner(currentPrincipal(), request.userId());
+        sessionSharedMemoryService.find(request.sessionId())
+                .ifPresent(session -> ragSecurity.requireOwner(currentPrincipal(), session.userId()));
         sessionSharedMemoryService.upsert(request);
-        return ApiResponse.ok(null);
+        return checkedResponse(null);
     }
 
     @GetMapping("/sessions")
     public ApiResponse<SessionMemoryResponse> getSessionMemory(@RequestParam("sessionId") String sessionId) {
-        return ApiResponse.ok(sessionSharedMemoryService.find(sessionId).orElse(null));
+        return checkedResponse(requireSessionOwner(sessionId).orElse(null));
     }
 
     @PostMapping("/artifacts")
     public ApiResponse<ArtifactQueryResponse> createArtifact(@RequestBody ArtifactCreateRequest request) {
-        return ApiResponse.ok(taskArtifactMemoryService.create(request));
+        requireSessionOwner(request.sessionId());
+        return checkedResponse(taskArtifactMemoryService.create(request));
     }
 
     @GetMapping("/artifacts/by-task")
     public ApiResponse<List<ArtifactQueryResponse>> listArtifactsByTask(@RequestParam("taskId") String taskId,
                                                                         @RequestParam("sessionId") String sessionId) {
-        return ApiResponse.ok(taskArtifactMemoryService.listByTaskId(taskId, sessionId));
+        requireSessionOwner(sessionId);
+        var artifacts = taskArtifactMemoryService.listByTaskId(taskId, sessionId);
+        artifacts.forEach(this::requireArtifactOwner);
+        return checkedResponse(artifacts);
     }
 
     @GetMapping("/artifacts/by-id")
     public ApiResponse<ArtifactQueryResponse> getArtifactById(@RequestParam("artifactId") String artifactId,
                                                               @RequestParam("taskId") String taskId,
                                                               @RequestParam(value = "sessionId", required = false) String sessionId) {
-        return ApiResponse.ok(taskArtifactMemoryService.getByArtifactId(artifactId, taskId, sessionId));
+        currentPrincipal();
+        if (sessionId != null) requireSessionOwner(sessionId);
+        var artifact = taskArtifactMemoryService.getByArtifactId(artifactId, taskId, sessionId);
+        requireArtifactOwner(artifact);
+        return checkedResponse(artifact);
     }
 
     @PostMapping("/handoffs")
     public ApiResponse<HandoffRelationQueryResponse> createHandoffRelation(@RequestBody AgentHandoffPacket packet) {
-        return ApiResponse.ok(handoffRelationMemoryService.create(packet));
+        requireSessionOwner(packet.sessionId());
+        return checkedResponse(handoffRelationMemoryService.create(packet));
     }
 
     @GetMapping("/handoffs/by-task")
     public ApiResponse<List<HandoffRelationQueryResponse>> listHandoffsByTask(@RequestParam("taskId") String taskId) {
-        return ApiResponse.ok(handoffRelationMemoryService.listByTaskId(taskId));
+        currentPrincipal();
+        var handoffs = handoffRelationMemoryService.listByTaskId(taskId);
+        requireHandoffOwners(handoffs);
+        return checkedResponse(handoffs);
     }
 
     @GetMapping("/handoffs/by-session")
     public ApiResponse<List<HandoffRelationQueryResponse>> listHandoffsBySession(@RequestParam("sessionId") String sessionId) {
-        return ApiResponse.ok(handoffRelationMemoryService.listBySessionId(sessionId));
+        requireSessionOwner(sessionId);
+        var handoffs = handoffRelationMemoryService.listBySessionId(sessionId);
+        requireHandoffOwners(handoffs);
+        return checkedResponse(handoffs);
+    }
+
+    private AuthRagPrincipal currentPrincipal() {
+        var attributes = org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+        if (!(attributes instanceof org.springframework.web.context.request.ServletRequestAttributes servlet)) {
+            throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+        }
+        var request = servlet.getRequest();
+        var value = request.getAttribute("memory.authenticatedPrincipal");
+        if (!(value instanceof AuthRagPrincipal original)) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+        var current = ragSecurity.authenticate(credentials(request.getHeader("Authorization")));
+        String owner = request.getHeader(com.bkanent.common.rpc.MemoryTransportHeaders.OWNER);
+        if (owner == null || owner.isBlank() || !java.util.Objects.equals(original.userId(), current.userId())) {
+            throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+        }
+        ragSecurity.requireOwner(current, owner);
+        return current;
+    }
+
+    private <T> ApiResponse<T> checkedResponse(T value) {
+        currentPrincipal();
+        return ApiResponse.ok(value);
+    }
+
+    private java.util.Optional<SessionMemoryResponse> requireSessionOwner(String sessionId) {
+        var principal = currentPrincipal();
+        if (sessionId == null || sessionId.isBlank()) throw new RagException(RagErrorCode.FORBIDDEN);
+        var session = sessionSharedMemoryService.find(sessionId);
+        var persisted = session.orElseThrow(() -> new RagException(RagErrorCode.FORBIDDEN));
+        ragSecurity.requireOwner(principal, persisted.userId());
+        return session;
+    }
+
+    private void requireArtifactOwner(ArtifactQueryResponse artifact) {
+        if (artifact == null) return;
+        if (artifact.meta() == null) throw new RagException(RagErrorCode.FORBIDDEN);
+        requireSessionOwner(artifact.meta().sessionId());
+    }
+
+    private void requireHandoffOwners(List<HandoffRelationQueryResponse> handoffs) {
+        for (var handoff : handoffs) {
+            if (handoff == null || handoff.packet() == null) throw new RagException(RagErrorCode.FORBIDDEN);
+            requireSessionOwner(handoff.packet().sessionId());
+        }
     }
 
     // --- User Preference Memory ---
@@ -119,7 +181,7 @@ public class MemoryController {
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         ragSecurity.requireOwner(ragSecurity.authenticate(credentials(authorization)), record.userId());
         userPreferenceMemoryService.upsert(record);
-        return ApiResponse.ok(null);
+        return checkedResponse(null);
     }
 
     @GetMapping("/user-preferences/{userId}")
@@ -128,7 +190,7 @@ public class MemoryController {
             @RequestParam(value = "category", required = false) String category,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         ragSecurity.requireOwner(ragSecurity.authenticate(credentials(authorization)), userId);
-        return ApiResponse.ok(userPreferenceMemoryService.findByUserId(userId, category));
+        return checkedResponse(userPreferenceMemoryService.findByUserId(userId, category));
     }
 
     @PostMapping("/user-preferences/{userId}/decay")
@@ -138,7 +200,7 @@ public class MemoryController {
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         ragSecurity.requireOwner(ragSecurity.authenticate(credentials(authorization)), userId);
         userPreferenceMemoryService.decayConfidence(userId, excludePreferenceKey);
-        return ApiResponse.ok(null);
+        return checkedResponse(null);
     }
 
     // --- System Constraint Memory ---
@@ -148,7 +210,7 @@ public class MemoryController {
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         ragSecurity.requireAdmin(ragSecurity.authenticate(credentials(authorization)));
         systemConstraintMemoryService.upsert(record);
-        return ApiResponse.ok(null);
+        return checkedResponse(null);
     }
 
     @GetMapping("/system-constraints")
@@ -156,7 +218,7 @@ public class MemoryController {
             @RequestParam(value = "category", required = false) String category,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         ragSecurity.requireConstraintRead(ragSecurity.authenticate(credentials(authorization)));
-        return ApiResponse.ok(systemConstraintMemoryService.findByCategory(category));
+        return checkedResponse(systemConstraintMemoryService.findByCategory(category));
     }
 
     @GetMapping("/system-constraints/search")
@@ -164,14 +226,14 @@ public class MemoryController {
             @RequestParam(value = "tags", required = false) String tags,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         ragSecurity.requireConstraintRead(ragSecurity.authenticate(credentials(authorization)));
-        return ApiResponse.ok(systemConstraintMemoryService.searchByTags(tags));
+        return checkedResponse(systemConstraintMemoryService.searchByTags(tags));
     }
 
     @PostMapping("/rag/search")
     public ApiResponse<MemoryRagSearchResponse> searchMemory(@RequestBody MemoryRagSearchRequest request,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         var credentials = credentials(authorization);
-        return ApiResponse.ok(ragSearch.search(request, ragSecurity.authenticate(credentials), credentials));
+        return checkedResponse(ragSearch.search(request, ragSecurity.authenticate(credentials), credentials));
     }
 
     @PostMapping("/rag/backfill")
@@ -179,7 +241,7 @@ public class MemoryController {
             @RequestHeader(value = "Authorization", required = false) String authorization,
             @RequestParam(value = "cursor", required = false) String cursor,
             @RequestParam(value = "limit", defaultValue = "" + MemoryRagBackfillService.DEFAULT_LIMIT) int limit) {
-        return ApiResponse.ok(ragBackfill.backfill(cursor, limit, credentials(authorization)));
+        return checkedResponse(ragBackfill.backfill(cursor, limit, credentials(authorization)));
     }
 
     private static RagCredentialContext credentials(String authorization) {
@@ -191,20 +253,24 @@ public class MemoryController {
 
     @PostMapping("/sessions/snapshot")
     public ApiResponse<Void> saveSessionMemorySnapshot(@RequestBody SessionMemorySnapshotRequest request) {
+        requireSessionOwner(request.sessionId());
         sessionMemorySnapshotService.save(request);
-        return ApiResponse.ok(null);
+        return checkedResponse(null);
     }
 
     @GetMapping("/sessions/snapshot/{sessionId}")
     public ApiResponse<SessionMemoryResponse> getLatestSessionMemorySnapshot(@PathVariable("sessionId") String sessionId) {
-        return ApiResponse.ok(sessionMemorySnapshotService.getLatest(sessionId).orElse(null));
+        requireSessionOwner(sessionId);
+        return checkedResponse(sessionMemorySnapshotService.getLatest(sessionId).orElse(null));
     }
 
     // --- Workflow History ---
 
     @GetMapping("/workflow/{taskId}/history")
     public ApiResponse<WorkflowHistoryView> getWorkflowHistory(@PathVariable("taskId") String taskId) {
+        currentPrincipal();
         List<HandoffRelationQueryResponse> handoffs = handoffRelationMemoryService.listByTaskId(taskId);
+        requireHandoffOwners(handoffs);
         List<Map<String, Object>> steps = new ArrayList<>();
         for (int i = 0; i < handoffs.size(); i++) {
             var h = handoffs.get(i);
@@ -223,6 +289,7 @@ public class MemoryController {
                     String taskIdFromPacket = h.packet().taskId();
                     ArtifactQueryResponse artifact = taskArtifactMemoryService.getByArtifactId(aid, taskIdFromPacket, null);
                     if (artifact != null) {
+                        requireArtifactOwner(artifact);
                         Map<String, Object> summary = new HashMap<>();
                         summary.put("artifactId", aid);
                         summary.put("artifactType", artifact.meta().artifactType());
@@ -233,6 +300,6 @@ public class MemoryController {
                 }
             }
         }
-        return ApiResponse.ok(new WorkflowHistoryView(steps, artifactSummaries));
+        return checkedResponse(new WorkflowHistoryView(steps, artifactSummaries));
     }
 }

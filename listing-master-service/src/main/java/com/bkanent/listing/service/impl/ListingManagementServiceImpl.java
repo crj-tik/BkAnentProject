@@ -55,6 +55,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
      */
     private final ListingKnowledgeDocumentAssembler listingKnowledgeDocumentAssembler;
     private final ListingRagOutbox outbox;
+    private final com.bkanent.listing.rag.ListingRagIdentity identity;
 
     /**
      * 构造 ListingManagementServiceImpl 实例。
@@ -63,7 +64,9 @@ public class ListingManagementServiceImpl implements ListingManagementService {
                                         ListingConverter listingConverter,
                                         ListingSearchService listingSearchService,
                                         ListingKnowledgeDocumentAssembler listingKnowledgeDocumentAssembler,
-                                        ListingRagOutbox outbox) {
+                                        ListingRagOutbox outbox,
+                                        com.bkanent.listing.rag.ListingRagIdentity identity) {
+        this.identity = identity;
         this.listingDomainService = listingDomainService;
         this.listingConverter = listingConverter;
         this.listingSearchService = listingSearchService;
@@ -77,6 +80,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ListingDetailResponse createListing(ListingUpsertRequest request) {
+        currentReader();
         ListingEntity entity = new ListingEntity();
         applyUpsert(entity, request);
         entity.setStatus(ListingStatusEnum.PENDING_REVIEW.name());
@@ -121,7 +125,9 @@ public class ListingManagementServiceImpl implements ListingManagementService {
      */
     @Override
     public ListingDetailResponse getListingDetail(Long listingId) {
-        return listingConverter.toDetailResponse(requireListing(listingId));
+        ListingEntity entity = requireListing(listingId);
+        requireReadable(entity, currentReader());
+        return listingConverter.toDetailResponse(entity);
     }
 
     /**
@@ -129,9 +135,20 @@ public class ListingManagementServiceImpl implements ListingManagementService {
      */
     @Override
     public List<ListingDetailResponse> searchListings(ListingQueryRequest request) {
-        return listingDomainService.search(request).stream()
-                .map(listingConverter::toDetailResponse)
-                .toList();
+        var principal = currentReader();
+        if (com.bkanent.listing.rag.ListingRagIdentity.activeOnly(principal)) {
+            if (request != null && StringUtils.hasText(request.status()) && !"ON_SALE".equals(request.status())) {
+                return List.of();
+            }
+            request = request == null ? new ListingQueryRequest(null, "ON_SALE", null, null, null, null, null, null)
+                    : new ListingQueryRequest(request.keyword(), "ON_SALE", request.brokerId(), request.minArea(),
+                    request.maxArea(), request.minTotalPrice(), request.maxTotalPrice(), request.verifiedOnly());
+        }
+        var rows = listingDomainService.search(request);
+        principal = currentReader();
+        var current = principal;
+        return rows.stream().filter(e -> com.bkanent.listing.rag.ListingRagIdentity.canRead(current, e))
+                .map(listingConverter::toDetailResponse).toList();
     }
 
     /**
@@ -139,9 +156,13 @@ public class ListingManagementServiceImpl implements ListingManagementService {
      */
     @Override
     public List<ListingDTO> searchListingSummaries(String keyword) {
-        return listingDomainService.searchByKeyword(keyword).stream()
-                .map(listingConverter::toDto)
-                .toList();
+        var principal = currentReader();
+        var rows = listingDomainService.search(new ListingQueryRequest(keyword,
+                com.bkanent.listing.rag.ListingRagIdentity.activeOnly(principal) ? "ON_SALE" : null,
+                null, null, null, null, null, null));
+        var current = currentReader();
+        return rows.stream().filter(e -> com.bkanent.listing.rag.ListingRagIdentity.canRead(current, e))
+                .map(listingConverter::toDto).toList();
     }
 
     /**
@@ -157,7 +178,15 @@ public class ListingManagementServiceImpl implements ListingManagementService {
      */
     @Override
     public ListingDTO getListingSummary(Long listingId) {
-        return listingConverter.toDto(listingDomainService.getById(listingId));
+        var principal = currentReader();
+        ListingEntity entity = listingDomainService.getById(listingId);
+        var current = currentReader();
+        if (!principal.userId().equals(current.userId())) {
+            throw new com.bkanent.common.rag.RagException(com.bkanent.common.rag.RagErrorCode.AUTHENTICATION_FAILED);
+        }
+        if (entity == null) { return null; }
+        requireReadable(entity, current);
+        return listingConverter.toDto(entity);
     }
 
     /**
@@ -281,11 +310,21 @@ public class ListingManagementServiceImpl implements ListingManagementService {
      * 获取必需房源。
      */
     private ListingEntity requireListing(Long listingId) {
+        currentReader();
         ListingEntity entity = listingDomainService.getById(listingId);
-        if (entity == null) {
+        if (entity == null || !Integer.valueOf(0).equals(entity.getDeleted())) {
             throw new IllegalArgumentException("房源不存在: " + listingId);
         }
         return entity;
     }
 
+    private com.bkanent.common.rag.AuthRagPrincipal currentReader() {
+        return identity.requireReader(com.bkanent.listing.rag.ListingRagCredentialContext.current());
+    }
+
+    private void requireReadable(ListingEntity entity, com.bkanent.common.rag.AuthRagPrincipal principal) {
+        if (!com.bkanent.listing.rag.ListingRagIdentity.canRead(principal, entity)) {
+            throw new com.bkanent.common.rag.RagException(com.bkanent.common.rag.RagErrorCode.FORBIDDEN);
+        }
+    }
 }

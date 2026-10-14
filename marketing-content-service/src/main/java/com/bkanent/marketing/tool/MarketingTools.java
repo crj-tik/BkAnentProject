@@ -28,16 +28,16 @@ public class MarketingTools {
     private final MarketingAssetService marketingAssetService;
     private final ObjectProvider<MarketingAgentService> marketingAgentServiceProvider;
     private final MarketingAgentProperties properties;
-    private final ListingMasterRpcService listingMasterRpcService;
+    private final com.bkanent.marketing.service.MarketingListingReadClient listingReadClient;
 
     public MarketingTools(MarketingAssetService marketingAssetService,
                           ObjectProvider<MarketingAgentService> marketingAgentServiceProvider,
                           MarketingAgentProperties properties,
-                          ListingMasterRpcService listingMasterRpcService) {
+                          com.bkanent.marketing.service.MarketingListingReadClient listingReadClient) {
         this.marketingAssetService = marketingAssetService;
         this.marketingAgentServiceProvider = marketingAgentServiceProvider;
         this.properties = properties;
-        this.listingMasterRpcService = listingMasterRpcService;
+        this.listingReadClient = listingReadClient;
     }
 
     @Tool(description = "Create marketing content for a listing. Saves the content and returns the detail with content ID. "
@@ -71,10 +71,10 @@ public class MarketingTools {
     }
 
     private String buildListingSummary(Long listingId) {
-        if (listingId == null || listingMasterRpcService == null) {
+        if (listingId == null || listingReadClient == null) {
             throw new IllegalArgumentException("无法获取房源信息，请先提供房源 ID 或直接给出文案");
         }
-        ListingDTO listing = listingMasterRpcService.getListingById(listingId);
+        ListingDTO listing = listingReadClient.get(listingId);
         if (listing == null) {
             throw new IllegalArgumentException("房源不存在或不可用: " + listingId);
         }

@@ -4,7 +4,7 @@
 #       .env 引导（缺失密钥用随机值补齐，绝不覆盖已有值）、Nacos 配置完整性检查。
 # 只做宿主机与配置层初始化，不启动任何容器；启动用 scripts/deploy/start.sh。
 #
-# 用法：init-environment.sh [--profile minimal|full|mcp] [--bind ADDR] [--fix-kernel] [--skip-docker]
+# 用法：init-environment.sh [--profile minimal|full|mcp|rag] [--bind ADDR] [--fix-kernel] [--skip-docker]
 #   --profile      目标部署档位，决定资源/端口/配置检查范围（默认 full）
 #   --bind ADDR    将 .env 的 HOST_BIND_ADDRESS 设置为 ADDR（如 0.0.0.0，向局域网开放端口）
 #   --fix-kernel   vm.max_map_count 不达标时通过 sudo 直接修正并持久化
@@ -35,7 +35,7 @@ while [ $# -gt 0 ]; do
     *) die "未知参数：$1（-h 查看用法）" ;;
   esac
 done
-case "$PROFILE" in minimal|full|mcp) ;; *) die "--profile 只支持 minimal|full|mcp" ;; esac
+case "$PROFILE" in minimal|full|mcp|rag) ;; *) die "--profile 只支持 minimal|full|mcp|rag" ;; esac
 
 cd "$BK_REPO_ROOT"
 
@@ -43,12 +43,13 @@ log_info "BkAgent Linux 部署初始化开始（profile=${PROFILE}，仓库根�
 
 # 1) 仓库部署工件完整性：compose 挂载的 SQL、Dockerfile、Nacos 配置目录必须就位。
 missing_artifacts=0
-for f in docker-compose.yml Dockerfile .env.example sql/mysql-init.sql docker/mysql/004-supervisor.sql; do
+for f in docker-compose.yml Dockerfile .env.example docker/mysql/001-manifest.sh docker/mysql/init-manifest.tsv scripts/deploy/run-init-manifest.sh; do
   if [ ! -f "$f" ]; then log_error "缺少部署工件：$f"; missing_artifacts=1; fi
 done
 [ -d nacos ] || { log_error "缺少 nacos/ 配置目录"; missing_artifacts=1; }
 [ -d sql/migrations ] || { log_error "缺少 sql/migrations/ 目录"; missing_artifacts=1; }
 [ "$missing_artifacts" -eq 0 ] || die "仓库工件不完整，请确认在完整源码仓库内执行。"
+bash "$SCRIPT_DIR/run-init-manifest.sh" --mode fresh --dry-run || die "版本化初始化清单或 SHA256 校验失败。"
 
 # 2) Docker 与 Compose V2。
 if [ "$SKIP_DOCKER" -eq 1 ]; then
@@ -122,12 +123,28 @@ fill_secret() { # $1=KEY $2=固定值或空；空则生成随机密钥
 }
 fill_secret MYSQL_ROOT_PASSWORD
 fill_secret AUTH_TOKEN_SECRET
+fill_secret NACOS_AUTH_TOKEN
+fill_secret NACOS_AUTH_IDENTITY_KEY
+fill_secret NACOS_AUTH_IDENTITY_VALUE
 fill_secret MINIO_ROOT_USER "bkagent"
 fill_secret MINIO_ROOT_PASSWORD
 fill_secret MILVUS_MINIO_ROOT_USER "milvus-internal"
 fill_secret MILVUS_MINIO_ROOT_PASSWORD
 fill_secret MYSQL_MCP_PASSWORD
 fill_secret MYSQL_MCP_TOKEN
+if [ "$PROFILE" = rag ] || [ "$PROFILE" = full ]; then
+  fill_secret RAG_MYSQL_PASSWORD
+  fill_secret RAG_AUTH_RPC_SECRET
+  fill_secret LISTING_RAG_RPC_SECRET
+  fill_secret MEMORY_RAG_RPC_SECRET
+  fill_secret AGENT_RAG_RPC_SECRET
+  fill_secret AUTH_RAG_RPC_RESPONSE_SECRET
+  fill_secret CUSTOMER_LISTING_READ_SECRET
+  fill_secret MARKETING_LISTING_READ_SECRET
+  for domain in AGENT LISTING CUSTOMER MARKETING BUSINESS COMPARE CONTRACT SETTLEMENT NOTIFICATION MEDIA INTERVIEW; do
+    fill_secret "${domain}_A2A_SIGNING_SECRET"
+  done
+fi
 [ "$generated" -gt 0 ] && log_info "共补齐 ${generated} 个缺失配置项" || log_info ".env 密钥项均已配置，无需补齐"
 chmod 600 "$BK_ENV_FILE" 2>/dev/null || log_warn "无法将 .env 权限调整为 600，请手工执行 chmod 600 .env"
 
@@ -175,6 +192,9 @@ else
     check_port "auth-service"       "$(env_value "$BK_ENV_FILE" AUTH_EXPOSED_PORT 9101)"
     check_port "gateway"            "$(env_value "$BK_ENV_FILE" GATEWAY_EXPOSED_PORT 5010)"
   fi
+  if [ "$PROFILE" = rag ]; then
+    check_port "RAG管理端口" "$(env_value "$BK_ENV_FILE" RAG_MANAGEMENT_EXPOSED_PORT 9018)"
+  fi
   if [ "$PROFILE" = "mcp" ]; then
     check_port "MySQL MCP"      "$(env_value "$BK_ENV_FILE" MYSQL_MCP_EXPOSED_PORT 18081)"
   fi
@@ -185,6 +205,9 @@ fi
 # 7) Nacos 模板完整性只检查文件存在，不证明已发布或在目标 namespace 生效。
 # config-init 仅发布 NACOS_CONFIG_DATA_IDS 显式选择的文件，默认空列表拒绝发布。
 required_configs="auth-service.yaml gateway.yaml"
+if [ "$PROFILE" = rag ]; then
+  required_configs="auth-service.yaml rag-service.yaml listing-master-service.yaml memory-service.yaml agent-service.yaml customer-service.yaml marketing-content-service.yaml"
+fi
 if [ "$PROFILE" = "full" ]; then
   required_configs="$required_configs agent-service.yaml business-service.yaml compare-engine-service.yaml contract-service.yaml customer-service.yaml interview-service.yaml listing-master-service.yaml marketing-content-service.yaml media-worker-service.yaml memory-service.yaml notification-service.yaml promotion-service.yaml settlement-service.yaml"
 fi
@@ -197,7 +220,7 @@ done
 
 # 8) 汇总与后续步骤。
 log_info "初始化完成。要点回顾："
-log_info "  - .env 已就绪（权限 600），真实模型密钥（DEEPSEEK_API_KEY / DASHSCOPE_API_KEY / AGENT_RAG_RERANK_API_KEY）仍为占位值，真实 AI 调用前必须替换"
+log_info "  - env 已就绪（权限 600）；真实 chat/embedding/rerank 调用前核验 DEEPSEEK_API_KEY / RAG_EMBEDDING_API_KEY / RAG_RERANK_API_KEY，既有值不覆盖；旧 AGENT_RAG_RERANK_API_KEY 不再消费"
 if [ "$BIND_ADDR" != "0.0.0.0" ] && [ "$PROFILE" != "mcp" ]; then
   log_info "  - 默认只绑定 127.0.0.1；需要局域网访问时用 --bind 0.0.0.0 或手工改 .env 的 HOST_BIND_ADDRESS，并同步复查 A2A_PUBLIC_BASE_URL / MINIO_PUBLIC_BASE_URL"
 fi

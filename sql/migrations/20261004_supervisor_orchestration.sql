@@ -1,4 +1,5 @@
 -- Generic run/call facts only; no skill business-step progress.
+USE bk_agent;
 CREATE TABLE IF NOT EXISTS agent_orchestration_run (
     run_id VARCHAR(128) PRIMARY KEY,
     user_id VARCHAR(128) NOT NULL,

@@ -29,7 +29,8 @@ public class AgentPrincipalContext {
     @org.springframework.beans.factory.annotation.Autowired
     public void setOrchestrationStore(com.bkanent.agent.orchestration.OrchestrationStore store) { orchestrationStore = store; }
 
-    public AgentPrincipalContext(HttpServletRequest request) {
+    @org.springframework.beans.factory.annotation.Autowired
+    public AgentPrincipalContext(HttpServletRequest request, com.bkanent.common.rpc.AuthPermissionRpcService auth) {
         String marker = request.getHeader(AuthPrincipalContext.MARKER_HEADER);
         String authenticatedUserId = request.getHeader(AuthPrincipalContext.USER_ID_HEADER);
         if (!AuthPrincipalContext.MARKER_VALUE.equals(marker) || !StringUtils.hasText(authenticatedUserId)) {
@@ -40,6 +41,12 @@ public class AgentPrincipalContext {
             if (parsedUserId <= 0) {
                 throw new NumberFormatException("user id must be positive");
             }
+            String authorization = request.getHeader("Authorization");
+            if (authorization == null || !authorization.regionMatches(true, 0, "Bearer ", 0, 7))
+                throw new AgentPrincipalException("authenticated access token is required");
+            var principal = auth.resolvePrincipal(authorization.substring(7).trim());
+            if (principal == null || principal.userId() != parsedUserId)
+                throw new AgentPrincipalException("access token does not match authenticated principal");
             this.userId = String.valueOf(parsedUserId);
         } catch (NumberFormatException exception) {
             throw new AgentPrincipalException("authenticated gateway user id is invalid");

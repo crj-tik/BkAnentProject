@@ -79,8 +79,10 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
 
     @Override
     public void execute(RequestContext context, EventQueue eventQueue) throws JSONRPCError {
+        A2aCredentialContext.registerTask(context.getTaskId());
         TaskUpdater updater = new TaskUpdater(context, eventQueue);
         ExecutionState execution = new ExecutionState(updater);
+        execution.authLease = A2aCredentialContext.required();
         ExecutionState previous = executions.put(context.getTaskId(), execution);
         if (previous != null) {
             previous.cancelled.set(true);
@@ -107,18 +109,24 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
         catch (com.bkanent.common.skill.runtime.SkillExecutionException exception) {
             failExecution(execution, exception.code(), exception.getMessage());
         }
+        catch (com.bkanent.common.rag.RagException exception) {
+            failExecution(execution, exception.code().name(), "Authentication is no longer valid");
+        }
         catch (Exception exception) {
-            LOGGER.warn("Official A2A SubAgent execution failed for task {}", context.getTaskId(), exception);
+            LOGGER.warn("Official A2A SubAgent execution failed for task {}", context.getTaskId());
             failExecution(execution, "EXECUTION_FAILED", "SubAgent execution failed");
         }
         finally {
             executions.remove(context.getTaskId(), execution);
+            A2aCredentialContext.discardTask(context.getTaskId());
         }
     }
 
     @Override
     public void cancel(RequestContext context, EventQueue eventQueue) throws JSONRPCError {
+        var authLease = A2aCredentialContext.required();
         String taskId = context.getTaskId();
+        if (!taskId.equals(authLease.binding.taskId())) throw new com.bkanent.common.rag.RagException(com.bkanent.common.rag.RagErrorCode.FORBIDDEN);
         ExecutionState execution = executions.get(taskId);
         if (execution == null) {
             TaskUpdater updater = new TaskUpdater(context, eventQueue);
@@ -170,6 +178,7 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
                     if (!StringUtils.hasText(chunk)) {
                         return;
                     }
+                    execution.authLease.verify();
                     appendBounded(output, chunk, outputPolicy.maxOutputChars());
                     execution.updater.addArtifact(
                             List.of(new TextPart(chunk)),
@@ -179,7 +188,11 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
                 },
                 error -> {
                     try {
-                        failExecution(execution, "EXECUTION_FAILED", "SubAgent streaming execution failed");
+                        if (error instanceof com.bkanent.common.rag.RagException rag) {
+                            failExecution(execution, rag.code().name(), "Authentication is no longer valid");
+                        } else {
+                            failExecution(execution, "EXECUTION_FAILED", "SubAgent streaming execution failed");
+                        }
                     }
                     finally {
                         finished.countDown();
@@ -221,6 +234,7 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
             return;
         }
         try {
+            execution.authLease.verify();
             A2aOutput output = outputNormalizer.normalize(rawOutput, outputPolicy, jsonOutput);
             List<Part<?>> parts = output.structured()
                     ? List.of(new DataPart(output.data(), Map.of(
@@ -237,6 +251,10 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
         catch (A2aOutputException exception) {
             execution.terminal.set(false);
             failExecution(execution, exception.code(), exception.getMessage());
+        }
+        catch (com.bkanent.common.rag.RagException exception) {
+            execution.terminal.set(false);
+            failExecution(execution, exception.code().name(), "Authentication is no longer valid");
         }
         catch (RuntimeException exception) {
             execution.terminal.set(false);
@@ -297,13 +315,7 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
 
     private RunnableConfig runnableConfig(RequestContext context, A2aInput input, ExecutionState execution) {
         RunnableConfig.Builder builder = RunnableConfig.builder();
-        Object threadId = input.metadata().get("threadId");
-        if (threadId instanceof String text && StringUtils.hasText(text)) {
-            builder.threadId(text);
-        }
-        else if (StringUtils.hasText(context.getTaskId())) {
-            builder.threadId(context.getTaskId());
-        }
+        builder.threadId(context.getTaskId());
         input.metadata().forEach(builder::addMetadata);
         if (execution.skillExecution != null) {
             builder.addMetadata(com.bkanent.common.skill.runtime.SkillExecutionContext.KEY, execution.skillExecution);
@@ -347,6 +359,7 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
 
     private static final class ExecutionState {
         private final TaskUpdater updater;
+        private A2aCredentialContext.Lease authLease;
         private final AtomicBoolean cancelled = new AtomicBoolean();
         private final AtomicBoolean terminal = new AtomicBoolean();
         private volatile Disposable subscription;

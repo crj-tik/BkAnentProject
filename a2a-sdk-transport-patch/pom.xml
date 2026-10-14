@@ -1,0 +1,27 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent><groupId>com.bkanent</groupId><artifactId>bk-agent-project</artifactId><version>1.0.0-SNAPSHOT</version></parent>
+    <groupId>io.github.a2asdk</groupId>
+    <artifactId>a2a-java-sdk-client</artifactId>
+    <version>0.2.5.Beta2-bk-transport1</version>
+    <licenses><license><name>Apache License, Version 2.0</name><url>https://www.apache.org/licenses/LICENSE-2.0</url><distribution>repo</distribution></license></licenses>
+    <properties><upstream.version>0.2.5.Beta2</upstream.version></properties>
+    <dependencies>
+        <dependency><groupId>io.github.a2asdk</groupId><artifactId>a2a-java-sdk-client</artifactId><version>${upstream.version}</version><optional>true</optional></dependency>
+        <dependency><groupId>io.github.a2asdk</groupId><artifactId>a2a-java-sdk-common</artifactId><version>${upstream.version}</version></dependency>
+        <dependency><groupId>io.github.a2asdk</groupId><artifactId>a2a-java-sdk-spec</artifactId><version>${upstream.version}</version></dependency>
+    </dependencies>
+    <build><plugins>
+        <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-dependency-plugin</artifactId><version>3.8.1</version><executions>
+            <execution><id>official-binary</id><phase>generate-sources</phase><goals><goal>unpack</goal></goals><configuration><artifactItems><artifactItem><groupId>io.github.a2asdk</groupId><artifactId>a2a-java-sdk-client</artifactId><version>${upstream.version}</version><outputDirectory>${project.build.outputDirectory}</outputDirectory><excludes>io/a2a/client/A2AClient*.class,io/a2a/http/JdkA2AHttpClient*.class,META-INF/maven/**</excludes></artifactItem></artifactItems></configuration></execution>
+            <execution><id>official-source</id><phase>generate-sources</phase><goals><goal>unpack</goal></goals><configuration><artifactItems><artifactItem><groupId>io.github.a2asdk</groupId><artifactId>a2a-java-sdk-client</artifactId><version>${upstream.version}</version><classifier>sources</classifier><overWrite>true</overWrite><outputDirectory>${project.build.directory}/generated-sources/upstream</outputDirectory><includes>io/a2a/client/A2AClient.java,io/a2a/http/JdkA2AHttpClient.java</includes></artifactItem></artifactItems></configuration></execution>
+        </executions></plugin>
+        <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-antrun-plugin</artifactId><version>3.1.0</version><executions><execution><id>transport-only-patch</id><phase>generate-sources</phase><goals><goal>run</goal></goals><configuration><target>
+            <replace file="${project.build.directory}/generated-sources/upstream/io/a2a/client/A2AClient.java" failOnNoReplacements="true"><replacefilter token="public A2AClient(AgentCard agentCard) {" value="public A2AClient(AgentCard agentCard) { this(new JdkA2AHttpClient(), agentCard); }&#10;    public A2AClient(A2AHttpClient transport, AgentCard agentCard) {"/><replacefilter token="public A2AClient(String agentUrl) {" value="public A2AClient(String agentUrl) { this(new JdkA2AHttpClient(), agentUrl); }&#10;    public A2AClient(A2AHttpClient transport, String agentUrl) {"/><replacefilter token="this.httpClient = new JdkA2AHttpClient();" value="checkNotNullParam(&quot;transport&quot;, transport); this.httpClient = transport;"/></replace>
+            <replace file="${project.build.directory}/generated-sources/upstream/io/a2a/http/JdkA2AHttpClient.java" failOnNoReplacements="true"><replacefilter token="public JdkA2AHttpClient() {" value="public JdkA2AHttpClient() { this(HttpClient.Redirect.NORMAL); }&#10;    public JdkA2AHttpClient(HttpClient.Redirect redirect) {"/><replacefilter token=".followRedirects(HttpClient.Redirect.NORMAL)" value=".followRedirects(redirect)"/></replace>
+            <mkdir dir="${project.build.outputDirectory}/META-INF/bkanent"/>
+            <copy file="${project.basedir}/transport-constructors.patch" todir="${project.build.outputDirectory}/META-INF/bkanent"/>
+        </target></configuration></execution></executions></plugin>
+        <plugin><groupId>org.codehaus.mojo</groupId><artifactId>build-helper-maven-plugin</artifactId><version>3.6.0</version><executions><execution><id>patched-source</id><phase>generate-sources</phase><goals><goal>add-source</goal></goals><configuration><sources><source>${project.build.directory}/generated-sources/upstream</source></sources></configuration></execution></executions></plugin>
+    </plugins></build>
+</project>

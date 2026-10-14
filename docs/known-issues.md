@@ -399,61 +399,123 @@
 
 **验证**：本轮定向89项和全reactor683项test/package均通过，实际运行门禁仍开放；见 `docs/acceptance/isolated-rag-local-verification.md`。
 
-## KI-78 [OPEN·P1] 个人回填游标、计数和持久身份未全部限定 owner
+**当前共享验证（2026-10-14；以下已修代码／夹具／配置项）**：当前22模块reactor的clean test与package均BUILD SUCCESS，各848 tests／137 XML suites，覆盖19个有测试模块，failure／error／skipped均0；七个外部依赖测试类显式排除，不计为已执行。日志：`D:/project/rag-current-reactor-clean-test-final-20261014.log`、`D:/project/rag-current-reactor-package-final-20261014.log`。源码LF指纹：`4e5307ef818d1263896ced5f78ea872e69523e87903cc156bc1ee833d40f476d`。
+
+14个Boot JAR已核对：含SDK的制品仅有唯一patch、两份改动源码可精确还原官方源、九个未改官方二进制class一致、许可证保留、后端依赖隔离及私有probe的javac release17通过；证据 `D:/project/rag-current-artifact-verification.json`、`D:/project/rag-current-artifact-proof-final-20261014.log`。这些仅关闭本地实现缺陷，不代表部署／真实身份、五操作、排序及readiness矩阵完成；原失败日志与历史事实保留，KI-90运行修复另行取证。
+
+## KI-91 [OPEN·P2] 受限发布镜像的源码模式健康检查依赖 JRE 缺失的编译器
+
+**发现日期**：2026-10-14（当前发布运行准备）。
+
+**现象与根因**：新受限release Dockerfile以源码模式执行 `ReadinessCheck`，需要 `jdk.compiler`；不可变digest `ec72…` 对应实际JRE17.0.20缺该模块，两个naming模块存在、SHA核对通过。此前离线模块字符串包含判断误报compiler存在；实际命令安全证据 `runtime-actual-module-predicates-safe.json` 覆盖该推断，不据离线检查声明健康检查可运行。
+
+**处置（待验证）**：仅在构建stage预编译Java17 class并改用class模式healthcheck；应用JRE保持不变、私有probe继续使用独立真实JDK，不改变业务源码行为。修复与实际healthcheck结果尚待验证，保持OPEN。
+
+## KI-78 [FIXED·本提交·P1] 个人回填游标、计数和持久身份未全部限定 owner
 
 **确认依据**：本次授权 ADMIN 也只能访问自身个人记忆后，对现有回填分页实现进行源码复核。
 
 **现象与根因**：仅限制偏好源或最终正文不足以保护跨用户持久 projection identity、扫描计数、回执和 r 游标；具有 ADMIN 的调用方可能观察或重建他人的删除身份。个人记忆强隔离包括这些控制事实，不只是内容。
 
-**处置（当前实施，待验证）**：源与持久身份 SQL 在 LIMIT 前参数绑定当前 owner，foreign-owner preference 游标拒绝；输出前重验当前身份/admin/owner，失效时事务回滚 revision/outbox。新增 H2 分页、他人删除身份不影响计数/游标/回执、撤销回滚反例，当前尚未运行；不据源码新增标为已修。见 LR-39、LR-40。
+**修复与验证（本提交）**：`MemoryRagBackfillService` 源与持久身份 SQL 在 LIMIT 前参数绑定当前 owner，foreign-owner preference 游标拒绝；输出前重验当前身份/admin/owner，失效时事务回滚 revision/outbox。`MemoryRagLifecycleTest` 15项通过，含H2分页、他人删除身份不影响计数/游标/回执、撤销回滚反例；当前全量验证见上，部署身份矩阵仍待执行。见 LR-39、LR-40。
 
-## KI-79 [OPEN·P1] 内部记忆部分查询与后续写入缺持久 session owner 校验
+## KI-79 [FIXED·本提交·P1] 内部记忆部分查询与后续写入缺持久 session owner 校验
 
 **确认依据**：本次 memory 内部入口源码审阅，未在真实个人数据上利用。
 
 **现象与根因**：artifact/by-id 省略 sessionId、handoffs/by-task 和 workflow/history 原先仅检查已认证 principal，没有依据持久 artifact/packet 的 session owner 限定输出；不存在 session 的后续 artifact/handoff/snapshot 写入也未拒绝。入口缓存 principal 不是返回前实时身份。此前关于既存会话可被直接覆盖的推断不成立：SessionSharedMemoryService 已拒绝变更既存 userId，session_id 唯一约束使并发新 ID 的失败插入不能覆盖已有记录；controller 前置校验不足不等于已证明服务层接管漏洞。
 
-**处置（当前实施，待验证）**：内部请求强制真实 Bearer + X-Memory-Owner，以 requestURI/contextPath 限定路径；既存 session 不属本人即拒绝。三查询路由逐个核对持久 artifact/packet 的实际 session owner，workflow 内部 artifact 再核对实际所属；后续写入要求 session 已存在且属于本人。所有正常 controller 响应返回前重新认证 Bearer，核对 OWNER 及入口 actor。新增跨 owner、孤儿/缺 session、查询后撤销拒绝输出及本人正向回归，当前尚未执行；不新增 service/schema/锁，不声称跨查询写入原子隔离。见 LR-40。
+**修复与验证（本提交）**：内部请求强制真实 Bearer + X-Memory-Owner，以 requestURI/contextPath 限定路径；既存 session 不属本人即拒绝。`MemoryController` 三查询路由逐个核对持久 artifact/packet 的实际 session owner，workflow 内部 artifact 再核对实际所属；后续写入要求 session 已存在且属于本人。所有正常 controller 响应返回前重新认证 Bearer，核对 OWNER 及入口 actor。`MemoryControllerTest` 7项通过，含跨 owner、孤儿/缺 session、查询后撤销拒绝输出及本人正向回归；当前全量验证见上，部署身份矩阵仍待执行。不新增 service/schema/锁，不声称跨查询写入原子隔离。见 LR-40。
 
-## KI-80 [OPEN·P1] A2A task lease 非原子容量检查及覆盖可破坏任务归属
+## KI-80 [FIXED·本提交·P1] A2A task lease 非原子容量检查及覆盖可破坏任务归属
 
 **确认依据**：当前专用 A2aCredentialContext 新实现集成审阅。
 
 **现象与根因**：并发 map size 检查后直接 put 不保证容量上限，且 taskId 相同的另一请求可替换原 owner/caller 的有效 lease；只在 AgentExecutor 校验还会漏 TaskStore 查询、取消和 resubscribe。
 
-**处置（当前实施，待验证）**：原子注册/容量检查、拒绝另一在途 lease 和跨 owner/caller/task 覆盖、条件 remove；official handler 在所有受支持任务操作访问 store 前核对原 owner，明确不支持操作失败关闭。新增跨 owner/并发/查询取消和线程恢复反例，当前尚未构建。见 LR-41。
+**修复与验证（本提交）**：`A2aCredentialContext` 原子注册/容量检查、拒绝另一在途 lease 和跨 owner/caller/task 覆盖、条件 remove；`A2aAuthenticatedRequestGuard` 在所有受支持任务操作访问 store 前核对原 owner，明确不支持操作失败关闭。对应Test分别4/8项通过，含跨 owner/并发/查询取消和线程恢复反例；当前test/package与制品验证见上，真实五操作身份矩阵仍待部署。见 LR-41。
 
-## KI-81 [OPEN·P1] A2A 默认 JDK transport 重定向可能转发专用凭据头
+## KI-81 [FIXED·本提交·P1] A2A 默认 JDK transport 重定向可能转发专用凭据头
 
 **确认依据**：当前官方 SDK JdkA2AHttpClient 源码核对，未向外部地址发送信标。
 
 **现象与根因**：官方默认 Redirect.NORMAL 并非专用凭据安全策略；在任务 transport 装饰器添加头后，自动跟随跳转可能把信标发到原任务目标外。固定 Task endpoint 与请求签名不等于禁止 HTTP 转发。
 
-**处置（当前实施，待验证）**：在已授权最小 SDK patch 制品中增加安全官方 JDK transport 构造路径，专用 beacon 使用 Redirect.NEVER，普通无凭据 SDK 默认行为不改；补302/307不转发回归。不反射改 final、不暗写缓存或重写 JSON-RPC。见 LR-41。
+**修复与验证（本提交）**：在已授权最小 SDK patch 制品中增加安全官方 `JdkA2AHttpClient` 构造路径，专用 beacon 使用 Redirect.NEVER，普通无凭据 SDK 默认行为不改；`BeaconA2aHttpClientTest` 2项通过，含本地302/307不跟随、不转发信标回归。制品/源码验证见上，部署transport矩阵仍待执行。不反射改 final、不暗写缓存或重写 JSON-RPC。见 LR-41。
 
-## KI-82 [OPEN·P2] 版本初始化 LF checksum 首次不一致在 DDL 前失败
+## KI-82 [FIXED·本提交·P2] 版本初始化 LF checksum 首次不一致在 DDL 前失败
 
 **确认依据**：本次真实开发库首次 manifest upgrade 返回 checksum mismatch。
 
 **现象与根因**：Windows CRLF 未完全按 manifest 的规范 LF 字节归一，第一轮验证拒绝且未执行 DDL；不是迁移已成功或表已损坏。
 
-**处置（已修运行流程，待本轮提交）**：统一 SQL/check LF hash 后，现存 MySQL8.4.11 六步升级及重跑全部 Verified，种子/历史计数不变；独立空新卷首启九步、fresh 重跑两次和 upgrade 六步均 schema check 通过。已应用 migration SQL/check 修改必须追加新版本，不绕 checksum。当前 scripts/应用回归未完，保留 OPEN 直到提交验证关联。见 LR-42。
+**修复与验证（本提交）**：`scripts/deploy/run-init-manifest.sh` 在任何DDL前统一校验SQL/check的规范LF hash；当前源码与test/package验证见上，关联生产脚本H2回归见KI-87。此前运行事实保留：现存 MySQL8.4.11 六步升级及重跑全部 Verified，种子/历史计数不变；独立空新卷首启九步、fresh 重跑两次和 upgrade 六步均 schema check 通过。已应用 migration SQL/check 修改必须追加新版本，不绕 checksum；关闭checksum流程缺陷不代表当前应用部署矩阵完成。见 LR-42。
 
-## KI-83 [OPEN·P1] 生产 PUBLIC_ONLY 空 allowlist 继承测试兼容的任意公开 host 行为
+## KI-83 [FIXED·本提交·P1] 生产 PUBLIC_ONLY 空 allowlist 继承测试兼容的任意公开 host 行为
 
 **确认依据**：本次实际 RagHttpTransportConfiguration configured 路径与 RagEndpointPolicy 源码复核，无外部未授权请求。
 
 **现象与根因**：旧 Supplier<Set<String>> 测试接口允许空集合代表全部合规公开地址，生产 configured factory 共用该 snapshot 时仅在 MANAGED_INTERNAL 检查非空；生产缺失 allowed-hosts 未失败关闭，违背精确 host 授权。
 
-**处置（当前实施，待验证）**：区分旧测试入口和生产 configured 路径，生产两种模式空 host 集合立即拒绝，真实 transport 不绕过该 factory。新增实际工厂缺配置/空 PUBLIC_ONLY 的公开 hostname/IP 反例，要求 DNS 零调用、HC5 连接 delegate 零交互；回归尚未执行。见 LR-34。
+**修复与验证（本提交）**：`RagEndpointPolicy` 区分旧测试入口和生产 configured 路径，生产两种模式空 host 集合立即拒绝，真实 transport 不绕过该 factory。`RagHttpPolicyBindingTest` 5项、`RagManagedEndpointPolicyTest` 80项通过，含实际工厂缺配置/空 PUBLIC_ONLY 的公开 hostname/IP 反例，DNS 零调用、HC5 连接 delegate 零交互；当前全量验证见上，部署网络策略矩阵仍待执行。见 LR-34。
 
-## KI-84 [OPEN·P2] A2A 流式回调丢失认证失败错误码
+## KI-84 [FIXED·本提交·P2] A2A 流式回调丢失认证失败错误码
 
 **确认依据**：本次 current reactor test 后对 OfficialA2aAgentExecutor.executeStream 的定点源码核对。
 
 **现象与根因**：流式 chunk 输出前 authLease.verify 抛出 RagException，订阅 error callback 却固定映射 EXECUTION_FAILED；最终同步/完成分支保留认证错误，但异步失败不能与普通模型故障区分。当前 blocking 撤销测试的首轮 NPE 另为夹具 anySatisfy 解引用 WORKING 空 message，并非生产未发 FAILED 的证据。
 
-**处置（当前实施，待验证）**：流式回调只对 RagException 保留其结构化 code，其他错误仍 EXECUTION_FAILED；增加撤销后零 progress/final 正文与安全认证错误反例。blocking 夹具精确核对 WORKING/FAILED、终态安全 error 和无 artifact，不删撤销断言。当前尚未重跑。见 LR-41。
+**修复与验证（本提交）**：`OfficialA2aAgentExecutor.executeStream` 回调只对 RagException 保留其结构化 code，其他错误仍 EXECUTION_FAILED；对应Test 11项通过，含撤销后零 progress/final 正文与安全认证错误、普通错误不泄漏provider正文反例。blocking 夹具精确核对 WORKING/FAILED、终态安全 error 和无 artifact，不删撤销断言；首轮失败事实保留，当前全量验证见上，部署流式身份矩阵仍待执行。见 LR-41。
+
+## KI-90 [OPEN·P2] 开发 RocketMQ broker 启动时存储异常，未完成注册
+
+**发现日期**：2026-10-14（当前独立RAG发布前依赖准备）。
+
+**现象与根因**：按原配置启动现有Redis／namesrv／broker，前两者协议或健康检查成功；broker在限定deadline未开放10911，mqadmin未确认注册，后续exit255／RestartCount9／OOMKilled=false。只读定位实际运行uid/gid=3000:3000、原store卷根0:0／0755不可写，日志同批确认commitlog／consumequeue mkdir Failed与store/lock Permission denied；盘仅23%使用。shutdown NullPointerException为初始化失败后的次级错误，不是已证卷损坏／OOM；原unless-stopped自动循环不是人工连续重启。
+
+**处置（进行中）**：仅修复原卷根ownership为3000:3000、保留0755；停原broker一次后受限维护，再启动同一原id／mount并限时验证注册。禁止递归chown/chmod、删除commitlog、重索引、格式化或盲改MQ配置／restart policy。agent事件总线和readiness正向运行待实际协议成功；已健康Redis／namesrv保持，其他六服务独立验收。安全证据为release-prep内broker-root-cause-safe.json、broker-store-metadata-safe.json；修复结果未取得前保持OPEN。
+
+**关联**：任务7.3、8.3、8.4；当前应用运行未完成。
+
+## KI-89 [FIXED·本提交·P1] 房源单 ID 与记忆 Dubbo 返回未在最后 SQL 后复验身份
+
+**发现日期**：2026-10-14（当前领域消费路径定点审阅，未在个人真实数据上利用）。
+
+**现象与根因**：`ListingManagementServiceImpl.getListingSummary` 在 SQL 前取得 principal，SQL 后仍以旧角色决定单房源输出；新 signed listing READ RPC 与营销消费者可达。查询期间 ADMIN 降为 BROKER 或凭据撤销，可能仍返回 OFFLINE 房源。`MemoryRagSearchFacade` 虽在每次召回后重认证，但重认证早于最终真源事务的 `memory_rag_lock FOR UPDATE` 等待，唯一 return 前缺复验；直接 Dubbo 路径不经过 HTTP controller 的 checkedResponse，锁等待期间失效的 owner 可能继续收到偏好正文。
+
+**修复与验证（本提交）**：在最终 SQL／评分完成后按原凭据复验当前 actor，再按当前角色检查房源；记忆唯一 return 前复验原凭据、actor 与请求 owner。新增 SQL callback 内撤销／降级／身份漂移的7项确定性回归，不使用 sleep、不改业务锁或重复后端召回。`ListingBusinessAuthorizationTest` 7项、`MemoryRagSearchFacadeTest` 24项共31项通过，定向日志 `D:/project/rag-domain-output-focused-20261014.log`，当前全量验证见上；实际运行身份矩阵仍待部署，不以单测声明全入口验收完成。
+
+**关联**：LR-40、KI-79；任务3.2、3.3、3.4、6.3。
+
+## KI-87 [FIXED·本提交·P3] 编排 H2 夹具未适配显式 MySQL 目标库
+
+**发现日期**：2026-10-14（本轮22模块clean test）。
+
+**现象与根因**：版本初始化为 `20261004_supervisor_orchestration.sql` 增加必要的 `USE bk_agent`。H2 编排测试逐语句执行同一生产脚本，但夹具未创建目标schema，导致 `Schema BK_AGENT not found`，三测试类共34个error；不是生产MySQL迁移失败，不能删除真实脚本的目标库或绕开checksum来修测试。
+
+**修复与验证（本提交）**：`OrchestrationStoreTest` 夹具每个H2新连接初始化固定BK_AGENT schema并执行真实USE/CREATE；严格适配当前MySQL的SET/PREPARE/EXECUTE/DEALLOCATE块，仅在metadata缺列时执行生产脚本内嵌ALTER。未知SQL、其他数据库和不完整块拒绝；新增重复迁移、23列/3主键索引、PUBLIC空及失败关闭回归，不复制生产schema。主Maven定向Store4/Reconciler2/Graph30共36项全部通过，日志 `D:/project/rag-orchestration-repair-focused-20261014.log`；当前clean test与package亦通过，见共享验证，部署编排矩阵仍待执行。该夹具修复未改生产SQL、manifest与runner LF hash；完整失败日志 `D:/project/rag-current-reactor-clean-test-20261014.log` 保留。
+
+**关联**：LR-42、KI-82。
+
+## KI-88 [FIXED·本提交·P1] A2A push字段拒绝与在途重复发送检查晚于官方副作用
+
+**发现日期**：2026-10-14（当前实现定点审阅官方SDK源，不是完整项目审计）。
+
+**现象与根因**：SDK `0.2.5.Beta2` 的 `MessageSendConfiguration` 实际序列化字段为 `pushNotification`，守卫却检查 `pushNotificationConfig`，可使受签发送进入官方push配置路径。另同owner/caller/context的重复发送在guard通过后才由executor的task lease注册拒绝；官方handler已先更新TaskStore/history、复用队列并覆盖runningAgents，拒绝过晚可能干扰原在途任务及取消关联。
+
+**修复与验证（本提交）**：`A2aAuthenticatedRequestGuard` 按实际SDK字段提前拒绝未支持push配置；`A2aCredentialContext` 在official dispatch前原子预留在途发送，执行采用同一租约，仅原forward和整个SDK command都完成后条件释放，不允许替换原执行身份。真实SDK序列化、同owner send/stream重复零official/store/queue副作用、失败转交和拒绝dispatch释放、两侧完成后释放回归通过。主common-a2a定向36项通过，日志 `D:/project/rag-a2a-repair-final-focused-20261014.log`，当前全量验证见上；两次此前夹具失败保留，未启用push、修改官方JSON-RPC或扩大认证范围。真实五操作运行联调仍待执行。
+
+**关联**：LR-41、KI-80、KI-81。
+
+## KI-86 [FIXED·本提交·P2] 记忆域评分版本白名单缺 Nacos 与 Compose 接线
+
+**发现日期**：2026-10-14（当前 governed 配置复核）。
+
+**现象与根因**：`MemoryRagSearchFacade` 按 `memory.rag.semantic-scoring-versions` 精确接受语义候选。application 已提供空默认环境占位符，但 Nacos memory 模板和 Compose memory 环境未透传；即使 RAG 使用已钉扎的 governed LOGIT profile 返回正确 scoringVersion，记忆域仍因空白名单拒绝全部语义候选。空白名单失败关闭本身正确，不能以移除版本校验修复接线。
+
+**修复与验证（本提交）**：`nacos/memory-service.yaml`、`docker-compose.yml` 补齐同一个 `MEMORY_RAG_SEMANTIC_SCORING_VERSIONS` 环境变量接线，保持空默认及精确版本集合，不允许通配。开发发布仅选择当前三个 RAG profile 的确切版本；`MemoryRagSearchFacadeTest` 24项通过，含模板/Compose空默认、配置绑定、空/通配/未知/漂移版本拒绝和确切批准版本正向回归，当前全量验证见上；真实记忆排序仍单独验收。
+
+**关联**：LR-31、LR-43；KI-76；任务6.3、7.1。
 
 ## KI-85 [FIXED·本提交·P3] chat 模型网关地址无法经 .env 配置，.env.example 存在失实条目
 

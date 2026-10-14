@@ -40,7 +40,39 @@ class AuthPermissionRpcServiceImplTest {
         activeAccount.setAccountStatus("ACTIVE");
         activeAccount.setDeleted(0);
         when(userAccountService.getById(7L)).thenReturn(activeAccount);
-        when(userManagementService.isActiveRole(null)).thenReturn(true);
+        activeAccount.setRoleCode("BROKER");
+        when(userManagementService.isActiveRole("BROKER")).thenReturn(true);
+        when(userManagementService.isActiveRole("ADMIN")).thenReturn(true);
+    }
+
+    @Test
+    void rejectsLegacyRoleEvenWhenRoleRepositorySaysActive() {
+        activeAccount.setRoleCode("MANAGER");
+        when(userManagementService.isActiveRole("MANAGER")).thenReturn(true);
+        assertFalse(permissionService.validateToken(authTokenService.issueAccessToken(activeAccount)));
+        assertFalse(permissionService.hasPermission(7L, "listing.read"));
+    }
+
+    @Test
+    void managementRequiresAdminAndUnknownPermissionsAreDenied() {
+        assertFalse(permissionService.hasPermission(7L, "agent.rag.manage"));
+        assertTrue(permissionService.hasPermission(7L, "agent.chat.use"));
+        assertFalse(permissionService.hasPermission(7L, "invented.permission"));
+        activeAccount.setRoleCode("ADMIN");
+        assertTrue(permissionService.hasPermission(7L, "agent.rag.manage"));
+        activeAccount.setDeleted(1);
+        assertFalse(permissionService.hasPermission(7L, "agent.rag.manage"));
+    }
+
+    @Test
+    void revocationAndCurrentRoleInvalidationRejectPreviouslyValidToken() {
+        String token = authTokenService.issueAccessToken(activeAccount);
+        assertTrue(permissionService.validateToken(token));
+        when(userManagementService.isActiveRole("BROKER")).thenReturn(false);
+        assertFalse(permissionService.validateToken(token));
+        when(userManagementService.isActiveRole("BROKER")).thenReturn(true);
+        authTokenService.revoke(token);
+        assertNull(permissionService.resolvePrincipal(token));
     }
 
     @Test

@@ -51,12 +51,26 @@ public class AuthPermissionRpcServiceImpl implements AuthPermissionRpcService {
             return false;
         }
         UserAccountEntity account = userAccountService.getById(userId);
-        return isActive(account);
+        if (!isActive(account)) return false;
+        if (java.util.Set.of("agent.rag.manage", "agent.vector-store.manage", "agent.mcp.vector-store.manage",
+                "rag.space.manage", "memory.constraint.manage", "auth.users.manage").contains(permissionCode)
+                || permissionCode.endsWith(".admin") || permissionCode.endsWith(".manage")
+                || permissionCode.endsWith(".init") || permissionCode.endsWith(".provision")
+                || permissionCode.endsWith(".replay") || permissionCode.endsWith(".index")) {
+            return "ADMIN".equals(account.getRoleCode());
+        }
+        return permissionCode.equals("agent.chat.use") || permissionCode.equals("agent.mcp.chat.use")
+                || permissionCode.equals("agent.workflow.read") || permissionCode.equals("agent.workflow.artifact.read")
+                || permissionCode.startsWith("agent.workflow.invoke.") || permissionCode.startsWith("agent.mcp.server.")
+                || java.util.Set.of("agent.rag.read", "agent.rag.search", "agent.vector-store.read",
+                    "agent.mcp.vector-store.read", "agent.rag.memory.search", "agent.rag.listing.query",
+                    "agent.mcp.tools.read", "agent.mcp.catalog.read", "agent.mcp.debug.read", "listing.read", "memory.constraint.read").contains(permissionCode);
     }
 
     private boolean isActive(UserAccountEntity account) {
         return account != null && Integer.valueOf(0).equals(account.getDeleted())
                 && "ACTIVE".equalsIgnoreCase(account.getAccountStatus())
+                && UserManagementService.isSupportedRole(account.getRoleCode())
                 && userManagementService.isActiveRole(account.getRoleCode());
     }
 }

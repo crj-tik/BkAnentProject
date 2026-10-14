@@ -190,12 +190,14 @@ public class SupervisorToolLoopRunner {
     }
 
     public SupervisorTaskResponse current(String runId, String userId) {
+        if (ragCredentials != null) ragCredentials.credentials(userId);
         store.assertOwner(runId, userId);
         var existing = snapshot(runId);
         return existing == null ? null : factory.responseOf(factory.stateOf(existing.state()));
     }
 
     public SupervisorTaskResponse cancel(String runId, String userId) {
+        if (ragCredentials != null) { ragCredentials.credentials(userId); ragCredentials.capture(runId, userId); }
         store.cancel(runId, userId);
         factory.cancelRemoteTasks(runId, userId);
         try {
@@ -249,11 +251,17 @@ public class SupervisorToolLoopRunner {
         if (!store.lease(runId, token, LEASE_MS)) throw new IllegalStateException("run already being processed");
         Future<?> heartbeat = renewals.scheduleAtFixedRate(() -> store.renew(runId, token, LEASE_MS), LEASE_MS / 3, LEASE_MS / 3, TimeUnit.MILLISECONDS);
         try {
+        String owner = store.originalRequest(runId).userId();
+        try (var ignored = ragCredentials == null ? (AutoCloseable) () -> { } : ragCredentials.openLease(runId, owner)) {
+            if (ragCredentials != null) ragCredentials.credentials(owner);
             var response = operation.apply(token);
+            if (ragCredentials != null) ragCredentials.credentials(owner);
             if (ragCredentials != null && AsyncRunStatus.terminal(response.status())) ragCredentials.discard(runId);
             return response;
         }
-        finally { heartbeat.cancel(false); store.release(runId, token); }
+        catch (RuntimeException exception) { throw exception; }
+        catch (Exception exception) { throw new IllegalStateException("credential scope cleanup failed"); }
+        } finally { heartbeat.cancel(false); store.release(runId, token); }
     }
     private SupervisorTaskResponse invoke(Map<String, Object> input, RunnableConfig config) {
         return factory.responseOf(factory.stateOf(graph.invoke(input, config)

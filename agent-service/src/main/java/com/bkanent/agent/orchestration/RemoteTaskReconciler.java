@@ -18,8 +18,20 @@ public class RemoteTaskReconciler {
                                 AgentPermissionService permissions, A2aExecutionService execution) {
         this.store = store; this.client = client; this.permissions = permissions; this.execution = execution;
     }
+    private com.bkanent.agent.security.AgentRagCredentialLeaseStore credentials;
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setCredentials(com.bkanent.agent.security.AgentRagCredentialLeaseStore credentials) { this.credentials = credentials; }
     public OrchestrationStore.Invocation reconcile(String runId, String callId, String userId, boolean cancel) {
         store.assertOwner(runId, userId);
+        try (var ignored = credentials == null ? (AutoCloseable) () -> { } : credentials.openLease(runId, userId)) {
+            if (credentials != null) credentials.credentials(userId);
+            var result = reconcileAuthenticated(runId, callId, userId, cancel);
+            if (credentials != null) credentials.credentials(userId);
+            return result;
+        } catch (RuntimeException exception) { throw exception; }
+        catch (Exception exception) { throw new IllegalStateException("credential scope cleanup failed"); }
+    }
+    private OrchestrationStore.Invocation reconcileAuthenticated(String runId, String callId, String userId, boolean cancel) {
         var invocation = store.find(runId, callId);
         if (invocation == null) throw new IllegalArgumentException("call not found");
         if ("COMPLETED".equals(invocation.status()) || invocation.remoteAssociation() == null) return invocation;

@@ -55,7 +55,11 @@ public class ListingRagFacade {
                 throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
             }
             for (RagCandidate candidate : response.candidates()) { accumulated.put(candidate.documentId(), candidate); }
-            matches = latest(List.copyOf(accumulated.values()), principal.userId(), input);
+            // Re-resolve current role/status/revocation after retrieval, not just at request start.
+            AuthRagPrincipal currentPrincipal = identity.requireReader(credentials);
+            if (!principal.userId().equals(currentPrincipal.userId())) { throw new RagException(RagErrorCode.AUTHENTICATION_FAILED); }
+            principal = currentPrincipal;
+            matches = latest(List.copyOf(accumulated.values()), principal, input);
             int topK = input.topK() == null ? 10 : input.topK();
             if (matches.size() >= topK || attempt == 1 || response.candidates().size() < request.candidateLimit()) { break; }
             int remaining = totalBudget - usedBudget;
@@ -88,7 +92,7 @@ public class ListingRagFacade {
         return new RagSearchRequest(1, input.requestId(), ListingRagIdentity.SPACE, input.query(), filters,
                 new RagRecallOptions(true, null, keyword, vector), null, true, Math.min(500, keyword + vector), limit, RagFailurePolicy.STRICT).normalized();
     }
-    private List<RagListingMatch> latest(List<RagCandidate> candidates, Long actor, RagListingSearchRequest input) {
+    private List<RagListingMatch> latest(List<RagCandidate> candidates, AuthRagPrincipal principal, RagListingSearchRequest input) {
         LinkedHashMap<Long, RagCandidate> byId = new LinkedHashMap<>();
         for (RagCandidate candidate : candidates) {
             try {
@@ -99,14 +103,12 @@ public class ListingRagFacade {
         if (byId.isEmpty()) { return List.of(); }
         Map<Long, ListingEntity> current = listings.selectBatchIds(byId.keySet()).stream().collect(Collectors.toMap(ListingEntity::getId, e -> e));
         Map<Long, ListingRagOutbox.Revision> revisions = outbox.revisions(byId.keySet());
-        Set<String> currentGrants = new HashSet<>(grants.allowed(actor));
         List<RagListingMatch> result = new ArrayList<>();
         byId.forEach((id, candidate) -> {
             ListingEntity entity = current.get(id);
             ListingRagOutbox.Revision revision = revisions.get(id);
-            if (entity == null || Integer.valueOf(1).equals(entity.getDeleted()) || revision == null || revision.tombstone()
-                    || revision.revision() != candidate.projectionVersion() || !"ON_SALE".equals(entity.getStatus())
-                    || !currentGrants.contains(String.valueOf(id)) || !matches(entity, input)) { return; }
+            if (!ListingRagIdentity.canRead(principal, entity) || revision == null || revision.tombstone()
+                    || revision.revision() != candidate.projectionVersion() || !matches(entity, input)) { return; }
             var dto = converter.toDto(entity);
             RagCandidate safe = new RagCandidate(candidate.documentId(), "LISTING", String.valueOf(id), assembler.assemble(dto).content(),
                     candidate.projectionVersion(), candidate.schemaVersion(), candidate.sources(), candidate.keywordScore(), candidate.vectorScore(),

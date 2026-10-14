@@ -51,7 +51,7 @@ public class ListingOfficialA2aAgent {
                 .model(chatModel)
                 .systemPrompt(properties.getSystemPrompt())
                 .tools(tools)
-                .interceptors(new A2aSupervisorContextInterceptor(),
+                .interceptors(new com.bkanent.common.a2a.A2aAuthenticationToolInterceptor(), new A2aSupervisorContextInterceptor(),
                         new SkillRoutingModelInterceptor(skillRegistry, DOMAIN),
                         new com.bkanent.common.skill.runtime.SkillRoutingToolInterceptor())
                 .outputKey(OUTPUT_KEY)

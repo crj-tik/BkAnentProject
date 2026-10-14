@@ -12,6 +12,10 @@ import java.util.List;
  */
 public interface ListingMasterRpcService {
 
+    List<ListingDTO> read(com.bkanent.common.rag.RagListingReadRequest request,
+                          com.bkanent.common.rag.RagAuthEnvelope authentication,
+                          com.bkanent.common.rag.RagCredentialContext credentials);
+
     /**
      * 获取指定房源摘要。
      */

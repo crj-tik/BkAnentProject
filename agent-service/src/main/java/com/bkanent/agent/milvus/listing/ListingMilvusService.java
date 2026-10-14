@@ -31,7 +31,7 @@ public class ListingMilvusService {
                     RagOperation.SUBMIT, legacy.userId(), token), token);
             if (status == null) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
             if (status.state() == RagIndexState.CONFLICT) throw new RagException(RagErrorCode.INDEX_CONFLICT);
-            if (status.state() == RagIndexState.STALE) throw new RagException(RagErrorCode.LEGACY_RECONCILIATION_REQUIRED);
+            if (status.state() == RagIndexState.STALE) throw new RagException(RagErrorCode.INDEX_CONFLICT);
             if (status.state() == null) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
         } catch (RagException exception) { throw exception; }
         catch (RuntimeException exception) { throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE); }
@@ -56,15 +56,6 @@ public class ListingMilvusService {
             }).toList(), response.retrieval());
         } catch (RagException exception) { throw exception; }
         catch (RuntimeException exception) { throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE); }
-    }
-    // Original void RPC lacks authenticated source version/hash and cutover evidence.
-    // Never read latest state and reinterpret a stale delete as a fresh tombstone.
-    public void indexListing(Long listingId, String alias) { legacyReconciliationRequired(listingId, alias); }
-    public void deleteListing(Long listingId, String alias) { legacyReconciliationRequired(listingId, alias); }
-    private void legacyReconciliationRequired(Long id, String alias) {
-        requireListingSpace(alias);
-        if (id == null || id < 1) throw new RagException(RagErrorCode.INVALID_ARGUMENT, "listingId");
-        throw new RagException(RagErrorCode.LEGACY_RECONCILIATION_REQUIRED);
     }
     private void requireListingSpace(String alias) {
         if (!"listing.knowledge".equals(AgentRagCompatibility.space(alias, "listing.knowledge"))) throw new RagException(RagErrorCode.FORBIDDEN);

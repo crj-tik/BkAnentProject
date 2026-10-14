@@ -22,8 +22,9 @@ public class AgentRagCredentialFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
         try (var ignored = credentials.openAuthorization(request.getHeader("Authorization"))) {
+            if (!request.getServletPath().equals("/agent/health")) credentials.currentUserId();
             chain.doFilter(request, response);
-        } catch (AgentRagAuthenticationException exception) {
+        } catch (AgentRagAuthenticationException | com.bkanent.common.rag.RagException exception) {
             response.setStatus(401);
             response.setContentType("application/json");
             response.getWriter().write("{\"success\":false,\"code\":\"AUTHENTICATION_REQUIRED\",\"message\":\"AUTHENTICATION_REQUIRED\",\"data\":null}");

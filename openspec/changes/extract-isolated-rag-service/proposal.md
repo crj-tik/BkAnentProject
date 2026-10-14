@@ -1,38 +1,41 @@
 ## Why
 
-RAG 执行目前分散在 agent-service（Spring AI Milvus、embedding、候选合并和重排）与 listing-master-service（ES 关键词索引及召回），记忆的结构化生命周期与向量更新也分离。需要将这条检索链整体抽成唯一的 rag-service，使业务域与 SubAgent 通过受控契约消费统一检索能力，同时以独立 ES 索引和 Milvus 集合隔离知识内容，避免新增服务后旧实现仍在多处运行。
+RAG 执行原先分散在 agent-service（Spring AI Milvus、embedding、候选合并和重排）与 listing-master-service（ES 关键词索引及召回），记忆的结构化生命周期与向量更新也分离。需要将这条检索链整体抽成唯一的 rag-service，使业务域与 SubAgent 通过受控契约消费统一检索能力，同时以独立 ES 索引和 Milvus 集合隔离知识内容，避免新增服务后旧实现仍在多处运行。
 
-本变更替代 `split-rag-by-domain` 的架构方向；旧 change 仅作为历史规划保留，不实施其 common-milvus 分发和域内 RAG 路线。本次只生成规划工件，不实施应用代码、不上线、不归档或改写旧 change。
+本变更替代 `split-rag-by-domain` 的架构方向；旧 change 仅作为历史规划保留，不实施其 common-milvus 分发和域内 RAG 路线。当前实施已部分完成但未完成真实配置、数据与切流验收。既有 7 个规划工件已完成修订，当前进入获授权的 apply 实施、初始化和限定开发部署验证；维护 docs/LR/KI，并在当前增量验证后提交推送。完整完成仍以任务门禁的实际证据为准。
 
 ## What Changes
 
 - 新建独立 Maven/Spring Boot `rag-service`，迁入并复用现有 Spring AI Milvus 存储封装、embedding 接入、ES 客户端和语义重排协议；不重写裸 Milvus SDK，不新建 embedding HTTP 客户端，不维护多套存储实现。
-- 将 ES 关键词召回、Milvus 向量召回、融合、去重和通用语义重排集中执行，默认混合召回加重排。业务域只提交授权范围、结构化条件、候选数量和受支持策略/开关，领域最终排序仍留域内。
-- 为每个获准知识空间配置独立 ES 索引与 Milvus 集合；不同域或需隔离的 SubAgent 不共用物理存储。逻辑空间映射和跨空间授权由服务端控制，metadata 仅承担空间内过滤，不能代替物理隔离或授权。
-- 定义有版本的 Dubbo 检索、索引变更、状态与管理契约，验证调用服务和最终用户身份。拒绝任意集合名、索引名、查询表达式、脚本或后端 URL。
-- 房源域和记忆域保留业务数据库、语料生成、授权决定、生命周期和最终排序；通过事务 outbox 提交完整版本化文档或删除事件。rag-service 统一维护两类索引、持久化应用状态、补偿失败及提供回放/重建能力，消除房源→agent→房源的索引回调环。
-- 将房源 Agent 的现有关键词工具改为领域包装的新混合检索消费者，同步技能描述；agent-service 保留 `milvusKnowledgeSearch` 的稳定工具身份、会话门控、结果记录和审计，仅代理知识检索，不执行后端 RAG。
-- 保留真实旧 REST 路径及响应字段一个兼容发布周期，由受鉴权的代理调用新领域入口/RAG；旧索引 RPC 分阶段退役。**BREAKING**：任意物理集合选择不再受支持；工具关键词搜索默认语义升级为混合检索；旧索引 RPC 在所有消费者升级后的下一清理发布删除。
-- 配置、后端凭据、启动初始化和 RAG 依赖健康检查迁入新服务，移除 agent/listing 的旧后端依赖；RAG 故障仅使相关检索能力不可用，不将所有域的结构化操作或 Supervisor 编排判为不就绪。
-- 对 rag-service 发出的 HTTP/HTTPS 请求执行 host 和解析地址校验，拒绝 localhost、环回、私有和保留地址，不为部署配置设置豁免。现有内网 ES 和本机 reranker 地址不能直接沿用为合规目标，必须在切流前提供符合约束且经过验证的部署目标。
+- 将 ES 关键词召回、Milvus 向量召回、融合、去重和通用语义重排集中执行，默认有界混合召回加重排。业务域只提交授权范围、结构化条件、候选数量和受支持策略/开关，领域真源、最终权限/状态检查和最终排序仍留域内。
+- 为每个获准知识空间配置独立 ES 索引与 Milvus 集合；逻辑映射和跨空间授权由服务端控制，metadata 不能代替物理隔离或授权。未知 Supervisor 语料继续隔离，不能默认公开或自动激活。
+- 定义有版本的 Dubbo 检索、索引变更、状态与管理契约，验证调用服务和最终用户身份。仅 ADMIN 与普通成员两类业务身份（当前实际 roleCode 为 ADMIN/BROKER）；MANAGER 是遗留角色，不默认视为 ADMIN。活跃 ADMIN 可全读未删除业务房源（含非 ON_SALE），普通成员 BROKER 只读 ON_SALE；使用显式 business-wide scope 与角色/activeOnly 独立复核，不建设资源 grant 规范、不用空资源集或通配表达全读。个人偏好绝对 self-only，ADMIN 亦无跨用户例外。停用、删除、离职或角色失效用户在所有相关入口禁止操作。
+- 接通 A2A 专用认证：使用可验证信标绑定真实身份、请求及受支持 SDK transport；专用凭据上下文不能进入模型 metadata、工具参数、日志或 checkpoint。必要最小 SDK 升级/修补或其受支持 transport 接线属于 apply 授权范围，不能以普通 HttpClient 能力推定真实 A2A 已支持。
+- 房源域和记忆域通过事务 outbox 提交完整版本化文档或删除事件；rag-service 统一维护双索引、独立 bk_rag 应用账本、补偿、回放和重建，消除房源→agent→房源索引回调环。
+- 房源关键词工具改为默认混合检索的领域包装并同步技能；`milvusKnowledgeSearch` 保留稳定工具身份、会话门控、结果记录和审计，只代理知识检索。
+- 真实旧 REST 路径及成功字段保留受鉴权纯代理兼容，退役另行公告。**BREAKING**：任意物理目标选择不再支持；关键词工具默认语义升级为混合加重排；全量调用方盘点确认无旧消费者后，直接删除 `AgentRpcService.syncListingKnowledge/deleteListingKnowledge` 签名、实现及残余引用，并删除无消费者的 signed listing legacy reconcile/证明路径（保留正常 index/backfill/outbox 及 worker 实际 hash 补偿），不建立条件成功或永久失败的旧 RPC 兼容路径，不等待虚构兼容周期。
+- HTTP 出站默认 `PUBLIC_ONLY`；内网须显式启用 `MANAGED_INTERNAL`，使用精确 host allowlist 与逐 host 对应 CIDR（建议 `rag.http.internal-networks` map），允许获准受管 Docker 单标签/host.docker.internal 和 RFC1918/IPv6 ULA。每次连接校验全部原始 A/AAAA 并固定已校验地址；环回/localhost、链接本地、映射、组播和其他保留地址始终禁止。禁止通配、0/0、任意 URL 覆盖、代理和自动重定向；未明确配置失败关闭，不是所有内网一律禁用或可信配置无限豁免。
+- 个人开发环境允许在后续 apply 修改本地/本项目容器与配置；公司内网 embedding/rerank/LLM 暂不开展新的语料脱敏项目，但凭据仍不得硬编码、打印、进入模型或 checkpoint，不影响访谈既有 LR-6 脱敏逻辑。不得擅自改用第三方或公开语料/服务。
+- 无生产真实业务，采用一次有界开发发布窗口，不搭建无消费者的旧 RPC 过渡发布。保留种子开发数据、历史 workflow/checkpoint 及旧存储；初始化必须版本化、可重入、与最新代码同步，覆盖当前缺失数据库/表、Compose 首启迁移和 Nacos 管理认证/实际 namespace 生效链。
 
 ## Capabilities
 
 ### New Capabilities
 
-- `isolated-rag-retrieval`: 独立空间存储映射、服务/用户授权、结构化过滤、默认双路召回、融合重排、候选及故障契约。
-- `rag-index-lifecycle`: 完整文档投影、版本/幂等、事务 outbox、双索引补偿、记忆生命周期、旧数据重建与切换回滚。
-- `domain-rag-consumption`: 房源/记忆消费者职责、领域最终排序、Supervisor 工具代理和真实旧接口兼容及来源实现清理。
-- `rag-service-runtime`: 可执行服务与 RPC 接线、配置/凭据归属、出站 URL 安全、能力健康、迁移验证及部署门禁。
+- `isolated-rag-retrieval`: 独立空间映射、服务/有效用户授权、ADMIN/成员与绝对 self-only、有界默认双路融合重排及故障契约。
+- `rag-index-lifecycle`: 完整文档、版本/幂等、事务 outbox、双索引补偿、记忆生命周期、保种子版本初始化、重建与水位回滚。
+- `domain-rag-consumption`: 域最终检查/排序、Supervisor 工具代理、A2A 专用身份链、真实 REST 兼容和无调用旧 RPC 直接清理。
+- `rag-service-runtime`: 独立服务、配置/凭据归属、HTTP 双模式地址安全、能力健康、版本初始化及开发发布门禁。
 
 ### Modified Capabilities
 
-无。现有 `supervisor-tool-orchestration` 的模型选择权、调用治理、账本恢复与历史 checkpoint 只读边界保持不变；`authentication-baseline`、`configuration-hygiene`、`runtime-bootstrap`、`service-packaging` 的现有要求继续适用。本变更的新 RAG 特定约束由上述新增能力表达，不改写其一般规则。
+无。`supervisor-tool-orchestration` 的模型选择权、唯一通用 Graph 执行、账本恢复与历史 checkpoint 只读边界保持不变；既有认证、配置卫生、运行初始化、打包及访谈脱敏要求继续适用。本变更不改写一般规则，不新增业务步骤调度器或全项目 RBAC/脱敏工程。
 
 ## Impact
 
-- 代码模块：新增 rag-service；修改 common 的纯 DTO/RPC 契约、auth-service 的最小 RAG principal 事实接口、agent-service、listing-master-service、memory-service；根 Maven reactor 聚合新模块。rag-service 独占本次 RAG 的 ES/Milvus/embedding/rerank 执行依赖。记忆域需明确接线 Dubbo，不能以 common 的传递依赖视为已接通。
-- 入口：旧 `/agent/vector-store/milvus/search`、`/agent/mcp/milvus/search`、两条集合初始化路径、`/agent/rag/listings/index`、`/agent/rag/listings/query`；`AgentRpcService.syncListingKnowledge/deleteListingKnowledge`；本地知识工具、房源工具/技能及 chat 审计 DTO。
-- 数据：独立空间新索引/集合、房源与记忆域 outbox、rag-service 应用状态账本（独立 bk_rag 库）；保留旧数据不删除，通过盘点、backfill 和增量追平验证，不承诺数据零迁移。
-- 配置与运维：新增 Nacos data ID，检查实际 namespace/group 导入链；修改受影响服务的启动、环境覆盖、Compose 和打包配置；切流前验证 URL 合规、身份链、真实能力健康与数据完整性。不得通过关闭双路/重排把未满足门禁伪装为默认路径验收成功。
-- 范围限制：营销现有独立 ES 业务搜索未接入此次 RAG，也不消费房源索引，本次不搬迁其实现；它不能参与本次混合召回链。未来任何域接入 RAG 必须使用新服务，不再复制检索底座。不建设 KI-13 行业语料，不新增通用业务评分 DSL，不改访谈状态机或全项目认证模型。新发现缺陷与非显然决策在实施提交中按项目清单规则维护。
+- 模块：rag-service、common 纯 DTO/RPC、auth-service 最小 RAG principal 事实接口、agent/listing/memory 和必要 common-a2a/真实 SDK transport；根 reactor 聚合。RAG 独占本次后端执行依赖，记忆域明确 Dubbo 接线。
+- 入口：六组真实旧 REST、知识/房源工具及技能、chat 审计 DTO、A2A 同步/流式/任务查询取消/异步续接身份链；删除无消费者的旧 Agent 索引 RPC，不牵连其他 AgentRpcService 方法。
+- 已报告实证基线：MySQL 8.4.11，bk_rag 不存在，listing_rag 与 memory_rag 各三表缺失；listing_info=0、user_preference_memory=0，但 system_constraint_memory=17、session_shared_memory=3；auth 两个活跃 ADMIN/BROKER 用户，三角色含遗留 MANAGER；agent_async_workflow=3、checkpoint=46，最新三 orchestration 表及 run_control 结构缺失。不能称为全部空库或删除重建。
+- 后端/Nacos的原始基线：旧 ES/Milvus 停止且无发布端口；Nacos BK-AGENT16/public21，旧容器空namespace实际public，无持久mount。当前已在受限备份后启动原后端，旧ES两个索引均0/mapping空，Milvus精确catalog仅default库且0集合/分区。七选中模板在十一域A2A扩展后认证发布/读回一致，原Nacos未重建。版本manifest首启/升级实测通过；这些不证明当前应用读取、模型schema或默认检索能力，实证详见验收记录。
+- 版本初始化：限定补齐本次 RAG 与 agent 最新编排必要结构，明确目标库、版本/校验、重复运行和首启/已有数据升级，保留种子与历史。任务 5.3/7.1/7.5 承接验收；不顺带修复全仓历史 SQL。
+- 范围：营销独立 ES 业务搜索未接入本次 RAG，保留其实现；不建设 KI-13 行业语料，不改访谈状态机。LR/KI 中与本轮新授权冲突的旧 HTTP/A2A/兼容假设由本规划明确替代，当前 apply 同步维护清单，修复状态与已验证实施提交关联，不将授权或源码当作运行完成。

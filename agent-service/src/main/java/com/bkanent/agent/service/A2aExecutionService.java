@@ -46,6 +46,10 @@ public class A2aExecutionService {
             1, 2, 30L, TimeUnit.SECONDS, new ArrayBlockingQueue<>(64), daemonThreadFactory("a2a-task-cancel"),
             new ThreadPoolExecutor.DiscardPolicy());
 
+    private com.bkanent.agent.security.AgentRagCredentialLeaseStore credentials;
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setCredentials(com.bkanent.agent.security.AgentRagCredentialLeaseStore credentials) { this.credentials = credentials; }
+
     private final A2aAgentClient a2aAgentClient;
     private final SessionStreamService sessionStreamService;
     private final AgentPermissionService agentPermissionService;
@@ -361,10 +365,11 @@ public class A2aExecutionService {
 
     private void requestCancellation(RegisteredAgentDescriptor descriptor, String asyncTaskId) {
         try {
+            var snapshot = credentials == null ? (java.util.function.Supplier<AutoCloseable>) () -> () -> { } : credentials.snapshot();
             CANCELLATION_EXECUTOR.execute(() -> {
-                try {
+                try (var ignored = snapshot.get()) {
                     a2aAgentClient.cancelAsyncTask(descriptor, asyncTaskId);
-                } catch (RuntimeException exception) {
+                } catch (Exception exception) {
                     LOGGER.debug("Best-effort A2A task cancellation failed for {}", asyncTaskId, exception);
                 }
             });
@@ -469,7 +474,8 @@ public class A2aExecutionService {
                                     Callable<T> request,
                                     long timeoutMs,
                                     String operation) {
-        Future<T> future = executor.submit(request);
+        var snapshot = credentials == null ? (java.util.function.Supplier<AutoCloseable>) () -> () -> { } : credentials.snapshot();
+        Future<T> future = executor.submit(() -> { try (var ignored = snapshot.get()) { return request.call(); } });
         try {
             return future.get(timeoutMs, TimeUnit.MILLISECONDS);
         } catch (TimeoutException exception) {

@@ -82,7 +82,7 @@ class AgentRagConsumerTest {
             verify(admin).provision(argThat(request -> request.dimension() == 1024 && request.spaceId().equals("supervisor.knowledge")), any(), any());
         }
     }
-    @Test void listingDefaultsAndExplicitQuantitiesPreserveOldContractAndLegacyVoidsNeverSend() throws Exception {
+    @Test void listingDefaultsAndExplicitQuantitiesPreserveContractAndLegacyVoidsAreAbsent() throws Exception {
         var wrapper = new ListingMilvusService(beans.getBeanProvider(RagListingDomainRpcService.class), properties, credentials, signing);
         when(listing.search(any(), any(), any())).thenAnswer(call -> {
             RagListingSearchRequest request = call.getArgument(0);
@@ -102,10 +102,38 @@ class AgentRagConsumerTest {
             assertThat(wrapper.query(query(200, 500, 500)).assembledContext()).isEqualTo("explicit");
             assertThatThrownBy(() -> wrapper.query(query(10, 500, 501))).hasMessageContaining("INVALID_ARGUMENT");
         }
-        var legacyRpc = new com.bkanent.agent.rpc.AgentRpcServiceImpl(null, wrapper);
-        assertThatThrownBy(() -> legacyRpc.syncListingKnowledge(1L)).hasMessage("LEGACY_RECONCILIATION_REQUIRED");
-        assertThatThrownBy(() -> legacyRpc.deleteListingKnowledge(1L)).hasMessage("LEGACY_RECONCILIATION_REQUIRED");
-        verify(listing, never()).index(any(), any(), any()); verify(listing, never()).reconcile(any(), any());
+        assertThat(Arrays.stream(AgentRpcService.class.getMethods()).map(java.lang.reflect.Method::getName))
+                .doesNotContain("syncListingKnowledge", "deleteListingKnowledge");
+        verify(listing, never()).index(any(), any(), any());
+    }
+    @Test void authenticatedNormalIndexAcceptsQueuedStateAndRejectsStaleOrConflict() throws Exception {
+        var listingWrapper = new ListingMilvusService(beans.getBeanProvider(RagListingDomainRpcService.class), properties, credentials, signing);
+        var request = new ListingIndexRequest("1", 7L, "listing.knowledge");
+        try (var ignored = credentials.openAuthorization("Bearer transport-only")) {
+            for (RagIndexState state : List.of(RagIndexState.ACCEPTED, RagIndexState.STALE, RagIndexState.CONFLICT)) {
+                doAnswer(call -> {
+                    RagListingIndexRequest payload = call.getArgument(0);
+                    RagAuthEnvelope envelope = call.getArgument(1);
+                    RagCredentialContext credential = call.getArgument(2);
+                    RagRequestSigner.verify(envelope, RagCanonicalHash.requestHash(payload), "listing-master-service",
+                            RagOperation.SUBMIT, payload.requestId(), credential,
+                            new RagSigningKey("test-key", "agent-service", null, Set.of(RagOperation.SUBMIT),
+                                    properties.getSigningSecret().getBytes(java.nio.charset.StandardCharsets.UTF_8)), java.time.Instant.now());
+                    assertThat(credential.accessToken()).isEqualTo("transport-only");
+                    assertThat(envelope.actorMode()).isEqualTo(RagActorMode.USER);
+                    assertThat(envelope.actorId()).isEqualTo("1");
+                    return new RagIndexStatus(1, payload.requestId(), "event", "listing.knowledge", "listing:7", 1,
+                            "hash", state, 1, false, null, null, null);
+                }).when(listing).index(any(), any(), any());
+                if (state == RagIndexState.ACCEPTED) {
+                    assertThatCode(() -> listingWrapper.indexListing(request)).doesNotThrowAnyException();
+                } else {
+                    assertThatThrownBy(() -> listingWrapper.indexListing(request)).isInstanceOfSatisfying(RagException.class,
+                            error -> assertThat(error.code()).isEqualTo(RagErrorCode.INDEX_CONFLICT));
+                }
+            }
+        }
+        verify(listing, times(3)).index(any(), any(), any());
     }
     @Test void toolIsQueryOnlyDisabledByDefaultAndAuditsSafeErrors() throws Exception {
         var tool = new AgentMilvusTool(wrapper, new AgentChatProperties());

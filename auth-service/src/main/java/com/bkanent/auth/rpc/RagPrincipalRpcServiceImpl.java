@@ -32,7 +32,13 @@ import java.util.Set;
 public class RagPrincipalRpcServiceImpl implements RagPrincipalRpcService {
 
     private static final String AUTH_SERVICE = "auth-service";
-    private static final Set<String> ALLOWED_CALLERS = Set.of("rag-service", "listing-master-service", "memory-service");
+    private static final Set<String> ALLOWED_CALLERS = Set.of("rag-service", "listing-master-service", "memory-service",
+            "agent-service", "customer-service", "marketing-content-service", "business-service", "contract-service",
+            "compare-engine-service", "promotion-service", "settlement-service", "interview-service");
+
+    private com.bkanent.auth.service.A2aBeaconStore beacons;
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setBeacons(com.bkanent.auth.service.A2aBeaconStore beacons) { this.beacons = beacons; }
 
     private final AuthTokenService authTokenService;
     private final UserAccountService userAccountService;
@@ -73,6 +79,18 @@ public class RagPrincipalRpcServiceImpl implements RagPrincipalRpcService {
         RagRequestSigner.verify(authentication, credentialDigest, AUTH_SERVICE, RagOperation.RESOLVE_PRINCIPAL,
                 authentication.requestId(), credentials, incomingKey, Instant.now());
 
+        if (credentials.beacon() != null) {
+            if (beacons == null) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
+            AuthRagPrincipal principal = beacons.principal(credentials, incomingKey.callerService());
+            Instant now = Instant.now();
+            RagAuthEnvelope response = RagRequestSigner.sign(new RagAuthEnvelope(CONTRACT_VERSION,
+                    properties.getResponseKeyId(), incomingKey.callerService(), AUTH_SERVICE,
+                    RagOperation.RESOLVE_PRINCIPAL_RESPONSE, authentication.requestId(), RagCanonicalHash.principalHash(principal),
+                    RagActorMode.USER, principal.userId().toString(), now.getEpochSecond(),
+                    Math.min(principal.expiresAtEpochSecond(), authentication.expiresAtEpochSecond()), credentialDigest, null), responseSecret);
+            return new AuthRagPrincipal(principal.userId(), principal.roleCode(), true, true, principal.expiresAtEpochSecond(), response);
+        }
+
         AuthTokenService.TokenPrincipal tokenPrincipal;
         UserAccountEntity account;
         boolean roleActive;
@@ -91,7 +109,7 @@ public class RagPrincipalRpcServiceImpl implements RagPrincipalRpcService {
             if (account == null || !Long.valueOf(tokenPrincipal.userId()).equals(account.getId())
                     || !Integer.valueOf(0).equals(account.getDeleted())
                     || !"ACTIVE".equalsIgnoreCase(account.getAccountStatus())
-                    || !StringUtils.hasText(account.getRoleCode())) {
+                    || !UserManagementService.isSupportedRole(account.getRoleCode())) {
                 throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
             }
             roleActive = userManagementService.isActiveRole(account.getRoleCode());

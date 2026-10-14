@@ -28,15 +28,21 @@ public class MemoryRagBackfillService {
      */
     @Transactional
     public BackfillPage backfill(String cursor, int limit, RagCredentialContext credentials) {
-        security.requireAdmin(security.authenticate(credentials));
+        AuthRagPrincipal principal = security.authenticate(credentials);
+        security.requireAdmin(principal);
+        String owner = principal.userId().toString();
         Cursor position = parse(cursor);
+        if (MemoryRagProjectionService.PREFERENCE.equals(position.space())) {
+            String[] parts = position.document().split(":", -1);
+            if (parts.length != 3 || !parts[0].equals("preference") || !owner.equals(decode(parts[1]))) throw invalidCursor();
+        }
         if (limit < 1 || limit > MAX_LIMIT) throw invalidCursor();
         projection.lock();
         List<RagIndexEvent> events = new ArrayList<>();
         int scanned;
         String next;
         if (position.stage().equals("p")) {
-            var rows = jdbc.queryForList("SELECT id,user_id,preference_key FROM user_preference_memory WHERE id>? ORDER BY id LIMIT ?", position.afterId(), limit + 1);
+            var rows = jdbc.queryForList("SELECT id,user_id,preference_key FROM user_preference_memory WHERE user_id=? AND id>? ORDER BY id LIMIT ?", owner, position.afterId(), limit + 1);
             scanned = Math.min(limit, rows.size());
             for (var row : rows.subList(0, scanned)) {
                 String user = row.get("user_id").toString(), key = row.get("preference_key").toString();
@@ -64,8 +70,9 @@ public class MemoryRagBackfillService {
             next = rows.size() > limit ? "c:" + rows.get(scanned - 1).get("id") : "r::";
         } else {
             // Bound the identity scan as well as events, including pages containing only live identities.
-            var rows = jdbc.queryForList("SELECT space_id,document_id FROM memory_rag_projection WHERE space_id>? OR (space_id=? AND document_id>?) ORDER BY space_id,document_id LIMIT ?",
-                    position.space(), position.space(), position.document(), limit + 1);
+            var rows = jdbc.queryForList("SELECT space_id,document_id FROM memory_rag_projection WHERE (space_id=? OR (space_id=? AND document_id LIKE ?)) AND (space_id>? OR (space_id=? AND document_id>?)) ORDER BY space_id,document_id LIMIT ?",
+                    MemoryRagProjectionService.CONSTRAINT, MemoryRagProjectionService.PREFERENCE,
+                    "preference:" + encode(owner) + ":%", position.space(), position.space(), position.document(), limit + 1);
             scanned = Math.min(limit, rows.size());
             for (var row : rows.subList(0, scanned)) {
                 String space = row.get("space_id").toString(), id = row.get("document_id").toString();
@@ -76,6 +83,9 @@ public class MemoryRagBackfillService {
                 next = "r:" + encode(last.get("space_id").toString()) + ":" + encode(last.get("document_id").toString());
             } else next = null;
         }
+        AuthRagPrincipal current = security.authenticate(credentials);
+        security.requireAdmin(current);
+        security.requireOwner(current, owner);
         return new BackfillPage(position.value(), next, scanned, next != null, events.stream()
                 .map(event -> new QueuedEvent(event.eventId(), event.spaceId(), event.documentId(), event.revision(), event.operation(), "QUEUED")).toList());
     }

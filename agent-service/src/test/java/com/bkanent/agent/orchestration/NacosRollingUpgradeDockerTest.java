@@ -66,7 +66,7 @@ class NacosRollingUpgradeDockerTest {
             var registry = mock(AgentRegistry.class); when(registry.listDescriptors()).thenAnswer(invocation -> List.of(reference.get()));
             when(registry.getByAgentId(name)).thenAnswer(invocation -> Optional.of(reference.get()));
             var permissions = mock(AgentPermissionService.class); when(permissions.canInvokeChildAgent(eq("1"), any())).thenReturn(true);
-            var client = new OfficialA2aAgentClient(new OfficialA2aResponseNormalizer(mapper));
+            var client = ProtocolFixtureA2aClient.create(new OfficialA2aResponseNormalizer(mapper));
             var execution = new A2aExecutionService(client, mock(SessionStreamService.class), permissions, new DistributedAgentProperties());
             var catalog = new SupervisorCapabilityCatalog(registry, mock(AgentMcpClient.class), permissions, execution, ToolCallbackProvider.from(), mapper);
             var oldBinding = catalog.snapshot("1", false).get("a2a:" + name);

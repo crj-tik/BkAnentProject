@@ -33,6 +33,7 @@ public class MemoryRagSearchFacade {
     }
 
     public MemoryRagSearchResponse search(MemoryRagSearchRequest domain, AuthRagPrincipal principal, RagCredentialContext credentials) {
+        AuthRagPrincipal original = principal;
         RagSearchRequest request = domain.search().normalized();
         if (domain.topK() > request.candidateLimit()) throw new RagException(RagErrorCode.INVALID_ARGUMENT, "topK");
         validateFilters(request);
@@ -44,6 +45,7 @@ public class MemoryRagSearchFacade {
         RagSearchResponse response = call(request, principal, credentials);
         Map<String, RagCandidate> pool = new LinkedHashMap<>();
         merge(pool, response.candidates());
+        principal = currentPrincipal(principal, credentials, request);
         List<MemoryRagMatch> matches = finalTruth(List.copyOf(pool.values()), request, domain, principal, asOf);
         if (matches.size() < domain.topK() && response.candidates().size() == request.candidateLimit()
                 && pool.size() > matches.size() && request.candidateLimit() < 200) {
@@ -53,6 +55,7 @@ public class MemoryRagSearchFacade {
                 response = call(request, principal, credentials);
                 merge(pool, response.candidates());
                 // Recheck all survivors under the writer lock: the second RPC may invalidate the first pool.
+                principal = currentPrincipal(principal, credentials, request);
                 matches = finalTruth(List.copyOf(pool.values()), request, domain, principal, asOf);
             }
         }
@@ -64,7 +67,16 @@ public class MemoryRagSearchFacade {
                 .thenComparingInt(match -> responseRank(match.candidate(), responseOrder))
                 .thenComparing(match -> match.candidate().documentId())).limit(domain.topK()).toList();
         RagSearchResponse safe = new RagSearchResponse(response.contractVersion(), response.requestId(), response.spaceId(), response.strategyVersion(), response.requestedMode(), response.effectiveMode(), response.degraded(), response.failedStages(), matches.stream().map(MemoryRagMatch::candidate).toList(), List.of());
+        // Final-truth SQL may wait on a writer lock after the earlier authentication.
+        currentPrincipal(original, credentials, request);
         return new MemoryRagSearchResponse(safe, matches, SCORING);
+    }
+
+    private AuthRagPrincipal currentPrincipal(AuthRagPrincipal original, RagCredentialContext credentials, RagSearchRequest request) {
+        AuthRagPrincipal current = security.authenticate(credentials);
+        if (!current.userId().equals(original.userId())) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+        security.scope(request, current);
+        return current;
     }
 
     private int responseRank(RagCandidate candidate, List<RagCandidate> candidates) {

@@ -51,13 +51,12 @@ class ListingRagFacadeTest {
         assertEquals(200, maximum.candidateLimit());
         assertThrows(RagException.class, () -> ListingRagFacade.request(input(20, 20, -1)));
     }
-    @Test void finalSQLStatusGrantAndFiltersEliminateStaleHintsAndNeverReturnTheirContent() {
+    @Test void finalSQLStatusAndFiltersEliminateStaleHintsAndNeverReturnTheirContent() {
         var identity = mock(ListingRagIdentity.class); var grants = mock(ListingRagGrantService.class); var mapper = mock(ListingMapper.class);
         when(identity.requireReader(any())).thenReturn(new AuthRagPrincipal(7L, "BROKER", true, true, Long.MAX_VALUE));
-        when(grants.allowed(7L)).thenReturn(List.of("1", "2", "3", "4"));
         List<ListingEntity> rows = new ArrayList<>();
         for (long id=1; id<=5; id++) {
-            ListingEntity e = new ListingEntity(); e.setId(id); e.setTitle("SQL " + id); e.setAddress("滨江路"); e.setStatus(id==2 ? "SOLD" : "ON_SALE"); e.setArea(BigDecimal.valueOf(id == 3 ? 20 : 100)); rows.add(e);
+            ListingEntity e = new ListingEntity(); e.setDeleted(0); e.setId(id); e.setTitle("SQL " + id); e.setAddress("滨江路"); e.setStatus(id==2 ? "SOLD" : "ON_SALE"); e.setArea(BigDecimal.valueOf(id == 3 ? 20 : 100)); rows.add(e);
         }
         when(mapper.selectBatchIds(anyCollection())).thenReturn(rows);
         RagRetrievalRpcService rpc = (r,a,c,s) -> response(r, List.of(candidate(1),candidate(2),candidate(3),candidate(5)));
@@ -65,17 +64,17 @@ class ListingRagFacadeTest {
         var facade = new ListingRagFacade(identity, grants, factory.getBeanProvider(RagRetrievalRpcService.class), mapper, new ListingConverter(), new ListingKnowledgeDocumentAssembler(), revisions());
         var req = new RagListingSearchRequest(1,"request","query","滨江",null,BigDecimal.valueOf(50),null,null,null,null,null,10);
         var result = facade.search(req, new RagCredentialContext("token"), "7");
-        assertEquals(List.of(1L), result.matches().stream().map(m -> m.listing().id()).toList());
+        assertEquals(List.of(1L, 5L), result.matches().stream().map(m -> m.listing().id()).toList());
         assertTrue(result.context().contains("SQL 1")); assertFalse(result.context().contains("STALE"));
         assertFalse(result.matches().get(0).candidate().content().contains("STALE"));
-        assertEquals(1, result.retrieval().candidates().size());
+        assertEquals(2, result.retrieval().candidates().size());
         verify(mapper, times(1)).selectBatchIds(anyCollection());
         assertThrows(RagException.class, () -> facade.search(req, new RagCredentialContext("token"), "8"));
     }
     @Test void atMostOneExpansionAndTotalCandidateBudgetAtMost500() {
         var identity = mock(ListingRagIdentity.class); var grants = mock(ListingRagGrantService.class); var mapper = mock(ListingMapper.class);
         when(identity.requireReader(any())).thenReturn(new AuthRagPrincipal(7L, "BROKER", true, true, Long.MAX_VALUE));
-        when(grants.allowed(7L)).thenReturn(List.of("1")); when(mapper.selectBatchIds(anyCollection())).thenReturn(List.of());
+        when(mapper.selectBatchIds(anyCollection())).thenReturn(List.of());
         AtomicInteger calls = new AtomicInteger(); AtomicInteger budget = new AtomicInteger();
         RagRetrievalRpcService rpc = (r,a,c,s) -> {
             calls.incrementAndGet(); budget.addAndGet(r.recall().keywordCandidates()+r.recall().vectorCandidates());
@@ -89,7 +88,6 @@ class ListingRagFacadeTest {
     @Test void explicitMaximumRouteCountsRemainUnchangedAndExhaustBudgetAfterOneCall() {
         var identity = mock(ListingRagIdentity.class); var grants = mock(ListingRagGrantService.class); var mapper = mock(ListingMapper.class);
         when(identity.requireReader(any())).thenReturn(new AuthRagPrincipal(7L, "BROKER", true, true, Long.MAX_VALUE));
-        when(grants.allowed(7L)).thenReturn(List.of("1"));
         when(mapper.selectBatchIds(anyCollection())).thenReturn(List.of());
         AtomicInteger calls = new AtomicInteger(); AtomicInteger budget = new AtomicInteger();
         RagRetrievalRpcService rpc = (request, authentication, credentials, scope) -> {
@@ -109,11 +107,10 @@ class ListingRagFacadeTest {
         assertEquals(1000, budget.get());
         verify(mapper, times(1)).selectBatchIds(anyCollection());
     }
-    @Test void revisionUpdateGrantRevokeAndOversizedProviderResponseFailClosed() {
+    @Test void revisionUpdateStatusChangeAndOversizedProviderResponseFailClosed() {
         var identity=mock(ListingRagIdentity.class); var grants=mock(ListingRagGrantService.class); var mapper=mock(ListingMapper.class); var revisions=revisions();
         when(identity.requireReader(any())).thenReturn(new AuthRagPrincipal(7L,"BROKER",true,true,Long.MAX_VALUE));
-        when(grants.allowed(7L)).thenReturn(List.of("1"));
-        var e=new ListingEntity(); e.setId(1L); e.setStatus("ON_SALE"); e.setTitle("latest SQL");
+        var e=new ListingEntity(); e.setDeleted(0); e.setId(1L); e.setStatus("ON_SALE"); e.setTitle("latest SQL");
         when(mapper.selectBatchIds(anyCollection())).thenReturn(List.of(e));
         var rpc=mock(RagRetrievalRpcService.class); when(rpc.search(any(),any(),any(),any())).thenAnswer(call->response(call.getArgument(0),List.of(candidate(1))));
         var factory=new StaticListableBeanFactory(); factory.addBean("rpc",rpc);
@@ -121,7 +118,7 @@ class ListingRagFacadeTest {
         when(revisions.revisions(anyCollection())).thenReturn(Map.of(1L,new ListingRagOutbox.Revision(2,false,"updated","event2")));
         assertTrue(facade.search(input(null,null,null),new RagCredentialContext("token"),"7").matches().isEmpty());
         when(revisions.revisions(anyCollection())).thenReturn(Map.of(1L,new ListingRagOutbox.Revision(1,false,"hash","event")));
-        when(grants.allowed(7L)).thenReturn(List.of("2"));
+        e.setStatus("OFFLINE");
         var revoked = facade.search(input(null,null,null),new RagCredentialContext("token"),"7");
         assertTrue(revoked.matches().isEmpty());
         assertEquals("", revoked.context());
@@ -129,6 +126,23 @@ class ListingRagFacadeTest {
         assertTrue(revoked.retrieval().stageStats().isEmpty());
         doAnswer(call->response(call.getArgument(0),java.util.stream.LongStream.rangeClosed(1,11).mapToObj(ListingRagFacadeTest::candidate).toList())).when(rpc).search(any(),any(),any(),any());
         assertEquals(RagErrorCode.DEPENDENCY_UNAVAILABLE,assertThrows(RagException.class,()->facade.search(input(null,null,null),new RagCredentialContext("token"),"7")).code());
+    }
+    @Test void finalCurrentRoleRevocationAndAdminInactiveStatusAreRecheckedAfterRetrieval() {
+        var identity = mock(ListingRagIdentity.class); var grants = mock(ListingRagGrantService.class); var mapper = mock(ListingMapper.class);
+        var admin = new AuthRagPrincipal(7L,"ADMIN",true,true,Long.MAX_VALUE);
+        var member = new AuthRagPrincipal(7L,"BROKER",true,true,Long.MAX_VALUE);
+        var row = new ListingEntity(); row.setDeleted(0); row.setId(1L); row.setStatus("OFFLINE"); row.setTitle("latest SQL");
+        when(mapper.selectBatchIds(anyCollection())).thenReturn(List.of(row));
+        RagRetrievalRpcService rpc = (r,a,c,s) -> response(r,List.of(candidate(1)));
+        var factory = new StaticListableBeanFactory(); factory.addBean("rpc",rpc);
+        var facade = new ListingRagFacade(identity,grants,factory.getBeanProvider(RagRetrievalRpcService.class),mapper,
+                new ListingConverter(),new ListingKnowledgeDocumentAssembler(),revisions());
+        when(identity.requireReader(any())).thenReturn(admin);
+        assertEquals(List.of(1L),facade.search(input(null,null,null),new RagCredentialContext("token"),"7").matches().stream().map(m -> m.listing().id()).toList());
+        when(identity.requireReader(any())).thenReturn(admin,member);
+        assertTrue(facade.search(input(null,null,null),new RagCredentialContext("token"),"7").matches().isEmpty());
+        when(identity.requireReader(any())).thenReturn(admin).thenThrow(new RagException(RagErrorCode.AUTHENTICATION_FAILED));
+        assertEquals(RagErrorCode.AUTHENTICATION_FAILED,assertThrows(RagException.class, () -> facade.search(input(null,null,null),new RagCredentialContext("token"),"7")).code());
     }
     @Test void unavailableRetrievalIsNotEmptySuccessOrSQLRecallFallback() {
         var identity=mock(ListingRagIdentity.class); when(identity.requireReader(any())).thenReturn(new AuthRagPrincipal(7L,"BROKER",true,true,Long.MAX_VALUE));

@@ -617,6 +617,8 @@ services:
       SERVICE_ARTIFACT: memory-service-1.0.0-SNAPSHOT.jar
       DUBBO_REGISTRY_ADDRESS: "nacos://nacos:8848?namespace=${NACOS_NAMESPACE:-BK-AGENT}&group=DEFAULT_GROUP"
       MYSQL_DB_MEMORY: ${MYSQL_DB_MEMORY:-bk_memory}
+      # Exact verified semantic profile registration only; unset/empty remains fail-closed.
+      MEMORY_RAG_SEMANTIC_SCORING_VERSIONS: ${MEMORY_RAG_SEMANTIC_SCORING_VERSIONS:-}
       MEMORY_RAG_RPC_SECRET: ${MEMORY_RAG_RPC_SECRET:-}
       AGENT_RAG_RPC_SECRET: ${AGENT_RAG_RPC_SECRET:-}
       AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}

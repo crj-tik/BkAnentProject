@@ -16,6 +16,11 @@ public class RagRetrievalRpcServiceImpl implements RagRetrievalRpcService {
     @Override public RagSearchResponse search(RagSearchRequest request, RagAuthEnvelope authentication,
             RagCredentialContext credentials, RagAuthorizationScope scope) {
         if (request == null) throw new RagException(RagErrorCode.INVALID_ARGUMENT, "request");
-        return retrieval.search(request, access.search(request, authentication, credentials, scope));
+        var mandatory = access.search(request, authentication, credentials, scope);
+        RagSearchResponse response = retrieval.search(request, mandatory);
+        if (!mandatory.equals(access.search(request, authentication, credentials, scope))) {
+            throw new RagException(RagErrorCode.FORBIDDEN);
+        }
+        return response;
     }
 }

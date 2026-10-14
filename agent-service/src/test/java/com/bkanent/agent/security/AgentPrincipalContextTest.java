@@ -40,15 +40,33 @@ class AgentPrincipalContextTest {
         request.addHeader(AuthPrincipalContext.USER_ID_HEADER, "42");
         request.addHeader(AuthPrincipalContext.MARKER_HEADER, "client");
 
-        assertThatThrownBy(() -> new AgentPrincipalContext(request))
+        assertThatThrownBy(() -> new AgentPrincipalContext(request, org.mockito.Mockito.mock(com.bkanent.common.rpc.AuthPermissionRpcService.class)))
                 .isInstanceOf(AgentPrincipalException.class)
                 .hasMessageContaining("gateway principal");
+    }
+
+    @Test
+    void gatewayMarkerAloneCannotAuthenticateAndTokenMustMatchOwner() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader(AuthPrincipalContext.USER_ID_HEADER, "42");
+        request.addHeader(AuthPrincipalContext.MARKER_HEADER, AuthPrincipalContext.MARKER_VALUE);
+        var auth = org.mockito.Mockito.mock(com.bkanent.common.rpc.AuthPermissionRpcService.class);
+        assertThatThrownBy(() -> new AgentPrincipalContext(request, auth)).isInstanceOf(AgentPrincipalException.class);
+        request.addHeader("Authorization", "Bearer other-token");
+        org.mockito.Mockito.when(auth.resolvePrincipal("other-token")).thenReturn(new com.bkanent.common.rpc.AuthenticatedPrincipal(7L));
+        assertThatThrownBy(() -> new AgentPrincipalContext(request, auth)).isInstanceOf(AgentPrincipalException.class);
+        org.mockito.Mockito.when(auth.resolvePrincipal("other-token")).thenReturn(null);
+        assertThatThrownBy(() -> new AgentPrincipalContext(request, auth)).isInstanceOf(AgentPrincipalException.class);
     }
 
     private AgentPrincipalContext principal(String userId) {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader(AuthPrincipalContext.USER_ID_HEADER, userId);
         request.addHeader(AuthPrincipalContext.MARKER_HEADER, AuthPrincipalContext.MARKER_VALUE);
-        return new AgentPrincipalContext(request);
+        request.addHeader("Authorization", "Bearer real-token");
+        var auth = org.mockito.Mockito.mock(com.bkanent.common.rpc.AuthPermissionRpcService.class);
+        org.mockito.Mockito.when(auth.resolvePrincipal("real-token")).thenReturn(
+                new com.bkanent.common.rpc.AuthenticatedPrincipal(Long.parseLong(userId)));
+        return new AgentPrincipalContext(request, auth);
     }
 }

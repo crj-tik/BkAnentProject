@@ -242,15 +242,67 @@ class MemoryRagLifecycleTest {
     }
 
     @Test
+    void adminBackfillNeverScansCountsOrReceiptsAnotherOwnersPreferences() {
+        var f = new MemoryRagTestSupport();
+        f.upsert(MemoryRagTestSupport.preference("own-live", ".8", LocalDateTime.now()));
+        f.upsert(MemoryRagTestSupport.preference("own-gone", ".8", LocalDateTime.now()));
+        f.upsert(new com.bkanent.common.agent.UserPreferenceRecord("43", "other", "private", "deployment",
+                new java.math.BigDecimal(".8"), null, null, LocalDateTime.now(), 1));
+        f.jdbc.update("DELETE FROM user_preference_memory WHERE preference_key='own-gone' OR user_id='43'");
+        var backfill = new MemoryRagBackfillService(f.jdbc, f.projection, f.security);
+        var pages = backfillAll(f, backfill, 1);
+        assertEquals(3, pages.stream().mapToInt(MemoryRagBackfillService.BackfillPage::scanned).sum());
+        assertEquals(2, pages.stream().flatMap(page -> page.receipts().stream()).count());
+        assertTrue(pages.stream().flatMap(page -> page.receipts().stream())
+                .allMatch(receipt -> receipt.documentId().startsWith("preference:" + encoded("42") + ":")));
+        assertEquals(1, f.latest(RagDocumentIds.preference("43", "other")).revision());
+        assertTrue(pages.stream().map(MemoryRagBackfillService.BackfillPage::nextCursor)
+                .filter(java.util.Objects::nonNull).filter(cursor -> cursor.startsWith("r:") && !cursor.equals("r::"))
+                .allMatch(cursor -> new String(java.util.Base64.getUrlDecoder().decode(cursor.split(":", -1)[2]),
+                        java.nio.charset.StandardCharsets.UTF_8).startsWith("preference:" + encoded("42") + ":")));
+        String foreignCursor = "r:" + encoded(MemoryRagProjectionService.PREFERENCE) + ":"
+                + encoded(RagDocumentIds.preference("43", "other"));
+        int before = f.count("memory_rag_outbox");
+        assertEquals(RagErrorCode.INVALID_ARGUMENT, assertThrows(RagException.class,
+                () -> f.tx.execute(tx -> backfill.backfill(foreignCursor, 1, f.credentials))).code());
+        assertEquals(before, f.count("memory_rag_outbox"));
+    }
+
+    @Test
+    void revocationBeforeBackfillReceiptRollsBackEventsAndRevision() {
+        var f = new MemoryRagTestSupport();
+        f.upsert(MemoryRagTestSupport.preference("live", ".8", LocalDateTime.now()));
+        var security = org.mockito.Mockito.spy(f.security);
+        org.mockito.Mockito.doReturn(MemoryRagTestSupport.principal("ADMIN"))
+                .doThrow(new RagException(RagErrorCode.AUTHENTICATION_FAILED))
+                .when(security).authenticate(f.credentials);
+        var backfill = new MemoryRagBackfillService(f.jdbc, f.projection, security);
+        assertEquals(RagErrorCode.AUTHENTICATION_FAILED, assertThrows(RagException.class,
+                () -> f.tx.execute(tx -> backfill.backfill(null, 1, f.credentials))).code());
+        assertEquals(1, f.count("memory_rag_outbox"));
+        assertEquals(1, f.latest(RagDocumentIds.preference("42", "live")).revision());
+    }
+
+    private static String encoded(String value) {
+        return java.util.Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    @Test
     void originalControllerRouteDefaultsToOneBoundedPageAndReturnsReceipts() throws Exception {
         var backfill = org.mockito.Mockito.mock(MemoryRagBackfillService.class);
         var page = new MemoryRagBackfillService.BackfillPage("p:0", "p:100", 100, true,
                 java.util.List.of(new MemoryRagBackfillService.QueuedEvent("event", "memory.preference", "document", 7, RagIndexOperation.UPSERT, "QUEUED")));
         org.mockito.Mockito.when(backfill.backfill(null, 100, new RagCredentialContext("token"))).thenReturn(page);
-        var controller = new com.bkanent.memory.controller.MemoryController(null, null, null, null, null, null, null, null, backfill);
+        var security = org.mockito.Mockito.mock(MemoryRagSecurity.class);
+        org.mockito.Mockito.when(security.authenticate(new RagCredentialContext("token")))
+                .thenReturn(MemoryRagTestSupport.principal("ADMIN"));
+        var controller = new com.bkanent.memory.controller.MemoryController(null, null, null, null, null, null, security, null, backfill);
         var mvc = org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup(controller)
+                .addFilters(new com.bkanent.memory.controller.MemoryRequestAuthenticationFilter(security))
                 .setControllerAdvice(new com.bkanent.memory.controller.MemoryRagExceptionHandler()).build();
-        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/internal/memory/rag/backfill").header("Authorization", "Bearer token"))
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/internal/memory/rag/backfill")
+                        .header("Authorization", "Bearer token").header(com.bkanent.common.rpc.MemoryTransportHeaders.OWNER, "42"))
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isOk())
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.data.nextCursor").value("p:100"))
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.data.hasMore").value(true))

@@ -16,8 +16,10 @@ memory:
         caller-service: agent-service
         secret: ${AGENT_RAG_RPC_SECRET:}
     policy-version: memory-v1
-    constraint-read-roles: []
-    constraint-admin-roles: []
+    constraint-read-roles: [ADMIN, BROKER]
+    constraint-admin-roles: [ADMIN]
+    # LR-43: deploy only the exact verified scoringVersion; missing registration fails closed.
+    semantic-scoring-versions: ${MEMORY_RAG_SEMANTIC_SCORING_VERSIONS:}
     dispatcher-enabled: false
     dispatch-batch-size: 25
     max-attempts: 5

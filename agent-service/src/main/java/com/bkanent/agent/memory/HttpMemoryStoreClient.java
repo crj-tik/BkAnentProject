@@ -27,8 +27,19 @@ public class HttpMemoryStoreClient implements MemoryStoreClient {
     private final MemoryServiceProperties properties;
 
     public HttpMemoryStoreClient(RestClient.Builder restClientBuilder,
-                                 MemoryServiceProperties properties) {
-        this.restClient = restClientBuilder.baseUrl(properties.getBaseUrl()).build();
+                                 MemoryServiceProperties properties,
+                                 com.bkanent.agent.security.AgentRagCredentialLeaseStore credentials) {
+        this.restClient = restClientBuilder.baseUrl(properties.getBaseUrl()).requestInterceptor((request, body, execution) -> {
+            String owner = credentials.currentUserId();
+            var credential = credentials.credentials(owner);
+            if (credential.accessToken() == null) throw new com.bkanent.common.rag.RagException(com.bkanent.common.rag.RagErrorCode.AUTHENTICATION_FAILED);
+            request.getHeaders().setBearerAuth(credential.accessToken());
+            request.getHeaders().set(com.bkanent.common.rpc.MemoryTransportHeaders.OWNER, owner);
+            var response = execution.execute(request, body);
+            try { credentials.credentials(owner); }
+            catch (RuntimeException ex) { response.close(); throw ex; }
+            return response;
+        }).build();
         this.properties = properties;
     }
 

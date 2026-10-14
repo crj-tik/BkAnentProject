@@ -52,14 +52,15 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
     private final CustomerFavoriteListingDomainService favoriteListingDomainService;
     private final CustomerConverter customerConverter;
 
-    @DubboReference(check = false)
-    private ListingMasterRpcService listingMasterRpcService;
+    private final com.bkanent.customer.service.ListingReadClient listingReadClient;
 
     public CustomerManagementServiceImpl(CustomerDomainService customerDomainService,
                                          CustomerFollowRecordDomainService followRecordDomainService,
                                          OwnerEntrustRecordDomainService ownerEntrustRecordDomainService,
                                          CustomerFavoriteListingDomainService favoriteListingDomainService,
-                                         CustomerConverter customerConverter) {
+                                         CustomerConverter customerConverter,
+                                         com.bkanent.customer.service.ListingReadClient listingReadClient) {
+        this.listingReadClient = listingReadClient;
         this.customerDomainService = customerDomainService;
         this.followRecordDomainService = followRecordDomainService;
         this.ownerEntrustRecordDomainService = ownerEntrustRecordDomainService;
@@ -144,6 +145,7 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
 
     @Override
     public List<CustomerMatchResponse> matchListings(Long customerId) {
+        var user = listingReadClient.authenticate();
         CustomerEntity customer = requireCustomer(customerId);
         if (!StringUtils.hasText(customer.getPreferredArea()) && !StringUtils.hasText(customer.getPreferredLayout())) {
             return List.of();
@@ -153,9 +155,7 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
                 ? customer.getPreferredArea()
                 : customer.getPreferredLayout();
 
-        List<ListingDTO> listings = listingMasterRpcService == null
-                ? List.of()
-                : listingMasterRpcService.searchListings(keyword);
+        List<ListingDTO> listings = listingReadClient.search(keyword, user);
 
         List<CustomerMatchResponse> matches = new ArrayList<>();
         for (ListingDTO listing : listings) {

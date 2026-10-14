@@ -59,7 +59,8 @@ public final class RagPublicDnsResolver implements org.apache.hc.client5.http.Dn
 
     @Override
     public InetAddress[] resolve(String host) throws UnknownHostException {
-        String normalized = policy.validateHost(host);
+        RagEndpointPolicy.Snapshot snapshot = policy.snapshot();
+        String normalized = snapshot.validateHost(host);
         byte[] literal = RagEndpointPolicy.literalAddress(normalized);
         InetAddress[] addresses;
         try {
@@ -72,11 +73,13 @@ public final class RagPublicDnsResolver implements org.apache.hc.client5.http.Dn
         if (addresses == null || addresses.length == 0) {
             throw RagEndpointPolicy.denied();
         }
+        // Freeze the provider-owned answer array before validation, not after it.
+        addresses = addresses.clone();
         for (InetAddress address : addresses) {
-            policy.requirePublic(address);
+            snapshot.requireAddress(normalized, address);
         }
-        // Return the entire validated answer unchanged; clients connect to these InetAddress bytes.
-        return addresses.clone();
+        // Return the entire validated answer; clients connect to these InetAddress bytes.
+        return addresses;
     }
 
     @Override

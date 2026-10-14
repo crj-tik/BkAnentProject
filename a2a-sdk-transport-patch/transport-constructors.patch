@@ -1,0 +1,25 @@
+--- a/io/a2a/http/JdkA2AHttpClient.java (Apache-2.0, upstream 0.2.5.Beta2)
++++ b/io/a2a/http/JdkA2AHttpClient.java
+@@
+-    public JdkA2AHttpClient() {
++    public JdkA2AHttpClient() { this(HttpClient.Redirect.NORMAL); }
++    public JdkA2AHttpClient(HttpClient.Redirect redirect) {
+@@
+-                .followRedirects(HttpClient.Redirect.NORMAL)
++                .followRedirects(redirect)
+--- a/io/a2a/client/A2AClient.java (Apache-2.0, upstream 0.2.5.Beta2)
++++ b/io/a2a/client/A2AClient.java
+@@
+-    public A2AClient(AgentCard agentCard) {
++    public A2AClient(AgentCard agentCard) { this(new JdkA2AHttpClient(), agentCard); }
++    public A2AClient(A2AHttpClient transport, AgentCard agentCard) {
+@@
+-        this.httpClient = new JdkA2AHttpClient();
++        checkNotNullParam("transport", transport); this.httpClient = transport;
+@@
+-    public A2AClient(String agentUrl) {
++    public A2AClient(String agentUrl) { this(new JdkA2AHttpClient(), agentUrl); }
++    public A2AClient(A2AHttpClient transport, String agentUrl) {
+@@
+-        this.httpClient = new JdkA2AHttpClient();
++        checkNotNullParam("transport", transport); this.httpClient = transport;

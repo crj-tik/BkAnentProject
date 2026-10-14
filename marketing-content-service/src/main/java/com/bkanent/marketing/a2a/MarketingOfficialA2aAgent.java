@@ -43,7 +43,7 @@ public class MarketingOfficialA2aAgent {
                 .model(chatModel)
                 .systemPrompt(properties.getSystemPrompt())
                 .tools(tools)
-                .interceptors(new A2aSupervisorContextInterceptor(),
+                .interceptors(new com.bkanent.common.a2a.A2aAuthenticationToolInterceptor(), new A2aSupervisorContextInterceptor(),
                         new SkillRoutingModelInterceptor(skillRegistry, "marketing"), new SkillRoutingToolInterceptor())
                 .outputKey(OUTPUT_KEY)
                 .build();

@@ -85,18 +85,18 @@ public class SupervisorToolLoopGraph {
         var strategies = new HashMap<>(schema.keyStrategyFactory().apply());
         strategies.put(STATE_KEY, new ReplaceStrategy());
         StateGraph graph = new StateGraph(RUNNER_VERSION, () -> strategies);
-        graph.addNode("PrepareContext", AsyncNodeAction.node_async(this::prepare));
-        graph.addNode("Model", AsyncNodeAction.node_async(this::model));
-        graph.addNode("Dispatch", AsyncNodeAction.node_async(this::dispatch));
-        graph.addNode("LoadSkill", AsyncNodeAction.node_async(this::loadSkill));
-        graph.addNode("GuardCall", AsyncNodeAction.node_async(this::guard));
-        graph.addNode("ApprovalGate", AsyncNodeAction.node_async(this::approval));
-        graph.addNode("PauseApproval", AsyncNodeAction.node_async(state -> updates(stateOf(state), "PauseApproval")));
-        graph.addNode("WaitInput", AsyncNodeAction.node_async(this::waitInput));
-        graph.addNode("PauseInput", AsyncNodeAction.node_async(state -> updates(stateOf(state), "PauseInput")));
-        graph.addNode("ExecuteTool", AsyncNodeAction.node_async(this::execute));
-        graph.addNode("Observe", AsyncNodeAction.node_async(this::observe));
-        graph.addNode("Complete", AsyncNodeAction.node_async(this::complete));
+        graph.addNode("PrepareContext", AsyncNodeAction.node_async(raw -> authenticatedNode(raw, this::prepare)));
+        graph.addNode("Model", AsyncNodeAction.node_async(raw -> authenticatedNode(raw, this::model)));
+        graph.addNode("Dispatch", AsyncNodeAction.node_async(raw -> authenticatedNode(raw, this::dispatch)));
+        graph.addNode("LoadSkill", AsyncNodeAction.node_async(raw -> authenticatedNode(raw, this::loadSkill)));
+        graph.addNode("GuardCall", AsyncNodeAction.node_async(raw -> authenticatedNode(raw, this::guard)));
+        graph.addNode("ApprovalGate", AsyncNodeAction.node_async(raw -> authenticatedNode(raw, this::approval)));
+        graph.addNode("PauseApproval", AsyncNodeAction.node_async(raw -> authenticatedNode(raw, state -> updates(stateOf(state), "PauseApproval"))));
+        graph.addNode("WaitInput", AsyncNodeAction.node_async(raw -> authenticatedNode(raw, this::waitInput)));
+        graph.addNode("PauseInput", AsyncNodeAction.node_async(raw -> authenticatedNode(raw, state -> updates(stateOf(state), "PauseInput"))));
+        graph.addNode("ExecuteTool", AsyncNodeAction.node_async(raw -> authenticatedNode(raw, this::execute)));
+        graph.addNode("Observe", AsyncNodeAction.node_async(raw -> authenticatedNode(raw, this::observe)));
+        graph.addNode("Complete", AsyncNodeAction.node_async(raw -> authenticatedNode(raw, this::complete)));
         graph.addEdge(StateGraph.START, "PrepareContext");
         graph.addEdge("PrepareContext", "Model");
         graph.addEdge("Model", "Dispatch");
@@ -118,6 +118,17 @@ public class SupervisorToolLoopGraph {
         return graph.compile(CompileConfig.builder().saverConfig(SaverConfig.builder().register(saver).build())
                 .recursionLimit(Math.max(100, properties.getMaxRounds() * 10 + 20))
                 .interruptAfter("PauseApproval", "PauseInput").build());
+    }
+
+    private Map<String, Object> authenticatedNode(OverAllState raw,
+            com.alibaba.cloud.ai.graph.action.NodeAction action) throws Exception {
+        ToolLoopState state = stateOf(raw);
+        try (var ignored = ragCredentials == null ? (AutoCloseable) () -> { } : ragCredentials.openLease(state.runId, state.userId)) {
+            if (ragCredentials != null) ragCredentials.credentials(state.userId);
+            var result = action.apply(raw);
+            if (ragCredentials != null) ragCredentials.credentials(state.userId);
+            return result;
+        }
     }
 
     public ToolLoopState stateOf(OverAllState state) {
@@ -159,7 +170,14 @@ public class SupervisorToolLoopGraph {
             if (++state.rounds > state.maxRounds) { fail(state, "BUDGET_EXHAUSTED", "模型轮次额度耗尽"); break; }
             try {
                 store.assertActive(state.runId, state.leaseToken);
-                Future<AssistantMessage> task = modelWorkers.submit(() -> model.call(messages, definitions));
+                Future<AssistantMessage> task = modelWorkers.submit(() -> {
+                    try (var ignored = ragCredentials == null ? (AutoCloseable) () -> { } : ragCredentials.openLease(state.runId, state.userId)) {
+                        if (ragCredentials != null) ragCredentials.credentials(state.userId);
+                        var result = model.call(messages, definitions);
+                        if (ragCredentials != null) ragCredentials.credentials(state.userId);
+                        return result;
+                    }
+                });
                 AssistantMessage output = await(task, state, properties.getModelTimeoutMs());
                 state.messages.add(StoredModelMessage.assistant(output));
                 state.pendingCalls = new ArrayList<>(output.getToolCalls());
@@ -369,6 +387,13 @@ public class SupervisorToolLoopGraph {
     }
 
     private ToolResponseMessage.ToolResponse executeCall(ToolLoopState state, AssistantMessage.ToolCall call) {
+        try (var ignored = ragCredentials == null ? (AutoCloseable) () -> { } : ragCredentials.openLease(state.runId, state.userId)) {
+            if (ragCredentials != null) ragCredentials.credentials(state.userId);
+            return executeAuthenticatedCall(state, call);
+        } catch (RuntimeException exception) { throw exception; }
+        catch (Exception exception) { throw new IllegalStateException("credential scope cleanup failed"); }
+    }
+    private ToolResponseMessage.ToolResponse executeAuthenticatedCall(ToolLoopState state, AssistantMessage.ToolCall call) {
         SupervisorCapability capability;
         try { capability = validateCall(state, call, available(state)); }
         catch (Exception exception) {
@@ -409,7 +434,10 @@ public class SupervisorToolLoopGraph {
         AgentToolContextHolder.init(state.userId, space, settings.get("topK") instanceof Number value ? value.intValue() : null, allowKnowledge);
         try (AutoCloseable ignored = ragCredentials == null ? () -> { } : ragCredentials.openLease(state.runId, state.userId)) {
             store.assertActive(state.runId, state.leaseToken);
+            if (ragCredentials != null) ragCredentials.credentials(state.userId);
             String result = capability.callback().call(call.arguments(), new ToolContext(Map.copyOf(context)));
+            // After a callback may have submitted remote work, failures remain outcome-unknown.
+            if (ragCredentials != null) ragCredentials.credentials(state.userId);
             if ("local:milvusKnowledgeSearch".equals(capability.capabilityId())) {
                 var terminal = store.completeKnowledgeRead(state.runId, call.id(), result, AgentToolContextHolder.snapshot());
                 return response(call, terminal.result());

@@ -163,8 +163,6 @@ class RagContractTest {
         invalid(() -> new RagStatusRequest(1, "r", "s", null, null));
         invalid(() -> new RagReplayRequest(1, "r", "s", "e", "d"));
         invalid(() -> new RagProvisionRequest(1, "r", "s", "v1", 0));
-        assertThatThrownBy(() -> new RagListingReconcileRequest(1, "r", 1L, 0, null, true))
-                .isInstanceOf(RagException.class).extracting("code").isEqualTo(RagErrorCode.LEGACY_RECONCILIATION_REQUIRED);
         assertThat(RagCanonicalHash.requestHash(new RagListingIndexRequest(1, "r", 1L))).hasSize(64);
         RagListingSearchRequest listing = new RagListingSearchRequest(1, "r", "q", null, null, null, null,
                 null, null, 20, 20, 10);

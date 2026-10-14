@@ -21,6 +21,13 @@ spring:
         namespace: ${bk.nacos.namespace}
         file-extension: yaml
 
+a2a:
+  auth:
+    key-id: ${LISTING_A2A_KEY_ID:listing-a2a-current}
+    signing-secret: ${LISTING_A2A_SIGNING_SECRET:}
+    response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}
+    response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
+
 dubbo:
   application:
     name: listing-master-service
@@ -36,15 +43,20 @@ listing:
   rag:
     key-id: ${LISTING_RAG_RPC_KEY_ID:listing-current}
     secret: ${LISTING_RAG_RPC_SECRET:}
-    auth-response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-response-current}
+    auth-response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}
     auth-response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
-    policy-version: listing-v1
+    policy-version: listing-v2
     schema-version: "1"
     read-role-codes: []
     admin-role-codes: []
     dispatcher-enabled: ${LISTING_RAG_DISPATCHER_ENABLED:false}
-    legacy-reconciliation-enabled: ${LISTING_RAG_LEGACY_RECONCILIATION_ENABLED:false}
     trusted-callers:
       agent-current:
         caller-service: agent-service
         secret: ${AGENT_RAG_RPC_SECRET:}
+      customer-read-current:
+        caller-service: customer-service
+        secret: ${CUSTOMER_LISTING_READ_SECRET:}
+      marketing-read-current:
+        caller-service: marketing-content-service
+        secret: ${MARKETING_LISTING_READ_SECRET:}

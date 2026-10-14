@@ -9,6 +9,7 @@ memory:
     # Explicit deployment-managed registration, never seed every active role.
     constraint-read-roles: ${MEMORY_RAG_CONSTRAINT_READ_ROLES:}
     constraint-admin-roles: ${MEMORY_RAG_CONSTRAINT_ADMIN_ROLES:}
+    # LR-43: empty by default; deployment must explicitly register verified scoringVersion(s).
     semantic-scoring-versions: ${MEMORY_RAG_SEMANTIC_SCORING_VERSIONS:}
     trusted-callers: {}
   system-constraint-bootstrap:

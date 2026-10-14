@@ -20,12 +20,41 @@ public class ListingMasterRpcServiceImpl implements ListingMasterRpcService {
      * 字段：listingManagementService。
      */
     private final ListingManagementService listingManagementService;
+    private final com.bkanent.listing.rag.ListingRagIdentity identity;
+    private final com.bkanent.listing.service.ListingDomainService domain;
+    private final com.bkanent.listing.converter.ListingConverter converter;
 
     /**
      * 构造 ListingMasterRpcServiceImpl 实例。
      */
-    public ListingMasterRpcServiceImpl(ListingManagementService listingManagementService) {
+    public ListingMasterRpcServiceImpl(ListingManagementService listingManagementService,
+                                        com.bkanent.listing.rag.ListingRagIdentity identity,
+                                        com.bkanent.listing.service.ListingDomainService domain,
+                                        com.bkanent.listing.converter.ListingConverter converter) {
         this.listingManagementService = listingManagementService;
+        this.identity = identity;
+        this.domain = domain;
+        this.converter = converter;
+    }
+
+    @Override
+    public List<ListingDTO> read(com.bkanent.common.rag.RagListingReadRequest request,
+                                com.bkanent.common.rag.RagAuthEnvelope authentication,
+                                com.bkanent.common.rag.RagCredentialContext credentials) {
+        identity.verifyCaller(request, request.requestId(), com.bkanent.common.rag.RagOperation.READ, authentication, credentials);
+        if (authentication.actorMode() == com.bkanent.common.rag.RagActorMode.USER) {
+            var principal = identity.requireReader(credentials);
+            if (!principal.userId().toString().equals(authentication.actorId())) {
+                throw new com.bkanent.common.rag.RagException(com.bkanent.common.rag.RagErrorCode.AUTHENTICATION_FAILED);
+            }
+            return com.bkanent.listing.rag.ListingRagCredentialContext.withCredential(credentials, () -> {
+                if (request.listingId() == null) return listingManagementService.searchListingSummaries(request.keyword());
+                var dto = listingManagementService.getListingSummary(request.listingId());
+                return dto == null ? List.of() : List.of(dto);
+            });
+        }
+        // No production background READ caller exists: missing USER context cannot select SERVICE.
+        throw new com.bkanent.common.rag.RagException(com.bkanent.common.rag.RagErrorCode.FORBIDDEN);
     }
 
     /**
@@ -33,7 +62,7 @@ public class ListingMasterRpcServiceImpl implements ListingMasterRpcService {
      */
     @Override
     public ListingDTO getListingById(Long listingId) {
-        return listingManagementService.getListingSummary(listingId);
+        throw new com.bkanent.common.rag.RagException(com.bkanent.common.rag.RagErrorCode.AUTHENTICATION_FAILED);
     }
 
     /**
@@ -41,7 +70,7 @@ public class ListingMasterRpcServiceImpl implements ListingMasterRpcService {
      */
     @Override
     public List<ListingDTO> searchListings(String keyword) {
-        return listingManagementService.searchListingSummaries(keyword);
+        throw new com.bkanent.common.rag.RagException(com.bkanent.common.rag.RagErrorCode.AUTHENTICATION_FAILED);
     }
 
     /**
@@ -58,6 +87,6 @@ public class ListingMasterRpcServiceImpl implements ListingMasterRpcService {
      */
     @Override
     public KnowledgeDocument getListingKnowledgeDocument(Long listingId) {
-        return listingManagementService.getListingKnowledgeDocument(listingId);
+        throw new com.bkanent.common.rag.RagException(com.bkanent.common.rag.RagErrorCode.AUTHENTICATION_FAILED);
     }
 }

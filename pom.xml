@@ -13,6 +13,7 @@
 
     <modules>
         <module>common</module>
+        <module>a2a-sdk-transport-patch</module>
         <module>common-a2a</module>
         <module>common-config-manager</module>
         <module>common-skill</module>
@@ -52,6 +53,11 @@
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>io.github.a2asdk</groupId>
+                <artifactId>a2a-java-sdk-client</artifactId>
+                <version>0.2.5.Beta2-bk-transport1</version>
+            </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>

@@ -39,19 +39,4 @@ public class ListingRagBackfillService {
             return outbox.publishCurrent(id);
         });
     }
-    public RagIndexEvent reconcile(Long id, long expectedRevision, String hash, boolean deleteIntent) {
-        return transactions.execute(status -> {
-            outbox.lock(id);
-            ListingRagOutbox.Revision revision = outbox.revision(id);
-            if (revision == null || revision.revision() <= 0 || revision.revision() != expectedRevision
-                    || hash == null || !hash.equals(revision.hash()) || revision.tombstone() != deleteIntent) {
-                throw new RagException(RagErrorCode.LEGACY_RECONCILIATION_REQUIRED);
-            }
-            Long exists = jdbc.queryForObject("SELECT COUNT(*) FROM listing_info WHERE id=? AND deleted=0", Long.class, id);
-            if ((exists != null && exists > 0) == deleteIntent) {
-                throw new RagException(RagErrorCode.LEGACY_RECONCILIATION_REQUIRED);
-            }
-            return outbox.publishCurrent(id, hash);
-        });
-    }
 }

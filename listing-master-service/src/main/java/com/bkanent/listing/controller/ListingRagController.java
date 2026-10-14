@@ -22,13 +22,6 @@ public class ListingRagController {
                                                        @RequestBody RagListingSearchRequest request) {
         return ApiResponse.ok(facade.search(request, ListingRagCredentialContext.bearer(authorization), null));
     }
-    @PutMapping("/grants/{actorUserId}/{listingId}")
-    public ApiResponse<Void> grant(@RequestHeader(value = "Authorization", required = false) String authorization,
-                                    @PathVariable Long actorUserId, @PathVariable Long listingId,
-                                    @RequestParam boolean active) {
-        grants.manage(actorUserId, listingId, active, ListingRagCredentialContext.bearer(authorization));
-        return ApiResponse.ok(null);
-    }
     @PostMapping("/backfill")
     public ApiResponse<List<QueuedEvent>> backfill(@RequestHeader(value = "Authorization", required = false) String authorization,
                                                    @RequestParam(defaultValue = "0") long afterId, @RequestParam(defaultValue = "100") int limit) {

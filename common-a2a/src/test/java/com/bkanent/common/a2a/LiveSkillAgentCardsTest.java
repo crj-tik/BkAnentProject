@@ -68,6 +68,9 @@ class LiveSkillAgentCardsTest {
 
     @Test
     void autoConfigurationServesLiveCardAndDelegatesRpcWithoutEnablingNacos() {
+        assertThat(LiveSkillAgentCardAutoConfiguration.class
+                .getAnnotation(org.springframework.boot.autoconfigure.AutoConfiguration.class).before())
+                .contains(com.alibaba.cloud.ai.a2a.autoconfigure.server.A2aServerHandlerAutoConfiguration.class);
         SkillFileLoader loader = mock(SkillFileLoader.class);
         when(loader.loadAll()).thenReturn(List.of(skill("find", "old")));
         SkillRegistry registry = new SkillRegistry(loader, "");
@@ -94,8 +97,10 @@ class LiveSkillAgentCardsTest {
                                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.skills[1].name").value("other"));
                     } catch (Exception exception) { throw new AssertionError(exception); }
                     assertThat(context.getBean(A2aExecutionProperties.class).getStreamTimeoutMs()).isEqualTo(2500);
-                    // Invalid JSON must still pass through the Starter's original RPC parsing.
-                    assertThat(handler.onHandler("invalid", null)).isNotNull();
+                    // Public Card remains unchanged; task RPC without dedicated auth is rejected
+                    // with an official JSON-RPC error, before the SDK task handler is called.
+                    assertThat(handler.onHandler("invalid", null)).isInstanceOf(io.a2a.spec.JSONRPCErrorResponse.class);
+                    verify(jsonRpc, never()).onMessageSend(any());
                 });
     }
 }

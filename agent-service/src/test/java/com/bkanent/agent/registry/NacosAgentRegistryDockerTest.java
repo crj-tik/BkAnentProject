@@ -67,7 +67,7 @@ class NacosAgentRegistryDockerTest {
             assertThat(discovery.fetchAgentCard("http://127.0.0.1:" + port, "/.well-known/agent.json")).isPresent();
             var descriptor = new RegisteredAgentDescriptor("listing-agent", "http://127.0.0.1:" + port,
                     "/.well-known/agent.json", "/a2a", AgentRuntimeType.ALIBABA_A2A, AgentDescriptorSource.DISCOVERED_CARD, actual, Map.of());
-            var client = new OfficialA2aAgentClient(new OfficialA2aResponseNormalizer(mapper));
+            var client = com.bkanent.agent.client.ProtocolFixtureA2aClient.create(new OfficialA2aResponseNormalizer(mapper));
             var response = client.invoke(descriptor, new AgentTaskInvokeRequest("session", "child", "run", "trace", "supervisor-agent", "listing-agent",
                     null, null, "查询房源", Map.of("userId", "1"), List.of(), List.of(), "json", "call", false));
             assertThat(response.status()).isEqualTo("COMPLETED"); assertThat(response.artifactIds()).contains("remote-artifact");

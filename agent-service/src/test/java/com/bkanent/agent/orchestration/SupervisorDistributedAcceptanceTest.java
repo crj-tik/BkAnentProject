@@ -100,7 +100,7 @@ class SupervisorDistributedAcceptanceTest {
             var permissions = mock(AgentPermissionService.class);
             when(permissions.canInvokeChildAgent(eq("1"), any())).thenReturn(true);
             when(permissions.canUseMcpTools("1")).thenReturn(true); when(permissions.canReadMcpServer(eq("1"), anyString())).thenReturn(true);
-            var client = new OfficialA2aAgentClient(new OfficialA2aResponseNormalizer(mapper));
+            var client = ProtocolFixtureA2aClient.create(new OfficialA2aResponseNormalizer(mapper));
             var execution = new A2aExecutionService(client, events, permissions, options);
             var mcpClient = new HttpAgentMcpClient(Map.of(), mapper, dynamicMcp);
             dynamicMcp.register(new DynamicMcpConnectionConfig("compare-mcp-server", "STREAMABLE", null, null, null, base));

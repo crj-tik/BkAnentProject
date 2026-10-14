@@ -29,6 +29,24 @@ class MemoryRagSecurityTest {
         assertThrows(RagException.class, () -> f.security.requireConstraintRead(principal));
     }
     @Test
+    void ownerIsAbsoluteAndThirdRoleOrInactivePrincipalCannotOperate() {
+        var f = new MemoryRagTestSupport();
+        for (String role : List.of("ADMIN", "BROKER")) {
+            var principal = MemoryRagTestSupport.principal(role);
+            assertDoesNotThrow(() -> f.security.requireOwner(principal, "42"));
+            assertEquals(RagErrorCode.FORBIDDEN, assertThrows(RagException.class, () -> f.security.requireOwner(principal, "43")).code());
+        }
+        f.properties.setConstraintAdminRoles(Set.of("ADMIN", "BROKER", "MANAGER"));
+        for (String role : List.of("BROKER", "MANAGER")) {
+            assertThrows(RagException.class, () -> f.security.requireAdmin(MemoryRagTestSupport.principal(role)));
+        }
+        assertThrows(RagException.class, () -> f.security.requireOwner(MemoryRagTestSupport.principal("MANAGER"), "42"));
+        for (var invalid : List.of(new AuthRagPrincipal(42L,"ADMIN",false,true,Long.MAX_VALUE),
+                new AuthRagPrincipal(42L,"ADMIN",true,false,Long.MAX_VALUE),new AuthRagPrincipal(42L,"ADMIN",true,true,1))) {
+            assertThrows(RagException.class, () -> f.security.requireOwner(invalid,"42"));
+        }
+    }
+    @Test
     void missingKeysUnsignedAuthAndServiceModeSearchDeny() {
         var properties = new MemoryRagProperties();
         var calls = new AtomicInteger();

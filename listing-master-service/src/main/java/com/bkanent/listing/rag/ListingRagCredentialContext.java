@@ -9,13 +9,16 @@ public final class ListingRagCredentialContext {
     private ListingRagCredentialContext() { }
     public static RagCredentialContext current() {
         RagCredentialContext context = CURRENT.get();
-        if (context == null) { throw new RagException(RagErrorCode.AUTHENTICATION_FAILED); }
-        return context;
+        return context == null ? com.bkanent.common.a2a.A2aCredentialContext.currentCredentials() : context;
     }
-    public static <T> T withCredential(RagCredentialContext credential, Supplier<T> action) {
+    public static Scope open(RagCredentialContext credential) {
         RagCredentialContext previous = CURRENT.get();
-        try { CURRENT.set(credential); return action.get(); }
-        finally { if (previous == null) { CURRENT.remove(); } else { CURRENT.set(previous); } }
+        CURRENT.set(credential);
+        return () -> { if (previous == null) { CURRENT.remove(); } else { CURRENT.set(previous); } };
+    }
+    @FunctionalInterface public interface Scope extends AutoCloseable { @Override void close(); }
+    public static <T> T withCredential(RagCredentialContext credential, Supplier<T> action) {
+        try (Scope ignored = open(credential)) { return action.get(); }
     }
     public static RagCredentialContext bearer(String authorization) {
         if (authorization == null || !authorization.startsWith("Bearer ") || authorization.length() <= 7) {

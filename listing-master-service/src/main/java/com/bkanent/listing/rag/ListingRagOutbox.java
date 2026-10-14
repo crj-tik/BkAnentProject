@@ -44,21 +44,10 @@ public class ListingRagOutbox {
         ListingEntity current = listings.selectById(id);
         return publishLocked(id, current);
     }
-    /** Reconciliation must prove the complete current payload, not only the stored revision hash. */
-    public RagIndexEvent publishCurrent(Long id, String expectedHash) {
-        lock(id);
-        return publishLocked(id, listings.selectById(id), expectedHash);
-    }
     public RagIndexEvent publishLocked(Long id, ListingEntity current) {
-        return publishLocked(id, current, null);
-    }
-    private RagIndexEvent publishLocked(Long id, ListingEntity current, String expectedHash) {
         RagIndexOperation operation = current == null ? RagIndexOperation.DELETE : RagIndexOperation.UPSERT;
         RagDocument document = current == null ? null : document(current);
         String hash = RagCanonicalHash.documentHash(operation, document);
-        if (expectedHash != null && !expectedHash.equals(hash)) {
-            throw new RagException(RagErrorCode.LEGACY_RECONCILIATION_REQUIRED);
-        }
         long revision = jdbc.queryForObject("SELECT revision FROM listing_rag_revision WHERE listing_id=? FOR UPDATE", Long.class, id) + 1;
         String eventId = UUID.randomUUID().toString();
         Instant now = Instant.now();
@@ -86,9 +75,6 @@ public class ListingRagOutbox {
         attributes.put("verified", RagValue.bool("VERIFIED".equals(dto.verificationStatus())));
         attributes.put("ownerDomain", RagValue.string(ListingRagIdentity.SERVICE));
         attributes.put("policyVersion", RagValue.string(properties.getPolicyVersion()));
-        List<String> grants = jdbc.query("SELECT actor_user_id FROM listing_rag_grant WHERE resource_id=? AND operation='SEARCH' AND active=TRUE ORDER BY actor_user_id",
-                (rs, n) -> String.valueOf(rs.getLong(1)), entity.getId());
-        if (!grants.isEmpty()) { attributes.put("allowedActorIds", RagValue.strings(grants)); }
         // Asset and verification changes change the immutable projection, without indexing private certificates/owner names.
         put(attributes, "imageUrls", entity.getImageUrls()); put(attributes, "floorPlanUrls", entity.getFloorPlanUrls());
         put(attributes, "videoUrls", entity.getVideoUrls()); put(attributes, "ocrStatus", entity.getOcrStatus());

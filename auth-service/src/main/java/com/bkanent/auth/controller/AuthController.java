@@ -69,6 +69,7 @@ public class AuthController {
         UserAccountEntity account = userAccountService.findByUsername(request.username());
         if (account == null || !Integer.valueOf(0).equals(account.getDeleted())
                 || !"ACTIVE".equalsIgnoreCase(account.getAccountStatus())
+                || !UserManagementService.isSupportedRole(account.getRoleCode())
                 || !userManagementService.isActiveRole(account.getRoleCode())
                 || !passwordEncoder.matches(request.password(), account.getPasswordHash())) {
             return ApiResponse.fail("AUTH_401", "invalid username or password");
@@ -100,6 +101,7 @@ public class AuthController {
         UserAccountEntity account = userAccountService.getById(principal.userId());
         if (account == null || !Integer.valueOf(0).equals(account.getDeleted())
                 || !"ACTIVE".equalsIgnoreCase(account.getAccountStatus())
+                || !UserManagementService.isSupportedRole(account.getRoleCode())
                 || !userManagementService.isActiveRole(account.getRoleCode())) {
             return ApiResponse.fail("AUTH_401", "账号已停用或权限已失效");
         }
@@ -218,7 +220,9 @@ public class AuthController {
             throw new UserManagementException(HttpStatus.UNAUTHORIZED, "AUTH_UNAUTHORIZED", "登录状态已失效");
         }
         UserAccountEntity account = userAccountService.getById(principal.userId());
-        if (account == null || !"ACTIVE".equalsIgnoreCase(account.getAccountStatus())
+        if (account == null || !Integer.valueOf(0).equals(account.getDeleted())
+                || !"ACTIVE".equalsIgnoreCase(account.getAccountStatus())
+                || !UserManagementService.isSupportedRole(account.getRoleCode())
                 || !userManagementService.isActiveRole(account.getRoleCode())) {
             throw new UserManagementException(HttpStatus.UNAUTHORIZED, "AUTH_UNAUTHORIZED", "账号已停用或权限已失效");
         }

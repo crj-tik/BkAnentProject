@@ -1,0 +1,28 @@
+# Isolated fresh-initialization verification; never points at the existing development volume.
+name: bk-anent-dev-initcheck
+services:
+  mysql:
+    image: mysql:8.4
+    restart: "no"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Explicit test root password required}
+      TZ: Asia/Shanghai
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    volumes:
+      - fresh-data:/var/lib/mysql
+      - ./001-manifest.sh:/docker-entrypoint-initdb.d/001-manifest.sh:ro
+      - .:/opt/bk-init/docker/mysql:ro
+      - ../../sql:/opt/bk-init/sql:ro
+      - ../../scripts/deploy/run-init-manifest.sh:/opt/bk-init/scripts/deploy/run-init-manifest.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$${MYSQL_ROOT_PASSWORD}\" mysql -uroot -h 127.0.0.1 --silent -e 'SELECT 1' >/dev/null"]
+      interval: 3s
+      timeout: 3s
+      retries: 50
+      start_period: 15s
+    networks: [isolated]
+volumes:
+  fresh-data:
+networks:
+  isolated:
+    internal: true

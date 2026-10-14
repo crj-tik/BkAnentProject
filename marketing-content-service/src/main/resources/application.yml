@@ -21,6 +21,13 @@ spring:
         namespace: ${bk.nacos.namespace}
         file-extension: yaml
 
+a2a:
+  auth:
+    key-id: ${MARKETING_A2A_KEY_ID:marketing-a2a-current}
+    signing-secret: ${MARKETING_A2A_SIGNING_SECRET:}
+    response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}
+    response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
+
 dubbo:
   application:
     name: marketing-content-service
@@ -31,3 +38,8 @@ dubbo:
     port: 20888
   registry:
     address: nacos://${bk.nacos.server-addr}?namespace=${bk.nacos.namespace}
+
+marketing:
+  listing-read:
+    key-id: ${MARKETING_LISTING_READ_KEY_ID:marketing-read-current}
+    signing-secret: ${MARKETING_LISTING_READ_SECRET:}

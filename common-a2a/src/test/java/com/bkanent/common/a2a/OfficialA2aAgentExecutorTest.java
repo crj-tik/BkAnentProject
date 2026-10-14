@@ -46,7 +46,7 @@ class OfficialA2aAgentExecutorTest {
         ReactAgent agent = mockAgent("{}");
         var executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy);
         EventQueue queue = EventQueue.create();
-        executor.execute(context("unsupported", Map.of("supervisor", Map.of("skillSelection",
+        executeAuthenticated(executor, context("unsupported", Map.of("supervisor", Map.of("skillSelection",
                 Map.of("name", "find", "mode", "explicit"))), List.of("text")), queue);
         assertThat(drain(queue)).anySatisfy(event -> assertThat(event).isInstanceOfSatisfying(
                 TaskStatusUpdateEvent.class, status -> {
@@ -66,7 +66,7 @@ class OfficialA2aAgentExecutorTest {
                 .tools(List.of("search")).build());
         var executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy, registry, "listing", List.of());
         EventQueue queue = EventQueue.create();
-        executor.execute(context("version-mismatch", Map.of("supervisor", Map.of("skillHint", "find",
+        executeAuthenticated(executor, context("version-mismatch", Map.of("supervisor", Map.of("skillHint", "find",
                 "skillSelection", Map.of("name", "find", "mode", "explicit", "version", "2"))), List.of("text")), queue);
         assertThat(drain(queue)).anySatisfy(event -> assertThat(event).isInstanceOfSatisfying(
                 TaskStatusUpdateEvent.class, status -> assertThat(status.getStatus().message().getMetadata())
@@ -82,7 +82,7 @@ class OfficialA2aAgentExecutorTest {
         OfficialA2aAgentExecutor executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy);
         EventQueue queue = EventQueue.create();
 
-        executor.execute(context("task-sync", Map.of(), List.of("text", "application/json")), queue);
+        executeAuthenticated(executor, context("task-sync", Map.of(), List.of("text", "application/json")), queue);
         List<Event> events = drain(queue);
 
         List<TaskArtifactUpdateEvent> artifacts = events.stream()
@@ -113,7 +113,7 @@ class OfficialA2aAgentExecutorTest {
         OfficialA2aAgentExecutor executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy);
         EventQueue queue = EventQueue.create();
 
-        executor.execute(context("task-stream", Map.of("isStreaming", true), List.of("text", "application/json")), queue);
+        executeAuthenticated(executor, context("task-stream", Map.of("isStreaming", true), List.of("text", "application/json")), queue);
         List<Event> events = drain(queue);
 
         List<TaskArtifactUpdateEvent> artifacts = events.stream()
@@ -139,7 +139,7 @@ class OfficialA2aAgentExecutorTest {
         OfficialA2aAgentExecutor executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy);
         EventQueue queue = EventQueue.create();
 
-        executor.execute(context("task-invalid", Map.of(), List.of("text", "application/json")), queue);
+        executeAuthenticated(executor, context("task-invalid", Map.of(), List.of("text", "application/json")), queue);
         List<Event> events = drain(queue);
 
         assertThat(events).noneMatch(TaskArtifactUpdateEvent.class::isInstance);
@@ -164,10 +164,12 @@ class OfficialA2aAgentExecutorTest {
         EventQueue queue = EventQueue.create();
         RequestContext context = context("task-cancel", Map.of(), List.of("text", "application/json"));
         ExecutorService worker = Executors.newSingleThreadExecutor();
-        Future<?> future = worker.submit(() -> executor.execute(context, queue));
+        Future<?> future = worker.submit(() -> executeAuthenticated(executor, context, queue));
 
         assertThat(started.await(5, TimeUnit.SECONDS)).isTrue();
-        executor.cancel(context, queue);
+        try (var ignored = A2aCredentialContext.open(testLease(context.getTaskId(), () -> { }))) {
+            executor.cancel(context, queue);
+        }
         release.countDown();
         future.get(5, TimeUnit.SECONDS);
         worker.shutdownNow();
@@ -188,13 +190,119 @@ class OfficialA2aAgentExecutorTest {
         when(agent.stream(anyString(), any())).thenReturn(Flux.<com.alibaba.cloud.ai.graph.NodeOutput>never().doOnCancel(() -> disposed.set(true)));
         var executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy, null, null, List.of(), 30);
         EventQueue queue = EventQueue.create();
-        executor.execute(context("stream-timeout", Map.of("isStreaming", true), List.of("text")), queue);
+        executeAuthenticated(executor, context("stream-timeout", Map.of("isStreaming", true), List.of("text")), queue);
         assertThat(disposed).isTrue();
         List<Event> events = drain(queue);
         assertThat(events).filteredOn(event -> event instanceof TaskStatusUpdateEvent status && status.getStatus().state() == TaskState.FAILED)
                 .singleElement().isInstanceOfSatisfying(TaskStatusUpdateEvent.class,
                         status -> assertThat(status.getStatus().message().getMetadata()).containsEntry("errorCode", "EXECUTION_TIMEOUT"));
         assertThat(events).noneMatch(event -> event instanceof TaskStatusUpdateEvent status && status.getStatus().state() == TaskState.COMPLETED);
+        queue.close();
+    }
+
+    private static A2aCredentialContext.Lease testLease(String task, Runnable validator) {
+        return new A2aCredentialContext.Lease(new com.bkanent.common.rag.A2aBeaconBinding(1, "rpc", "agent-service",
+                "listing-master-service", "7", "message/send", "0".repeat(64), task),
+                com.bkanent.common.rag.RagCredentialContext.beacon("opaque-test"),
+                java.time.Instant.now().getEpochSecond() + 300, validator);
+    }
+    private void executeAuthenticated(OfficialA2aAgentExecutor executor, RequestContext context, EventQueue queue) {
+        try (var ignored = A2aCredentialContext.open(testLease(context.getTaskId(), () -> { }))) {
+            executor.execute(context, queue);
+        }
+    }
+
+    @Test
+    void missingAuthenticationFailsBeforeModelOrTaskEvents() throws Exception {
+        var agent = mockAgent("{}");
+        var queue = EventQueue.create();
+        var executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> executor.execute(context("no-auth", Map.of(), List.of("text")), queue))
+                .isInstanceOf(com.bkanent.common.rag.RagException.class);
+        assertThat(drain(queue)).isEmpty();
+        org.mockito.Mockito.verify(agent, org.mockito.Mockito.never()).invoke(anyString(), any());
+        queue.close();
+    }
+
+    @Test
+    void revokedCredentialsSuppressFinalResultAndKeepAuthenticationError() throws Exception {
+        var valid = new java.util.concurrent.atomic.AtomicBoolean(true);
+        var agent = mockAgent("{}");
+        doAnswer(invocation -> {
+            valid.set(false);
+            return Optional.of(new OverAllState(Map.of("output", new org.springframework.ai.chat.messages.AssistantMessage("{}"))));
+        }).when(agent).invoke(anyString(), any());
+        var executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy);
+        var queue = EventQueue.create();
+        try (var ignored = A2aCredentialContext.open(testLease("revoked", () -> {
+            if (!valid.get()) throw new com.bkanent.common.rag.RagException(com.bkanent.common.rag.RagErrorCode.AUTHENTICATION_FAILED);
+        }))) {
+            executor.execute(context("revoked", Map.of("threadId", "spoofed"), List.of("application/json")), queue);
+        }
+        var events = drain(queue);
+        assertThat(events).noneMatch(TaskArtifactUpdateEvent.class::isInstance);
+        List<TaskStatusUpdateEvent> statuses = events.stream().filter(TaskStatusUpdateEvent.class::isInstance)
+                .map(TaskStatusUpdateEvent.class::cast).toList();
+        assertThat(statuses).extracting(status -> status.getStatus().state())
+                .containsExactly(TaskState.WORKING, TaskState.FAILED);
+        assertThat(statuses.get(0).getStatus().message()).isNull();
+        TaskStatusUpdateEvent failed = statuses.get(1);
+        assertThat(failed.isFinal()).isTrue();
+        assertThat(failed.getStatus().message()).isNotNull();
+        assertThat(failed.getStatus().message().getMetadata()).containsEntry("errorCode", "AUTHENTICATION_FAILED");
+        assertThat(failed.getStatus().message().getParts()).singleElement().isInstanceOfSatisfying(TextPart.class,
+                text -> assertThat(text.getText()).isEqualTo("AUTHENTICATION_FAILED: Authentication is no longer valid")
+                        .doesNotContain("{}", "opaque-test"));
+        queue.close();
+    }
+
+    @Test
+    void streamingRevocationKeepsAuthenticationErrorWithoutProgressOrFinalBody() throws Exception {
+        var valid = new java.util.concurrent.atomic.AtomicBoolean(true);
+        var agent = mockAgent("{}");
+        when(agent.stream(anyString(), any())).thenReturn(Flux.defer(() -> {
+            valid.set(false);
+            return Flux.just(new StreamingOutput<>("private-model-body", "llm", "listing-agent", new OverAllState()));
+        }));
+        var executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy);
+        var queue = EventQueue.create();
+        try (var ignored = A2aCredentialContext.open(testLease("stream-revoked", () -> {
+            if (!valid.get()) throw new com.bkanent.common.rag.RagException(com.bkanent.common.rag.RagErrorCode.AUTHENTICATION_FAILED);
+        }))) {
+            executor.execute(context("stream-revoked", Map.of("isStreaming", true), List.of("text")), queue);
+        }
+        var events = drain(queue);
+        assertThat(events).noneMatch(TaskArtifactUpdateEvent.class::isInstance);
+        List<TaskStatusUpdateEvent> statuses = events.stream().filter(TaskStatusUpdateEvent.class::isInstance)
+                .map(TaskStatusUpdateEvent.class::cast).toList();
+        assertThat(statuses).extracting(status -> status.getStatus().state()).containsExactly(TaskState.WORKING, TaskState.FAILED);
+        var failed = statuses.get(1);
+        assertThat(failed.isFinal()).isTrue();
+        assertThat(failed.getStatus().message()).isNotNull();
+        assertThat(failed.getStatus().message().getMetadata()).containsEntry("errorCode", "AUTHENTICATION_FAILED");
+        assertThat(failed.getStatus().message().getParts()).singleElement().isInstanceOfSatisfying(TextPart.class,
+                text -> assertThat(text.getText()).isEqualTo("AUTHENTICATION_FAILED: Authentication is no longer valid")
+                        .doesNotContain("private-model-body", "opaque-test"));
+        queue.close();
+    }
+
+    @Test
+    void ordinaryStreamingFailureKeepsExecutionFailureWithoutProviderText() throws Exception {
+        var agent = mockAgent("{}");
+        when(agent.stream(anyString(), any())).thenReturn(Flux.error(new IllegalStateException("private-provider-body")));
+        var executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy);
+        var queue = EventQueue.create();
+        executeAuthenticated(executor, context("stream-provider-error", Map.of("isStreaming", true), List.of("text")), queue);
+        var events = drain(queue);
+        assertThat(events).noneMatch(TaskArtifactUpdateEvent.class::isInstance);
+        assertThat(events.stream().filter(TaskStatusUpdateEvent.class::isInstance).map(TaskStatusUpdateEvent.class::cast)
+                .filter(status -> status.getStatus().state() == TaskState.FAILED).toList())
+                .singleElement().satisfies(status -> {
+                    assertThat(status.isFinal()).isTrue();
+                    assertThat(status.getStatus().message().getMetadata()).containsEntry("errorCode", "EXECUTION_FAILED");
+                    assertThat(status.getStatus().message().getParts()).singleElement().isInstanceOfSatisfying(TextPart.class,
+                            text -> assertThat(text.getText()).doesNotContain("private-provider-body"));
+                });
         queue.close();
     }
 

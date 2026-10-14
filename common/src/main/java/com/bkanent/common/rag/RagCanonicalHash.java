@@ -27,11 +27,11 @@ import java.util.Set;
 public final class RagCanonicalHash {
     private static final Set<Class<?>> REQUESTS = Set.of(RagSearchRequest.class, RagIndexEvent.class,
             RagStatusRequest.class, RagInspectRequest.class, RagProvisionRequest.class, RagReplayRequest.class,
-            RagListingSearchRequest.class, RagListingReconcileRequest.class, RagListingIndexRequest.class, MemoryRagSearchRequest.class);
+            RagListingSearchRequest.class, RagListingReadRequest.class, RagListingIndexRequest.class, MemoryRagSearchRequest.class, A2aBeaconBinding.class);
     private static final Set<Class<?>> BUSINESS = Set.of(RagSearchRequest.class, RagRecallOptions.class,
             RagFusionOptions.class, RagFilter.class, RagValue.class, RagDocument.class, RagIndexEvent.class,
             RagStatusRequest.class, RagInspectRequest.class, RagProvisionRequest.class, RagReplayRequest.class,
-            RagListingSearchRequest.class, RagListingReconcileRequest.class, RagListingIndexRequest.class, MemoryRagSearchRequest.class);
+            RagListingSearchRequest.class, RagListingReadRequest.class, RagListingIndexRequest.class, MemoryRagSearchRequest.class, A2aBeaconBinding.class);
 
     private RagCanonicalHash() { }
 
@@ -69,7 +69,8 @@ public final class RagCanonicalHash {
     /** Used directly as the RESOLVE_PRINCIPAL request hash; null represents no user credentials. */
     public static String credentialDigest(RagCredentialContext credentials) {
         if (credentials == null) return null;
-        return hash(encode("rag.credential.v1", credentials.accessToken(), false));
+        return hash(encode("rag.credential.v2", Arrays.asList(credentials.beacon() == null ? "access" : "a2a-beacon",
+                credentials.beacon() == null ? credentials.accessToken() : credentials.beacon()), false));
     }
 
     static byte[] envelopeBytes(RagAuthEnvelope envelope) {
@@ -80,10 +81,10 @@ public final class RagCanonicalHash {
     }
 
     static byte[] scopeBytes(RagAuthorizationScope scope) {
-        return encode("rag.scope.v1", Arrays.asList(scope.contractVersion(), scope.keyId(), scope.issuerService(),
+        return encode("rag.scope.v2", Arrays.asList(scope.contractVersion(), scope.keyId(), scope.issuerService(),
                 scope.ownerDomain(), scope.spaceId(), scope.actorId(), scope.operation(), scope.requestHash(),
                 scope.policyVersion(), scope.issuedAtEpochSecond(), scope.expiresAtEpochSecond(),
-                scope.ownerId(), scope.allowedResourceIds(), scope.activeOnly()), false);
+                scope.ownerId(), scope.allowedResourceIds(), scope.activeOnly(), scope.businessWideRead()), false);
     }
 
     private static byte[] encode(String domain, Object value, boolean ignored) {

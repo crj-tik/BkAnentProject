@@ -33,7 +33,8 @@ public final class RagAccessControl {
         verify(space, envelope, credentials, RagOperation.SEARCH, request.requestId(), hash);
         require(envelope.actorMode() == RagActorMode.USER);
         AuthRagPrincipal principal = principal(envelope, credentials);
-        require(space.searchRoles().contains(principal.roleCode()));
+        require(Set.of("ADMIN", "BROKER").contains(principal.roleCode())
+                && space.searchRoles().contains(principal.roleCode()));
         RagSigningKey owner = scope == null ? null : keys.get(scope.keyId());
         RagScopeSigner.verify(scope, owner, space.spaceId(), principal.userId().toString(), RagOperation.SEARCH,
                 hash, space.ownerDomain(), space.policyVersion(), clock.instant());
@@ -41,17 +42,24 @@ public final class RagAccessControl {
         require(space.allowedClients().getOrDefault(owner.callerService(), Set.of()).contains(RagOperation.SEARCH));
         List<RagFilter> mandatory = new ArrayList<>();
         if ("listing.knowledge".equals(space.spaceId())) {
-            require(!scope.allowedResourceIds().isEmpty());
-            requiredField(space, "listingId", RagValueType.STRING);
-            mandatory.add(new RagFilter("listingId", RagFilterOperator.IN, RagValue.strings(scope.allowedResourceIds())));
+            if (scope.businessWideRead()) {
+                require(scope.ownerId() == null && scope.allowedResourceIds().isEmpty());
+                require("ADMIN".equals(principal.roleCode())
+                        ? Boolean.FALSE.equals(scope.activeOnly()) : Boolean.TRUE.equals(scope.activeOnly()));
+            } else {
+                require(!scope.allowedResourceIds().isEmpty() && Boolean.TRUE.equals(scope.activeOnly()));
+                requiredField(space, "listingId", RagValueType.STRING);
+                mandatory.add(new RagFilter("listingId", RagFilterOperator.IN, RagValue.strings(scope.allowedResourceIds())));
+            }
         } else if ("memory.preference".equals(space.spaceId())) {
-            require(principal.userId().toString().equals(scope.ownerId()));
+            require(!scope.businessWideRead() && principal.userId().toString().equals(scope.ownerId())
+                    && Boolean.TRUE.equals(scope.activeOnly()));
             // Current memory projection's trusted owner field is userId, never model-provided ownerId.
             requiredField(space, "userId", RagValueType.STRING);
             mandatory.add(new RagFilter("userId", RagFilterOperator.EQ, RagValue.string(principal.userId().toString())));
         } else {
             // General/constraint content is not public just because it has no per-resource scope.
-            require(Boolean.TRUE.equals(scope.activeOnly()));
+            require(!scope.businessWideRead() && Boolean.TRUE.equals(scope.activeOnly()));
         }
         if (Boolean.TRUE.equals(scope.activeOnly())) {
             requiredField(space, "active", RagValueType.BOOLEAN);
@@ -83,7 +91,7 @@ public final class RagAccessControl {
         // Granting management operations to a domain writer never upgrades its SERVICE actor.
         require(envelope.actorMode() == RagActorMode.USER);
         AuthRagPrincipal principal = principal(envelope, credentials);
-        require(space.adminRoles().contains(principal.roleCode()));
+        require("ADMIN".equals(principal.roleCode()) && space.adminRoles().contains(principal.roleCode()));
     }
 
     private RagSigningKey verify(RagSpaceDefinition space, RagAuthEnvelope envelope, RagCredentialContext credentials,

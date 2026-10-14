@@ -91,7 +91,11 @@ rag:
     expected-revision: ${RAG_RERANK_EXPECTED_REVISION:}
     expected-artifact-digest: ${RAG_RERANK_EXPECTED_ARTIFACT_DIGEST:}
   http:
+    mode: ${RAG_HTTP_MODE:PUBLIC_ONLY}
     allowed-hosts: ${RAG_HTTP_ALLOWED_HOSTS:}
+    # Deployment-owned host -> CIDR lists; no assumed Docker/Windows runtime network.
+    # Dotted YAML map keys must be quoted and bracketed, e.g. '[host.docker.internal]'.
+    internal-networks: {}
 management:
   endpoints:
     web:

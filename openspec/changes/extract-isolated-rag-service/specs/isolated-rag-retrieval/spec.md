@@ -18,7 +18,15 @@
 
 ### Requirement: 服务身份与最终用户授权先于召回
 
-每次检索 SHALL 验证调用服务凭据、最终用户的有效身份、调用服务允许访问的空间及操作权限。用户身份 MUST NOT 从模型参数、普通 userId 字段或服务发现名称推断；后台索引服务身份 MUST NOT 自动获得用户检索权。实际过滤 SHALL 为强制授权条件 AND 经校验的领域过滤；该条件 SHALL 等价施加于两路召回，未获授权内容 MUST NOT 被提交给重排提供方或返回调用者。认证/授权依赖故障 SHALL 失败关闭。
+每次检索 SHALL 验证调用服务、当前有效用户、空间及操作交集；停用/删除/离职/角色失效用户在所有相关入口禁止操作，未过期token不豁免。仅ADMIN为管理员，BROKER为当前普通成员，MANAGER/未知角色不默认准入。房源ADMIN全读未删除项（含非ON_SALE），BROKER仅ON_SALE；scope SHALL 用显式business-wide与activeOnly语义并由RAG独立按当前role复核，不用空资源集/通配或强制资源grant规范。偏好读写和用户管理入口 SHALL 绝对self-only，ADMIN不得跨用户。用户身份 MUST NOT 从模型/userId/普通metadata/服务发现推断；后台写身份无用户读取/管理权。强制授权AND领域过滤 SHALL 等价施于双路，未获授权正文不得送重排或返回；认证故障失败关闭。
+
+#### Scenario: ADMIN与普通成员房源基线
+- **WHEN** 当前有效ADMIN或BROKER搜索房源
+- **THEN** ADMIN可检索全部未删除房源，BROKER仅ON_SALE，RAG独立复核角色/activeOnly且领域最终检查，不要求全量资源枚举
+
+#### Scenario: 管理员跨用户偏好或遗留角色
+- **WHEN** ADMIN指定他人偏好owner，或MANAGER被默认当管理员，或用户状态/角色已失效
+- **THEN** 操作拒绝，双路及重排不接触未授权正文，不凭管理角色或有效旧token豁免
 
 #### Scenario: 搜索其他用户记忆
 - **WHEN** 用户 A 的有效请求指定用户 B 的 owner 条件或试图省略 owner 限制

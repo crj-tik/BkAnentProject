@@ -21,6 +21,13 @@ spring:
         namespace: ${bk.nacos.namespace}
         file-extension: yaml
 
+a2a:
+  auth:
+    key-id: ${NOTIFICATION_A2A_KEY_ID:notification-a2a-current}
+    signing-secret: ${NOTIFICATION_A2A_SIGNING_SECRET:}
+    response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}
+    response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
+
 dubbo:
   application:
     name: notification-service

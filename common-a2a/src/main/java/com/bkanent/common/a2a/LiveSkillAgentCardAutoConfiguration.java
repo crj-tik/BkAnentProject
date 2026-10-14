@@ -17,7 +17,8 @@ import org.springframework.context.annotation.Bean;
  * 随之消失，而服务自己的 Card bean 又以它们为参数。此处统一注册，注册器幂等，
  * Starter 自动配置正常执行时不会重复注册。
  */
-@AutoConfiguration(after = com.bkanent.common.skill.config.SkillAutoConfiguration.class)
+@AutoConfiguration(after = com.bkanent.common.skill.config.SkillAutoConfiguration.class,
+        before = com.alibaba.cloud.ai.a2a.autoconfigure.server.A2aServerHandlerAutoConfiguration.class)
 @org.springframework.boot.context.properties.EnableConfigurationProperties({A2aExecutionProperties.class,
         com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerProperties.class,
         com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerAgentCardProperties.class})
@@ -30,7 +31,19 @@ public class LiveSkillAgentCardAutoConfiguration {
     }
 
     @Bean
-    static BeanPostProcessor liveSkillCardHttpHandler(ObjectProvider<LiveSkillAgentCards> cards) {
+    A2aBeaconAuthentication a2aBeaconAuthentication(org.springframework.core.env.Environment environment) {
+        return new A2aBeaconAuthentication(environment);
+    }
+    @Bean
+    A2aAuthenticatedRequestGuard a2aAuthenticatedRequestGuard(A2aBeaconAuthentication authentication) {
+        return new A2aAuthenticatedRequestGuard(authentication);
+    }
+    @Bean
+    A2aContextExecutorProvider a2aContextExecutorProvider() { return new A2aContextExecutorProvider(); }
+
+    @Bean
+    static BeanPostProcessor liveSkillCardHttpHandler(ObjectProvider<LiveSkillAgentCards> cards,
+            ObjectProvider<A2aAuthenticatedRequestGuard> guard) {
         return new BeanPostProcessor() {
             @Override public Object postProcessAfterInitialization(Object bean, String name) {
                 if (bean.getClass() != JsonRpcA2aRequestHandler.class) return bean;
@@ -41,7 +54,14 @@ public class LiveSkillAgentCardAutoConfiguration {
                         return live == null ? delegate.getAgentCard() : live.currentCard(delegate.getAgentCard());
                     }
                     @Override public Object onHandler(String body, org.springframework.web.servlet.function.ServerRequest.Headers headers) {
-                        return delegate.onHandler(body, headers);
+                        try { return guard.getObject().handle(body, headers, () -> delegate.onHandler(body, headers)); }
+                        catch (com.bkanent.common.rag.RagException failure) {
+                            Object id = null;
+                            try { id = io.a2a.util.Utils.OBJECT_MAPPER.readTree(body).path("id"); }
+                            catch (Exception ignored) { }
+                            return new io.a2a.spec.JSONRPCErrorResponse(id, new io.a2a.spec.JSONRPCError(-32001,
+                                    "Authentication or task access denied", java.util.Map.of("errorCode", failure.code().name())));
+                        }
                     }
                 };
             }

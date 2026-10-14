@@ -7,7 +7,10 @@ set -u -o pipefail
 
 _BK_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BK_REPO_ROOT="$(cd "${_BK_LIB_DIR}/../.." && pwd)"
-BK_ENV_FILE="${BK_REPO_ROOT}/.env"
+BK_ENV_FILE="${BK_ENV_FILE:-${BK_REPO_ROOT}/.env}"
+
+# Keep an external, restricted runtime env usable without copying secrets into the repo.
+compose() { docker compose --project-directory "$BK_REPO_ROOT" -f "$BK_REPO_ROOT/docker-compose.yml" --env-file "$BK_ENV_FILE" "$@"; }
 
 log_info()  { printf '[INFO] %s\n' "$*"; }
 log_warn()  { printf '[WARN] %s\n' "$*" >&2; }
@@ -69,8 +72,14 @@ gen_secret() {
   fi
 }
 
-# 127.0.0.1 上该 TCP 端口是否已有监听（用于服务可达性判断）。
-port_open() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
+# Bounded TCP probe of the configured host (never silently substitute localhost).
+tcp_open() {
+  local host="$1" port="$2"
+  [[ "$port" =~ ^[0-9]+$ ]] && [ "$port" -ge 1 ] && [ "$port" -le 65535 ] || return 1
+  command -v timeout >/dev/null 2>&1 || return 1
+  timeout 3 bash -c 'exec 3<>"/dev/tcp/$1/$2"' _ "$host" "$port" 2>/dev/null
+}
+port_open() { tcp_open 127.0.0.1 "$1"; }
 
 require_docker() {
   command -v docker >/dev/null 2>&1 || die "未检测到 docker。请先安装 Docker Engine（>= 24）与 Compose V2 插件，参见 docs/linux-deployment-init.md。"
@@ -97,16 +106,42 @@ host_ram_kb() {
 wait_all_healthy() {
   local timeout="$1"; shift
   local deadline=$(( $(date +%s) + timeout ))
+  local -a flags=() services=()
+  while [ "$#" -gt 0 ] && [ "$1" != -- ]; do flags+=("$1"); shift; done
+  if [ "$#" -gt 0 ]; then shift; services=("$@"); fi
+  local expected
+  if [ "${#services[@]}" -gt 0 ]; then
+    expected="${services[*]}"
+  else
+    expected="$(compose "${flags[@]}" config --services)" || return 1
+  fi
+  [ -n "$expected" ] || return 1
   while :; do
     local ids="" id starting=0 unhealthy=0 failed=0 total=0
     local state health exitcode name
-    ids="$(docker compose "$@" ps -q 2>/dev/null || true)"
+    local service service_ids
+    for service in $expected; do
+      service_ids="$(compose "${flags[@]}" ps -a -q "$service" 2>/dev/null)" || return 1
+      if [ -z "$service_ids" ]; then
+        failed=$((failed + 1)); log_error "缺少预期服务实例：${service}"
+      else
+        ids="$ids $service_ids"
+      fi
+    done
     for id in $ids; do
       state="$(docker inspect -f '{{.State.Status}}' "$id" 2>/dev/null || echo unknown)"
       health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$id" 2>/dev/null || echo unknown)"
       exitcode="$(docker inspect -f '{{.State.ExitCode}}' "$id" 2>/dev/null || echo 1)"
       name="$(docker inspect -f '{{.Name}}' "$id" 2>/dev/null | sed 's#^/##')"
       total=$((total + 1))
+      # An old healthy result must not mask a stopped/restarting container.
+      if [ "$state" != running ]; then
+        case "$state:$exitcode:$name" in
+          exited:0:*config-init*|exited:0:*minio-init*|exited:0:*elasticsearch-init*|exited:0:*mysql-mcp-init*) continue ;;
+          created:*|restarting:*) starting=$((starting + 1)); continue ;;
+          *) failed=$((failed + 1)); log_error "容器未运行：${name}（state=${state}, exit=${exitcode}）"; continue ;;
+        esac
+      fi
       case "$health" in
         healthy)
           continue ;;

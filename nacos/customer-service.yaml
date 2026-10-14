@@ -38,7 +38,17 @@ mybatis-plus:
       logic-delete-value: 1
       logic-not-delete-value: 0
 
+a2a:
+  auth:
+    key-id: ${CUSTOMER_A2A_KEY_ID:customer-a2a-current}
+    signing-secret: ${CUSTOMER_A2A_SIGNING_SECRET:}
+    response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}
+    response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
+
 customer:
+  listing-read:
+    key-id: customer-read-current
+    signing-secret: ${CUSTOMER_LISTING_READ_SECRET:}
   reminder:
     enabled: true
     entrust-expire-days: 7

@@ -6,20 +6,114 @@ import com.bkanent.common.rag.RagException;
 import java.net.IDN;
 import java.net.InetAddress;
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
 
-/** No I/O. Allowlisting never exempts a host from the public-address requirement. */
+/** No I/O. Private addresses require explicit mode, exact host and that host's private CIDR. */
 public final class RagEndpointPolicy {
-    private final Supplier<Set<String>> allowedHosts;
+    private final Supplier<RagHttpPolicyConfiguration> configuration;
+    private final boolean configured;
 
     public RagEndpointPolicy() {
         this(Set::of);
     }
 
+    /** Legacy public-only test seam; production must use configured(), which requires allowed hosts. */
     public RagEndpointPolicy(Supplier<Set<String>> allowedHosts) {
-        this.allowedHosts = allowedHosts;
+        this(() -> {
+            Set<String> hosts = allowedHosts.get();
+            if (hosts == null) {
+                throw denied();
+            }
+            return new RagHttpPolicyConfiguration("PUBLIC_ONLY", List.copyOf(hosts), Map.of());
+        }, false);
+    }
+
+    private RagEndpointPolicy(Supplier<RagHttpPolicyConfiguration> configuration, boolean configured) {
+        this.configuration = configuration;
+        this.configured = configured;
+    }
+
+    public static RagEndpointPolicy configured(Supplier<RagHttpPolicyConfiguration> configuration) {
+        return new RagEndpointPolicy(configuration, true);
+    }
+
+    Snapshot snapshot() {
+        try {
+            RagHttpPolicyConfiguration config = configuration.get();
+            if (config == null) {
+                throw denied();
+            }
+            boolean managed = "MANAGED_INTERNAL".equals(config.mode());
+            if (!managed && config.mode() != null && !"PUBLIC_ONLY".equals(config.mode())) {
+                throw denied();
+            }
+            Set<String> hosts = new HashSet<>();
+            for (String host : config.allowedHosts()) {
+                hosts.add(normalize(host, managed));
+            }
+            if ((configured || managed) && hosts.isEmpty()) {
+                throw denied();
+            }
+            Map<String, List<PrivateNetwork>> networks = new HashMap<>();
+            for (var entry : config.internalNetworks().entrySet()) {
+                // Validate syntax even in PUBLIC_ONLY, without authorizing private connections.
+                String host = normalize(entry.getKey(), true);
+                if (!hosts.contains(host) || networks.containsKey(host) || entry.getValue().isEmpty()) {
+                    throw denied();
+                }
+                List<PrivateNetwork> ranges = new ArrayList<>();
+                for (String cidr : entry.getValue()) {
+                    ranges.add(PrivateNetwork.parse(cidr));
+                }
+                networks.put(host, List.copyOf(ranges));
+            }
+            return new Snapshot(managed, Set.copyOf(hosts), Map.copyOf(networks));
+        } catch (IllegalArgumentException | NullPointerException ex) {
+            throw denied();
+        }
+    }
+
+    record Snapshot(boolean managed, Set<String> hosts, Map<String, List<PrivateNetwork>> networks) {
+        String validateHost(String host) {
+            String normalized = normalize(host, managed);
+            if ((!hosts.isEmpty() && !hosts.contains(normalized)) || normalized.endsWith(".arpa")) {
+                throw denied();
+            }
+            byte[] literal = literalAddress(normalized);
+            if (managed && literal == null && (!normalized.contains(".") || normalized.endsWith(".internal"))
+                    && !networks.containsKey(normalized)) {
+                throw denied(); // managed Docker/local infrastructure names need their own explicit map
+            }
+            if (literal != null) {
+                requireAddress(normalized, literal);
+            }
+            return normalized;
+        }
+
+        void requireAddress(String host, InetAddress address) {
+            if (address == null) {
+                throw denied();
+            }
+            requireAddress(host, address.getAddress());
+        }
+
+        private void requireAddress(String host, byte[] address) {
+            if (isPrivate(address)) {
+                if (!managed || !hosts.contains(host)
+                        || networks.getOrDefault(host, List.of()).stream().noneMatch(range -> range.contains(address))) {
+                    throw denied();
+                }
+            } else {
+                requirePublic(address); // mapped/NAT64/transition and all other special ranges stay forbidden
+            }
+        }
     }
 
     public URI validateUrl(String value) {
@@ -50,25 +144,14 @@ public final class RagEndpointPolicy {
     }
 
     public String validateHost(String host) {
-        String normalized = normalize(host);
-        Set<String> configured = allowedHosts.get();
-        if (configured == null) {
-            throw denied();
-        }
-        if (!configured.isEmpty() && configured.stream().map(RagEndpointPolicy::normalize)
-                .noneMatch(normalized::equals)) {
-            throw denied();
-        }
-        byte[] literal = literalAddress(normalized);
-        if (literal != null) {
-            requirePublic(literal);
-        } else if (normalized.endsWith(".arpa")) {
-            throw denied(); // infrastructure/reverse-DNS names are not public HTTP endpoints
-        }
-        return normalized;
+        return snapshot().validateHost(host);
     }
 
     static String normalize(String value) {
+        return normalize(value, false);
+    }
+
+    private static String normalize(String value, boolean managed) {
         if (value == null || value.isBlank() || !value.equals(value.trim()) || value.indexOf('%') >= 0) {
             throw denied();
         }
@@ -89,7 +172,7 @@ public final class RagEndpointPolicy {
             throw denied();
         }
         if (host.length() > 253 || host.equals("localhost") || host.endsWith(".localhost")
-                || host.equals("local") || host.endsWith(".local") || host.endsWith(".internal")
+                || host.equals("local") || host.endsWith(".local") || (!managed && host.endsWith(".internal"))
                 || host.endsWith(".home.arpa") || host.endsWith(".onion")) {
             throw denied();
         }
@@ -101,7 +184,7 @@ public final class RagEndpointPolicy {
         }
         if (host.matches("[0-9.]+")) {
             parseV4(host); // rejects integer, octal, shorthand and leading-zero spellings
-        } else if (labels.length < 2 || labels[labels.length - 1].matches("[0-9]+|0x[0-9a-f]+")
+        } else if ((!managed && labels.length < 2) || labels[labels.length - 1].matches("[0-9]+|0x[0-9a-f]+")
                 || host.matches("(?:0x[0-9a-f]+|[0-9]+)(?:\\.(?:0x[0-9a-f]+|[0-9]+))*")) {
             throw denied();
         }
@@ -122,7 +205,7 @@ public final class RagEndpointPolicy {
         requirePublic(address.getAddress());
     }
 
-    private static void requirePublic(byte[] address) {
+    static void requirePublic(byte[] address) {
         if (address.length == 4) {
             int a = address[0] & 255;
             int b = address[1] & 255;
@@ -149,6 +232,94 @@ public final class RagEndpointPolicy {
         } else {
             throw denied();
         }
+    }
+
+    private static boolean isPrivate(byte[] address) {
+        if (address.length == 4) {
+            int a = address[0] & 255;
+            int b = address[1] & 255;
+            return a == 10 || (a == 172 && b >= 16 && b <= 31) || (a == 192 && b == 168);
+        }
+        return address.length == 16 && (address[0] & 0xfe) == 0xfc;
+    }
+
+    private record PrivateNetwork(byte[] address, int prefix) {
+        static PrivateNetwork parse(String cidr) {
+            if (cidr == null || !cidr.equals(cidr.trim()) || !cidr.equals(cidr.toLowerCase(Locale.ROOT))) {
+                throw denied();
+            }
+            String[] parts = cidr.split("/", -1);
+            if (parts.length != 2 || !parts[1].matches("[1-9][0-9]{0,2}")
+                    || parts[0].contains("[") || parts[0].contains(".") && parts[0].contains(":")) {
+                throw denied();
+            }
+            byte[] bytes = literalAddress(parts[0]);
+            int prefix = Integer.parseInt(parts[1]);
+            if (bytes == null || prefix > bytes.length * 8 || !isPrivate(bytes)) {
+                throw denied();
+            }
+            // The ENTIRE network must fit one private allocation, not merely its first address.
+            int minimum = bytes.length == 16 ? 7 : (bytes[0] & 255) == 10 ? 8
+                    : (bytes[0] & 255) == 172 ? 12 : 16;
+            if (prefix < minimum || (bytes.length == 16 && !parts[0].equals(canonicalV6(bytes)))) {
+                throw denied();
+            }
+            for (int bit = prefix; bit < bytes.length * 8; bit++) {
+                if ((bytes[bit / 8] & (1 << (7 - bit % 8))) != 0) {
+                    throw denied(); // non-network bits cannot silently broaden an authorization
+                }
+            }
+            return new PrivateNetwork(bytes.clone(), prefix);
+        }
+
+        boolean contains(byte[] candidate) {
+            if (candidate.length != address.length) {
+                return false;
+            }
+            for (int bit = 0; bit < prefix; bit++) {
+                int mask = 1 << (7 - bit % 8);
+                if ((candidate[bit / 8] & mask) != (address[bit / 8] & mask)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    private static String canonicalV6(byte[] address) {
+        int[] groups = new int[8];
+        int bestStart = -1;
+        int bestLength = 1;
+        for (int i = 0; i < 8; i++) {
+            groups[i] = ((address[i * 2] & 255) << 8) | (address[i * 2 + 1] & 255);
+        }
+        for (int i = 0; i < 8;) {
+            if (groups[i] != 0) {
+                i++;
+                continue;
+            }
+            int start = i;
+            while (i < 8 && groups[i] == 0) {
+                i++;
+            }
+            if (i - start > bestLength) {
+                bestStart = start;
+                bestLength = i - start;
+            }
+        }
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < 8;) {
+            if (i == bestStart) {
+                result.append("::");
+                i += bestLength;
+            } else {
+                if (!result.isEmpty() && result.charAt(result.length() - 1) != ':') {
+                    result.append(':');
+                }
+                result.append(Integer.toHexString(groups[i++]));
+            }
+        }
+        return result.toString();
     }
 
     private static byte[] parseV4(String host) {

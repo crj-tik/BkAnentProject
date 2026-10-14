@@ -59,6 +59,22 @@ class AgentRagCredentialLeaseStoreTest {
         }
         assertThatThrownBy(() -> store.credentials("1")).hasMessage("AUTHENTICATION_REQUIRED");
     }
+    @Test void explicitWorkerSnapshotRevalidatesAndClearsThreadCredential() throws Exception {
+        var store = store();
+        when(auth.resolvePrincipal("worker-token")).thenReturn(new AuthenticatedPrincipal(1L));
+        var worker = java.util.concurrent.Executors.newSingleThreadExecutor();
+        try {
+            java.util.function.Supplier<AutoCloseable> snapshot;
+            try (var ignored = store.openAuthorization("Bearer worker-token")) { snapshot = store.snapshot(); }
+            assertThat(worker.submit(() -> { try (var ignored = snapshot.get()) { return store.currentUserId(); } })
+                    .get(5, java.util.concurrent.TimeUnit.SECONDS)).isEqualTo("1");
+            assertThatThrownBy(() -> worker.submit(() -> store.credentials("1")).get())
+                    .hasCauseInstanceOf(AgentRagAuthenticationException.class);
+            when(auth.resolvePrincipal("worker-token")).thenReturn(null);
+            assertThatThrownBy(() -> worker.submit(() -> { try (var ignored = snapshot.get()) { return store.credentials("1"); } }).get())
+                    .hasCauseInstanceOf(RagException.class);
+        } finally { worker.shutdownNow(); }
+    }
     @Test void malformedOrOversizedHeaderIsSafe() {
         var store = store();
         for (String value : List.of("Basic private-value", "Bearer ", "Bearer " + "x".repeat(16385)))

@@ -37,13 +37,14 @@ public final class RagRequestSigner {
         } else {
             RagSignatureSupport.equal(key.callerService(), envelope.actorId());
             // A background writer cannot promote itself to user search or user response authority.
-            RagSignatureSupport.authorize(expectedOperation != RagOperation.SEARCH
+            RagSignatureSupport.authorize(expectedOperation != RagOperation.SEARCH && expectedOperation != RagOperation.READ
                     && expectedOperation != RagOperation.RESOLVE_PRINCIPAL_RESPONSE);
-            if (expectedOperation == RagOperation.RESOLVE_PRINCIPAL) {
+            if (expectedOperation == RagOperation.RESOLVE_PRINCIPAL || expectedOperation == RagOperation.ISSUE_BEACON
+                    || expectedOperation == RagOperation.RESOLVE_BEACON) {
                 RagSignatureSupport.authenticate(credentials != null);
                 String digest = RagCanonicalHash.credentialDigest(credentials);
                 RagSignatureSupport.equal(digest, envelope.credentialDigest());
-                RagSignatureSupport.equal(digest, envelope.requestHash());
+                if (expectedOperation == RagOperation.RESOLVE_PRINCIPAL) RagSignatureSupport.equal(digest, envelope.requestHash());
             } else {
                 RagSignatureSupport.authenticate(credentials == null && envelope.credentialDigest() == null);
             }

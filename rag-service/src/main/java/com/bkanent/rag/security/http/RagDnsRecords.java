@@ -14,10 +14,8 @@ import java.util.List;
 
 /** Preserve AAAA bytes: JDK getAllByName silently collapses mapped IPv6 into Inet4Address. */
 final class RagDnsRecords implements RagPublicDnsResolver.Lookup {
-    private final RagEndpointPolicy policy;
-
     RagDnsRecords(RagEndpointPolicy policy) {
-        this.policy = policy;
+        // Host authorization belongs to the resolver's single immutable per-connection snapshot.
     }
 
     @Override
@@ -53,7 +51,7 @@ final class RagDnsRecords implements RagPublicDnsResolver.Lookup {
         NamingEnumeration<?> records = attribute.getAll();
         try {
             while (records.hasMore()) {
-                addresses.add(parseRecord(policy, String.valueOf(records.next()), ipv6));
+                addresses.add(parseRecord(String.valueOf(records.next()), ipv6));
             }
         } finally {
             records.close();
@@ -61,12 +59,23 @@ final class RagDnsRecords implements RagPublicDnsResolver.Lookup {
     }
 
     static InetAddress parseRecord(RagEndpointPolicy policy, String value, boolean ipv6) throws UnknownHostException {
+        InetAddress address = parseRecord(value, ipv6);
+        policy.requirePublic(address); // retained public-only test seam
+        return address;
+    }
+
+    static InetAddress parseRecord(String value, boolean ipv6) throws UnknownHostException {
+        if (value == null) {
+            throw RagEndpointPolicy.denied();
+        }
         byte[] bytes = RagEndpointPolicy.literalAddress(value.toLowerCase(java.util.Locale.ROOT));
         if (bytes == null || bytes.length != (ipv6 ? 16 : 4)) {
             throw RagEndpointPolicy.denied();
         }
-        InetAddress address = ipv6 ? Inet6Address.getByAddress(null, bytes, -1) : InetAddress.getByAddress(bytes);
-        policy.requirePublic(address);
-        return address;
+        // Even a managed CIDR may never authorize special/transition/mapped bytes.
+        if (bytes.length == 16 && (bytes[0] & 0xfe) != 0xfc) {
+            RagEndpointPolicy.requirePublic(bytes);
+        }
+        return ipv6 ? Inet6Address.getByAddress(null, bytes, -1) : InetAddress.getByAddress(bytes);
     }
 }

@@ -179,6 +179,36 @@ class RagSigningTest {
                 "r", HASH, RagActorMode.USER, "1", 1000, 1060, RagCanonicalHash.credentialDigest(CREDENTIALS), CREDENTIALS.accessToken()), CREDENTIALS, KEY, NOW));
     }
 
+    @Test
+    void businessWideReadIsExplicitSignedAndListingSearchOnly() {
+        var wide = RagScopeSigner.sign(new RagAuthorizationScope(1, "listing-1", "listing-master-service", "listing-master",
+                "listing.knowledge", "1", RagOperation.SEARCH, HASH, "p1", 1000, 1060, null, List.of(), false, true, null), SECRET);
+        RagScopeSigner.verify(wide, ownerKey(), "listing.knowledge", "1", RagOperation.SEARCH, HASH, "listing-master", "p1", NOW);
+        assertThat(scope("listing.knowledge", "1", HASH, "p1", null, List.of("1"), true).businessWideRead()).isFalse();
+        var tampered = new RagAuthorizationScope(1, wide.keyId(), wide.issuerService(), wide.ownerDomain(), wide.spaceId(),
+                wide.actorId(), wide.operation(), wide.requestHash(), wide.policyVersion(), 1000, 1060, null, List.of(), false, false, wide.signature());
+        error(RagErrorCode.AUTHENTICATION_FAILED, () -> RagScopeSigner.verify(tampered, ownerKey(), "listing.knowledge", "1",
+                RagOperation.SEARCH, HASH, "listing-master", "p1", NOW));
+        var memory = RagScopeSigner.sign(new RagAuthorizationScope(1, "memory-1", "memory-service", "memory", "memory.preference",
+                "1", RagOperation.SEARCH, HASH, "p1", 1000, 1060, "1", List.of(), true, true, null), SECRET);
+        error(RagErrorCode.FORBIDDEN, () -> RagScopeSigner.verify(memory,
+                new RagSigningKey("memory-1", "memory-service", "memory", Set.of(RagOperation.SEARCH), SECRET),
+                "memory.preference", "1", RagOperation.SEARCH, HASH, "memory", "p1", NOW));
+    }
+
+    @Test
+    void credentialsAreExclusiveAndTypeDomainSeparated() {
+        var token = new RagCredentialContext("same-reference");
+        var beacon = RagCredentialContext.beacon("same-reference");
+        assertThat(RagCanonicalHash.credentialDigest(token)).isNotEqualTo(RagCanonicalHash.credentialDigest(beacon));
+        assertThat(beacon.toString()).doesNotContain("same-reference");
+        error(RagErrorCode.INVALID_ARGUMENT, () -> new RagCredentialContext(null, null));
+        error(RagErrorCode.INVALID_ARGUMENT, () -> new RagCredentialContext("token", "beacon"));
+        error(RagErrorCode.INVALID_ARGUMENT, () -> new RagCredentialContext("token", ""));
+        assertThat(RagCanonicalHash.requestHash(new RagListingReadRequest(1, "r", 1L, null))).hasSize(64);
+        error(RagErrorCode.INVALID_ARGUMENT, () -> new RagListingReadRequest(1, "r", 1L, "q"));
+    }
+
     private static RagAuthEnvelope signedUser() {
         return RagRequestSigner.sign(envelope(1, "agent-1", "rag-service", "agent-service", RagOperation.SEARCH,
                 "r", HASH, RagActorMode.USER, "1", 1000, 1060, RagCanonicalHash.credentialDigest(CREDENTIALS), null), SECRET);

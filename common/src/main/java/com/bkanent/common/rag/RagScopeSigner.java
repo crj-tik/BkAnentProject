@@ -13,7 +13,7 @@ public final class RagScopeSigner {
                 unsigned.ownerDomain(), unsigned.spaceId(), unsigned.actorId(), unsigned.operation(),
                 unsigned.requestHash(), unsigned.policyVersion(), unsigned.issuedAtEpochSecond(),
                 unsigned.expiresAtEpochSecond(), unsigned.ownerId(), unsigned.allowedResourceIds(), unsigned.activeOnly(),
-                RagSignatureSupport.sign(RagCanonicalHash.scopeBytes(unsigned), secret));
+                unsigned.businessWideRead(), RagSignatureSupport.sign(RagCanonicalHash.scopeBytes(unsigned), secret));
     }
 
     public static void verify(RagAuthorizationScope scope, RagSigningKey key, String spaceId, String actorId,
@@ -34,9 +34,12 @@ public final class RagScopeSigner {
         RagSignatureSupport.equal(policyVersion, scope.policyVersion());
         RagSignatureSupport.time(scope.issuedAtEpochSecond(), scope.expiresAtEpochSecond(), now);
         if (scope.ownerId() != null) RagSignatureSupport.authorize(Objects.equals(actorId, scope.ownerId()));
+        RagSignatureSupport.authorize(!scope.businessWideRead()
+                || operation == RagOperation.SEARCH && "listing.knowledge".equals(spaceId)
+                && "listing-master-service".equals(scope.issuerService()));
         if (operation == RagOperation.SEARCH) {
             if ("listing.knowledge".equals(spaceId)) {
-                RagSignatureSupport.authorize(!scope.allowedResourceIds().isEmpty());
+                RagSignatureSupport.authorize(scope.businessWideRead() || !scope.allowedResourceIds().isEmpty());
             }
             if ("memory.preference".equals(spaceId)) {
                 RagSignatureSupport.authorize(Objects.equals(actorId, scope.ownerId()));

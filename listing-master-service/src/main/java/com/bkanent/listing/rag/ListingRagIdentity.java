@@ -22,7 +22,7 @@ public class ListingRagIdentity {
         this.auth = auth;
     }
     public AuthRagPrincipal resolve(RagCredentialContext credentials) {
-        if (credentials == null || credentials.accessToken() == null || credentials.accessToken().isBlank()) {
+        if (credentials == null) {
             throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
         }
         RagPrincipalRpcService provider = auth.getIfAvailable();
@@ -35,7 +35,7 @@ public class ListingRagIdentity {
         try { principal = provider.resolveRagPrincipal(credentials, request); }
         catch (RagException e) { throw e; }
         catch (RuntimeException e) { throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE); }
-        if (principal == null || principal.attestation() == null || principal.userId() == null) {
+        if (principal == null || principal.attestation() == null || principal.userId() == null || principal.userId() <= 0) {
             throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
         }
         RagRequestSigner.verify(principal.attestation(), RagCanonicalHash.principalHash(principal), SERVICE,
@@ -50,6 +50,7 @@ public class ListingRagIdentity {
         if (principal.expiresAtEpochSecond() <= Instant.now().getEpochSecond()) {
             throw new RagException(RagErrorCode.AUTHENTICATION_EXPIRED);
         }
+        requireCurrent(principal);
         return principal;
     }
     public AuthRagPrincipal requireReader(RagCredentialContext credentials) {
@@ -59,8 +60,30 @@ public class ListingRagIdentity {
     }
     public AuthRagPrincipal requireAdmin(RagCredentialContext credentials) {
         AuthRagPrincipal p = resolve(credentials);
-        if (!properties.getAdminRoleCodes().contains(p.roleCode())) { throw new RagException(RagErrorCode.FORBIDDEN); }
+        if (!"ADMIN".equals(p.roleCode()) || !properties.getAdminRoleCodes().contains(p.roleCode())) {
+            throw new RagException(RagErrorCode.FORBIDDEN);
+        }
         return p;
+    }
+    public static void requireCurrent(AuthRagPrincipal principal) {
+        if (principal == null || principal.userId() == null || principal.userId() <= 0
+                || !principal.accountActive() || !principal.roleActive()) {
+            throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+        }
+        if (principal.expiresAtEpochSecond() <= Instant.now().getEpochSecond()) {
+            throw new RagException(RagErrorCode.AUTHENTICATION_EXPIRED);
+        }
+        if (!"ADMIN".equals(principal.roleCode()) && !"BROKER".equals(principal.roleCode())) {
+            throw new RagException(RagErrorCode.FORBIDDEN);
+        }
+    }
+    public static boolean activeOnly(AuthRagPrincipal principal) {
+        requireCurrent(principal);
+        return !"ADMIN".equals(principal.roleCode());
+    }
+    public static boolean canRead(AuthRagPrincipal principal, com.bkanent.listing.entity.ListingEntity entity) {
+        return entity != null && Integer.valueOf(0).equals(entity.getDeleted())
+                && (!activeOnly(principal) || "ON_SALE".equals(entity.getStatus()));
     }
     public RagAuthEnvelope sign(String audience, RagOperation operation, String requestId, String hash,
                                 RagActorMode mode, String actor, RagCredentialContext credentials) {
@@ -76,7 +99,7 @@ public class ListingRagIdentity {
         if (caller == null) { throw new RagException(RagErrorCode.AUTHENTICATION_FAILED); }
         RagRequestSigner.verify(envelope, RagCanonicalHash.requestHash(request), SERVICE, operation, requestId,
                 credentials, new RagSigningKey(envelope.keyId(), caller.getCallerService(), null,
-                        Set.of(RagOperation.SEARCH, RagOperation.SUBMIT), bytes(caller.getSecret())), Instant.now());
+                        Set.of(RagOperation.SEARCH, RagOperation.READ, RagOperation.SUBMIT), bytes(caller.getSecret())), Instant.now());
     }
     static byte[] bytes(String secret) {
         if (secret == null || secret.isBlank()) { throw new RagException(RagErrorCode.AUTHENTICATION_FAILED); }

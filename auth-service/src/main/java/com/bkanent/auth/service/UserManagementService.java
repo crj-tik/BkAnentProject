@@ -38,7 +38,12 @@ public class UserManagementService {
         this.passwordEncoder = passwordEncoder;
     }
 
+    public static boolean isSupportedRole(String roleCode) {
+        return "ADMIN".equals(roleCode) || "BROKER".equals(roleCode);
+    }
+
     public boolean isActiveRole(String roleCode) {
+        if (!isSupportedRole(roleCode)) return false;
         return authRoleMapper.selectCount(new LambdaQueryWrapper<AuthRoleEntity>()
                 .eq(AuthRoleEntity::getRoleCode, roleCode)
                 .eq(AuthRoleEntity::getActive, 1)) > 0;
@@ -57,6 +62,7 @@ public class UserManagementService {
                         .eq(AuthRoleEntity::getAssignable, 1)
                         .orderByAsc(AuthRoleEntity::getId))
                 .stream()
+                .filter(role -> isSupportedRole(role.getRoleCode()))
                 .map(role -> new RoleOption(role.getRoleCode(), role.getRoleName(), role.getDescription()))
                 .toList();
     }
@@ -161,6 +167,9 @@ public class UserManagementService {
     }
 
     private AuthRoleEntity findActiveRole(String roleCode, boolean requireAssignable) {
+        if (!isSupportedRole(roleCode)) {
+            throw new UserManagementException(HttpStatus.BAD_REQUEST, "AUTH_ROLE_INVALID", "角色不存在或不可分配");
+        }
         AuthRoleEntity role = authRoleMapper.selectOne(new LambdaQueryWrapper<AuthRoleEntity>()
                 .eq(AuthRoleEntity::getRoleCode, roleCode)
                 .eq(AuthRoleEntity::getActive, 1)
