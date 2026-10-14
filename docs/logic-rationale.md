@@ -423,6 +423,16 @@
 
 **关联**：KI-37、KI-38、KI-39、KI-82；实际 MySQL 首启、升级、重复执行及保种子已验，隔离恢复副本原计数一致；Nacos paused快照已在独立internal网络恢复，12原config/hash一致且无有效host端口/mount；这不是graceful cold备份。当前应用/config/索引事件水位回滚另验，不把历史全仓初始化债务一并标已修。
 
+## LR-44 共享Dubbo运行依赖与私有直连序列化不属于SDK补丁
+
+**结论**：common-a2a为所有实际共享消费者声明OkHttp运行依赖，官方A2A SDK patch仅保留原依赖和两个transport构造器修补。私有无registry探针固定使用提供方标准支持的fastjson2 wire参数，原URL仍拒绝userinfo/query/fragment；不使用add-opens、不降低Auth签名或provider检查。
+
+**根因**：真实Listing日志的Nacos discovery事件刷新invoker，经Protocol.Adaptive.refer进入RestProtocol及默认OkHttpClientFactory时缺okhttp3.Callback；编译和部分Agent测试依赖不能证明下游Boot运行classpath完整。裸Dubbo直连缺注册协商prefer metadata会回落Hessian2，Java17实际Auth反射失败；官方3.2.15默认支持fastjson2,hessian2，使用可用标准序列化不等于身份绕过。准确区分依赖所有者与真实协议协商，避免把无关库加入官方SDK补丁或为测试放开Java模块。
+
+**代码位置**：`common-a2a/pom.xml` / `OfficialRuntimeDependenciesTest`；`scripts/verification/RagRuntimeProbe.java`。Agent排除未使用的DashScopeAgent自动配置而保留业务DeepSeek，营销两个必要RPC配置采用独立Bean名，不复制模型凭据或删除有效桥。
+
+**关联**：LR-33、LR-41；KI-94～97。真实调用栈仅证明REST扩展加载链，不推断具体provider metadata；无网络链接/round-trip/扫描测试、当前完整制品与实际签名调用分别取证。
+
 ## LR-43 治理重排按响应钉扎模型身份，同 alias 漂移失败关闭
 
 **结论**：`rag-service` 对外部 Reranker-BGE-V2-M3 治理接口（`/api/v1/rerank`，`RAG_RERANK_PROTOCOL=governed`）的重排调用在每次响应上核对 `model.alias/revision/scoring_version/artifact_digest` 与 `score_semantics` 必须精确等于受管配置（`RAG_RERANK_EXPECTED_REVISION`/`EXPECTED_ARTIFACT_DIGEST` 与空间 rerank-profile 的 provider/modelVersion/scoringVersion/scale）。任何一项不匹配抛 SCORING_PROFILE_MISMATCH，不尝试重新归一化或继续用旧分数。请求固定 `truncate=false`，响应声明截断发生即 RERANK_PROTOCOL_ERROR；400/413 映射为不可重试的 INVALID_ARGUMENT，401/403 仍为身份错误。

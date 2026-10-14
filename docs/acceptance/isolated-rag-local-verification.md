@@ -91,9 +91,18 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - 原有两个ADMIN／BROKER经参数绑定SQL核对ACTIVE／非删除／角色后，实际 `/auth/login` HTTP200／code0／角色相符，`/auth/me` HTTP200成功；未改密码、账号或撤销原用户，所有token／密码仅受限private环境，未输出正文。见actual-seed-auth-safe.json。这是正向登录事实，不代替无效用户／个人owner反例矩阵。
 - RAG双网卡默认注册10.253.240.3:20898使仅bk网络Listing不能访问；仅stage RAG固定已核对唯一bk IP172.24.0.12，并设置官方bind／registry变量同值，新RAG重建exit0，实际IP一致、rerank网络保留。见release-rag-registry-stage-fix-safe.json，KI-93；真实Nacos发现／消费者连接待验，直连probe不代替发现成功。
 
+### 2026-10-14 首轮真实运行暴露的当前修复
+
+- 七个首轮镜像实际build成功；auth／rag／listing／memory／customer各实际readiness HTTP200且healthy，Agent额外DashScopeAgent自动配置要求未选提供方key、营销两个必要RPC配置默认Bean名冲突导致启动失败。两个新失败实例各精确stop一次exit0，ID／image／mount／restart policy不变，旧app与共享infra未碰；见release-first-wave-acceptance-safe.json、new-failing-instances-stop-safe.json。
+- 真实Listing最早异常帧闭合Nacos discovery事件刷新invoker，经官方RestProtocol和OkHttpClientFactory首次加载okhttp3.Callback而缺类。官方A2A SDK client无该引用，原依赖全部保留；仅common-a2a补共享Dubbo运行依赖，不给SDK patch添加无关库。见listing-first-callback-exact-frames-safe.json、KI-96／LR-44。
+- 修复额外未使用的DashScopeAgent自动配置和营销Listing配置Bean名，保留DeepSeek／Graph／A2A及两个必要RPC桥；定向Agent1＋营销11共12项通过，日志rag-runtime-boot-repairs-focused-20261014.log。共享模块四项无网络JUnit通过，含真实Dubbo OkHttp链接／构造、Java17 Fastjson2 principal round-trip、实际probe编译及query拒绝，日志rag-runtime-dependency-focused-20261014.log；不是实际签名ADMIN成功。
+- DOMAIN初次exit127由Windows误选WSL bash导致，未进入Java；改为绝对Git Bash后真实Auth TCP成功、权限RPC未完成，原因是裸直连URL缺prefer metadata退回Hessian2，Java17反射失败。仅probe固定serialization=fastjson2并拒原query，不add-opens、不绕Auth。真实signed principal／INSPECT／PROVISION尚未通过，见KI-97。
+- RAG Dubbo注册及Listing连接已实际验证172.24.0.12:20898；HTTP discovery仍10.253.240.3:9018，下一次仅stage修正并验证，KI-93保持OPEN。只读实际ES三个新索引404、Milvus collection list HTTP200／code0且0集合，无PROVISION／schema写入；实际容器DNS匹配host maps不是guard验收。
+- 本轮执行源／POM／probe改变后曾重开8.7为27/49；冻结后22模块串行clean test及package均BUILD SUCCESS，各855项、140份XML、0失败／错误／跳过，19个有测试模块。新增7项为Agent1、营销2、共享运行4；日志rag-runtime-repairs-clean-test-20261014.log、rag-runtime-repairs-package-20261014.log，七个外部联调类仍按上述选择器显式排除。当前1216个源输入LF指纹977fd9b2ba50968fcd7dfcbd626502ab15c9cecc51412c7f4d610ea9376b188e；14Boot JAR、唯一SDK／两个源精确还原／九官方binary一致／license／后端隔离、Java17实际probe编译全通过，十个实际A2A消费者运行包都具唯一OkHttp4.12／Okio-jvm3.6／Kotlin1.9.25。报告D:/project/rag-runtime-repairs-artifact-verification-20261014.json，日志rag-runtime-repairs-artifact-proof-20261014.log；原报告／目录未覆盖。8.7重新关闭为28/49，不证明真实身份／模型／五操作。worker／两个dispatcher仍false，是有意门禁而非缺陷。
+
 ### 本轮仍待完成的验证
 
-1. 当前完整构建已取得上述848项／14个Boot制品证明，8.7据此完成；后续任何执行源码或构建配置变动须重跑对应回归／package／hash证明。下方683 tests和JAR hash仅历史，七外部联调类仍显式排除，真实Auth／模型／五操作不能据构建补勾。
+1. 当前增量完整回归／package／source-JAR证明已通过855项，8.7关闭。下方683 tests和首轮848项均有明确源版本边界；七外部联调类仍显式排除，真实Auth／模型／五操作不能据构建补勾；后续执行源码改变必须重新构建。
 2. 七扩展配置认证读回已通过；应用实际生效、images/digest、限定服务deploy、JRE DNS模块、真实Dubbo/provider/consumer发现验签仍待执行，不能拿配置发布替代。
 3. 公司模型真实调用、provider/model/version/dimension、rerank协议/scale/profile/scoringVersion、ES/Milvus真实schema/身份/权限、默认双路+融合+rerank及两路硬过滤等价。
 4. owner-aware回填、revision/hash/schema/tombstone、APPLIED及实际两后端物理水位/删除结果、迟到写/partial补偿、领域最终排序与真源复核。

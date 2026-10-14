@@ -399,9 +399,9 @@
 
 **验证**：本轮定向89项和全reactor683项test/package均通过，实际运行门禁仍开放；见 `docs/acceptance/isolated-rag-local-verification.md`。
 
-**当前共享验证（2026-10-14；以下已修代码／夹具／配置项）**：当前22模块reactor的clean test与package均BUILD SUCCESS，各848 tests／137 XML suites，覆盖19个有测试模块，failure／error／skipped均0；七个外部依赖测试类显式排除，不计为已执行。日志：`D:/project/rag-current-reactor-clean-test-final-20261014.log`、`D:/project/rag-current-reactor-package-final-20261014.log`。源码LF指纹：`4e5307ef818d1263896ced5f78ea872e69523e87903cc156bc1ee833d40f476d`。
+**当前共享验证（2026-10-14；以下已修代码／夹具／配置项）**：真实发布增量修复后22模块reactor串行clean test与package均BUILD SUCCESS，各855 tests／140 XML suites，覆盖19个有测试模块，failure／error／skipped均0；七个外部依赖测试类显式排除，不计为已执行。日志：`D:/project/rag-runtime-repairs-clean-test-20261014.log`、`D:/project/rag-runtime-repairs-package-20261014.log`。1216个源码输入LF指纹：`977fd9b2ba50968fcd7dfcbd626502ab15c9cecc51412c7f4d610ea9376b188e`；此前4e5307…／848项原证明保留。KI-94～97本地回归通过，重新实启／签名RPC验收仍待，保持OPEN。
 
-14个Boot JAR已核对：含SDK的制品仅有唯一patch、两份改动源码可精确还原官方源、九个未改官方二进制class一致、许可证保留、后端依赖隔离及私有probe的javac release17通过；证据 `D:/project/rag-current-artifact-verification.json`、`D:/project/rag-current-artifact-proof-final-20261014.log`。这些仅关闭本地实现缺陷，不代表部署／真实身份、五操作、排序及readiness矩阵完成；原失败日志与历史事实保留，KI-90运行修复另行取证。
+14个Boot JAR已核对：含SDK制品仅唯一patch、两改动源码精确还原官方源、九未改官方binary class一致、许可证保留、后端依赖隔离及私有probe javac release17通过；十实际A2A消费者运行包均具唯一OkHttp4.12／Okio-jvm3.6／Kotlin。当前证据 `D:/project/rag-runtime-repairs-artifact-verification-20261014.json`、`D:/project/rag-runtime-repairs-artifact-proof-20261014.log`，原报告保留。这些仅证明本地实现，不代表部署／真实身份、五操作、排序及readiness矩阵完成；原失败日志与历史事实保留，KI-90运行修复另行取证。
 
 ## KI-91 [FIXED·本提交·P2] 受限发布镜像的源码模式健康检查依赖 JRE 缺失的编译器
 
@@ -425,7 +425,39 @@
 
 **现象与根因**：仅RAG额外加入既有rerank网络后，Dubbo自动选10.253.240.3:20898；Listing仅在业务bk网络，实际RpcException／RemotingException无法访问该地址。不是HTTP guard拒绝，不能把全部业务服务接到rerank网络作为修复。
 
-**处置（待发现验证）**：受限stage仅RAG在bk网络固定已检查空闲的172.24.0.12，官方DUBBO_IP_TO_REGISTRY与DUBBO_IP_TO_BIND同值；config-q0／新RAG重建exit0，实际bk IP和两个变量相等，rerank网络及其HTTP CIDR不变。证据release-rag-registry-stage-fix-safe.json；实际导出地址／Nacos发现／Listing消费尚待核对，直连probe不替代发现验收，保持OPEN。
+**当前分层验证**：受限stage仅RAG在bk网络固定已检查空闲的172.24.0.12，官方DUBBO_IP_TO_REGISTRY与DUBBO_IP_TO_BIND同值；config-q0／新RAG重建exit0，实际IP及变量相等，rerank网络及HTTP CIDR不变。实际Nacos三RAG provider注册172.24.0.12:20898且healthy/enabled，Listing日志已建立连接；不代表签名RPC成功。Spring HTTP discovery仍错误注册10.253.240.3:9018，须在下一次当前制品发布时仅stage设置官方SPRING_CLOUD_NACOS_DISCOVERY_IP为同一业务IP并实际验证，故保持OPEN。证据release-rag-registry-stage-fix-safe.json、actual-nacos-rag-discovery-safe.json及release-first-wave-acceptance-safe.json，直连probe不替代发现验收。
+
+## KI-94 [OPEN·P2] Agent未使用的DashScopeAgent自动配置要求额外API key而阻止启动
+
+**发现日期**：2026-10-14（新Agent release真实启动）。
+
+**现象与根因**：AgentServiceApplication仅排除DashScopeChatAutoConfiguration，依赖仍导入DashScopeAgentAutoConfiguration。实际dashScopeAgent factory在DashScopeConnectionUtils.require apiKey处失败；业务DeepSeek配置非空不能替代独立DashScope凭据。不得复用公司网关key发送到未选提供方。
+
+**处置（待验证）**：应用排除两个未使用的DashScope chat／agent自动配置，保留选定DeepSeek模型、Graph／ReactAgent及A2A依赖；新增生产AutoConfigurationImportSelector筛选回归，当前待串行测试及重新镜像实启。证据release-agent-exact-factory-safe.json；不以排除源码声明运行完成。
+
+## KI-95 [OPEN·P2] 营销两个必要RPC配置的默认Bean名冲突阻止真实启动
+
+**发现日期**：2026-10-14（新marketing release真实启动）。
+
+**现象与根因**：根包及rpc子包各有MarketingRpcReferenceConfiguration，默认同名marketingRpcReferenceConfiguration；实际Spring扫描抛ConflictingBeanDefinitionException。前者为MediaWorker／Promotion桥，后者为受鉴权Listing读取桥，不能将其中之一当重复死代码删除。
+
+**处置（待验证）**：仅Listing配置显式独立Bean名marketingListingRpcReferenceConfiguration，保留两个必要配置及Primary／非local条件／实际签名读取；新增真实Spring默认命名扫描及consumer wiring两项回归，待串行测试和实启。证据release-runtime-exact-causes-safe.json。
+
+## KI-96 [OPEN·P2] 共享Dubbo REST扩展缺OkHttp运行依赖，Listing启动后出现类加载失败
+
+**发现日期**：2026-10-14（新Listing release实际日志）。
+
+**现象与根因**：真实NoClassDefFoundError okhttp3.Callback。官方A2A SDK client不引用该类，其原POM依赖均保留；引用来自Dubbo3.2.15 OKHttpRestClient，不能误归为SDK补丁遗漏官方依赖。精确首次异常栈已闭合Nacos discovery事件→refreshInvoker/toInvokers→Protocol.Adaptive.refer→RestProtocol→OkHttpClientFactory.doCreateRestClient；不推断具体provider metadata。Listing制品缺该运行库，编译／部分Agent测试间接带库无法发现下游缺口。证据listing-first-callback-exact-frames-safe.json。
+
+**处置（待验证）**：在承载共享Dubbo的common-a2a补齐受管OkHttp运行依赖，并以无网络class加载回归核对；官方SDK patch POM不添加无关依赖。待实际package依赖核对和Listing运行验证，保持OPEN。
+
+## KI-97 [OPEN·P2] 私有Dubbo直连探针缺协议序列化协商信息而退回Hessian2
+
+**发现日期**：2026-10-14（真实DOMAIN探针，已进入Java但未完成signed principal）。
+
+**现象与根因**：裸P2P URL未携带注册发现prefer-serialization，Dubbo默认回落Hessian2；真实Auth请求解码创建Hessian2工厂遇Java17 StackTraceElement反射InaccessibleObjectException，TCP20881成功。官方3.2.15 provider默认支持可用fastjson2,hessian2，实际制品具fastjson2 SPI。初次exit127来自选错WSL bash、未进runtime，后续真实exit1均不代表签名ADMIN／INSPECT通过。
+
+**处置（待验证）**：仅探针校验固定直连URL后添加官方serialization=fastjson2，保持拒绝调用方任意query、签名／owner及provider检查；不使用add-opens，不改provider或绕过Auth。待当前package编译及真实正向调用，安全证据actual-domain-auth-rpc-projection-safe.json、actual-domain-probe-first-cause-safe.json。
 
 ## KI-78 [FIXED·本提交·P1] 个人回填游标、计数和持久身份未全部限定 owner
 

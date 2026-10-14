@@ -426,7 +426,8 @@ final class RagRuntimeProbe implements AutoCloseable {
         return result;
     }
     private static String directUrl(String value) {
-        return endpoint(value, Set.of("dubbo"), true);
+        // Registry-free references lack provider serialization preferences; callers cannot override this parameter.
+        return endpoint(value, Set.of("dubbo"), true) + "?serialization=fastjson2";
     }
     private static String httpUrl(String value) {
         return endpoint(value, Set.of("http", "https"), false);
