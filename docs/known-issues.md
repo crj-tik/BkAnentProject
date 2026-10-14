@@ -517,23 +517,23 @@
 
 **最新运行闭合**：d9b63e6／668860a新RAG-only镜像build/up0，原生产三INSPECT2034／316／296ms全部RETURNED、前后signed ADMIN、1024维；KEYWORD与VECTOR均SPACE_NOT_READY，embedding／governed rerank保护probe全过。ES原HEAD三次404／71、4、3ms，mapping未执行；Milvus同一类型100／UnexpectedError现已正确分类。etcd同revision299669覆盖default数据库当前新collection-info与legacy collection全量keys-only前缀均0，exact db-info/1匹配default／ID1／DatabaseCreated1；证明当前包含不可用状态的catalog无集合，不证明历史snapshot或object不存在。六服务／原资源／逐键env与安全设置保留；原Env数组排序及自动Hostname比较false另附解析，未改绿旧证据。当前后端错误分类缺口已关闭，空间尚未初始化和默认检索未验；其运行任务继续待验，不重开DNS／REST根因。safe证据milvus-modern-d9b63e目录下runtime-gates／domain-inspect／backend-diagnostics，以及ragperm-narrow-milvus-allstate-metadata-safe.json。
 
-## KI-107 [OPEN·P2] ES官方对象mapping读回省略type导致已创建空间被误判不兼容
+## KI-107 [FIXED·7e7ef1a·P2] ES官方对象mapping读回省略type导致已创建空间被误判不兼容
 
 **发现日期**：2026-10-14。
 
 **实证与根因**：fresh catalog revision300994两个当前Milvus前缀0且default／ID1／Created1，三空间生产INSPECT模型通过、两后端missing-only后，仅一次listing.knowledge PROVISION失败SPACE_NOT_READY／7312ms，立即停止其他空间及后续INSPECT，无外层timeout。原生产ES HEAD200／NONE23ms、MAPPING200／SPACE_NOT_READY30ms，无Milvus describe；postfailure revision301070当前两前缀仍0。ES partial保留。一条独立只读mapping GET200／170ms精确对照冻结schema，唯一受管差异metadata.type缺失，properties存在，25个受管metadata字段类型、顶层keyword／text及两个String strict均匹配。旁路GET不冒称应用guard通过。
 
-**官方依据与处置**：ES v8.15.3 ObjectMapper.java:701-706仅空子字段对象显式输出type，非空properties隐式识别object；302-308解析同义，260-266要求properties Map。递归校验只允许expected type=object、actual无type键且具有非空properties Map的官方省略形式，其余叶严格比较；显式null／nested／错type、缺字段／properties／dynamic、宽松dynamic及日期格式不放行。不PUT／drop／覆盖partial，不重开DNS／REST／Milvus错误根因。新增16组创建读回／已有索引正例和冲突负例，日期回归同样使用隐式object响应；ES投影24项及A2A Card16／guard8共48项定向通过，0失败／错误／跳过，日志D:/project/rag-schema-a2a-focused-20261014.log。当前冻结源码22模块串行clean test及package各948项／142 XML，0失败／错误／跳过；14Boot与common／十消费者common-a2a精确嵌套、SDK及Java17 probe新制品证明通过（rag-schema-a2a-artifact-verification-20261014.json，LF3c391454…），七外部类仍明确排除。新发布与再次PROVISION未执行，运行门禁保持OPEN。
+**官方依据与处置**：ES v8.15.3 ObjectMapper.java:701-706仅空子字段对象显式输出type，非空properties隐式识别object；302-308解析同义，260-266要求properties Map。递归校验只允许expected type=object、actual无type键且具有非空properties Map的官方省略形式，其余叶严格比较；显式null／nested／错type、缺字段／properties／dynamic、宽松dynamic及日期格式不放行。不PUT／drop／覆盖partial，不重开DNS／REST／Milvus错误根因。新增16组创建读回／已有索引正例和冲突负例，日期回归同样使用隐式object响应；ES投影24项及A2A Card16／guard8共48项定向通过，0失败／错误／跳过，日志D:/project/rag-schema-a2a-focused-20261014.log。当前冻结源码22模块串行clean test及package各948项／142 XML，0失败／错误／跳过；14Boot与common／十消费者common-a2a精确嵌套、SDK及Java17 probe新制品证明通过（rag-schema-a2a-artifact-verification-20261014.json，LF3c391454…），七外部类仍明确排除。7e7ef1a已推送，新3c391454四服务实际发布后，signed ADMIN生产INSPECT的Listing KEYWORD通过，原受保护HEAD200／NONE55ms、MAPPING200／NONE28ms；原partial未PUT／drop／覆盖。该mapping误判已运行闭合；Listing仍仅VECTOR SPACE_NOT_READY，Memory两空间仍缺两后端，三空间ready=false，不以本修复宣称初始化或默认检索完成。safe证据schema-a2a-7e7ef1/schema-a2a-domain-INSPECT-safe.json。
 
 **保留与关联**：七服务healthy／restart0，env／安全配置、两seed指纹、业务计数与memory outbox17不变，worker／dispatcher／backfill／fixture未启用。safe证据schema-init-d9b63e目录下PROVISION-and-INSPECT／failure-backend／ES-mapping-diff／postfailure-catalog／preservation；LR-52、KI-104，实际field与frame未记录保持UNKNOWN。
 
-## KI-106 [OPEN·P2] A2A认证拒绝响应把JsonNode作为官方JSON-RPC ID导致HTTP500空正文
+## KI-106 [FIXED·7e7ef1a·P2] A2A认证拒绝响应把JsonNode作为官方JSON-RPC ID导致HTTP500空正文
 
 **发现日期**：2026-10-14。
 
 **现象与根因**：正确业务Listing alias:9004/a2a仅一次合法String id、message/send、无专用凭据请求实测HTTP500／500ms、Content-Type缺失／body0／无JSONRPC。旧Agent9002错误端点的0/5失败保留，不能代替本实测。LiveSkillAgentCardAutoConfiguration在RagException分支将Jackson JsonNode传入JSONRPCErrorResponse；官方SDK只接受Java null／String／Integer，拒绝响应构造产生第二异常。原测试仅malformed body使解析失败、id保持Java null，漏掉正常JSON。真实500不证明队列／模型零执行，两者保持UNKNOWN。
 
-**处置**：只在现有拒绝分支将textual及32位integral node转换为官方支持的Java值；missing／null／非支持类型使用Java null，不修改guard、SDK或缓存。新增String／Integer边界／null／missing及非法类型的实际官方序列化和Starter HTTP路由回归，首轮14组中8组因官方ObjectMapper省略Java null id而断言失败，原日志保留；仅修正null序列化断言为id不存在，未改SDK或生产安全。修正后LiveSkillAgentCards16及真实guard8共24定向通过，0失败／错误／跳过；HTTP200／application-json／固定-32001与错误枚举、支持的ID值、零SDK delegate交互均已验证。日志D:/project/rag-a2a-error-id-focused-20261014.log及rag-a2a-error-id-focused-fixed-20261014.log。新增输入冻结后22模块串行clean test及package各948项／142 XML，0失败／错误／跳过，七外部类仍明确排除；14Boot／十消费者common-a2a精确嵌套及新制品证明通过，LF3c391454…；commit／release与正确Listing运行复验尚待完成，918项不能用于此次新增输入。
+**处置**：只在现有拒绝分支将textual及32位integral node转换为官方支持的Java值；missing／null／非支持类型使用Java null，不修改guard、SDK或缓存。新增String／Integer边界／null／missing及非法类型的实际官方序列化和Starter HTTP路由回归，首轮14组中8组因官方ObjectMapper省略Java null id而断言失败，原日志保留；仅修正null序列化断言为id不存在，未改SDK或生产安全。修正后LiveSkillAgentCards16及真实guard8共24定向通过，0失败／错误／跳过；HTTP200／application-json／固定-32001与错误枚举、支持的ID值、零SDK delegate交互均已验证。日志D:/project/rag-a2a-error-id-focused-20261014.log及rag-a2a-error-id-focused-fixed-20261014.log。新增输入冻结后22模块串行clean test及package各948项／142 XML，0失败／错误／跳过，七外部类仍明确排除；14Boot／十消费者common-a2a精确嵌套及新制品证明通过，LF3c391454…；7e7ef1a已推送，四服务限定发布后仅一次正确Listing9004/a2a无beacon／binding／bearer的message/send实测HTTP200／application-json／JSONRPC2.0／String ID匹配／-32001／AUTHENTICATION_FAILED，609ms，六项判据全过、无redirect或retry。本拒绝响应缺陷已运行闭合，五操作、队列与模型零副作用未由此证明，后两者仍UNKNOWN。safe证据schema-a2a-7e7ef1/schema-a2a-Listing-negative-once-safe.json；918项不能用于此次新增输入。
 
 **关联**：LR-41、LR-51；安全证据milvus-modern-Listing-A2A-negative-once-safe.json，队列／模型事实不补造。
 

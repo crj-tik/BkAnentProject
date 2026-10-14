@@ -501,7 +501,7 @@
 
 **代码位置**：common-a2a/LiveSkillAgentCardAutoConfiguration及LiveSkillAgentCardsTest的官方序列化／Starter Router MockMvc参数化回归。官方Utils ObjectMapper省略Java null id，回归断言缺失而非强行序列化id:null；String和Integer仍核对原值。14组参数化及两个既有Card测试16项、实际guard8项，共24定向通过，不含不存在的A2aInflightRequestGuardTest。
 
-**关联**：LR-41、KI-106；实际正确Listing端点的修复前500证据保留，零delegate交互由本地回归验证，不能据HTTP500补造真实队列或模型零执行。
+**关联**：LR-41、KI-106；实际正确Listing端点的修复前500证据保留，零delegate交互由本地回归验证，不能据HTTP500补造真实队列或模型零执行。7e7ef1a新四服务发布后，正确Listing9004/a2a单次无专用凭据message/send实测609ms返回HTTP200／JSONRPC2／匹配String ID／-32001／AUTHENTICATION_FAILED，拒绝响应缺陷已运行闭合；队列／模型实际计数仍UNKNOWN，不替代五操作与身份租约验收。
 
 ## LR-52 ES对象schema验证兼容官方隐式object表示但不弱化字段约束
 
@@ -511,7 +511,7 @@
 
 **代码位置**：rag-service/storage/ElasticsearchProjectionStore.containsMapping及ElasticsearchProjectionStoreTest的创建读回／已有兼容／冲突回归。官方来源：https://github.com/elastic/elasticsearch/blob/v8.15.3/server/src/main/java/org/elasticsearch/index/mapper/ObjectMapper.java#L701-L744（序列化）、L260-L308（解析）；Spring Data5.5.0 IndicesTemplate／RequestConverter将Document作为TypeMapping传入，不额外嵌套mapping。
 
-**关联**：KI-107、LR-36、LR-47、LR-49；首次PROVISION失败与partial原样保留。官方归一化兼容不证明新发布或三空间ready，不借此开启worker或直接写后端。
+**关联**：KI-107、LR-36、LR-47、LR-49；首次PROVISION失败与partial原样保留。7e7ef1a新RAG生产signed ADMIN INSPECT已在原受保护HEAD200／NONE55ms及MAPPING200／NONE28ms验证保留partial，Listing仅VECTOR缺失；mapping误判运行闭合。官方归一化兼容不证明三空间ready，不借此开启worker或直接写后端。
 
 ## LR-43 治理重排按响应钉扎模型身份，同 alias 漂移失败关闭
 

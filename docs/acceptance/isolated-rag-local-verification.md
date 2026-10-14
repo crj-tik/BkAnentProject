@@ -176,7 +176,17 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 
 - 当前clean test与package按142份实际XML各948项，0失败／错误／跳过，22模块通过；选择器仍明确排除七外部类：ApprovalClaimDatabaseConcurrencyTest、SupervisorDockerDatabaseTest、SupervisorDistributedAcceptanceTest、NacosAgentRegistryDockerTest、NacosRollingUpgradeDockerTest、SupervisorRealModelEvaluationTest、LiveSkillAgentCardsDockerTest，未执行这些类。新日志rag-schema-a2a-clean-test-20261014.log／package及test-proof／artifact-proof位于D:/project，历史失败与918证明未覆盖。
 - 新制品证明rag-schema-a2a-artifact-verification-20261014.json SHA-256为465dc44a7c739ce462e42639be31753445098c74ba206d6508fc30657e447501；1219执行格式输入LF指纹3c39145488241d3254aa7e5ad1f19fa8d2eec8d3b2c22a58f2a3227205901004。14Boot、common／十消费者common-a2a逐字节一致、四接口七throws、九官方未改class／两官方源重建／license／后端依赖隔离／唯一SDK及共享运行库、当前probe Java17编译全部通过。source_head=d9b63e6、dirty=true是构建前状态，提交绑定另验。8.7重闭合为30/49，不补勾运行任务。
-- 只读发布准备确认当前四服务rollback混合基线RAG668860a／Agent、Listing、Marketing9d4161，七服务env与安全配置保持。RAG document／event账本均0；Memory outbox17全部memory.constraint／PENDING／attempt0／errorNONE，schema memory-v1及payload space控制字段均匹配、17均到期可选。这不证明正文兼容，也不允许把全局dispatcher启用当空操作；当前不启用、不写fixture。safe根es-a2a-four-service-prep-20261014。四服务新发布与后续PROVISION尚未执行。
+- 只读发布准备确认当前四服务rollback混合基线RAG668860a／Agent、Listing、Marketing9d4161，七服务env与安全配置保持。RAG document／event账本均0；Memory outbox17全部memory.constraint／PENDING／attempt0／errorNONE，schema memory-v1及payload space控制字段均匹配、17均到期可选。这不证明正文兼容，也不允许把全局dispatcher启用当空操作；当前不启用、不写fixture。safe根es-a2a-four-service-prep-20261014。此处为发布前冻结记录；下方记录新四服务实际发布，PROVISION另验。
+
+### 2026-10-14 7e7ef1a四服务实际发布与两个运行缺陷闭合
+
+- 7e7ef1a0925633a75fbb875c69e2658d2bfeb67a（兼容ES对象映射读回并修复A2A拒绝响应）已push且本地／origin/dev-fix全hash一致。提交前index绑定、提交后1215 Git输入／4 ignored IDEA及14JAR绑定通过；构建时dirty source_head与提交绑定分开保留。Mimosa commit hook报scanner_enobufs、无完整安全扫描结论，兼容策略允许提交，不宣称项目安全。
+- 不可变3c391454源码／14JAR快照通过，144 common类与当前六消费者及旧RAG全同；十消费者嵌套common-a2a精确一致，唯一执行类差异为双匿名拒绝wrapper的LiveSkillAgentCardAutoConfiguration$1$1.class，其余类不变。初始把外层class作为唯一差异的断言失败保留，只按实际精确类修正，不泛化类族。
+- 仅RAG／Agent／Listing／Marketing各build0与首次up0、两次healthy／restart0／readiness200UP且image／source／JAR标签匹配。Agent构建后Compose image字面选择断言失败发生于首次up前；原值为插值表达式而非已解析旧source，只修三个授权服务的image绑定，保留全局旧source及Auth／Memory／Customer不变，复用已验证Agent镜像，无build／up重试。原失败和resume证据分别保留。
+- 正确Listing9004/a2a仅一次无beacon／binding／bearer的String-ID message/send：609ms、HTTP200／application-json／JSONRPC2.0／String ID匹配／-32001／AUTHENTICATION_FAILED，六谓词全过，无redirect／retry；KI-106运行闭合。队列／模型次数仍UNKNOWN，不据此宣布五操作或零副作用完成。
+- 三signed ADMIN实际INSPECT调用2088／334／393ms（consumer30000），均RETURNED且前后身份通过、dimension1024。Listing仅VECTOR SPACE_NOT_READY，原受保护HEAD200／NONE55ms、MAPPING200／NONE28ms，保留partial schema通过，KI-107运行闭合；Memory两个空间KEYWORD＋VECTOR SPACE_NOT_READY，HEAD404各9ms。全部protected embedding／governed rerank通过，Milvus仍同一现代100／兼容UnexpectedError；ready=false是未初始化，不是旧DNS／REST或mapping错误。
+- fresh etcd revision301910两次同revision完整current＋legacy collection keys-only前缀均0，exact DB1/default／ID1／DatabaseCreated1。业务计数／两原seed指纹／历史权限失败文件hash不变，Auth total6/live2，RAG document／event各0，Memory outbox17约束PENDING／attempt0／errorNONE未动。原种子／资源与partial均保留；未PROVISION／worker／dispatcher／backfill／fixture。
+- safe根D:/project/rag-dev-backups/42a55bf-20261014-release-prep/schema-a2a-7e7ef1：snapshot／build-up／resume-build-up／Listing-negative-once／domain-INSPECT／fresh-catalog／counts-preservation。源码948证明不再重复跑，当前仍30/49；初始化、正命中、应用水位和切流任务继续待验。
 
 ### 本轮仍待完成的验证
 
