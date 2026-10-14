@@ -483,21 +483,37 @@
 
 **处置**：纯Dubbo消费者使用官方dubbo.consumer.protocol=dubbo，阻止REST候选匹配，保留HTTP发现、provider、命名group、序列化与REST SPI。新增官方适配器及实际配置绑定回归；真实发现调用20898／HTTP仍9018另验。证据repair-wave-approved-provider-protocol-safe.json、repair-wave-listing-rest-exact-safe.json；关联LR-45。
 
-## KI-101 [OPEN·P2] 房源实际鉴权入口按类型解析RPC出现Bean歧义
+## KI-101 [FIXED·accf97f·P2] 房源实际鉴权入口按类型解析RPC出现Bean歧义
 
 **发现日期**：2026-10-14（c338b7e／4356c4实际部署）。
 
 **现象**：真实POST /listings/rag/search返回HTTP500；NoUniqueBeanDefinitionException固定链为DependencyObjectProvider.getIfAvailable→ListingRagIdentity.resolve／requireReader→ListingRequestAuthenticationFilter。故障发生于领域鉴权依赖解析，不能归为DNS／REST或声称真实发现调用已经成功。
 
-**根因与当前修复**：官方Dubbo字段ReferenceBean的principal／retrieval／index与Distributed显式@Bean桥ragPrincipalRpcService／ragRetrievalRpcService／ragIndexRpcService各形成双候选；三个生产ObjectProvider按既有桥名精确Qualifier，不删除合法引用或加Primary。旧AuthPermissionRpcService是独立接口，不是根因；Memory的ReferenceConfig非FactoryBean及RAG直接字段注入不属同根。新增真实AnnotationConfigApplicationContext双候选／精确桥／缺桥失败关闭／signed principal／HTTP401、503回归，Listing五项及probe四项定向通过；新22模块串行clean test和package各896项／142 XML，0失败／错误／跳过，制品证明22f9fe2a…通过，实际修复版领域调用另验。证据dns-protocol-domain-http-error-safe.json；关联LR-46。
+**根因与当前修复**：官方Dubbo字段ReferenceBean的principal／retrieval／index与Distributed显式@Bean桥ragPrincipalRpcService／ragRetrievalRpcService／ragIndexRpcService各形成双候选；三个生产ObjectProvider按既有桥名精确Qualifier，不删除合法引用或加Primary。旧AuthPermissionRpcService是独立接口，不是根因；Memory的ReferenceConfig非FactoryBean及RAG直接字段注入不属同根。新增真实AnnotationConfigApplicationContext双候选／精确桥／缺桥失败关闭／signed principal／HTTP401、503回归，Listing五项及probe四项定向通过；新22模块串行clean test和package各896项／142 XML，0失败／错误／跳过，制品证明22f9fe2a…通过，accf97f新Listing／RAG两个镜像build/up0、healthy／restart0，其余五服务未重建；真实原ADMIN登录后的POST于828ms进入ListingRagFacade.search，当前不再被Bean歧义拦住，而在RPC异常反序列化失败，另记KI-103。证据inspect-wiring-domain-discovery-call-safe.json／inspect-wiring-domain-http-error-safe.json及历史dns-protocol-domain-http-error-safe.json；关联LR-46。
 
-## KI-102 [OPEN·P2] 新制品三空间INSPECT在签名ADMIN后远端超时
+## KI-102 [FIXED·accf97f·P2] 新制品三空间INSPECT在签名ADMIN后远端超时
 
 **发现日期**：2026-10-14（c338b7e／4356c4实际部署）。
 
 **现象**：三个空间初段signed ADMIN通过后均RpcException→TimeoutException，返回DEADLINE_EXCEEDED，没有能力结果及DOMAIN后身份复验成功。七进程基础healthy不代表受保护embedding／rerank或空间就绪，亦不能判断旧偏好policy错误是否仍在。
 
-**已证边界与源码缺口**：实际直接RagSpaceAdminRpcService.inspect消费者timeout为30000ms，RAG→Auth为5000ms；现有安全证据无elapsed或远端终止事实，不能断言预算不足或某一模型阻塞。源码inspect四阶段串行但未用overall剩余预算、Set迭代不稳定，inspect／provision共用全registry synchronized，无有界排队与迟到结果守卫；ES schema exists／mapping同步读取亦未复用可取消deadline reader。已修复共享整体预算／固定顺序／有界执行与ES可取消schema读取，按空间租约直到实际worker退出，迟到worker不发布证据；未执行／整体过期／容量拒绝失败关闭，已调用probe的TIMEOUT保留既有显式降级判断。实际SpringAI自动配置离线503证明确切注入单次无退避模板且惰性基础启动保留，Milvus只读schema使用新单次RetryParam再配置剩余gRPC deadline；定向37项通过，首次Mockito重复设桩失败保留并已修正；新22模块串行clean test和package各896项／142 XML，14Boot JAR与Java17 probe制品证明通过，源LF22f9fe2a…，实际新制品另验。保持既有SpringAI和出站安全，关联LR-47。probe补固定numeric elapsed／configured timeout／safe code，不输出异常原文，只有真实输出前复验成功才打印stage/code。未PROVISION，worker／dispatcher仍关闭。原证据dns-protocol-domain-inspect-safe.json、dns-protocol-new-inspect-error-safe.json、dns-protocol-timeout-selected-fields-safe.json；新的源缺口并不证明这些缺口是该次runtime超时的具体耗时归属。
+**已证边界与源码缺口**：实际直接RagSpaceAdminRpcService.inspect消费者timeout为30000ms，RAG→Auth为5000ms；现有安全证据无elapsed或远端终止事实，不能断言预算不足或某一模型阻塞。源码inspect四阶段串行但未用overall剩余预算、Set迭代不稳定，inspect／provision共用全registry synchronized，无有界排队与迟到结果守卫；ES schema exists／mapping同步读取亦未复用可取消deadline reader。已修复共享整体预算／固定顺序／有界执行与ES可取消schema读取，按空间租约直到实际worker退出，迟到worker不发布证据；未执行／整体过期／容量拒绝失败关闭，已调用probe的TIMEOUT保留既有显式降级判断。实际SpringAI自动配置离线503证明确切注入单次无退避模板且惰性基础启动保留，Milvus只读schema使用新单次RetryParam再配置剩余gRPC deadline；定向37项通过，首次Mockito重复设桩失败保留并已修正；新22模块串行clean test和package各896项／142 XML，14Boot JAR与Java17 probe制品证明通过，源LF22f9fe2a…，实际新制品另验。保持既有SpringAI和出站安全，关联LR-47。probe补固定numeric elapsed／configured timeout／safe code，不输出异常原文，只有真实输出前复验成功才打印stage/code。未PROVISION，worker／dispatcher仍关闭。原证据dns-protocol-domain-inspect-safe.json、dns-protocol-new-inspect-error-safe.json、dns-protocol-timeout-selected-fields-safe.json；新的源缺口并不证明这些缺口是该次runtime超时的具体耗时归属。accf97f新制品实际三INSPECT调用耗时6780／5337／5326ms，consumer仍30000ms，全部返回结构化结果及操作前后signed ADMIN；退出1是SPACE_NOT_READY而非消费者超时。三空间1024维embedding及governed rerank真实保护能力probe通过；残余KEYWORD TIMEOUT／VECTOR DEPENDENCY_UNAVAILABLE另记KI-104，不能推定仅缺schema或提前PROVISION。新证据inspect-wiring-domain-inspect-safe.json。
+
+## KI-103 [OPEN·P2] 领域RPC失败的Throwable反序列化错误遮蔽结构化RAG错误
+
+**发现日期**：2026-10-14（accf97f／22f9fe实际部署）。
+
+**现象与已证边界**：原ADMIN真实Listing POST越过Bean解析并进入Facade，但HTTP500／828ms，固定readThrowable→DecodeableRpcResult.handleException/decode分类为RagException／SerializationException／IllegalArgumentException／IOException。未输出异常正文、URL、完整堆栈。实际序列化器及异常字段重建根因仍须官方wire离线round-trip和受限运行选择取证，不能猜成DNS、REST、Hessian或放宽Java模块／class check。
+
+**处置**：保持协议与身份检查，独立核对公共RagException可序列化契约和官方Dubbo3.2.15读写Throwable；新回归必须真实经过官方writeThrowable／readThrowable，不仅new mock异常。证据inspect-wiring-domain-http-error-safe.json；修复前不宣称领域默认检索成功。
+
+## KI-104 [OPEN·P2] 真实空间能力仍有关键词TIMEOUT及向量DEPENDENCY_UNAVAILABLE
+
+**发现日期**：2026-10-14（accf97f／22f9fe实际部署）。
+
+**现象与已证边界**：三空间INSPECT均在5.3～6.8秒返回、操作后signed ADMIN通过，1024维embedding及governed rerank保护probe未失败；KEYWORD为TIMEOUT，VECTOR为DEPENDENCY_UNAVAILABLE。已关闭整体consumer超时并隔离残余后端失败，不再重复JNDI混合ANY／REST误选调查。
+
+**处置**：仅受限只读取证实际ES受保护HEAD／mapping和Milvus schema状态；不能从两种错误推定只有missing schema，不绕HTTP守卫用curl当通过，不PROVISION／backfill／enable workers。官方传输与错误映射必要离线诊断独立进行。证据inspect-wiring-domain-inspect-safe.json；关联LR-34、LR-47。
 
 ## KI-78 [FIXED·本提交·P1] 个人回填游标、计数和持久身份未全部限定 owner
 
