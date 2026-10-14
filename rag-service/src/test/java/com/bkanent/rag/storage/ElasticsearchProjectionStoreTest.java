@@ -55,7 +55,7 @@ class ElasticsearchProjectionStoreTest {
         assertEquals("strict", json.path("properties").path("metadata").path("dynamic").asText());
         assertEquals(Map.of("type", "date_nanos", "format", "strict_date_optional_time_nanos"),
                 new ObjectMapper().convertValue(json.path("properties").path("metadata").path("properties").path("lastObservedAt"), Map.class));
-        when(index.getMapping()).thenReturn(mapping);
+        schemaResponses(reader, memory, mapping);
         assertDoesNotThrow(() -> store.inspectSchema(memory));
         for (Map<String, String> incompatible : List.of(
                 Map.of("type", "date", "format", "strict_date_optional_time_nanos"),
@@ -69,21 +69,58 @@ class ElasticsearchProjectionStoreTest {
             @SuppressWarnings("unchecked")
             var metadataFields = (Map<String, Object>) metadata.get("properties");
             metadataFields.put("lastObservedAt", incompatible);
-            when(index.getMapping()).thenReturn(actual);
+            schemaResponses(reader, memory, actual);
             assertEquals(RagErrorCode.SPACE_NOT_READY,
                     assertThrows(RagException.class, () -> store.inspectSchema(memory)).code());
         }
         verify(index, never()).create(anyMap(), any());
         verify(index, never()).putMapping(any(org.springframework.data.elasticsearch.core.document.Document.class));
-        verifyNoInteractions(reader);
+        verifyNoInteractions(index, operations);
+    }
+    private static void schemaResponses(ElasticsearchDeadlineReader reader, RagSpaceDefinition space, Map<String, Object> mapping) {
+        try {
+            var head = mock(org.elasticsearch.client.Response.class);
+            when(head.getStatusLine()).thenReturn(new org.apache.http.message.BasicStatusLine(org.apache.http.HttpVersion.HTTP_1_1, 200, "OK"));
+            var response = mock(org.elasticsearch.client.Response.class);
+            when(response.getEntity()).thenReturn(new org.apache.http.entity.StringEntity(new ObjectMapper().writeValueAsString(
+                    Map.of(space.elasticsearchIndex(), Map.of("mappings", mapping))), java.nio.charset.StandardCharsets.UTF_8));
+            doAnswer(call -> call.<org.elasticsearch.client.Request>getArgument(0).getMethod().equals("HEAD") ? head : response)
+                    .when(reader).read(any(), any(), anyInt());
+        } catch (Exception failure) { throw new AssertionError(failure); }
+    }
+    @Test void schemaHeadAndMappingShareOneAbsoluteDeadlineAndNeverUseSynchronousIndexOps() throws Exception {
+        var client = mock(org.elasticsearch.client.RestClient.class);
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var cancellation = mock(org.elasticsearch.client.Cancellable.class);
+        when(client.performRequestAsync(any(), any())).thenAnswer(call -> {
+            if (calls.incrementAndGet() == 1) {
+                Thread.sleep(80);
+                var head = mock(org.elasticsearch.client.Response.class);
+                when(head.getStatusLine()).thenReturn(new org.apache.http.message.BasicStatusLine(org.apache.http.HttpVersion.HTTP_1_1, 200, "OK"));
+                call.<org.elasticsearch.client.ResponseListener>getArgument(1).onSuccess(head);
+            }
+            return cancellation;
+        });
+        var reader = new ElasticsearchDeadlineReader(client);
+        var operations = mock(ElasticsearchOperations.class);
+        var store = new ElasticsearchProjectionStore(registry(), operations, new ObjectMapper(), reader);
+        try (var ignored = com.bkanent.rag.security.http.RagHttpDeadline.open(java.time.Duration.ofMillis(180))) {
+            long start = System.nanoTime();
+            assertEquals(RagErrorCode.TIMEOUT, assertThrows(RagException.class, () -> store.inspectSchema(space())).code());
+            assertTrue(java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start) < 700);
+            assertEquals(2, calls.get());
+            verify(cancellation, atLeastOnce()).cancel();
+            verifyNoInteractions(operations);
+        } finally { reader.close(); }
     }
     @Test void inspectRefusesWrongFieldMappingAndProvisionDoesNotOverwriteExistingMapping() {
         ElasticsearchOperations operations = mock(ElasticsearchOperations.class);
         IndexOperations index = mock(IndexOperations.class);
         when(operations.indexOps(any(IndexCoordinates.class))).thenReturn(index);
         when(index.exists()).thenReturn(true);
-        when(index.getMapping()).thenReturn(Map.of("properties", Map.of("content", Map.of("type", "keyword"))));
-        var store = new ElasticsearchProjectionStore(registry(), operations, new ObjectMapper(), mock(ElasticsearchDeadlineReader.class));
+        var reader = mock(ElasticsearchDeadlineReader.class);
+        schemaResponses(reader, space(), Map.of("properties", Map.of("content", Map.of("type", "keyword"))));
+        var store = new ElasticsearchProjectionStore(registry(), operations, new ObjectMapper(), reader);
         assertEquals(RagErrorCode.SPACE_NOT_READY, assertThrows(RagException.class, () -> store.provision(space())).code());
         verify(index, never()).create(anyMap(), any());
         verify(index, never()).putMapping(any(org.springframework.data.elasticsearch.core.document.Document.class));

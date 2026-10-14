@@ -220,8 +220,8 @@ final class RagRuntimeProbe implements AutoCloseable {
             RagSpaceInspection result;
             if ("INSPECT".equals(operation)) {
                 RagInspectRequest request = new RagInspectRequest(1, requestId, space);
-                result = admin.inspect(request, envelope(RagOperation.INSPECT, requestId,
-                        RagCanonicalHash.requestHash(request), "rag-service", true), credentials);
+                result = inspectTimed(admin, request, envelope(RagOperation.INSPECT, requestId,
+                        RagCanonicalHash.requestHash(request), "rag-service", true), credentials, rpcTimeout);
             } else {
                 RagProvisionRequest request = new RagProvisionRequest(1, requestId, space,
                         required("RAG_PROBE_SCHEMA_VERSION"), integer("RAG_PROBE_DIMENSION", -1, 1, 65536));
@@ -233,6 +233,9 @@ final class RagRuntimeProbe implements AutoCloseable {
                     && caller.equals(result.ownerDomain()), RagErrorCode.INVALID_ARGUMENT);
             SUMMARY.printf("probe mode=DOMAIN operation=%s space=%s ready=%s dimension=%d failedStageCount=%d%n",
                     operation, space, result.ready(), result.dimension(), result.failedStages().size());
+            for (RagStageFailure failure : result.failedStages()) {
+                SUMMARY.printf("probe capabilityStage=%s errorCode=%s%n", failure.stage(), failure.code());
+            }
             require(result.ready(), RagErrorCode.SPACE_NOT_READY);
             return;
         }
@@ -262,6 +265,27 @@ final class RagRuntimeProbe implements AutoCloseable {
                 operation, space, hash(result.documentId()), result.state(), result.revision(),
                 result.keyword() == null ? -1 : result.keyword().appliedRevision(),
                 result.vector() == null ? -1 : result.vector().appliedRevision(), result.errorCode());
+    }
+
+    private static RagSpaceInspection inspectTimed(RagSpaceAdminRpcService admin, RagInspectRequest request,
+            RagAuthEnvelope envelope, RagCredentialContext credentials, int timeoutMillis) {
+        long started = System.nanoTime();
+        try {
+            RagSpaceInspection result = admin.inspect(request, envelope, credentials);
+            inspectTiming(SUMMARY, started, timeoutMillis, null);
+            return result;
+        } catch (RuntimeException failure) {
+            inspectTiming(SUMMARY, started, timeoutMillis, failure);
+            throw failure;
+        }
+    }
+
+    private static void inspectTiming(PrintStream output, long started, int timeoutMillis, Throwable failure) {
+        long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(Math.max(0, System.nanoTime() - started));
+        output.printf("probe rpcInterface=RagSpaceAdminRpcService method=inspect protocol=dubbo "
+                        + "timeoutConfiguredMillis=%d elapsedMillis=%d outcome=%s errorCode=%s remoteOutcome=%s%n",
+                timeoutMillis, elapsedMillis, failure == null ? "RETURNED" : "FAILED",
+                failure == null ? "NONE" : safeFailure(failure), failure == null ? "RETURNED" : "UNCONFIRMED");
     }
 
     private void a2a(AuthRagPrincipal initial) throws Exception {

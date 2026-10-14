@@ -19,6 +19,27 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class SpringAiMilvusDocumentStoreTest {
+    private static MilvusServiceClient inspectionClient() {
+        var client = mock(MilvusServiceClient.class);
+        when(client.withRetry(any(io.milvus.param.RetryParam.class))).thenReturn(client);
+        when(client.withTimeout(anyLong(), any())).thenReturn(client);
+        return client;
+    }
+    @Test void schemaInspectionUsesFreshSingleAttemptAndRemainingDeadline() {
+        var client = inspectionClient();
+        when(client.describeCollection(any())).thenReturn(R.failed(io.grpc.Status.DEADLINE_EXCEEDED.asRuntimeException()));
+        var store = new SpringAiMilvusDocumentStore(registry(), client, mock(EmbeddingModel.class));
+        try (var ignored = com.bkanent.rag.security.http.RagHttpDeadline.open(java.time.Duration.ofMillis(90))) {
+            assertEquals(RagErrorCode.TIMEOUT, assertThrows(RagException.class, () -> store.verifySchema(space())).code());
+        }
+        var retry = org.mockito.ArgumentCaptor.forClass(io.milvus.param.RetryParam.class);
+        var timeout = org.mockito.ArgumentCaptor.forClass(Long.class);
+        verify(client).withRetry(retry.capture());
+        verify(client).withTimeout(timeout.capture(), eq(java.util.concurrent.TimeUnit.NANOSECONDS));
+        assertEquals(1, retry.getValue().getMaxRetryTimes());
+        assertTrue(timeout.getValue() > 0 && timeout.getValue() <= 90000000);
+        verify(client, times(1)).describeCollection(any());
+    }
     @Test void dimensionWrapperChecksActualVectorsWithoutCreatingAnHttpClient() {
         EmbeddingModel model = mock(EmbeddingModel.class);
         when(model.embed(any(Document.class))).thenReturn(new float[] {1, 2});
@@ -33,16 +54,19 @@ class SpringAiMilvusDocumentStoreTest {
         verify(model, times(3)).embed(any(Document.class));
     }
     @Test void actualSchemaIsInspectedAndNeverInitializedBySearch() {
-        MilvusServiceClient client = mock(MilvusServiceClient.class);
+        MilvusServiceClient client = inspectionClient();
         when(client.describeCollection(any(DescribeCollectionParam.class))).thenReturn(R.success(DescribeCollectionResponse.getDefaultInstance()));
         var store = new SpringAiMilvusDocumentStore(registry(), client, mock(EmbeddingModel.class));
         assertThrows(RagException.class, () -> store.search(space(), "query", List.of(), 5));
-        verify(client).describeCollection(any(DescribeCollectionParam.class));
+        var order = inOrder(client);
+        order.verify(client).withRetry(any(io.milvus.param.RetryParam.class));
+        order.verify(client).withTimeout(anyLong(), eq(java.util.concurrent.TimeUnit.NANOSECONDS));
+        order.verify(client).describeCollection(any(DescribeCollectionParam.class));
         verifyNoMoreInteractions(client);
     }
     @Test void readonlySchemaAndRevisionInspectionPreserveGrpcPermissionFailures() {
         for (io.grpc.Status denied : List.of(io.grpc.Status.UNAUTHENTICATED, io.grpc.Status.PERMISSION_DENIED)) {
-            MilvusServiceClient client = mock(MilvusServiceClient.class);
+            MilvusServiceClient client = inspectionClient();
             when(client.describeCollection(any(DescribeCollectionParam.class))).thenReturn(R.failed(denied.asRuntimeException()));
             when(client.query(any(io.milvus.param.dml.QueryParam.class))).thenReturn(R.failed(denied.asRuntimeException()));
             var store = new SpringAiMilvusDocumentStore(registry(), client, mock(EmbeddingModel.class));
@@ -51,7 +75,7 @@ class SpringAiMilvusDocumentStoreTest {
             assertEquals(code, assertThrows(RagException.class, () -> store.verifySchema(space())).code());
             assertEquals(code, assertThrows(RagException.class, () -> store.inspect(space().spaceId(), "listing:1")).code());
         }
-        MilvusServiceClient client = mock(MilvusServiceClient.class);
+        MilvusServiceClient client = inspectionClient();
         when(client.describeCollection(any(DescribeCollectionParam.class))).thenReturn(R.failed(R.Status.PermissionDenied, "denied"));
         var store = new SpringAiMilvusDocumentStore(registry(), client, mock(EmbeddingModel.class));
         assertEquals(RagErrorCode.FORBIDDEN, assertThrows(RagException.class, () -> store.verifySchema(space())).code());

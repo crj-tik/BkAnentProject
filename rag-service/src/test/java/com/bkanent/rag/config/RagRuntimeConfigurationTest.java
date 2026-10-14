@@ -5,14 +5,35 @@ import com.bkanent.rag.index.*;
 import com.bkanent.rag.rerank.BgeRerankService;
 import com.bkanent.rag.rerank.RerankEndpoint;
 import com.bkanent.rag.storage.*;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import javax.sql.DataSource;
 import org.apache.dubbo.config.annotation.DubboReference;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.model.openai.autoconfigure.OpenAiConnectionProperties;
+import org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration;
+import org.springframework.ai.openai.OpenAiEmbeddingModel;
+import org.springframework.ai.retry.TransientAiException;
+import org.springframework.ai.retry.autoconfigure.SpringAiRetryAutoConfiguration;
+import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.mock.env.MockEnvironment;
+import org.springframework.mock.http.client.MockClientHttpRequest;
+import org.springframework.mock.http.client.MockClientHttpResponse;
+import org.springframework.retry.backoff.NoBackOffPolicy;
+import org.springframework.retry.support.RetryTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.client.RestClient;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -39,6 +60,86 @@ class RagRuntimeConfigurationTest {
                     verify(keyword).backend(); verify(vector).backend();
                     verifyNoMoreInteractions(keyword, vector);
                     verifyNoInteractions(rerank, embedding);
+                });
+    }
+    @Test void actualEmbeddingRetryTemplateIsSingleAttemptWithoutBackoff() {
+        var environment = new MockEnvironment()
+                .withProperty("spring.ai.openai.api-key", "")
+                .withProperty("spring.ai.openai.base-url", "")
+                .withProperty("spring.ai.openai.embedding.options.model", "offline-fixture");
+        var db = mock(DataSource.class);
+        var keyword = mock(ElasticsearchProjectionStore.class);
+        var vector = mock(SpringAiMilvusDocumentStore.class);
+        var rerank = mock(BgeRerankService.class);
+        when(keyword.backend()).thenReturn(IndexSink.Backend.KEYWORD);
+        when(vector.backend()).thenReturn(IndexSink.Backend.VECTOR);
+        var calls = new AtomicInteger();
+        URI endpoint = URI.create("https://embedding.invalid/v1/embeddings");
+        ClientHttpRequestFactory offlineRequests = (uri, method) -> {
+            assertThat(uri).isEqualTo(endpoint);
+            assertThat(method).isEqualTo(HttpMethod.POST);
+            return new MockClientHttpRequest(method, uri) {
+                @Override protected ClientHttpResponse executeInternal() {
+                    calls.incrementAndGet();
+                    return new MockClientHttpResponse("fixed".getBytes(StandardCharsets.UTF_8),
+                            HttpStatus.SERVICE_UNAVAILABLE);
+                }
+            };
+        };
+        // Two real templates make @Primary necessary; the alternative would retry this 503 three times.
+        var competingTemplate = RetryTemplate.builder().maxAttempts(3).noBackoff().build();
+        new ApplicationContextRunner(() -> {
+            var context = new AnnotationConfigApplicationContext();
+            context.setEnvironment(environment);
+            return context;
+        }).withUserConfiguration(RagRuntimeConfiguration.class)
+                .withConfiguration(AutoConfigurations.of(SpringAiRetryAutoConfiguration.class,
+                        OpenAiEmbeddingAutoConfiguration.class))
+                .withBean(DataSource.class, () -> db)
+                .withBean(ElasticsearchProjectionStore.class, () -> keyword)
+                .withBean(SpringAiMilvusDocumentStore.class, () -> vector)
+                .withBean(BgeRerankService.class, () -> rerank)
+                .withBean("retryTemplate", RetryTemplate.class, () -> competingTemplate)
+                .withBean(RestClient.Builder.class, () -> RestClient.builder().requestFactory(offlineRequests))
+                .run(context -> {
+                    assertThat(context).hasNotFailed().hasSingleBean(RagIndexService.class);
+                    assertThat(context.getEnvironment()).isSameAs(environment);
+                    assertThat(environment.getPropertySources().contains("systemProperties")).isFalse();
+                    assertThat(environment.getPropertySources().contains("systemEnvironment")).isFalse();
+                    var factory = context.getBeanFactory();
+                    assertThat(factory.getBeanDefinition("openAiEmbeddingModel").getFactoryBeanName())
+                            .isEqualTo(OpenAiEmbeddingAutoConfiguration.class.getName());
+                    assertThat(factory.getBeanDefinition("openAiEmbeddingModel").isLazyInit()).isTrue();
+                    assertThat(factory.containsSingleton("openAiEmbeddingModel")).isFalse();
+                    assertThat(factory.containsSingleton("ragActualMilvusClient")).isFalse();
+                    assertThat(context.getBean(ManagedRagSpaceRegistry.class).snapshot()).isEmpty();
+                    EmbeddingModel model = context.getBean(EmbeddingModel.class);
+                    assertThat(model).isSameAs(context.getBean("ragEmbeddingModel"));
+                    assertThat(factory.containsSingleton("openAiEmbeddingModel")).isFalse();
+                    assertThat(calls.get()).isZero();
+
+                    var template = context.getBean("ragEmbeddingRetryTemplate", RetryTemplate.class);
+                    assertThat(context.getBeansOfType(RetryTemplate.class)).hasSize(2);
+                    assertThat(context.getBean(RetryTemplate.class)).isSameAs(template).isNotSameAs(competingTemplate);
+                    assertThat(ReflectionTestUtils.getField(template, "backOffPolicy"))
+                            .isInstanceOf(NoBackOffPolicy.class);
+                    // Official 1.1.2 factory requires nonblank connection values. Supply only an in-memory
+                    // unusable placeholder after proving credential-free base startup; no property files or sockets.
+                    var connection = context.getBean(OpenAiConnectionProperties.class);
+                    assertThat(connection.getApiKey()).isEmpty();
+                    assertThat(connection.getBaseUrl()).isEmpty();
+                    connection.setApiKey("offline-placeholder-not-a-credential");
+                    connection.setBaseUrl("https://embedding.invalid");
+                    assertThatThrownBy(() -> model.embed("offline retry diagnostic"))
+                            .isInstanceOf(TransientAiException.class).hasMessage("HTTP 503 - fixed");
+                    assertThat(calls.get()).isEqualTo(1);
+                    var actual = context.getBean("openAiEmbeddingModel", OpenAiEmbeddingModel.class);
+                    assertThat(ReflectionTestUtils.getField(actual, "retryTemplate")).isSameAs(template);
+                    assertThat(factory.containsSingleton("ragActualMilvusClient")).isFalse();
+                    verify(keyword).backend();
+                    verify(vector).backend();
+                    verifyNoMoreInteractions(keyword, vector);
+                    verifyNoInteractions(db, rerank);
                 });
     }
     @Test void authReferenceDefersDiscoveryAndDisablesRetries() throws Exception {

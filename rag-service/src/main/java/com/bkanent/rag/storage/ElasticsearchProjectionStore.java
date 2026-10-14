@@ -125,9 +125,20 @@ public class ElasticsearchProjectionStore implements IndexSink {
         inspectSchema(space);
     }
     public void inspectSchema(RagSpaceDefinition space) {
-        var index = operations.indexOps(target(space));
-        if (!index.exists()) throw new RagException(RagErrorCode.SPACE_NOT_READY);
-        if (!containsMapping(index.getMapping(), mapping(space))) throw new RagException(RagErrorCode.SPACE_NOT_READY, "keywordMapping");
+        Duration budget = Duration.ofMillis(Math.min(5000, space.limits().recallTimeoutMillis()));
+        long deadline = com.bkanent.rag.security.http.RagHttpDeadline.capture(budget);
+        try (var ignored = com.bkanent.rag.security.http.RagHttpDeadline.until(deadline)) {
+            String path = "/" + space.elasticsearchIndex();
+            var exists = reader.read(new org.elasticsearch.client.Request("HEAD", path), budget, 65536);
+            if (exists.getStatusLine().getStatusCode() == 404) throw new RagException(RagErrorCode.SPACE_NOT_READY);
+            if (exists.getStatusLine().getStatusCode() != 200) unavailable();
+            com.bkanent.rag.security.http.RagHttpDeadline.remainingNanos(deadline);
+            var response = reader.read(new org.elasticsearch.client.Request("GET", path + "/_mapping"), budget, 1024 * 1024);
+            var root = mapper.readTree(org.apache.http.util.EntityUtils.toString(response.getEntity(), java.nio.charset.StandardCharsets.UTF_8));
+            Map<?, ?> actual = mapper.convertValue(root.path(space.elasticsearchIndex()).path("mappings"), Map.class);
+            if (!containsMapping(actual, mapping(space))) throw new RagException(RagErrorCode.SPACE_NOT_READY, "keywordMapping");
+            com.bkanent.rag.security.http.RagHttpDeadline.remainingNanos(deadline);
+        } catch (java.io.IOException failure) { throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE); }
     }
     public Map<String, Object> mapping(RagSpaceDefinition space) {
         Map<String, Object> metadata = new HashMap<>();

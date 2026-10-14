@@ -25,6 +25,7 @@ public final class ElasticsearchDeadlineReader {
         request.setOptions(RequestOptions.DEFAULT.toBuilder().setHttpAsyncResponseConsumerFactory(
                 new HttpAsyncResponseConsumerFactory.HeapBufferedResponseConsumerFactory(maxResponseBytes)));
         long deadline = RagHttpDeadline.capture(budget);
+        RagHttpDeadline.remainingNanos(deadline);
         CompletableFuture<Response> result = new CompletableFuture<>();
         AtomicBoolean expired = new AtomicBoolean();
         java.util.concurrent.atomic.AtomicReference<Cancellable> operationRef = new java.util.concurrent.atomic.AtomicReference<>();
@@ -58,6 +59,7 @@ public final class ElasticsearchDeadlineReader {
                     int status = response.getResponse().getStatusLine().getStatusCode();
                     if (status == 401) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
                     if (status == 403) throw new RagException(RagErrorCode.FORBIDDEN);
+                    if (status == 404 && request.getMethod().equals("HEAD")) throw new RagException(RagErrorCode.SPACE_NOT_READY);
                 }
             }
             throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);

@@ -29,6 +29,25 @@ class ElasticsearchDeadlineReaderTest {
             assertDoesNotThrow(() -> listener.getValue().onFailure(new RuntimeException("late")));
         } finally { reader.close(); }
     }
+    @Test void expiredDeadlineDoesNotIssueARequestAndMissingHeadRemainsSchemaFailure() {
+        RestClient client = mock(RestClient.class);
+        var reader = new ElasticsearchDeadlineReader(client);
+        try {
+            try (var ignored = com.bkanent.rag.security.http.RagHttpDeadline.until(System.nanoTime() - 1)) {
+                assertEquals(RagErrorCode.TIMEOUT, assertThrows(RagException.class,
+                        () -> reader.read(new Request("HEAD", "/managed"), Duration.ofSeconds(1), 65536)).code());
+                verifyNoInteractions(client);
+            }
+            Response response = mock(Response.class);
+            when(response.getStatusLine()).thenReturn(new org.apache.http.message.BasicStatusLine(org.apache.http.HttpVersion.HTTP_1_1, 404, "missing"));
+            ResponseException missing = mock(ResponseException.class); when(missing.getResponse()).thenReturn(response);
+            when(client.performRequestAsync(any(), any())).thenAnswer(call -> {
+                call.<ResponseListener>getArgument(1).onFailure(missing); return mock(Cancellable.class);
+            });
+            assertEquals(RagErrorCode.SPACE_NOT_READY, assertThrows(RagException.class,
+                    () -> reader.read(new Request("HEAD", "/managed"), Duration.ofSeconds(1), 65536)).code());
+        } finally { reader.close(); }
+    }
     @Test void successReturnsOnlyCompletedBoundedResponse() {
         RestClient client = mock(RestClient.class);
         Cancellable operation = mock(Cancellable.class);

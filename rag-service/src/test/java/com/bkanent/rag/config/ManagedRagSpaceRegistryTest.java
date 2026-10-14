@@ -137,6 +137,99 @@ class ManagedRagSpaceRegistryTest {
         assertThat(props.spaces().get("listing.knowledge").allowedClients()).containsKey("listing-master-service");
         assertThat(new RagProperties(null).spaces()).isEmpty();
     }
+    private static RagSpaceDefinition budget(String id, long overall, long recall) {
+        var s = space(id, "index_" + id, "collection_" + id);
+        return new RagSpaceDefinition(s.spaceId(), s.ownerDomain(), s.policyVersion(), s.schemaVersion(), s.elasticsearchIndex(),
+                s.vectorSchema(), s.fields(), s.returnFields(), s.searchRoles(), s.adminRoles(), s.allowedClients(),
+                new RagSpaceDefinition.Limits(500, 500, 200, 8192, 100000, 100000, overall, recall, recall), s.rerankProfile());
+    }
+    private static List<RagCapabilityProbe> actions(java.util.function.BiConsumer<RagStage, RagSpaceDefinition> action) {
+        return List.of(RagStage.KEYWORD, RagStage.VECTOR, RagStage.EMBEDDING, RagStage.RERANK).stream()
+                .map(stage -> (RagCapabilityProbe) new RagCapabilityProbe() {
+                    public RagStage stage() { return stage; }
+                    public void inspect(RagSpaceDefinition s) { action.accept(stage, s); }
+                    public void provision(RagSpaceDefinition s) { action.accept(stage, s); }
+                }).toList();
+    }
+    private static void uninterruptibly(java.util.concurrent.CountDownLatch latch) {
+        boolean interrupted = false;
+        for (;;) { try { latch.await(); break; } catch (InterruptedException failure) { interrupted = true; } }
+        if (interrupted) Thread.currentThread().interrupt();
+    }
+    @Test void fixedStageOrderAndCumulativeDeadlineIncludeEveryStageWithoutRefreshingBudget() {
+        var order = new java.util.concurrent.CopyOnWriteArrayList<RagStage>();
+        var s = budget("a", 260, 200);
+        var registry = new ManagedRagSpaceRegistry(new RagProperties(Map.of("a", s)), () -> actions((stage, space) -> {
+            order.add(stage);
+            try { Thread.sleep(110); } catch (InterruptedException failure) { Thread.currentThread().interrupt(); }
+        }), CLOCK);
+        try {
+            long start = System.nanoTime();
+            var result = registry.inspect("req", "a");
+            assertThat(java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)).isLessThan(850);
+            assertThat(order).containsExactly(RagStage.KEYWORD, RagStage.VECTOR, RagStage.EMBEDDING);
+            assertThat(result.ready()).isFalse();
+            assertThat(result.failedStages()).contains(new RagStageFailure(RagStage.RERANK, RagErrorCode.TIMEOUT));
+            assertThatThrownBy(() -> registry.requireReady("a", Set.of(RagStage.KEYWORD), RagFailurePolicy.ALLOW_DEGRADED)).isInstanceOf(RagException.class);
+        } finally { registry.close(); }
+    }
+    @Test void blockedStageReturnsKnownTimeoutButLateWorkCannotPublishOrPermitConcurrentProvision() throws Exception {
+        var release = new java.util.concurrent.CountDownLatch(1);
+        var exited = new java.util.concurrent.CountDownLatch(1);
+        var s = budget("a", 800, 90);
+        var registry = new ManagedRagSpaceRegistry(new RagProperties(Map.of("a", s)), () -> actions((stage, space) -> {
+            if (stage == RagStage.KEYWORD) { try { uninterruptibly(release); } finally { exited.countDown(); } }
+        }), CLOCK);
+        try {
+            var result = registry.inspect("req", "a");
+            assertThat(result.failedStages()).containsExactly(new RagStageFailure(RagStage.KEYWORD, RagErrorCode.TIMEOUT));
+            assertThat(registry.requireReady("a", Set.of(RagStage.KEYWORD, RagStage.VECTOR), RagFailurePolicy.ALLOW_DEGRADED)).isEqualTo(s);
+            assertThatThrownBy(() -> registry.provision(new RagProvisionRequest(1, "p", "a", "schema-v1", 3)))
+                    .isInstanceOfSatisfying(RagException.class, e -> assertThat(e.code()).isEqualTo(RagErrorCode.DEPENDENCY_UNAVAILABLE));
+            release.countDown();
+            assertThat(exited.await(1, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            assertThat(registry.snapshot()).singleElement().satisfies(state -> {
+                assertThat(state.ready()).isFalse(); assertThat(state.failedStages()).isEqualTo(result.failedStages());
+            });
+        } finally { release.countDown(); registry.close(); }
+    }
+    @Test void timedOutProvisionKeepsSchemaLeaseAndDoesNotBlockAnotherSpace() throws Exception {
+        var release = new java.util.concurrent.CountDownLatch(1);
+        var a = budget("a", 500, 90); var b = budget("b", 500, 90);
+        var registry = new ManagedRagSpaceRegistry(new RagProperties(Map.of("a", a, "b", b)), () -> actions((stage, s) -> {
+            if (s.spaceId().equals("a")) uninterruptibly(release);
+        }), CLOCK);
+        try {
+            assertThatThrownBy(() -> registry.provision(new RagProvisionRequest(1, "p", "a", "schema-v1", 3)))
+                    .isInstanceOfSatisfying(RagException.class, e -> assertThat(e.code()).isEqualTo(RagErrorCode.TIMEOUT));
+            assertThatThrownBy(() -> registry.provision(new RagProvisionRequest(1, "p2", "a", "schema-v1", 3))).isInstanceOf(RagException.class);
+            assertThat(registry.inspect("other", "b").ready()).isTrue();
+            assertThat(registry.snapshot().stream().filter(state -> state.spaceId().equals("a")).findFirst().orElseThrow().ready()).isFalse();
+        } finally { release.countDown(); registry.close(); }
+    }
+    @Test void boundedQueueTimeConsumesStageBudgetAndCapacityRejectionFailsClosed() throws Exception {
+        var release = new java.util.concurrent.CountDownLatch(1);
+        var started = new java.util.concurrent.CountDownLatch(1);
+        var calls = new AtomicInteger();
+        var s = budget("a", 400, 70);
+        var registry = new ManagedRagSpaceRegistry(new RagProperties(Map.of("a", s)), () -> actions((stage, space) -> calls.incrementAndGet()), CLOCK, 1);
+        var field = ManagedRagSpaceRegistry.class.getDeclaredField("executor"); field.setAccessible(true);
+        var executor = (java.util.concurrent.ThreadPoolExecutor) field.get(registry);
+        try {
+            executor.execute(() -> { started.countDown(); uninterruptibly(release); });
+            assertThat(started.await(1, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            var queued = registry.inspect("queued", "a");
+            assertThat(queued.ready()).isFalse(); assertThat(calls.get()).isZero();
+            assertThat(executor.getQueue()).isEmpty();
+            executor.execute(() -> uninterruptibly(release));
+            var rejected = registry.inspect("capacity", "a");
+            assertThat(rejected.failedStages()).hasSize(4).allSatisfy(f -> assertThat(f.code()).isEqualTo(RagErrorCode.DEPENDENCY_UNAVAILABLE));
+            assertThat(calls.get()).isZero();
+            assertThatThrownBy(() -> registry.requireReady("a", Set.of(RagStage.KEYWORD), RagFailurePolicy.ALLOW_DEGRADED)).isInstanceOf(RagException.class);
+            registry.close();
+            assertThatThrownBy(() -> registry.inspect("closed", "a")).isInstanceOf(RagException.class);
+        } finally { release.countDown(); registry.close(); }
+    }
     private static List<RagCapabilityProbe> probes(AtomicInteger calls, RagStage failure) {
         return List.of(RagStage.KEYWORD, RagStage.VECTOR, RagStage.EMBEDDING, RagStage.RERANK).stream().map(stage -> (RagCapabilityProbe) new RagCapabilityProbe() {
             public RagStage stage() { return stage; }

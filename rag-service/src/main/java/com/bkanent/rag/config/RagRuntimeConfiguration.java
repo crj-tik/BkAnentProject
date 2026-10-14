@@ -64,6 +64,11 @@ public class RagRuntimeConfiguration {
     }
     @Bean @Primary EmbeddingModel ragEmbeddingModel(@Lazy @Qualifier("openAiEmbeddingModel") EmbeddingModel target) { return target; }
 
+    /** The actual OpenAI embedding auto-configuration injects this template; retrieval owns bounded retry. */
+    @Bean @Primary org.springframework.retry.support.RetryTemplate ragEmbeddingRetryTemplate() {
+        return org.springframework.retry.support.RetryTemplate.builder().maxAttempts(1).noBackoff().build();
+    }
+
     @Bean(destroyMethod = "") @Primary MilvusServiceClient milvusClient(@Lazy @Qualifier("ragActualMilvusClient") MilvusServiceClient target) { return target; }
     @Bean(destroyMethod = "") @Lazy
     MilvusServiceClient ragActualMilvusClient(@Value("${rag.milvus.host:}") String host,

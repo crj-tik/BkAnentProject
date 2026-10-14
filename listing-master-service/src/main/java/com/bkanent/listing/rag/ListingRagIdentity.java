@@ -4,6 +4,7 @@ import com.bkanent.common.rag.*;
 import com.bkanent.common.rpc.RagPrincipalRpcService;
 import com.bkanent.listing.config.ListingRagProperties;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -17,7 +18,8 @@ public class ListingRagIdentity {
     public static final String SPACE = "listing.knowledge";
     private final ListingRagProperties properties;
     private final ObjectProvider<RagPrincipalRpcService> auth;
-    public ListingRagIdentity(ListingRagProperties properties, ObjectProvider<RagPrincipalRpcService> auth) {
+    public ListingRagIdentity(ListingRagProperties properties,
+                              @Qualifier("ragPrincipalRpcService") ObjectProvider<RagPrincipalRpcService> auth) {
         this.properties = properties;
         this.auth = auth;
     }

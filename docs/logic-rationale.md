@@ -443,6 +443,26 @@
 
 **关联**：LR-34、LR-44；KI-98～100。实际旧制品失败与新源码测试分别保存，默认检索与发现调用必须经新制品验证后才完成。
 
+## LR-46 Dubbo字段引用与显式桥共存时，消费方绑定权威桥名
+
+**结论**：Listing身份、检索与索引的ObjectProvider精确限定既有ragPrincipalRpcService／ragRetrievalRpcService／ragIndexRpcService显式桥；保留Dubbo字段ReferenceBean及旧AuthPermission独立用途，不加任意Primary、不回退缺失桥。
+
+**根因**：官方Dubbo3.2.15把@DubboReference字段名注册为接口产品，而Distributed的@Bean又返回同一代理。两个产品对象相同仍有两个Spring候选名字，按类型getIfAvailable会抛NoUniqueBeanDefinitionException。直接new(provider)单测绕过构造器解析，只有真实双候选上下文可覆盖；消除正常引用或扩大旧Auth用途会破坏接线／签名边界。
+
+**代码位置**：listing-master-service/rag/ListingRagIdentity、ListingRagFacade、ListingRagDispatcher及ListingRagIdentityTest；ListingRpcReferenceConfiguration保留原桥。
+
+**关联**：LR-40、LR-45；KI-101。Memory的ReferenceConfig非FactoryBean与RAG直接Dubbo字段并非此模式，不作无证据同类改动；真实领域调用单独验收。
+
+## LR-47 空间诊断共享绝对期限，取消不提前释放实际执行租约
+
+**结论**：INSPECT固定按KEYWORD／VECTOR／EMBEDDING／RERANK执行，排队、惰性构造、阶段等待及后端读取共用一个overall绝对截止时间，阶段仅取剩余预算。线程与队列有界；inspect／provision按空间互斥，Future取消后仍执行的worker必须真实退出才释放租约，worker不发布能力证据。未执行、整体过期、缺probe和容量拒绝不能成为显式降级依据；已调用probe的TIMEOUT保留已知失败，由既有选择阶段与失败策略判断，默认能力仍不就绪。
+
+**根因**：消费者等待超时不等于远端结束。旧全registry synchronized可使其他空间排队，四阶段独立预算和SDK重试又能超过调用期限；仅在线程绑定deadline不能取消同步ES读取。取消Future的完成状态也不能证明schema副作用结束，因此不能据此允许同空间PROVISION。没有执行证据和已知瞬时失败必须区分，否则会错误降级或破坏既有显式降级契约。
+
+**代码位置**：rag-service/config/ManagedRagSpaceRegistry及其并发回归；storage/ElasticsearchProjectionStore与ElasticsearchDeadlineReader以现有受保护异步客户端执行HEAD／mapping；SpringAiMilvusDocumentStore只读schema核对先配置独立单次RetryParam再配置remaining gRPC deadline；RagRuntimeConfiguration为实际Spring AI模型提供单次无退避RetryTemplate，检索执行器继续拥有有界重试。
+
+**关联**：LR-31、LR-34、LR-46；KI-102。实际Spring AI自动配置及离线503单次调用、原lazy/base启动分别验证；不新建embedding客户端或裸Milvus CRUD，不承诺取消能撤回远端副作用。私有probe只输出安全计时与操作后重新认证的stage/code，运行能力必须用新制品实测。
+
 ## LR-43 治理重排按响应钉扎模型身份，同 alias 漂移失败关闭
 
 **结论**：`rag-service` 对外部 Reranker-BGE-V2-M3 治理接口（`/api/v1/rerank`，`RAG_RERANK_PROTOCOL=governed`）的重排调用在每次响应上核对 `model.alias/revision/scoring_version/artifact_digest` 与 `score_semantics` 必须精确等于受管配置（`RAG_RERANK_EXPECTED_REVISION`/`EXPECTED_ARTIFACT_DIGEST` 与空间 rerank-profile 的 provider/modelVersion/scoringVersion/scale）。任何一项不匹配抛 SCORING_PROFILE_MISMATCH，不尝试重新归一化或继续用旧分数。请求固定 `truncate=false`，响应声明截断发生即 RERANK_PROTOCOL_ERROR；400/413 映射为不可重试的 INVALID_ARGUMENT，401/403 仍为身份错误。

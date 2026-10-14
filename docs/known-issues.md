@@ -371,13 +371,13 @@
 
 **验证**：本轮定向89项和全reactor683项test/package均通过，实际运行门禁仍开放；见 `docs/acceptance/isolated-rag-local-verification.md`。
 
-## KI-75 [OPEN·P1] 旧 ID-only 索引 RPC 缺可信遗留重建输入路径
+## KI-75 [FIXED·8fed832·P1] 旧 ID-only 索引 RPC 缺可信遗留重建输入路径
 
 **确认依据**：旧AgentRpcService签名/provider与领域reconcile契约本地核对，没有真实排空或调用证据。
 
 **现象与根因**：syncListingKnowledge(Long)/deleteListingKnowledge(Long)无入站认证、expected revision/hash及排空证据，当前有效调用总是LEGACY_RECONCILIATION_REQUIRED，没有D9要求的条件成功路径。独立signed reconcile contract存在，但无生产旧入口能提供可信证明；由agent查询当前状态自签名不能证明原事务或顺序。
 
-**处置**：维持ID-only路径失败关闭、不发事件；task6.7未完成。需另确认获准证明输入路径及真实stop-write/drain事实，不能用配置boolean、反射、模型metadata或新认证DSL补造证据。见LR-39与逐空间迁移清单。
+**历史处置（已被替代）**：此前ID-only路径失败关闭、不发事件，task6.7当时未完成。最新授权确认无真实旧消费者后改为直接删除旧两个RPC及signed legacy reconcile／证明／错误码／配置，不建设条件成功路径。8fed832已完成删除；当前c338b7e全仓生产／测试／配置复核仅旧RPC否定测试一处，无collector/retriever或旧执行底座，886项构建通过。正常index/backfill/outbox及worker实际hash补偿完整保留；真实stop-write／水位由8.3另验，不能重新补造旧证明。见LR-39及task6.7／8.5。
 
 ## KI-76 [FIXED·ee4c9b9·P2] 记忆语义版本缺失触发允许集合 NPE
 
@@ -399,7 +399,7 @@
 
 **验证**：本轮定向89项和全reactor683项test/package均通过，实际运行门禁仍开放；见 `docs/acceptance/isolated-rag-local-verification.md`。
 
-**当前共享验证（2026-10-14；以下已修代码／夹具／配置项）**：真实发布增量修复后22模块reactor串行clean test与package均BUILD SUCCESS，各855 tests／140 XML suites，覆盖19个有测试模块，failure／error／skipped均0；七个外部依赖测试类显式排除，不计为已执行。日志：`D:/project/rag-runtime-repairs-clean-test-20261014.log`、`D:/project/rag-runtime-repairs-package-20261014.log`。1216个源码输入LF指纹：`977fd9b2ba50968fcd7dfcbd626502ab15c9cecc51412c7f4d610ea9376b188e`；此前4e5307…／848项原证明保留。这段855项仅对应7bd7a52冻结版本。后续实启已关闭KI-95营销Bean、KI-96共享缺类及KI-97直连序列化／真实签名故障；KI-94后续未选模型阻塞由KI-98继续记录，新DNS和消费者误选分别为KI-99／100。当前执行增量已重新串行clean test／package各886项、142 XML、0失败／错误／跳过，14Boot JAR及私有probe编译通过，源LF4356c418965cfe851cdbdc118ae672ec7416b62beed20b4a9f6e7c4ac98a0cd5；证据D:/project/rag-dns-protocol-artifact-verification-20261014.json。KI-98～100仍须修复版实际运行才关闭，不能沿用旧制品证明或以本地测试声明运行解决。
+**当前共享验证（2026-10-14；以下已修代码／夹具／配置项）**：真实发布增量修复后22模块reactor串行clean test与package均BUILD SUCCESS，各855 tests／140 XML suites，覆盖19个有测试模块，failure／error／skipped均0；七个外部依赖测试类显式排除，不计为已执行。日志：`D:/project/rag-runtime-repairs-clean-test-20261014.log`、`D:/project/rag-runtime-repairs-package-20261014.log`。1216个源码输入LF指纹：`977fd9b2ba50968fcd7dfcbd626502ab15c9cecc51412c7f4d610ea9376b188e`；此前4e5307…／848项原证明保留。这段855项仅对应7bd7a52冻结版本。后续实启已关闭KI-95营销Bean、KI-96共享缺类及KI-97直连序列化／真实签名故障；KI-94后续未选模型阻塞由KI-98继续记录，新DNS和消费者误选分别为KI-99／100。当前执行增量已重新串行clean test／package各886项、142 XML、0失败／错误／跳过，14Boot JAR及私有probe编译通过，源LF4356c418965cfe851cdbdc118ae672ec7416b62beed20b4a9f6e7c4ac98a0cd5；证据D:/project/rag-dns-protocol-artifact-verification-20261014.json。c338b7e已推送并部署，七4356c4服务含Agent均healthy／restart0，KI-94／98启动故障关闭；KI-99／100保护路径及真实发现调用仍待新KI-101／102排除后验收，不能沿用旧制品证明或以基础健康声明默认能力解决。
 
 14个Boot JAR已核对：含SDK制品仅唯一patch、两改动源码精确还原官方源、九未改官方binary class一致、许可证保留、后端依赖隔离及私有probe javac release17通过；十实际A2A消费者运行包均具唯一OkHttp4.12／Okio-jvm3.6／Kotlin。当前证据 `D:/project/rag-runtime-repairs-artifact-verification-20261014.json`、`D:/project/rag-runtime-repairs-artifact-proof-20261014.log`，原报告保留。这些仅证明本地实现，不代表部署／真实身份、五操作、排序及readiness矩阵完成；原失败日志与历史事实保留，KI-90运行修复另行取证。
 
@@ -427,13 +427,13 @@
 
 **修复与当前运行验证**：首次stage固定.12仅解决Dubbo，HTTP discovery仍错误，历史证据保留。7bd7a52重新发布时并行释放.12后被新Memory自动分配，故仅RAG改为已核对空闲的172.24.0.20，DUBBO_IP_TO_REGISTRY／BIND和官方SPRING_CLOUD_NACOS_DISCOVERY_IP统一；其他服务及rerank网络不变。实际认证Nacos读回HTTP9018、Dubbo20898和三RAG接口均.20且healthy/enabled，模板LF等于local；三空间实际签名ADMIN的INSPECT及输出前复验通过。关闭地址错网问题，不据此声明消费者协议选择或检索能力成功。证据repair-wave-nacos-discovery-safe.json、repair-wave-domain-inspect-safe.json；同名HTTP误选另记KI-100。
 
-## KI-94 [OPEN·P2] Agent未使用的DashScopeAgent自动配置要求额外API key而阻止启动
+## KI-94 [FIXED·c338b7e·P2] Agent未使用的DashScopeAgent自动配置要求额外API key而阻止启动
 
 **发现日期**：2026-10-14（新Agent release真实启动）。
 
 **现象与根因**：AgentServiceApplication仅排除DashScopeChatAutoConfiguration，依赖仍导入DashScopeAgentAutoConfiguration。实际dashScopeAgent factory在DashScopeConnectionUtils.require apiKey处失败；业务DeepSeek配置非空不能替代独立DashScope凭据。不得复用公司网关key发送到未选提供方。
 
-**处置与边界**：7bd7a52排除两个未使用的DashScope chat／agent自动配置，生产AutoConfigurationImportSelector回归及855项完整测试通过；实际新启动不再卡该Agent工厂，但进一步暴露独立AudioSpeech工厂，见KI-98。本轮继续按真实模型使用排除未选模型，保留DeepSeek、Graph／ReactAgent、A2A与非模型AsyncToolCallingManager自动配置；不以源码／本地测试声明Agent已经启动。证据release-agent-exact-factory-safe.json、repair-wave-failure-fixed-frames-safe.json。
+**处置与边界**：7bd7a52排除两个未使用的DashScope chat／agent自动配置，生产AutoConfigurationImportSelector回归及855项完整测试通过；当时新启动进一步暴露独立AudioSpeech工厂，见KI-98。c338b7e一次排除九个未选模型，保留DeepSeek、Graph／ReactAgent、A2A与非模型AsyncToolCallingManager；886项回归及4356c4真实Agent运行／healthy／restart0均通过，启动故障已关闭。模型和工具链另验。证据release-agent-exact-factory-safe.json、repair-wave-failure-fixed-frames-safe.json、dns-protocol-health-discovery-safe.json。
 
 ## KI-95 [FIXED·7bd7a52·P2] 营销两个必要RPC配置的默认Bean名冲突阻止真实启动
 
@@ -459,13 +459,13 @@
 
 **修复与验证**：7bd7a52探针原URL严格校验后只添加固定serialization=fastjson2；四项本地回归、855项完整测试及实际Java17探针编译通过，不使用add-opens、不改provider／Auth检查。当前冻结探针在listing.knowledge／memory.preference／memory.constraint均经真实signed ADMIN及操作后复验后输出INSPECT结果；独立安全诊断亦确认两次签名成功。各ready=false／SPACE_NOT_READY是能力失败，不再误判鉴权失败。安全证据repair-wave-domain-inspect-safe.json；此关闭不证明A2A五操作或默认检索成功。
 
-## KI-98 [OPEN·P2] Agent未选DashScope音频等模型默认自动装配阻止启动
+## KI-98 [FIXED·c338b7e·P2] Agent未选DashScope音频等模型默认自动装配阻止启动
 
 **发现日期**：2026-10-14。
 
 **现象与根因**：排除旧chat／agent工厂后，真实Agent继续在DashScopeAudioSpeechAutoConfiguration.dashScopeSpeechSynthesisModel缺key失败。官方1.1.2.3的speech／transcription／image／video／embedding／multimodal／rerank模型均matchIfMissing=true；Agent实际仅消费ChatModel，未使用这些模型。不能复制公司key到未选提供方或逐次等待每个默认工厂失败。
 
-**处置**：应用一次明确排除九个未选DashScope模型自动配置，保留选定DeepSeek以及Graph／ReactAgent／A2A与AsyncToolCallingManager。实际ImportSelector回归通过；Agent真实重新实启仍待当前完整制品。证据repair-wave-failure-fixed-frames-safe.json，源码AgentServiceApplication／AgentServiceAutoConfigurationTest。
+**处置**：应用一次明确排除九个未选DashScope模型自动配置，保留选定DeepSeek以及Graph／ReactAgent／A2A与AsyncToolCallingManager。实际ImportSelector及当前886项完整回归通过；c338b7e／4356c4新镜像已真实部署，Agent running／healthy／restart0、readiness HTTP200／UP，未选模型启动故障关闭。证据dns-protocol-health-discovery-safe.json；不代表模型工具链／默认检索通过。证据repair-wave-failure-fixed-frames-safe.json，源码AgentServiceApplication／AgentServiceAutoConfigurationTest。
 
 ## KI-99 [OPEN·P2] JNDI组合A／AAAA转ANY导致受管Docker目标DNS超时
 
@@ -482,6 +482,22 @@
 **现象与根因**：实际RAG三RPC只导出Dubbo20898，同名HTTP9018另带SPRING_CLOUD标记；Listing错误栈与RagRetrievalRpcService／RagIndexRpcService及REST9018关联。官方Dubbo3.2.15在HTTP-only通知时合成REST通配metadata；consumer protocol未指定可匹配，继而RestProtocol先创建HTTP客户端、后校验REST注解。KI-96缺类与当前CodeStyleNotSupportException是该错误选择链先后阻塞，不应给纯RPC补REST注解。mixed通知不满足allMatch，不能声称每个混合快照都会适配。
 
 **处置**：纯Dubbo消费者使用官方dubbo.consumer.protocol=dubbo，阻止REST候选匹配，保留HTTP发现、provider、命名group、序列化与REST SPI。新增官方适配器及实际配置绑定回归；真实发现调用20898／HTTP仍9018另验。证据repair-wave-approved-provider-protocol-safe.json、repair-wave-listing-rest-exact-safe.json；关联LR-45。
+
+## KI-101 [OPEN·P2] 房源实际鉴权入口按类型解析RPC出现Bean歧义
+
+**发现日期**：2026-10-14（c338b7e／4356c4实际部署）。
+
+**现象**：真实POST /listings/rag/search返回HTTP500；NoUniqueBeanDefinitionException固定链为DependencyObjectProvider.getIfAvailable→ListingRagIdentity.resolve／requireReader→ListingRequestAuthenticationFilter。故障发生于领域鉴权依赖解析，不能归为DNS／REST或声称真实发现调用已经成功。
+
+**根因与当前修复**：官方Dubbo字段ReferenceBean的principal／retrieval／index与Distributed显式@Bean桥ragPrincipalRpcService／ragRetrievalRpcService／ragIndexRpcService各形成双候选；三个生产ObjectProvider按既有桥名精确Qualifier，不删除合法引用或加Primary。旧AuthPermissionRpcService是独立接口，不是根因；Memory的ReferenceConfig非FactoryBean及RAG直接字段注入不属同根。新增真实AnnotationConfigApplicationContext双候选／精确桥／缺桥失败关闭／signed principal／HTTP401、503回归，Listing五项及probe四项定向通过；新22模块串行clean test和package各896项／142 XML，0失败／错误／跳过，制品证明22f9fe2a…通过，实际修复版领域调用另验。证据dns-protocol-domain-http-error-safe.json；关联LR-46。
+
+## KI-102 [OPEN·P2] 新制品三空间INSPECT在签名ADMIN后远端超时
+
+**发现日期**：2026-10-14（c338b7e／4356c4实际部署）。
+
+**现象**：三个空间初段signed ADMIN通过后均RpcException→TimeoutException，返回DEADLINE_EXCEEDED，没有能力结果及DOMAIN后身份复验成功。七进程基础healthy不代表受保护embedding／rerank或空间就绪，亦不能判断旧偏好policy错误是否仍在。
+
+**已证边界与源码缺口**：实际直接RagSpaceAdminRpcService.inspect消费者timeout为30000ms，RAG→Auth为5000ms；现有安全证据无elapsed或远端终止事实，不能断言预算不足或某一模型阻塞。源码inspect四阶段串行但未用overall剩余预算、Set迭代不稳定，inspect／provision共用全registry synchronized，无有界排队与迟到结果守卫；ES schema exists／mapping同步读取亦未复用可取消deadline reader。已修复共享整体预算／固定顺序／有界执行与ES可取消schema读取，按空间租约直到实际worker退出，迟到worker不发布证据；未执行／整体过期／容量拒绝失败关闭，已调用probe的TIMEOUT保留既有显式降级判断。实际SpringAI自动配置离线503证明确切注入单次无退避模板且惰性基础启动保留，Milvus只读schema使用新单次RetryParam再配置剩余gRPC deadline；定向37项通过，首次Mockito重复设桩失败保留并已修正；新22模块串行clean test和package各896项／142 XML，14Boot JAR与Java17 probe制品证明通过，源LF22f9fe2a…，实际新制品另验。保持既有SpringAI和出站安全，关联LR-47。probe补固定numeric elapsed／configured timeout／safe code，不输出异常原文，只有真实输出前复验成功才打印stage/code。未PROVISION，worker／dispatcher仍关闭。原证据dns-protocol-domain-inspect-safe.json、dns-protocol-new-inspect-error-safe.json、dns-protocol-timeout-selected-fields-safe.json；新的源缺口并不证明这些缺口是该次runtime超时的具体耗时归属。
 
 ## KI-78 [FIXED·本提交·P1] 个人回填游标、计数和持久身份未全部限定 owner
 

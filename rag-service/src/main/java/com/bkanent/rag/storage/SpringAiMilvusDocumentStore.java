@@ -72,7 +72,14 @@ public class SpringAiMilvusDocumentStore implements IndexSink {
     public void verifySchema(RagSpaceDefinition space) {
         bind(space);
         var schema = space.vectorSchema();
-        var response = client.describeCollection(DescribeCollectionParam.newBuilder()
+        long deadline = com.bkanent.rag.security.http.RagHttpDeadline.capture(java.time.Duration.ofMillis(
+                Math.min(5000, space.limits().recallTimeoutMillis())));
+        // Configure retry first: SDK 2.5.8 withRetry copies base stubs, so applying it after withTimeout loses the interceptor.
+        // Use a fresh RetryParam: withRetry(int) mutates the shared original parameter in this SDK version.
+        var inspectionClient = client.withRetry(RetryParam.newBuilder().withMaxRetryTimes(1).build())
+                .withTimeout(com.bkanent.rag.security.http.RagHttpDeadline.remainingNanos(deadline), java.util.concurrent.TimeUnit.NANOSECONDS);
+        com.bkanent.rag.security.http.RagHttpDeadline.remainingNanos(deadline);
+        var response = inspectionClient.describeCollection(DescribeCollectionParam.newBuilder()
                 .withDatabaseName(schema.database()).withCollectionName(schema.collection()).build());
         checkResponse(response);
         DescCollResponseWrapper wrapper = new DescCollResponseWrapper(response.getData());
@@ -143,6 +150,7 @@ public class SpringAiMilvusDocumentStore implements IndexSink {
                 io.grpc.Status.Code code = io.grpc.Status.fromThrowable(cause).getCode();
                 if (code == io.grpc.Status.Code.UNAUTHENTICATED) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
                 if (code == io.grpc.Status.Code.PERMISSION_DENIED) throw new RagException(RagErrorCode.FORBIDDEN);
+                if (code == io.grpc.Status.Code.DEADLINE_EXCEEDED) throw new RagException(RagErrorCode.TIMEOUT);
             }
             if (cause instanceof io.milvus.exception.ServerException server
                     && server.getCompatibleCode() == io.milvus.grpc.ErrorCode.PermissionDenied) throw new RagException(RagErrorCode.FORBIDDEN);

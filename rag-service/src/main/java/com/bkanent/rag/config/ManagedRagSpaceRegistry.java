@@ -6,19 +6,32 @@ import com.bkanent.rag.storage.RagSpaceRegistry;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import com.bkanent.rag.security.http.RagHttpDeadline;
+import jakarta.annotation.PreDestroy;
+import java.time.Duration;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 /** No search-time creation, and no configured ready flag. Diagnostic evidence expires. */
 public final class ManagedRagSpaceRegistry implements RagSpaceRegistry {
-    private static final Set<RagStage> REQUIRED = Set.of(RagStage.KEYWORD, RagStage.VECTOR,
+    private static final List<RagStage> STAGES = List.of(RagStage.KEYWORD, RagStage.VECTOR,
             RagStage.EMBEDDING, RagStage.RERANK);
+    private static final Set<RagStage> REQUIRED = Set.copyOf(STAGES);
     private final Map<String, RagSpaceDefinition> spaces;
     private final Supplier<List<RagCapabilityProbe>> probes;
     private final Clock clock;
     private final Map<String, Evidence> evidence = new ConcurrentHashMap<>();
+    private final Map<String, Operation> active = new ConcurrentHashMap<>();
+    private final ThreadPoolExecutor executor;
+    private volatile boolean closed;
 
     public ManagedRagSpaceRegistry(RagProperties properties, Supplier<List<RagCapabilityProbe>> probes, Clock clock) {
+        this(properties, probes, clock, 4);
+    }
+
+    ManagedRagSpaceRegistry(RagProperties properties, Supplier<List<RagCapabilityProbe>> probes, Clock clock, int concurrency) {
+        if (concurrency < 1 || concurrency > 64) invalid();
         this.probes = probes;
         this.clock = clock;
         Set<String> indices = new HashSet<>();
@@ -31,6 +44,10 @@ public final class ManagedRagSpaceRegistry implements RagSpaceRegistry {
             }
         });
         spaces = properties.spaces();
+        executor = new ThreadPoolExecutor(concurrency, concurrency, 0, TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(concurrency), task -> {
+                    Thread thread = new Thread(task, "rag-inspect"); thread.setDaemon(true); return thread;
+                }, new ThreadPoolExecutor.AbortPolicy());
     }
 
     @Override public RagSpaceDefinition require(String spaceId) {
@@ -80,39 +97,128 @@ public final class ManagedRagSpaceRegistry implements RagSpaceRegistry {
                 || code == RagErrorCode.RERANK_PROTOCOL_ERROR || code == RagErrorCode.SCORING_PROFILE_MISMATCH;
     }
 
-    /** Administrative call only; a missing or duplicate probe cannot produce green readiness. */
-    public synchronized RagSpaceInspection inspect(String requestId, String spaceId) {
+    /** Administrative call only. Queue wait and lazy backend construction consume the same deadline. */
+    public RagSpaceInspection inspect(String requestId, String spaceId) {
         RagSpaceDefinition space = require(spaceId);
-        List<RagStageFailure> failures = new ArrayList<>();
-        List<RagCapabilityProbe> available = probes.get();
-        boolean complete = true;
-        for (RagStage stage : REQUIRED) {
-            List<RagCapabilityProbe> matching = available.stream().filter(p -> p.stage() == stage).toList();
-            if (matching.size() != 1) {
-                complete = false;
-                failures.add(new RagStageFailure(stage, RagErrorCode.DEPENDENCY_UNAVAILABLE));
-                continue;
-            }
-            try { matching.get(0).inspect(space); }
-            catch (RuntimeException failure) { failures.add(new RagStageFailure(stage, RagRuntimeConfiguration.capabilityFailure(failure))); }
-        }
-        evidence.put(spaceId, new Evidence(List.copyOf(failures), clock.instant().plusSeconds(60), complete));
-        return result(requestId, space, failures.isEmpty(), failures);
+        long deadline = RagHttpDeadline.capture(Duration.ofMillis(space.limits().overallTimeoutMillis()));
+        Operation operation = begin(spaceId);
+        try { return inspect(requestId, space, deadline, operation); }
+        finally { operation.release(); }
     }
 
-    public synchronized RagSpaceInspection provision(RagProvisionRequest request) {
+    private RagSpaceInspection inspect(String requestId, RagSpaceDefinition space, long deadline, Operation operation) {
+        List<RagStageFailure> failures = new ArrayList<>();
+        boolean complete = true;
+        for (RagStage stage : STAGES) {
+            if (System.nanoTime() >= deadline) {
+                complete = false;
+                failures.add(new RagStageFailure(stage, RagErrorCode.TIMEOUT));
+                continue;
+            }
+            try { execute(space, stage, deadline, operation, false); }
+            catch (RagException failure) {
+                if ("capabilityUnexecuted".equals(failure.field()) || "capabilityMissing".equals(failure.field())
+                        || "capabilityCapacity".equals(failure.field())) complete = false;
+                failures.add(new RagStageFailure(stage, failure.code()));
+            }
+        }
+        // Workers never publish evidence. A cancelled/late stage cannot turn this result green.
+        if (!closed) evidence.put(space.spaceId(), new Evidence(List.copyOf(failures), clock.instant().plusSeconds(60), complete));
+        return result(requestId, space, !closed && complete && failures.isEmpty(), failures);
+    }
+
+    public RagSpaceInspection provision(RagProvisionRequest request) {
         RagSpaceDefinition space = require(request.spaceId());
         if (!space.schemaVersion().equals(request.schemaVersion()) || space.vectorSchema().dimension() != request.dimension()) {
             throw new RagException(RagErrorCode.INVALID_ARGUMENT, "schema");
         }
-        evidence.remove(space.spaceId());
-        for (RagStage stage : List.of(RagStage.KEYWORD, RagStage.VECTOR)) {
-            List<RagCapabilityProbe> matching = probes.get().stream().filter(p -> p.stage() == stage).toList();
-            if (matching.size() != 1) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE, "schema");
-            try { matching.get(0).provision(space); }
-            catch (RuntimeException failure) { throw new RagException(RagRuntimeConfiguration.capabilityFailure(failure), "schema"); }
+        long deadline = RagHttpDeadline.capture(Duration.ofMillis(space.limits().overallTimeoutMillis()));
+        Operation operation = begin(space.spaceId());
+        try {
+            for (RagStage stage : List.of(RagStage.KEYWORD, RagStage.VECTOR)) execute(space, stage, deadline, operation, true);
+            return inspect(request.requestId(), space, deadline, operation);
+        } finally { operation.release(); }
+    }
+
+    private Operation begin(String spaceId) {
+        Operation operation = new Operation(spaceId);
+        if (closed || active.putIfAbsent(spaceId, operation) != null) {
+            throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE, "capabilityBusy");
         }
-        return inspect(request.requestId(), request.spaceId());
+        evidence.remove(spaceId);
+        return operation;
+    }
+
+    private void execute(RagSpaceDefinition space, RagStage stage, long overallDeadline, Operation operation, boolean provision) {
+        long budgetMillis = stage == RagStage.RERANK ? Math.min(8000, space.limits().rerankTimeoutMillis())
+                : Math.min(5000, space.limits().recallTimeoutMillis());
+        long deadline = Math.min(overallDeadline, System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(budgetMillis));
+        if (System.nanoTime() >= deadline) throw new RagException(RagErrorCode.TIMEOUT, "capabilityUnexecuted");
+        operation.retain();
+        AtomicBoolean invoked = new AtomicBoolean();
+        StageTask task = new StageTask(() -> {
+            try (var ignored = RagHttpDeadline.until(deadline)) {
+                RagHttpDeadline.remainingNanos(deadline);
+                List<RagCapabilityProbe> matching = probes.get().stream().filter(p -> p.stage() == stage).toList();
+                if (matching.size() != 1) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE, "capabilityMissing");
+                RagHttpDeadline.remainingNanos(deadline);
+                invoked.set(true);
+                if (provision) matching.get(0).provision(space); else matching.get(0).inspect(space);
+                RagHttpDeadline.remainingNanos(deadline);
+                return null;
+            }
+        }, operation);
+        try {
+            executor.execute(task);
+            task.get(RagHttpDeadline.remainingNanos(deadline), TimeUnit.NANOSECONDS);
+        } catch (RejectedExecutionException failure) {
+            throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE, "capabilityCapacity");
+        } catch (InterruptedException failure) {
+            Thread.currentThread().interrupt(); throw new RagException(RagErrorCode.TIMEOUT, "capabilityUnexecuted");
+        } catch (TimeoutException failure) {
+            throw new RagException(RagErrorCode.TIMEOUT, invoked.get() ? "capability" : "capabilityUnexecuted");
+        } catch (RagException failure) {
+            if (failure.code() == RagErrorCode.TIMEOUT && !invoked.get()) throw new RagException(RagErrorCode.TIMEOUT, "capabilityUnexecuted");
+            throw failure;
+        } catch (ExecutionException failure) {
+            if (failure.getCause() instanceof RagException rag) {
+                if (rag.code() == RagErrorCode.TIMEOUT && !invoked.get()) throw new RagException(RagErrorCode.TIMEOUT, "capabilityUnexecuted");
+                throw rag;
+            }
+            throw new RagException(RagRuntimeConfiguration.capabilityFailure(failure.getCause()), "capability");
+        } finally {
+            task.cancel(true);
+            executor.remove(task);
+        }
+    }
+
+    // Reference count is released on actual worker exit, NOT Future cancellation completion.
+    private final class Operation {
+        private final String spaceId;
+        private int references = 1;
+        Operation(String spaceId) { this.spaceId = spaceId; }
+        synchronized void retain() { references++; }
+        synchronized void release() { if (--references == 0) active.remove(spaceId, this); }
+    }
+    private static final class StageTask extends FutureTask<Void> {
+        private final AtomicBoolean claimed = new AtomicBoolean();
+        private final Operation operation;
+        StageTask(Callable<Void> action, Operation operation) { super(action); this.operation = operation; }
+        @Override public void run() {
+            if (!claimed.compareAndSet(false, true)) return;
+            try { super.run(); } finally { operation.release(); }
+        }
+        @Override public boolean cancel(boolean interrupt) {
+            boolean cancelled = super.cancel(interrupt);
+            if (claimed.compareAndSet(false, true)) operation.release();
+            return cancelled;
+        }
+    }
+
+    @PreDestroy public void close() {
+        closed = true;
+        evidence.clear();
+        for (Runnable queued : executor.shutdownNow()) if (queued instanceof Future<?> future) future.cancel(true);
     }
 
     /** Passive diagnostics, safe for actuator: no network probes or schema mutation. */
@@ -120,9 +226,9 @@ public final class ManagedRagSpaceRegistry implements RagSpaceRegistry {
         return spaces.values().stream().sorted(Comparator.comparing(RagSpaceDefinition::spaceId)).map(space -> {
             Evidence state = evidence.get(space.spaceId());
             boolean fresh = state != null && clock.instant().isBefore(state.expiresAt());
-            List<RagStageFailure> failures = fresh ? state.failures() : REQUIRED.stream()
+            List<RagStageFailure> failures = fresh ? state.failures() : STAGES.stream()
                     .map(stage -> new RagStageFailure(stage, RagErrorCode.SPACE_NOT_READY)).toList();
-            return result("diagnostic", space, fresh && failures.isEmpty(), failures);
+            return result("diagnostic", space, fresh && state.complete() && failures.isEmpty(), failures);
         }).toList();
     }
 

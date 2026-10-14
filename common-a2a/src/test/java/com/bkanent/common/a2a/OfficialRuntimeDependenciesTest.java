@@ -116,6 +116,25 @@ class OfficialRuntimeDependenciesTest {
                             "Invalid endpoint must fail closed without echoing it");
                 }
             }
+            Method timing = probe.getDeclaredMethod("inspectTiming", java.io.PrintStream.class,
+                    long.class, int.class, Throwable.class);
+            timing.setAccessible(true);
+            var bytes = new ByteArrayOutputStream();
+            var output = new java.io.PrintStream(bytes, true, java.nio.charset.StandardCharsets.UTF_8);
+            RuntimeException waiting = new RuntimeException("UNTRUSTED_PROVIDER_BODY",
+                    new java.util.concurrent.TimeoutException("UNTRUSTED_TIMEOUT_BODY"));
+            timing.invoke(null, output, System.nanoTime() - 2_000_000, 30000, waiting);
+            String summary = bytes.toString(java.nio.charset.StandardCharsets.UTF_8);
+            check(summary.matches("probe rpcInterface=RagSpaceAdminRpcService method=inspect protocol=dubbo "
+                            + "timeoutConfiguredMillis=30000 elapsedMillis=[0-9]+ outcome=FAILED "
+                            + "errorCode=DEADLINE_EXCEEDED remoteOutcome=UNCONFIRMED\\R"),
+                    "Actual configured consumer wait and elapsed time must be safe numeric evidence, not remote completion");
+            check(!summary.contains("UNTRUSTED"), "Provider exception text must never enter timing evidence");
+            bytes.reset();
+            timing.invoke(null, output, System.nanoTime(), 30000, null);
+            check(bytes.toString(java.nio.charset.StandardCharsets.UTF_8).contains(
+                            "outcome=RETURNED errorCode=NONE remoteOutcome=RETURNED"),
+                    "A returned inspection is distinct from timeout, not an implied ready or post-auth result");
         }
     }
 

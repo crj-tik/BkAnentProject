@@ -7,6 +7,7 @@ import com.bkanent.listing.entity.ListingEntity;
 import com.bkanent.listing.mapper.ListingMapper;
 import com.bkanent.listing.search.ListingKnowledgeDocumentAssembler;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.util.*;
@@ -23,7 +24,7 @@ public class ListingRagFacade {
     private final ListingKnowledgeDocumentAssembler assembler;
     private final ListingRagOutbox outbox;
     public ListingRagFacade(ListingRagIdentity identity, ListingRagGrantService grants,
-                            ObjectProvider<RagRetrievalRpcService> rpc, ListingMapper listings,
+                            @Qualifier("ragRetrievalRpcService") ObjectProvider<RagRetrievalRpcService> rpc, ListingMapper listings,
                             ListingConverter converter, ListingKnowledgeDocumentAssembler assembler, ListingRagOutbox outbox) {
         this.identity = identity; this.grants = grants; this.rpc = rpc; this.listings = listings;
         this.converter = converter; this.assembler = assembler; this.outbox = outbox;

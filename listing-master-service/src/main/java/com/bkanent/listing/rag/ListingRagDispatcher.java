@@ -5,6 +5,7 @@ import com.bkanent.common.rpc.RagIndexRpcService;
 import com.bkanent.listing.config.ListingRagProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -22,7 +23,8 @@ public class ListingRagDispatcher {
     private final ObjectProvider<RagIndexRpcService> rpc;
     private final ListingRagIdentity identity;
     private final ListingRagProperties properties;
-    public ListingRagDispatcher(JdbcTemplate jdbc, ObjectMapper json, ObjectProvider<RagIndexRpcService> rpc,
+    public ListingRagDispatcher(JdbcTemplate jdbc, ObjectMapper json,
+                                @Qualifier("ragIndexRpcService") ObjectProvider<RagIndexRpcService> rpc,
                                 ListingRagIdentity identity, ListingRagProperties properties) {
         this.jdbc = jdbc; this.json = json; this.rpc = rpc; this.identity = identity; this.properties = properties;
     }
