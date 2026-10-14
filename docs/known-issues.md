@@ -467,21 +467,21 @@
 
 **处置**：应用一次明确排除九个未选DashScope模型自动配置，保留选定DeepSeek以及Graph／ReactAgent／A2A与AsyncToolCallingManager。实际ImportSelector及当前886项完整回归通过；c338b7e／4356c4新镜像已真实部署，Agent running／healthy／restart0、readiness HTTP200／UP，未选模型启动故障关闭。证据dns-protocol-health-discovery-safe.json；不代表模型工具链／默认检索通过。证据repair-wave-failure-fixed-frames-safe.json，源码AgentServiceApplication／AgentServiceAutoConfigurationTest。
 
-## KI-99 [OPEN·P2] JNDI组合A／AAAA转ANY导致受管Docker目标DNS超时
+## KI-99 [FIXED·c338b7e·P2] JNDI组合A／AAAA转ANY导致受管Docker目标DNS超时
 
 **发现日期**：2026-10-14。
 
 **现象与根因**：官方OpenJDK17 DnsContext对getAttributes(name,{A,AAAA})选择IN／ANY(255)，不是分别查询。当前RAG同JRE／同网络实测三个批准host组合均CommunicationException→SocketTimeoutException，独立A成功且AAAA成功空；不能把getent成功当作保护路径成功，也不能归为整体DNS故障或缺schema。
 
-**处置**：RagDnsRecords同一fresh InitialDirContext分别查询A和AAAA，共用一次整体deadline，两次成功后才返回完整原始地址；任一路失败不返回部分结果。原平台DNS、mapped／保留地址拒绝、逐host授权与实际连接绑定不变。新增16次JNDI facade夹具测试通过，含空AAAA与失败区别、混答、换址和整体期限；实际新制品HTTP能力仍待验。证据repair-wave-dns-separate-query-safe.json；关联LR-34、LR-45。
+**处置**：RagDnsRecords同一fresh InitialDirContext分别查询A和AAAA，共用一次整体deadline，两次成功后才返回完整原始地址；任一路失败不返回部分结果。原平台DNS、mapped／保留地址拒绝、逐host授权与实际连接绑定不变。新增16次JNDI facade夹具测试通过，含空AAAA与失败区别、混答、换址和整体期限；c338b7e修复后、accf97f新制品三空间实际protected embedding／governed rerank能力probe通过，已不再被组合ANY查询阻塞；ES独立reactor缺口另记KI-104，不重开本DNS根因。证据repair-wave-dns-separate-query-safe.json、inspect-wiring-domain-inspect-safe.json；关联LR-34、LR-45。
 
-## KI-100 [OPEN·P2] 未限定消费者协议使同名Spring HTTP实例被适配成REST RPC
+## KI-100 [FIXED·c338b7e·P2] 未限定消费者协议使同名Spring HTTP实例被适配成REST RPC
 
 **发现日期**：2026-10-14。
 
 **现象与根因**：实际RAG三RPC只导出Dubbo20898，同名HTTP9018另带SPRING_CLOUD标记；Listing错误栈与RagRetrievalRpcService／RagIndexRpcService及REST9018关联。官方Dubbo3.2.15在HTTP-only通知时合成REST通配metadata；consumer protocol未指定可匹配，继而RestProtocol先创建HTTP客户端、后校验REST注解。KI-96缺类与当前CodeStyleNotSupportException是该错误选择链先后阻塞，不应给纯RPC补REST注解。mixed通知不满足allMatch，不能声称每个混合快照都会适配。
 
-**处置**：纯Dubbo消费者使用官方dubbo.consumer.protocol=dubbo，阻止REST候选匹配，保留HTTP发现、provider、命名group、序列化与REST SPI。新增官方适配器及实际配置绑定回归；真实发现调用20898／HTTP仍9018另验。证据repair-wave-approved-provider-protocol-safe.json、repair-wave-listing-rest-exact-safe.json；关联LR-45。
+**处置**：纯Dubbo消费者使用官方dubbo.consumer.protocol=dubbo，阻止REST候选匹配，保留HTTP发现、provider、命名group、序列化与REST SPI。新增官方适配器及实际配置绑定回归通过；accf97f新Listing实际生产发现调用进入RAG服务端requireReady／search，HTTP仍作为独立发现保留，不再误走REST RPC。当前返回异常的fastjson2注册缺口另记KI-103，不重开协议选择根因。证据repair-wave-approved-provider-protocol-safe.json、repair-wave-listing-rest-exact-safe.json、inspect-wiring-bounded-backend-serializer-safe.json；关联LR-45。
 
 ## KI-101 [FIXED·accf97f·P2] 房源实际鉴权入口按类型解析RPC出现Bean歧义
 
@@ -503,7 +503,7 @@
 
 **发现日期**：2026-10-14（accf97f／22f9fe实际部署）。
 
-**现象与已证边界**：原ADMIN真实Listing POST越过Bean解析并进入Facade，但HTTP500／828ms，固定readThrowable→DecodeableRpcResult.handleException/decode分类为RagException／SerializationException／IllegalArgumentException／IOException。未输出异常正文、URL、完整堆栈。实际序列化器及异常字段重建根因仍须官方wire离线round-trip和受限运行选择取证，不能猜成DNS、REST、Hessian或放宽Java模块／class check。
+**现象与已证边界**：原ADMIN真实Listing POST越过Bean解析并进入Facade，但HTTP500／828ms，固定readThrowable→DecodeableRpcResult.handleException/decode分类为RagException／SerializationException／IllegalArgumentException／IOException。未输出异常正文、URL、完整堆栈。后续受限运行固定帧证实实际fastjson2 STRICT允许列表拒绝公共RagException，RAG server真实requireReady→search已执行。官方Dubbo3.2.15初始化registerInterface遍历throws自动精确注册异常及字段类型；当前接口没有throws RagException导致未注册。隔离framework实际writeThrowable／readThrowable在现接口初始化后拒绝，声明该异常的同签名接口初始化后39种code／field组合可完整重建，未知同包类仍拒绝，STRICT／serializable不变；无final字段／无参构造问题，不需add-opens或包级allowlist。四接口七方法已显式声明异常，既有官方wire六项定向通过，新增两项回归逐接口156种code／field组合恢复并保留未受信拒绝；冻结增量22模块串行clean test及package各916项／142 XML，0失败／错误／跳过；14Boot嵌套common逐字节一致及四接口七方法throws制品证明已通过。新消费者与提供者七release实际部署及Throwable返回仍待验证，保持OPEN。证据inspect-wiring-bounded-backend-serializer-safe.json；新构建证明D:/project/rag-contract-reactor-artifact-verification-20261014.json，关联LR-48。
 
 **处置**：保持协议与身份检查，独立核对公共RagException可序列化契约和官方Dubbo3.2.15读写Throwable；新回归必须真实经过官方writeThrowable／readThrowable，不仅new mock异常。证据inspect-wiring-domain-http-error-safe.json；修复前不宣称领域默认检索成功。
 
@@ -513,7 +513,15 @@
 
 **现象与已证边界**：三空间INSPECT均在5.3～6.8秒返回、操作后signed ADMIN通过，1024维embedding及governed rerank保护probe未失败；KEYWORD为TIMEOUT，VECTOR为DEPENDENCY_UNAVAILABLE。已关闭整体consumer超时并隔离残余后端失败，不再重复JNDI混合ANY／REST误选调查。
 
-**处置**：仅受限只读取证实际ES受保护HEAD／mapping和Milvus schema状态；不能从两种错误推定只有missing schema，不绕HTTP守卫用curl当通过，不PROVISION／backfill／enable workers。官方传输与错误映射必要离线诊断独立进行。证据inspect-wiring-domain-inspect-safe.json；关联LR-34、LR-47。
+**处置**：受限运行Milvus官方ServerException及describeCollection帧已取证，typed status未知；ES请求状态未知。只读源码及当前制品确认HC4 shared=true却无reactor启动owner，官方该模式client.start只置ACTIVE而不执行reactor，connect可在INACTIVE入队直到deadline；这是已证生命周期代码缺口，不把它当尚未采样的实际reactor状态。已以官方shared=false由唯一Boot RestClient拥有原reactor，保留Spring官方幂等shutdown后备；十二项transport定向通过，含真实ACTIVE／SHUT_DOWN、重复关闭及无client后备。HEAD404官方自动ignore且无body不等待；原protected reader生产schema诊断和四项actual reader离线回调回归已补。Milvus describe-only按官方compatible CollectionNotExists分类SPACE_NOT_READY，保留硬失败优先、通用revision query及未知数字依赖失败；14项Milvus／8项ES投影定向全过。冻结增量22模块串行clean test及package各916项／142 XML、14Boot与Java17 probe制品证明已通过。新制品将输出固定HTTP状态及typed数字／enum，当前运行值仍未知；实际新部署另验，保持OPEN，关联LR-49／50。不能从两种错误推定只有missing schema，不绕HTTP守卫用curl当通过，不PROVISION／backfill／enable workers。官方传输与错误映射必要离线诊断独立进行。证据inspect-wiring-domain-inspect-safe.json；关联LR-34、LR-47。
+
+## KI-105 [OPEN·P2] 房源RAG控制器未把正常业务错误映射为结构化HTTP失败
+
+**发现日期**：2026-10-14。
+
+**现象与根因**：KI-103异常传输修复后，ListingRagFacade保留正常收到的RagException，但Listing模块没有对应ControllerAdvice，SPACE_NOT_READY仍可能返回通用HTTP500而非可识别业务失败；修复RPC wire不等于修复HTTP边界。
+
+**处置**：仅ListingRagController的定向advice处理RagException，沿用ApiResponse失败包络；code／message只用枚举，可选data.field只用原净化字段，不输出异常／cause／suppressed／stack。认证401、权限403、参数400、不存在404、冲突409、期限504、空间／依赖／重排失败503；普通RuntimeException及其他Controller不接管，成功包络与凭据清理不变。既有ListingRequestAuthenticationFilterTest增加五项真实MockMvc controller／advice／filter回归，8项filter／7项Facade／5项Identity／7项BusinessAuthorization共27项定向通过；冻结增量22模块串行clean test及package各916项／142 XML、14Boot制品证明已通过；实际新Listing POST及结构化HTTP失败仍待部署验证，保持OPEN。关联LR-48、KI-103。
 
 ## KI-78 [FIXED·本提交·P1] 个人回填游标、计数和持久身份未全部限定 owner
 

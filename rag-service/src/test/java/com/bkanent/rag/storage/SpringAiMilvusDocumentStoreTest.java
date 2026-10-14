@@ -2,7 +2,13 @@ package com.bkanent.rag.storage;
 
 import com.bkanent.common.rag.*;
 import com.bkanent.rag.index.IndexDocument;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import io.milvus.client.MilvusServiceClient;
+import io.milvus.exception.ServerException;
+import io.milvus.grpc.ErrorCode;
 import io.milvus.grpc.DataType;
 import io.milvus.grpc.DescribeCollectionResponse;
 import io.milvus.param.R;
@@ -80,6 +86,174 @@ class SpringAiMilvusDocumentStoreTest {
         var store = new SpringAiMilvusDocumentStore(registry(), client, mock(EmbeddingModel.class));
         assertEquals(RagErrorCode.FORBIDDEN, assertThrows(RagException.class, () -> store.verifySchema(space())).code());
     }
+    @Test void onlyOfficialCompatibleMissingCollectionMapsSchemaToNotReady() {
+        for (int status : List.of(4, 100, 987654)) {
+            var client = inspectionClient();
+            var failure = new ServerException("provider text must not classify", status, ErrorCode.CollectionNotExists);
+            R<DescribeCollectionResponse> response = R.failed(failure);
+            assertSame(failure, response.getException());
+            assertEquals(Integer.valueOf(status), response.getStatus());
+            when(client.describeCollection(any())).thenReturn(response);
+            when(client.query(any(io.milvus.param.dml.QueryParam.class))).thenReturn(R.failed(failure));
+            var store = new SpringAiMilvusDocumentStore(registry(), client, mock(EmbeddingModel.class));
+            var schemaFailure = assertThrows(RagException.class, () -> store.verifySchema(space()));
+            assertEquals(RagErrorCode.SPACE_NOT_READY, schemaFailure.code());
+            assertEquals("vectorSchema", schemaFailure.field());
+            var queryFailure = assertThrows(RagException.class, () -> store.inspect(space().spaceId(), "listing:1"));
+            assertEquals(RagErrorCode.DEPENDENCY_UNAVAILABLE, queryFailure.code());
+            assertNull(queryFailure.field());
+        }
+    }
+
+    @Test void modernNumbersOtherNamespacesUnknownAndMissingMessagesRemainUnavailable() {
+        List<R<DescribeCollectionResponse>> responses = new ArrayList<>();
+        for (ErrorCode compatible : Arrays.asList(ErrorCode.DataCoordNA, ErrorCode.UnexpectedError,
+                ErrorCode.Success, ErrorCode.UNRECOGNIZED, null)) {
+            responses.add(R.failed(new ServerException("collection not exist", 100, compatible)));
+        }
+        responses.add(R.failed(new ServerException("collection not exist", 4, ErrorCode.UnexpectedError)));
+        responses.add(R.failed(new ServerException("collection not exist", null, null)));
+        responses.add(R.failed(new ServerException("collection not exist", 28, ErrorCode.CollectionNameNotFound)));
+        responses.add(R.failed(new ServerException("collection not exist", -3, ErrorCode.UnexpectedError)));
+        responses.add(R.failed(new ServerException("collection not exist", 987654, ErrorCode.UNRECOGNIZED)));
+        responses.add(R.failed(new Exception("collection not exist code=100 error_code=CollectionNotExists")));
+        responses.add(R.failed(ErrorCode.CollectionNotExists, "collection not exist"));
+        responses.add(R.failed(R.Status.CollectionNotExists, "collection not exist"));
+        responses.add(R.success());
+        responses.add(null);
+        for (R<DescribeCollectionResponse> response : responses) {
+            var client = inspectionClient();
+            when(client.describeCollection(any())).thenReturn(response);
+            var store = new SpringAiMilvusDocumentStore(registry(), client, mock(EmbeddingModel.class));
+            var failure = assertThrows(RagException.class, () -> store.verifySchema(space()));
+            assertEquals(RagErrorCode.DEPENDENCY_UNAVAILABLE, failure.code());
+            assertNull(failure.field());
+        }
+    }
+
+    @Test void schemaMissingDoesNotMaskNestedGrpcRagOrCompatiblePermissionHardFailures() {
+        List<Exception> hardFailures = new ArrayList<>();
+        List<RagErrorCode> expected = new ArrayList<>();
+        for (io.grpc.Status status : List.of(io.grpc.Status.UNAUTHENTICATED,
+                io.grpc.Status.PERMISSION_DENIED, io.grpc.Status.DEADLINE_EXCEEDED)) {
+            RagErrorCode code = switch (status.getCode()) {
+                case UNAUTHENTICATED -> RagErrorCode.AUTHENTICATION_FAILED;
+                case PERMISSION_DENIED -> RagErrorCode.FORBIDDEN;
+                default -> RagErrorCode.TIMEOUT;
+            };
+            hardFailures.add(status.asRuntimeException());
+            expected.add(code);
+            hardFailures.add(status.asException());
+            expected.add(code);
+        }
+        hardFailures.add(new ServerException("provider text", 123456, ErrorCode.PermissionDenied));
+        expected.add(RagErrorCode.FORBIDDEN);
+        for (RagErrorCode code : List.of(RagErrorCode.AUTHENTICATION_FAILED, RagErrorCode.FORBIDDEN, RagErrorCode.TIMEOUT)) {
+            hardFailures.add(new RagException(code));
+            expected.add(code);
+        }
+        for (int i = 0; i < hardFailures.size(); i++) {
+            var missing = new ServerException("collection not exist", 100, ErrorCode.CollectionNotExists);
+            missing.initCause(new IllegalStateException("nested provider text", hardFailures.get(i)));
+            var client = inspectionClient();
+            when(client.describeCollection(any())).thenReturn(R.failed(missing));
+            var store = new SpringAiMilvusDocumentStore(registry(), client, mock(EmbeddingModel.class));
+            var failure = assertThrows(RagException.class, () -> store.verifySchema(space()));
+            assertEquals(expected.get(i), failure.code());
+            assertNull(failure.field());
+        }
+        var existing = new RagException(RagErrorCode.INDEX_CONFLICT);
+        existing.initCause(io.grpc.Status.UNAUTHENTICATED.asRuntimeException());
+        var client = inspectionClient();
+        when(client.describeCollection(any())).thenReturn(R.failed(existing));
+        var store = new SpringAiMilvusDocumentStore(registry(), client, mock(EmbeddingModel.class));
+        assertEquals(RagErrorCode.AUTHENTICATION_FAILED,
+                assertThrows(RagException.class, () -> store.verifySchema(space())).code());
+    }
+
+    @Test void schemaDescribePreservesExistingRagFailuresAndCompatiblePermission() {
+        var client = inspectionClient();
+        var existing = new RagException(RagErrorCode.INDEX_CONFLICT);
+        when(client.describeCollection(any())).thenReturn(R.failed(existing));
+        var store = new SpringAiMilvusDocumentStore(registry(), client, mock(EmbeddingModel.class));
+        assertSame(existing, assertThrows(RagException.class, () -> store.verifySchema(space())));
+        when(client.describeCollection(any())).thenReturn(R.failed(
+                new ServerException("collection not exist", 100, ErrorCode.PermissionDenied)));
+        assertEquals(RagErrorCode.FORBIDDEN, assertThrows(RagException.class, () -> store.verifySchema(space())).code());
+    }
+
+    @Test void failedSchemaSearchRemainsReadonlySingleAttemptAndDoesNotCacheOrEmbed() {
+        var client = inspectionClient();
+        when(client.describeCollection(any())).thenReturn(R.failed(
+                new ServerException("provider text", 100, ErrorCode.CollectionNotExists)));
+        var embedding = mock(EmbeddingModel.class);
+        var store = new SpringAiMilvusDocumentStore(registry(), client, embedding);
+        for (int attempt = 0; attempt < 2; attempt++) {
+            assertEquals(RagErrorCode.SPACE_NOT_READY,
+                    assertThrows(RagException.class, () -> store.search(space(), "query", List.of(), 5)).code());
+        }
+        var retry = org.mockito.ArgumentCaptor.forClass(io.milvus.param.RetryParam.class);
+        var timeout = org.mockito.ArgumentCaptor.forClass(Long.class);
+        var order = inOrder(client);
+        for (int attempt = 0; attempt < 2; attempt++) {
+            order.verify(client).withRetry(retry.capture());
+            order.verify(client).withTimeout(timeout.capture(), eq(java.util.concurrent.TimeUnit.NANOSECONDS));
+            order.verify(client).describeCollection(any());
+        }
+        assertTrue(retry.getAllValues().stream().allMatch(value -> value.getMaxRetryTimes() == 1));
+        assertNotSame(retry.getAllValues().get(0), retry.getAllValues().get(1));
+        assertTrue(timeout.getAllValues().stream().allMatch(value -> value > 0 && value <= 5000000000L));
+        verifyNoMoreInteractions(client);
+        verifyNoInteractions(embedding);
+    }
+
+    @Test void schemaFailureDiagnosticsContainOnlyFixedSafeScalarsAndNoThrowable() {
+        Logger logger = (Logger) org.slf4j.LoggerFactory.getLogger(SpringAiMilvusDocumentStore.class);
+        Level previousLevel = logger.getLevel();
+        var appender = new ListAppender<ILoggingEvent>();
+        appender.start();
+        logger.addAppender(appender);
+        logger.setLevel(Level.WARN);
+        try {
+            var client = inspectionClient();
+            var missing = new ServerException("SECRET_REASON endpoint=http://secret db=private collection=private token=secret\nSTACK",
+                    100, ErrorCode.CollectionNotExists);
+            missing.initCause(io.grpc.Status.PERMISSION_DENIED.withDescription("SECRET_GRPC token=secret").asRuntimeException());
+            when(client.describeCollection(any())).thenReturn(R.failed(missing));
+            when(client.query(any(io.milvus.param.dml.QueryParam.class))).thenReturn(R.failed(missing));
+            var store = new SpringAiMilvusDocumentStore(registry(), client, mock(EmbeddingModel.class));
+            assertEquals(RagErrorCode.FORBIDDEN, assertThrows(RagException.class, () -> store.verifySchema(space())).code());
+            assertEquals(1, appender.list.size());
+            ILoggingEvent event = appender.list.get(0);
+            assertEquals("operation=SCHEMA_DESCRIBE rStatus=100 serverStatus=100 compatibleCode=CollectionNotExists grpcCode=PERMISSION_DENIED",
+                    event.getFormattedMessage());
+            assertNull(event.getThrowableProxy());
+            for (Object argument : event.getArgumentArray()) {
+                assertTrue(argument == null || argument instanceof Integer || argument instanceof String);
+            }
+            assertEquals(RagErrorCode.FORBIDDEN,
+                    assertThrows(RagException.class, () -> store.inspect(space().spaceId(), "listing:1")).code());
+            assertEquals(1, appender.list.size());
+            when(client.describeCollection(any())).thenReturn(null);
+            assertThrows(RagException.class, () -> store.verifySchema(space()));
+            assertEquals("operation=SCHEMA_DESCRIBE rStatus=null serverStatus=null compatibleCode=null grpcCode=null",
+                    appender.list.get(1).getFormattedMessage());
+            assertNull(appender.list.get(1).getThrowableProxy());
+            when(client.describeCollection(any())).thenReturn(R.failed(new ServerException("SECRET_REASON", null, ErrorCode.UNRECOGNIZED)));
+            assertThrows(RagException.class, () -> store.verifySchema(space()));
+            assertEquals("operation=SCHEMA_DESCRIBE rStatus=null serverStatus=null compatibleCode=UNRECOGNIZED grpcCode=null",
+                    appender.list.get(2).getFormattedMessage());
+            assertNull(appender.list.get(2).getThrowableProxy());
+            when(client.describeCollection(any())).thenReturn(R.success(DescribeCollectionResponse.getDefaultInstance()));
+            assertThrows(Exception.class, () -> store.verifySchema(space()));
+            assertEquals(3, appender.list.size());
+        } finally {
+            logger.detachAppender(appender);
+            logger.setLevel(previousLevel);
+            appender.stop();
+        }
+    }
+
     @Test void projectionKeepsLogicalIdAndVersionAndNeverAllowsIdentityOverride() {
         var document = new RagDocument("listing", "1", "body", Map.of("area", RagValue.number(10)));
         String hash = RagCanonicalHash.documentHash(RagIndexOperation.UPSERT, document);

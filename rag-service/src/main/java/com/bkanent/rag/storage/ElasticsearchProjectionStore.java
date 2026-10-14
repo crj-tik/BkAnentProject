@@ -14,12 +14,15 @@ import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
 import org.springframework.data.elasticsearch.core.mapping.IndexCoordinates;
 import org.springframework.data.elasticsearch.core.query.IndexQuery;
 import org.springframework.stereotype.Component;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.*;
 
 /** Migrated ElasticsearchOperations path, only complete domain projections; no SQL/RPC fallback. */
 @Component
 public class ElasticsearchProjectionStore implements IndexSink {
+    private static final Logger log = LoggerFactory.getLogger(ElasticsearchProjectionStore.class);
     public record EsProjection(@Id String documentId, String content, Map<String, Object> metadata) { }
     private final RagSpaceRegistry registry;
     private final ElasticsearchOperations operations;
@@ -127,19 +130,51 @@ public class ElasticsearchProjectionStore implements IndexSink {
     public void inspectSchema(RagSpaceDefinition space) {
         Duration budget = Duration.ofMillis(Math.min(5000, space.limits().recallTimeoutMillis()));
         long deadline = com.bkanent.rag.security.http.RagHttpDeadline.capture(budget);
+        SchemaOperation operation = SchemaOperation.SCHEMA_HEAD;
+        long started = System.nanoTime();
+        int httpStatus = 0;
+        RagErrorCode errorCode = null;
         try (var ignored = com.bkanent.rag.security.http.RagHttpDeadline.until(deadline)) {
             String path = "/" + space.elasticsearchIndex();
             var exists = reader.read(new org.elasticsearch.client.Request("HEAD", path), budget, 65536);
-            if (exists.getStatusLine().getStatusCode() == 404) throw new RagException(RagErrorCode.SPACE_NOT_READY);
-            if (exists.getStatusLine().getStatusCode() != 200) unavailable();
+            httpStatus = exists.getStatusLine().getStatusCode();
+            if (httpStatus == 404) throw new RagException(RagErrorCode.SPACE_NOT_READY);
+            if (httpStatus != 200) unavailable();
+            logSchemaDiagnostic(operation, httpStatus, null, started);
+            operation = SchemaOperation.SCHEMA_MAPPING;
+            started = System.nanoTime();
+            httpStatus = 0;
             com.bkanent.rag.security.http.RagHttpDeadline.remainingNanos(deadline);
             var response = reader.read(new org.elasticsearch.client.Request("GET", path + "/_mapping"), budget, 1024 * 1024);
+            httpStatus = response.getStatusLine().getStatusCode();
             var root = mapper.readTree(org.apache.http.util.EntityUtils.toString(response.getEntity(), java.nio.charset.StandardCharsets.UTF_8));
             Map<?, ?> actual = mapper.convertValue(root.path(space.elasticsearchIndex()).path("mappings"), Map.class);
             if (!containsMapping(actual, mapping(space))) throw new RagException(RagErrorCode.SPACE_NOT_READY, "keywordMapping");
             com.bkanent.rag.security.http.RagHttpDeadline.remainingNanos(deadline);
-        } catch (java.io.IOException failure) { throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE); }
+        } catch (RagException failure) {
+            errorCode = failure.code();
+            throw failure;
+        } catch (java.io.IOException failure) {
+            errorCode = RagErrorCode.DEPENDENCY_UNAVAILABLE;
+            throw new RagException(errorCode);
+        } catch (RuntimeException failure) {
+            errorCode = RagErrorCode.DEPENDENCY_UNAVAILABLE;
+            throw failure;
+        } finally {
+            logSchemaDiagnostic(operation, httpStatus, errorCode, started);
+        }
     }
+
+    private enum SchemaOperation { SCHEMA_HEAD, SCHEMA_MAPPING }
+
+    private static void logSchemaDiagnostic(SchemaOperation operation, int status, RagErrorCode code, long started) {
+        // Only a returned protected-reader response supplies a status; timeout proves neither headers nor cancellation.
+        String httpStatus = status > 0 && code != RagErrorCode.TIMEOUT ? Integer.toString(status) : "UNKNOWN";
+        long elapsedMillis = Math.max(0, java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started));
+        log.info("operation={} httpStatus={} errorCode={} elapsedMillis={}",
+                operation.name(), httpStatus, code == null ? "NONE" : code.name(), elapsedMillis);
+    }
+
     public Map<String, Object> mapping(RagSpaceDefinition space) {
         Map<String, Object> metadata = new HashMap<>();
         space.fields().forEach((name, field) -> metadata.put(name, field.type() == RagValueType.INSTANT

@@ -1,8 +1,21 @@
 package com.bkanent.common.a2a;
 
+import com.bkanent.common.rag.RagErrorCode;
+import com.bkanent.common.rag.RagException;
 import com.bkanent.common.rpc.AuthenticatedPrincipal;
+import com.bkanent.common.rpc.RagIndexRpcService;
+import com.bkanent.common.rpc.RagPrincipalRpcService;
+import com.bkanent.common.rpc.RagRetrievalRpcService;
+import com.bkanent.common.rpc.RagSpaceAdminRpcService;
 import org.apache.dubbo.common.URL;
+import org.apache.dubbo.common.serialize.Serialization;
+import org.apache.dubbo.common.serialize.SerializationException;
+import org.apache.dubbo.common.serialize.fastjson2.Fastjson2SecurityManager;
 import org.apache.dubbo.common.serialize.support.PreferSerializationProviderImpl;
+import org.apache.dubbo.common.utils.AllowClassNotifyListener;
+import org.apache.dubbo.common.utils.SerializeCheckStatus;
+import org.apache.dubbo.common.utils.SerializeSecurityConfigurator;
+import org.apache.dubbo.common.utils.SerializeSecurityManager;
 import org.apache.dubbo.remoting.http.RestClient;
 import org.apache.dubbo.remoting.http.config.HttpClientConfig;
 import org.apache.dubbo.remoting.transport.CodecSupport;
@@ -15,13 +28,18 @@ import javax.tools.ToolProvider;
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 /** Offline checks only: no application context, provider export, reference.get(), or HTTP/RPC call. */
 class OfficialRuntimeDependenciesTest {
@@ -81,6 +99,153 @@ class OfficialRuntimeDependenciesTest {
                     "Java 17 auth principal record must round-trip without add-opens");
         } finally {
             framework.destroy();
+        }
+    }
+
+    @Test void declaredRagFailuresRegisterExactClassesAndRoundTripThroughOfficialThrowableWire() throws Exception {
+        for (Class<?> contract : List.of(RagPrincipalRpcService.class, RagRetrievalRpcService.class,
+                RagIndexRpcService.class, RagSpaceAdminRpcService.class)) {
+            for (Method method : contract.getDeclaredMethods()) {
+                check(Arrays.equals(method.getExceptionTypes(), new Class<?>[]{RagException.class}),
+                        "Every RAG RPC method must explicitly declare the safe unchecked failure contract");
+            }
+            FrameworkModel framework = new FrameworkModel();
+            try {
+                var module = framework.newApplication().newModule();
+                var configurator = module.getBeanFactory().getBean(SerializeSecurityConfigurator.class);
+                var security = framework.getBeanFactory().getBean(SerializeSecurityManager.class);
+                var observed = new ObservedSerializationSecurity();
+                security.registerListener(observed);
+                URL direct = URL.valueOf("dubbo://127.0.0.1:20898?serialization=fastjson2").setScopeModel(module);
+                Serialization serialization = CodecSupport.getSerialization(direct);
+                check(serialization.getContentTypeId() == 23, "Offline wire must select official fastjson2");
+                byte[] notReady = throwableWire(serialization, direct,
+                        new RagException(RagErrorCode.SPACE_NOT_READY, "spaceId"));
+
+                configurator.registerInterface(UndeclaredFailureRpc.class);
+                check(!observed.allowed.contains(RagException.class.getName()),
+                        "An undeclared runtime exception must not be implicitly trusted");
+                assertStrictSerializable(observed);
+                assertUntrustedThrowableWire(serialization, direct, notReady);
+
+                configurator.registerInterface(contract);
+                check(observed.allowed.contains(RagException.class.getName())
+                                && observed.allowed.contains(RagErrorCode.class.getName()),
+                        "Official interface initialization must register the declared exception and its enum field");
+                check(!observed.allowed.contains("com.bkanent.")
+                                && !observed.allowed.contains("com.bkanent.common.")
+                                && !observed.allowed.contains("com.bkanent.common.rag."),
+                        "Trust must remain exact classes, never the application or RAG package");
+                assertStrictSerializable(observed);
+                RagException readyFailure = (RagException) serialization.deserialize(direct,
+                        new ByteArrayInputStream(notReady)).readThrowable();
+                check(readyFailure.code() == RagErrorCode.SPACE_NOT_READY && "spaceId".equals(readyFailure.field()),
+                        "The same previously rejected bytes must preserve the safe remote failure");
+
+                for (RagErrorCode code : RagErrorCode.values()) {
+                    for (String field : Arrays.asList(null, "spaceId", "access-token-MUST-NOT-ECHO")) {
+                        RagException original = new RagException(code, field);
+                        Throwable result = serialization.deserialize(direct,
+                                new ByteArrayInputStream(throwableWire(serialization, direct, original))).readThrowable();
+                        check(result instanceof RagException, "Official readThrowable must restore the actual exception type");
+                        RagException decoded = (RagException) result;
+                        check(decoded.code() == code && Objects.equals(decoded.field(), original.field())
+                                        && decoded.getMessage().equals(original.getMessage()),
+                                "Final fields and constructor-based decoding must preserve code and sanitized field");
+                        check(decoded.getCause() == null && decoded.getSuppressed().length == 0
+                                        && !decoded.toString().contains("access-token"),
+                                "The public failure must not gain a provider cause or unsanitized field");
+                    }
+                }
+            } finally {
+                framework.destroy();
+            }
+        }
+    }
+
+    @Test void declaredRagFailureDoesNotPermitUnknownThrowableOrDisableSerializableChecking() throws Exception {
+        FrameworkModel framework = new FrameworkModel();
+        try {
+            var module = framework.newApplication().newModule();
+            var security = framework.getBeanFactory().getBean(SerializeSecurityManager.class);
+            var observed = new ObservedSerializationSecurity();
+            security.registerListener(observed);
+            module.getBeanFactory().getBean(SerializeSecurityConfigurator.class)
+                    .registerInterface(RagRetrievalRpcService.class);
+            URL direct = URL.valueOf("dubbo://127.0.0.1:20898?serialization=fastjson2").setScopeModel(module);
+            Serialization serialization = CodecSupport.getSerialization(direct);
+            byte[] unknown = throwableWire(serialization, direct, new UntrustedThrowable("OFFLINE_SAFE_FAILURE"));
+            assertUntrustedThrowableWire(serialization, direct, unknown);
+            check(!observed.allowed.contains(UntrustedThrowable.class.getName()),
+                    "Registering a RAG contract must not trust an unrelated Throwable");
+            assertStrictSerializable(observed);
+            check(framework.getBeanFactory().getBean(Fastjson2SecurityManager.class)
+                            .getSecurityFilter().isCheckSerializable(),
+                    "The real fastjson2 input/output path must retain Serializable checking");
+            try {
+                serialization.serialize(direct, new ByteArrayOutputStream()).writeObject(new Object());
+                throw new AssertionError("Official writeObject must reject a non-Serializable object");
+            } catch (IOException expected) {
+                check(expected.getCause() instanceof SerializationException,
+                        "Non-Serializable failure must come from the official serialization wrapper");
+            }
+            assertStrictSerializable(observed);
+        } finally {
+            framework.destroy();
+        }
+    }
+
+    private static byte[] throwableWire(Serialization serialization, URL direct, Throwable failure) throws IOException {
+        var bytes = new ByteArrayOutputStream();
+        var output = serialization.serialize(direct, bytes);
+        output.writeThrowable(failure);
+        output.flushBuffer();
+        return bytes.toByteArray();
+    }
+
+    private static void assertUntrustedThrowableWire(Serialization serialization, URL direct, byte[] wire) throws Exception {
+        try {
+            serialization.deserialize(direct, new ByteArrayInputStream(wire)).readThrowable();
+            throw new AssertionError("An untrusted Throwable must be rejected by official readThrowable");
+        } catch (IOException expected) {
+            check(expected.getCause() instanceof SerializationException
+                            && expected.getCause().getCause() instanceof IllegalArgumentException,
+                    "Official input must preserve IOException -> SerializationException -> IllegalArgumentException");
+            check(Arrays.stream(expected.getCause().getCause().getStackTrace()).anyMatch(frame ->
+                            frame.getClassName().equals(Fastjson2SecurityManager.Handler.class.getName())
+                                    && frame.getMethodName().equals("apply")),
+                    "The rejection must originate in the real fastjson2 security handler");
+            check(Arrays.stream(expected.getCause().getCause().getStackTrace()).anyMatch(frame ->
+                            frame.getClassName().equals("org.apache.dubbo.common.serialize.fastjson2.FastJson2ObjectInput")
+                                    && frame.getMethodName().equals("readObject")),
+                    "The regression must exercise actual fastjson2 input rather than constructing a result directly");
+        }
+    }
+
+    private static void assertStrictSerializable(ObservedSerializationSecurity observed) {
+        check(observed.status == SerializeCheckStatus.STRICT && observed.checkSerializable,
+                "Official security initialization must keep STRICT and Serializable checking enabled");
+    }
+
+    public interface UndeclaredFailureRpc {
+        AuthenticatedPrincipal resolve();
+    }
+
+    public static final class UntrustedThrowable extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+        public UntrustedThrowable(String message) { super(message); }
+    }
+
+    private static final class ObservedSerializationSecurity implements AllowClassNotifyListener {
+        private Set<String> allowed = Set.of();
+        private SerializeCheckStatus status;
+        private boolean checkSerializable;
+        @Override public void notifyPrefix(Set<String> allowedList, Set<String> disAllowedList) {
+            allowed = Set.copyOf(allowedList);
+        }
+        @Override public void notifyCheckStatus(SerializeCheckStatus status) { this.status = status; }
+        @Override public void notifyCheckSerializable(boolean checkSerializable) {
+            this.checkSerializable = checkSerializable;
         }
     }
 

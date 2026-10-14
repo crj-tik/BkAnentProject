@@ -178,6 +178,100 @@ class RagHttpTransportTest {
     }
 
     @Test
+    void bootSingletonEsClientStartsRealReactorAndContextClosesItsResources() {
+        var clientRef = new AtomicReference<org.elasticsearch.client.RestClient>();
+        var managerRef = new AtomicReference<RagElasticsearchTransportConfiguration.ReactorConnectionManager>();
+        var dnsRef = new AtomicReference<java.util.concurrent.ExecutorService>();
+        var timerRef = new AtomicReference<java.util.concurrent.ScheduledExecutorService>();
+        esLifecycleContext().run(context -> {
+            assertNull(context.getStartupFailure());
+            assertEquals(1, context.getBeansOfType(org.elasticsearch.client.RestClient.class).size());
+            var client = context.getBean(org.elasticsearch.client.RestClient.class);
+            assertSame(client, context.getBean("elasticsearchRestClient"));
+            var manager = context.getBean("ragEsConnectionManager",
+                    RagElasticsearchTransportConfiguration.ReactorConnectionManager.class);
+            clientRef.set(client);
+            managerRef.set(manager);
+            dnsRef.set(context.getBean("ragDnsExecutor", java.util.concurrent.ExecutorService.class));
+            timerRef.set(context.getBean("ragHttpDeadlineScheduler", java.util.concurrent.ScheduledExecutorService.class));
+            assertTrue(client.isRunning());
+            awaitReactorStatus(manager, org.apache.http.nio.reactor.IOReactorStatus.ACTIVE);
+            var definition = (org.springframework.beans.factory.support.AbstractBeanDefinition)
+                    context.getSourceApplicationContext().getBeanFactory().getBeanDefinition("ragEsConnectionManager");
+            assertEquals("shutdown", definition.getDestroyMethodName()); // Official HC4 pool shutdown is idempotent.
+            // A real async request is rejected by the original policy before DNS/connect, not a mock transport.
+            var failure = new java.util.concurrent.CompletableFuture<Exception>();
+            client.performRequestAsync(new org.elasticsearch.client.Request("HEAD", "/managed"),
+                    new org.elasticsearch.client.ResponseListener() {
+                        public void onSuccess(org.elasticsearch.client.Response response) {
+                            failure.completeExceptionally(new AssertionError("Denied target returned a response"));
+                        }
+                        public void onFailure(Exception error) { failure.complete(error); }
+                    });
+            assertEquals(RagErrorCode.ENDPOINT_POLICY_DENIED, assertInstanceOf(RagException.class,
+                    failure.get(1, java.util.concurrent.TimeUnit.SECONDS)).code());
+        });
+        assertFalse(clientRef.get().isRunning());
+        awaitReactorStatus(managerRef.get(), org.apache.http.nio.reactor.IOReactorStatus.SHUT_DOWN);
+        assertTrue(dnsRef.get().isShutdown());
+        assertTrue(timerRef.get().isShutdown());
+    }
+
+    @Test
+    void realEsClientCloseIsIdempotentBeforeSpringContextDestruction() {
+        var managerRef = new AtomicReference<RagElasticsearchTransportConfiguration.ReactorConnectionManager>();
+        esLifecycleContext().run(context -> {
+            assertNull(context.getStartupFailure());
+            var client = context.getBean(org.elasticsearch.client.RestClient.class);
+            var manager = context.getBean("ragEsConnectionManager",
+                    RagElasticsearchTransportConfiguration.ReactorConnectionManager.class);
+            managerRef.set(manager);
+            awaitReactorStatus(manager, org.apache.http.nio.reactor.IOReactorStatus.ACTIVE);
+            assertTimeout(Duration.ofSeconds(3), () -> {
+                client.close();
+                assertFalse(client.isRunning());
+                awaitReactorStatus(manager, org.apache.http.nio.reactor.IOReactorStatus.SHUT_DOWN);
+                client.close();
+            });
+        });
+        awaitReactorStatus(managerRef.get(), org.apache.http.nio.reactor.IOReactorStatus.SHUT_DOWN);
+    }
+
+    @Test
+    void springFallbackClosesInactiveManagerWhenBootClientIsNotConstructed() {
+        var managerRef = new AtomicReference<RagElasticsearchTransportConfiguration.ReactorConnectionManager>();
+        new ApplicationContextRunner().withUserConfiguration(RagHttpTransportConfiguration.class,
+                        RagElasticsearchTransportConfiguration.class)
+                .withPropertyValues("rag.http.allowed-hosts[0]=public.example")
+                .run(context -> {
+                    assertNull(context.getStartupFailure());
+                    assertTrue(context.getBeansOfType(org.elasticsearch.client.RestClient.class).isEmpty());
+                    var manager = context.getBean("ragEsConnectionManager",
+                            RagElasticsearchTransportConfiguration.ReactorConnectionManager.class);
+                    managerRef.set(manager);
+                    assertEquals(org.apache.http.nio.reactor.IOReactorStatus.INACTIVE, manager.reactorStatus());
+                });
+        awaitReactorStatus(managerRef.get(), org.apache.http.nio.reactor.IOReactorStatus.SHUT_DOWN);
+    }
+
+    private static ApplicationContextRunner esLifecycleContext() {
+        return new ApplicationContextRunner().withUserConfiguration(RagHttpTransportConfiguration.class,
+                        RagElasticsearchTransportConfiguration.class)
+                .withConfiguration(AutoConfigurations.of(ElasticsearchRestClientAutoConfiguration.class))
+                .withPropertyValues("spring.elasticsearch.uris=http://127.0.0.1:9200",
+                        "rag.http.allowed-hosts[0]=public.example"); // Loopback remains denied; never connect.
+    }
+
+    private static void awaitReactorStatus(RagElasticsearchTransportConfiguration.ReactorConnectionManager manager,
+            org.apache.http.nio.reactor.IOReactorStatus expected) {
+        assertTimeout(Duration.ofSeconds(3), () -> {
+            long deadline = System.nanoTime() + Duration.ofSeconds(2).toNanos();
+            while (manager.reactorStatus() != expected && System.nanoTime() < deadline) Thread.sleep(5);
+            assertEquals(expected, manager.reactorStatus());
+        });
+    }
+
+    @Test
     void realEsCustomizerDoesNotUseUnsupportedHc5Apis() {
         var builder = org.apache.http.client.config.RequestConfig.custom();
         new RagElasticsearchTransportConfiguration.ProtectedCustomizer(policy,

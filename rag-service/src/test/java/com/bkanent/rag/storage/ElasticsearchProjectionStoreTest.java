@@ -82,6 +82,7 @@ class ElasticsearchProjectionStoreTest {
             var head = mock(org.elasticsearch.client.Response.class);
             when(head.getStatusLine()).thenReturn(new org.apache.http.message.BasicStatusLine(org.apache.http.HttpVersion.HTTP_1_1, 200, "OK"));
             var response = mock(org.elasticsearch.client.Response.class);
+            when(response.getStatusLine()).thenReturn(new org.apache.http.message.BasicStatusLine(org.apache.http.HttpVersion.HTTP_1_1, 200, "OK"));
             when(response.getEntity()).thenReturn(new org.apache.http.entity.StringEntity(new ObjectMapper().writeValueAsString(
                     Map.of(space.elasticsearchIndex(), Map.of("mappings", mapping))), java.nio.charset.StandardCharsets.UTF_8));
             doAnswer(call -> call.<org.elasticsearch.client.Request>getArgument(0).getMethod().equals("HEAD") ? head : response)
@@ -113,6 +114,83 @@ class ElasticsearchProjectionStoreTest {
             verifyNoInteractions(operations);
         } finally { reader.close(); }
     }
+    @Test void actualReaderLogsMissingHeadAs404WithoutSensitiveResponseFields() throws Exception {
+        assertSafeSchemaDiagnostics(404, false, false, RagErrorCode.SPACE_NOT_READY,
+                List.of("operation=SCHEMA_HEAD httpStatus=404 errorCode=SPACE_NOT_READY"), 1);
+    }
+
+    @Test void actualReaderLogsMappingMismatchAs200SpaceNotReady() throws Exception {
+        assertSafeSchemaDiagnostics(200, false, false, RagErrorCode.SPACE_NOT_READY,
+                List.of("operation=SCHEMA_HEAD httpStatus=200 errorCode=NONE",
+                        "operation=SCHEMA_MAPPING httpStatus=200 errorCode=SPACE_NOT_READY"), 2);
+    }
+
+    @Test void actualReaderLogsHeadTimeoutWithUnknownStatus() throws Exception {
+        assertSafeSchemaDiagnostics(200, true, false, RagErrorCode.TIMEOUT,
+                List.of("operation=SCHEMA_HEAD httpStatus=UNKNOWN errorCode=TIMEOUT"), 1);
+    }
+
+    @Test void actualReaderLogsMappingTimeoutWithoutReusingHeadStatus() throws Exception {
+        assertSafeSchemaDiagnostics(200, false, true, RagErrorCode.TIMEOUT,
+                List.of("operation=SCHEMA_HEAD httpStatus=200 errorCode=NONE",
+                        "operation=SCHEMA_MAPPING httpStatus=UNKNOWN errorCode=TIMEOUT"), 2);
+    }
+
+    private static void assertSafeSchemaDiagnostics(int headStatus, boolean stallHead, boolean stallMapping,
+            RagErrorCode expectedCode, List<String> expectedLines, int expectedRequests) throws Exception {
+        var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(ElasticsearchProjectionStore.class);
+        var appender = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        appender.start();
+        var originalLevel = logger.getLevel();
+        logger.setLevel(ch.qos.logback.classic.Level.INFO);
+        logger.addAppender(appender);
+        var client = mock(org.elasticsearch.client.RestClient.class);
+        var requests = new ArrayList<org.elasticsearch.client.Request>();
+        when(client.performRequestAsync(any(), any())).thenAnswer(call -> {
+            var request = call.<org.elasticsearch.client.Request>getArgument(0);
+            requests.add(request);
+            boolean head = request.getMethod().equals("HEAD");
+            if (!(head ? stallHead : stallMapping)) {
+                var response = mock(org.elasticsearch.client.Response.class);
+                when(response.getStatusLine()).thenReturn(new org.apache.http.message.BasicStatusLine(
+                        org.apache.http.HttpVersion.HTTP_1_1, head ? headStatus : 200, "sensitive-status-reason"));
+                if (!head) when(response.getEntity()).thenReturn(new org.apache.http.entity.StringEntity(
+                        new ObjectMapper().writeValueAsString(Map.of(space().elasticsearchIndex(), Map.of("mappings",
+                                Map.of("sensitive-body", "credentials https://private.invalid/secret")))), java.nio.charset.StandardCharsets.UTF_8));
+                // Real ES RestClient reports HEAD404 through onSuccess; the production reader returns that status.
+                call.<org.elasticsearch.client.ResponseListener>getArgument(1).onSuccess(response);
+            }
+            return mock(org.elasticsearch.client.Cancellable.class);
+        });
+        var reader = new ElasticsearchDeadlineReader(client);
+        var operations = mock(ElasticsearchOperations.class);
+        var store = new ElasticsearchProjectionStore(registry(), operations, new ObjectMapper(), reader);
+        try (var ignored = com.bkanent.rag.security.http.RagHttpDeadline.open(java.time.Duration.ofMillis(250))) {
+            assertEquals(expectedCode, assertThrows(RagException.class, () -> store.inspectSchema(space())).code());
+            assertEquals(expectedRequests, requests.size());
+            assertEquals("HEAD", requests.get(0).getMethod());
+            if (expectedRequests == 2) assertEquals("GET", requests.get(1).getMethod());
+            var events = appender.list;
+            assertEquals(expectedLines.size(), events.size());
+            for (int i = 0; i < events.size(); i++) {
+                var event = events.get(i);
+                String line = event.getFormattedMessage();
+                assertTrue(line.matches(java.util.regex.Pattern.quote(expectedLines.get(i)) + " elapsedMillis=[0-9]+"), line);
+                assertNull(event.getThrowableProxy());
+                assertFalse(line.contains(space().elasticsearchIndex()));
+                assertFalse(line.contains("sensitive"));
+                assertFalse(line.contains("credentials"));
+                assertFalse(line.contains("private.invalid"));
+            }
+            verifyNoInteractions(operations);
+        } finally {
+            reader.close();
+            logger.detachAppender(appender);
+            logger.setLevel(originalLevel);
+            appender.stop();
+        }
+    }
+
     @Test void inspectRefusesWrongFieldMappingAndProvisionDoesNotOverwriteExistingMapping() {
         ElasticsearchOperations operations = mock(ElasticsearchOperations.class);
         IndexOperations index = mock(IndexOperations.class);

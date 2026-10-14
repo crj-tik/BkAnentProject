@@ -463,6 +463,36 @@
 
 **关联**：LR-31、LR-34、LR-46；KI-102。实际Spring AI自动配置及离线503单次调用、原lazy/base启动分别验证；不新建embedding客户端或裸Milvus CRUD，不承诺取消能撤回远端副作用。私有probe只输出安全计时与操作后重新认证的stage/code，运行能力必须用新制品实测。
 
+## LR-48 公共RPC安全异常须显式声明，沿官方接口初始化精确注册
+
+**结论**：四个RAG纯RPC接口的七个已有失败方法显式声明unchecked `throws RagException`，消费者与提供方采用同一契约制品。保留异常final字段、构造器、STRICT和Serializable检查，不新增包级allowlist或Java模块开放。
+
+**根因**：Dubbo3.2.15官方SerializeSecurityConfigurator.registerInterface遍历方法声明的异常并递归注册字段类型；未声明的RuntimeException不会因此受信。实际fastjson2 readThrowable拒绝公共RagException，使正确的SPACE_NOT_READY被序列化错误遮蔽。声明异常不改变二进制方法descriptor；官方wire可重建final code／安全field，问题不是无参构造器缺失。
+
+**代码位置**：common/rpc/RagPrincipalRpcService、RagRetrievalRpcService、RagIndexRpcService、RagSpaceAdminRpcService；common-a2a/OfficialRuntimeDependenciesTest逐接口隔离官方初始化及writeThrowable／readThrowable回归。
+
+**关联**：LR-44、LR-46；KI-103。未声明接口先拒绝、实际声明契约后156种code／field组合恢复，未知Throwable与非Serializable对象仍拒绝；离线固定wire ID不是实际协商ID。收到业务错误不等于空间就绪，也不承诺领域HTTP已具该错误映射。
+
+## LR-49 受保护ES连接池由唯一官方RestClient执行reactor生命周期
+
+**结论**：HC4连接管理器设shared=false，由Boot唯一单例ES RestClient启动和关闭原reactor；保留Spring manager.shutdown作为官方幂等后备，覆盖client未构造的INACTIVE资源。原逐连接完整DNS校验、地址pinning、TLS、proxy／redirect拒绝均不变。
+
+**根因**：HC4 shared=true不仅影响关闭，还抑制client的reactor线程；client.start可显示ACTIVE而原reactor仍INACTIVE，连接请求入队直到读取期限。仅构造client或mock响应测试无法证明实际reactor执行。官方pool shutdown以CAS保护资源清理，因此Spring后备不需要自造第二所有者或执行器。
+
+**代码位置**：rag-service/security/http/RagElasticsearchTransportConfiguration及RagHttpTransportTest；package-private manager仅保留原reactor状态枚举供生命周期回归观察。
+
+**关联**：LR-34、LR-47；KI-104。真实Boot单例、ACTIVE到SHUT_DOWN、重复client.close及无client后备均验证；真实HEAD仍在原policy拒绝环回且不连接。源码缺口与当前运行HTTP／schema结果分开取证，不再把该故障归为已修的JNDI ANY。
+
+## LR-50 Milvus集合缺失只按schema操作的兼容枚举分类
+
+**结论**：describeCollection的官方ServerException兼容枚举CollectionNotExists才映射SPACE_NOT_READY／vectorSchema；原revision query仍按依赖错误处理。先遍历cause链保留认证、权限、期限和原RagException，再分类缺schema。诊断仅固定操作、nullable数字和枚举，不打印reason／message／目标或异常。
+
+**根因**：SDK2.5.8把现代Status.code和旧error_code合并为ServerException.getStatus，两个命名空间数字不能混同；兼容enum的100是DataCoordNA，不能把裸100或异常文本当缺集合。schema不存在可通过受权初始化解决，revision查询失败却不能自动初始化或变成成功空记录。
+
+**代码位置**：rag-service/storage/SpringAiMilvusDocumentStore的schema-only检查及既有SpringAiMilvusDocumentStoreTest；ElasticsearchProjectionStore沿原受保护reader输出固定SCHEMA_HEAD／SCHEMA_MAPPING状态、错误码和单调耗时。
+
+**关联**：LR-36、LR-47、LR-49；KI-104。真实运行typed值仍须新制品取证，历史collection_count=0不代替当前错误；HTTP200但mapping不兼容也不是missing-only。安全日志只作为原生产路径证据，不引入旁路客户端或放行PROVISION。
+
 ## LR-43 治理重排按响应钉扎模型身份，同 alias 漂移失败关闭
 
 **结论**：`rag-service` 对外部 Reranker-BGE-V2-M3 治理接口（`/api/v1/rerank`，`RAG_RERANK_PROTOCOL=governed`）的重排调用在每次响应上核对 `model.alias/revision/scoring_version/artifact_digest` 与 `score_semantics` 必须精确等于受管配置（`RAG_RERANK_EXPECTED_REVISION`/`EXPECTED_ARTIFACT_DIGEST` 与空间 rerank-profile 的 provider/modelVersion/scoringVersion/scale）。任何一项不匹配抛 SCORING_PROFILE_MISMATCH，不尝试重新归一化或继续用旧分数。请求固定 `truncate=false`，响应声明截断发生即 RERANK_PROTOCOL_ERROR；400/413 映射为不可重试的 INVALID_ARGUMENT，401/403 仍为身份错误。

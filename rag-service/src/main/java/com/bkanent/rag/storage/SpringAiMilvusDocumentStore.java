@@ -12,6 +12,8 @@ import io.milvus.param.collection.DescribeCollectionParam;
 import io.milvus.param.dml.QueryParam;
 import io.milvus.response.DescCollResponseWrapper;
 import io.milvus.response.QueryResultsWrapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.vectorstore.SearchRequest;
@@ -23,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /** Migrated Spring AI execution path. SDK use is restricted to readonly schema/actual-state inspection. */
 @Component
 public class SpringAiMilvusDocumentStore implements IndexSink {
+    private static final Logger log = LoggerFactory.getLogger(SpringAiMilvusDocumentStore.class);
     private final RagSpaceRegistry registry;
     private final MilvusServiceClient client;
     private final EmbeddingModel embeddingModel;
@@ -81,7 +84,7 @@ public class SpringAiMilvusDocumentStore implements IndexSink {
         com.bkanent.rag.security.http.RagHttpDeadline.remainingNanos(deadline);
         var response = inspectionClient.describeCollection(DescribeCollectionParam.newBuilder()
                 .withDatabaseName(schema.database()).withCollectionName(schema.collection()).build());
-        checkResponse(response);
+        checkSchemaDescribeResponse(response);
         DescCollResponseWrapper wrapper = new DescCollResponseWrapper(response.getData());
         var id = wrapper.getFieldByName(schema.idField());
         var vector = wrapper.getFieldByName(schema.vectorField());
@@ -140,23 +143,71 @@ public class SpringAiMilvusDocumentStore implements IndexSink {
                 .iDFieldName(v.idField()).contentFieldName(v.contentField()).metadataFieldName(v.metadataField())
                 .embeddingFieldName(v.vectorField()).build();
     }
+    private static void checkSchemaDescribeResponse(R<?> response) {
+        try { checkResponse(response, true); }
+        catch (RagException failure) {
+            logSchemaDescribeFailure(response);
+            throw failure;
+        }
+    }
+
     private static void checkResponse(R<?> response) {
+        checkResponse(response, false);
+    }
+
+    private static void checkResponse(R<?> response, boolean schemaDescribe) {
         if (response != null && Objects.equals(response.getStatus(), R.Status.PermissionDenied.getCode())) {
             throw new RagException(RagErrorCode.FORBIDDEN);
         }
+        RagException ragFailure = null;
+        boolean collectionMissing = false;
         for (Throwable cause = response == null ? null : response.getException(); cause != null; cause = cause.getCause()) {
-            if (cause instanceof RagException error) throw error;
+            if (cause instanceof RagException error) {
+                if (!schemaDescribe || error.code() == RagErrorCode.AUTHENTICATION_FAILED
+                        || error.code() == RagErrorCode.FORBIDDEN || error.code() == RagErrorCode.TIMEOUT) throw error;
+                if (ragFailure == null) ragFailure = error;
+            }
             if (cause instanceof io.grpc.StatusRuntimeException || cause instanceof io.grpc.StatusException) {
                 io.grpc.Status.Code code = io.grpc.Status.fromThrowable(cause).getCode();
                 if (code == io.grpc.Status.Code.UNAUTHENTICATED) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
                 if (code == io.grpc.Status.Code.PERMISSION_DENIED) throw new RagException(RagErrorCode.FORBIDDEN);
                 if (code == io.grpc.Status.Code.DEADLINE_EXCEEDED) throw new RagException(RagErrorCode.TIMEOUT);
             }
-            if (cause instanceof io.milvus.exception.ServerException server
-                    && server.getCompatibleCode() == io.milvus.grpc.ErrorCode.PermissionDenied) throw new RagException(RagErrorCode.FORBIDDEN);
+            if (cause instanceof io.milvus.exception.ServerException server) {
+                if (server.getCompatibleCode() == io.milvus.grpc.ErrorCode.PermissionDenied) {
+                    throw new RagException(RagErrorCode.FORBIDDEN);
+                }
+                // KI-104 / LR-36: only describe-schema compatibility enum proves this classification.
+                // SDK 2.5.8 getStatus() merges modern code and legacy error_code; numeric 100 is not a predicate.
+                collectionMissing |= schemaDescribe
+                        && server.getCompatibleCode() == io.milvus.grpc.ErrorCode.CollectionNotExists;
+            }
         }
+        // Scan the entire cause chain for hard failures before applying the schema-only missing classification.
+        if (ragFailure != null) throw ragFailure;
+        if (collectionMissing) throw new RagException(RagErrorCode.SPACE_NOT_READY, "vectorSchema");
         if (response == null || response.getException() != null || response.getData() == null
                 || !Objects.equals(response.getStatus(), R.Status.Success.getCode())) unavailable();
+    }
+
+    private static void logSchemaDescribeFailure(R<?> response) {
+        Integer serverStatus = null;
+        String compatibleCode = null;
+        String grpcCode = null;
+        boolean serverFound = false;
+        for (Throwable cause = response == null ? null : response.getException(); cause != null; cause = cause.getCause()) {
+            if (cause instanceof io.milvus.exception.ServerException server && !serverFound) {
+                serverFound = true;
+                serverStatus = server.getStatus();
+                compatibleCode = server.getCompatibleCode() == null ? null : server.getCompatibleCode().name();
+            }
+            if (grpcCode == null && (cause instanceof io.grpc.StatusRuntimeException || cause instanceof io.grpc.StatusException)) {
+                grpcCode = io.grpc.Status.fromThrowable(cause).getCode().name();
+            }
+        }
+        // Fixed safe scalar fields only: never pass response, throwable, reason or connection identity to the logger.
+        log.warn("operation=SCHEMA_DESCRIBE rStatus={} serverStatus={} compatibleCode={} grpcCode={}",
+                response == null ? null : response.getStatus(), serverStatus, compatibleCode, grpcCode);
     }
     private record SchemaIdentity(String spaceId, String schemaVersion, RagSpaceDefinition.VectorSchema vectorSchema) { }
     private static void unavailable() { throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE); }

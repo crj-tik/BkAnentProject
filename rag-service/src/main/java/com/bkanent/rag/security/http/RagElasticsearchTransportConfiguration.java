@@ -27,6 +27,8 @@ import java.net.SocketAddress;
 /** Elasticsearch 8.18.1 uses HC4 async, not the HC5 Spring RestClient connection manager. */
 @Configuration(proxyBeanMethods = false)
 public class RagElasticsearchTransportConfiguration {
+    // Boot's singleton ES RestClient owns startup/close; Spring's idempotent shutdown also cleans up
+    // an INACTIVE manager when no client is constructed (for example, failed context initialization).
     @Bean(name = "ragEsConnectionManager", destroyMethod = "shutdown")
     public PoolingNHttpClientConnectionManager ragEsConnectionManager(RagEndpointPolicy policy,
                                                                       RagPublicDnsResolver resolver) throws IOException {
@@ -35,11 +37,24 @@ public class RagElasticsearchTransportConfiguration {
         var registry = RegistryBuilder.<SchemeIOSessionStrategy>create()
                 .register("http", NoopIOSessionStrategy.INSTANCE)
                 .register("https", SSLIOSessionStrategy.getDefaultStrategy()).build();
-        var manager = new PoolingNHttpClientConnectionManager(reactor,
-                ManagedNHttpClientConnectionFactory.INSTANCE, registry, addressResolver(policy, resolver));
+        var manager = new ReactorConnectionManager(reactor, registry, addressResolver(policy, resolver));
         manager.setMaxTotal(64);
         manager.setDefaultMaxPerRoute(16);
         return manager;
+    }
+
+    /** Package-private lifecycle observation; no endpoint, exception details or reflective access. */
+    static final class ReactorConnectionManager extends PoolingNHttpClientConnectionManager {
+        private final DefaultConnectingIOReactor reactor;
+
+        ReactorConnectionManager(DefaultConnectingIOReactor reactor,
+                org.apache.http.config.Registry<SchemeIOSessionStrategy> registry,
+                SocketAddressResolver<HttpRoute> resolver) {
+            super(reactor, ManagedNHttpClientConnectionFactory.INSTANCE, registry, resolver);
+            this.reactor = reactor;
+        }
+
+        org.apache.http.nio.reactor.IOReactorStatus reactorStatus() { return reactor.getStatus(); }
     }
 
     static SocketAddressResolver<HttpRoute> addressResolver(RagEndpointPolicy policy, RagPublicDnsResolver dns) {
@@ -91,7 +106,8 @@ public class RagElasticsearchTransportConfiguration {
         }
 
         public void customize(HttpAsyncClientBuilder builder) {
-            builder.setConnectionManager(manager).setConnectionManagerShared(true)
+            // HC4 shared=true suppresses the client's reactor thread, not just manager destruction.
+            builder.setConnectionManager(manager).setConnectionManagerShared(false)
                     .setRoutePlanner((target, request, context) -> {
                         if (target == null || target.getAddress() != null) {
                             throw RagEndpointPolicy.denied();
