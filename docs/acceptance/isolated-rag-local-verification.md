@@ -230,6 +230,15 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - **物理水位**：ES `rag_memory_constraint_v1` **17文档**（preference/listing两索引0符合预期）；Milvus约束集合469727203909255386 **12 binlog键+4 segment+2 statslog+2 deltalog**，另两集合无binlog。账本17事件/17文档APPLIED与ES 17文档与Milvus binlog存在性三方一致。
 - 旧容器已清理（配置备份`rag-container-config-before-6da2dcc.json`及两`*-config-before-981cefe.json`保留）；七release服务全healthy。8.1的17条约束真实APPLIED水位完成；默认混合正命中、A2A五操作、偏好生命周期仍待验。
 
+### 2026-10-15 默认混合正命中贯通：fastjson2ctor SPI全链路落地
+
+- **正命中实测（8bc352b镜像，约束空间）**：admin01真实登录token+X-Memory-Owner=2，`/internal/memory/rag/search`查询"房源发布规范要求"→success=true、**HYBRID_RERANK生效、degraded=false、failedStages=[]**、top3候选全部**KEYWORD+VECTOR双路来源**、RRF融合分、治理scoringVersion `12ab2575eb91…`与钉扎一致、首位`approval_threshold_marketing` relevance 0.910（SEMANTIC_NORMALIZED）。距上次管理INSPECT已数小时——**KI-110单飞续验在真实检索路径隐式生效**（无SPACE_NOT_READY）。
+- **序列化缺陷链修复（b32cd0e+8bc352b）**：检索暴露第三层fastjson2缺陷——Dubbo内建fastjson2的**FieldBased JSONB**经安全Handler解码record列表字段`startArray(TYPED_ANY)`必崩（2.0.52-2.0.59全部，本地按生产Handler路径精确复现offset一致）；hessian2路线死路（hessian-lite 3.2.13 Java17无模块开放下SerializerFactory静态崩溃，add-opens被项目规则禁止）；consumer侧reference/method parameters与provider服务参数均不达**channel URL**（请求编码的serialization取channel URL，实测subscribe URL≠channel URL）。
+- **fastjson2ctor SPI（common模块）**：无WriteClassName/FieldBased的构造器JSON wire，RPC参数按方法声明类型解码；无类名标记使无类型读取只能产出普通容器（无多态反序列化面）；writeThrowable/writeAttachments走default委托；顺序JSONReader多值读。contentTypeId=27避免与官方fastjson2撞号（撞号时响应按帧头ID回退官方实现导致文本JSON被JSONB reader误读）。写侧去ReferenceDetection（List.of()空列表JVM单例被误判共享引用写$ref，读侧解析为null域phantom记录）。
+- **接线**：RAG三provider `@DubboService(parameters serialization=fastjson2ctor)`+两侧`dubbo.protocol.parameters.serialization=fastjson2ctor`（协议参数进channel URL，请求响应双向生效）+memory三reference keyed-config。SPI单测6项（列表record/Instant/原语/无类型容器/空列表往返/完整响应）。
+- **构建坑记录**：`-pl rag-service package`会解析`common/target`旧产物——修复SPI后必须`common clean install`再`clean package`，否则镜像内嵌旧class（ReferenceDetection残留，曾致一次部署failedStages phantom null）。
+- 全仓970项0失败0错误；8.2的"真实默认混合正命中"已达成（约束空间），A2A五操作与偏好生命周期仍待验。
+
 ### 本轮仍待完成的验证
 
 以下1／2为c338b7e部署时点保留记录，已由上方accf97f实测及本轮增量推进覆盖，不作为当前仍阻塞的DNS／REST／Bean／整体INSPECT原因。
