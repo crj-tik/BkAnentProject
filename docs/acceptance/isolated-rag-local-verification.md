@@ -256,6 +256,18 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - ES `_cat/indices` docs.count为近实时统计（需refresh），验证文档数以`_search`实查为准（曾显示1实为2）。
 - 偏好空间终态清理干净：source 0行/ES 0文档（refresh后）/outbox 17事件全APPLIED无残留，全程经domain API decay链清理无物理直写。8.2仍缺：partial补偿专项、ALLOW_DEGRADED降级路径（需停RAG后端）、A2A五操作。
 
+### 2026-10-15 A2A五操作真实验收（8bc352b全服务镜像）
+
+- **协议前置**：RESUBSCRIBE首次失败暴露新旧镜像协议断层——listing旧镜像（3c391454）不识别fastjson2ctor wire ID 27（"Unrecognized serialize type 27"）。为此六服务（rag/memory/auth/listing/agent/customer）全部重建部署到同源8bc352b common镜像；期间发现并修复两部署问题：`-pl svc package`不带`-am`时产物缺common/common-a2a模块（NoClassDefFoundError），容器重建丢失compose网络别名（service名DNS解析失败致readiness DOWN，`--network-alias`重挂解决）；auth重建补回9101宿主端口映射。
+- **五操作实测（admin01真实token+AGENT_A2A信标，frozen runner探针，listing 9004/a2a）**：
+  - **SEND**：task COMPLETED、1事件1 artifact（真实检索执行）；
+  - **GET**：按taskId取回同任务COMPLETED一致；
+  - **STREAM**：新任务流式完成（115-208事件量级，含artifact增量）；
+  - **CANCEL**：对已存在任务返回state=CANCELED（任务所有权正确；对不存在任务guard返回FORBIDDEN亦验证）；
+  - **RESUBSCRIBE**：并发场景——后台STREAM长任务运行中（5秒窗口）第二进程resubscribe成功接入活跃事件队列（181事件重放至终态COMPLETED，与STREAM侧任务哈希一致）。SDK语义确认：resubscribe需任务队列存活（tap），终态后TaskNotFoundError为正确行为。
+- **guard反例顺带验证**：无信标请求`/a2a`返回-32001 AUTHENTICATION_FAILED；操作前后principal复验在探针内执行（association断言task/context归属）。
+- 探针增`RAG_PROBE_DEBUG`栈输出开关（默认关）；新增`run-a2a-resubscribe-acceptance.sh`并发驱动脚本。3.5的"覆盖同步/流式/任务查询取消/异步续接"主路径达成；审批续接（push/approval）仍待（本card capabilities.pushNotifications=false）。
+
 ### 本轮仍待完成的验证
 
 以下1／2为c338b7e部署时点保留记录，已由上方accf97f实测及本轮增量推进覆盖，不作为当前仍阻塞的DNS／REST／Bean／整体INSPECT原因。

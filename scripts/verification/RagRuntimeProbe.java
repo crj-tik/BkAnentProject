@@ -73,6 +73,7 @@ final class RagRuntimeProbe implements AutoCloseable {
             exit = 0;
         } catch (Throwable failure) {
             SUMMARY.println("probe result=FAILED errorCode=" + safeFailure(failure));
+            if ("true".equals(env("RAG_PROBE_DEBUG"))) failure.printStackTrace(SUMMARY);
         } finally {
             watchdog.shutdownNow();
         }
