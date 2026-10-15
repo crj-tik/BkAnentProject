@@ -58,6 +58,13 @@
                 <artifactId>a2a-java-sdk-client</artifactId>
                 <version>0.2.5.Beta2-bk-transport1</version>
             </dependency>
+            <!-- Dubbo 3.2.15 pulls fastjson2 2.0.52 whose JSONB readInstant throws
+                 UnsupportedOperationException; 2.0.58 fixes JSONB Instant round-trips. -->
+            <dependency>
+                <groupId>com.alibaba.fastjson2</groupId>
+                <artifactId>fastjson2</artifactId>
+                <version>2.0.58</version>
+            </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>

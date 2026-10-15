@@ -90,6 +90,12 @@ class OfficialRuntimeDependenciesTest {
             URL direct = URL.valueOf("dubbo://127.0.0.1:20881?serialization=fastjson2").setScopeModel(framework);
             var serialization = CodecSupport.getSerialization(direct);
             check(serialization.getContentTypeId() == 23, "Direct reference must select official fastjson2 wire ID 23");
+            // fastjson2 2.0.52 crashed inside JSONB readInstant before the allowlist could judge the
+            // principal; 2.0.58 decodes it, so trust must come from the same exact-class registration
+            // pattern production uses for declared RPC payloads (KI-113), not an implicit allow.
+            var module = framework.newApplication().newModule();
+            module.getBeanFactory().getBean(SerializeSecurityManager.class)
+                    .addToAllowed(AuthenticatedPrincipal.class.getName());
             var bytes = new ByteArrayOutputStream();
             var output = serialization.serialize(direct, bytes);
             output.writeObject(new AuthenticatedPrincipal(7L));
