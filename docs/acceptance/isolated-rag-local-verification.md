@@ -239,6 +239,14 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - **构建坑记录**：`-pl rag-service package`会解析`common/target`旧产物——修复SPI后必须`common clean install`再`clean package`，否则镜像内嵌旧class（ReferenceDetection残留，曾致一次部署failedStages phantom null）。
 - 全仓970项0失败0错误；8.2的"真实默认混合正命中"已达成（约束空间），A2A五操作与偏好生命周期仍待验。
 
+### 2026-10-15 偏好生命周期全链路验收（3.4闭合）
+
+- **创建与正命中**：broker01（userId=1，无存量偏好）经`/user-preferences/upsert`写入夹具（confidence 0.10/observationCount 1）→12秒内dispatcher/worker自动应用：outbox APPLIED、ledger rev1双后端APPLIED（tombstone=0）、ES preference索引1文档；owner检索正命中——HYBRID_RERANK/degraded=false/failedStages空、relevance **0.9626**双路来源、治理scoringVersion `12ab2575…`匹配、domainScore≈0.10×relevance符合memory-confidence-semantic-decay语义。
+- **绝对隔离三反例全过**：①ADMIN token读broker偏好→REST 403；②ADMIN检索preference空间→**0候选零泄漏**（授权scope强制ownerId=admin，broker文档SQL真源+授权域双重不可见）；③broker token伪造`X-Memory-Owner: 2`→403。个人偏好self-only含ADMIN的基线真实运行成立。
+- **两级衰减语义实测**：decay#1（0.10→0.05）——`preferenceDocument`阈值<0.1投影为DELETE，ledger rev2 tombstone=1双后端APPLIED、ES归零、检索隐藏，但source行保留0.05且GET同样隐藏；decay#2（0.05→0）——source物理删除（归零）、rev3 DELETE tombstone、outbox 5事件全APPLIED。**墓碑防迟到回放不防合法重建**：删除后同key重新upsert产生rev4新UPSERT（tombstone=0/ES 1/检索可见0.963）。
+- **水位事实**：偏好空间生命周期4个revision（UPSERT/DELETE/DELETE/UPSERT）+最终清理decay，全部经outbox→账本→双后端，ES与source终态归零、outbox无残留。夹具经domain API创建与衰减清理，无任何物理后端直写。
+- 3.4勾选闭合；8.2偏好生命周期部分达成（partial补偿/两路等价专项仍待）。
+
 ### 本轮仍待完成的验证
 
 以下1／2为c338b7e部署时点保留记录，已由上方accf97f实测及本轮增量推进覆盖，不作为当前仍阻塞的DNS／REST／Bean／整体INSPECT原因。

@@ -20,7 +20,7 @@
 - [x] 3.1 按服务独立密钥的请求绑定签名envelope，覆盖audience/operation/hash/expiry/rotation，凭据只来自环境/秘密管理，不进模型/日志/快照。
 - [ ] 3.2 复用auth最小signed principal并重验当前账号/角色事实：停用/删除/离职/角色失效在全部相关REST/RPC/A2A/工具/管理/异步续接入口禁操作，未过期token不豁免，MANAGER不默认ADMIN；补伪造及入口/最终输出失效反例。旧局部认证测试非新全入口完成证据。
 - [ ] 3.3 改房源scope为显式businessWide及activeOnly语义：ADMIN未删除全读，BROKER仅ON_SALE，RAG独立按当前signed role核对；移除资源grant必需/空集即全读假设，不用资源通配，不扩张授权DSL；保留ownerDomain/actor/space/request/policy/expiry绑定。
-- [ ] 3.4 重验两路强制owner/未删除/active条件等价；个人偏好读写及用户管理/回填响应绝对self-only（ADMIN亦不得跨用户），跨域/伪scope/后台写身份不能获得用户搜索/管理权。
+- [x] 3.4 重验两路强制owner/未删除/active条件等价；个人偏好读写及用户管理/回填响应绝对self-only（ADMIN亦不得跨用户），跨域/伪scope/后台写身份不能获得用户搜索/管理权。2026-10-15真实运行验证（8bc352b镜像）：broker01 upsert偏好→两后端APPLIED（rev1双路）→检索正命中relevance 0.9626双路/治理scoringVersion匹配/domainScore≈confidence×relevance；隔离反例三组全过——ADMIN读broker偏好REST 403、ADMIN检索preference空间0候选零泄漏（scope强制ownerId）、broker token伪造X-Memory-Owner=2被403；两级衰减语义实测（<0.1投影DELETE+墓碑、GET隐藏0.05源行、→0物理删除source归零）；删除后重新upsert为合法rev4新UPSERT（墓碑防迟到回放不防重建）；夹具清理后source/ES归零、outbox全APPLIED。
 - [ ] 3.5 接通A2A专用可验auth信标和真实SDK受支持transport（必要最小升级/修补已授权），覆盖同步/流式/任务查询取消/异步/审批续接；专用上下文不进模型metadata/工具参数/RunnableConfig/checkpoint，进程内租约过期/重启须原owner重新认证，不以userId换发。
 
 ## 4. 迁移检索执行与出站安全
