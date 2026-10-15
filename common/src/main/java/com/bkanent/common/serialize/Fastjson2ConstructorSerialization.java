@@ -27,11 +27,10 @@ import java.util.Arrays;
 public final class Fastjson2ConstructorSerialization implements Serialization {
     private static final JSONWriter.Feature[] WRITE = {
             JSONWriter.Feature.ErrorOnNoneSerializable,
-            JSONWriter.Feature.ReferenceDetection,
             JSONWriter.Feature.WriteNulls,
             JSONWriter.Feature.NotWriteHashMapArrayListClassName};
 
-    @Override public byte getContentTypeId() { return 23; }
+    @Override public byte getContentTypeId() { return 27; }
 
     @Override public String getContentType() { return "x-application/fastjson2-ctor"; }
 

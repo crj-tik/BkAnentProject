@@ -69,4 +69,19 @@ class Fastjson2ConstructorSerializationTest {
         // never an attacker-chosen class; typed reads go through the declared method signature.
         assertThat(value).isInstanceOf(java.util.Collection.class);
     }
+
+    @Test void recordWithEmptyListFieldRoundTripsAsEmptyList() throws Exception {
+        // Empty failedStages must stay empty: a null-filled phantom element would corrupt
+        // response semantics on the HTTP surface (observed once on the live wire).
+        RagSearchResponse response = new RagSearchResponse(1, "r", "memory.constraint", "rrf-v1",
+                RagSearchMode.HYBRID_RERANK, RagSearchMode.HYBRID_RERANK, false, List.of(), List.of(), List.of());
+        var bytes = new ByteArrayOutputStream();
+        ObjectOutput output = serialization.serialize(null, bytes);
+        output.writeObject(response);
+        output.flushBuffer();
+        ObjectInput input = serialization.deserialize(null, new ByteArrayInputStream(bytes.toByteArray()));
+        RagSearchResponse restored = input.readObject(RagSearchResponse.class);
+        assertThat(restored.failedStages()).isEmpty();
+        assertThat(restored).isEqualTo(response);
+    }
 }

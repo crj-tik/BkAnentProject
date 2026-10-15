@@ -19,14 +19,17 @@ dubbo:
   application:
     name: memory-service
     qos-enable: false
-    # hessian2 wire pin (KI-113 follow-up): fastjson2 2.0.52+ JSONB crashes decoding Dubbo's
-    # FieldBased record payloads with list fields (see RagFastjson2JsonbRoundTripTest). Ordering
-    # hessian2 first in the consumer prefer list makes the wire negotiation select hessian2 for
-    # every outbound RAG call; provider RAG services also pin serialization=hessian2.
+    # fastjson2ctor wire pin (KI-113 follow-up): Dubbo's built-in fastjson2 writes FieldBased
+    # JSONB which crashes decoding record list fields; the ctor SPI keeps the strict typed
+    # contract. Application prefer ordering feeds every outbound reference URL.
     prefer-serialization: fastjson2ctor,fastjson2
   protocol:
     name: dubbo
     port: ${MEMORY_DUBBO_PORT:20891}
+    # Protocol parameters reach BOTH the server channel URL and outbound client channel URLs,
+    # so request encoding (not only reference resolution) selects fastjson2ctor.
+    parameters:
+      serialization: fastjson2ctor
   registry:
     address: ${DUBBO_REGISTRY_ADDRESS:N/A}
   consumer:
@@ -34,8 +37,8 @@ dubbo:
     check: false
     init: false
     retries: 0
-  # Per-interface reference attributes (Dubbo 3.2 keyed-config form) land directly on the invoker
-  # URL; together with the provider-side pin this keeps the whole RAG wire on fastjson2ctor.
+  # Per-interface reference attributes keep the RAG invoker URLs pinned as well; the protocol
+  # parameter above is what finally reaches the shared Netty client channel URL.
   # KI-113 follow-up.
   reference:
     com.bkanent.common.rpc.RagPrincipalRpcService:
