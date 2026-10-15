@@ -45,7 +45,7 @@
 ## 6. 领域消费、Bootstrap 与兼容包装
 
 - [x] 6.1 房源facade请求RAG、批量最新真源检查及旧match/context，至多一次有界扩池；新ADMIN/BROKER规则待3.3/3.4回归，不据旧grant测试宣称完成。
-- [ ] 6.2 searchListingsByKeyword领域默认混合工具/description/技能，真实房源Agent凭3.5专用A2A认证调用；SQL详情与营销独立搜索不变。
+- [x] 6.2 searchListingsByKeyword领域默认混合工具/description/技能，真实房源Agent凭3.5专用A2A认证调用；SQL详情与营销独立搜索不变。2026-10-15真实验收（8bc352b镜像，夹具listing:3/4 ON_SALE）：A2A SEND→模型第一轮调skill（listing-search激活）→技能展开→**模型第二轮真实调searchListingsByKeyword**（DEBUG日志Starting/Successful 851ms，时间线与RAG侧SCHEMA_HEAD/MAPPING能力续验精确对应——检索真实经RAG管线）→第三轮模型汇总产出artifact；getListingDetail工具同样验证真实执行（三轮模型往返完整）。工具description含混合检索/授权范围/凭据语义声明；SQL详情（getListingDetail）与searchListingSummaries独立路径不变；认证全链路为A2A信标+executor内currentPrincipal复验。**排查记录**：MethodToolCallback执行日志为DEBUG级（默认INFO不可见），此前"工具未执行"为日志级别误判，非故障；诊断期间临时开启Spring AI DEBUG已回滚。营销独立搜索不在本任务范围。勾选闭合。
 - [ ] 6.3 记忆消费/真源有效性/领域最终排序，验证真实rerank profile及scoringVersion注册，保持统一asOf/两池去重/累计预算/metadata白名单；不强制示例权重或新评分DSL。
 - [x] 6.4 bootstrap/YAML唯一迁memory，开关/仅补缺/人工及停用不覆盖，所有更新事件化。
 - [x] 6.5 milvusKnowledgeSearch纯代理，保留能力/recordMilvus/审计/知识开关，不允许模型物理寻址。

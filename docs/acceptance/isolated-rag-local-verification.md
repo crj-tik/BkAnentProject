@@ -294,6 +294,12 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - 夹具清理干净：partial_pref经decay链到删除（source 0/ES 0），outbox 25事件全APPLIED；七release服务healthy。
 - 8.2勾选闭合（35/49）。剩余主要：3.5审批续接、6.2/6.3、1.5/4.6 HTTP策略、4.1/4.2、7.1/7.5、8.3切流、8.4停机、8.8恢复演练、8.9归档维护。
 
+### 2026-10-15 6.2房源Agent混合工具真实验收（6.2闭合）
+
+- **全链路证据（DEBUG日志时间线）**：A2A SEND（admin01信标）→模型第一轮tool_call=skill（listing-search技能激活，INFO日志）→技能展开注入指引→**模型第二轮调searchListingsByKeyword**（10:17:39.380 Starting →10:17:40.231 Successful，851ms）→RAG侧10:17:39.409 SCHEMA_HEAD/200+MAPPING/200（**requireReady单飞续验四阶段探测，证明检索真实进入RAG混合管线**）→结果经listing SQL真源核验→第三轮模型汇总→任务COMPLETED+artifact。getListingDetail同法验证（listingId=3真实执行，三轮模型往返完整）。
+- **诊断误区记录（重要）**：Spring AI `MethodToolCallback` 的工具执行日志是**DEBUG级**，默认INFO下完全不可见；技能激活日志恰好是INFO——导致此前误判"模型激活技能后无第二轮工具调用"。实际多轮ReAct循环一直正常。诊断手段：临时Nacos发布`logging.level.org.springframework.ai=DEBUG`+重启（已回滚）。期间排除了网关工具能力（直连KE网关tool_calls正常）、ReactAgent边路由（tools→model边逻辑正确）、ModelRequest.tools命名匹配（纯工具名✓）、技能capability解析（resolver refs校验通过）。
+- 工具description含混合检索/授权范围/凭据语义（不收userId作认证）；夹具listing:3/4 ON_SALE经domain API创建/删除，终态source 0/ES 0。6.2勾选闭合（36/49）。
+
 ### 本轮仍待完成的验证
 
 以下1／2为c338b7e部署时点保留记录，已由上方accf97f实测及本轮增量推进覆盖，不作为当前仍阻塞的DNS／REST／Bean／整体INSPECT原因。
