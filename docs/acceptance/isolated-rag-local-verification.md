@@ -300,6 +300,14 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - **诊断误区记录（重要）**：Spring AI `MethodToolCallback` 的工具执行日志是**DEBUG级**，默认INFO下完全不可见；技能激活日志恰好是INFO——导致此前误判"模型激活技能后无第二轮工具调用"。实际多轮ReAct循环一直正常。诊断手段：临时Nacos发布`logging.level.org.springframework.ai=DEBUG`+重启（已回滚）。期间排除了网关工具能力（直连KE网关tool_calls正常）、ReactAgent边路由（tools→model边逻辑正确）、ModelRequest.tools命名匹配（纯工具名✓）、技能capability解析（resolver refs校验通过）。
 - 工具description含混合检索/授权范围/凭据语义（不收userId作认证）；夹具listing:3/4 ON_SALE经domain API创建/删除，终态source 0/ES 0。6.2勾选闭合（36/49）。
 
+### 2026-10-15 6.3记忆消费与领域排序真实验收（6.3闭合）
+
+- **领域最终排序**：rank_pref_high（conf 0.90，rel 0.9675）domainScore=**0.8708**、rank_pref_mid（conf 0.30，rel 0.9574）=**0.2872**——与 confidence×relevance 公式逐位吻合，排序随置信度正确；domainScoringVersion=memory-confidence-semantic-decay-v1。
+- **halfLife时间衰减**：rank_pref_old（lastObservedAt 2.0168天前，conf 0.80）domainScore=**0.1893**，与 relevance×0.80×2^(-2.0168) 期望值完全一致（误差<0.002）——真实流逝时间的指数衰减数学验证。
+- **metadata白名单**：候选metadata仅[active/category/confidence/observationCount/preferenceKey]；evidence与sourceSessionId（夹具注入SECRET_EVIDENCE_*/SECRET_SESSION_*标记）**零外泄**。
+- **真源有效性**：finalTruthLocked在writer锁内SQL复核——confidence>=0.1且未删除过滤、projection revision/tombstone/contentHash三重一致校验、请求过滤条件对SQL真源复验、scoringVersion白名单与SEMANTIC_NORMALIZED校验；统一asOf单快照；两池documentId去重；扩池累计预算（remainingRecall）此前已验。preferences空间排序语义完整。
+- 夹具（high/mid/old三偏好）经decay链清理，终态source 0/ES 0/outbox全APPLIED。6.3勾选闭合（37/49）。
+
 ### 本轮仍待完成的验证
 
 以下1／2为c338b7e部署时点保留记录，已由上方accf97f实测及本轮增量推进覆盖，不作为当前仍阻塞的DNS／REST／Bean／整体INSPECT原因。
