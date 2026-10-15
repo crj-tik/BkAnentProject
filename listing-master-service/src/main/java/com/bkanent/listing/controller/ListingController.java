@@ -43,30 +43,30 @@ public class ListingController {
     }
 
     @PutMapping("/{id}")
-    public ApiResponse<ListingDetailResponse> update(@PathVariable Long id, @RequestBody ListingUpsertRequest request) {
+    public ApiResponse<ListingDetailResponse> update(@PathVariable("id") Long id, @RequestBody ListingUpsertRequest request) {
         return ApiResponse.ok(listingManagementService.updateListing(id, request));
     }
 
     @DeleteMapping("/{id}")
-    public ApiResponse<Void> delete(@PathVariable Long id) {
+    public ApiResponse<Void> delete(@PathVariable("id") Long id) {
         listingManagementService.deleteListing(id);
         return ApiResponse.ok(null);
     }
 
     @GetMapping("/{id}")
-    public ApiResponse<ListingDetailResponse> detail(@PathVariable Long id) {
+    public ApiResponse<ListingDetailResponse> detail(@PathVariable("id") Long id) {
         return ApiResponse.ok(listingManagementService.getListingDetail(id));
     }
 
     @GetMapping("/search")
-    public ApiResponse<List<ListingDetailResponse>> search(@RequestParam(required = false) String keyword,
-                                                           @RequestParam(required = false) String status,
-                                                           @RequestParam(required = false) Long brokerId,
-                                                           @RequestParam(required = false) BigDecimal minArea,
-                                                           @RequestParam(required = false) BigDecimal maxArea,
-                                                           @RequestParam(required = false) BigDecimal minTotalPrice,
-                                                           @RequestParam(required = false) BigDecimal maxTotalPrice,
-                                                           @RequestParam(required = false) Boolean verifiedOnly) {
+    public ApiResponse<List<ListingDetailResponse>> search(@RequestParam(name = "keyword", required = false) String keyword,
+                                                           @RequestParam(name = "status", required = false) String status,
+                                                           @RequestParam(name = "brokerId", required = false) Long brokerId,
+                                                           @RequestParam(name = "minArea", required = false) BigDecimal minArea,
+                                                           @RequestParam(name = "maxArea", required = false) BigDecimal maxArea,
+                                                           @RequestParam(name = "minTotalPrice", required = false) BigDecimal minTotalPrice,
+                                                           @RequestParam(name = "maxTotalPrice", required = false) BigDecimal maxTotalPrice,
+                                                           @RequestParam(name = "verifiedOnly", required = false) Boolean verifiedOnly) {
         return ApiResponse.ok(listingManagementService.searchListings(new ListingQueryRequest(
                 keyword,
                 status,
@@ -80,30 +80,30 @@ public class ListingController {
     }
 
     @GetMapping
-    public ApiResponse<List<ListingDTO>> searchSummary(@RequestParam(required = false, defaultValue = "") String keyword) {
+    public ApiResponse<List<ListingDTO>> searchSummary(@RequestParam(name = "keyword", required = false, defaultValue = "") String keyword) {
         return ApiResponse.ok(listingManagementService.searchListingSummaries(keyword));
     }
 
     @PutMapping("/{id}/status")
-    public ApiResponse<ListingDetailResponse> updateStatus(@PathVariable Long id,
+    public ApiResponse<ListingDetailResponse> updateStatus(@PathVariable("id") Long id,
                                                            @RequestBody ListingStatusUpdateRequest request) {
         return ApiResponse.ok(listingManagementService.updateStatus(id, request));
     }
 
     @PutMapping("/{id}/assets")
-    public ApiResponse<ListingDetailResponse> bindAssets(@PathVariable Long id,
+    public ApiResponse<ListingDetailResponse> bindAssets(@PathVariable("id") Long id,
                                                          @RequestBody ListingAssetBindRequest request) {
         return ApiResponse.ok(listingManagementService.bindAssets(id, request));
     }
 
     @PostMapping("/{id}/ocr")
-    public ApiResponse<ListingDetailResponse> recognizeOcr(@PathVariable Long id,
+    public ApiResponse<ListingDetailResponse> recognizeOcr(@PathVariable("id") Long id,
                                                            @RequestBody ListingOcrRecognizeRequest request) {
         return ApiResponse.ok(listingManagementService.recognizeOcr(id, request));
     }
 
     @PostMapping("/{id}/verify")
-    public ApiResponse<ListingDetailResponse> verify(@PathVariable Long id,
+    public ApiResponse<ListingDetailResponse> verify(@PathVariable("id") Long id,
                                                      @RequestBody ListingVerifyRequest request) {
         return ApiResponse.ok(listingManagementService.verifyAuthenticity(id, request));
     }

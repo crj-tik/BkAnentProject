@@ -64,6 +64,29 @@ public final class Fastjson2ConstructorSerialization implements Serialization {
             try { output.write(JSON.toJSONBytes(value, WRITE)); }
             catch (RuntimeException failure) { throw new IOException(failure); }
         }
+        @Override public void writeThrowable(Throwable failure) throws IOException {
+            // Self-describing envelope: class-name tags do not exist on this wire, and the
+            // default readThrowable() expects a real Throwable from an untyped read. Only the
+            // project's own safe failure contract is carried; no foreign exception class can be
+            // named or instantiated through this path.
+            String code = null;
+            String field = null;
+            for (Class<?> type = failure.getClass(); type != null; type = type.getSuperclass()) {
+                if (type.getName().equals("com.bkanent.common.rag.RagException")) {
+                    try {
+                        code = String.valueOf(type.getMethod("code").invoke(failure));
+                        field = (String) type.getMethod("field").invoke(failure);
+                    } catch (ReflectiveOperationException ignored) { }
+                    break;
+                }
+            }
+            java.util.LinkedHashMap<String, Object> envelope = new java.util.LinkedHashMap<>();
+            envelope.put("@throwable", "RagException");
+            envelope.put("code", code != null ? code : "DEPENDENCY_UNAVAILABLE");
+            envelope.put("field", field);
+            envelope.put("message", failure.getMessage() == null ? "" : failure.getMessage());
+            writeObject(envelope);
+        }
         @Override public void flushBuffer() throws IOException { ensureOpen(); output.flush(); }
         private void ensureOpen() throws IOException {
             if (closed) throw new IOException("fastjson2ctor output already flushed");
@@ -97,7 +120,23 @@ public final class Fastjson2ConstructorSerialization implements Serialization {
         @Override public String readUTF() throws IOException { return read(String.class); }
         @Override public byte[] readBytes() throws IOException { return read(byte[].class); }
         @Override public Object readObject() throws IOException {
-            return read(Object.class);
+            Object value = read(Object.class);
+            if (value instanceof java.util.Map<?, ?> map
+                    && "RagException".equals(map.get("@throwable"))) {
+                // Rebuild the safe failure contract from the envelope; code/field stay the only
+                // constructor inputs, so no attacker-controlled class or message text escapes.
+                String code = String.valueOf(map.get("code"));
+                String field = map.get("field") == null ? null : String.valueOf(map.get("field"));
+                try {
+                    Class<?> type = Class.forName("com.bkanent.common.rag.RagException");
+                    Class<?> enumType = Class.forName("com.bkanent.common.rag.RagErrorCode");
+                    Object parsed = java.lang.Enum.valueOf((Class<? extends Enum>) enumType.asSubclass(Enum.class), code);
+                    return type.getConstructor(enumType, String.class).newInstance(parsed, field);
+                } catch (ReflectiveOperationException | IllegalArgumentException failure) {
+                    throw new IOException("invalid throwable envelope");
+                }
+            }
+            return value;
         }
         @Override public <T> T readObject(Class<T> type) throws IOException {
             return read(type);

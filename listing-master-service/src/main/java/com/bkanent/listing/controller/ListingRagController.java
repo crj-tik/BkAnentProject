@@ -30,7 +30,7 @@ public class ListingRagController {
                 .map(event -> new QueuedEvent(event.eventId(), event.documentId(), event.revision(), "QUEUED")).toList());
     }
     @PostMapping("/index/{listingId}")
-    public ApiResponse<RagIndexStatus> index(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable Long listingId) {
+    public ApiResponse<RagIndexStatus> index(@RequestHeader(value = "Authorization", required = false) String authorization, @PathVariable("listingId") Long listingId) {
         RagIndexEvent event = backfill.index(listingId, ListingRagCredentialContext.bearer(authorization));
         return ApiResponse.ok(dispatcher.deliver(event.eventId()));
     }

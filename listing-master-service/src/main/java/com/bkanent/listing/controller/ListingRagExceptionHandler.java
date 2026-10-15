@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.util.Map;
 
 /** Only public RAG codes and sanitized schema fields may cross the domain HTTP boundary. */
-@RestControllerAdvice(assignableTypes = ListingRagController.class)
+@RestControllerAdvice
 public class ListingRagExceptionHandler {
     @ExceptionHandler(RagException.class)
     public ResponseEntity<ApiResponse<Map<String, String>>> handle(RagException exception) {

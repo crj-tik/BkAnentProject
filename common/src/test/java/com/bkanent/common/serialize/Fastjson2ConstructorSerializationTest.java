@@ -70,6 +70,22 @@ class Fastjson2ConstructorSerializationTest {
         assertThat(value).isInstanceOf(java.util.Collection.class);
     }
 
+    @Test void ragExceptionRoundTripsThroughTheThrowableEnvelope() throws Exception {
+        // Dubbo's readThrowable() uses the untyped read; the envelope carries only the safe
+        // failure contract (code + sanitized field), never a foreign exception class.
+        var bytes = new ByteArrayOutputStream();
+        ObjectOutput output = serialization.serialize(null, bytes);
+        output.writeThrowable(new com.bkanent.common.rag.RagException(
+                com.bkanent.common.rag.RagErrorCode.SPACE_NOT_READY, "spaceId"));
+        output.flushBuffer();
+        ObjectInput input = serialization.deserialize(null, new ByteArrayInputStream(bytes.toByteArray()));
+        Object restored = input.readObject();
+        assertThat(restored).isInstanceOf(com.bkanent.common.rag.RagException.class);
+        com.bkanent.common.rag.RagException failure = (com.bkanent.common.rag.RagException) restored;
+        assertThat(failure.code()).isEqualTo(com.bkanent.common.rag.RagErrorCode.SPACE_NOT_READY);
+        assertThat(failure.field()).isEqualTo("spaceId");
+    }
+
     @Test void recordWithEmptyListFieldRoundTripsAsEmptyList() throws Exception {
         // Empty failedStages must stay empty: a null-filled phantom element would corrupt
         // response semantics on the HTTP surface (observed once on the live wire).

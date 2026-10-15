@@ -279,6 +279,14 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - 清理：两个测试用户均经admin API DELETE（deleted=1），auth_role恢复active=1，admin01/broker01种子完好。异步续接入口（审批流）待3.5审批专项同批覆盖。
 - 3.2勾选闭合（33/49）。
 
+### 2026-10-15 房源scope真实验收与四处生产缺陷修复（3.3闭合）
+
+- **夹具与数据链路**：admin经`POST /listings`创建AccListingA/B（默认PENDING_REVIEW），`PUT /{id}/status`分别置ON_SALE/OFFLINE；开启listing dispatcher（Nacos `dispatcher-enabled: true`单行）后4事件派发——账本listing:1/2双后端APPLIED（rev2，STALE事件正确幂等）、ES 2文档。
+- **3.3矩阵全部通过**：REST——ADMIN detail/search见[1,2]、BROKER仅[1]且OFFLINE detail 403；RAG检索（真实HYBRID_RERANK）——ADMIN候选[1,2]、BROKER仅[1]（OFFLINE经授权scope两路硬过滤+SQL真源复核双重排除）；activeOnly=非ADMIN代码语义与实测一致。**删除链路**：DELETE→outbox DELETE APPLIED→账本tombstone=1双后端APPLIED→ES归零（partial补偿的删除侧实证）。
+- **四处生产缺陷修复**（均实测暴露）：①listing缺`MetaObjectHandler`——真实MySQL创建房源`created_at cannot be null` 500（H2夹具曾掩盖）；②`@PathVariable/@RequestParam`缺显式名——Spring 6无`-parameters`时detail/status/search全500；③`ListingRagExceptionHandler`仅绑定RagController——业务路径FORBIDDEN漏成500，改为全局`@RestControllerAdvice`（对应测试断言同步改写）；④fastjson2ctor SPI缺throwable通道——RAG错误响应被读成JSONObject（"expect Throwable"），listing派发5次重试耗尽；SPI增自描述throwable信封（仅RagException code+field，无任意类反序列化面）+回归测试。
+- **构建坑（重要）**：Spring Boot repackage增量缓存——改common后`-pl svc package`不刷新BOOT-INF/lib内嵌jar（时间戳15:31旧class），必须`clean package`；此前"writeThrowable已实现但容器仍旧行为"即此因。
+- 夹具清理：两listing经domain API DELETE，终态source 0/ES 0/账本保留墓碑/outbox全终态。3.3勾选闭合（34/49）。
+
 ### 本轮仍待完成的验证
 
 以下1／2为c338b7e部署时点保留记录，已由上方accf97f实测及本轮增量推进覆盖，不作为当前仍阻塞的DNS／REST／Bean／整体INSPECT原因。

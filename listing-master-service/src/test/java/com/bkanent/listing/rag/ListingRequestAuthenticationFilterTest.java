@@ -112,7 +112,7 @@ class ListingRequestAuthenticationFilterTest {
         assertThrows(RagException.class, ListingRagCredentialContext::current);
     }
 
-    @Test void adviceDoesNotHandleUnrelatedRuntimeExceptionsOrOtherControllers() {
+    @Test void adviceHandlesRagExceptionsGloballyButNotUnrelatedRuntimeFailures() throws Exception {
         var identity = authenticatedIdentity();
         var facade = mock(ListingRagFacade.class);
         var failure = new IllegalStateException("UNTRUSTED_PROVIDER_MESSAGE");
@@ -123,10 +123,14 @@ class ListingRequestAuthenticationFilterTest {
         assertSame(failure, raised.getCause());
         assertThrows(RagException.class, ListingRagCredentialContext::current);
 
+        // Global advice (3.3 follow-up): business controllers map RagException to its public HTTP
+        // status too — the previous 500-on-FORBIDDEN behavior on /listings is closed.
         var other = MockMvcBuilders.standaloneSetup(new UnrelatedController())
                 .setControllerAdvice(new ListingRagExceptionHandler()).build();
-        ServletException unrelated = assertThrows(ServletException.class, () -> other.perform(get("/unrelated-failure")));
-        assertInstanceOf(RagException.class, unrelated.getCause());
+        var result = other.perform(get("/unrelated-failure")).andReturn();
+        assertEquals(503, result.getResponse().getStatus());
+        assertEquals("SPACE_NOT_READY", com.fasterxml.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(result.getResponse().getContentAsString()).path("code").asText());
     }
 
     private static ListingRagIdentity authenticatedIdentity() {
