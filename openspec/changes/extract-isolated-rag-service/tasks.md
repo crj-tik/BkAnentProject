@@ -63,7 +63,7 @@
 
 ## 8. 回填、切流、清理与验证
 
-- [x] 8.1 受权有界backfill（默认100/最大500单页）、锁内完整快照/outbox及持久删除身份、更新删除交错测试；未知supervisor未激活，游标终止不等于两路APPLIED。真实数据/权限水位待1.2/8.2；新用户self-only边界待3.4。
+- [x] 8.1 受权有界backfill（默认100/最大500单页）、锁内完整快照/outbox及持久删除身份、更新删除交错测试；未知supervisor未激活，游标终止不等于两路APPLIED。真实数据/权限水位待1.2/8.2；新用户self-only边界待3.4。2026-10-15受控激活补充：17条memory.constraint真实经dispatcher→Dubbo submit→RAG账本→worker双后端APPLIED→getStatus幂等确认→outbox APPLIED/error NULL全链路闭合；ES rag_memory_constraint_v1 17文档、Milvus约束集合12 binlog+4 segment+2 statslog存在；激活路径经KI-110单飞续验修复（6da2dcc）与fastjson2 2.0.58修复（981cefe，KI-113），EXHAUSTED经显式WAITING重置处置。
 - [ ] 8.2 在授权且双模式地址合规的真实目标验独立索引/集合/身份映射/两路等价/更新删除partial补偿和默认重排；缺目标/协议时阻塞，不用stub/单路无重排代替。2026-10-15恢复前日corrected-host安全结果：三空间各一次PROVISION及后续INSPECT全部ready=true/1024/0失败/前后signed ADMIN，不重复调用。同日主会完成部分后置核验：ES三索引strict mapping逐字段一致、Milvus etcd当前目录exact3集合＋legacy前缀无残留、17约束真实库校验器passed=true（唯一ID/全UPSERT/生产转换与canonical hash匹配/投影全等/快照稳定）；Auth unhealthy根因（Nacos抢跑→H2回退）已修复（KI-111 FIXED/KI-112记录竞态）。仍缺：真实默认混合正命中、两后端APPLIED水位、A2A五操作；能力60秒无续验KI-110阻塞激活。本完整任务不补勾。
 - [ ] 8.3 无生产真实业务采用一个有界开发窗口：备份配置/镜像/种子历史/事件水位，暂停受影响写入、核对实例/在途并追平；版本初始化和新身份/地址/数据/默认能力gate全过才恢复，不要求虚构旧RPC消费者兼容发布。
 - [ ] 8.4 RAG停机结构化功能/无知识Supervisor可用、显式降级、真实REST/技能、ADMIN/BROKER/无效用户/跨偏好反例及历史审计恢复。

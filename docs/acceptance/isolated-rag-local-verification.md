@@ -221,6 +221,15 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - 回归：新增单飞续验（MutableClock过期续验恰一次／在飞第二读者有界等待／失败续验发布失败后续读者不再触发新probe）、热开关逐tick语义、中飞禁用排空、非法batchSize拒绝单测；改写无探针永不就绪（每次读触发一轮四阶段re-inspect后仍SPACE_NOT_READY，probe计数4/8/12）、过期续验成功（总probe 8）、显式降级首次读经真实续验合法成功三处旧断言。KI-110修复后全仓22模块串行`clean test` BUILD SUCCESS：150份Surefire XML共**959项**，0失败／0错误，7 skipped仍为历史显式排除的七个外部联调类（较冻结948基线净增11项，无新排除）。
 - 边界不变：续验是检索／写入路径上的同步有界开销（同空间互斥期间其他调用者等待同一次结果）；RAG RETRY_PENDING耗尽与Memory EXHAUSTED不自动恢复仍是各域重试语义，需各自处置；worker／dispatcher仍false，17条原事件未动。运行面验证须新制品部署后执行。
 
+### 2026-10-15 受控激活端到端闭合与fastjson2缺陷修复（KI-113）
+
+- KI-110修复镜像6da2dcc限定部署（新容器healthy／双网络172.24.0.17+10.253.240.2／只读rootfs+cap-drop ALL+no-new-privileges+UID10001保留；镜像层补齐release布局application.jar+ReadinessCheck.class，本地JAR hash 273e1f88逐字节一致；绑定DUBBO_IP等环境变量到新容器实际IP）。部署坑记录：直接docker run继承旧容器env钉扎IP会bind失败（新容器实际IP变化），须按当前实际IP重建。
+- Nacos v3 admin API表单发布两开关并读回：rag `index.worker.enabled: true`、memory `memory.rag.dispatcher-enabled: true`（各仅单行diff，其余内容不变）。激活后RAG侧17事件APPLIED、17文档两后端APPLIED——写路径完全成功，**首次证明真实17文档批量经账本到双后端APPLIED**，且不受60秒证据窗口限制（每文档sink写入时requireReady单飞续验逐个生效，17条未出现SPACE_NOT_READY耗尽）。
+- **KI-113发现与修复**：Memory outbox 17条EXHAUSTED（DEPENDENCY_UNAVAILABLE），根因fastjson2 2.0.52 JSONB `readInstant`抛UnsupportedOperationException（Dubbo 3.2.15传递依赖；RagBackendStatus.nextRetryAt为Instant）。契约类新旧144类字节全一致排除接口不兼容。981cefe修复：根POM钉2.0.58、common新增JSONB Instant往返回归、common-a2a测试改精确类注册（2.0.52下该测试靠崩溃意外通过，2.0.58暴露principal未注册）。全仓961项0失败0错误。
+- 981cefe rag+memory镜像重建部署（healthy；memory健康检查端口9011此前误写9013已修正）。激活后Memory Decode失败归零。EXHAUSTED显式处置：17条重置WAITING/attempts=0（payload不动），dispatcher经getStatus幂等确认——**outbox 17条APPLIED/error NULL**。EXHAUSTED不自动恢复是设计语义，本次处置即KI-110记录的显式路径。
+- **物理水位**：ES `rag_memory_constraint_v1` **17文档**（preference/listing两索引0符合预期）；Milvus约束集合469727203909255386 **12 binlog键+4 segment+2 statslog+2 deltalog**，另两集合无binlog。账本17事件/17文档APPLIED与ES 17文档与Milvus binlog存在性三方一致。
+- 旧容器已清理（配置备份`rag-container-config-before-6da2dcc.json`及两`*-config-before-981cefe.json`保留）；七release服务全healthy。8.1的17条约束真实APPLIED水位完成；默认混合正命中、A2A五操作、偏好生命周期仍待验。
+
 ### 本轮仍待完成的验证
 
 以下1／2为c338b7e部署时点保留记录，已由上方accf97f实测及本轮增量推进覆盖，不作为当前仍阻塞的DNS／REST／Bean／整体INSPECT原因。

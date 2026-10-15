@@ -559,6 +559,20 @@
 
 **关联**：KI-108／109／110／112；LR-47。17约束真实数据库语义校验已通过，写激活仍未执行。
 
+## KI-113 [FIXED·981cefe·P1] fastjson2 2.0.52 JSONB readInstant缺陷导致Memory读取RAG响应全败并耗尽outbox
+
+**发现日期**：2026-10-15（KI-110受控激活实测暴露）。
+
+**现象与根因**：受控激活开dispatcher后，RAG侧17事件/17文档两后端APPLIED（账本真实写入），但Memory outbox 17条全部EXHAUSTED（attempts=5, DEPENDENCY_UNAVAILABLE）。Memory日志`DecodeableRpcResult`失败，cause链定位`com.alibaba.fastjson2.JSONReaderJSONB.readInstant`抛`UnsupportedOperationException`：Dubbo 3.2.15传递的fastjson2 2.0.52在JSONB二进制反序列化`RagBackendStatus.nextRetryAt`（Instant）时无实现。契约类字节比对确认新旧common/rag 144类全一致，非接口不兼容；2.0.52下该缺陷使所有含Instant的RPC响应读取必败，与KI-110续验无关。
+
+**处置（981cefe）**：根POM dependencyManagement钉fastjson2 2.0.58（已验证readInstant完整实现）；common新增JSONB Instant往返与嵌套事件回归测试；common-a2a运行时依赖测试原靠2.0.52崩溃意外通过、2.0.58下暴露principal未注册，改用SerializeSecurityManager精确类注册（addToAllowed单类，STRICT不放宽、无包allowlist）。全仓961项0失败0错误，7外部联调类仍排除。
+
+**运行面验证（981cefe镜像实测）**：rag+memory两镜像重建部署（新容器healthy/安全配置保留/标签绑定源码与JAR hash）；Memory侧Decode失败归零；显式处置EXHAUSTED（17条重置WAITING/attempts=0，payload不动）后dispatcher经getStatus确认——outbox 17条APPLIED/error NULL；ES `rag_memory_constraint_v1` 17文档；Milvus约束集合12 binlog键+4 segment+2 statslog+2 deltalog（另两集合无binlog）。端到端链路（投影→outbox→Dubbo submit→账本→worker双后端→getStatus确认→APPLIED）真实闭合。
+
+**遗留语义（非缺陷）**：EXHAUSTED不自动恢复是设计意图（耗尽需显式处置），KI-110已记录；本次处置走WAITING→getStatus幂等确认，无重复写入。
+
+**代码位置与关联**：根`pom.xml`（fastjson2 2.0.58）；`common/src/test/.../RagFastjson2JsonbRoundTripTest.java`；`common-a2a/src/test/.../OfficialRuntimeDependenciesTest.java`；LR-48、KI-110。
+
 ## KI-112 [OPEN·P2] 整栈同时重启时auth-service可能抢跑Nacos就绪回退内嵌H2，需人工重启恢复
 
 **确认日期**：2026-10-15。
