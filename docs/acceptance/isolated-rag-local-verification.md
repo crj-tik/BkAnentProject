@@ -247,6 +247,15 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - **水位事实**：偏好空间生命周期4个revision（UPSERT/DELETE/DELETE/UPSERT）+最终清理decay，全部经outbox→账本→双后端，ES与source终态归零、outbox无残留。夹具经domain API创建与衰减清理，无任何物理后端直写。
 - 3.4勾选闭合；8.2偏好生命周期部分达成（partial补偿/两路等价专项仍待）。
 
+### 2026-10-15 偏好空间两路等价与过滤专项（8.2续）
+
+- **硬过滤等价**（两夹具：deploy_pref_a category=deployment lastObservedAt=10-15、compliance_pref_b category=compliance lastObservedAt=10-14）：category IN[deployment]仅返回deploy文档（compliance被两路滤除）；lastObservedAt GTE 2026-10-15仅返回新文档（缺/旧时间字段文档被排除，过滤非时间衰减排序）；AND组合过滤语义正确。过滤经RAG两路强制执行（KEYWORD query filter+VECTOR metadata filter等价），域不自行召回。
+- **显式单路模式**：hybrid=false singleRecall=VECTOR→effectiveMode=VECTOR_RERANK，候选sources=[VECTOR]（关键词路未执行）；hybrid=false singleRecall=KEYWORD+semanticRerank=false→KEYWORD模式，scoreKind=**RANK_SINGLE**（如实标明融合/单路排序，不伪装语义分）。
+- **无效参数三反例全拒**：未知字段bogusField→INVALID_ARGUMENT；category字段EQ配NUMBER类型→INVALID_ARGUMENT；candidateLimit=500超候选池上限→INVALID_ARGUMENT（明确报错非静默截断）。
+- 契约细节记录：RagFilter的IN运算需STRING_LIST（values数组、scalar null），EQ/GTE/LTE需匹配字段声明类型——首测用scalar单值配IN被正确拒绝（参数校验本身亦为验证面）。
+- ES `_cat/indices` docs.count为近实时统计（需refresh），验证文档数以`_search`实查为准（曾显示1实为2）。
+- 偏好空间终态清理干净：source 0行/ES 0文档（refresh后）/outbox 17事件全APPLIED无残留，全程经domain API decay链清理无物理直写。8.2仍缺：partial补偿专项、ALLOW_DEGRADED降级路径（需停RAG后端）、A2A五操作。
+
 ### 本轮仍待完成的验证
 
 以下1／2为c338b7e部署时点保留记录，已由上方accf97f实测及本轮增量推进覆盖，不作为当前仍阻塞的DNS／REST／Bean／整体INSPECT原因。
