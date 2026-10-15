@@ -70,6 +70,42 @@ class Fastjson2ConstructorSerializationTest {
         assertThat(value).isInstanceOf(java.util.Collection.class);
     }
 
+    @Test void multiValueFrameAdvancesAfterUntypedAndTypedReads() throws Exception {
+        // Exact Dubbo response-frame layout: byte tag, result value, byte tag, attachments map.
+        // Guards the stream-position claim: every read must advance, and a Map-valued untyped
+        // read mid-frame must not swallow the following tag or attachments.
+        RagIndexStatus status = new RagIndexStatus(1, "req", "evt", "memory.constraint", "constraint:YQ",
+                3, "a".repeat(64), RagIndexState.APPLIED, 3, false,
+                new RagBackendStatus(3, 0, null, null),
+                new RagBackendStatus(3, 0, null, null), null);
+        var bytes = new ByteArrayOutputStream();
+        ObjectOutput output = serialization.serialize(null, bytes);
+        output.writeByte((byte) 2);          // RESPONSE_VALUE tag
+        output.writeObject(status);          // typed result
+        output.writeByte((byte) 0);          // no-exception tag
+        output.writeAttachments(java.util.Map.of());   // attachments envelope
+        output.flushBuffer();
+        ObjectInput input = serialization.deserialize(null, new ByteArrayInputStream(bytes.toByteArray()));
+        assertThat(input.readByte()).isEqualTo((byte) 2);
+        assertThat(input.readObject(RagIndexStatus.class)).isEqualTo(status);
+        assertThat(input.readByte()).isEqualTo((byte) 0);
+        assertThat(input.readAttachments()).isEmpty();
+    }
+
+    @Test void untypedEnvelopeFollowedByMoreValuesReadsSequentially() throws Exception {
+        // Throwable envelope is NOT last on the wire: readObject() must consume exactly the
+        // envelope object and leave the reader positioned for the next value.
+        var bytes = new ByteArrayOutputStream();
+        ObjectOutput output = serialization.serialize(null, bytes);
+        output.writeThrowable(new com.bkanent.common.rag.RagException(
+                com.bkanent.common.rag.RagErrorCode.SPACE_NOT_READY, "spaceId"));
+        output.writeUTF("trailing");
+        output.flushBuffer();
+        ObjectInput input = serialization.deserialize(null, new ByteArrayInputStream(bytes.toByteArray()));
+        assertThat(input.readObject()).isInstanceOf(com.bkanent.common.rag.RagException.class);
+        assertThat(input.readUTF()).isEqualTo("trailing");
+    }
+
     @Test void ragExceptionRoundTripsThroughTheThrowableEnvelope() throws Exception {
         // Dubbo's readThrowable() uses the untyped read; the envelope carries only the safe
         // failure contract (code + sanitized field), never a foreign exception class.
