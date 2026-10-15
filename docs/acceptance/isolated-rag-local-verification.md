@@ -321,6 +321,12 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - **187项策略专项单测全过**（今日复跑）：RagManagedEndpointPolicy 80项（非规范CIDR/通配/0路/环回/跨host/两种host.docker.internal部署形态）、RagEndpointPolicy 68项、RagDnsRecords 16项（A/AAAA/混答）、RagHttpTransport+Managed 36项（重定向拒绝/地址固定）、ProtectedRequestFactory 4项、PolicyBinding 12项。任务列出的全部反例（localhost/环回/链接本地/映射/组播/保留/代理/URL覆盖/DNS换址重连刷新）在矩阵内。
 - 真实运行transport此前全程验证（三空间能力探测/embedding/rerank均经此策略）。1.5/4.6勾选闭合（41/49）。
 
+### 2026-10-15 7.1/7.5配置与初始化链验收（闭合）
+
+- **7.5 SQL链幂等实证**：20261012_rag_control/memory_rag/listing_rag + 20261015_studio_workspace 四脚本对live库（已有17约束/2用户/28账本文档/85outbox）**重放零错误、数据前后完全一致**；bk_schema_migration记录rag-control-20261012-v1（file+check双SHA）；启动链七服务healthy；事件水位终态（outbox全APPLIED、三方一致此前已验）；镜像8bc352b源码+JAR标签绑定。agent结构表齐备（async_workflow/checkpoint/approval_claim，本环境0行业务数据）；session_shared_memory等共享记忆表0行（无业务数据），约束17完整。
+- **7.1 配置生效汇总**：BK-AGENT/DEFAULT_GROUP/rag-service.yaml live读取验证三键HTTP策略+三空间schema+rerank钉扎+worker开关全部实际生效（worker热开即证）；ADMIN/BROKER角色矩阵实测；三域签名密钥链全程验证（env注入不打印）；治理scoringVersion逐响应校验+memory语义评分白名单；config-init经bkagent管理认证发布读回一致（历史nacos-publication验证）；敏感值零打印。
+- 7.1/7.5勾选闭合（43/49）。剩余：3.5审批续接、8.3切流、8.4停机、8.8恢复演练、8.9归档维护、1.3（MANAGER矩阵大部分在3.2已证）。
+
 ### 本轮仍待完成的验证
 
 以下1／2为c338b7e部署时点保留记录，已由上方accf97f实测及本轮增量推进覆盖，不作为当前仍阻塞的DNS／REST／Bean／整体INSPECT原因。

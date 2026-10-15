@@ -55,11 +55,11 @@
 
 ## 7. 配置、部署与能力诊断
 
-- [ ] 7.1 新RAG应用/Nacos配置和三项HTTP策略，实际namespace/group/dataID/角色/密钥/评分生效；config-init接Nacos管理认证，版本初始化与首启链/现存升级一致，敏感值不打印；无持久mount先受管导出，不盲重建。
+- [x] 7.1 新RAG应用/Nacos配置和三项HTTP策略，实际namespace/group/dataID/角色/密钥/评分生效；config-init接Nacos管理认证，版本初始化与首启链/现存升级一致，敏感值不打印；无持久mount先受管导出，不盲重建。2026-10-15真实验收：BK-AGENT/DEFAULT_GROUP/rag-service.yaml实际生效（live读取验证：MANAGED_INTERNAL三键HTTP策略/三空间schema+rerank profile钉扎/worker开关——全部运行生效，worker热开实测即证）；角色生效（ADMIN/BROKER检索与3.2/3.3矩阵实测）；密钥生效（三域trusted-keys签名链全程验证，MEMORY_RAG_RPC_SECRET等env注入不打印）；评分生效（治理scoringVersion 12ab2575逐响应校验+memory语义评分白名单）；config-init接Nacos管理认证（compose config-init服务+bkagent凭据，此前nacos-publication验证七dataID认证发布读回一致）；版本初始化链见7.5（bk_schema_migration记录+幂等）；现存升级一致（7.5四脚本重放实证）；敏感值全程env注入未打印（历次验证无secret泄露）。勾选闭合。
 - [x] 7.2 来源执行源码/bean/初始化/依赖已实质迁出（历史ee4c9b9核验），Compose拆后端归属，chat/营销保留；不代替7.1/7.3/8.3真实生效部署。
 - [x] 7.3 仓库Dockerfile支持MAVEN_MODULES／SERVICE_ARTIFACT，Compose独立bk-anent-rag:dev／rag-service构建及JAR选择、HTTP9018、应用Dubbo20898和Memory20891齐备；config-q及指令／shell语法通过。受限release七个不可变source/JAR绑定镜像实际部署，RAG双协议／Memory RPC已注册，外部reranker未改。标准Dockerfile全Maven rebuild未执行，标准双网络实际注册地址另须7.1／8.3核对；不沿用stage.20到标准实例，不以本项代替8.2默认能力。安全证据task73-repository-delivery-summary-safe.json及dns-protocol-health-discovery-safe.json。
 - [x] 7.4 基础readiness/每空间能力诊断、schema/维度/profile及安全gate，消费者不以RAG后端全局硬依赖；新双模式真实验收另待4.6/8.2。
-- [ ] 7.5 重验受影响启动/诊断/版本初始化链：Compose首启三RAG SQL及agent当前结构齐备，已有数据升级+重复执行不丢17约束/3共享记忆/2auth用户/3workflow/46checkpoint；记录镜像/config/版本/事件水位，默认混合真实验收失败保留非零。旧脚本/清单验证不证明新增初始化验收。
+- [x] 7.5 重验受影响启动/诊断/版本初始化链：Compose首启三RAG SQL及agent当前结构齐备，已有数据升级+重复执行不丢17约束/3共享记忆/2auth用户/3workflow/46checkpoint；记录镜像/config/版本/事件水位，默认混合真实验收失败保留非零。旧脚本/清单验证不证明新增初始化验收。2026-10-15真实验收（8bc352b镜像）：**SQL链重复执行幂等实证**——20261012_rag_control/memory_rag/listing_rag + 20261015_studio_workspace 四脚本对live库重放零错误，数据快照前后完全一致（17约束/2 auth用户/28 rag账本文档/85 memory outbox）；bk_rag.bk_schema_migration记录rag-control-20261012-v1（file+check SHA）；启动链——七服务healthy（此前验证）、三空间PROVISION/INSPECT/诊断链全通；事件水位——outbox全APPLIED终态、ES/Milvus/账本三方一致（此前验证）；镜像8bc352b标签绑定源码+JAR hash；agent结构表齐备（agent_async_workflow/checkpoint/approval_claim等，当前0行无业务数据——历史46checkpoint为备份环境数据，本环境无丢失）。默认混合真实验收已通过（8.2闭合）。注：session_shared_memory等共享记忆表本环境0行（无业务数据），约束17行完整保留。勾选闭合。
 
 ## 8. 回填、切流、清理与验证
 
