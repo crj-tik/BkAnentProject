@@ -3,7 +3,7 @@
 已结束规划修订并进入授权 apply，执行源码、初始化、限定配置与开发运行验证，维护 docs/LR/KI 并在验证后中文提交推送。保留49个稳定编号，不增删/复用编号；旧验证仅证明旧要求，新增要求不得自动勾选。此前重开原[x]：1.5、3.2、3.3、3.4、4.6、7.5、8.7、8.9，使基线为24/49；仅按当前完整证据继续勾选，不以源码、授权或历史测试代替新验收。
 
 - [x] 1.1 重新读取 LR/KI、主规格及设计，确认旧 split-rag-by-domain 不实施、不覆盖历史；当前已读取并同步维护 LR/KI，未改旧 change 的历史工件。
-- [ ] 1.2 盘点旧 REST/RPC/工具/技能/审计、真实 ES/Milvus schema/PK/模型维度/身份/hash/水位。旧后端已备份后启动：ES两个旧索引均0且mapping空，Milvus REST与精确catalog仅default库、0集合/分区/实体；不存在旧PK/model/schema可补造。6.7已全量核对无旧Agent索引RPC调用方并清理；新模型维度/投影身份和应用水位仍需实测，不据模板完成。
+- [x] 1.2 盘点旧 REST/RPC/工具/技能/审计、真实 ES/Milvus schema/PK/模型维度/身份/hash/水位。旧后端已备份后启动：ES两个旧索引均0且mapping空，Milvus REST与精确catalog仅default库、0集合/分区/实体；不存在旧PK/model/schema可补造。6.7已全量核对无旧Agent索引RPC调用方并清理；新模型维度/投影身份和应用水位仍需实测，不据模板完成。2026-10-15水位实测补全（8bc352b镜像）：模型维度1024经三空间PROVISION/INSPECT与真实embedding实测；投影身份（RagDocumentIds逻辑ID/base64url）经17约束校验器与偏好生命周期逐文档验证；应用水位终态快照——constraint空间ES 17文档+Milvus 12 binlog+账本17事件APPLIED（tombstone=0），preference空间经完整生命周期（创建/衰减/删除/重建/清理）后ES 0/source 0/账本3文档（全tombstone=1墓碑）/outbox 18事件全APPLIED，listing空间0（未启用）。新模型维度/投影身份/水位三项均不再以模板推断。
 - [ ] 1.3 按最小业务基线核对 ADMIN唯一管理员、BROKER普通成员、MANAGER不默认准入；ADMIN全未删除房源含非ON_SALE，BROKER仅ON_SALE；偏好包括ADMIN绝对self-only，未知Supervisor语料隔离，不再要求资源grant规范/授权种子。
 - [x] 1.4 已读取operations-inventory-safe/configuration-validation/Nacos恢复证据，核对DEFAULT_GROUP原BK-AGENT16/public21/acceptance5、现BK17/public21/5，旧空namespace实际public；七selected十一域key扩展后认证发布/逐hash读回一致。实际端口/旧imageID/digest/原volume与受限archive checksum已记录，无mount原Nacos未重建；隔离internal实例12原config恢复匹配。旧listing/memory/agent imageID本地缺失明确非可重建rollback；应用生效另验，不全目录覆盖。
 - [ ] 1.5 重验所有HTTP真实transport与新双模式配置/目标：仅mode/allowed-hosts/internal-networks逐host map；项目网172.24.0.0/16，host.docker.internal容器192.168.65.254/Windows10.117.102.54分别核对，公司公开HTTPS host走公开分支。旧一律禁内网验证不证明新要求完成。
