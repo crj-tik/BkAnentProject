@@ -7,7 +7,9 @@ import com.bkanent.rag.index.RagIndexService;
 import com.bkanent.rag.security.RagAccessControl;
 import org.apache.dubbo.config.annotation.DubboService;
 
-@DubboService
+// hessian2 pin (KI-113 follow-up): fastjson2 2.0.52+ JSONB crashes on FieldBased record
+// list fields through Dubbo's security handler; see RagFastjson2JsonbRoundTripTest.
+@DubboService(parameters = {"serialization", "hessian2"})
 public class RagSpaceAdminRpcServiceImpl implements RagSpaceAdminRpcService {
     private final RagAccessControl access;
     private final ManagedRagSpaceRegistry registry;
