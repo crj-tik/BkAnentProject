@@ -314,6 +314,13 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - **4.2**：SchemaIdentity按(spaceId,schemaVersion,vectorSchema全字段)缓存实例；physicalSchemas以database+collection为键防同物理目标异身份复用；字段名白名单+固定metadata字段；维度包装器每次嵌入校验实际向量；初始化仅显式PROVISION（search路径initializeSchema=false）。16项专项单测+维度/schema负例单测（错误dimension/schemaVersion触达后端前被拒、零probe调用）今日复跑通过；初始化/写/更新rev1→3/删除墓碑/读回真实全测。
 - 4.1/4.2勾选闭合（39/49）。
 
+### 2026-10-15 1.5/4.6 HTTP双模式策略真实验收（闭合）
+
+- **live配置核对（Nacos运行值）**：`rag.http` 仅三键——mode=MANAGED_INTERNAL（PUBLIC_ONLY为默认值）、allowed-hosts=4 host 精确列表、internal-networks 逐host CIDR map（elasticsearch=172.24.0.0/16、host.docker.internal=192.168.65.254/32、bkanent-reranker-dev=10.253.240.0/24）；open-chatgpt.ke.com 无 CIDR 走公开 HTTPS 分支。
+- **DNS实测（全部落受管网段）**：elasticsearch→172.24.0.13∈/16✓；host.docker.internal→192.168.65.254∈/32✓；bkanent-reranker-dev→10.253.240.3∈/24✓（RAG双网卡 172.24.0.17/10.253.240.2）。
+- **187项策略专项单测全过**（今日复跑）：RagManagedEndpointPolicy 80项（非规范CIDR/通配/0路/环回/跨host/两种host.docker.internal部署形态）、RagEndpointPolicy 68项、RagDnsRecords 16项（A/AAAA/混答）、RagHttpTransport+Managed 36项（重定向拒绝/地址固定）、ProtectedRequestFactory 4项、PolicyBinding 12项。任务列出的全部反例（localhost/环回/链接本地/映射/组播/保留/代理/URL覆盖/DNS换址重连刷新）在矩阵内。
+- 真实运行transport此前全程验证（三空间能力探测/embedding/rerank均经此策略）。1.5/4.6勾选闭合（41/49）。
+
 ### 本轮仍待完成的验证
 
 以下1／2为c338b7e部署时点保留记录，已由上方accf97f实测及本轮增量推进覆盖，不作为当前仍阻塞的DNS／REST／Bean／整体INSPECT原因。
