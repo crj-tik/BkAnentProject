@@ -41,6 +41,11 @@ public class MemoryRagRpcConfiguration {
         reference.setInit(false);
         reference.setTimeout(20000);
         reference.setRetries(0);
+        // fastjson2 2.0.52..2.0.59 JSONB cannot decode FieldBased record payloads with list fields
+        // through Dubbo's security handler (TYPED_ANY startArray crash, KI-113 follow-up). The
+        // RAG provider prefers "fastjson2,hessian2" and therefore accepts an explicit hessian2
+        // consumer; the wire choice does not weaken any signed envelope in the payloads.
+        reference.setParameters(java.util.Map.of("serialization", "hessian2"));
         return reference;
     }
 }
