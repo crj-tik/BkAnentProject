@@ -38,8 +38,10 @@
 
 - [x] 6.1 Compile affected modules and resolve implementation diagnostics.
 - [x] 6.2 Update API/schema examples, LR/KI and deployment/rollback prerequisites with actual verification limits.
-- [ ] 6.3 Commit and push verified scoped changes according to repository instructions.
+- [x] 6.3 Commit and push verified scoped changes according to repository instructions.
 
 ## Implementation handoff
 
 P0/P1/P2 source and the frontend are delivered in this batch; full P3/P4 remains explicit work under KI-114. Publish preparation currently stores an INCOMPLETE/NOT_CONFIGURED snapshot only, and persisted interview-response lookup is a partial KI-12 improvement. No deployment or schema application has been performed. Current-work keyword/cursor history is implemented; status/needsDecision filtering remains part of the outstanding metadata work (5.4). See docs/studio-v2-api.md and the sibling frontend backend-integration-prompts-v2.md for concrete continuation instructions.
+
+Source delivery commit 35afd8d was pushed to origin/dev-fix with explicit user authorization after automatic approval initially rejected the unverified destination. Frontend production build and affected backend module compile succeeded; no test suite or runtime migration was executed. Unrelated working-tree changes remain outside this delivery.

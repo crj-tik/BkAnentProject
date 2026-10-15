@@ -2,6 +2,8 @@
 
 日期：2026-10-15。变更 `implement-studio-v2`。本文件描述当前源码，完整目标仍见同名 OpenSpec 未完成任务及前端仓库的后端实施 Prompt。
 
+源码交付：`35afd8d`，经用户明确授权已推送 `origin/dev-fix`。该提交不等于数据库迁移、部署或业务联调完成。
+
 ## 身份与存储
 
 浏览器只经过 Gateway；Studio 位于 `/agent/studio/v1`。入口与输出均重新校验真实 Bearer/principal，工作、成果、消息和回执只允许原 owner。ADMIN 的业务房源读范围不扩展到其他人的工作。所有 SQL 均先绑定 owner/work；模型或客户端提供的 owner、角色、URL 不会授予权限。
