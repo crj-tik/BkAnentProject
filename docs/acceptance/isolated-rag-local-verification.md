@@ -327,6 +327,13 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - **7.1 配置生效汇总**：BK-AGENT/DEFAULT_GROUP/rag-service.yaml live读取验证三键HTTP策略+三空间schema+rerank钉扎+worker开关全部实际生效（worker热开即证）；ADMIN/BROKER角色矩阵实测；三域签名密钥链全程验证（env注入不打印）；治理scoringVersion逐响应校验+memory语义评分白名单；config-init经bkagent管理认证发布读回一致（历史nacos-publication验证）；敏感值零打印。
 - 7.1/7.5勾选闭合（43/49）。剩余：3.5审批续接、8.3切流、8.4停机、8.8恢复演练、8.9归档维护、1.3（MANAGER矩阵大部分在3.2已证）。
 
+### 2026-10-15 8.4 RAG真实停机演练（闭合）
+
+- **停机窗口（docker stop RAG）**：auth正常、listing SQL搜索正常、memory GET偏好（SQL真源）正常——非RAG路径全部结构化可用；memory.rag检索STRICT/ALLOW_DEGRADED均DEPENDENCY_UNAVAILABLE显式失败不悬挂；伪造token/ADMIN跨偏好反例停机中照常拒绝；A2A的getListingDetail（非RAG工具）任务COMPLETED、GET审计历史可查。
+- **写路径耐久**：停机期间upsert成功（outbox PENDING积累，业务写不被阻塞）。
+- **恢复**：RAG restart healthy后停机写入自动派发——其中1条在停机窗口内重试耗尽（EXHAUSTED，既知设计语义KI-110记录），经显式重置（WAITING/attempts=0）后drain APPLIED；检索恢复双偏好命中、ES 2→终态清理0；七服务healthy。
+- 演练结论：RAG单点停机不放大为业务全面停摆——SQL真源/鉴权/A2A非RAG技能全程可用，RAG依赖功能显式失败可观察，写路径耐久恢复自动追平。8.4勾选闭合（45/49）。
+
 ### 本轮仍待完成的验证
 
 以下1／2为c338b7e部署时点保留记录，已由上方accf97f实测及本轮增量推进覆盖，不作为当前仍阻塞的DNS／REST／Bean／整体INSPECT原因。
