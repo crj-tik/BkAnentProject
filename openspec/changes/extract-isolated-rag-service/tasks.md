@@ -25,8 +25,8 @@
 
 ## 4. 迁移检索执行与出站安全
 
-- [ ] 4.1 将现有 SpringAiMilvusDocumentStore、实际 embedding 接入及必需模型/连接/schema 配置迁入 RAG，保持原文档 metadata/逻辑 ID 映射；不重写裸 SDK 或 HTTP embedding 客户端。
-- [ ] 4.2 调整按空间 schema 身份缓存的 VectorStore 实例，校验 database/collection/field/model/维度不混用；验证初始化、旧文档读/更新/删除及维度错误。
+- [x] 4.1 将现有 SpringAiMilvusDocumentStore、实际 embedding 接入及必需模型/连接/schema 配置迁入 RAG，保持原文档 metadata/逻辑 ID 映射；不重写裸 SDK 或 HTTP embedding 客户端。迁移完成且真实运行验证：SpringAiMilvusDocumentStore 全程复用 Spring AI 官方 MilvusVectorStore（builder 仅注入 DimensionCheckedEmbeddingModel 包装与空间 schema），embedding 走既有 Spring AI OpenAI 装配（无自建 HTTP 客户端），Milvus 连接为官方 MilvusServiceClient；metadata 经 ProjectionCodec 保持逻辑 ID/版本映射（物理 UUID pk + metadata 携带逻辑 documentId/projectionVersion/contentHash）；upsert 为 ledger 保护的 delete+add。真实证据：三空间维度1024实测、17约束+偏好+listing三域双后端写入读回、17约束外部校验器逐文档验证物理/逻辑身份映射与canonical hash。勾选闭合。
+- [x] 4.2 调整按空间 schema 身份缓存的 VectorStore 实例，校验 database/collection/field/model/维度不混用；验证初始化、旧文档读/更新/删除及维度错误。实现与验证齐备：SchemaIdentity 按(spaceId, schemaVersion, vectorSchema全字段)缓存 MilvusVectorStore 实例；physicalSchemas 以 database+collection 为键防同物理目标被不同身份复用（冲突抛schemaIdentity）；字段名白名单校验（[A-Za-z][A-Za-z0-9_]{0,63}+固定metadata字段）；DimensionCheckedEmbeddingModel 每次嵌入校验实际向量维度/有限性（错误抛SPACE_NOT_READY不写入）；初始化仅显式PROVISION（search路径initializeSchema=false永不建schema）。16项SpringAiMilvusDocumentStoreTest专项单测（schema缓存防混用/维度包装/物理逻辑ID/官方转换器注入安全/权限保留）+注册表维度与schema负例单测（错误dimension/schemaVersion在触达后端前被拒、零probe调用，今日复跑通过）；真实运行：三空间初始化/写入/更新（rev1→3）/删除（墓碑）/读回全实测。勾选闭合。
 - [x] 4.3 从房源迁移 ES 索引/关键词召回执行到 RAG，使用统一领域投影、显式 mapping 和类型化过滤，去除房源 Mapper/RPC 回调及 ES→SQL 召回 fallback。
 - [x] 4.4 实现两路召回、文档去重、版本化 RRF/同分稳定顺序与有界候选池；增加异量纲分数、重复候选、单路开关及数量不足测试。
 - [x] 4.5 迁移现有 BGE native/DashScope 重排协议并校验候选完整性、下标/分数，接线明确评分 profile/logit或bounded转换，覆盖 scoreKind 与关闭重排语义。追加外部 Reranker-BGE-V2-M3 治理协议适配（governed，/api/v1/rerank）：请求 model/query/passages + raw_scores + truncate=false，每次响应钉扎 alias/revision/scoring_version/artifact_digest 与 score_semantics，漂移即 SCORING_PROFILE_MISMATCH、意外截断即 RERANK_PROTOCOL_ERROR、400/413 映射不可重试 INVALID_ARGUMENT；三空间登记实测 LOGIT profile 锚点，endpoint/CIDR/env 接线完成，协议与模板单测通过（rag-service 288 项）。真实容器联调与默认重排能力验收未执行，见 8.2。

@@ -308,6 +308,12 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - **真源有效性**：finalTruthLocked在writer锁内SQL复核——confidence>=0.1且未删除过滤、projection revision/tombstone/contentHash三重一致校验、请求过滤条件对SQL真源复验、scoringVersion白名单与SEMANTIC_NORMALIZED校验；统一asOf单快照；两池documentId去重；扩池累计预算（remainingRecall）此前已验。preferences空间排序语义完整。
 - 夹具（high/mid/old三偏好）经decay链清理，终态source 0/ES 0/outbox全APPLIED。6.3勾选闭合（37/49）。
 
+### 2026-10-15 4.1/4.2存储迁移实现对照闭合
+
+- **4.1**：SpringAiMilvusDocumentStore全程复用Spring AI官方MilvusVectorStore（builder仅注入DimensionCheckedEmbeddingModel包装与空间schema），embedding走既有Spring AI OpenAI装配无自建HTTP客户端，Milvus连接为官方MilvusServiceClient；metadata经ProjectionCodec保持物理UUID pk+逻辑documentId/projectionVersion/contentHash映射；真实证据=三空间维度1024、三域双后端写入读回、17约束校验器逐文档身份验证。
+- **4.2**：SchemaIdentity按(spaceId,schemaVersion,vectorSchema全字段)缓存实例；physicalSchemas以database+collection为键防同物理目标异身份复用；字段名白名单+固定metadata字段；维度包装器每次嵌入校验实际向量；初始化仅显式PROVISION（search路径initializeSchema=false）。16项专项单测+维度/schema负例单测（错误dimension/schemaVersion触达后端前被拒、零probe调用）今日复跑通过；初始化/写/更新rev1→3/删除墓碑/读回真实全测。
+- 4.1/4.2勾选闭合（39/49）。
+
 ### 本轮仍待完成的验证
 
 以下1／2为c338b7e部署时点保留记录，已由上方accf97f实测及本轮增量推进覆盖，不作为当前仍阻塞的DNS／REST／Bean／整体INSPECT原因。
