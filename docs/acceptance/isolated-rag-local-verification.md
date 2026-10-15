@@ -287,6 +287,13 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - **构建坑（重要）**：Spring Boot repackage增量缓存——改common后`-pl svc package`不刷新BOOT-INF/lib内嵌jar（时间戳15:31旧class），必须`clean package`；此前"writeThrowable已实现但容器仍旧行为"即此因。
 - 夹具清理：两listing经domain API DELETE，终态source 0/ES 0/账本保留墓碑/outbox全终态。3.3勾选闭合（34/49）。
 
+### 2026-10-15 8.2收尾：partial补偿与降级路径真实验收（8.2闭合）
+
+- **partial补偿（更新侧）**：partial_pref夹具v1→v2→v3连续upsert（内容与observationCount递增），每轮经outbox→账本→双后端；终态账本latest_revision=3且keyword/vector_applied_revision均=3（同步到最新），检索返回**v3内容**且projectionVersion=3——多轮更新交错无中间版本残留、无回退。迟到写STALE分类与同revision同hash幂等由RagIndexLifecycleTest既有断言覆盖（`late1` STALE、duplicate submit幂等）。删除侧补偿此前listing实测（墓碑→双后端APPLIED→ES归零）。
+- **ALLOW_DEGRADED降级路径（真实故障注入）**：`docker stop` ES容器后——STRICT请求明确失败DEPENDENCY_UNAVAILABLE（不伪装成空结果）；ALLOW_DEGRADED请求降级成功：**degraded=true、effectiveMode=VECTOR_RERANK、failedStages=[(KEYWORD,DEPENDENCY_UNAVAILABLE)]、候选sources全[VECTOR]（关键词路未执行）、scoreKind=SEMANTIC_NORMALIZED如实标注**——向量单路+语义重排，非融合顺序伪装。ES重启healthy后STRICT回归HYBRID_RERANK双路（恢复无残留状态）。
+- 夹具清理干净：partial_pref经decay链到删除（source 0/ES 0），outbox 25事件全APPLIED；七release服务healthy。
+- 8.2勾选闭合（35/49）。剩余主要：3.5审批续接、6.2/6.3、1.5/4.6 HTTP策略、4.1/4.2、7.1/7.5、8.3切流、8.4停机、8.8恢复演练、8.9归档维护。
+
 ### 本轮仍待完成的验证
 
 以下1／2为c338b7e部署时点保留记录，已由上方accf97f实测及本轮增量推进覆盖，不作为当前仍阻塞的DNS／REST／Bean／整体INSPECT原因。
