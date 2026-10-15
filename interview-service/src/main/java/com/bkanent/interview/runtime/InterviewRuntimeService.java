@@ -87,6 +87,17 @@ public class InterviewRuntimeService {
     public record TurnResult(String reply, String move, boolean sessionClosed) {
     }
 
+    /** Read-only recovery of a persisted response; never advances the interview or calls a model. */
+    public TurnResult completedTurn(Long sessionId, String requestId) {
+        if (requestId == null || requestId.isBlank() || requestId.length() > 200) return null;
+        InterviewTurnEntity existing = turnMapper.selectOne(new LambdaQueryWrapper<InterviewTurnEntity>()
+                .eq(InterviewTurnEntity::getSessionId, sessionId)
+                .eq(InterviewTurnEntity::getIdempotencyKey, requestId)
+                .eq(InterviewTurnEntity::getRole, "INTERVIEWER")
+                .last("LIMIT 1"));
+        return existing == null ? null : new TurnResult(existing.getSanitizedContent(), existing.getProbeMove(), "CLOSE".equals(existing.getProbeMove()));
+    }
+
     /**
      * 处理一个受访者话轮（完整管线）。
      */

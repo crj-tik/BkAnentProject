@@ -253,7 +253,7 @@ public class InterviewController {
                 sessionId, request.content(), idempotencyKey);
 
         // 终态暂存（断线续取）：TTL 内前端可凭 reqId 重取
-        terminalReplies.put(idempotencyKey, new TerminalReply(
+        terminalReplies.put(sessionId + ":" + idempotencyKey, new TerminalReply(
                 result.reply() == null ? "" : result.reply(),
                 result.sessionClosed(), Instant.now().plus(TERMINAL_TTL)));
 
@@ -283,10 +283,12 @@ public class InterviewController {
         }
         // 惰性清理过期条目
         terminalReplies.entrySet().removeIf(e -> e.getValue().expiresAt().isBefore(Instant.now()));
-        TerminalReply cached = terminalReplies.get(reqId);
+        InterviewRuntimeService.TurnResult persisted = runtimeService.completedTurn(sessionId, reqId);
+        if (persisted != null) return ApiResponse.ok(Map.of("reqId", reqId, "reply", persisted.reply() == null ? "" : persisted.reply(), "closed", persisted.sessionClosed()));
+        TerminalReply cached = terminalReplies.get(sessionId + ":" + reqId);
         if (cached == null) {
             return ApiResponse.fail("INTERVIEW_REPLY_NOT_FOUND",
-                    "终态响应不存在或已过期（15 分钟窗口），请携带新 x-req-id 重试");
+                    "尚未找到本场原请求的完整回执，请保留原请求编号核对，不要重新提交");
         }
         return ApiResponse.ok(Map.of(
                 "reqId", reqId,

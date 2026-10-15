@@ -18,7 +18,7 @@ public record ListingDTO(
         String layout,
         /** 业务属性：area。 */
         BigDecimal area,
-        /** 业务属性：totalPrice。 */
+        /** 房源总价，数据库单位为万元；公开 CNY 元金额须乘以 10000。 */
         BigDecimal totalPrice,
         /** 业务属性：status。 */
         String status,

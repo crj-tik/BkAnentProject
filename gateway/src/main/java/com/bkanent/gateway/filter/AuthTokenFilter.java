@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.stereotype.Component;
@@ -42,7 +43,10 @@ public class AuthTokenFilter implements GlobalFilter, Ordered {
         ServerHttpRequest request = stripClientPrincipalHeaders(exchange.getRequest());
         ServerWebExchange sanitizedExchange = exchange.mutate().request(request).build();
         String path = request.getURI().getPath();
-        if (gatewayAccessProperties.isWhitelisted(path)) {
+        // Refresh authenticates its own refresh token; an expired access token must not block it.
+        // Keep this exemption exact: neither alternate methods nor suffixes are public.
+        boolean refresh = "/auth/refresh".equals(path) && HttpMethod.POST.equals(request.getMethod());
+        if (refresh || gatewayAccessProperties.isWhitelisted(path)) {
             return chain.filter(sanitizedExchange);
         }
 

@@ -513,6 +513,26 @@
 
 **关联**：KI-107、LR-36、LR-47、LR-49；首次PROVISION失败与partial原样保留。7e7ef1a新RAG生产signed ADMIN INSPECT已在原受保护HEAD200／NONE55ms及MAPPING200／NONE28ms验证保留partial，Listing仅VECTOR缺失；mapping误判运行闭合。官方归一化兼容不证明三空间ready，不借此开启worker或直接写后端。
 
+## LR-53 Studio 草稿与回执同事务，生成来源和执行政策保持原身份
+
+**结论**：Studio 的 work/context/UI/run/command 和人工草稿不可变修订归属 agent 库，Memory 只保存未改写的生成成果，sourceArtifactId 用于溯源；不双写正文。seriesId 是稳定成果身份，revisionId/version 是不可变版本。AI 建议另建系列，明确引用基准，不按标题合并。上下文、UI及工作修订号分开。
+
+**根因**：原 Memory artifact 是不可变生成输出，没有事务编辑/OCC及回执接口。跨服务双写无法原子绑定用户修改和幂等结果；把旧 versionNo 当人工版本也会冲突。Studio 修订与回执同事务可在响应丢失时找回原结果，expectedVersion防止覆盖。NEW复用既有异步执行，CONTINUE仅 WAITING_USER_INPUT并冻结原context/skill/allowMcp和有效contextRevision；新增引用需装配授权的不可变内容快照，不能把Studio系列ID误当Memory产物ID。
+
+**代码位置**：agent-service/studio；sql/migrations/20261015_studio_workspace.sql；docker/mysql/init-manifest.tsv。事件水位先于状态读取，接受重放重叠；客户端定时及断线读取权威状态，以覆盖持久事件不可用的回退。工作与原事件保持owner-only，公开能力发现不代表健康、allowedActions不授予权限；新模型执行使用原审批门，完整领域写策略仍待对接。
+
+**关联**：LR-40、LR-41、LR-42；KI-114。仅完成源码/编译与契约，未应用迁移或声明运行闭合。
+
+## LR-54 比较读取先授权真源，万元只在量纲边界转换一次
+
+**结论**：用户已确认旧 ListingDTO.totalPrice/数据库总价为万元。Studio CNY金额乘10000成为元，单价共享公式为 totalPrice×10000/area 元/㎡；缺面积/总价不假造单价。来源指纹与 compare-yuan-v2 一起隔离旧缓存，先重新读取当前授权来源，再查缓存。
+
+**根因**：旧比较缓存只含ID/AI flag，旧公式直接除面积却标元，既会过时也相差一万倍。旧 compare RPC 仍调用已停用的无凭据 Listing.getListingById，不能为接通前端重新放行旧读取。Studio 只读比较走现有签名READ并复用 common 纯计算，限定候选及来源版本，结果和回执在同一事务登记，不依赖旧缓存/分享入口。
+
+**代码位置**：common/model/ListingComparisonFacts、ListingDTO；agent-service/studio/StudioListingReader、StudioCommandService；compare-engine-service/CompareAnalysisServiceImpl。Listing READ公开接口声明RagException沿LR-48受管序列化；Studio按LR-46精确使用现有桥，不增加重复Dubbo引用。
+
+**关联**：LR-40、LR-46、LR-48；KI-115。旧compare读取/分享权限迁移仍待实施，编译通过不等于真实服务可用。
+
 ## LR-43 治理重排按响应钉扎模型身份，同 alias 漂移失败关闭
 
 **结论**：`rag-service` 对外部 Reranker-BGE-V2-M3 治理接口（`/api/v1/rerank`，`RAG_RERANK_PROTOCOL=governed`）的重排调用在每次响应上核对 `model.alias/revision/scoring_version/artifact_digest` 与 `score_semantics` 必须精确等于受管配置（`RAG_RERANK_EXPECTED_REVISION`/`EXPECTED_ARTIFACT_DIGEST` 与空间 rerank-profile 的 provider/modelVersion/scoringVersion/scale）。任何一项不匹配抛 SCORING_PROFILE_MISMATCH，不尝试重新归一化或继续用旧分数。请求固定 `truncate=false`，响应声明截断发生即 RERANK_PROTOCOL_ERROR；400/413 映射为不可重试的 INVALID_ARGUMENT，401/403 仍为身份错误。

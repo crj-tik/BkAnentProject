@@ -17,7 +17,7 @@ public class AgentRpcReferenceConfiguration {
     /**
      * 字段：listingMasterRpcService。
      */
-    @DubboReference(check = false)
+    @DubboReference(check = false, protocol = "dubbo", retries = 0, timeout = 10000)
     private ListingMasterRpcService listingMasterRpcService;
 
     /**

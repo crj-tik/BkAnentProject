@@ -14,7 +14,7 @@ public interface ListingMasterRpcService {
 
     List<ListingDTO> read(com.bkanent.common.rag.RagListingReadRequest request,
                           com.bkanent.common.rag.RagAuthEnvelope authentication,
-                          com.bkanent.common.rag.RagCredentialContext credentials);
+                          com.bkanent.common.rag.RagCredentialContext credentials) throws com.bkanent.common.rag.RagException;
 
     /**
      * 获取指定房源摘要。

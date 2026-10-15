@@ -10,6 +10,20 @@
 
 ## 待修复（OPEN）
 
+## KI-114 [OPEN·P1] Studio 完整领域动作与主体绑定尚未全部接通
+
+**确认日期**：2026-10-15。`implement-studio-v2` 已新增工作/修订/比较/回执及未配置计划快照；完整P3/P4仍未完成。发布账号/素材版本/实际审批参数绑定、选定结算、保留直写接口等价校验、访谈凭据恢复、受保护文件和完整领域投影/分页尚缺；userId/workNo/employeeId不能凭字段相似直接映射。部分现有Agent只回summary，不能据此生成候选事实。
+
+**处置**：新Studio未配置路径不提供执行actions，directOperations为空，发布计划INCOMPLETE/NOT_CONFIGURED。前端保留输入/原请求身份，缺回执不盲重发；剩余实现及可信映射需求见docs/studio-v2-api.md和前端backend-integration-prompts-v2.md。新增迁移尚未应用，未运行环境联调。本问题不是已修KI-110/111的复发。
+
+**关联**：LR-53、KI-12。源码/compile与实际部署分别报告；现有直写路径的历史权限缺口不能因新门面受控而标为修复。
+
+## KI-115 [OPEN·P1] 旧比较仍使用已停用房源读取；单位和过时缓存已修源码
+
+**确认日期**：2026-10-15。旧CompareAnalysisServiceImpl.loadListings调用ListingMasterRpcService.getListingById，而该provider在RAG身份迁移后主动拒绝无凭据读取；旧compare REST/RPC正向路径因此不可用。另确认totalPrice为万元而原单价未乘10000，且ID-only缓存无法感知来源更新。
+
+**本次处置**：共享ListingComparisonFacts修正元/㎡并引入compare-yuan-v2来源指纹，旧比较先读来源再查缓存。Studio比较直接使用当前签名READ、严格候选/来源版本和原子成果回执；不放开旧RPC、不使用旧分享绕过授权。单位/缓存源码已修，旧读取及分享授权迁移继续OPEN。当前仅compile，无真实RPC或缓存验收。关联LR-54。
+
 ## KI-1 [OPEN·P0] 表单式 prep 阶段凭据真空（鸡生蛋）
 
 **现象**：`POST /interviews` 开台不返回 ticket，而 `POST /{id}/questions`、`POST /{id}/questions/confirm`、`GET /{id}` 都要求 `x-ticket` 头 → 表单前端开台后无法进行任何后续操作，前端页面被卡死。
@@ -35,6 +49,8 @@
 **现象**：`terminalReplies` 是 `InterviewController` 内的 `ConcurrentHashMap`——多实例部署时 `GET /{id}/replies/{reqId}` 经负载均衡命中另一实例会 404。单实例部署无此问题。
 
 **处置方向**：多实例部署前迁移到 Redis 或 DB 暂存表。
+
+**2026-10-15部分修正**：回复查询先按sessionId/原reqId读取已持久化INTERVIEWER脱敏正文及CLOSE动作，之后才查询会话命名空间内的15分钟缓存，避免原全局reqId查到另一会话响应。未找到时不再提示换新编号重试。WAIT/处理中/失败仍无完整持久回执，保持OPEN；前端保留原请求与回答并先查回执。本次仅增加只读查询，不新增transition、不推进状态、不调用模型；compile通过不代替运行/并发验证。
 
 ## KI-13 [OPEN·P3] 行业大脑 Milvus 集合未建设
 
