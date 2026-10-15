@@ -334,6 +334,13 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - **恢复**：RAG restart healthy后停机写入自动派发——其中1条在停机窗口内重试耗尽（EXHAUSTED，既知设计语义KI-110记录），经显式重置（WAITING/attempts=0）后drain APPLIED；检索恢复双偏好命中、ES 2→终态清理0；七服务healthy。
 - 演练结论：RAG单点停机不放大为业务全面停摆——SQL真源/鉴权/A2A非RAG技能全程可用，RAG依赖功能显式失败可观察，写路径耐久恢复自动追平。8.4勾选闭合（45/49）。
 
+### 2026-10-15 8.8版本恢复与退旧演练（闭合）
+
+- **config/版本/水位三要素恢复证据**：三dataID认证读取SHA快照；当前8bc352b+回退3c391454双镜像保留；outbox终态水位（88+17全APPLIED）与rag账本/ES/Milvus三方一致快照。
+- **退旧演练（真实验证）**：旧镜像3c391454在隔离IP 172.24.0.99对**当前数据/config/卷**启动 `Started RagApplication`+healthy，Dubbo元数据缓存正常创建，双实例并存注册Nacos（新旧20898并列，验证发现路由兼容）——新旧版本schema/账本兼容，无需差异重放（新版本无不兼容变更；若有，7.5已证SQL幂等重放路径）。
+- **演练坑（部署知识）**：docker run tmpfs的uid=10001挂载选项在演练容器不生效，旧镜像entrypoint无预建目录导致`.dubbo`缓存创建Permission denied误判为"版本不兼容"——加mode=0777+sh预建目录后正常。此为容器运行时知识，非镜像缺陷。
+- **资源保留**：13相关卷全保留、零prune/drop/公开。8.8勾选闭合（46/49）。
+
 ### 本轮仍待完成的验证
 
 以下1／2为c338b7e部署时点保留记录，已由上方accf97f实测及本轮增量推进覆盖，不作为当前仍阻塞的DNS／REST／Bean／整体INSPECT原因。
