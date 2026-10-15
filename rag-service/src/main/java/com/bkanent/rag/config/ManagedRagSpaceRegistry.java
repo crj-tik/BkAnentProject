@@ -13,7 +13,7 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
-/** No search-time creation, and no configured ready flag. Diagnostic evidence expires. */
+/** No search-time creation and no configured ready flag: expired evidence renews through a bounded single-flight re-inspection that still fails closed. */
 public final class ManagedRagSpaceRegistry implements RagSpaceRegistry {
     private static final List<RagStage> STAGES = List.of(RagStage.KEYWORD, RagStage.VECTOR,
             RagStage.EMBEDDING, RagStage.RERANK);
@@ -66,13 +66,18 @@ public final class ManagedRagSpaceRegistry implements RagSpaceRegistry {
 
     @Override public RagSpaceDefinition requireReady(String spaceId, Set<RagStage> requiredStages, RagFailurePolicy failurePolicy) {
         RagSpaceDefinition space = require(spaceId);
-        Evidence state = evidence.get(spaceId);
         if (requiredStages == null || requiredStages.isEmpty() || !REQUIRED.containsAll(requiredStages)
-                || failurePolicy == null || state == null || !state.complete()
-                || !clock.instant().isBefore(state.expiresAt())) {
+                || failurePolicy == null) {
             throw new RagException(RagErrorCode.SPACE_NOT_READY);
         }
-        for (RagStageFailure failure : state.failures()) {
+        Evidence state = evidence.get(spaceId);
+        if (stale(state)) {
+            renew(space);
+            state = evidence.get(spaceId);
+        }
+        if (stale(state)) throw new RagException(RagErrorCode.SPACE_NOT_READY);
+        Evidence evidenceState = state;
+        for (RagStageFailure failure : evidenceState.failures()) {
             boolean selected = requiredStages.contains(failure.stage());
             boolean hard = failure.code() == RagErrorCode.ENDPOINT_POLICY_DENIED
                     || failure.code() == RagErrorCode.SPACE_NOT_READY || failure.code() == RagErrorCode.FORBIDDEN
@@ -86,7 +91,7 @@ public final class ManagedRagSpaceRegistry implements RagSpaceRegistry {
         // Never manufacture an available route when all selected recalls have failed inspection.
         if (failurePolicy == RagFailurePolicy.ALLOW_DEGRADED && requiredStages.stream()
                 .filter(stage -> stage == RagStage.KEYWORD || stage == RagStage.VECTOR)
-                .noneMatch(stage -> state.failures().stream().noneMatch(f -> f.stage() == stage
+                .noneMatch(stage -> evidenceState.failures().stream().noneMatch(f -> f.stage() == stage
                         || stage == RagStage.VECTOR && f.stage() == RagStage.EMBEDDING))) {
             throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE, "capability");
         }
@@ -95,6 +100,31 @@ public final class ManagedRagSpaceRegistry implements RagSpaceRegistry {
     private static boolean degradable(RagErrorCode code) {
         return code == RagErrorCode.DEPENDENCY_UNAVAILABLE || code == RagErrorCode.TIMEOUT
                 || code == RagErrorCode.RERANK_PROTOCOL_ERROR || code == RagErrorCode.SCORING_PROFILE_MISMATCH;
+    }
+
+    private boolean stale(Evidence state) {
+        return state == null || !state.complete() || !clock.instant().isBefore(state.expiresAt());
+    }
+
+    /**
+     * Bounded single-flight renewal of stale capability evidence: exactly one real re-inspection per
+     * space; concurrent callers bounded-wait for the in-flight operation instead of racing it. The
+     * renewal only inspects (never provisions), keeps the coordinator-only publication rule, and a
+     * failed renewal publishes its failures so every reader still fails closed.
+     */
+    private void renew(RagSpaceDefinition space) {
+        Operation operation = new Operation(space.spaceId());
+        Operation inFlight = active.putIfAbsent(space.spaceId(), operation);
+        if (inFlight != null) {
+            try { inFlight.awaitDone(space.limits().overallTimeoutMillis(), TimeUnit.MILLISECONDS); }
+            catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+            return;
+        }
+        try {
+            if (closed) return;
+            long deadline = RagHttpDeadline.capture(Duration.ofMillis(space.limits().overallTimeoutMillis()));
+            inspect("capabilityRenewal", space, deadline, operation);
+        } finally { operation.release(); }
     }
 
     /** Administrative call only. Queue wait and lazy backend construction consume the same deadline. */
@@ -195,10 +225,12 @@ public final class ManagedRagSpaceRegistry implements RagSpaceRegistry {
     // Reference count is released on actual worker exit, NOT Future cancellation completion.
     private final class Operation {
         private final String spaceId;
+        private final CountDownLatch done = new CountDownLatch(1);
         private int references = 1;
         Operation(String spaceId) { this.spaceId = spaceId; }
         synchronized void retain() { references++; }
-        synchronized void release() { if (--references == 0) active.remove(spaceId, this); }
+        synchronized void release() { if (--references == 0) { active.remove(spaceId, this); done.countDown(); } }
+        void awaitDone(long timeout, TimeUnit unit) throws InterruptedException { done.await(timeout, unit); }
     }
     private static final class StageTask extends FutureTask<Void> {
         private final AtomicBoolean claimed = new AtomicBoolean();

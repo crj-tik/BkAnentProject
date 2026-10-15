@@ -461,7 +461,7 @@
 
 **代码位置**：rag-service/config/ManagedRagSpaceRegistry及其并发回归；storage/ElasticsearchProjectionStore与ElasticsearchDeadlineReader以现有受保护异步客户端执行HEAD／mapping；SpringAiMilvusDocumentStore只读schema核对先配置独立单次RetryParam再配置remaining gRPC deadline；RagRuntimeConfiguration为实际Spring AI模型提供单次无退避RetryTemplate，检索执行器继续拥有有界重试。
 
-**关联**：LR-31、LR-34、LR-46；KI-102、KI-110。实际Spring AI自动配置及离线503单次调用、原lazy/base启动分别验证；不新建embedding客户端或裸Milvus CRUD，不承诺取消能撤回远端副作用。私有probe只输出安全计时与操作后重新认证的stage/code，运行能力必须用新制品实测。2026-10-15确认当前能力证据60秒且没有自动续验，管理INSPECT开始先移除旧证据，重启清空；该实现是未修运行限制，不是无缝能力维护策略。一次成功不授权之后无限期检索／索引，也不能靠反复INSPECT、永久ready或忽略SPACE_NOT_READY激活积压。后续有界续验与暂停／排空修复必须保留本条的阶段期限、真实执行租约、失败关闭及只由完整协调结果发布证据约束。
+**关联**：LR-31、LR-34、LR-46；KI-102、KI-110。实际Spring AI自动配置及离线503单次调用、原lazy/base启动分别验证；不新建embedding客户端或裸Milvus CRUD，不承诺取消能撤回远端副作用。私有probe只输出安全计时与操作后重新认证的stage/code，运行能力必须用新制品实测。2026-10-15确认能力证据60秒无自动续验是未修限制（KI-110）。同日实施有界续验：`requireReady`遇到缺失／incomplete／过期证据时按空间单飞续验——恰一个真实四阶段re-inspect（永不PROVISION），并发调用者对在飞Operation有界等待完成闩锁而不竞速，续验占用该空间overall预算（嵌套检索路径经`RagHttpDeadline.capture`取较小期限），失败续验照常发布失败证据使后续读者继续失败关闭；所有既有阶段期限、真实执行租约、失败关闭及协调器唯一发布约束保留。RAG索引调度改为逐tick读取`rag.index.worker.enabled`（`@ConfigurationProperties`可Nacos热重绑），与Memory dispatcher入口检查对齐，实现真实暂停／排空；不引入永久ready、忽略SPACE_NOT_READY或无限重试。
 
 ## LR-48 公共RPC安全异常须显式声明，沿官方接口初始化精确注册
 

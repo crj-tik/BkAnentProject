@@ -6,6 +6,7 @@ import com.bkanent.rag.rerank.RerankProfile;
 import java.time.*;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
@@ -14,6 +15,7 @@ import static org.assertj.core.api.Assertions.*;
 
 class ManagedRagSpaceRegistryTest {
     private static final Clock CLOCK = Clock.fixed(Instant.parse("2026-10-12T00:00:00Z"), ZoneOffset.UTC);
+    private static final List<RagStage> STAGES = List.of(RagStage.KEYWORD, RagStage.VECTOR, RagStage.EMBEDDING, RagStage.RERANK);
     private static RagSpaceDefinition space(String id, String index, String collection) {
         return new RagSpaceDefinition(id, "memory", "policy-v1", "schema-v1", index,
                 new RagSpaceDefinition.VectorSchema("default", collection, "model-v1", 3, "id", "content", "metadata", "embedding",
@@ -41,9 +43,16 @@ class ManagedRagSpaceRegistryTest {
         assertThat(registry.snapshot()).singleElement().satisfies(s -> assertThat(s.ready()).isFalse());
         assertThat(called.get()).isZero();
         assertThatThrownBy(() -> registry.require("unknown")).isInstanceOf(RagException.class);
-        assertThatThrownBy(() -> registry.requireReady("a")).isInstanceOf(RagException.class);
+        assertThatThrownBy(() -> registry.requireReady("a")).isInstanceOfSatisfying(RagException.class,
+                e -> assertThat(e.code()).isEqualTo(RagErrorCode.SPACE_NOT_READY));
+        // The failed renewal re-inspected all four stages and published the incomplete evidence.
+        assertThat(called.get()).isEqualTo(4);
         assertThat(registry.inspect("req", "a").ready()).isFalse();
-        assertThatThrownBy(() -> registry.requireReady("a")).isInstanceOf(RagException.class);
+        assertThat(called.get()).isEqualTo(8);
+        // Missing probes keep the space incomplete, so every read renews once and still fails closed.
+        assertThatThrownBy(() -> registry.requireReady("a")).isInstanceOfSatisfying(RagException.class,
+                e -> assertThat(e.code()).isEqualTo(RagErrorCode.SPACE_NOT_READY));
+        assertThat(called.get()).isEqualTo(12);
     }
     @Test void explicitDiagnosticsInspectEachActualStageAndExpire() {
         AtomicInteger called = new AtomicInteger();
@@ -52,9 +61,71 @@ class ManagedRagSpaceRegistryTest {
         assertThat(registry.inspect("req", "a").ready()).isTrue();
         assertThat(called.get()).isEqualTo(4);
         assertThat(registry.requireReady("a").spaceId()).isEqualTo("a");
+        assertThat(called.get()).isEqualTo(4);
         var expired = new ManagedRagSpaceRegistry(new RagProperties(Map.of("a", space("a", "index", "collection"))),
                 () -> probes(called, null), Clock.offset(CLOCK, Duration.ofSeconds(61)));
-        assertThatThrownBy(() -> expired.requireReady("a")).isInstanceOf(RagException.class);
+        // Stale evidence renews through one real bounded re-inspection, not a permanent ready flag.
+        assertThat(expired.requireReady("a").spaceId()).isEqualTo("a");
+        assertThat(called.get()).isEqualTo(8);
+    }
+    @Test void staleEvidenceRenewsOnceSingleFlightAndFailsClosed() throws Exception {
+        MutableClock clock = new MutableClock(Instant.parse("2026-10-12T00:00:00Z"));
+        AtomicInteger calls = new AtomicInteger();
+        var pause = new java.util.concurrent.CountDownLatch(1);
+        var failing = new java.util.concurrent.atomic.AtomicBoolean();
+        List<RagCapabilityProbe> probes = STAGES.stream().map(stage -> (RagCapabilityProbe) new RagCapabilityProbe() {
+            public RagStage stage() { return stage; }
+            public void inspect(RagSpaceDefinition space) {
+                calls.incrementAndGet();
+                if (failing.get()) throw new RagException(RagErrorCode.TIMEOUT);
+                if (stage == RagStage.KEYWORD && clock.holdRenewal()) uninterruptibly(pause);
+            }
+        }).toList();
+        clock.setHoldRenewal(false);
+        var registry = new ManagedRagSpaceRegistry(new RagProperties(Map.of("a", budget("a", 20000, 5000))), () -> probes, clock);
+        try {
+            assertThat(registry.inspect("req", "a").ready()).isTrue();
+            assertThat(calls.get()).isEqualTo(4);
+            clock.advance(Duration.ofSeconds(61));
+            clock.setHoldRenewal(true);
+            var firstDone = new java.util.concurrent.CountDownLatch(1);
+            var first = new AtomicReference<String>();
+            var reader = new Thread(() -> { try { first.set(registry.requireReady("a").spaceId()); } finally { firstDone.countDown(); } });
+            reader.setDaemon(true); reader.start();
+            while (calls.get() < 5) Thread.onSpinWait();
+            var secondDone = new java.util.concurrent.CountDownLatch(1);
+            var second = new AtomicReference<String>();
+            var waiter = new Thread(() -> { try { second.set(registry.requireReady("a").spaceId()); } catch (RagException ignored) { } finally { secondDone.countDown(); } });
+            waiter.setDaemon(true); waiter.start();
+            // The second caller bounded-waits for the in-flight renewal instead of racing it.
+            assertThat(secondDone.await(300, java.util.concurrent.TimeUnit.MILLISECONDS)).isFalse();
+            pause.countDown();
+            assertThat(firstDone.await(3, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            assertThat(secondDone.await(3, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            assertThat(first.get()).isEqualTo("a");
+            assertThat(second.get()).isEqualTo("a");
+            assertThat(calls.get()).isEqualTo(8);
+            // A renewal whose stages fail publishes its failures; readers fail closed without new probes.
+            clock.advance(Duration.ofSeconds(61));
+            failing.set(true);
+            assertThatThrownBy(() -> registry.requireReady("a"))
+                    .isInstanceOfSatisfying(RagException.class, e -> assertThat(e.code()).isEqualTo(RagErrorCode.TIMEOUT));
+            assertThat(calls.get()).isEqualTo(12);
+            assertThatThrownBy(() -> registry.requireReady("a"))
+                    .isInstanceOfSatisfying(RagException.class, e -> assertThat(e.code()).isEqualTo(RagErrorCode.TIMEOUT));
+            assertThat(calls.get()).isEqualTo(12);
+        } finally { pause.countDown(); registry.close(); }
+    }
+    private static final class MutableClock extends Clock {
+        private volatile Instant now;
+        private volatile boolean holdRenewal;
+        MutableClock(Instant start) { now = start; }
+        void advance(Duration duration) { now = now.plus(duration); }
+        void setHoldRenewal(boolean value) { holdRenewal = value; }
+        boolean holdRenewal() { return holdRenewal; }
+        @Override public Instant instant() { return now; }
+        @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+        @Override public Clock withZone(ZoneId zone) { return this; }
     }
     @Test void selectedModeCanExplicitlyOmitFailedRerankButDefaultCapabilityRemainsUnavailable() {
         var registry = new ManagedRagSpaceRegistry(new RagProperties(Map.of("a", space("a", "index", "collection"))),
@@ -69,7 +140,8 @@ class ManagedRagSpaceRegistryTest {
         var registry = new ManagedRagSpaceRegistry(new RagProperties(Map.of("a", space("a", "index", "collection"))),
                 () -> probes(new AtomicInteger(), RagStage.RERANK), CLOCK);
         Set<RagStage> selected = Set.of(RagStage.KEYWORD, RagStage.VECTOR, RagStage.EMBEDDING, RagStage.RERANK);
-        assertThatThrownBy(() -> registry.requireReady("a", selected, RagFailurePolicy.ALLOW_DEGRADED)).isInstanceOf(RagException.class);
+        // With bounded renewal the first read re-inspects and legitimately serves degraded readiness.
+        assertThat(registry.requireReady("a", selected, RagFailurePolicy.ALLOW_DEGRADED).spaceId()).isEqualTo("a");
         registry.inspect("req", "a");
         assertThat(registry.requireReady("a", selected, RagFailurePolicy.ALLOW_DEGRADED).spaceId()).isEqualTo("a");
         assertThatThrownBy(() -> registry.requireReady("a", selected, RagFailurePolicy.STRICT)).isInstanceOf(RagException.class);

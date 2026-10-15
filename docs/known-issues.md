@@ -533,15 +533,17 @@
 
 **处置**：保留旧文件hash与漂移safe证据，禁止stale文件再部署；仅在完整resolved服务image对照后同步该文件RAG image到已验证运行镜像，所有其他服务段、全局插值与rollback不动，只做config校验，不build／up／restart。safe证据schema-init-7e7ef1/schema-init-release-compose-drift-safe.json。限定同步已完成：before SHA945551d7…、after608c41fa…，config exit0，exact_single_RAG_image_change／all_nonimage_fields_equal／other_six_services_equal／global_interpolation_unchanged全true，七resolved image全部与实际运行匹配；无up／build／restart／rollback。同步safe文件schema-init-release-compose-image-sync-safe.json，旧漂移文件和备份保留，交付漂移已闭合。
 
-## KI-110 [OPEN·P1] 空间能力证据60秒过期且无自动续验，正常检索和索引会永久停在未就绪
+## KI-110 [FIXED·本提交·P1] 空间能力证据60秒过期且无自动续验，正常检索和索引会永久停在未就绪
 
-**确认日期**：2026-10-15（承接2026-10-14源码研究，未实施修复）。
+**确认日期**：2026-10-15；**修复**：2026-10-15（本提交）。
 
 **现象与根因**：`ManagedRagSpaceRegistry` 只有显式管理INSPECT／PROVISION发布能力证据，有效期60秒；`requireReady`仅检查现存证据，`snapshot`被动读取，无自动续验。管理操作的`begin`先移除旧证据，重复INSPECT不是无缝续期；重启清空证据。因此已成功初始化不表示正常搜索和索引持续可用，过期后仍失败关闭为SPACE_NOT_READY。这是能力维护缺口，不是已修DNS／REST／schema错误复发，不能以永久ready或延长到无限期绕过。
 
-**派发风险与处置**：RAG worker同批次逐文档串行，每文档两后端各最多等待5秒，17条可消耗170秒加SQL／调度时间，不能保证落在60秒窗口。真实文档`sink.inspect`不发布空间能力证据；需要修正写入时`requireReady`会消耗重试。RAG耗尽RETRY_PENDING与Memory EXHAUSTED不会仅因之后INSPECT或重启自动恢复；无错误WAITING则会重置attempts并持续轮询。RAG scheduler按启动条件创建，Memory开关仅在批次入口读取，不能据Nacos热改false宣称已暂停／排空。当前未启用worker／dispatcher，不修改17条原事件、不删除源数据、不执行ADMIN REPLAY。后续须先实现并验证有界能力续验／失败关闭及真实暂停排空，再受控激活；本条是未修限制，不新建第二存储底座。
+**修复（2026-10-15实施）**：`requireReady`证据缺失／incomplete／过期时触发按空间**单飞有界续验**：恰一个真实四阶段re-inspect（永不PROVISION），在飞Operation由完成闩锁让并发调用者有界等待而非竞速；续验占用空间overall预算（嵌套时经`RagHttpDeadline.capture`取较小期限），失败续验发布失败证据继续失败关闭。全部既有约束保留：阶段期限、真实worker退出才释放租约、失败关闭、协调器唯一发布、快照被动。RAG索引调度同批改为逐tick读取`rag.index.worker.enabled`热开关（`@ConfigurationProperties`随Nacos refresh重绑），与Memory dispatcher批次入口检查对齐，实现真实暂停／排空——置false后当前批次排空、后续tick静默，无需重启。回归：新增单飞续验／失败关闭／过期续验／热开关逐tick语义与中飞禁用排空单测，改写无探针永不就绪／过期／显式降级三处旧断言；rag-service全量347项通过。既有预算、租约、worker串行与MEMORY EXHAUSTED不自动恢复行为不变（前者设计意图，后者属各域重试语义）。
 
-**代码位置与关联**：`rag-service/config/ManagedRagSpaceRegistry.java:59-74,100-149,218-231`；`rag-service/index/RagIndexWorker.java:54-60,117-165,180-198`；`memory-service/service/MemoryRagOutboxDispatcher.java:27-59`；LR-47，任务7.4／8.2／8.3。当前成功PROVISION／INSPECT证据保留，不能补造当前新鲜度或APPLIED水位。
+**运行面待验**：修复须新制品部署后实测（热开关切换、续验窗口、17条约束派发到APPLIED），旧镜像不携带本修复。worker／dispatcher当前仍保持false，不修改17条原事件、不删除源数据、不执行ADMIN REPLAY。
+
+**代码位置与关联**：`rag-service/config/ManagedRagSpaceRegistry.java`（requireReady/stale/renew/Operation闩锁）；`rag-service/config/RagIndexScheduling.java`＋`RagIndexSchedulingProperties.java`（热开关）；`rag-service/src/test/.../ManagedRagSpaceRegistryTest.java`／`RagIndexSchedulingTest.java`；LR-47，任务7.4／8.2／8.3。2026-10-14成功PROVISION／INSPECT证据保留，APPLIED水位待受控激活后验。
 
 ## KI-111 [FIXED·本提交·P2] 初始化后新运行窗口Auth不健康且运维诊断被拦截，后置验收未完成
 

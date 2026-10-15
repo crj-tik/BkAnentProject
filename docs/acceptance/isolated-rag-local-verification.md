@@ -214,6 +214,13 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - **Auth unhealthy根因修复（KI-111→FIXED）**：整栈同窗口重启时Auth抢跑Nacos就绪，distributed配置导入未在bean构建期生效——本次启动Hikari实际连`jdbc:h2:mem:<随机UUID>`（user=SA，Spring Boot在datasource url缺失且类路径含H2时的内嵌库自动回退，非local profile固定bk_auth库）、Redis按默认localhost构建；应用启动完成约2秒后Nacos refresh才到达，只改Environment不重建已构建bean。健康503 DOWN由redis(localhost)组件拉低；容器内三依赖TCP实测2-5ms全通、Redis容器无密码，排除网络与凭据。其余六服务refresh=0且无H2，仅Auth中招。ReadinessCheck反编译确认为GET localhost:9101/actuator/health要求200且`"status":"UP"`。完成根因实证后`docker restart` Auth一次：15秒healthy、新启动0次refresh、Hikari为`com.mysql.cj.jdbc.ConnectionImpl`（MySQL）、不存在用户登录探测返回正常业务AUTH_401。竞态本身未做源码修复，记KI-112（运维缓解：整栈重启后若Auth unhealthy，等Nacos healthy后重启Auth一次）。危险面已识别：该缺陷下应用表面正常但认证数据在空内存H2中，健康检查fail-closed是有效检测面。
 - 仍未完成：默认混合正命中、两后端APPLIED水位、A2A五操作；KI-110能力60秒无续验仍阻塞激活，worker／dispatcher保持未启用，17条原事件与源数据未动。校验器为仓库外工具无源码提交需求，进度仍30/49，8.2按其完整门禁不补勾。
 
+### 2026-10-15 KI-110实施：单飞有界能力续验与worker热开关
+
+- `ManagedRagSpaceRegistry.requireReady`证据缺失／incomplete／过期时按空间单飞续验：恰一个真实四阶段re-inspect（永不PROVISION），并发调用者经Operation完成闩锁有界等待而非竞速；续验占用空间overall预算（嵌套检索路径`RagHttpDeadline.capture`取较小期限），失败续验照常发布失败证据继续失败关闭。阶段期限、真实worker退出才释放租约、协调器唯一发布、快照被动全部保留；不引入永久ready或忽略SPACE_NOT_READY。
+- RAG索引调度`RagIndexScheduling`从`@ConditionalOnProperty`启动条件改为常装配＋逐tick读`rag.index.worker.enabled`（新`RagIndexSchedulingProperties`，`@ConfigurationProperties`随Nacos refresh热重绑），与Memory dispatcher批次入口检查对齐：置false即当前批次排空、后续tick静默，无需重启——真实暂停语义。原`RagApplicationBootstrapTest`的enabled=false属性仍有效（flag默认false）。
+- 回归：新增单飞续验（MutableClock过期续验恰一次／在飞第二读者有界等待／失败续验发布失败后续读者不再触发新probe）、热开关逐tick语义、中飞禁用排空、非法batchSize拒绝单测；改写无探针永不就绪（每次读触发一轮四阶段re-inspect后仍SPACE_NOT_READY，probe计数4/8/12）、过期续验成功（总probe 8）、显式降级首次读经真实续验合法成功三处旧断言。KI-110修复后全仓22模块串行`clean test` BUILD SUCCESS：150份Surefire XML共**959项**，0失败／0错误，7 skipped仍为历史显式排除的七个外部联调类（较冻结948基线净增11项，无新排除）。
+- 边界不变：续验是检索／写入路径上的同步有界开销（同空间互斥期间其他调用者等待同一次结果）；RAG RETRY_PENDING耗尽与Memory EXHAUSTED不自动恢复仍是各域重试语义，需各自处置；worker／dispatcher仍false，17条原事件未动。运行面验证须新制品部署后执行。
+
 ### 本轮仍待完成的验证
 
 以下1／2为c338b7e部署时点保留记录，已由上方accf97f实测及本轮增量推进覆盖，不作为当前仍阻塞的DNS／REST／Bean／整体INSPECT原因。
