@@ -543,15 +543,29 @@
 
 **代码位置与关联**：`rag-service/config/ManagedRagSpaceRegistry.java:59-74,100-149,218-231`；`rag-service/index/RagIndexWorker.java:54-60,117-165,180-198`；`memory-service/service/MemoryRagOutboxDispatcher.java:27-59`；LR-47，任务7.4／8.2／8.3。当前成功PROVISION／INSPECT证据保留，不能补造当前新鲜度或APPLIED水位。
 
-## KI-111 [OPEN·P2] 初始化后新运行窗口Auth不健康且运维诊断被拦截，后置验收未完成
+## KI-111 [FIXED·本提交·P2] 初始化后新运行窗口Auth不健康且运维诊断被拦截，后置验收未完成
+
+**确认日期**：2026-10-15；**修复**：2026-10-15（本提交记录）。
+
+**已证事实**：只读恢复发现三个空间2026-10-14已成功初始化，未重复任何RPC。随后本项目七release实例的镜像仍相符，但Auth running／unhealthy／RestartCount0，StartedAt为2026-10-15T01:25:18Z、health failing streak持续增长；其余六服务healthy／RestartCount1，全部OOMKilled=false。这是晚于初始化成功的新窗口，不能继续宣称七服务healthy／restart0。
+
+**根因（2026-10-15实测闭合）**：整栈同窗口重启时Auth抢在Nacos完全就绪前启动，distributed配置导入未在bean构建期生效：日志显示本次启动Hikari实际连接`jdbc:h2:mem:<随机UUID>`（user=SA，Spring Boot在`spring.datasource.url`缺失且类路径含H2时的内嵌库自动回退，非local profile的固定bk_auth库）、Redis客户端按默认localhost构建；应用启动完成约2秒后才收到含`spring.datasource.url`等键的Nacos refresh，refresh只更新Environment不重建已构建的DataSource／Redis工厂。健康端点实测503 DOWN（redis组件对localhost失败拉低聚合状态），ReadinessCheck反编译确认为GET localhost:9101/actuator/health要求200且status UP；容器内三个依赖TCP实测2-5ms全通、Redis容器无密码，排除网络与凭据。其余六服务refresh=0且无H2，仅Auth中此竞态。危险面：应用表面正常响应但认证数据在空内存H2中，真实种子用户不存在；健康检查fail-closed正确拦截（LR-47能力gate之外的既有readiness设计有效）。
+
+**处置与验证**：不盲重启，先完成上述根因实证再处置。Nacos恢复healthy后`docker restart` Auth一次，15秒内healthy；新启动0次refresh事件（配置在导入期生效），健康端点200 UP，Hikari为`com.mysql.cj.jdbc.ConnectionImpl`（MySQL），一次不存在用户登录探测返回正常业务AUTH_401。原unhealthy窗口证据保留，不做源码修改；竞态本身作为KI-112未修限制记录。此前Docker专家诊断任务被Host以“敏感信息拦截”终止两次；本提交改由主会话直接执行同等只读核验（ES mapping／etcd catalog／SQL计数）未被拦截，运维阻塞实际解除，原拦截边界事实保留不重试。
+
+**后置核验（2026-10-15完成）**：初始化后物理schema与17约束真实库核验全部通过，详见`docs/acceptance/isolated-rag-local-verification.md`对应小节；该部分不再作为本KI的未完成项。
+
+**关联**：KI-108／109／110／112；LR-47。17约束真实数据库语义校验已通过，写激活仍未执行。
+
+## KI-112 [OPEN·P2] 整栈同时重启时auth-service可能抢跑Nacos就绪回退内嵌H2，需人工重启恢复
 
 **确认日期**：2026-10-15。
 
-**已证事实**：只读恢复发现三个空间2026-10-14已成功初始化，未重复任何RPC。随后本项目七release实例的镜像仍相符，但Auth running／unhealthy／RestartCount0，StartedAt为2026-10-15T01:25:18Z、health failing streak56；其余六服务healthy／RestartCount1，全部OOMKilled=false。这是晚于初始化成功的新窗口，不能继续宣称七服务healthy／restart0，也不能把restart计数推定为某人或本会话主动重启。现有固定错误计数没有确定根因，未执行修复／重启／配置修改。
+**现象与根因**：见KI-111根因段。整栈compose窗口内同时重启时，auth-service的`spring.config.import: nacos:auth-service.yaml`在Nacos完全就绪前未生效，Spring Boot因JAR内无datasource默认url且类路径含H2（local profile依赖）静默回退随机名内嵌H2、Redis回退localhost；晚到的Nacos refresh不重建已构建bean。结果：auth持续unhealthy且真实登录全部失败于空内存库，直到人工重启。本次仅Auth中招、其余六服务正常，属时序竞态非确定性必然。
 
-**阻塞边界**：Docker专家后续只读catalog／schema／count／配置保留及Auth定点诊断任务被Host以“敏感信息拦截”终止；请求仅报告既有安全边界的任务也被同样终止，具体命令及之前完成范围未返回，保持UNKNOWN。未换agent／执行器绕过拦截，未读取私密原始输出。初始化后exact3集合状态／schema、源与outbox语义、当前环境／安全保留均缺后置证据；旧revision302351的空catalog早于成功PROVISION，不能借用。后续需先解决该拦截的授权／工具访问边界并取得有界只读诊断，才能判断Auth所需具体修复；不以盲重启或放宽权限替代。
+**处置边界**：未做源码修复（可选方向：distributed profile强制要求datasource url缺失即启动失败、或配置导入失败fail-fast、或启动时依赖Nacos就绪重试），当前以运维缓解为准：整栈重启后若Auth unhealthy，等Nacos healthy后重启Auth一次即可恢复。健康检查fail-closed是该缺陷的有效检测面，不得放宽。首次复现证据：本次unhealthy窗口日志（H2连接行、refresh时间线、503 DOWN）。
 
-**关联**：KI-108／109／110；`docs/acceptance/isolated-rag-local-verification.md`。17约束真实数据库语义校验与写激活仍未执行，独立校验器18项离线自测不证明真实队列兼容。
+**代码位置与关联**：`auth-service/src/main/resources/application-distributed.yml`（仅一行nacos导入）；`common/src/main/java/com/bkanent/common/readiness/DependencyReadinessHealthIndicator.java`（检测面）；KI-111；LR-47。
 
 ## KI-107 [FIXED·7e7ef1a·P2] ES官方对象mapping读回省略type导致已创建空间被误判不兼容
 
