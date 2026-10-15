@@ -188,6 +188,25 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - fresh etcd revision301910两次同revision完整current＋legacy collection keys-only前缀均0，exact DB1/default／ID1／DatabaseCreated1。业务计数／两原seed指纹／历史权限失败文件hash不变，Auth total6/live2，RAG document／event各0，Memory outbox17约束PENDING／attempt0／errorNONE未动。原种子／资源与partial均保留；未PROVISION／worker／dispatcher／backfill／fixture。
 - safe根D:/project/rag-dev-backups/42a55bf-20261014-release-prep/schema-a2a-7e7ef1：snapshot／build-up／resume-build-up／Listing-negative-once／domain-INSPECT／fresh-catalog／counts-preservation。源码948证明不再重复跑，当前仍30/49；初始化、正命中、应用水位和切流任务继续待验。
 
+### 2026-10-14 新初始化窗口宿主执行器失败与受限Compose漂移
+
+- 三空间serial-once窗口首Listing执行器exit127／3750ms，无结构化probe结果；立即停止后两空间及全部INSPECT，无retry／清partial／启用worker。Auth login／me通过不证明DOMAIN pre/post signed ADMIN或实际PROVISION RPC发送。原输出仅hash且已离开内存，原报错UNKNOWN，失败保留。
+- 只读同调用结构检查证明裸bash内核Linux、D:/冻结runner不可见／cygpath不可用；绝对C:/Program Files/Git/usr/bin/bash.exe可见同路径且docker／cygpath可解析。固定cached JDK network-none／read-only确认java／javac／jar17，无compile／RPC，冻结runner／probe／JAR hash不变。只绑定正确宿主shell即可修复执行路径，不盲换JDK、改source或扩大服务超时，KI-108记录；未根据无schema日志宣称远端零执行。
+- KEYWORD／VECTOR stage cap5000ms，模板overall20000ms，有效运行overall未查询；consumer30000／probe90秒／外层155秒单列，先前5000整体表述不是运行事实。失败后fresh current catalog revision302351两完整prefix均0、default DB1 Created1，说明当前仍无集合，不证明失败调用阶段或历史object不存在。
+- 独立私有release compose由Docker代理此前创建、历史显式-f调用，RAG image仍668860a而实际3c391454，其他三授权服务一致；根默认Compose不自动引用。禁止stale文件再up／rollback，限定同步RAG image一行、保留六其他服务与global interpolation／env／rollback、仅config内存比较，KI-109记录；文件与新执行窗口验收另记。
+- safe根D:/project/rag-dev-backups/42a55bf-20261014-release-prep/schema-init-7e7ef1：PROVISION-and-INSPECT／executor-boundary-comparison／after-executor-failure-catalog／release-compose-drift。未把exit127当作服务异常或初始化完成，进度仍30/49。
+
+### 2026-10-15 恢复三空间初始化成功记录与新的运行阻塞
+
+- 在相邻安全目录恢复2026-10-14T14:25:21Z corrected-host执行记录，不重复任何PROVISION／INSPECT。绝对`C:/Program Files/Git/usr/bin/bash.exe`运行冻结3c391454制品；listing.knowledge／memory.preference／memory.constraint各一次PROVISION及各一次后续INSPECT全部exit0、无timeout、ready=true、dimension1024、failedStageCount0，操作前后signed ADMIN身份相符。三PROVISION总耗时6547／6781／6422ms，三INSPECT RPC耗时336／293／307ms；预算不变，原exit127远端UNKNOWN保留。KI-108闭合。
+- 原始成功安全文件：`D:/project/rag-dev-backups/42a55bf-20261014-release-prep/schema-init-7e7ef1-corrected-host/schema-init-corrected-host-PROVISION-INSPECT-safe.json`。这证明当时真实KEYWORD／VECTOR／EMBEDDING／RERANK能力通过，不是默认查询正命中或APPLIED水位。初始化后完整current＋legacy catalog、exact3集合Created0／DB1及字段／metric／index、源／事件／配置保留后置核验仍缺；旧revision302351空目录早于成功，不可借用。
+- KI-109私有release Compose镜像漂移已单行同步：before945551d7…／after608c41fa…，config0，所有非image字段／其他六服务／全局插值相同，七resolved镜像匹配实际；无build／up／restart／rollback，旧文件备份与漂移证据保留。
+- 源码确认能力证据仅60秒、无自动续验、INSPECT开始先移除旧证据、重启清空。17文档顺序worker两路各5秒最坏可耗170秒加SQL／调度，不能依赖一次INSPECT后全局启用完成；SPACE_NOT_READY会消耗重试，RAG RETRY_PENDING耗尽及Memory EXHAUSTED不因续验自动恢复。已追加KI-110，未用永久ready／删除历史事件／反复INSPECT制造通过，worker／dispatcher／backfill／fixture未由本轮启用。
+- 独立外部`D:/project/RagConstraintCohortCheck.java`已恢复并审阅，主会以固定Java17 `javac -proc:none --release 17`针对冻结Memory Boot JAR编译exit0，18项离线自测exit0／passed=true／failure=NONE。使用生产公开decode／constraintDocument／RagCanonicalHash，参数绑定只读repeatable-read快照，限定17条与空RAG账本，5秒语句／60秒全局期限，输出仅计数。固定字段检查不是调用package-private IndexPayloadCodec或真实空间配置校验，32768默认cap只代表模板。禁止正文／ID／哈希值／凭据输出；该校验器尚未访问真实数据库。
+- 外部校验源SHA-256 `f351afd907e87ae0e899154cf587b6d348fcaffa28e0c70809684a66be20a039`；Memory JAR `2970394c39b89e05d7cc28feb5d248d3a5a276e94b08f539410aefd55092cfe2`与948制品证明一致；170个提取依赖输入和5个编译class均已绑定。证明`D:/project/rag-constraint-cohort-20261015/verification-safe.json`，SHA-256 `b71f41830afaac341e64996685222b7c6b116efd793e283eeed5186522391b3a`。18自测不加进948应用测试，不作为17真实队列语义通过。
+- 2026-10-15只读运行观察：七release镜像相符；Auth running／unhealthy／RestartCount0、StartedAt01:25:18Z、health failing streak56，其余六healthy／RestartCount1，全部OOMKilled=false。晚于初始化成功，原因未确证，不沿用历史七healthy／restart0、不推定重启操作者。后续Docker只读后置验证和Auth诊断被Host“敏感信息拦截”终止；仅报告既有边界的请求也被拦截，具体命令／执行范围未返回，保持UNKNOWN。未换执行器／agent／权限绕过，未盲重启或修改配置，KI-111记录。
+- 本轮只完成历史结果恢复、离线校验器验证和文档同步；49个完整任务中仍30项完成。三空间初始化不重复，默认正命中／强隔离／应用水位／切流仍未验，change未归档。应用源码未改，不重复948构建；运维工具访问拦截属于当前必须先解除的执行阻塞。
+
 ### 本轮仍待完成的验证
 
 以下1／2为c338b7e部署时点保留记录，已由上方accf97f实测及本轮增量推进覆盖，不作为当前仍阻塞的DNS／REST／Bean／整体INSPECT原因。

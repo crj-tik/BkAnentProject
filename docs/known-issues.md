@@ -517,6 +517,42 @@
 
 **最新运行闭合**：d9b63e6／668860a新RAG-only镜像build/up0，原生产三INSPECT2034／316／296ms全部RETURNED、前后signed ADMIN、1024维；KEYWORD与VECTOR均SPACE_NOT_READY，embedding／governed rerank保护probe全过。ES原HEAD三次404／71、4、3ms，mapping未执行；Milvus同一类型100／UnexpectedError现已正确分类。etcd同revision299669覆盖default数据库当前新collection-info与legacy collection全量keys-only前缀均0，exact db-info/1匹配default／ID1／DatabaseCreated1；证明当前包含不可用状态的catalog无集合，不证明历史snapshot或object不存在。六服务／原资源／逐键env与安全设置保留；原Env数组排序及自动Hostname比较false另附解析，未改绿旧证据。当前后端错误分类缺口已关闭，空间尚未初始化和默认检索未验；其运行任务继续待验，不重开DNS／REST根因。safe证据milvus-modern-d9b63e目录下runtime-gates／domain-inspect／backend-diagnostics，以及ragperm-narrow-milvus-allstate-metadata-safe.json。
 
+## KI-108 [FIXED·本提交·P2] Windows私有运行执行器使用裸bash选中Linux环境而无法启动冻结探针
+
+**发现日期**：2026-10-14。
+
+**实证与边界**：7e7ef1a三空间初始化窗口的首Listing runner attempt exit127／3750ms，未出现任何probe结构行；立即停止另外两空间及后续INSPECT，未重试／清partial。原stdout／stderr只保存hash，已离开内存，具体原报错UNKNOWN，不能把进程失败当ADMIN RPC失败或已发送。只读同结构对比：裸bash内核Linux、D:/冻结runner不可见、cygpath不可用；绝对C:/Program Files/Git/usr/bin/bash.exe路径可见、cygpath与docker可解析。冻结runner／probe／Agent JAR hash相同，固定JDK离线network-none确认java／javac／jar17完好，无compile／RPC。该边界支持host执行器选错shell，不凭缺生产日志推定远端零执行。
+
+**处置**：仅将私有执行器宿主shell绑定绝对Git Bash，不换JDK、不改仓库runner／probe、不加服务预算；重新确认当前catalog和兼容partial后才能开始新的限定执行窗口。stage cap5000、模板overall20000、有效overall未查询、consumer30000／probe90秒／外层155秒分列，先前把5000称整体只是引用要求而非运行事实。safe根schema-init-7e7ef1：PROVISION-and-INSPECT／executor-boundary-comparison。2026-10-15恢复相邻corrected-host目录的成功证据：2026-10-14T14:25:21Z新窗口绑定绝对Git Bash，三个空间各一次PROVISION及各一次后续INSPECT全部exit0／无timeout／ready=true／dimension1024／failedStageCount0，操作前后signed ADMIN及身份相符；PROVISION耗时6547／6781／6422ms，INSPECT RPC耗时336／293／307ms。该宿主执行器缺陷已闭合；未重复RPC，原127的远端UNKNOWN保留。安全文件schema-init-7e7ef1-corrected-host/schema-init-corrected-host-PROVISION-INSPECT-safe.json。此成功只证明当时能力，不证明后续catalog／数据水位／当前能力持续有效，见KI-110／111。
+
+## KI-109 [FIXED·本提交·P2] 受限release Compose保留旧RAG image而实际四服务已经发布新版本
+
+**发现日期**：2026-10-14。
+
+**实证与边界**：Docker代理创建并由历史显式-f部署命令引用的私有compose.release.yml中RAG image仍为668860a，实际RAG容器为3c391454；其他三个本次授权服务已匹配3c391454。项目根默认Compose不自动引用该私有文件，但再次沿旧显式命令up将有意外回旧风险。当前未运行该文件up或rollback，未改模板、env或服务。
+
+**处置**：保留旧文件hash与漂移safe证据，禁止stale文件再部署；仅在完整resolved服务image对照后同步该文件RAG image到已验证运行镜像，所有其他服务段、全局插值与rollback不动，只做config校验，不build／up／restart。safe证据schema-init-7e7ef1/schema-init-release-compose-drift-safe.json。限定同步已完成：before SHA945551d7…、after608c41fa…，config exit0，exact_single_RAG_image_change／all_nonimage_fields_equal／other_six_services_equal／global_interpolation_unchanged全true，七resolved image全部与实际运行匹配；无up／build／restart／rollback。同步safe文件schema-init-release-compose-image-sync-safe.json，旧漂移文件和备份保留，交付漂移已闭合。
+
+## KI-110 [OPEN·P1] 空间能力证据60秒过期且无自动续验，正常检索和索引会永久停在未就绪
+
+**确认日期**：2026-10-15（承接2026-10-14源码研究，未实施修复）。
+
+**现象与根因**：`ManagedRagSpaceRegistry` 只有显式管理INSPECT／PROVISION发布能力证据，有效期60秒；`requireReady`仅检查现存证据，`snapshot`被动读取，无自动续验。管理操作的`begin`先移除旧证据，重复INSPECT不是无缝续期；重启清空证据。因此已成功初始化不表示正常搜索和索引持续可用，过期后仍失败关闭为SPACE_NOT_READY。这是能力维护缺口，不是已修DNS／REST／schema错误复发，不能以永久ready或延长到无限期绕过。
+
+**派发风险与处置**：RAG worker同批次逐文档串行，每文档两后端各最多等待5秒，17条可消耗170秒加SQL／调度时间，不能保证落在60秒窗口。真实文档`sink.inspect`不发布空间能力证据；需要修正写入时`requireReady`会消耗重试。RAG耗尽RETRY_PENDING与Memory EXHAUSTED不会仅因之后INSPECT或重启自动恢复；无错误WAITING则会重置attempts并持续轮询。RAG scheduler按启动条件创建，Memory开关仅在批次入口读取，不能据Nacos热改false宣称已暂停／排空。当前未启用worker／dispatcher，不修改17条原事件、不删除源数据、不执行ADMIN REPLAY。后续须先实现并验证有界能力续验／失败关闭及真实暂停排空，再受控激活；本条是未修限制，不新建第二存储底座。
+
+**代码位置与关联**：`rag-service/config/ManagedRagSpaceRegistry.java:59-74,100-149,218-231`；`rag-service/index/RagIndexWorker.java:54-60,117-165,180-198`；`memory-service/service/MemoryRagOutboxDispatcher.java:27-59`；LR-47，任务7.4／8.2／8.3。当前成功PROVISION／INSPECT证据保留，不能补造当前新鲜度或APPLIED水位。
+
+## KI-111 [OPEN·P2] 初始化后新运行窗口Auth不健康且运维诊断被拦截，后置验收未完成
+
+**确认日期**：2026-10-15。
+
+**已证事实**：只读恢复发现三个空间2026-10-14已成功初始化，未重复任何RPC。随后本项目七release实例的镜像仍相符，但Auth running／unhealthy／RestartCount0，StartedAt为2026-10-15T01:25:18Z、health failing streak56；其余六服务healthy／RestartCount1，全部OOMKilled=false。这是晚于初始化成功的新窗口，不能继续宣称七服务healthy／restart0，也不能把restart计数推定为某人或本会话主动重启。现有固定错误计数没有确定根因，未执行修复／重启／配置修改。
+
+**阻塞边界**：Docker专家后续只读catalog／schema／count／配置保留及Auth定点诊断任务被Host以“敏感信息拦截”终止；请求仅报告既有安全边界的任务也被同样终止，具体命令及之前完成范围未返回，保持UNKNOWN。未换agent／执行器绕过拦截，未读取私密原始输出。初始化后exact3集合状态／schema、源与outbox语义、当前环境／安全保留均缺后置证据；旧revision302351的空catalog早于成功PROVISION，不能借用。后续需先解决该拦截的授权／工具访问边界并取得有界只读诊断，才能判断Auth所需具体修复；不以盲重启或放宽权限替代。
+
+**关联**：KI-108／109／110；`docs/acceptance/isolated-rag-local-verification.md`。17约束真实数据库语义校验与写激活仍未执行，独立校验器18项离线自测不证明真实队列兼容。
+
 ## KI-107 [FIXED·7e7ef1a·P2] ES官方对象mapping读回省略type导致已创建空间被误判不兼容
 
 **发现日期**：2026-10-14。
