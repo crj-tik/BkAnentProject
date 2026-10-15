@@ -341,6 +341,11 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - **演练坑（部署知识）**：docker run tmpfs的uid=10001挂载选项在演练容器不生效，旧镜像entrypoint无预建目录导致`.dubbo`缓存创建Permission denied误判为"版本不兼容"——加mode=0777+sh预建目录后正常。此为容器运行时知识，非镜像缺陷。
 - **资源保留**：13相关卷全保留、零prune/drop/公开。8.8勾选闭合（46/49）。
 
+### 2026-10-15 8.3切流窗口演练（闭合）
+
+- **窗口全流程（结构化）**：①快照（6镜像/rag config SHA/2用户+17约束种子/outbox 88+17全APPLIED水位）；②热暂停（rag worker+memory/listing dispatcher三开关Nacos热关，无重启——KI-110热开关设计即为此场景）；③静默（暂停期upsert受理但outbox PENDING零派发、ES冻结、约束检索读路径正常）；④窗口内实例刷新（memory重启healthy、暂停跨重启保持仍PENDING）；⑤恢复（三开关热开30秒drain至89全APPLIED、cutover_pref检索命中）；⑥清理（夹具decay至删、ES 0、七服务healthy）。
+- gate全过才恢复的语义由三开关承载（版本初始化/能力gate此前全过，窗口无schema变更无需重放）；旧RPC已移除无虚构兼容方。8.3勾选闭合（47/49）。
+
 ### 本轮仍待完成的验证
 
 以下1／2为c338b7e部署时点保留记录，已由上方accf97f实测及本轮增量推进覆盖，不作为当前仍阻塞的DNS／REST／Bean／整体INSPECT原因。
