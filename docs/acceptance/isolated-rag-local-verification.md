@@ -268,6 +268,17 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - **guard反例顺带验证**：无信标请求`/a2a`返回-32001 AUTHENTICATION_FAILED；操作前后principal复验在探针内执行（association断言task/context归属）。
 - 探针增`RAG_PROBE_DEBUG`栈输出开关（默认关）；新增`run-a2a-resubscribe-acceptance.sh`并发驱动脚本。3.5的"覆盖同步/流式/任务查询取消/异步续接"主路径达成；审批续接（push/approval）仍待（本card capabilities.pushNotifications=false）。
 
+### 2026-10-15 账号失效矩阵全入口验收（3.2闭合）
+
+- **专用测试用户基线**：admin经`POST /auth/users`创建accmtx_broker_1（BROKER/ACTIVE），登录token三入口全通——`/auth/me`返回角色、memory.rag约束检索success、listing A2A正常。
+- **停用分支**：`PUT /auth/users/{id}`置DISABLED后——重新登录AUTH_401；**未过期旧token**三入口全拒：REST `/auth/me` AUTH_UNAUTHORIZED（"账号已停用或权限已失效"）、memory RPC（resolveRagPrincipal复核）AUTHENTICATION_FAILED、A2A guard -32001。
+- **删除分支**：DELETE软删后未过期token同样三入口全拒。
+- **角色失效分支**：auth_role BROKER active=0（SQL直改本开发库、验后立即恢复）后未过期token三入口全拒——角色失效与账号停用同等阻塞。
+- **MANAGER不默认准入**：ADMIN API建MANAGER用户返回AUTH_ROLE_INVALID（角色不存在或不可分配）——`isSupportedRole`仅认ADMIN/BROKER，MANAGER登录AUTH_401。
+- **伪造token反例**：`/auth/me` AUTH_UNAUTHORIZED、memory入口AUTHENTICATION_FAILED。
+- 清理：两个测试用户均经admin API DELETE（deleted=1），auth_role恢复active=1，admin01/broker01种子完好。异步续接入口（审批流）待3.5审批专项同批覆盖。
+- 3.2勾选闭合（33/49）。
+
 ### 本轮仍待完成的验证
 
 以下1／2为c338b7e部署时点保留记录，已由上方accf97f实测及本轮增量推进覆盖，不作为当前仍阻塞的DNS／REST／Bean／整体INSPECT原因。
