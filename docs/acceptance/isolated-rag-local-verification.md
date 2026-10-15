@@ -353,6 +353,11 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - **上下文隔离**：RunnableConfig metadata仅三个白名单键（技能执行上下文/结构化输入标记/输出模式），专用上下文不进模型messages、工具参数、checkpoint；KI-46指纹日志确认无正文泄漏。
 - 3.5勾选闭合（48/49）。仅剩8.9归档维护。
 
+### 2026-10-15 8.9归档维护收尾（change全量完成 49/49）
+
+- 8.9勾选：apply全程LR（新增LR-48~52等）/KI（KI-108~113及续记）与验收记录同提交维护，中文commit即时push；终态全仓971项0失败（pre-archive clean test基线）、七服务healthy、三空间真实可检索、49/49全门禁真实完成。
+- **change extract-isolated-rag-service 全部49项任务闭合，归档就绪**。
+
 ### 本轮仍待完成的验证
 
 以下1／2为c338b7e部署时点保留记录，已由上方accf97f实测及本轮增量推进覆盖，不作为当前仍阻塞的DNS／REST／Bean／整体INSPECT原因。
