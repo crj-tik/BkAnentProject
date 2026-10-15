@@ -7,9 +7,10 @@ import com.bkanent.rag.security.RagAccessControl;
 import com.bkanent.rag.storage.ProjectionFilters;
 import org.apache.dubbo.config.annotation.DubboService;
 
-// hessian2 pin (KI-113 follow-up): fastjson2 2.0.52+ JSONB crashes on FieldBased record
-// list fields through Dubbo's security handler; see RagFastjson2JsonbRoundTripTest.
-@DubboService(parameters = {"serialization", "hessian2"})
+// fastjson2ctor pin (KI-113 follow-up): Dubbo's built-in fastjson2 writes FieldBased
+// JSONB which crashes decoding record list fields; the ctor SPI keeps the strict typed
+// contract without class-name tags. See Fastjson2ConstructorSerializationTest.
+@DubboService(parameters = {"serialization", "fastjson2ctor"})
 public class RagIndexRpcServiceImpl implements RagIndexRpcService {
     private final RagAccessControl access;
     private final RagIndexService index;

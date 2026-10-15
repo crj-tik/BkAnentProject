@@ -19,6 +19,19 @@ public record RagSearchRequest(int contractVersion, String requestId, String spa
         RagContract.require(filters.size() <= 100, "filters");
     }
 
+    // fastjson2 JSONB record path: an explicit @JSONCreator factory routes decoding through the
+    // canonical constructor instead of the FieldBased reflection reader, which crashes on list
+    // fields through Dubbo's security handler on fastjson2 2.0.52..2.0.59 (KI-113 follow-up).
+    // Jackson never reads fastjson2 annotations; the wire contract is unchanged.
+    @com.alibaba.fastjson2.annotation.JSONCreator
+    public static RagSearchRequest of(int contractVersion, String requestId, String spaceId, String query,
+                                      java.util.List<RagFilter> filters, RagRecallOptions recall,
+                                      RagFusionOptions fusion, Boolean semanticRerank, Integer rerankCandidates,
+                                      Integer candidateLimit, RagFailurePolicy failurePolicy) {
+        return new RagSearchRequest(contractVersion, requestId, spaceId, query, filters, recall, fusion,
+                semanticRerank, rerankCandidates, candidateLimit, failurePolicy);
+    }
+
     public static RagSearchRequest defaults(String requestId, String spaceId, String query) {
         return new RagSearchRequest(1, requestId, spaceId, query, null, null, null, null, null, null, null).normalized();
     }

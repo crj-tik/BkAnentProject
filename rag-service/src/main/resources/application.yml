@@ -54,6 +54,9 @@ dubbo:
   protocol:
     name: dubbo
     port: ${RAG_DUBBO_PORT:20898}
+    # fastjson2ctor wire pin (KI-113 follow-up): constructor/property JSONB without class-name
+    # tags; Dubbo's built-in fastjson2 FieldBased JSONB crashes on record list fields.
+    prefer-serialization: fastjson2ctor,fastjson2
   consumer:
     protocol: dubbo
     check: false

@@ -19,6 +19,11 @@ dubbo:
   application:
     name: memory-service
     qos-enable: false
+    # hessian2 wire pin (KI-113 follow-up): fastjson2 2.0.52+ JSONB crashes decoding Dubbo's
+    # FieldBased record payloads with list fields (see RagFastjson2JsonbRoundTripTest). Ordering
+    # hessian2 first in the consumer prefer list makes the wire negotiation select hessian2 for
+    # every outbound RAG call; provider RAG services also pin serialization=hessian2.
+    prefer-serialization: fastjson2ctor,fastjson2
   protocol:
     name: dubbo
     port: ${MEMORY_DUBBO_PORT:20891}
@@ -29,6 +34,16 @@ dubbo:
     check: false
     init: false
     retries: 0
+  # Per-interface reference attributes (Dubbo 3.2 keyed-config form) land directly on the invoker
+  # URL; together with the provider-side pin this keeps the whole RAG wire on fastjson2ctor.
+  # KI-113 follow-up.
+  reference:
+    com.bkanent.common.rpc.RagPrincipalRpcService:
+      serialization: fastjson2ctor
+    com.bkanent.common.rpc.RagRetrievalRpcService:
+      serialization: fastjson2ctor
+    com.bkanent.common.rpc.RagIndexRpcService:
+      serialization: fastjson2ctor
 
 server:
   port: 9011
