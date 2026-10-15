@@ -346,6 +346,13 @@ env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUT
 - **窗口全流程（结构化）**：①快照（6镜像/rag config SHA/2用户+17约束种子/outbox 88+17全APPLIED水位）；②热暂停（rag worker+memory/listing dispatcher三开关Nacos热关，无重启——KI-110热开关设计即为此场景）；③静默（暂停期upsert受理但outbox PENDING零派发、ES冻结、约束检索读路径正常）；④窗口内实例刷新（memory重启healthy、暂停跨重启保持仍PENDING）；⑤恢复（三开关热开30秒drain至89全APPLIED、cutover_pref检索命中）；⑥清理（夹具decay至删、ES 0、七服务healthy）。
 - gate全过才恢复的语义由三开关承载（版本初始化/能力gate此前全过，窗口无schema变更无需重放）；旧RPC已移除无虚构兼容方。8.3勾选闭合（47/49）。
 
+### 2026-10-15 3.5审批续接与租约语义收尾（3.5闭合）
+
+- **审批续接架构语义**：A2A协议层push通知被**设计性拒绝**——card capabilities.pushNotifications=false，且guard对真实SDK `pushNotificationConfig`字段在官方Store/Queue/Sender任何触碰前返回FORBIDDEN（专项单测`actualSdkPushNotificationFieldIsRejectedBeforeOfficialStoreQueueOrSender`验证六组件零交互）；审批流实际走agent-service supervisor REST（/supervisor/approvals/callback、/pending，agent_workflow_approval_claim表含approval_version乐观控制）——审批不在A2A通道上，属架构决定。
+- **租约过期/重启重认证**：Lease.verify()在每个流式chunk与工具调用边界校验（过期抛AUTHENTICATION_EXPIRED）；executor finally discardTask强制重启后重新信标认证；binding绑定method/task/requestId/bodyHash四元组防跨任务换发；probe的lease续验机制在五操作验收中已实测。
+- **上下文隔离**：RunnableConfig metadata仅三个白名单键（技能执行上下文/结构化输入标记/输出模式），专用上下文不进模型messages、工具参数、checkpoint；KI-46指纹日志确认无正文泄漏。
+- 3.5勾选闭合（48/49）。仅剩8.9归档维护。
+
 ### 本轮仍待完成的验证
 
 以下1／2为c338b7e部署时点保留记录，已由上方accf97f实测及本轮增量推进覆盖，不作为当前仍阻塞的DNS／REST／Bean／整体INSPECT原因。
