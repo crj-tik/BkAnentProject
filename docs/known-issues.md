@@ -10,6 +10,24 @@
 
 ## 待修复（OPEN）
 
+## KI-118 [OPEN·P2] 官方 fastjson2 接受名单条目会按类名前缀匹配
+
+**确认日期**：2026-10-16。MemoryExceptionSerializationTest 实测精确声明 `throws MemoryException` 后，未精确注册的测试类 `MemoryExceptionSerializationTest$ForeignFailure` 因全名以 `com.bkanent.common.memory.MemoryException` 开头而被官方 ContextAutoTypeBeforeHandler 接受；声明前拒绝，STRICT/Serializable 始终开启，scoped CodecSupport 与原 Extension 实例一致。精确条目注册不等于第三方 handler 精确名称匹配。
+
+**处置**：保留此前 allowlist 最小精确注册，不新增包前缀、不改第三方/.m2，也不声称任意陌生类型一律拒绝。本次补根因回归和外部无允许名前缀的动态 Throwable，验证官方 fastjson2 内存 wire 拒绝无允许名前缀的外部 Throwable，并断言拒绝异常链；第三方前缀接受行为未修，不能据此推导利用链。后续 2.2 必须验证选定 ctor-SPI 的类型/异常联合边界，官方 fastjson2 fixture 不替代其生产契约。关联 LR-48/55，测试位于 common memory 两个 focused suite，最终29项通过。
+
+## KI-116 [OPEN·P1] 原生 SummarizationHook 默认替换不满足耐久与完整工具事实契约
+
+**确认日期**：2026-10-16。实际 Spring AI 1.1.2 / Alibaba 1.1.2.3 制品级测试确认：摘要模型异常转错误 SystemMessage 后仍 REPLACE，异常文本可进入日志；cutoff 五条邻域可拆长间隔工具组，并行未完成响应未被完整阻断；总结 getText 不携带 responseData/工具身份；第一条 user 在保留尾部可能重复。普通 gate 返回前版本判断也不保护随后到达的新输入。
+
+**处置**：当前九入口未接 memory Hook，本批不启用默认接法。公开 MessagesModelHook action bridge、外围 ModelHook 与 update-time KeyStrategy 可保护候选，25 次离线测试记录反例与拒绝/保留窗口。覆盖/提交/revision 为桩，尚未实现持久覆盖、无损结构事实、两阶段 CAS、恢复尾部及日志安全装饰；继续 OPEN，由 integrate-domain-agent-memory 第5/6组落实，不能把反例通过或桩当生产安全完成。关联 LR-56；测试 `common-a2a/src/test/java/com/bkanent/a2a/memory/SummarizationHookContractTest.java`，证据见基础验收记录。
+
+## KI-117 [OPEN·P1] 现有 Agent 恢复材料不覆盖完整记忆消息与域内工具交付事实
+
+**确认日期**：2026-10-16。Supervisor 原请求/外层调用/结果账本与 checkpoint 不覆盖每次模型输出成功至 checkpoint 保存前窗口，也不覆盖九 SubAgent 全部域内 tool-call/response 组。共享 OfficialA2aAgentExecutor 当前只在进程内管理执行及有界/规范化 artifact。Compare 有 JSON/PDF 磁盘缓存但未证授权不可变事件身份；Media task/result 为 ConcurrentHashMap，MQ 受理不能证明原 task 完成跨重启可恢复。官方 SDK 实际 TaskStore 耐久性本批未验，不推定其实现。
+
+**处置**：新压缩与跨域长期共享保持未启用。优先稳定版本引用现有领域真源/完成成果，仅在缺事实处补最小交付 journal；不九域无条件建业务库、不用重跑模型/副作用补结果、不凭短期缓存回执裁剪。具体可靠顺序/事务/权限/保留由 change 第3/4组验收，当前仅确认缺口未修。关联 LR-22/23、LR-55/56、KI-12/24；逐域来源表见 `docs/acceptance/domain-agent-memory-foundation-20261016.md`。
+
 ## KI-114 [OPEN·P1] Studio 完整领域动作与主体绑定尚未全部接通
 
 **确认日期**：2026-10-15。`implement-studio-v2` 已新增工作/修订/比较/回执及未配置计划快照；完整P3/P4仍未完成。发布账号/素材版本/实际审批参数绑定、选定结算、保留直写接口等价校验、访谈凭据恢复、受保护文件和完整领域投影/分页尚缺；userId/workNo/employeeId不能凭字段相似直接映射。部分现有Agent只回summary，不能据此生成候选事实。
@@ -541,13 +559,15 @@
 
 **处置**：仅将私有执行器宿主shell绑定绝对Git Bash，不换JDK、不改仓库runner／probe、不加服务预算；重新确认当前catalog和兼容partial后才能开始新的限定执行窗口。stage cap5000、模板overall20000、有效overall未查询、consumer30000／probe90秒／外层155秒分列，先前把5000称整体只是引用要求而非运行事实。safe根schema-init-7e7ef1：PROVISION-and-INSPECT／executor-boundary-comparison。2026-10-15恢复相邻corrected-host目录的成功证据：2026-10-14T14:25:21Z新窗口绑定绝对Git Bash，三个空间各一次PROVISION及各一次后续INSPECT全部exit0／无timeout／ready=true／dimension1024／failedStageCount0，操作前后signed ADMIN及身份相符；PROVISION耗时6547／6781／6422ms，INSPECT RPC耗时336／293／307ms。该宿主执行器缺陷已闭合；未重复RPC，原127的远端UNKNOWN保留。安全文件schema-init-7e7ef1-corrected-host/schema-init-corrected-host-PROVISION-INSPECT-safe.json。此成功只证明当时能力，不证明后续catalog／数据水位／当前能力持续有效，见KI-110／111。
 
-## KI-109 [FIXED·本提交·P2] 受限release Compose保留旧RAG image而实际四服务已经发布新版本
+## KI-109 [OPEN·P2] 受限release Compose与实际发布镜像再次漂移
 
 **发现日期**：2026-10-14。
 
 **实证与边界**：Docker代理创建并由历史显式-f部署命令引用的私有compose.release.yml中RAG image仍为668860a，实际RAG容器为3c391454；其他三个本次授权服务已匹配3c391454。项目根默认Compose不自动引用该私有文件，但再次沿旧显式命令up将有意外回旧风险。当前未运行该文件up或rollback，未改模板、env或服务。
 
 **处置**：保留旧文件hash与漂移safe证据，禁止stale文件再部署；仅在完整resolved服务image对照后同步该文件RAG image到已验证运行镜像，所有其他服务段、全局插值与rollback不动，只做config校验，不build／up／restart。safe证据schema-init-7e7ef1/schema-init-release-compose-drift-safe.json。限定同步已完成：before SHA945551d7…、after608c41fa…，config exit0，exact_single_RAG_image_change／all_nonimage_fields_equal／other_six_services_equal／global_interpolation_unchanged全true，七resolved image全部与实际运行匹配；无up／build／restart／rollback。同步safe文件schema-init-release-compose-image-sync-safe.json，旧漂移文件和备份保留，交付漂移已闭合。
+
+**2026-10-16新窗口**：只读 Docker 元数据核对确认 Auth/Agent/Customer/Listing/Memory/RAG 实际为 `8bc352b0d45a79c860c65140ef829bbdd46415ee`，Marketing 为 `3c39145488241d3254aa7e5ad1f19fa8d2eec8d3b2c22a58f2a3227205901004`。Marketing 标签所指 `D:/project/rag-dev-backups/42a55bf-20261014-release-prep/compose.release.yml` 中 Agent/Listing/RAG 仍固定 `3c391454…`，六个新容器没有 Compose project/service 标签；未读凭据 env resolve 其他插值。历史限定同步成功保留，但当前漂移重新 OPEN。该文件不能作为完整现行部署/回滚依据；本次未 up/restart、未同步镜像或修改配置。依据见 `docs/acceptance/domain-agent-memory-foundation-20261016.md`，需后续受授权部署维护收口，不凭 healthy 代替版本对照。
 
 ## KI-110 [FIXED·本提交·P1] 空间能力证据60秒过期且无自动续验，正常检索和索引会永久停在未就绪
 

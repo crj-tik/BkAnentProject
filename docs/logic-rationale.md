@@ -542,3 +542,23 @@
 **代码位置**：`rag-service/src/main/java/com/bkanent/rag/rerank/BgeRerankService.java`（governed 分支与身份核对）、`RerankEndpoint.java`（钉扎字段）、`config/RagRuntimeConfiguration.java`（端点装配）；`nacos/rag-service.yaml`（expected-revision/artifact-digest 与三空间 measured-governed-profile 锚点）、`docker-compose.yml`/`.env.example`（env 接线与 bkanent-rerank-dev 网络声明）。
 
 **关联**：LR-31、LR-34；KI-57（目标合规部分已接线，真实联调未做）。分数归一化仍由 `RerankProfile.normalize` 单点执行（LR-31）；身份钉扎值来自外部项目 `docs/capability-results-dev.json` 实测记录，外部升级模型时必须同步更新三处（endpoint env、nacos rerank 段、空间 rerank-profile 的 scoring-version），漏改即失败关闭而非漂移。
+
+## LR-55 记忆逻辑身份、完整事实形状与授权证明分别定义
+
+**结论**：common memory DTO 使用 `(ownerId,domainId,agentId,conversationId)` 复合身份，事项/run/A2A task/domainSession 独立关联；私有偏好 scope 同时包含 domain 与 agent，用长度分帧避免分隔符碰撞。封闭 JSON record 树保留工具 responseData，完整工具信封与执行结果状态分开；摘要和派生内容显式记录来源 revision/hash/grant 依赖，偏好详情页固定 block/content revision/authorization revision。构造器只校验形状，不授予读取、共享、加工或压缩权限。
+
+**根因**：Graph threadId 在现有执行器分别绑定 run 或 A2A task，不能自动当跨 run conversation；同 owner/domain 的不同 Agent 仍私有。任意 Object/框架 Message 会把框架依赖和不可控 wire 传入公共契约；只保留摘要文本则无法证明工具全部响应及原结构事实。分页不固定授权/内容版本会混页；可信来源真实性和当前 grant 必须由服务端核验，而不是 DTO 自证。
+
+**代码位置**：common/src/main/java/com/bkanent/common/memory 的 ContextKey/Association/Scope/JsonValue/ToolGroup/Summary/PreferenceHistoryPage/MemoryException 及两个 focused 测试。MemoryException 只携枚举，无 provider 文本/cause/suppressed/stack；后续 RPC 须遵 LR-48 显式 throws 并验证实际选定 wire。本批不修改既有 v1，不创建闲置 ChatClient 适配或新框架依赖。
+
+**关联**：LR-33/40/41/48/53、KI-117/118；integrate-domain-agent-memory 2.1。官方 fastjson2 异常测试与 ctor-SPI 普通 DTO 测试是分离证据，不能据此声称后续 v2 RPC 同一 wire 已支持两者；当前 ctor-SPI 仅有 RagException envelope。官方接受名单虽按精确类型注册，第三方 handler 仍有类名前缀匹配语义，测试明确保留该限制，不以“精确条目”等同“精确匹配”。
+
+## LR-56 原生压缩只提供候选生成能力，实际窗口采纳候选需要更新边界保护
+
+**结论**：Alibaba 1.1.2.3 的 SummarizationHook 不独立直接注册到生产窗口。公开 MessagesModelHook.beforeModelAction 返回候选，不立即更新 state；外围 ModelHook 可拒绝候选，公开 Hook.getKeyStrategys 可在实际 update 边界校验版本。可复用原生 token trigger/候选能力，但不能把 gate 返回前检查加普通 REPLACE 当 run/checkpoint CAS。
+
+**根因**：原生会把模型异常文本当 SystemMessage 并继续 REPLACE，getText 总结丢全部 responseData，邻域切点不能保证完整工具组。实际测试还证明候选返回后新输入会被普通 REPLACE 丢弃。依赖公开更新策略保护无需反射或框架补丁，但本地策略不提供分布式租约、数据库覆盖或跨库事务。
+
+**代码位置**：common-a2a/src/test/java/com/bkanent/a2a/memory/SummarizationHookContractTest.java；真实 ReactAgent BEFORE_MODEL 顺序、25 次制品测试与四制品 hash 见基础验收记录。fixture 的覆盖/提交/revision 只是可控性证明；生产仍须安全结构投影、来源/grant核验、摘要与 covered 同事务、独立 run CAS、未覆盖尾部恢复及硬预算失败关闭。
+
+**关联**：LR-22/23/55、KI-116/117；change 1.3、5.5、6.1–6.5。未修改默认框架版本或原生产窗口，未以反例通过宣称压缩启用。

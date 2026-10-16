@@ -1,13 +1,13 @@
 ## 1. 接入清单与验收基线（先于启用）
 
 - [ ] 1.1 查阅并记录 LR-3/6/17/18/22/23/31/33/34/38/40/41/53、KI-2/21/24/59/80/100/114 适用边界；盘点九个 SubAgent 源码接入口及目标环境实际启用集合，形成逐入口执行器、身份、可靠事实源与消费者清单。
-- [ ] 1.2 记录 Supervisor 通用 Graph、SubAgent ReAct、真实 ChatClient 入口及 interview REST/SSE 运行面调用路径；核实实际解析的 Spring AI 1.1.2 / Alibaba 1.1.2.3 制品与扩展签名，无真实消费者的适配不建设。
-- [ ] 1.3 用制品级测试验证 SummarizationHook 执行顺序、token估算、工具组切点、结构化工具结果及失败传播，证明可在可靠提交和版本核验后才替换窗口；无法满足保护契约的接法不得启用。
+- [x] 1.2 记录 Supervisor 通用 Graph、SubAgent ReAct、真实 ChatClient 入口及 interview REST/SSE 运行面调用路径；核实实际解析的 Spring AI 1.1.2 / Alibaba 1.1.2.3 制品与扩展签名，无真实消费者的适配不建设。
+- [x] 1.3 用制品级测试验证 SummarizationHook 执行顺序、token估算、工具组切点、结构化工具结果及失败传播，证明可在可靠提交和版本核验后才替换窗口；无法满足保护契约的接法不得启用。
 - [ ] 1.4 固定 Supervisor、marketing、interview 治理面 fixture 和正式 SSE 入口，记录改造前首可见事件、终态展示、成果及 Studio 可读的 P50/P95、负载、模型、拓扑、认证/审计配置和 I/O 次数；无目标环境的项目标为未测，不预设无依据毫秒门限。
 
 ## 2. 薄适配层与受管 RPC 契约
 
-- [ ] 2.1 在 common 定义框架无关 MemoryContextKey、事项/来源引用、版本、消息/工具结构、摘要、偏好块/历程页、经验、共享 grant/export、状态与错误 DTO；区分 conversationId/runId/A2A taskId/domainSessionRef，不泄漏框架 Message 或凭据。
+- [x] 2.1 在 common 定义框架无关 MemoryContextKey、事项/来源引用、版本、消息/工具结构、摘要、偏好块/历程页、经验、共享 grant/export、状态与错误 DTO；区分 conversationId/runId/A2A taskId/domainSessionRef，不泄漏框架 Message 或凭据。
 - [ ] 2.2 定义 memory v2 原生 Dubbo RPC，覆盖工作集读取、消息接收许可/交付、摘要提交、事项/实体查询、偏好/经验搜索详情及共享引用；固定 interface/group/version/operation 与请求hash身份，加入序列化及版本不兼容拒绝测试。
 - [ ] 2.3 按实际依赖面落实 common-memory 薄适配层；需要独立模块时配置 Java17 和现有框架版本、更新 reactor 依赖，无需求时沿既有共享层组织；验证 common DTO 不依赖 AI 框架、common-a2a 不反向依赖 Agent 业务实现。
 - [ ] 2.4 显式绑定原生 dubbo consumer/provider，补 KI-100 防回归测试，受管注册中心/服务映射只从部署配置获取；新请求不能选 URL、host、物理集合，不增加内网 HTTP 客户端或借 LR-34 放宽新 HTTP 地址禁令。

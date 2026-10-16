@@ -1,0 +1,9 @@
+package com.bkanent.common.memory;
+
+/** Safe public classifications; dependency failure is never an empty successful search. */
+public enum MemoryErrorCode {
+    INVALID_ARGUMENT, UNSUPPORTED_VERSION, AUTHENTICATION_FAILED, FORBIDDEN,
+    NOT_FOUND, DELETED, WITHDRAWN, VERSION_CONFLICT, CURSOR_INVALID,
+    MEMORY_UNAVAILABLE, CONTEXT_BUDGET_EXCEEDED, ARCHIVE_NOT_CONFIRMED,
+    INCOMPLETE_TOOL_GROUP, INVALID_EXTRACTION, RETRY_EXHAUSTED
+}
