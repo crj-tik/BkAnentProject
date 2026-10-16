@@ -18,6 +18,7 @@ import com.bkanent.agent.stream.*;
 import com.bkanent.agent.workflow.DbTaskArtifactStore;
 import com.bkanent.common.agent.*;
 import com.bkanent.common.mcp.*;
+import com.bkanent.common.skill.SkillDefinition;
 import com.bkanent.common.skill.core.*;
 import com.fasterxml.jackson.databind.*;
 import com.sun.net.httpserver.*;
@@ -47,6 +48,12 @@ class SupervisorDistributedAcceptanceTest {
         var http = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         String base = "http://127.0.0.1:" + http.getAddress().getPort();
         String run = "mixed-" + UUID.randomUUID(); String sessionId = "session-" + run;
+        // Fixture agents must not reuse live agent ids: Nacos keeps the latest
+        // released card per name, so a live marketing-agent container overrides
+        // this test's fixture card (real content hashes replace fixture-hash).
+        // Names also stay under Nacos' 64-character agentName limit.
+        String listingFixture = "fx-listing-" + UUID.randomUUID().toString().substring(0, 8);
+        String marketingFixture = "fx-marketing-" + UUID.randomUUID().toString().substring(0, 8);
         http.createContext("/listing/a2a", exchange -> a2a(exchange, "listing", run));
         http.createContext("/marketing/a2a", exchange -> a2a(exchange, "marketing", run));
         http.createContext("/", this::mcp);
@@ -67,7 +74,7 @@ class SupervisorDistributedAcceptanceTest {
         SupervisorToolLoopGraph factory = null; SupervisorToolLoopRunner runner = null;
         try {
             for (String domain : List.of("listing", "marketing")) {
-                String agentId = domain + "-agent";
+                String agentId = "listing".equals(domain) ? listingFixture : marketingFixture;
                 var card = card(agentId, domain, base + "/" + domain + "/a2a");
                 var server = new com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerProperties();
                 server.setAddress("127.0.0.1"); server.setPort(http.getAddress().getPort()); server.setMessageUrl("/" + domain + "/a2a");
@@ -107,9 +114,23 @@ class SupervisorDistributedAcceptanceTest {
             dynamicMcp.register(new DynamicMcpConnectionConfig("other-compare", "STREAMABLE", null, null, null, base));
             var catalog = new SupervisorCapabilityCatalog(registry, mcpClient, permissions, execution, ToolCallbackProvider.from(), mapper);
             var capabilities = catalog.snapshot("1", true);
-            assertThat(capabilities).containsKeys("a2a:listing-agent", "a2a:marketing-agent", "mcp:compare-mcp-server:compareListings", "mcp:other-compare:compareListings");
-            assertThat(capabilities.get("a2a:marketing-agent").callback().getToolDefinition().description()).contains("fixture-hash", "marketing-draft");
-            var skillRegistry = new SkillRegistry(new SkillFileLoader(), "");
+            assertThat(capabilities).containsKeys("a2a:" + listingFixture, "a2a:" + marketingFixture,
+                    "mcp:compare-mcp-server:compareListings", "mcp:other-compare:compareListings");
+            assertThat(capabilities.get("a2a:" + marketingFixture).callback().getToolDefinition().description())
+                    .contains("fixture-hash", "marketing-draft");
+            // The production skill file allowlists live agent ids (a2a:listing-agent,
+            // a2a:marketing-agent); this run registers fixture-named agents instead, so
+            // the registry is stubbed with an equivalent fixture allowlist.
+            var explicitSkill = SkillDefinition.builder().name("listing-compare-marketing-draft")
+                    .description("按真实找房结果进行房源对比，再形成营销草稿；仅接受本次请求显式指定")
+                    .domain("supervisor").version("1").explicitOnly(true)
+                    .capabilities(new com.bkanent.common.skill.SkillCapabilityPolicy("allowlist",
+                            List.of("a2a:" + listingFixture, "mcp:compare-mcp-server:compareListings", "a2a:" + marketingFixture)))
+                    .systemPrompt("按真实找房结果进行房源对比，再形成营销草稿").build();
+            var skillRegistry = mock(SkillRegistry.class);
+            when(skillRegistry.getByName("listing-compare-marketing-draft")).thenReturn(explicitSkill);
+            when(skillRegistry.findOperationalSkills("supervisor")).thenReturn(List.of());
+            when(skillRegistry.findSupervisorSkills()).thenReturn(List.of());
             var props = new SupervisorOrchestrationProperties(); props.setModelRetries(0);
             var model = mock(SupervisorModelTurn.class); var turns = new AtomicInteger();
             when(model.call(anyList(), anyList())).thenAnswer(invocation -> {
@@ -118,12 +139,12 @@ class SupervisorDistributedAcceptanceTest {
                 int turn = turns.getAndIncrement();
                 return switch (turn) {
                     case 0 -> call("question", "request_input", "{\"question\":\"在哪个地区\",\"missingFields\":[\"district\"]}");
-                    case 1 -> call("listing", SupervisorCapabilityCatalog.alias("a2a:listing-agent"), "{\"instruction\":\"按实际预算300万与浦东地区找候选房\"}");
+                    case 1 -> call("listing", SupervisorCapabilityCatalog.alias("a2a:" + listingFixture), "{\"instruction\":\"按实际预算300万与浦东地区找候选房\"}");
                     case 2 -> {
                         assertThat(messages.toString()).contains("101", "102");
                         yield call("compare", SupervisorCapabilityCatalog.alias("mcp:compare-mcp-server:compareListings"), "{\"listingIds\":\"101,102\"}");
                     }
-                    case 3 -> call("marketing", SupervisorCapabilityCatalog.alias("a2a:marketing-agent"),
+                    case 3 -> call("marketing", SupervisorCapabilityCatalog.alias("a2a:" + marketingFixture),
                             "{\"instruction\":\"为实际对比结果中的101写草稿，不发布\",\"context\":{\"listingId\":101},\"skill\":{\"name\":\"marketing-draft\"}}");
                     default -> new AssistantMessage("已依据实际候选房与对比结果生成草稿");
                 };

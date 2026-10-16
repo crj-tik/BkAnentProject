@@ -6,7 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class NotificationWorkflowEventProperties {
 
     private boolean enabled = true;
-    private String topic = "bk.agent.session.stream";
+    private String topic = "bk-agent-session-stream";
     private String consumerGroup = "notification-service-workflow-events";
     private int maxAttempts = 3;
 

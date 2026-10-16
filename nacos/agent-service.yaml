@@ -191,7 +191,7 @@ agent:
     stream:
       provider: rocketmq
       rocketmq:
-        topic: ${AGENT_STREAM_ROCKETMQ_TOPIC:bk.agent.session.stream}
+        topic: ${AGENT_STREAM_ROCKETMQ_TOPIC:bk-agent-session-stream}
         consumer-group: ${AGENT_STREAM_ROCKETMQ_CONSUMER_GROUP:agent-service-session-stream}
         producer-group: ${AGENT_STREAM_ROCKETMQ_PRODUCER_GROUP:agent-service-session-stream-producer}
     discovery-enabled: ${AGENT_DISCOVERY_ENABLED:true}

@@ -10,6 +10,48 @@
 
 ## 待修复（OPEN）
 
+## KI-125 [已修测试·P3] 分布式验收测试 fixture Agent 名与生产 Agent 名冲突，Nacos latest 卡覆盖断言
+
+**确认日期**：2026-10-16；**修复**：2026-10-16（本提交）。`SupervisorDistributedAcceptanceTest` 以 `listing-agent`/`marketing-agent` 真实 agent id 在 public 命名空间发布 fixture Card（version=1、fixture-hash）。Nacos 的 A2A registry 按 agent 名保留 latest 版本：dev 栈恢复 marketing-agent 后，运行容器发布的真实 Card（真实 contentHash）成为 latest，测试的 `discovery.fetchByAgentName` 取回真实 Card 而非 fixture，`fixture-hash` 断言失败。该测试在 18:36 的"通过"属首次发布时序侥幸（当时 marketing 副本尚未发布 Card）。修复：fixture 改为独立随机名（`fx-listing-…`/`fx-marketing-…`，8 位随机后缀兼顾 Nacos agentName≤64 限制——首版用完整 run UUID 超长被 400 拒绝）；生产技能文件 allowlist 认死真实 agent id，测试改为 mock SkillRegistry 返回 fixture allowlist 的等价技能，不改生产技能文件。附带发现：测试遗留的 `listing-agent::1` 空版本条目（首次运行的 endpoint 残余，实例已摘除）不影响断言。
+
+**处置**：测试内不再使用任何生产 agent id；SkillRegistry mock 保持既有测试风格。运行该测试需真实 Nacos+MySQL（BK_AGENT_NACOS_SERVER/BK_AGENT_DB_*），fixture 名随机化后与任何运行中 Agent 均不冲突。关联 KI-123（同轮暴露的子调用链路缺陷族）。
+
+## KI-124 [OPEN·P1] 本机 Docker Desktop/WSL 引擎在多 JVM 并发下整体过载，marketing A2A 链路可复现压垮引擎
+
+**确认日期**：2026-10-16。本会话 dev 栈全量恢复后共发生 4 次 Docker Engine API 全面无响应（`docker version` 挂起、Engine API 500、网关 000），均需重启 Docker Desktop + `wsl --shutdown`（25–60 秒恢复）拉回。其中 2 次与 marketing A2A 任务强相关且 2/2 可复现：任务到达 marketing 容器、`marketing-draft` 技能激活后约 10 秒内引擎死亡；涉事容器均非 OOMKilled（RC=1 为引擎重启所致）。致死机制在宿主/WSL2 资源层，约 20 个 JVM 并发 + 多次容器重建加剧。后果：supervisor 基线 marketing fixture 无法测量（任务 1.4 该项未测）、排障中断、Studio 503 无法取日志核实。
+
+**处置**：未执行资源调整（超出授权）。建议后续：给 marketing/media-worker 等容器设 mem_limit、评估 WSL2 VM 资源上限、控制并发 JVM 数量后复测 marketing fixture 与 Studio。多 JVM 并发 start 压垮引擎的现象在本会话第一轮恢复时已出现（8 JVM 同时 start），同根因。证据见 `docs/acceptance/domain-agent-memory-foundation-20261016.md`。
+
+## KI-123 [已修源码·运行环境待切换·P1] 会话流 RocketMQ topic 默认名含点号非法，supervisor 全部子 Agent 调用 OUTCOME_UNKNOWN
+
+**确认日期**：2026-10-16；**源码修复**：2026-10-16（本提交）。真实运行首次端到端暴露：supervisor 经 A2A 调用子 Agent 时，事件发布走 `RocketMqSessionEventBus.publish` → `syncSend` 抛 `MQClientException: The specified topic[bk.agent.session.stream] contains illegal characters, allowing only ^[%|a-zA-Z0-9_-]+$`，异常沿 `executeAuthenticatedCall` 传播，三次意向请求（listing/marketing/interview）全部 `OUTCOME_UNKNOWN`（`agent_tool_invocation` 实测无 result）。五处同源默认值均含点号：`RocketMqSessionEventBus` 的 `@RocketMQMessageListener` 与构造器 `@Value`、`nacos/agent-service.yaml`、`nacos/notification-service.yaml`、`NotificationWorkflowEventProperties`。此前测试全绿是因为分布式验收测试 mock 了 `SessionStreamService`；supervisor 介导的真实子调用从未跑通过。
+
+**处置**：五处默认值统一改为 `bk-agent-session-stream`；新增防回归——`RocketMqSessionEventBusDefaultsTest`（注解/@Value 默认值合法且一致 + 扫描两份 Nacos 模板 topic 默认行）、`NotificationWorkflowEventPropertiesTest`（属性类默认值合法），3 项测试通过。注意：同一 topic 名被 agent 与 notification 两侧消费，改名即换通道，旧 dotted topic 从未成功创建过，无存量消息迁移问题。运行环境切换已落实：运行中 supervisor 容器（旧制品）以 `AGENT_STREAM_ROCKETMQ_TOPIC=bk-agent-session-stream` env 覆盖，实测日志层 illegal characters/MQClientException 清零，listing/interview 子 Agent 调用真实出站并 COMPLETED；新构建制品自带修复。关联 KI-117（子调用事实源缺口清单中 OUTCOME_UNKNOWN 需按本条重定性）；A2A 出站还依赖 public 命名空间的 `A2aBeaconRpcService` provider（dev auth 旧 jar 无该接口，已以 release auth 镜像复刻补齐，见验收记录）。
+
+## KI-122 [OPEN·P3] dev marketing 旧制品 jar 的 MCP 工具重复注册缺陷，容器无法启动
+
+**确认日期**：2026-10-16。dev marketing 容器（09-18 构建旧 jar）启动即抛 `mcpSyncServer` 初始化 `IllegalArgumentException: Tool with name 'publishMarketingContent' is already registered`，崩溃先于 DB 连接（与 KI-121 密码无关）。已排除 Nacos 配置漂移（与 20261013 备份逐字节一致）；现源码 `MarketingMcpTools.publishMarketingContent` 与 `MarketingTools.publishContent` 已不同名，release 镜像（3c3914，10-14 构建）已修复且运行 healthy。属旧制品缺陷而非源码缺陷。
+
+**处置**：不在源码侧修改（源码已修）；dev marketing 恢复需换用当前制品——本轮以 release 镜像在 public 命名空间复刻副本供 dev supervisor 发现（见验收记录），原旧容器与已备好的 `-new` 容器留存。marketing 事实源/缓存语义不受影响；dev 镜像库缺陷（a6e760985207 父层 blob 回收）另见 KI-121。证据见 `docs/acceptance/domain-agent-memory-foundation-20261016.md`。
+
+## KI-121 [OPEN·P1] MySQL root 密码轮换后 dev 容器冻结旧密码，DB 认证实际全断
+
+**确认日期**：2026-10-16。dev 容器 env 冻结的 `MYSQL_PASSWORD`（哈希 bbb23f2c…）与 MySQL 容器/项目 `.env` 当前值（哈希 402942de…）不一致：root@'%' TCP 认证实测旧值被拒、`.env` 现值通过。9-30/10-09 批次创建的 dev 容器全部含旧密码；auth 当时"healthy"是假象（登录线程已报 CannotGetJdbcConnection），网关 `/auth/login` 500 的直接原因即此。dev agent 的 `DEEPSEEK_API_KEY` 同属冻结旧值（指纹 01ca6d3e…，`.env`/release 现值 17279bfb…），模型通道 503 DEPENDENCY_UNAVAILABLE。另：dev 应用镜像 `a6e760985207` 已不在本地镜像库（父层 blob 被回收，12 个容器仍引用运行，commit 快照路线不可行）。
+
+**处置**：本轮按授权对 agent/auth/listing/interview（+marketing 尝试）用「bk-anent-services:dev + 原容器 jar 注入 + 仅换冻结凭据」复刻重建（MYSQL_PASSWORD 与 agent 的 DEEPSEEK_API_KEY 分别更新为 `.env` 现值），网关登录恢复 200；business/contract/settlement/media-worker/notification 五容器同批重建（contract 调度线程已见 Access denied，未重建前其 DB 依赖工具不可用）。原 jar 宿主备份 D:/tmp/bk-jars/。根治需部署流程变更：凭据轮换时同步重建全部引用容器，或容器改用运行时注入而非创建时冻结；不在本条内自行改部署机制。另注：supervisor 任务链曾 500，除模型 key 外还有 release memory（BK-AGENT）→ release auth `RagPrincipalRpcService` Dubbo 断供一环（dev auth 旧 jar 无该 provider），release auth 恢复后闭合。关联 KI-119/120；证据见 `docs/acceptance/domain-agent-memory-foundation-20261016.md`。
+
+## KI-120 [OPEN·P1] release 栈钉扎 bind IP 在 Docker 引擎重启后失效，agent Dubbo 绑定失败崩溃循环
+
+**确认日期**：2026-10-16。release 容器 env 内 `DUBBO_IP_TO_BIND/DUBBO_IP_TO_REGISTRY=172.24.0.4`（agent）等钉扎 IP 在 Docker Desktop 引擎重启后被重新分配给其他容器；release agent 每次启动 `Failed to bind NettyServer on /172.24.0.4:20882`（BindException: Cannot assign requested address，RestartCount≈687，OOMKilled=false），该 IP 实际已由 dev settlement-service 占用。同批 release auth/listing 以 Exited(255)、rag 以 Exited(1) 停留，凭 unless-stopped 也未自愈。与 KI-93 同族（注册地址钉扎），但本条是钉扎 IP 与容器实际 IP 分离导致 bind 失败，stop/start 无法修复。
+
+**处置**：本轮未重建容器、未改 env——钉扎在容器创建时冻结，start 层面无解；已 `docker stop` release agent 结束无效循环，agent-service 角色由 dev 容器承担（public 命名空间，无钉扎）。后续修复需授权下重建 release 容器：恢复钉扎 IP 归属（disconnect/reconnect --ip）或改用 `DUBBO_IP_TO_BIND` 自动探测，重建前逐容器比对 env/网络别名/卷；auth/listing/rag 同批恢复需一并处理。关联 KI-93/109；证据见 `docs/acceptance/domain-agent-memory-foundation-20261016.md`。
+
+## KI-119 [OPEN·P2] dev compare-engine 容器 /app/runtime 不可写导致启动崩溃循环
+
+**确认日期**：2026-10-16。`bk-anent-dev-compare-engine-service-1` 启动即失败：`compareReportCacheServiceImpl` init 抛 `IllegalStateException: 初始化房源对比报告缓存目录失败`，根因 `java.nio.file.AccessDeniedException: /app/runtime`；compose 挂载 `compare-report-data:/app/runtime`，属主/权限与容器运行用户不匹配（RestartCount 已超 1000，每轮 exit 1，OOMKilled=false）。重启无法自愈，compare-agent 从未到达 Nacos 注册阶段。
+
+**处置**：本轮在授权范围内先 stop 停止循环，再用临时容器对卷根做最小 chown 对齐容器运行用户后 start 复验；保留卷内既有 JSON/PDF 报告文件不动，不改 compose、不重建镜像。若 chown 后仍失败则保留证据待专项处置。历史对比报告缓存语义见验收记录「compare 事实源」行；修复只恢复容器可启动，不证明检索/对比链路恢复。
+
 ## KI-118 [OPEN·P2] 官方 fastjson2 接受名单条目会按类名前缀匹配
 
 **确认日期**：2026-10-16。MemoryExceptionSerializationTest 实测精确声明 `throws MemoryException` 后，未精确注册的测试类 `MemoryExceptionSerializationTest$ForeignFailure` 因全名以 `com.bkanent.common.memory.MemoryException` 开头而被官方 ContextAutoTypeBeforeHandler 接受；声明前拒绝，STRICT/Serializable 始终开启，scoped CodecSupport 与原 Extension 实例一致。精确条目注册不等于第三方 handler 精确名称匹配。

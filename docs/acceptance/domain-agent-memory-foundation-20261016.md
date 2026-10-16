@@ -122,6 +122,74 @@ JSON 采用封闭 type-tagged record 树（不含任意 Object），保留 null/
 
 离线命令 `mvn -o -gs .mvn-settings.xml -s .mvn-settings.xml -pl common -Dtest=MemoryContractTest,MemoryExceptionSerializationTest test` 最终 BUILD SUCCESS：27+2=29 项，failure/error/skipped 均 0（2026-10-16 15:09:52，6.374s）。原未拒绝的 ForeignFailure 全名以已注册 MemoryException 名称开头，实证为官方 handler 前缀匹配，不是关闭 STRICT 或 scope 错误。测试保留该边界，并动态编译无允许名前缀的外部 Throwable 验证真正拒绝；第三方行为未修（KI-118）。本批 DTO 2.1 完成，RPC 2.2 未完成。
 
+## 本地容器环境恢复与真实执行（2026-10-16 下午追加）
+
+用户授权「按需重启docker，测试可直接使用本地docker容器」「完全允许」后，按此窗口执行。此前“容器退出/认证缺失”阻断中属于容器层的部分已解除；模型可用性与 fixture 身份仍按实测记录，不倒填。
+
+### 环境依赖测试首次真实执行（6/7 通过，遗留行已清理）
+
+以宿主机直连本地容器执行此前全仓回归中 assumption-skip 的七项测试：`BK_AGENT_NACOS_SERVER=127.0.0.1:8848`（gRPC 9848 已映射），`BK_AGENT_DB_*` 指向 dev MySQL（宿主映射 `10.117.102.54:3306/bk_agent`，root 凭据从根 `.env` 注入命令环境，不回显不入文件）。结果：
+
+- `NacosAgentRegistryDockerTest`、`NacosRollingUpgradeDockerTest`、`ApprovalClaimDatabaseConcurrencyTest` 一次通过（3 项，11.000s）。
+- `SupervisorDistributedAcceptanceTest`、`SupervisorDockerDatabaseTest` 通过（2 项，18.710s）。
+- `LiveSkillAgentCardsDockerTest` 通过（1 项，含真实 Nacos Card 重发/删除，凭据取自 `.env` 注入）。
+- `SupervisorRealModelEvaluationTest` 仍跳过：测试硬编码占位 apiKey（`local-evaluation`），只能指向接受任意 key 的本地 OpenAI 兼容端点；当前栈无此端点，外部 KE 网关需真实 key 不可注入（不读取运行凭据补测试）。该项保持未测，不伪造。
+
+测试写入的 `db-%`/`mixed-%`/`session-mixed-%` 前缀行已按参数化 DELETE 清理并复核归零（agent_orchestration_run/tool_invocation/skill_snapshot/workflow_checkpoint/task_artifact/event_audit/approval_claim 全部为 0）；并发竞争测试自身已删除 `db-race-*`。真实 broker01 种子账号未动。
+
+### Nacos 实际注册机制与启用集合实测（任务 1.1 目标环境证据）
+
+只读查询（v1 naming + 控制台 v3 console API，bkagent 登录，凭据不回显）：
+
+- A2A Card 走 SDK `A2aService.releaseAgentCard`（gRPC，NACOS_AUTH_ENABLE=false），端点走 naming 的 agent-endpoints 组；控制台 Card 注册表（`/v3/console/ai/a2a/list`）在 public 与 BK-AGENT 两命名空间均 totalCount=0——端点以 naming 实例可见，Card 注册表为空。
+- public 命名空间（dev 容器，冻结 env `NACOS_NAMESPACE=`空）：12 项服务（gateway、business/contract/interview/media-worker/notification/settlement 六域 + 5 个 Dubbo `providers:com.bkanent.common.rpc.*`）+ 5 个 agent-endpoints。
+- BK-AGENT 命名空间（release 容器）：marketing-content/customer/memory-service 各 2 实例 healthy、agent-service 0 实例、marketing-agent::1.0.0 端点、3 个 Dubbo providers。
+- 九 SubAgent 实况：trade/contract/media/notification/settlement 端点已注册（public）；marketing 端点在 BK-AGENT（release 容器）；interview 服务实例注册但 `NACOS_A2A_AGENT_REGISTRY_ENABLED=false` 无 A2A 端点；compare 从未注册（见 KI-119）；listing 两命名空间均无端点条目。
+
+### 容器恢复与四个新缺陷（KI-119/120/121/122，分两轮 docker 代理执行）
+
+第一轮：gateway/interview/business/contract/media-worker/notification/settlement dev 容器与业务 MinIO 恢复运行并注册；8 JVM 并发 start 曾压垮 Docker Desktop 引擎（Engine API 500），代理按授权重启 Docker Desktop 引擎后凭 unless-stopped 自动拉回。历史批量 137/143 退出确认为宿主/WSL 停机事件（OOMKilled=false），非容器内 OOM。release agent 因 `DUBBO_IP_TO_BIND=172.24.0.4` 钉扎与引擎重启后实际 IP 不符崩溃循环（RestartCount≈740），已 stop；auth/listing/rag release 保持 exited（KI-120）。
+
+第二轮（复刻重建，docker 代理）：根因升级为 **MySQL root 密码轮换 vs dev 容器冻结旧密码**（KI-121）——dev 全体容器（含当时"healthy"的 auth）DB 认证实际全断，网关 `/auth/login` 500 即 auth 断连。处理与结果：
+
+| 容器 | 处置 | 最终状态 |
+| --- | --- | --- |
+| dev agent | 复刻重建（`bk-anent-services:dev` + 原 jar 注入，jar 逐字节一致 3ee81afb…，仅换 MYSQL_PASSWORD） | Up，readiness UP，Nacos public 172.24.0.19:9002+20882 |
+| dev auth | 同上复刻重建 | Up，网关登录 HTTP 200/code 0 |
+| dev listing | 同上（保留原 jar dd89ef…，dev 镜像内 listing jar 与原容器不同未采用） | Up，readiness UP，172.24.0.26:9004 |
+| dev compare | 容器实际无 compare-report-data 卷（compose 声明与实况不符）；根因镜像内 `/app` root:root 755 且 `/app/runtime` 不存在，uid 10001 建目录被拒；`docker exec -u 0` 建目录 chown app（容器可写层，stop/start 保留） | Up，`compare-agent::1.0.0` 注册 public agent-endpoints |
+| dev interview | 两段复刻重建：`NACOS_A2A_AGENT_REGISTRY_ENABLED=false→true` + 换新密码；NACOS_NAMESPACE 保持空值 | Up，`interview-agent::1.0.0` 注册 public agent-endpoints |
+| dev marketing | 旧 jar（09-18 构建）`mcpSyncServer` 抛 `Tool 'publishMarketingContent' already registered`——现源码已不同名、release 镜像已修，属旧制品缺陷（KI-122）；改密码无效，需换制品 | 阻塞；新容器 `-new` 留存（已含新密码+原 jar），marketing-agent 由 release 容器在 BK-AGENT 提供 |
+| business/contract/settlement/media-worker/notification | 同批复刻重建（第三轮收尾中） | 见下"最终清单" |
+| release agent | stop 结束崩溃循环（IP 钉扎 start 层面无解，KI-120） | Exited，agent-service 角色由 dev 容器承担 |
+
+Nacos public 最终（第二轮时点）：服务 20 项全 healthy（agent/auth/listing/interview/compare/gateway/business/contract/settlement/notification/media-worker + 9 Dubbo providers）；agent-endpoints 8 项（interview/contract/settlement/listing/media/compare/trade/notification 各 ::1.0.0），唯一缺席 marketing-agent（在 BK-AGENT 由 release 容器 172.24.0.2:9008 提供）。A2A Card 控制台注册表两命名空间仍 totalCount=0（端点均以 naming 实例呈现）。
+
+第三轮（凭据对齐与版本缺口收尾）：business/contract/settlement/media-worker/notification 五容器按「bk-anent-services:dev + 原容器 jar 注入 + 仅换 MYSQL_PASSWORD」复刻重建，全部 healthy 无 Access denied；dev auth 的 AUTH_TOKEN_SECRET 亦为冻结旧值，同模式对齐后登录恢复 200。public 命名空间以 release marketing 镜像（3c391454）复刻 `bk-anent-dev-marketing-public-a2a`（NACOS_NAMESPACE 置空、A2A 基址指向自身容器名、补 public 版配置所需 ELASTICSEARCH_URIS、entrypoint 显式 -Duser.home=/app/runtime、无别名/无宿主端口），`marketing-agent::1.0.0` 注册 public——**九个 SubAgent 端点在 public 全部就绪**。release auth 钉扎 IP 172.24.0.8 已被 rocketmq-namesrv 占用（start 必失败），改以 release auth 镜像复刻 `bk-anent-release-auth-rpc`（去 DUBBO_IP 钉扎、BK-AGENT）恢复 `RagPrincipalRpcService` provider，memory→auth 验签链闭合。
+
+supervisor 任务链修复链全记录（逐层剥离，每层均有实证）：① 网关登录 500 = dev auth 冻结旧密码（KI-121，复刻对齐后 200）；② 任务 503 = release memory→auth `RagPrincipalRpcService` 断供（release auth 复刻 replica 恢复）；③ 401 = 旧 dev agent jar 的 HttpMemoryStoreClient 无 Bearer/X-Memory-Owner 头（制品版本缺口，改以 release agent 镜像复刻 public supervisor `bk-anent-dev-agent-supervisor-public`：NACOS_NAMESPACE 空、DEEPSEEK key=.env 现值、去除三个 IP 钉扎含 SPRING_CLOUD_NACOS_DISCOVERY_IP）；④ 打招呼 COMPLETED、三意向正确路由（governanceMetadata.calls 为证）但子调用全 OUTCOME_UNKNOWN——真因一为 RocketMQ topic 默认名非法（KI-123，源码五处已修+防回归 3 项测试通过，运行容器以 AGENT_STREAM_ROCKETMQ_TOPIC=bk-agent-session-stream 覆盖后日志层 illegal characters/MQClientException 清零）；真因二为 public 无 `A2aBeaconRpcService` provider（dev auth 旧 jar 无该接口，A2A 调用死在 beacon 签发步从未出站——子容器日志仅注册元数据零任务提交），以 release auth 镜像在 public 复刻 auth 补齐（见下）。行为特性记录：memory 对不存在 session 返回 403 使 `claim` 首请求 500（预建会话后正常，实测 upsert→GET→任务 200）；`executeAuthenticatedCall` 异常走 store.unknown 静默降级（result_json NULL、无日志），排障时需结合 `agent_tool_invocation` 状态与 Nacos provider 清单。Docker 引擎两轮过载（8+ JVM 并发），均按授权重启 Desktop+WSL 恢复。
+
+## 改造前基线实测（任务 1.4 部分达成，2026-10-16 晚）
+
+三代表 fixture 中的两类经正式链路实测（broker01 真实登录 token → dev gateway `lb://` → supervisor → A2A → 子 Agent → memory → SSE），每轮先经 memory REST 预建会话（memory 对不存在 session 返回 403 使 `claim` 首请求 500，故预建是正式链路的必要前置，实测 upsert→GET→任务全通）。SSE 端点在首事件前不回送响应头（curl 8 秒无头实测），故脚本以订阅后预等 2 秒再发请求计时；结果以 POST 时刻为 t0。
+
+| fixture（各 3 轮，全 COMPLETED） | 首可见事件 P50/P95 | 终态事件 P50/P95 | 事件数 | 备注 |
+| --- | --- | --- | --- | --- |
+| supervisor-listing（找浦东两居室） | 4775.7 / 5040.7 ms | 10184.2 / 11189.2 ms | 8–9 | `a2a:listing-agent COMPLETED`，artifact 每轮生成；子 Agent 真实答复"检索服务未授权，不编造列表"（release rag 容器 exited + 子容器冻结 RPC 凭据，业务检索在本混合环境不可用，链路本身完整） |
+| supervisor-interview（带看访谈问题清单） | 5111.8 / 11769.1 ms | 38156.6 / 38577.8 ms | 9 | `a2a:interview-agent COMPLETED`，答复为完整可用的访谈问题清单，artifact 生成 |
+
+事件序列典型形态：agent.started → agent.progress×N →（子工具失败事件）→ artifact.created → tool.completed → supervisor.completed → heartbeat。governanceMetadata.calls 逐轮记录 capabilityId 与结果负载（I/O 计数以事件数与 calls 为实测口径；未单独埋点 DB/RPC 次数）。模型：`gpt-5.6-terra`（public 命名空间 agent-service.yaml 当前生效模板值，经 KE 网关 + .env 现值 key，非模板历史数据）。认证/审计：真实 auth-service 登录 + agent_event_audit 全程落库（supervisor.completed/heartbeat 等 8–9 事件/轮）。
+
+**marketing fixture 环境阻断未测**：A2A 任务到达 marketing 副本、技能激活后约 10 秒内 Docker 引擎整体无响应，2/2 可复现（本会话共 4 次引擎故障，2 次与 marketing 任务强相关；宿主/WSL 资源层，非 OOMKilled，见 KI-124）。按任务规则记为未测，不以其他 fixture 数字外推。**Studio 可读未通**：`GET /agent/studio/v1/works` 经网关持续 503（3/3），疑与 supervisor 启动期约束（marketing MCP 探测失败缓存）相关，因引擎过载无法取日志核实，如实记为未通。
+
+基线结果文件（会话外，不入库）：`D:\Personal\Temp\bk-baseline-result.json`；数字以本表为准。
+
+### 基线窗口期间的回归修复（代码变更，随本批提交）
+
+- **KI-123**：会话流 RocketMQ topic 默认名 `bk.agent.session.stream` 含点号非法——真实链路首次端到端暴露（此前全绿是因为分布式验收测试 mock 了 SessionStreamService）。五处默认值改 `bk-agent-session-stream`（`RocketMqSessionEventBus` 注解+@Value、两份 Nacos yaml、`NotificationWorkflowEventProperties`），新增 `RocketMqSessionEventBusDefaultsTest`（2 项）与 `NotificationWorkflowEventPropertiesTest`（1 项）防回归，均通过。
+- **KI-125**：`SupervisorDistributedAcceptanceTest` fixture Agent 名与生产 agent id 冲突——dev 栈 marketing-agent 运行后其真实 Card 成为 Nacos latest，覆盖测试 fixture Card 使断言失败（此前通过属时序侥幸）。fixture 改随机短名 + mock SkillRegistry 提供 fixture allowlist，修复后该测试在真实 Nacos+MySQL 上通过（12.16s）。
+- 修复后完整回归：`mvn -o -pl agent-service,notification-service test`（真实 Nacos+MySQL env）BUILD SUCCESS，两模块合计 **158 项测试，0 失败/0 错误/1 跳过**（跳过项为 `SupervisorRealModelEvaluationTest`，需真实模型评估端点，保持既有 assumption 门控）。环境事件如实记录：复测期间 Nacos 曾在引擎重启后出现 AI 注册能力降级（501 "version too low"、控制台 500 Whitelabel、agent-endpoints 出现 `____:` 前缀乱码条目），引擎再恢复后 v1 能力正常；两测试失败均由该降级触发，恢复并完成上述测试修正后全绿。测试遗留 mixed- 行已清理归零。
+
 ## 本批相关与全仓回归
 
 使用仓库本地 Maven settings，串行离线执行，不修改 `.m2`、运行配置或服务部署：

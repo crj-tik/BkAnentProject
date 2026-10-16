@@ -119,7 +119,7 @@ notification:
     mode: local # Docker development only; production requires real mode and an implemented real provider.
   workflow-events:
     enabled: ${NOTIFICATION_WORKFLOW_EVENTS_ENABLED:true}
-    topic: ${AGENT_STREAM_ROCKETMQ_TOPIC:bk.agent.session.stream}
+    topic: ${AGENT_STREAM_ROCKETMQ_TOPIC:bk-agent-session-stream}
     consumer-group: ${NOTIFICATION_WORKFLOW_EVENTS_CONSUMER_GROUP:notification-service-workflow-events}
     max-attempts: ${NOTIFICATION_WORKFLOW_EVENTS_MAX_ATTEMPTS:3}
   agent:

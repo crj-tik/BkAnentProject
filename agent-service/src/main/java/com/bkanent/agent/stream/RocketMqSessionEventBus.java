@@ -18,7 +18,7 @@ import java.util.function.Consumer;
 @Component
 @ConditionalOnProperty(name = "agent.distributed.stream.provider", havingValue = "rocketmq")
 @RocketMQMessageListener(
-        topic = "${agent.distributed.stream.rocketmq.topic:bk.agent.session.stream}",
+        topic = "${agent.distributed.stream.rocketmq.topic:bk-agent-session-stream}",
         consumerGroup = "${agent.distributed.stream.rocketmq.consumer-group:agent-service-session-stream}",
         consumeMode = ConsumeMode.CONCURRENTLY,
         messageModel = MessageModel.BROADCASTING
@@ -33,7 +33,7 @@ public class RocketMqSessionEventBus implements SessionEventBus, RocketMQListene
     public RocketMqSessionEventBus(RocketMQTemplate rocketMQTemplate,
                                    SessionSubscriberRegistry subscriberRegistry,
                                    SessionEventAuditService sessionEventAuditService,
-                                   @Value("${agent.distributed.stream.rocketmq.topic:bk.agent.session.stream}") String topic) {
+                                   @Value("${agent.distributed.stream.rocketmq.topic:bk-agent-session-stream}") String topic) {
         this.rocketMQTemplate = rocketMQTemplate;
         this.subscriberRegistry = subscriberRegistry;
         this.sessionEventAuditService = sessionEventAuditService;
