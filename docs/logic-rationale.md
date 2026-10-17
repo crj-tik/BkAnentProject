@@ -562,3 +562,13 @@
 **代码位置**：common-a2a/src/test/java/com/bkanent/a2a/memory/SummarizationHookContractTest.java；真实 ReactAgent BEFORE_MODEL 顺序、25 次制品测试与四制品 hash 见基础验收记录。fixture 的覆盖/提交/revision 只是可控性证明；生产仍须安全结构投影、来源/grant核验、摘要与 covered 同事务、独立 run CAS、未覆盖尾部恢复及硬预算失败关闭。
 
 **关联**：LR-22/23/55、KI-116/117；change 1.3、5.5、6.1–6.5。未修改默认框架版本或原生产窗口，未以反例通过宣称压缩启用。
+
+## LR-57 memory v2 RPC 用封闭操作集与构造期版本拒绝，信封只做身份不做凭据
+
+**结论**：v2 契约为单一接口（group `bkanent-memory`、dubbo version `2.0.0`、CONTRACT_VERSION=2）加九个封闭 operation 常量；每个请求绑定 `MemoryRequestEnvelope(operation, caller, audience, requestId, bodyHash, contractVersion)`，requestId+bodyHash 构成请求 hash 身份用于幂等/重放关联。版本不匹配在构造期即抛 `UNSUPPORTED_VERSION`，operation 与请求类型在构造期互绑——错误请求无法存在，而不是到服务端才被拒绝。九个方法全部显式 `throws MemoryException`，沿官方 fastjson2 按接口 throws 精确注册异常信封。
+
+**根因**：DTO 层（LR-55）只定数据形状；RPC 层必须额外钉住"哪个请求属于哪个操作"和"哪个版本能上 wire"。放开 operation 字符串或推迟版本校验会让服务器拒绝成为唯一防线，错配请求可穿过序列化层。信封不含凭据、不是 bearer token——当前用户认证与签名核验是服务端 3.x 职责，形状检查在客户端构造期即可完成。permit/交付拆成两段（先许可后交付）对应 D2 可靠交付，许可不能兑换读取权，因此是独立响应类型而非一个授权对象。
+
+**代码位置**：common/src/main/java/com/bkanent/common/memory 的 MemoryV2Contract、MemoryRequestEnvelope、MemoryV2RpcService 及 18 个请求/响应 record；测试 MemoryV2RpcContractTest（6 项：信封 wire 轮转/版本拒绝/形状拒绝/九请求 operation 互绑/分页与 hash/sequence 约束）与 MemoryV2RpcExceptionEnvelopeTest（1 项：真实接口注册后全 15 错误码 wire 轮转）。
+
+**关联**：LR-48/55、KI-118（v2 接口 throws 注册即 2.2 承诺的 ctor-SPI 异常联合边界验证）、KI-126；change 2.2（提供方/消费者绑定与版本协商属 2.4，签名与防重放属 3.1，本批未实现服务端）。

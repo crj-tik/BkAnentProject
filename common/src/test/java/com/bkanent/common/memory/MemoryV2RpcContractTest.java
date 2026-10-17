@@ -1,0 +1,155 @@
+package com.bkanent.common.memory;
+
+import com.bkanent.common.serialize.Fastjson2ConstructorSerialization;
+import org.junit.jupiter.api.Test;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.time.Instant;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+/** Offline v2 RPC contract tests only: shape, binding, serialization and version rejection. */
+class MemoryV2RpcContractTest {
+    private static final String HASH = "a".repeat(64);
+    private static final Instant AT = Instant.parse("2026-10-18T00:00:00Z");
+    private static final MemoryContextKey CONTEXT =
+            new MemoryContextKey("owner-1", "marketing", "copy-agent", "conversation-1");
+    private static final MemoryAssociation ASSOCIATION = new MemoryAssociation("matter-1", "run-1", "a2a-1",
+            new MemoryAssociation.DomainSessionRef("marketing", "domain-session-1"));
+    private final Fastjson2ConstructorSerialization serialization = new Fastjson2ConstructorSerialization();
+
+    private MemoryRequestEnvelope envelope(String operation) {
+        return new MemoryRequestEnvelope(operation, "agent-service", "memory-service", "req-1", HASH,
+                MemoryV2Contract.VERSION);
+    }
+
+    @Test void envelopeKeepsRequestHashIdentityAcrossWireSerialization() throws Exception {
+        MemoryRequestEnvelope envelope = envelope(MemoryV2Contract.OPERATION_WORKING_SET);
+        assertThat(envelope.requestIdentity()).isEqualTo("req-1:" + HASH);
+        assertThat(spi(envelope, MemoryRequestEnvelope.class)).isEqualTo(envelope);
+    }
+
+    @Test void unsupportedContractVersionsAreRejectedAtConstruction() {
+        for (int version : new int[]{0, 1, 3}) {
+            assertThatThrownBy(() -> new MemoryRequestEnvelope(MemoryV2Contract.OPERATION_WORKING_SET,
+                    "agent-service", "memory-service", "req-1", HASH, version))
+                    .isInstanceOf(MemoryException.class).hasMessage("UNSUPPORTED_VERSION (VERSION)");
+        }
+    }
+
+    @Test void envelopeRejectsUnknownOperationWrongAudienceAndInvalidHashIdentity() {
+        assertThatThrownBy(() -> envelope("memory.unknown.operation"))
+                .isInstanceOf(MemoryException.class).hasMessage("INVALID_ARGUMENT (IDENTITY)");
+        assertThatThrownBy(() -> new MemoryRequestEnvelope(MemoryV2Contract.OPERATION_WORKING_SET,
+                "agent-service", "rag-service", "req-1", HASH, MemoryV2Contract.VERSION))
+                .isInstanceOf(MemoryException.class).hasMessage("INVALID_ARGUMENT (IDENTITY)");
+        for (String hash : new String[]{null, "not-a-hash", "A".repeat(64), "a".repeat(63)}) {
+            assertThatThrownBy(() -> new MemoryRequestEnvelope(MemoryV2Contract.OPERATION_WORKING_SET,
+                    "agent-service", "memory-service", "req-1", hash, MemoryV2Contract.VERSION))
+                    .isInstanceOf(MemoryException.class);
+        }
+        assertThatThrownBy(() -> new MemoryRequestEnvelope(MemoryV2Contract.OPERATION_WORKING_SET,
+                "bad caller", "memory-service", "req-1", HASH, MemoryV2Contract.VERSION))
+                .isInstanceOf(MemoryException.class);
+        assertThatThrownBy(() -> new MemoryRequestEnvelope(MemoryV2Contract.OPERATION_WORKING_SET,
+                "agent-service", "memory-service", "bad request", HASH, MemoryV2Contract.VERSION))
+                .isInstanceOf(MemoryException.class);
+    }
+
+    @Test void everyRequestBindsItsDeclaredOperationAndRoundTrips() throws Exception {
+        MemorySummary summary = summary();
+        MemoryMessage message = new MemoryMessage("message-1", CONTEXT, 1, ASSOCIATION,
+                MemoryMessage.Role.USER, "hi", List.of(), List.of(), source("message-1", 1));
+        MemoryMatter matter = new MemoryMatter("matter-1", CONTEXT, version(1), "write copy",
+                MemoryMatter.State.ACTIVE, null, List.of(new MemorySourceDependency(source("confirmation", 1), null)));
+        List<Object> requests = List.of(
+                new MemoryWorkingSetRequest(envelope(MemoryV2Contract.OPERATION_WORKING_SET), CONTEXT),
+                new MemoryReceivePermitRequest(envelope(MemoryV2Contract.OPERATION_RECEIVE_PERMIT), CONTEXT,
+                        List.of(new MemoryReceivePermitRequest.EventSubmission("event-1", HASH, "conversation archive"))),
+                new MemoryDeliveryRequest(envelope(MemoryV2Contract.OPERATION_DELIVER_MESSAGES), CONTEXT,
+                        ASSOCIATION, "permit-1", List.of(message)),
+                new MemorySummaryRequest(envelope(MemoryV2Contract.OPERATION_SUBMIT_SUMMARY), summary),
+                new MemoryMatterQueryRequest(envelope(MemoryV2Contract.OPERATION_QUERY_MATTERS), CONTEXT, null, 50),
+                new MemoryEntityQueryRequest(envelope(MemoryV2Contract.OPERATION_QUERY_ENTITIES), CONTEXT, "cursor-1", 500),
+                new MemoryPreferenceQueryRequest(envelope(MemoryV2Contract.OPERATION_SEARCH_PREFERENCES), CONTEXT,
+                        "subject-1", "copy_length", null, 20),
+                new MemoryExperienceQueryRequest(envelope(MemoryV2Contract.OPERATION_SEARCH_EXPERIENCES), CONTEXT,
+                        "copy-draft", null, 20),
+                new MemoryGrantRequest(envelope(MemoryV2Contract.OPERATION_GET_GRANT),
+                        new MemoryExportRef("export-1", CONTEXT, version(1))));
+        for (Object request : requests) {
+            assertThat(spi(request, request.getClass())).isEqualTo(request);
+        }
+        assertThatThrownBy(() -> new MemoryWorkingSetRequest(
+                envelope(MemoryV2Contract.OPERATION_DELIVER_MESSAGES), CONTEXT))
+                .isInstanceOf(MemoryException.class).hasMessage("INVALID_ARGUMENT (IDENTITY)");
+        assertThatThrownBy(() -> new MemorySummaryRequest(null, summary))
+                .isInstanceOf(MemoryException.class);
+    }
+
+    @Test void responsesRoundTripAndPagesNeverClaimMoreWithoutCursor() throws Exception {
+        MemoryConversationVersion conversation = new MemoryConversationVersion(5, 3, "policy-v2");
+        List<Object> responses = List.of(
+                new MemoryWorkingSetResponse(CONTEXT, conversation, List.of(), List.of(), List.of()),
+                new MemoryReceivePermitResponse("permit-1",
+                        List.of(new MemoryReceivePermitResponse.EventAcceptance("event-1", true, null))),
+                new MemoryDeliveryResponse("permit-1", conversation,
+                        List.of(new MemoryDeliveryResponse.DeliveryResult(1, true, null))),
+                new MemorySummaryResponse("summary-1", true, null, conversation),
+                new MemoryMatterQueryResponse(List.of(), null, false),
+                new MemoryEntityQueryResponse(List.of(), "next-1", true),
+                new MemoryPreferenceQueryResponse(List.of(), "next-1", true),
+                new MemoryExperienceQueryResponse(List.of(), null, false),
+                new MemoryGrantResponse(grant(), List.of()));
+        for (Object response : responses) {
+            assertThat(spi(response, response.getClass())).isEqualTo(response);
+        }
+        assertThatThrownBy(() -> new MemoryMatterQueryResponse(List.of(), null, true))
+                .isInstanceOf(MemoryException.class).hasMessage("INVALID_ARGUMENT (CURSOR)");
+    }
+
+    @Test void permitEventsAndDeliveryResultsPinExactHashAndSequence() {
+        assertThatThrownBy(() -> new MemoryReceivePermitRequest.EventSubmission("event-1", "not-a-hash", "archive"))
+                .isInstanceOf(MemoryException.class).hasMessage("INVALID_ARGUMENT (HASH)");
+        assertThatThrownBy(() -> new MemoryDeliveryResponse.DeliveryResult(0, true, null))
+                .isInstanceOf(MemoryException.class);
+        assertThatThrownBy(() -> new MemoryReceivePermitRequest(envelope(MemoryV2Contract.OPERATION_RECEIVE_PERMIT),
+                CONTEXT, List.of()))
+                .isInstanceOf(MemoryException.class);
+        for (int limit : new int[]{0, 501}) {
+            assertThatThrownBy(() -> new MemoryMatterQueryRequest(
+                    envelope(MemoryV2Contract.OPERATION_QUERY_MATTERS), CONTEXT, null, limit))
+                    .isInstanceOf(MemoryException.class).hasMessage("INVALID_ARGUMENT (PAGE)");
+        }
+    }
+
+    private Object spi(Object value, Class<?> type) throws Exception {
+        var bytes = new ByteArrayOutputStream();
+        var output = serialization.serialize(null, bytes);
+        output.writeObject(value);
+        output.flushBuffer();
+        return serialization.deserialize(null, new ByteArrayInputStream(bytes.toByteArray())).readObject(type);
+    }
+
+    private MemoryRevision version(long revision) { return new MemoryRevision(revision, "a".repeat(64), "memory-v2"); }
+    private MemorySourceRef source(String id, long sequence) {
+        return new MemorySourceRef(MemorySourceRef.Kind.MESSAGE, CONTEXT, id, "event-" + id, sequence, version(1));
+    }
+    private MemorySummary summary() {
+        MemorySourceDependency dependency = new MemorySourceDependency(source("input", 1), new MemoryGrantRef("grant-1", 3));
+        return new MemorySummary("summary-1", CONTEXT, ASSOCIATION, version(1), 5, new MemoryRunVersion("run-1", 9),
+                new MemoryCoveredRange(1, 40), List.of(new MemoryCoveredRange(1, 40)),
+                List.of(new MemorySummary.Item(MemorySummary.ItemKind.NEGATION, "not a permanent default", List.of(dependency))),
+                List.of(), List.of(dependency));
+    }
+    private MemoryShareGrant grant() {
+        return new MemoryShareGrant(new MemoryGrantRef("grant-1", 3), CONTEXT,
+                new MemoryScope(MemoryScope.Kind.TASK_SHARED, null, null, "group-1"), "matter-1", "reuse",
+                List.of(new MemoryShareGrant.Participant("supervisor", "supervisor-agent")),
+                List.of(MemoryShareGrant.Projection.DURABLE_EXPORT), List.of(source("result", 40)),
+                AT, AT.plusSeconds(3600), MemoryShareGrant.State.ACTIVE);
+    }
+}

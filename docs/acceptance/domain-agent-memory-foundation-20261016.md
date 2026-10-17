@@ -221,6 +221,12 @@ mvn -o -gs .mvn-settings.xml -s .mvn-settings.xml test
 
 构建日志仍有既有日志管理器初始化、commons-logging/类共享等提示；未据此更改依赖或系统配置。测试通过不替代这些跳过项、当前环境注册集合、授权链或四阶段性能基线。OpenSpec apply 进度为 3/66（1.2、1.3、2.1）；11.6 包含后续全部实现验证，本批回归通过不提前勾选该整项。
 
+## 任务 2.2：memory v2 原生 Dubbo 契约（2026-10-18 完成）
+
+新增 `MemoryV2RpcService` 单接口九操作（工作集读取、接收许可请求、消息交付、摘要提交、事项/实体查询、偏好/经验搜索、共享 grant 获取），group `bkanent-memory`、dubbo version `2.0.0`、CONTRACT_VERSION=2 固定于 `MemoryV2Contract`；每请求绑定 `MemoryRequestEnvelope`（operation/caller/audience/requestId/bodyHash/contractVersion），requestId+bodyHash 为请求 hash 身份。版本不匹配与 operation 错绑在**构造期**拒绝（UNSUPPORTED_VERSION / INVALID_ARGUMENT），错配请求无法到达序列化层。九方法全部显式 `throws MemoryException`，官方 fastjson2 按接口 throws 精确注册异常族——真实接口注册后全 15 错误码 writeThrowable/readThrowable 轮转通过（MemoryV2RpcExceptionEnvelopeTest 1 项）。18 个请求/响应 record 全量过 ctor-SPI wire 轮转与构造约束测试（MemoryV2RpcContractTest 6 项：版本/operation/信封形状拒绝、分页 cursor、事件 hash、交付 sequence、limit 边界）。设计根因见 LR-57。
+
+本批范围边界：接口与数据形状即 2.2 全部交付；服务端实现、显式 consumer/provider 绑定（2.4/KI-100）、签名与防重放（3.1）未动——运行中的 memory-service 不感知 v2，新契约尚未接入任何真实消费者，不宣称 RPC 链路可用。common 模块回归 82 项（75 既有 + 7 新增）全绿，0 失败/0 跳过。
+
 ## 未完成范围
 
 真实阶段延迟/I/O 基线、memory v2 RPC 与授权、可靠交付/数据库迁移、运行工作集/压缩持久提交、偏好/经验加工、新 RAG 投影和逐域启用均不得由本文件的源码或离线证据替代。未取得真实证据的任务继续保持未勾选；不归档、不宣称项目安全或生产就绪。
