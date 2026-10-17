@@ -182,6 +182,12 @@ supervisor 任务链修复链全记录（逐层剥离，每层均有实证）：
 
 **marketing fixture 环境阻断未测**：A2A 任务到达 marketing 副本、技能激活后约 10 秒内 Docker 引擎整体无响应，2/2 可复现（本会话共 4 次引擎故障，2 次与 marketing 任务强相关；宿主/WSL 资源层，非 OOMKilled，见 KI-124）。按任务规则记为未测，不以其他 fixture 数字外推。**Studio 可读未通**：`GET /agent/studio/v1/works` 经网关持续 503（3/3），疑与 supervisor 启动期约束（marketing MCP 探测失败缓存）相关，因引擎过载无法取日志核实，如实记为未通。
 
+### 2026-10-18 追加：环境清理与 Studio 503 深挖
+
+用户授权清理后停止 11 个本项目失效容器（release auth/agent/listing/rag 崩溃循环 + dev 旧制品/旧密码容器，均只停不删），无关项目容器本就全部非运行态零负载。清理后引擎仍两度过载（累计第 5、6 次，KI-124）——26 容器稳态即在本机资源边缘，marketing 基线第三次重试未及执行即被引擎阻断，维持未测。
+
+Studio 503 深挖结论（绕网关直打应用容器实证）：503 为应用自身返回 `STUDIO_DEPENDENCY_UNAVAILABLE`（通用 Exception 兜底），直打五连击呈"首发 ~991ms（超时特征）→ 61–331ms 快速失败"形态；auth 侧 ProfilerServerFilter 实测 `resolvePrincipal` 业务实现 1.16–2.07s（98% 在 biz impl），超消费端 1000ms Dubbo 超时；快速失败机制因处理器零日志无法取证（KI-126）。已修 `StudioExceptionHandler` 补 WARN 异常日志并加防回归（1 项测试通过）；运行中 release 制品不含修复，Studio 维持未通，待新制品后凭日志续查。
+
 基线结果文件（会话外，不入库）：`D:\Personal\Temp\bk-baseline-result.json`；数字以本表为准。
 
 ### 基线窗口期间的回归修复（代码变更，随本批提交）

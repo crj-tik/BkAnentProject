@@ -10,6 +10,12 @@
 
 ## 待修复（OPEN）
 
+## KI-126 [已修源码·P2] Studio 通用 503 异常处理器零日志，降级根因在部署制品中不可诊断
+
+**确认日期**：2026-10-18；**源码修复**：2026-10-18（本提交）。基线复测期 `GET /agent/studio/v1/works` 持续 503（绕网关直打应用实证为应用自身返回），响应体 `STUDIO_DEPENDENCY_UNAVAILABLE` 来自通用 Exception 兜底，但处理器不记日志、应用日志零痕迹，无法定位真实异常。本批定位到两层：① auth 侧 `AuthPermissionRpcService.resolvePrincipal` 业务实现实测 1.16–2.07s（ProfilerServerFilter 98% 在 biz impl），超过消费端 1000ms Dubbo 超时——首调用即超时；② 超时后后续请求 61–331ms 快速失败，机制不明（消费端无 RpcException 日志，疑 Dubbo 集群对超时 invoker 的快速失败行为），因零日志无法进一步取证。慢根因候选为 MySQL 冷缓存/负载（同库 REST 登录路径正常，未定案）。运行中 supervisor 为 release 制品（无本修复），Studio 在当前环境保持 503、基线记为未通。
+
+**处置**：`StudioExceptionHandler` 通用兜底补 WARN 级异常日志（含触发异常类名与栈），新增 `StudioExceptionHandlerTest` 以 ListAppender 断言日志与响应码防回归（1 项通过）。遗留：resolvePrincipal 慢根因与快速失败机制待新制品部署后凭日志定位；若为常态负载特征，需评估该接口 Dubbo 超时/缓存策略，不在本条内擅改。关联 KI-124（引擎过载导致本批未能完成运行面复测）。
+
 ## KI-125 [已修测试·P3] 分布式验收测试 fixture Agent 名与生产 Agent 名冲突，Nacos latest 卡覆盖断言
 
 **确认日期**：2026-10-16；**修复**：2026-10-16（本提交）。`SupervisorDistributedAcceptanceTest` 以 `listing-agent`/`marketing-agent` 真实 agent id 在 public 命名空间发布 fixture Card（version=1、fixture-hash）。Nacos 的 A2A registry 按 agent 名保留 latest 版本：dev 栈恢复 marketing-agent 后，运行容器发布的真实 Card（真实 contentHash）成为 latest，测试的 `discovery.fetchByAgentName` 取回真实 Card 而非 fixture，`fixture-hash` 断言失败。该测试在 18:36 的"通过"属首次发布时序侥幸（当时 marketing 副本尚未发布 Card）。修复：fixture 改为独立随机名（`fx-listing-…`/`fx-marketing-…`，8 位随机后缀兼顾 Nacos agentName≤64 限制——首版用完整 run UUID 超长被 400 拒绝）；生产技能文件 allowlist 认死真实 agent id，测试改为 mock SkillRegistry 返回 fixture allowlist 的等价技能，不改生产技能文件。附带发现：测试遗留的 `listing-agent::1` 空版本条目（首次运行的 endpoint 残余，实例已摘除）不影响断言。

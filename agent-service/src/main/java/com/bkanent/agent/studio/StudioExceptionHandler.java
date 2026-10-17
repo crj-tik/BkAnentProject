@@ -10,6 +10,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice(assignableTypes = StudioController.class)
 public class StudioExceptionHandler {
+    // Without this log the degraded-request trigger is invisible in deployed jars (KI-126).
+    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(StudioExceptionHandler.class);
+
     @ExceptionHandler(StudioException.class)
     public ResponseEntity<ApiResponse<Void>> studio(StudioException exception) {
         return ResponseEntity.status(exception.status()).body(ApiResponse.fail(exception.code(), exception.getMessage()));
@@ -38,6 +41,7 @@ public class StudioExceptionHandler {
     }
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> unavailable(Exception exception) {
+        LOGGER.warn("studio request degraded", exception);
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(ApiResponse.fail("STUDIO_DEPENDENCY_UNAVAILABLE", "本次操作暂未取得可靠结果，请查询原请求并核对依赖状态"));
     }
 }
