@@ -227,6 +227,14 @@ mvn -o -gs .mvn-settings.xml -s .mvn-settings.xml test
 
 本批范围边界：接口与数据形状即 2.2 全部交付；服务端实现、显式 consumer/provider 绑定（2.4/KI-100）、签名与防重放（3.1）未动——运行中的 memory-service 不感知 v2，新契约尚未接入任何真实消费者，不宣称 RPC 链路可用。common 模块回归 82 项（75 既有 + 7 新增）全绿，0 失败/0 跳过。
 
+## 任务 2.3/2.4：薄适配层决策与受管绑定（2026-10-18 完成）
+
+**2.3（不建新模块）**：`mvn dependency:tree` 实证 common 依赖树零 Spring AI / Alibaba graph / agent-framework 制品（仅 dubbo 3.2.15 供 RPC 契约）；memory 包 36+21 个文件零 AI 框架 import；common-a2a 无任何 `com.bkanent.agent`/`com.bkanent.common.memory` 反向 import。按任务"无需求时沿既有共享层组织"判定：**common-memory 不独立建模块**，v2 契约随 common 共享层分发，避免无消费者的 reactor 模块。
+
+**2.4（受管绑定 + KI-100 防回归）**：`MemoryV2ConsumerConfiguration`（ReferenceConfig 构造期钉死 protocol="dubbo"、group `bkanent-memory`、version `2.0.0`、check=false、retries=0、timeout=5000）与 `MemoryV2ProviderBinder`（ServiceConfig 同组版本 + protocolIds="dubbo" + 部署侧 ProviderConfig 注入）。注册中心/地址/凭据只来自部署配置；**任何 `memory.v2.dubbo.url`/`memory.v2.dubbo.host` 配置直接抛 IllegalStateException 拒绝**——延续 KI-100 修复的 consumer.protocol 钉扎模式，杜绝同名 HTTP 实例误选与请求级目标选择。防回归 `MemoryV2ConsumerConfigurationTest` 2 项：绑定钉扎断言 + URL/host 拒绝。Dubbo setter 归属经 javap 逐一核对（ReferenceConfig.setProtocol(String) 可用；ServiceConfig 侧 setProtocol 重载为 ProtocolConfig 故用 protocolIds）。
+
+本批边界：绑定类为受管装配件，**未接入任何运行服务**（memory-service 无 v2 实现、agent-service 无 v2 消费者引用），不宣称链路可用；v1 兼容与差异发布属 2.5。common 回归 84 项全绿（82 + 2）。
+
 ## 未完成范围
 
 真实阶段延迟/I/O 基线、memory v2 RPC 与授权、可靠交付/数据库迁移、运行工作集/压缩持久提交、偏好/经验加工、新 RAG 投影和逐域启用均不得由本文件的源码或离线证据替代。未取得真实证据的任务继续保持未勾选；不归档、不宣称项目安全或生产就绪。
