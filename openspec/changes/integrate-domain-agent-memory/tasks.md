@@ -11,7 +11,7 @@
 - [x] 2.2 定义 memory v2 原生 Dubbo RPC，覆盖工作集读取、消息接收许可/交付、摘要提交、事项/实体查询、偏好/经验搜索详情及共享引用；固定 interface/group/version/operation 与请求hash身份，加入序列化及版本不兼容拒绝测试。
 - [x] 2.3 按实际依赖面落实 common-memory 薄适配层；需要独立模块时配置 Java17 和现有框架版本、更新 reactor 依赖，无需求时沿既有共享层组织；验证 common DTO 不依赖 AI 框架、common-a2a 不反向依赖 Agent 业务实现。
 - [x] 2.4 显式绑定原生 dubbo consumer/provider，补 KI-100 防回归测试，受管注册中心/服务映射只从部署配置获取；新请求不能选 URL、host、物理集合，不增加内网 HTTP 客户端或借 LR-34 放宽新 HTTP 地址禁令。
-- [ ] 2.5 保留受鉴权 v1 REST/RPC 真实消费者兼容，发布 v1/v2 能力与失败差异；验证旧 memory_json/summary、单值偏好和约束接口不会被误声明为完整新记忆链，也不静默双写覆盖 v2 历程。
+- [x] 2.5 保留受鉴权 v1 REST/RPC 真实消费者兼容，发布 v1/v2 能力与失败差异；验证旧 memory_json/summary、单值偏好和约束接口不会被误声明为完整新记忆链，也不静默双写覆盖 v2 历程。
 
 ## 3. 身份、授权与派生内容撤回
 

@@ -235,6 +235,10 @@ mvn -o -gs .mvn-settings.xml -s .mvn-settings.xml test
 
 本批边界：绑定类为受管装配件，**未接入任何运行服务**（memory-service 无 v2 实现、agent-service 无 v2 消费者引用），不宣称链路可用；v1 兼容与差异发布属 2.5。common 回归 84 项全绿（82 + 2）。
 
+## 任务 2.5：v1 兼容边界与 v1/v2 能力差异发布（2026-10-18 完成，第 2 组收口）
+
+源码核实 v1 真实消费者面：agent-service 六个活跃调用点（会话归属 claim/assertOwned、工件存储 `@Primary`、交接、工作流历史、约束引导）+ RAG 经 `MemoryRagRpcService.search` 的私有检索；用户偏好 REST 无业务调用点（接口方法存在、无 caller，已被 RAG 偏好投影链路替代）。交付 `docs/memory-v1-v2-compatibility.md`：逐通道消费者表、v1 五项"不提供能力"清单（无完整历程/四重身份/可靠交付/压缩契约/共享授权——"接入 v1 ≠ 已有域隔离记忆"）、防互污染四规则、失败差异发布表。防回归 `MemoryV1V2CompatibilityTest` 3 项：v2 operation 与 v1 REST 路径不相交、v1 形状无 v2 语义字段混入、v2 DTO 不嵌 v1 类型（结构上杜绝静默双写）。v1 活跃通道形状/鉴权/owner-only 语义承诺不变（LR-40/43）。common 回归 87 项全绿。第 2 组（薄适配与受管 RPC 契约）五项任务全部完成。
+
 ## 未完成范围
 
 真实阶段延迟/I/O 基线、memory v2 RPC 与授权、可靠交付/数据库迁移、运行工作集/压缩持久提交、偏好/经验加工、新 RAG 投影和逐域启用均不得由本文件的源码或离线证据替代。未取得真实证据的任务继续保持未勾选；不归档、不宣称项目安全或生产就绪。
