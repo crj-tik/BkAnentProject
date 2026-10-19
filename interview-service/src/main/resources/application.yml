@@ -21,6 +21,13 @@ spring:
         namespace: ${bk.nacos.namespace}
         file-extension: yaml
 
+dubbo:
+  registry:
+    address: ${DUBBO_REGISTRY_ADDRESS:N/A}
+  consumer:
+    protocol: dubbo
+    check: false
+
 a2a:
   auth:
     key-id: ${INTERVIEW_A2A_KEY_ID:interview-a2a-current}

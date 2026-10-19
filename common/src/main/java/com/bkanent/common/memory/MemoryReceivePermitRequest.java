@@ -5,7 +5,7 @@ import java.util.List;
 
 /** Server-issuable receive permission request for exact events, per D2 reliable delivery. */
 public record MemoryReceivePermitRequest(MemoryRequestEnvelope envelope, MemoryContextKey contextKey,
-                                          List<EventSubmission> events) implements Serializable {
+                                          List<EventSubmission> events) implements Serializable, MemoryV2Request {
     private static final long serialVersionUID = 1L;
 
     /** One exact event: identity, content hash and purpose bound before acceptance. */

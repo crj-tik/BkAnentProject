@@ -1,4 +1,9 @@
 memory:
+  v2:
+    current-user-permission: ${MEMORY_V2_USER_PERMISSION:agent.chat.use}
+    replay-cleanup-ms: ${MEMORY_V2_REPLAY_CLEANUP_MS:60000}
+    # Empty by default. Populate from deployment-managed secrets and exact domain/agent mappings.
+    trusted-callers: {}
   rag:
     key-id: ${MEMORY_RAG_RPC_KEY_ID:memory-current}
     signing-secret: ${MEMORY_RAG_RPC_SECRET:}

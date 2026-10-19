@@ -4,7 +4,7 @@ import java.io.Serializable;
 
 /** Paged entity-anchor query inside one context. */
 public record MemoryEntityQueryRequest(MemoryRequestEnvelope envelope, MemoryContextKey contextKey,
-                                        String cursor, int limit) implements Serializable {
+                                        String cursor, int limit) implements Serializable, MemoryV2Request {
     private static final long serialVersionUID = 1L;
 
     public MemoryEntityQueryRequest {

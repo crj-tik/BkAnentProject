@@ -242,3 +242,11 @@ mvn -o -gs .mvn-settings.xml -s .mvn-settings.xml test
 ## 未完成范围
 
 真实阶段延迟/I/O 基线、memory v2 RPC 与授权、可靠交付/数据库迁移、运行工作集/压缩持久提交、偏好/经验加工、新 RAG 投影和逐域启用均不得由本文件的源码或离线证据替代。未取得真实证据的任务继续保持未勾选；不归档、不宣称项目安全或生产就绪。
+
+## 2026-10-19 追加：Memory v2 身份/防重放基础与最小运行观测
+
+本次继续使用唯一开发栈 `bk-anent-dev`，未创建测试副本容器。登录认证通过并确认合成 fixture owner 为有效用户；没有在文档中保存 token、任务正文或认证材料。Supervisor 通用 async SSE 请求产生 `supervisor.async.accepted`、`supervisor.async.status`、`supervisor.completed`、`supervisor.async.completed`，DB 行为 `COMPLETED`。同任务状态 GET 两次 500（KI-128），所以本次不算状态读取通过。
+
+marketing 与 interview 各提交 1 个受管合成请求，SSE 首个可见事件分别为 239ms / 148ms，请求总时间分别为 9.230s / 6.889s；二者都以 `supervisor.waiting_user_approval` 结束，pending capability 分别为 `a2a:marketing-agent` 与 `a2a:interview-agent`。这些数值只代表到审批边界的一次观察，不是目标 Agent 首事件、完整成功延迟或 P50/P95。未批准也未执行目标 A2A 调用，因此没有业务写入或域 Agent 完整成果可记录。
+
+模型实际身份、输入/输出 token、阶段 RPC/DB I/O 计数、负载、P50/P95 和 Studio 可读结果仍未测。Studio GET 有 `syncLatest` 写入副作用，不能用于纯读取基线。本次安全代码增加 Memory v2 canonical body hash、专用 HMAC proof、精确 caller→domain→agent allowlist、Auth 资格复核和带唯一键的持久 nonce 表；focused tests 15 项 common + 8 项 memory 均通过。provider/client 未接入，未配置 caller，故这仅是安全基础实现，不是运行链路验收。任务 1.4 与 3.1 均保持未勾选。

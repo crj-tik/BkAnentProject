@@ -16,6 +16,20 @@
 
 **处置**：`StudioExceptionHandler` 通用兜底补 WARN 级异常日志（含触发异常类名与栈），新增 `StudioExceptionHandlerTest` 以 ListAppender 断言日志与响应码防回归（1 项通过）。遗留：resolvePrincipal 慢根因与快速失败机制待新制品部署后凭日志定位；若为常态负载特征，需评估该接口 Dubbo 超时/缓存策略，不在本条内擅改。关联 KI-124（引擎过载导致本批未能完成运行面复测）。
 
+## KI-127 [FIXED·P2] Interview A2A beacon consumer 缺少显式 Dubbo 注册配置
+
+**确认日期**：2026-10-19。按当前 HEAD 构建并启动唯一 `bk-anent-dev-interview-service-1`，A2A 注册开启后 Spring 启动失败：`No such any registry to reference com.bkanent.common.rpc.A2aBeaconRpcService`。`interview-service` 的 Dubbo consumer 由 `DUBBO_REGISTRY_ADDRESS` 配置，但 Compose 原服务环境未提供该值；`memory-service` 与 RAG 已显式绑定同一 Nacos registry。旧 Interview 镜像未能暴露当前源码中的 beacon RPC consumer。
+
+**根因**：Interview `application.yml` 未将 registry 环境变量绑定到 Dubbo consumer；仅增加 Compose 环境变量不足以生成 Dubbo registry。
+
+**修复**：2026-10-19。Compose 为 Interview 显式提供受管 Nacos namespace/group 地址；`application.yml` 增加 `dubbo.registry.address` 映射并固定 consumer protocol 为 `dubbo`，沿用 KI-100 的纯 RPC 选择边界。以单次运行环境覆盖启用 A2A 注册后，当前制品 readiness UP，Nacos 中精确发现一个 `A2aBeaconRpcService` provider；`.env` 默认开关保持 `false`。修复代码见本次提交。因营销与访谈验收请求停在用户审批闸，正式 Supervisor SSE 目标调用仍未发生，不作为已通过的目标 Agent 基线。
+
+## KI-128 [OPEN·P2] 已完成 Supervisor async task 的状态查询返回 500
+
+**确认日期**：2026-10-19。开发环境通过正式 `/agent/supervisor/stream` SSE 入口提交的合成 async task 已有 `COMPLETED` 数据行和 `supervisor.completed` / `supervisor.async.completed` 终态事件；随后两次调用 `GET /agent/supervisor/tasks/async/status` 均返回 500。只核验状态/事件元数据，未读取结果正文；对应数据库行的结果字段非空。排查窗口内未找到能确认根因的匹配应用日志。
+
+**处置**：保持 OPEN，待专项复现 controller→`SupervisorAsyncTaskService.queryStatus` 及 JSON 反序列化分支，添加成功/畸形持久结果回归后修复。完成事件不能替代状态查询成功，当前状态查询基线未通过；Studio 只读工作列表也未测，因为其现有 GET 会同步副作用。
+
 ## KI-125 [已修测试·P3] 分布式验收测试 fixture Agent 名与生产 Agent 名冲突，Nacos latest 卡覆盖断言
 
 **确认日期**：2026-10-16；**修复**：2026-10-16（本提交）。`SupervisorDistributedAcceptanceTest` 以 `listing-agent`/`marketing-agent` 真实 agent id 在 public 命名空间发布 fixture Card（version=1、fixture-hash）。Nacos 的 A2A registry 按 agent 名保留 latest 版本：dev 栈恢复 marketing-agent 后，运行容器发布的真实 Card（真实 contentHash）成为 latest，测试的 `discovery.fetchByAgentName` 取回真实 Card 而非 fixture，`fixture-hash` 断言失败。该测试在 18:36 的"通过"属首次发布时序侥幸（当时 marketing 副本尚未发布 Card）。修复：fixture 改为独立随机名（`fx-listing-…`/`fx-marketing-…`，8 位随机后缀兼顾 Nacos agentName≤64 限制——首版用完整 run UUID 超长被 400 拒绝）；生产技能文件 allowlist 认死真实 agent id，测试改为 mock SkillRegistry 返回 fixture allowlist 的等价技能，不改生产技能文件。附带发现：测试遗留的 `listing-agent::1` 空版本条目（首次运行的 endpoint 残余，实例已摘除）不影响断言。

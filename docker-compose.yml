@@ -730,6 +730,7 @@ services:
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: interview-service-1.0.0-SNAPSHOT.jar
+      DUBBO_REGISTRY_ADDRESS: "nacos://nacos:8848?namespace=${NACOS_NAMESPACE:-BK-AGENT}&group=DEFAULT_GROUP"
       A2A_PUBLIC_BASE_URL: http://interview-service:9014
       INTERVIEW_A2A_KEY_ID: ${INTERVIEW_A2A_KEY_ID:-interview-a2a-current}
       INTERVIEW_A2A_SIGNING_SECRET: ${INTERVIEW_A2A_SIGNING_SECRET:-}

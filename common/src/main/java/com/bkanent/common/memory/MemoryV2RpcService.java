@@ -11,21 +11,21 @@ package com.bkanent.common.memory;
 public interface MemoryV2RpcService {
     int CONTRACT_VERSION = MemoryV2Contract.VERSION;
 
-    MemoryWorkingSetResponse readWorkingSet(MemoryWorkingSetRequest request) throws MemoryException;
+    MemoryWorkingSetResponse readWorkingSet(MemoryWorkingSetRequest request, MemoryRequestProof proof) throws MemoryException;
 
-    MemoryReceivePermitResponse requestReceivePermit(MemoryReceivePermitRequest request) throws MemoryException;
+    MemoryReceivePermitResponse requestReceivePermit(MemoryReceivePermitRequest request, MemoryRequestProof proof) throws MemoryException;
 
-    MemoryDeliveryResponse deliverMessages(MemoryDeliveryRequest request) throws MemoryException;
+    MemoryDeliveryResponse deliverMessages(MemoryDeliveryRequest request, MemoryRequestProof proof) throws MemoryException;
 
-    MemorySummaryResponse submitSummary(MemorySummaryRequest request) throws MemoryException;
+    MemorySummaryResponse submitSummary(MemorySummaryRequest request, MemoryRequestProof proof) throws MemoryException;
 
-    MemoryMatterQueryResponse queryMatters(MemoryMatterQueryRequest request) throws MemoryException;
+    MemoryMatterQueryResponse queryMatters(MemoryMatterQueryRequest request, MemoryRequestProof proof) throws MemoryException;
 
-    MemoryEntityQueryResponse queryEntities(MemoryEntityQueryRequest request) throws MemoryException;
+    MemoryEntityQueryResponse queryEntities(MemoryEntityQueryRequest request, MemoryRequestProof proof) throws MemoryException;
 
-    MemoryPreferenceQueryResponse searchPreferences(MemoryPreferenceQueryRequest request) throws MemoryException;
+    MemoryPreferenceQueryResponse searchPreferences(MemoryPreferenceQueryRequest request, MemoryRequestProof proof) throws MemoryException;
 
-    MemoryExperienceQueryResponse searchExperiences(MemoryExperienceQueryRequest request) throws MemoryException;
+    MemoryExperienceQueryResponse searchExperiences(MemoryExperienceQueryRequest request, MemoryRequestProof proof) throws MemoryException;
 
-    MemoryGrantResponse getGrant(MemoryGrantRequest request) throws MemoryException;
+    MemoryGrantResponse getGrant(MemoryGrantRequest request, MemoryRequestProof proof) throws MemoryException;
 }

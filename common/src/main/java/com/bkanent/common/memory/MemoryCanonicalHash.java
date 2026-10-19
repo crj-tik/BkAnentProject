@@ -1,0 +1,100 @@
+package com.bkanent.common.memory;
+
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.lang.reflect.RecordComponent;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Map;
+
+/** Canonical, typed, length-framed hashing for v2 payloads, independent of RPC serializers. */
+public final class MemoryCanonicalHash {
+    private static final String DOMAIN = "memory.request-body.v2";
+
+    private MemoryCanonicalHash() { }
+
+    /** Hashes only the payload record fields; operation/request identity stay in its signed envelope. */
+    public static String requestBodyHash(MemoryV2Request request) {
+        MemoryContract.required(request, MemoryException.Field.HASH);
+        MemoryContract.required(request.envelope(), MemoryException.Field.IDENTITY);
+        try {
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream(1024);
+            DataOutputStream output = new DataOutputStream(bytes);
+            writeString(output, DOMAIN);
+            write(output, request, true);
+            output.flush();
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes.toByteArray()));
+        } catch (MemoryException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new MemoryException(MemoryErrorCode.INVALID_ARGUMENT, MemoryException.Field.HASH);
+        }
+    }
+
+    private static void write(DataOutputStream output, Object value, boolean rootRequest) throws Exception {
+        if (value == null) { output.writeByte(0); return; }
+        if (value instanceof String text) { output.writeByte(1); writeString(output, text); return; }
+        if (value instanceof Boolean bool) { output.writeByte(2); output.writeBoolean(bool); return; }
+        if (value instanceof Integer number) { output.writeByte(3); output.writeInt(number); return; }
+        if (value instanceof Long number) { output.writeByte(4); output.writeLong(number); return; }
+        if (value instanceof Short number) { output.writeByte(5); output.writeShort(number); return; }
+        if (value instanceof Byte number) { output.writeByte(6); output.writeByte(number); return; }
+        if (value instanceof BigDecimal number) { output.writeByte(7); writeString(output, number.toPlainString()); return; }
+        if (value instanceof Instant instant) {
+            output.writeByte(8); output.writeLong(instant.getEpochSecond()); output.writeInt(instant.getNano()); return;
+        }
+        if (value instanceof Enum<?> item) {
+            output.writeByte(9); writeString(output, item.getDeclaringClass().getName()); writeString(output, item.name()); return;
+        }
+        if (value instanceof byte[] array) { output.writeByte(10); output.writeInt(array.length); output.write(array); return; }
+        if (value instanceof Map<?, ?> map) {
+            output.writeByte(11);
+            List<Map.Entry<String, Object>> entries = new ArrayList<>();
+            for (var entry : map.entrySet()) {
+                if (!(entry.getKey() instanceof String key)) throw new MemoryException(MemoryErrorCode.INVALID_ARGUMENT, MemoryException.Field.HASH);
+                @SuppressWarnings("unchecked") Object nested = entry.getValue();
+                entries.add(new java.util.AbstractMap.SimpleImmutableEntry<>(key, nested));
+            }
+            entries.sort(Comparator.comparing(Map.Entry::getKey));
+            output.writeInt(entries.size());
+            for (var entry : entries) { writeString(output, entry.getKey()); write(output, entry.getValue(), false); }
+            return;
+        }
+        if (value instanceof Collection<?> items) {
+            if (value instanceof java.util.Set<?>) throw new MemoryException(MemoryErrorCode.INVALID_ARGUMENT, MemoryException.Field.HASH);
+            output.writeByte(12); output.writeInt(items.size());
+            for (Object item : items) write(output, item, false);
+            return;
+        }
+        Class<?> type = value.getClass();
+        if (type.isRecord() && type.getPackageName().equals(MemoryV2Request.class.getPackageName())) {
+            output.writeByte(13); writeString(output, type.getName());
+            RecordComponent[] components = type.getRecordComponents();
+            int included = components.length;
+            if (rootRequest && value instanceof MemoryV2Request) included--;
+            output.writeInt(included);
+            for (RecordComponent component : components) {
+                if (rootRequest && value instanceof MemoryV2Request && component.getName().equals("envelope")) continue;
+                writeString(output, component.getName());
+                write(output, component.getAccessor().invoke(value), false);
+            }
+            return;
+        }
+        throw new MemoryException(MemoryErrorCode.INVALID_ARGUMENT, MemoryException.Field.HASH);
+    }
+
+    private static void writeString(DataOutputStream output, String value) throws IOException {
+        byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
+        output.writeInt(bytes.length);
+        output.write(bytes);
+    }
+}

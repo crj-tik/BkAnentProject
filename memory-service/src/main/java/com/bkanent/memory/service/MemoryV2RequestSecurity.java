@@ -1,0 +1,95 @@
+package com.bkanent.memory.service;
+
+import com.bkanent.common.memory.MemoryContextKey;
+import com.bkanent.common.memory.MemoryErrorCode;
+import com.bkanent.common.memory.MemoryException;
+import com.bkanent.common.memory.MemoryRequestProof;
+import com.bkanent.common.memory.MemoryRequestSigner;
+import com.bkanent.common.memory.MemoryV2Contract;
+import com.bkanent.common.memory.MemoryV2Request;
+import com.bkanent.common.rpc.AuthPermissionRpcService;
+import com.bkanent.memory.config.MemoryV2SecurityProperties;
+import org.springframework.stereotype.Service;
+
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.Map;
+
+/** Authenticates the signed current-user assertion from one deployment-trusted domain caller. */
+@Service
+public class MemoryV2RequestSecurity {
+    private final MemoryV2SecurityProperties properties;
+    private final AuthPermissionRpcService authPermissionRpcService;
+    private final MemoryV2ReplayGuard replayGuard;
+
+    public MemoryV2RequestSecurity(MemoryV2SecurityProperties properties,
+                                   AuthPermissionRpcService authPermissionRpcService,
+                                   MemoryV2ReplayGuard replayGuard) {
+        this.properties = properties;
+        this.authPermissionRpcService = authPermissionRpcService;
+        this.replayGuard = replayGuard;
+    }
+
+    /**
+     * The trusted caller must authenticate the interactive user before signing. Memory
+     * independently rechecks that the asserted account is active and may use Agents.
+     * Returns the verified owner id for downstream ownership checks.
+     */
+    public long authorize(MemoryV2Request request, MemoryRequestProof proof, String expectedOperation) {
+        if (request == null || request.envelope() == null || request.contextKey() == null
+                || !isOperation(expectedOperation)) {
+            throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
+        }
+        var envelope = request.envelope();
+        Map<String, MemoryV2SecurityProperties.TrustedCaller> callers = properties.getTrustedCallers();
+        MemoryV2SecurityProperties.TrustedCaller caller = callers == null ? null : callers.get(envelope.caller());
+        if (caller == null || caller.getKeyId() == null || caller.getSigningSecret() == null
+                || caller.getSigningSecret().getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
+        }
+
+        MemoryContextKey context = request.contextKey();
+        if (!caller.allows(context.domainId(), context.agentId())) {
+            throw new MemoryException(MemoryErrorCode.FORBIDDEN);
+        }
+        byte[] secret = caller.getSigningSecret().getBytes(StandardCharsets.UTF_8);
+        MemoryRequestSigner.verify(request, context, proof, envelope.caller(),
+                MemoryV2Contract.MEMORY_AUDIENCE, expectedOperation, caller.getKeyId(), Instant.now(), secret);
+
+        long ownerId;
+        try {
+            ownerId = Long.parseLong(context.ownerId());
+        } catch (NumberFormatException exception) {
+            throw new MemoryException(MemoryErrorCode.FORBIDDEN);
+        }
+        if (ownerId <= 0) throw new MemoryException(MemoryErrorCode.FORBIDDEN);
+
+        try {
+            if (!authPermissionRpcService.hasPermission(ownerId, properties.getCurrentUserPermission())) {
+                throw new MemoryException(MemoryErrorCode.FORBIDDEN);
+            }
+        } catch (MemoryException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+        }
+
+        if (proof.expiresAtEpochSecond() <= Instant.now().getEpochSecond()) {
+            throw new MemoryException(MemoryErrorCode.AUTHENTICATION_EXPIRED);
+        }
+        replayGuard.consume(proof.keyId(), proof.nonce(), proof.expiresAtEpochSecond());
+        return ownerId;
+    }
+
+    private static boolean isOperation(String operation) {
+        return MemoryV2Contract.OPERATION_WORKING_SET.equals(operation)
+                || MemoryV2Contract.OPERATION_RECEIVE_PERMIT.equals(operation)
+                || MemoryV2Contract.OPERATION_DELIVER_MESSAGES.equals(operation)
+                || MemoryV2Contract.OPERATION_SUBMIT_SUMMARY.equals(operation)
+                || MemoryV2Contract.OPERATION_QUERY_MATTERS.equals(operation)
+                || MemoryV2Contract.OPERATION_QUERY_ENTITIES.equals(operation)
+                || MemoryV2Contract.OPERATION_SEARCH_PREFERENCES.equals(operation)
+                || MemoryV2Contract.OPERATION_SEARCH_EXPERIENCES.equals(operation)
+                || MemoryV2Contract.OPERATION_GET_GRANT.equals(operation);
+    }
+}

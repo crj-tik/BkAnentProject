@@ -5,7 +5,7 @@ import java.io.Serializable;
 /** Searches preference blocks by trusted context; optional verified subject and dimension narrow the query. */
 public record MemoryPreferenceQueryRequest(MemoryRequestEnvelope envelope, MemoryContextKey contextKey,
                                             String verifiedSubjectRef, String dimensionId,
-                                            String cursor, int limit) implements Serializable {
+                                            String cursor, int limit) implements Serializable, MemoryV2Request {
     private static final long serialVersionUID = 1L;
 
     public MemoryPreferenceQueryRequest {

@@ -571,4 +571,15 @@
 
 **代码位置**：common/src/main/java/com/bkanent/common/memory 的 MemoryV2Contract、MemoryRequestEnvelope、MemoryV2RpcService 及 18 个请求/响应 record；测试 MemoryV2RpcContractTest（6 项：信封 wire 轮转/版本拒绝/形状拒绝/九请求 operation 互绑/分页与 hash/sequence 约束）与 MemoryV2RpcExceptionEnvelopeTest（1 项：真实接口注册后全 15 错误码 wire 轮转）。
 
-**关联**：LR-48/55、KI-118（v2 接口 throws 注册即 2.2 承诺的 ctor-SPI 异常联合边界验证）、KI-126；change 2.2（提供方/消费者绑定与版本协商属 2.4，签名与防重放属 3.1，本批未实现服务端）。
+**关联**：LR-48/55、KI-118（v2 接口 throws 注册即 2.2 承诺的 ctor-SPI 异常联合边界验证）、KI-126；change 2.2/2.4。Memory v2 当前用户签名与防重放基础见 LR-58；provider/client 尚未接入，不等同于 RPC 运行链路已受保护。
+
+## LR-58 Memory v2 以可信域调用者签名承载当前用户断言
+
+**结论**：域服务先沿自己的入口认证当前用户，再用该服务专属 Memory key 签署专用短时证明；客户端 signer 要求 `AuthenticatedPrincipal` 与请求 ownerId 完全相等。证明绑定固定 caller、memory audience、RPC operation、requestId、canonical body hash、完整 contextKey、keyId、有效期和单次 nonce。Memory 只接受部署配置中明确登记的 caller，并按精确 domain→agent 映射授权，向 Auth 复核 owner 账号仍启用且具备 Agent 使用权限，再以 SQL 唯一键跨实例消费 nonce。A2A beacon 不是 Memory 凭据，用户 token 不进入 Memory proof 或 Memory 持久化。
+
+**根因**：memory envelope 和 ownerId 只是请求数据，不能自证当前用户；共享 A2A request beacon 也只能证明原 A2A 请求，不能授权另一个 memory operation。域服务已经持有入口认证上下文，因此用其专属 key 对精确用户断言签名，同时由 Memory 限定服务可代表的域/Agent，并独立确认用户资格。持久 nonce 处理进程重启和多实例重放；清理保留有效期后 5 分钟缓冲，降低小时钟偏差重开窗口的风险。Caller key 缺失时关闭失败。
+
+**代码位置**：common 的 `MemoryCanonicalHash`、`MemoryRequestSigner`、`MemoryRequestProof`；memory-service 的 `MemoryV2SecurityProperties`、`MemoryV2RequestSecurity`、`MemoryV2ReplayGuard`；迁移 `20261019_memory_v2_request_nonce.sql`。测试覆盖签名绑定、授权范围、用户资格、认证依赖失败、持久 nonce 唯一性。
+
+**关联**：LR-33/41/55/57；integrate-domain-agent-memory 3.1。当前 v2 provider 与真实消费者尚未注册/接入，调用点接线与 A2A 租约续期仍待后续任务，未配置 caller 的运行环境保持拒绝。
+**确认日期**：2026-10-19。

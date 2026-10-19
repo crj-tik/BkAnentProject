@@ -3,22 +3,36 @@ package com.bkanent.memory.config;
 import com.bkanent.common.rpc.RagIndexRpcService;
 import com.bkanent.common.rpc.RagPrincipalRpcService;
 import com.bkanent.common.rpc.RagRetrievalRpcService;
+import com.bkanent.common.rpc.AuthPermissionRpcService;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.apache.dubbo.config.ReferenceConfig;
 import org.apache.dubbo.config.spring.context.annotation.EnableDubbo;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
+import com.bkanent.memory.config.MemoryV2SecurityProperties;
 
 @Configuration
 @EnableScheduling
 @EnableDubbo(scanBasePackages = "com.bkanent.memory.rpc")
+@EnableConfigurationProperties(MemoryV2SecurityProperties.class)
 public class MemoryRagRpcConfiguration {
+    @Bean(destroyMethod = "destroy")
+    public ReferenceConfig<AuthPermissionRpcService> memoryAuthPermissionReference() { return reference(AuthPermissionRpcService.class); }
     @Bean(destroyMethod = "destroy")
     public ReferenceConfig<RagPrincipalRpcService> memoryPrincipalReference() { return reference(RagPrincipalRpcService.class); }
     @Bean(destroyMethod = "destroy")
     public ReferenceConfig<RagRetrievalRpcService> memoryRetrievalReference() { return reference(RagRetrievalRpcService.class); }
     @Bean(destroyMethod = "destroy")
     public ReferenceConfig<RagIndexRpcService> memoryIndexReference() { return reference(RagIndexRpcService.class); }
+    @Bean
+    public AuthPermissionRpcService memoryAuthPermissions(ReferenceConfig<AuthPermissionRpcService> memoryAuthPermissionReference) {
+        return new AuthPermissionRpcService() {
+            public boolean validateToken(String token) { return memoryAuthPermissionReference.get().validateToken(token); }
+            public com.bkanent.common.rpc.AuthenticatedPrincipal resolvePrincipal(String token) { return memoryAuthPermissionReference.get().resolvePrincipal(token); }
+            public boolean hasPermission(Long userId, String permissionCode) { return memoryAuthPermissionReference.get().hasPermission(userId, permissionCode); }
+        };
+    }
     @Bean
     public RagPrincipalRpcService memoryPrincipals(ReferenceConfig<RagPrincipalRpcService> memoryPrincipalReference) {
         return (credentials, authentication) -> memoryPrincipalReference.get().resolveRagPrincipal(credentials, authentication);

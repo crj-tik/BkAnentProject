@@ -55,7 +55,7 @@ class MemoryV1V2CompatibilityTest {
     void v2DtoFamilyAndV1FamilyShareNoWireType() {
         List<Class<?>> v1Types = List.of(SessionMemoryUpsertRequest.class,
                 com.bkanent.common.agent.SessionMemoryResponse.class, UserPreferenceRecord.class);
-        List<Class<?>> v2Types = List.of(MemoryRequestEnvelope.class, MemoryWorkingSetRequest.class,
+        List<Class<?>> v2Types = List.of(MemoryRequestEnvelope.class, MemoryRequestProof.class, MemoryWorkingSetRequest.class,
                 MemoryWorkingSetResponse.class, MemoryReceivePermitRequest.class, MemoryReceivePermitResponse.class,
                 MemoryDeliveryRequest.class, MemoryDeliveryResponse.class, MemorySummaryRequest.class,
                 MemorySummaryResponse.class, MemoryGrantRequest.class, MemoryGrantResponse.class);

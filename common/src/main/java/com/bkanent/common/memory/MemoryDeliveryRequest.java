@@ -6,7 +6,7 @@ import java.util.List;
 /** Delivers accepted events under a previously issued permit; the permit cannot grant reads or searches. */
 public record MemoryDeliveryRequest(MemoryRequestEnvelope envelope, MemoryContextKey contextKey,
                                      MemoryAssociation association, String permitId,
-                                     List<MemoryMessage> messages) implements Serializable {
+                                     List<MemoryMessage> messages) implements Serializable, MemoryV2Request {
     private static final long serialVersionUID = 1L;
 
     public MemoryDeliveryRequest {
