@@ -22,7 +22,7 @@
 
 **根因**：Interview `application.yml` 未将 registry 环境变量绑定到 Dubbo consumer；仅增加 Compose 环境变量不足以生成 Dubbo registry。
 
-**修复**：2026-10-19。Compose 为 Interview 显式提供受管 Nacos namespace/group 地址；`application.yml` 增加 `dubbo.registry.address` 映射并固定 consumer protocol 为 `dubbo`，沿用 KI-100 的纯 RPC 选择边界。以单次运行环境覆盖启用 A2A 注册后，当前制品 readiness UP，Nacos 中精确发现一个 `A2aBeaconRpcService` provider；`.env` 默认开关保持 `false`。修复代码见本次提交。因营销与访谈验收请求停在用户审批闸，正式 Supervisor SSE 目标调用仍未发生，不作为已通过的目标 Agent 基线。
+**修复**：2026-10-19，提交 `6825233`。Compose 为 Interview 显式提供受管 Nacos namespace/group 地址；`application.yml` 增加 `dubbo.registry.address` 映射并固定 consumer protocol 为 `dubbo`，沿用 KI-100 的纯 RPC 选择边界。以单次运行环境覆盖启用 A2A 注册后，当前制品 readiness UP，Nacos 中精确发现一个 `A2aBeaconRpcService` provider；`.env` 默认开关保持 `false`。因营销与访谈验收请求停在用户审批闸，正式 Supervisor SSE 目标调用仍未发生，不作为已通过的目标 Agent 基线。
 
 ## KI-128 [OPEN·P2] 已完成 Supervisor async task 的状态查询返回 500
 
