@@ -78,8 +78,9 @@ class MemoryV2RpcContractTest {
                         "subject-1", "copy_length", null, 20),
                 new MemoryExperienceQueryRequest(envelope(MemoryV2Contract.OPERATION_SEARCH_EXPERIENCES), CONTEXT,
                         "copy-draft", null, 20),
-                new MemoryGrantRequest(envelope(MemoryV2Contract.OPERATION_GET_GRANT),
-                        new MemoryExportRef("export-1", CONTEXT, version(1))));
+                new MemoryGrantRequest(envelope(MemoryV2Contract.OPERATION_GET_GRANT), CONTEXT,
+                        new MemoryExportRef("export-1", CONTEXT, version(1)),
+                        new MemoryScope(MemoryScope.Kind.TASK_SHARED, null, null, "shared-1"), "matter-1", "collaboration"));
         for (Object request : requests) {
             assertThat(spi(request, request.getClass())).isEqualTo(request);
         }
@@ -109,6 +110,34 @@ class MemoryV2RpcContractTest {
         }
         assertThatThrownBy(() -> new MemoryMatterQueryResponse(List.of(), null, true))
                 .isInstanceOf(MemoryException.class).hasMessage("INVALID_ARGUMENT (CURSOR)");
+    }
+
+    @Test void sharedRequestKeepsReceivingContextSeparateFromTheSourceAcrossWire() throws Exception {
+        MemoryContextKey recipient = new MemoryContextKey("owner-1", "supervisor", "supervisor-agent", "recipient-session");
+        MemoryScope scope = new MemoryScope(MemoryScope.Kind.TASK_SHARED, null, null, "shared-1");
+        MemoryGrantRequest request = new MemoryGrantRequest(envelope(MemoryV2Contract.OPERATION_GET_GRANT), recipient,
+                new MemoryExportRef("export-1", CONTEXT, version(1)), scope, "matter-1", "collaboration");
+
+        MemoryGrantRequest decoded = (MemoryGrantRequest) spi(request, MemoryGrantRequest.class);
+        assertThat(decoded.contextKey()).isEqualTo(recipient);
+        assertThat(decoded.sharedRef().sourceContext()).isEqualTo(CONTEXT);
+        assertThat(decoded).isEqualTo(request);
+        MemoryGrantRequest anotherSource = new MemoryGrantRequest(request.envelope(), recipient,
+                new MemoryExportRef("export-1", new MemoryContextKey(CONTEXT.ownerId(), CONTEXT.domainId(), CONTEXT.agentId(), "other-session"), version(1)),
+                scope, "matter-1", "collaboration");
+        assertThat(MemoryCanonicalHash.requestBodyHash(anotherSource)).isNotEqualTo(MemoryCanonicalHash.requestBodyHash(request));
+    }
+
+    @Test void sharedRequestAndParticipantsRequireAnExplicitReceivingContext() {
+        MemoryScope scope = new MemoryScope(MemoryScope.Kind.SESSION_SHARED, null, null, "shared-1");
+        assertThatThrownBy(() -> new MemoryGrantRequest(envelope(MemoryV2Contract.OPERATION_GET_GRANT), null,
+                new MemoryExportRef("export-1", CONTEXT, version(1)), scope, null, "collaboration"))
+                .isInstanceOf(MemoryException.class);
+        assertThatThrownBy(() -> new MemoryShareGrant.Participant("supervisor", "supervisor-agent", null))
+                .isInstanceOf(MemoryException.class);
+        assertThatThrownBy(() -> new MemoryGrantRequest(envelope(MemoryV2Contract.OPERATION_GET_GRANT), CONTEXT,
+                new MemoryExportRef("export-1", CONTEXT, version(1)), MemoryScope.privateScope(CONTEXT.domainId(), CONTEXT.agentId()), null, "collaboration"))
+                .isInstanceOf(MemoryException.class);
     }
 
     @Test void permitEventsAndDeliveryResultsPinExactHashAndSequence() {
@@ -148,7 +177,7 @@ class MemoryV2RpcContractTest {
     private MemoryShareGrant grant() {
         return new MemoryShareGrant(new MemoryGrantRef("grant-1", 3), CONTEXT,
                 new MemoryScope(MemoryScope.Kind.TASK_SHARED, null, null, "group-1"), "matter-1", "reuse",
-                List.of(new MemoryShareGrant.Participant("supervisor", "supervisor-agent")),
+                List.of(new MemoryShareGrant.Participant("supervisor", "supervisor-agent", "supervisor-conversation")),
                 List.of(MemoryShareGrant.Projection.DURABLE_EXPORT), List.of(source("result", 40)),
                 AT, AT.plusSeconds(3600), MemoryShareGrant.State.ACTIVE);
     }

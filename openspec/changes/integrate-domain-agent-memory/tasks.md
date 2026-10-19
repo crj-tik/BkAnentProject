@@ -16,7 +16,7 @@
 ## 3. 身份、授权与派生内容撤回
 
 - [x] 3.1 实现当前用户及可信 caller/domain/agent 映射、请求操作/audience/hash绑定签名与防重放；A2A 租约只作为身份来源，不把原 A2A 信标重放给 memory，凭据只在专用传输与进程租约中存在。
-- [ ] 3.2 实现 DOMAIN_PRIVATE、TASK_SHARED、SESSION_SHARED 的 owner/参与者/purpose/版本/有效期授权，域内不同 Agent 默认隔离，ADMIN 的个人记忆仍 self-only；覆盖伪造 owner/domain/grant、仅持引用/namespace/contextId 的拒绝测试。
+- [x] 3.2 实现 DOMAIN_PRIVATE、TASK_SHARED、SESSION_SHARED 的 owner/参与者/purpose/版本/有效期授权，域内不同 Agent 默认隔离，ADMIN 的个人记忆仍 self-only；覆盖伪造 owner/domain/grant、仅持引用/namespace/contextId 的拒绝测试。
 - [ ] 3.3 实现服务端可持久核验的精确事件接收许可及已接受调用的受限结果交付许可，绑定 eventId/内容hash/来源身份；服务补交付与当前用户读取/后台加工权分离，不持久化用户token、不从owner换发凭据。
 - [ ] 3.4 测试用户租约到期/进程重启后的原 actor 重新认证、SERVICE精确事件补交付、伪造证明及不同内容重放拒绝；删除/撤回可阻止加工及发布，但不改写真实业务执行事实。
 - [ ] 3.5 为摘要、锚点、工作集及共享投影记录来源版本/grant依赖；实现恢复后、入模前与输出前当前授权复验，撤回来源时失效或重建派生内容；测试同owner旧checkpoint不能绕过来源权限。

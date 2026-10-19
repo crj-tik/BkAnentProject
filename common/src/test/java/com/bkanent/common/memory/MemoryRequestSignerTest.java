@@ -115,6 +115,9 @@ class MemoryRequestSignerTest {
         assertThatThrownBy(() -> MemoryRequestSigner.sign(request, new AuthenticatedPrincipal(17L), "key", NOW.getEpochSecond(),
                 NOW.getEpochSecond() + 30, "short", SECRET))
                 .isInstanceOf(MemoryException.class).hasMessage("INVALID_ARGUMENT (IDENTITY)");
+        assertThatThrownBy(() -> MemoryRequestSigner.sign(request, new AuthenticatedPrincipal(17L), "k".repeat(65), NOW.getEpochSecond(),
+                NOW.getEpochSecond() + 30, "2d65e053d5164f8696e9132c0eb7412e", SECRET))
+                .isInstanceOf(MemoryException.class).hasMessage("INVALID_ARGUMENT (IDENTITY)");
     }
 
     @Test

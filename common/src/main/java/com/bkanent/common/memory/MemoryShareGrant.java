@@ -13,11 +13,12 @@ public record MemoryShareGrant(MemoryGrantRef grant, MemoryContextKey sourceCont
     private static final long serialVersionUID = 1L;
     public enum State { ACTIVE, REVOKED, EXPIRED }
     public enum Projection { DISPLAY, COLLABORATION, DURABLE_EXPORT }
-    public record Participant(String domainId, String agentId) implements Serializable {
+    public record Participant(String domainId, String agentId, String conversationId) implements Serializable {
         private static final long serialVersionUID = 1L;
         public Participant {
             domainId = MemoryContract.id(domainId, MemoryException.Field.GRANT);
             agentId = MemoryContract.id(agentId, MemoryException.Field.GRANT);
+            conversationId = MemoryContract.id(conversationId, MemoryException.Field.GRANT);
         }
     }
     public MemoryShareGrant {

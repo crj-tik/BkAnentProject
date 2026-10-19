@@ -36,6 +36,19 @@ public class MemoryV2RequestSecurity {
      * Returns the verified owner id for downstream ownership checks.
      */
     public long authorize(MemoryV2Request request, MemoryRequestProof proof, String expectedOperation) {
+        long ownerId = verifyCurrentUser(request, proof, expectedOperation);
+        replayGuard.consume(proof.keyId(), proof.nonce(), proof.expiresAtEpochSecond());
+        return ownerId;
+    }
+
+    /** Output check for an already consumed request; it never admits a new request or skips current Auth. */
+    void revalidate(MemoryV2Request request, MemoryRequestProof proof, long expectedOwner, String expectedOperation) {
+        if (verifyCurrentUser(request, proof, expectedOperation) != expectedOwner) {
+            throw new MemoryException(MemoryErrorCode.FORBIDDEN);
+        }
+    }
+
+    private long verifyCurrentUser(MemoryV2Request request, MemoryRequestProof proof, String expectedOperation) {
         if (request == null || request.envelope() == null || request.contextKey() == null
                 || !isOperation(expectedOperation)) {
             throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
@@ -77,7 +90,6 @@ public class MemoryV2RequestSecurity {
         if (proof.expiresAtEpochSecond() <= Instant.now().getEpochSecond()) {
             throw new MemoryException(MemoryErrorCode.AUTHENTICATION_EXPIRED);
         }
-        replayGuard.consume(proof.keyId(), proof.nonce(), proof.expiresAtEpochSecond());
         return ownerId;
     }
 

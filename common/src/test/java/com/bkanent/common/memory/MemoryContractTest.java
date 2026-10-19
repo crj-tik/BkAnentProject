@@ -443,7 +443,7 @@ class MemoryContractTest {
     private MemoryShareGrant grant() {
         return new MemoryShareGrant(new MemoryGrantRef("grant-1", 3), CONTEXT,
                 new MemoryScope(MemoryScope.Kind.TASK_SHARED, null, null, "group-1"), "matter-1", "reuse",
-                List.of(new MemoryShareGrant.Participant("supervisor", "supervisor-agent")), List.of(MemoryShareGrant.Projection.DURABLE_EXPORT),
+                List.of(new MemoryShareGrant.Participant("supervisor", "supervisor-agent", "supervisor-conversation")), List.of(MemoryShareGrant.Projection.DURABLE_EXPORT),
                 List.of(source("result", 40)), AT, AT.plusSeconds(3600), MemoryShareGrant.State.ACTIVE);
     }
     private MemorySharedExport export(MemorySharedExport.State state, MemoryExportRef ref, MemoryIndexState indexState) {

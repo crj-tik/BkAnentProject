@@ -47,6 +47,8 @@ memory v2 内部调用采用原生 Dubbo RPC（显式 dubbo consumer/provider、
 
 范围枚举：DOMAIN_PRIVATE、TASK_SHARED、SESSION_SHARED；长期跨域偏好仅在用户明确授予具体范围时共享，缺省域私有。共享 grant 绑定 owner、事项/会话、来源、接收 agent/domain 集、purpose、版本与有效期；域内多个 Agent 亦只共享明确授权的组。所有入口（详情、搜索、导出、回放、后台处理）执行当前授权交集，ADMIN不得跨个人owner。
 
+共享引用读取将经签名的接收方 contextKey 与来源 exportRef 分开；grant 的接收者同时绑定 domain、agent 和具体 conversation，TASK_SHARED 另绑定 matter，SESSION_SHARED 绑定独立 sharedScopeId。请求中的 scope/引用只用于核对服务端持久 grant，不授予权限；仅持展示或当前协作许可不能读取 durable export 正文。元数据授权通过后才读取正文，输出前重新检查当前用户及 grant/export 状态，远程 Auth 调用不占 SQL 锁。
+
 RAG 新 memory scope 单独版本化，由 memory 签发并由 RAG 按可信调用者/空间/owner/domain/grant独立校验；不改旧 listing scope含义。私有空间按domain分配物理 ES/Milvus；同域存在需内容隔离的不同SubAgent时进一步分配各自独立索引/集合，不能只用agent标签替代既有物理隔离要求。空间内仍用不可覆盖owner/agent范围过滤；TASK/SESSION_SHARED 用独立协作空间且强制owner和grant过滤。namespace/category/tags只寻址，不是ACL。
 
 替代方案“同user自动全域共享”和“模型填写domain”为拒绝项，会绕过既有owner-only以上的职责边界。

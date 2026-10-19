@@ -15,6 +15,7 @@ public record MemoryRequestProof(String keyId,
 
     public MemoryRequestProof {
         keyId = MemoryContract.id(keyId, MemoryException.Field.IDENTITY);
+        MemoryContract.require(keyId.length() <= 64, MemoryException.Field.IDENTITY);
         MemoryContract.require(issuedAtEpochSecond >= 0
                         && expiresAtEpochSecond > issuedAtEpochSecond
                         && expiresAtEpochSecond - issuedAtEpochSecond <= MemoryRequestSigner.MAX_TTL_SECONDS,

@@ -10,6 +10,16 @@
 
 ## 待修复（OPEN）
 
+## KI-129 [FIXED·P2] Memory 共享查询混淆来源与接收方身份，缺少接收会话及用途约束
+
+**确认/修复日期**：2026-10-19，本提交。原 `MemoryGrantRequest.contextKey()` 返回 exportRef 的 sourceContext，`MemoryV2RequestSecurity` 却将其当 caller 的可信 domain/agent 检查，合法跨域接收方被拒绝；若靠扩大 caller 映射放行，则会破坏域私有边界。原 participant 仅含 domain/agent，无法限制共享许可所属的接收会话。
+
+**修复**：请求独立携带接收 context、来源引用、scope/matter/purpose，participant 增加 conversationId。持久共享读取从 SQL 当前 grant 及历史快照核验 owner、精确参与者、用途、版本、有效期、来源和 durable 投影；输出前重验用户与授权，展示/协作许可不兑换持久正文。回归覆盖跨域成功及跨 owner/domain/agent/conversation、伪造用途/引用、过期/撤回/旧版本拒绝；拒绝元数据请求时正文读取次数为 0。运行 RPC provider 尚未开放，未受此缺陷影响现有 v1 链路。设计见 LR-59。
+
+## KI-130 [FIXED·P3] Memory proof keyId 形状允许 255 字符但 nonce 表仅支持 64
+
+**确认/修复日期**：2026-10-19，本提交。原 proof 复用通用 id 的 255 字符上限，与 `memory_v2_request_nonce.key_id VARCHAR(64)` 不一致，过长 key 会在消费 nonce 时变成依赖错误。proof 构造器增加 64 字符上限，签名测试覆盖 65 字符拒绝；没有更改已应用 SQL 字节或部署密钥。
+
 ## KI-126 [已修源码·P2] Studio 通用 503 异常处理器零日志，降级根因在部署制品中不可诊断
 
 **确认日期**：2026-10-18；**源码修复**：2026-10-18（本提交）。基线复测期 `GET /agent/studio/v1/works` 持续 503（绕网关直打应用实证为应用自身返回），响应体 `STUDIO_DEPENDENCY_UNAVAILABLE` 来自通用 Exception 兜底，但处理器不记日志、应用日志零痕迹，无法定位真实异常。本批定位到两层：① auth 侧 `AuthPermissionRpcService.resolvePrincipal` 业务实现实测 1.16–2.07s（ProfilerServerFilter 98% 在 biz impl），超过消费端 1000ms Dubbo 超时——首调用即超时；② 超时后后续请求 61–331ms 快速失败，机制不明（消费端无 RpcException 日志，疑 Dubbo 集群对超时 invoker 的快速失败行为），因零日志无法进一步取证。慢根因候选为 MySQL 冷缓存/负载（同库 REST 登录路径正常，未定案）。运行中 supervisor 为 release 制品（无本修复），Studio 在当前环境保持 503、基线记为未通。

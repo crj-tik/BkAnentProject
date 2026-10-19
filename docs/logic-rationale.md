@@ -583,3 +583,13 @@
 
 **关联**：LR-33/41/55/57；integrate-domain-agent-memory 3.1。当前 v2 provider 与真实消费者尚未注册/接入，调用点接线与 A2A 租约续期仍待后续任务，未配置 caller 的运行环境保持拒绝。
 **确认日期**：2026-10-19。
+
+## LR-59 共享读取分别核验接收身份、来源引用和当前持久 grant
+
+**结论**：共享请求的 contextKey 表示接收方，sourceContext 保留在 exportRef；两者 owner 必须等于真实当前用户。grant 的接收者绑定 domain/agent/conversation，且 scope、matter、purpose、grant revision、有效期和 DURABLE_EXPORT 投影都必须匹配。域私有工作集要求完整四重 context 相等，ADMIN 无跨 owner 分支。SQL 先查不含正文的 export 元数据及当前 grant，核对不可变 grant 历史快照后才读取一个指定版本；不按 grant 批量返回历史。
+
+**根因**：把来源 context 当调用者身份会误拒合法接收域，放开来源域映射又会扩大调用者权限。只限制 domain/agent 而不绑定接收会话，会让同 Agent 的其他任务复用一次共享许可。exportId/sharedScopeId 都是定位数据；当前 SQL grant 才是授权真源。短事务按 grant→export 顺序加锁，Auth RPC 在事务外执行，正文读取后再次认证并核对当前 grant/export 版本，阻止在 Auth 等待窗口发生的撤回。grant 日期字段按 UTC 微秒截断写入；授权使用原快照时间，不依赖数据库时区。
+
+**代码位置**：`MemoryGrantRequest`、`MemoryShareGrant.Participant`；memory-service 的 `MemoryAccessPolicy`、`MemorySharingStore`、`MemorySharingAccessService`；迁移 `20261019_memory_share_authorization.sql`。共享读取只接受服务端 SQL 记录，不接受请求携带的 grant 对象；索引未追平不影响已获准详情读取。
+
+**关联**：LR-33/40/41/55/58、KI-129/130；change 3.2，4.2 的 grant/export 子集。v2 provider 与真实客户端仍待后续接线；来源当前删除/撤回及派生依赖复核属 3.5/4.7，带上游 grant 的链式导出在该复核实现前失败关闭。grant 签发/更新与来源域发布属后续 10.2，本次没有对外写入口或运行 grant 数据。

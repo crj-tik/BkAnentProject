@@ -250,3 +250,5 @@ mvn -o -gs .mvn-settings.xml -s .mvn-settings.xml test
 marketing 与 interview 各提交 1 个受管合成请求，SSE 首个可见事件分别为 239ms / 148ms，请求总时间分别为 9.230s / 6.889s；二者都以 `supervisor.waiting_user_approval` 结束，pending capability 分别为 `a2a:marketing-agent` 与 `a2a:interview-agent`。这些数值只代表到审批边界的一次观察，不是目标 Agent 首事件、完整成功延迟或 P50/P95。未批准也未执行目标 A2A 调用，因此没有业务写入或域 Agent 完整成果可记录。
 
 模型实际身份、输入/输出 token、阶段 RPC/DB I/O 计数、负载、P50/P95 和 Studio 可读结果仍未测。Studio GET 有 `syncLatest` 写入副作用，不能用于纯读取基线。本次安全代码增加 Memory v2 canonical body hash、要求已认证 `AuthenticatedPrincipal` 与 owner 相等的 HMAC signer、精确 caller→domain→agent allowlist、Auth 资格复核和带唯一键的持久 nonce 表；focused tests 16 项 common + 8 项 memory 均通过。按代码组件与失败关闭契约完成任务 3.1；v2 provider/client 未接入、caller 尚未配置，网络运行验收仍待后续接线。任务 1.4 继续未勾选。
+
+后续 3.2 已完成私有/共享授权组件及既有开发库 110/120 迁移，67 项定向验证和未启用边界见 `domain-agent-memory-authorization-20261019.md`。该进度不改变本节历史基线中的未测项。
