@@ -7,6 +7,7 @@ import com.bkanent.common.memory.MemoryRequestProof;
 import com.bkanent.common.memory.MemoryRequestSigner;
 import com.bkanent.common.memory.MemoryV2Contract;
 import com.bkanent.common.memory.MemoryV2Request;
+import com.bkanent.common.memory.MemoryDeliveryRequest;
 import com.bkanent.common.rpc.AuthPermissionRpcService;
 import com.bkanent.memory.config.MemoryV2SecurityProperties;
 import org.springframework.stereotype.Service;
@@ -49,6 +50,40 @@ public class MemoryV2RequestSecurity {
     }
 
     private long verifyCurrentUser(MemoryV2Request request, MemoryRequestProof proof, String expectedOperation) {
+        if (proof == null || proof.actor() != MemoryRequestProof.Actor.USER) {
+            throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
+        }
+        long ownerId = verifyCaller(request, proof, expectedOperation, false);
+        try {
+            if (!authPermissionRpcService.hasPermission(ownerId, properties.getCurrentUserPermission())) {
+                throw new MemoryException(MemoryErrorCode.FORBIDDEN);
+            }
+        } catch (MemoryException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+        }
+        requireUnexpired(proof);
+        return ownerId;
+    }
+
+    /** SERVICE only enters this delivery-specific gate; its identity never becomes a user principal. */
+    public void authorizeDelivery(MemoryDeliveryRequest request, MemoryRequestProof proof) {
+        if (proof != null && proof.actor() == MemoryRequestProof.Actor.SERVICE) {
+            verifyCaller(request, proof, MemoryV2Contract.OPERATION_DELIVER_MESSAGES, true);
+            replayGuard.consume(proof.keyId(), proof.nonce(), proof.expiresAtEpochSecond());
+        } else {
+            authorize(request, proof, MemoryV2Contract.OPERATION_DELIVER_MESSAGES);
+        }
+    }
+
+    static void requireUnexpired(MemoryRequestProof proof) {
+        if (proof.expiresAtEpochSecond() <= Instant.now().getEpochSecond()) {
+            throw new MemoryException(MemoryErrorCode.AUTHENTICATION_EXPIRED);
+        }
+    }
+
+    private long verifyCaller(MemoryV2Request request, MemoryRequestProof proof, String expectedOperation, boolean service) {
         if (request == null || request.envelope() == null || request.contextKey() == null
                 || !isOperation(expectedOperation)) {
             throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
@@ -65,6 +100,7 @@ public class MemoryV2RequestSecurity {
         if (!caller.allows(context.domainId(), context.agentId())) {
             throw new MemoryException(MemoryErrorCode.FORBIDDEN);
         }
+        if (service && !caller.isServiceDelivery()) throw new MemoryException(MemoryErrorCode.FORBIDDEN);
         byte[] secret = caller.getSigningSecret().getBytes(StandardCharsets.UTF_8);
         MemoryRequestSigner.verify(request, context, proof, envelope.caller(),
                 MemoryV2Contract.MEMORY_AUDIENCE, expectedOperation, caller.getKeyId(), Instant.now(), secret);
@@ -75,21 +111,7 @@ public class MemoryV2RequestSecurity {
         } catch (NumberFormatException exception) {
             throw new MemoryException(MemoryErrorCode.FORBIDDEN);
         }
-        if (ownerId <= 0) throw new MemoryException(MemoryErrorCode.FORBIDDEN);
-
-        try {
-            if (!authPermissionRpcService.hasPermission(ownerId, properties.getCurrentUserPermission())) {
-                throw new MemoryException(MemoryErrorCode.FORBIDDEN);
-            }
-        } catch (MemoryException exception) {
-            throw exception;
-        } catch (RuntimeException exception) {
-            throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
-        }
-
-        if (proof.expiresAtEpochSecond() <= Instant.now().getEpochSecond()) {
-            throw new MemoryException(MemoryErrorCode.AUTHENTICATION_EXPIRED);
-        }
+        if (ownerId <= 0 || !Long.toString(ownerId).equals(context.ownerId())) throw new MemoryException(MemoryErrorCode.FORBIDDEN);
         return ownerId;
     }
 
@@ -102,6 +124,7 @@ public class MemoryV2RequestSecurity {
                 || MemoryV2Contract.OPERATION_QUERY_ENTITIES.equals(operation)
                 || MemoryV2Contract.OPERATION_SEARCH_PREFERENCES.equals(operation)
                 || MemoryV2Contract.OPERATION_SEARCH_EXPERIENCES.equals(operation)
-                || MemoryV2Contract.OPERATION_GET_GRANT.equals(operation);
+                || MemoryV2Contract.OPERATION_GET_GRANT.equals(operation)
+                || MemoryV2Contract.OPERATION_WITHDRAW.equals(operation);
     }
 }

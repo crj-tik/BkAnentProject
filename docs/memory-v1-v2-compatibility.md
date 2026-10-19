@@ -1,6 +1,6 @@
 # Memory v1 / v2 能力差异与兼容边界
 
-> 状态：v2 契约已定义（`MemoryV2RpcService`，见 `common/src/main/java/com/bkanent/common/memory/`），**无任何运行实现与消费者**。本文档是任务 2.5 的能力差异发布：谁在用 v1、v1 提供什么/不提供什么、v2 承诺什么、两者如何互不污染。防回归：`common/src/test/java/com/bkanent/common/memory/MemoryV1V2CompatibilityTest.java`。
+> 状态：v2 可靠归档实现已完成，原生 provider 受 `memory.v2.archive-enabled` 控制且默认关闭；真实 Agent 消费者尚未接入。v1 保持原接口。防回归：`MemoryV1V2CompatibilityTest`；本次模块证据见 `docs/acceptance/domain-agent-memory-archive-20261019.md`。
 
 ## 1. v1 真实消费者面（2026-10-18 源码核实）
 
@@ -29,9 +29,11 @@
 
 ## 3. v2 能力与启用状态（实现按任务组推进）
 
-九操作（工作集读取/接收许可/消息交付/摘要提交/事项/实体/偏好/经验/grant）+ 四重身份 + 构造期版本/操作拒绝 + 请求 hash 身份。2026-10-19 已实现当前用户 HMAC proof/持久 nonce，以及私有与共享授权服务；开发库已应用清单 110/120。**v2 provider 仍未注册到 Nacos，无真实消费者引用**，组件测试与 DDL 不表示运行链路启用。
+十操作（原九操作加来源撤回）+ 四重身份 + 构造期版本/操作拒绝 + 请求 hash 身份。已实现当前用户与 SERVICE 分离、持久 nonce、精确事件/受理结果许可、消息单调追加、摘要覆盖/OCC、实体与事项分页、当前来源复核和撤回。开发库已应用清单 110/120/130。原生 provider 已实现并通过进程内 Dubbo 调用测试，开发容器默认关闭新归档入口；真实 Agent 接线、加工 worker、v2 RAG 尚未启用。偏好/经验搜索在当前阶段明确返回 `MEMORY_UNAVAILABLE`，不会伪装成无匹配。
 
 首次启用前的 KI-129 契约修正：`MemoryGrantRequest` 独立传递接收 contextKey、来源 exportRef、scope/matter/purpose，`MemoryShareGrant.Participant` 绑定接收 conversationId。此前仅由来源引用推导调用者身份的 v2 测试客户端须随当前源码更新；v1 形状及消费者不受影响。共享引用不是认证凭据，展示/协作许可不兑换 durable export，当前 RPC 详情路径只返回一个明确请求且获准的导出版本。
+
+本次首次启用前的 v2 wire 变更：proof 增加签名覆盖的 USER/SERVICE actor；permit 请求增加 `resultAdmissions`；接口增加 `withdrawSource`，十个方法均声明安全异常。所有 v2 caller 必须一起更新，不能混用先前未启用的 v2 测试制品。事件用途固定为 `conversation-archive`；结果许可仅接受已入库 TOOL/ACCEPTED 事实，模型 ASSISTANT 提案无效。来源工具事实必须由真实执行器构造（后续 Agent 接线验收），本批没有开放模型自行签名入口。
 
 ## 4. 防互污染规则（测试锁定）
 

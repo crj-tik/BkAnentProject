@@ -28,4 +28,6 @@ public interface MemoryV2RpcService {
     MemoryExperienceQueryResponse searchExperiences(MemoryExperienceQueryRequest request, MemoryRequestProof proof) throws MemoryException;
 
     MemoryGrantResponse getGrant(MemoryGrantRequest request, MemoryRequestProof proof) throws MemoryException;
+
+    MemoryWithdrawalResponse withdrawSource(MemoryWithdrawalRequest request, MemoryRequestProof proof) throws MemoryException;
 }

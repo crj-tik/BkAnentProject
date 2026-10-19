@@ -10,10 +10,17 @@ public record MemoryRequestProof(String keyId,
                                  long issuedAtEpochSecond,
                                  long expiresAtEpochSecond,
                                  String nonce,
-                                 String signature) implements Serializable {
+                                 String signature, Actor actor) implements Serializable {
     private static final long serialVersionUID = 1L;
+    public enum Actor { USER, SERVICE }
+
+    public MemoryRequestProof(String keyId, long issuedAtEpochSecond, long expiresAtEpochSecond,
+                              String nonce, String signature) {
+        this(keyId, issuedAtEpochSecond, expiresAtEpochSecond, nonce, signature, Actor.USER);
+    }
 
     public MemoryRequestProof {
+        MemoryContract.required(actor, MemoryException.Field.IDENTITY);
         keyId = MemoryContract.id(keyId, MemoryException.Field.IDENTITY);
         MemoryContract.require(keyId.length() <= 64, MemoryException.Field.IDENTITY);
         MemoryContract.require(issuedAtEpochSecond >= 0

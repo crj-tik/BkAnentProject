@@ -1,0 +1,42 @@
+package com.bkanent.memory.rpc;
+
+import com.bkanent.common.memory.*;
+import com.bkanent.memory.service.MemoryArchiveService;
+import com.bkanent.memory.service.MemorySharingAccessService;
+import com.bkanent.memory.service.MemoryV2RequestSecurity;
+import org.apache.dubbo.config.annotation.DubboService;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+
+/** Opt-in native Dubbo provider. Unimplemented learning/search capability fails explicitly. */
+@DubboService(group = MemoryV2Contract.DUBBO_GROUP, version = MemoryV2Contract.DUBBO_SERVICE_VERSION, protocol = "dubbo")
+@ConditionalOnProperty(name = "memory.v2.archive-enabled", havingValue = "true")
+public class MemoryV2RpcServiceImpl implements MemoryV2RpcService {
+    private final MemoryArchiveService archive;
+    private final MemorySharingAccessService sharing;
+    private final MemoryV2RequestSecurity security;
+
+    public MemoryV2RpcServiceImpl(MemoryArchiveService archive, MemorySharingAccessService sharing, MemoryV2RequestSecurity security) {
+        this.archive = archive;
+        this.sharing = sharing;
+        this.security = security;
+    }
+
+    public MemoryWorkingSetResponse readWorkingSet(MemoryWorkingSetRequest request, MemoryRequestProof proof) { return archive.readWorkingSet(request, proof); }
+    public MemoryReceivePermitResponse requestReceivePermit(MemoryReceivePermitRequest request, MemoryRequestProof proof) { return archive.requestReceivePermit(request, proof); }
+    public MemoryDeliveryResponse deliverMessages(MemoryDeliveryRequest request, MemoryRequestProof proof) { return archive.deliverMessages(request, proof); }
+    public MemorySummaryResponse submitSummary(MemorySummaryRequest request, MemoryRequestProof proof) { return archive.submitSummary(request, proof); }
+    public MemoryMatterQueryResponse queryMatters(MemoryMatterQueryRequest request, MemoryRequestProof proof) { return archive.queryMatters(request, proof); }
+    public MemoryEntityQueryResponse queryEntities(MemoryEntityQueryRequest request, MemoryRequestProof proof) { return archive.queryEntities(request, proof); }
+    public MemoryGrantResponse getGrant(MemoryGrantRequest request, MemoryRequestProof proof) { return sharing.getGrant(request, proof); }
+    public MemoryWithdrawalResponse withdrawSource(MemoryWithdrawalRequest request, MemoryRequestProof proof) { return archive.withdrawSource(request, proof); }
+
+    public MemoryPreferenceQueryResponse searchPreferences(MemoryPreferenceQueryRequest request, MemoryRequestProof proof) {
+        security.authorize(request, proof, MemoryV2Contract.OPERATION_SEARCH_PREFERENCES);
+        throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+    }
+
+    public MemoryExperienceQueryResponse searchExperiences(MemoryExperienceQueryRequest request, MemoryRequestProof proof) {
+        security.authorize(request, proof, MemoryV2Contract.OPERATION_SEARCH_EXPERIENCES);
+        throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+    }
+}

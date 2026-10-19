@@ -6,6 +6,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionException;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.dao.DataAccessException;
 
 import java.time.Instant;
 import java.util.List;
@@ -19,13 +20,15 @@ public class MemorySharingAccessService {
     private final MemoryV2RequestSecurity security;
     private final MemoryAccessPolicy policy;
     private final MemorySharingStore store;
+    private final MemorySourceAuthorizer sources;
     private final TransactionTemplate transaction;
 
     public MemorySharingAccessService(MemoryV2RequestSecurity security, MemoryAccessPolicy policy,
-                                       MemorySharingStore store, PlatformTransactionManager transactionManager) {
+                                       MemorySharingStore store, MemorySourceAuthorizer sources, PlatformTransactionManager transactionManager) {
         this.security = security;
         this.policy = policy;
         this.store = store;
+        this.sources = sources;
         this.transaction = new TransactionTemplate(transactionManager);
         transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
         transaction.setTimeout(5);
@@ -36,7 +39,7 @@ public class MemorySharingAccessService {
         policy.requireSelf(owner, request.sharedRef().sourceContext());
         try {
             return readAuthorized(request, proof, owner);
-        } catch (TransactionException exception) {
+        } catch (TransactionException | DataAccessException exception) {
             throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
         }
     }
@@ -46,6 +49,7 @@ public class MemorySharingAccessService {
             Authorized metadata = lockedMetadata(owner, request);
             MemorySharedExport export = store.readPayload(request.sharedRef());
             policy.requirePayload(request, metadata.header(), metadata.grant(), export);
+            sources.requireCurrent(export.sourceContext(), export.dependencies());
             return new Authorized(metadata.header(), metadata.grant(), export);
         });
         if (authorized == null) throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
@@ -60,6 +64,7 @@ public class MemorySharingAccessService {
             if (!current.header().equals(authorized.header()) || !current.grant().equals(authorized.grant())) {
                 throw new MemoryException(MemoryErrorCode.VERSION_CONFLICT);
             }
+            sources.requireCurrent(authorized.export().sourceContext(), authorized.export().dependencies());
             return new MemoryGrantResponse(current.grant(), List.of(authorized.export()));
         });
     }

@@ -23,6 +23,9 @@ public class MemoryV2SecurityProperties {
     public static class TrustedCaller {
         private String keyId;
         private String signingSecret;
+        private boolean serviceDelivery;
+        public boolean isServiceDelivery() { return serviceDelivery; }
+        public void setServiceDelivery(boolean serviceDelivery) { this.serviceDelivery = serviceDelivery; }
         /** Exact domain-to-agent allowlist; no cross-product expansion is performed. */
         private Map<String, Set<String>> allowedAgentsByDomain = new LinkedHashMap<>();
 

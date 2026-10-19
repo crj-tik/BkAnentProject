@@ -611,12 +611,19 @@ services:
 
   memory-service:
     <<: *app-service
+    image: bk-anent-memory:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        MAVEN_MODULES: memory-service
     profiles: [full]
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: memory-service-1.0.0-SNAPSHOT.jar
       DUBBO_REGISTRY_ADDRESS: "nacos://nacos:8848?namespace=${NACOS_NAMESPACE:-BK-AGENT}&group=DEFAULT_GROUP"
       MYSQL_DB_MEMORY: ${MYSQL_DB_MEMORY:-bk_memory}
+      MEMORY_V2_ARCHIVE_ENABLED: ${MEMORY_V2_ARCHIVE_ENABLED:-false}
       # Exact verified semantic profile registration only; unset/empty remains fail-closed.
       MEMORY_RAG_SEMANTIC_SCORING_VERSIONS: ${MEMORY_RAG_SEMANTIC_SCORING_VERSIONS:-}
       MEMORY_RAG_RPC_SECRET: ${MEMORY_RAG_RPC_SECRET:-}

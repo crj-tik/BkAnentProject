@@ -593,3 +593,33 @@
 **代码位置**：`MemoryGrantRequest`、`MemoryShareGrant.Participant`；memory-service 的 `MemoryAccessPolicy`、`MemorySharingStore`、`MemorySharingAccessService`；迁移 `20261019_memory_share_authorization.sql`。共享读取只接受服务端 SQL 记录，不接受请求携带的 grant 对象；索引未追平不影响已获准详情读取。
 
 **关联**：LR-33/40/41/55/58、KI-129/130；change 3.2，4.2 的 grant/export 子集。v2 provider 与真实客户端仍待后续接线；来源当前删除/撤回及派生依赖复核属 3.5/4.7，带上游 grant 的链式导出在该复核实现前失败关闭。grant 签发/更新与来源域发布属后续 10.2，本次没有对外写入口或运行 grant 数据。
+
+## LR-60 精确归档接收与迟到结果只授予受限 SERVICE 交付权
+
+**结论**：Memory 先以当前用户断言准入，再持久保存 caller/context/event/hash/purpose 许可，7 天内允许同一可信 caller 用显式启用的 SERVICE 交付能力补交付。actor 本身纳入 HMAC；SERVICE 不能读取、申请新许可、提交摘要或撤回。已知结果事件必须精确 hash 相同；尚未完成调用仅能从已入库 TOOL/ACCEPTED 事实预约一个 callId 的结果身份，首次交付冻结 hash，后续不同内容冲突。ASSISTANT 工具调用提案不等于受理证明。
+
+**根因**：用户租约结束不能让已授权入站事件丢失；让 owner 自动换发用户 token 则会把补交付升级为读取权限。服务签名与持久接收事实的交集限定补交付，且不保存 proof、token 或秘密。源事件、消息 ID 和 sequence 均有唯一约束；会话行锁、严格连续 sequence、真源/回执/待加工 job 同事务，丢回执或跨实例重试不增加消息与观察。乱序显式冲突后重投，绝不静默重排调用事实。
+
+**代码位置**：common 的 MemoryRequestProof/Signer、MemoryResultAdmission、MemoryCanonicalHash；memory-service 的 MemoryArchiveService/Store、MemoryV2RequestSecurity；迁移 130。Native provider 固定原 interface/group/version/protocol，增加 withdrawSource，总计十操作，默认 `archive-enabled=false`。
+
+**关联**：LR-33/41/55/58/59、KI-131/132；change 3.3/3.4/4.1/4.4。真实执行器可靠事实构造、journal 选择与 Agent 接线另验收；进程内重建/SQL 并发测试不冒充真实 A2A token 续期或目标 Agent 全链验收。
+
+## LR-61 归档摘要覆盖与来源撤回受 SQL 真源约束
+
+**结论**：摘要保存完整结构，采用累计前缀覆盖、当前 conversation revision 和精确来源依赖；全部覆盖消息必须已归档，完整工具组及非等待/非未知结果才可压缩。摘要与 covered cursor 同事务。run/checkpoint revision 属执行器，当前归档 provider 拒绝自称已核对 runVersion 的提交，后续运行面须独立完成 CAS。冷恢复只读有效摘要与全部未覆盖尾部，超过 500 消息或 1MiB 响应返回 CONTEXT_BUDGET_EXCEEDED，保留原文，不裁剪冒充完整。
+
+**根因**：保存摘要不能证明执行 checkpoint 已采用它；失效摘要也不能继续遮住原文尾部。消息/共享来源的版本、删除、grant 和传递依赖必须再查当前 SQL。工作集、实体/事项和共享详情输出前再次检查用户及来源，Auth RPC 不占 SQL 锁。私有来源撤回时保守失效整个会话派生集合和来源导出，读取排除不可用内容；删除立即清正文并保留事件/hash tombstone 和 PRIVACY_CLEANUP job，外部副本未确认时始终 DELETION_PENDING。领域执行账本与业务成功状态不改写。
+
+**代码位置**：MemoryArchiveService、MemorySourceAuthorizer、MemorySharingAccessService、memory_source_dependency 和 memory_processing_job。传递核验限 8 层/500 次，未知领域真源和未支持的链式 export 失败关闭；分页游标含 conversation revision 和末项身份 hash，元数据解析有界，255 字符实体 ID 仍可分页。
+
+**关联**：LR-22/23/55/56/59/60；3.5/4.5/4.7/6.x 的服务端基础，未据此完成 Agent checkpoint 入模/输出接线、异步处理/外部删除 worker 或 RAG 投影任务。用户读取失败不触发工具重执行；档案未确认禁止移除窗口，后续客户端沿相同错误语义接线。
+
+## LR-62 无时区 DATETIME 以 UTC 字面量跨 JDBC 驱动读写
+
+**结论**：Memory v2 许可和 job 的 DATETIME 使用 LocalDateTime.ofInstant(..., UTC) 写入；读取同时接受 MySQL 的 LocalDateTime 与 H2 的 Timestamp，后者以 toLocalDateTime 再按 UTC 解释。
+
+**根因**：MySQL Connector/J 对 DATETIME 的 getObject 返回 LocalDateTime，直接转 Timestamp 会抛类型异常；直接混用 Timestamp/系统时区还会使有效期偏移。真实开发 MySQL 测试首次暴露该差异，固定字面量同时回归两种返回类型。
+
+**代码位置**：MemoryArchiveStore.utcInstant/enqueue、MemoryArchiveService.requestReceivePermit/deliverMessages；MemoryArchiveServiceTest、MemoryArchiveMySqlTest。
+
+**关联**：KI-132、LR-59/60；只调整 Java 读写，不更改已经应用的迁移字节。

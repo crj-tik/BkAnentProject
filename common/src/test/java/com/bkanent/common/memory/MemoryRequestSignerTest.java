@@ -134,6 +134,16 @@ class MemoryRequestSignerTest {
         assertThat(decoded).isEqualTo(signed);
     }
 
+    @Test
+    void actorModeIsCryptographicallyBoundAndCannotBeRelabelled() {
+        var request = request();
+        var user = proof(request, CONTEXT);
+        var changed = new MemoryRequestProof(user.keyId(), user.issuedAtEpochSecond(), user.expiresAtEpochSecond(),
+                user.nonce(), user.signature(), MemoryRequestProof.Actor.SERVICE);
+        assertRejected(request, CONTEXT, changed, "marketing-content-service", MemoryV2Contract.MEMORY_AUDIENCE,
+                MemoryV2Contract.OPERATION_WORKING_SET, user.keyId());
+    }
+
     private void assertRejected(MemoryWorkingSetRequest request, MemoryContextKey context, MemoryRequestProof proof,
                                 String caller, String audience, String operation, String keyId) {
         assertThatThrownBy(() -> MemoryRequestSigner.verify(request, context, proof, caller, audience,

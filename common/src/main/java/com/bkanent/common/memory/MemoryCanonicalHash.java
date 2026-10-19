@@ -22,6 +22,34 @@ public final class MemoryCanonicalHash {
 
     private MemoryCanonicalHash() { }
 
+    /** Stable content identity. The source hash is excluded to avoid a self-referential digest. */
+    public static String messageHash(MemoryMessage message) {
+        MemoryContract.required(message, MemoryException.Field.HASH);
+        return contentHash(java.util.Arrays.asList(message.messageId(), message.contextKey(), message.sequence(), message.association(),
+                message.role(), message.text(), message.toolCalls(), message.toolResponses(),
+                message.source().sourceEventId(), message.source().version().revision(), message.source().version().schemaVersion()));
+    }
+
+    /** Includes all summary fields except its own content hash. */
+    public static String summaryHash(MemorySummary summary) {
+        return contentHash(java.util.Arrays.asList(summary.summaryId(), summary.contextKey(), summary.association(),
+                summary.version().revision(), summary.version().schemaVersion(), summary.expectedConversationRevision(),
+                summary.runVersion(), summary.coveredRange(), summary.toolGroupRanges(), summary.items(), summary.entities(), summary.dependencies()));
+    }
+
+    public static String contentHash(Object value) {
+        try {
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            DataOutputStream output = new DataOutputStream(bytes);
+            writeString(output, "memory.content.v2");
+            write(output, value, false);
+            output.flush();
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes.toByteArray()));
+        } catch (Exception exception) {
+            throw new MemoryException(MemoryErrorCode.INVALID_ARGUMENT, MemoryException.Field.HASH);
+        }
+    }
+
     /** Hashes only the payload record fields; operation/request identity stay in its signed envelope. */
     public static String requestBodyHash(MemoryV2Request request) {
         MemoryContract.required(request, MemoryException.Field.HASH);

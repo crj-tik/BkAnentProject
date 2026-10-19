@@ -32,11 +32,25 @@ public final class MemoryRequestSigner {
         requireInputs(request, context, secret);
         authenticate(principal != null && principal.userId() != null && principal.userId() > 0
                 && Long.toString(principal.userId()).equals(context.ownerId()));
+        return signBound(request, keyId, issuedAtEpochSecond, expiresAtEpochSecond, nonce, secret,
+                MemoryRequestProof.Actor.USER);
+    }
+
+    /** Service credentials grant only delivery; the server must additionally verify its durable permit. */
+    public static MemoryRequestProof signServiceDelivery(MemoryDeliveryRequest request, String keyId,
+                                                         long issued, long expires, String nonce, byte[] secret) {
+        requireInputs(request, request == null ? null : request.contextKey(), secret);
+        return signBound(request, keyId, issued, expires, nonce, secret, MemoryRequestProof.Actor.SERVICE);
+    }
+
+    private static MemoryRequestProof signBound(MemoryV2Request request, String keyId, long issuedAtEpochSecond,
+                                                long expiresAtEpochSecond, String nonce, byte[] secret,
+                                                MemoryRequestProof.Actor actor) {
         MemoryRequestEnvelope envelope = request.envelope();
         authenticate(equalHash(envelope.bodyHash(), MemoryCanonicalHash.requestBodyHash(request)));
-        byte[] payload = canonical(envelope, context, keyId, issuedAtEpochSecond, expiresAtEpochSecond, nonce);
+        byte[] payload = canonical(envelope, request.contextKey(), keyId, issuedAtEpochSecond, expiresAtEpochSecond, nonce, actor);
         return new MemoryRequestProof(keyId, issuedAtEpochSecond, expiresAtEpochSecond, nonce,
-                encode(mac(payload, secret)));
+                encode(mac(payload, secret)), actor);
     }
 
     public static void verify(MemoryV2Request request,
@@ -68,7 +82,8 @@ public final class MemoryRequestSigner {
         } catch (IllegalArgumentException exception) {
             throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
         }
-        byte[] expected = mac(canonical(envelope, context, proof.keyId(), issued, expires, proof.nonce()), secret);
+        authenticate(proof.actor() != null);
+        byte[] expected = mac(canonical(envelope, context, proof.keyId(), issued, expires, proof.nonce(), proof.actor()), secret);
         authenticate(MessageDigest.isEqual(expected, supplied)
                 && encode(supplied).equals(proof.signature()));
     }
@@ -87,12 +102,13 @@ public final class MemoryRequestSigner {
                                     String keyId,
                                     long issuedAt,
                                     long expiresAt,
-                                    String nonce) {
+                                    String nonce, MemoryRequestProof.Actor actor) {
         authenticate(keyId != null && !keyId.isBlank() && nonce != null && !nonce.isBlank());
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream(512);
             DataOutputStream output = new DataOutputStream(bytes);
             write(output, keyId);
+            write(output, actor.name());
             write(output, envelope.caller());
             write(output, envelope.audience());
             write(output, envelope.operation());

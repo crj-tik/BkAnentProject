@@ -10,6 +10,14 @@
 
 ## 待修复（OPEN）
 
+## KI-131 [FIXED·P3] Memory 通用 ID 正则实际接收 256 字符，与 SQL 的 255 不符
+
+**确认/修复日期**：2026-10-19，本提交（LR-60）。原首字符加 `{0,255}` 合计允许 256 字符，超长上下文等字段会在 SQL 写入时错误降级成依赖故障。统一为首字符加 `{0,254}`；255 接受/256 拒绝加入契约回归。最大合法实体 ID 使用 revision+身份 hash 的有界游标，避免游标前缀使合法 ID 再次超长；摘要索引 job 的事件身份同样采用稳定 hash。
+
+## KI-132 [FIXED·P2] Memory 接收许可 DATETIME 在真实 MySQL 下被误转 Timestamp
+
+**确认/修复日期**：2026-10-19，本提交（LR-62）。H2 的 JdbcTemplate map 返回 Timestamp，但 MySQL 8.4 Connector/J 返回 LocalDateTime。真实开发库补交付测试首次抛 ClassCastException，纯 H2 未暴露。统一 UTC 字面量读写并兼容两种返回类型；真实 MySQL 同一随机 fixture 的并发交付、进程重建、摘要覆盖、删除及索引计划验证通过，最终精确清理 fixture，无新容器。回归另覆盖固定微秒字面量，无依赖宿主时区的隐式偏移。
+
 ## KI-129 [FIXED·P2] Memory 共享查询混淆来源与接收方身份，缺少接收会话及用途约束
 
 **确认/修复日期**：2026-10-19，本提交。原 `MemoryGrantRequest.contextKey()` 返回 exportRef 的 sourceContext，`MemoryV2RequestSecurity` 却将其当 caller 的可信 domain/agent 检查，合法跨域接收方被拒绝；若靠扩大 caller 映射放行，则会破坏域私有边界。原 participant 仅含 domain/agent，无法限制共享许可所属的接收会话。

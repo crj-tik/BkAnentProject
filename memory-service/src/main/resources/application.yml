@@ -1,5 +1,6 @@
 memory:
   v2:
+    archive-enabled: ${MEMORY_V2_ARCHIVE_ENABLED:false}
     current-user-permission: ${MEMORY_V2_USER_PERMISSION:agent.chat.use}
     replay-cleanup-ms: ${MEMORY_V2_REPLAY_CLEANUP_MS:60000}
     # Empty by default. Populate from deployment-managed secrets and exact domain/agent mappings.

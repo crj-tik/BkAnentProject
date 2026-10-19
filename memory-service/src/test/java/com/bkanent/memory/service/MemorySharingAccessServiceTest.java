@@ -37,6 +37,18 @@ class MemorySharingAccessServiceTest {
     private static final MemoryExportRef REFERENCE = new MemoryExportRef("export-1", SOURCE, VERSION);
     private static final String PURPOSE = "draft-marketing";
 
+    @Test void sourceWithdrawalIsCheckedAtBothPayloadAndFinalOutputBoundary() throws Exception {
+        Fixture before = new Fixture(MemoryScope.Kind.TASK_SHARED, UnaryOperator.identity());
+        before.jdbc.update("UPDATE memory_message SET state='WITHDRAWN'");
+        var request = before.request(RECIPIENT, REFERENCE, before.scope, "matter-1", PURPOSE);
+        assertCode(MemoryErrorCode.WITHDRAWN, () -> before.service.getGrant(request, before.sign(request)));
+
+        Fixture during = new Fixture(MemoryScope.Kind.TASK_SHARED, UnaryOperator.identity());
+        during.auth.onSecondCheck = () -> during.jdbc.update("UPDATE memory_message SET state='WITHDRAWN'");
+        var second = during.request(RECIPIENT, REFERENCE, during.scope, "matter-1", PURPOSE);
+        assertCode(MemoryErrorCode.WITHDRAWN, () -> during.service.getGrant(second, during.sign(second)));
+    }
+
     @Test
     void taskShareReadsOnlyTheRequestedVersionWithoutWaitingForIndex() throws Exception {
         Fixture f = new Fixture(MemoryScope.Kind.TASK_SHARED, UnaryOperator.identity());
@@ -243,7 +255,7 @@ class MemorySharingAccessServiceTest {
             var datasource = new DriverManagerDataSource("jdbc:h2:mem:sharing-" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
             jdbc = new JdbcTemplate(datasource);
             try (var connection = datasource.getConnection()) {
-                for (String file : List.of("20261019_memory_v2_request_nonce.sql", "20261019_memory_share_authorization.sql")) {
+                for (String file : List.of("20261019_memory_v2_request_nonce.sql", "20261019_memory_share_authorization.sql", "20261019_memory_v2_archive.sql")) {
                     Path root = Path.of(System.getProperty("maven.multiModuleProjectDirectory"));
                     String sql = Files.readString(root.resolve("sql/migrations/" + file))
                             .replace("USE bk_memory;", "").replace(" CHARACTER SET ascii COLLATE ascii_bin", "")
@@ -254,7 +266,16 @@ class MemorySharingAccessServiceTest {
             }
             scope = new MemoryScope(kind, null, null, "shared-scope-1");
             String matter = kind == MemoryScope.Kind.TASK_SHARED ? "matter-1" : null;
-            var source = new MemorySourceRef(MemorySourceRef.Kind.MESSAGE, SOURCE, "message-1", "event-1", 1L, VERSION);
+            var association = new MemoryAssociation(matter, "run-1", "a2a-1", null);
+            var draftSource = new MemorySourceRef(MemorySourceRef.Kind.MESSAGE, SOURCE, "message-1", "event-1", 1L, VERSION);
+            var draftMessage = new MemoryMessage("message-1", SOURCE, 1, association, MemoryMessage.Role.USER,
+                    "synthetic source", List.of(), List.of(), draftSource);
+            var source = new MemorySourceRef(MemorySourceRef.Kind.MESSAGE, SOURCE, "message-1", "event-1", 1L,
+                    new MemoryRevision(1, MemoryCanonicalHash.messageHash(draftMessage), VERSION.schemaVersion()));
+            var sourceMessage = new MemoryMessage("message-1", SOURCE, 1, association, MemoryMessage.Role.USER,
+                    "synthetic source", List.of(), List.of(), source);
+            jdbc.update("INSERT INTO memory_message(context_id,sequence_no,message_id,source_event_id,content_hash,content_revision,schema_version,source_caller,payload_json) VALUES(?,?,?,?,?,?,?,?,?)",
+                    MemoryArchiveStore.key(SOURCE), 1, "message-1", "event-1", source.version().contentHash(), 1, VERSION.schemaVersion(), "interview-service", mapper.writeValueAsString(sourceMessage));
             Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
             grant = transform.apply(new MemoryShareGrant(new MemoryGrantRef("grant-1", 1), SOURCE, scope, matter, PURPOSE,
                     List.of(new MemoryShareGrant.Participant(RECIPIENT.domainId(), RECIPIENT.agentId(), RECIPIENT.conversationId())),
@@ -274,7 +295,9 @@ class MemorySharingAccessServiceTest {
             properties.setTrustedCallers(Map.of("marketing-service", caller));
             var security = new MemoryV2RequestSecurity(properties, auth, new MemoryV2ReplayGuard(jdbc));
             store = new CountingStore(jdbc, mapper);
-            service = new MemorySharingAccessService(security, new MemoryAccessPolicy(), store, new DataSourceTransactionManager(datasource));
+            var policy = new MemoryAccessPolicy();
+            var sources = new MemorySourceAuthorizer(new MemoryArchiveStore(jdbc, mapper), store, policy);
+            service = new MemorySharingAccessService(security, policy, store, sources, new DataSourceTransactionManager(datasource));
         }
 
         private void insertGrant(MemoryShareGrant value) {

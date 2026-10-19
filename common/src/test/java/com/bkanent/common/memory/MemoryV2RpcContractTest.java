@@ -155,6 +155,24 @@ class MemoryV2RpcContractTest {
         }
     }
 
+    @Test void admissionWithdrawalAndActorProofRoundTripThroughTheChosenWire() throws Exception {
+        var admission = new MemoryResultAdmission(source("accepted", 1), "call-1", "result-event", "result-message", 2);
+        var request = new MemoryReceivePermitRequest(envelope(MemoryV2Contract.OPERATION_RECEIVE_PERMIT), CONTEXT,
+                List.of(), List.of(admission));
+        assertThat(spi(request, MemoryReceivePermitRequest.class)).isEqualTo(request);
+        var withdrawal = new MemoryWithdrawalRequest(envelope(MemoryV2Contract.OPERATION_WITHDRAW), CONTEXT, "event-1", true);
+        assertThat(spi(withdrawal, MemoryWithdrawalRequest.class)).isEqualTo(withdrawal);
+        var response = new MemoryWithdrawalResponse("event-1", MemoryState.DELETION_PENDING, new MemoryConversationVersion(2, 1, "v2"));
+        assertThat(spi(response, MemoryWithdrawalResponse.class)).isEqualTo(response);
+        var proof = new MemoryRequestProof("key", 100, 160, "n".repeat(22), "s".repeat(43), MemoryRequestProof.Actor.SERVICE);
+        assertThat(spi(proof, MemoryRequestProof.class)).isEqualTo(proof);
+    }
+
+    @Test void idsMatchSqlMaximumRatherThanAcceptingA256thCharacter() {
+        assertThat(new MemoryContextKey("o".repeat(255), "d", "a", "c").ownerId()).hasSize(255);
+        assertThatThrownBy(() -> new MemoryContextKey("o".repeat(256), "d", "a", "c")).isInstanceOf(MemoryException.class);
+    }
+
     private Object spi(Object value, Class<?> type) throws Exception {
         var bytes = new ByteArrayOutputStream();
         var output = serialization.serialize(null, bytes);
