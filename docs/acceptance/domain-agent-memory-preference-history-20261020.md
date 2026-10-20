@@ -44,8 +44,16 @@ mvn -o -gs .mvn-settings.xml -s .mvn-settings.xml -pl agent-service,memory-servi
 
 迁移 160 新增 observation、preference_block/revision/transition 四表，保持既有 SQL 字节不变。通过 manifest LF/SHA256 dry-run，既有 `bk-anent-dev-mysql-1` 完整 upgrade/check 两次通过；H2 fixture 同一迁移也重复执行。没有自动导入旧单值偏好。
 
-本轮只更新既有 `bk-anent-dev-memory-service-1`，V2 开关保持原状态。编译、打包、部署制品与健康结果完成后在此补录。
+本轮只更新既有 `bk-anent-dev-memory-service-1`，V2 保持原先默认关闭状态。使用本机离线 package 产物覆盖既有镜像内 Memory JAR，随后 `--no-deps --no-build` 更新规范服务，无额外构建/测试容器。
+
+2026-10-20 14:39（Asia/Shanghai）复核：
+
+| 服务 | 容器 ID | 镜像 ID | readiness / health |
+| --- | --- | --- | --- |
+| `bk-anent-dev-memory-service-1` | `09e919b7cde6` | `ac517bdedfba` | 200 / 200 |
+
+容器内 JAR 与本机产物 SHA-256 均为 `c15fc5085cca1e284b66cc3ea53db67cb107eca7da728245b6ce59e8d85bef61`，镜像标记 `org.opencontainers.image.revision=6bba908`。现有项目容器仍为 31 个、运行 24 个，其余 30 个容器名称与 ID 完全不变；Agent 等原服务未重建。
 
 ## 关联
 
-LR-68/69；KI-140/141。实现提交在最终记录中补录。
+LR-68/69；KI-140/141。实现与修复提交：`6bba908`，已推送 `origin/dev-fix`。

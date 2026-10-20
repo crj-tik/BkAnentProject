@@ -33,7 +33,7 @@
 
 首次启用前的 KI-129 契约修正：`MemoryGrantRequest` 独立传递接收 contextKey、来源 exportRef、scope/matter/purpose，`MemoryShareGrant.Participant` 绑定接收 conversationId。此前仅由来源引用推导调用者身份的 v2 测试客户端须随当前源码更新；v1 形状及消费者不受影响。共享引用不是认证凭据，展示/协作许可不兑换 durable export，当前 RPC 详情路径只返回一个明确请求且获准的导出版本。
 
-本次首次启用前的 v2 wire 变更：proof 增加签名覆盖的 USER/SERVICE actor；permit 请求增加 `resultAdmissions` 与 writer authority；消息增加来源依赖；摘要请求增加 writer authority；工具 response 增加 `RETURNED`（只证明 callback 返回）；接口增加 `withdrawSource`、`manageWriter`、`checkBoundary`，十二个方法均声明安全异常。所有 v2 caller 必须一起更新，不能混用先前未启用的 v2 测试制品。事件用途固定为 `conversation-archive`；结果许可仅接受已入库 TOOL/ACCEPTED 事实，模型 ASSISTANT 提案与回调 JSON 中的状态文本无效。来源工具事实必须由真实执行器构造，本批没有开放模型自行签名入口。
+本次首次启用前的 v2 wire 变更：proof 增加签名覆盖的 USER/SERVICE actor；permit 请求增加 `resultAdmissions` 与 writer authority；消息增加来源依赖；摘要请求增加 writer authority；工具 response 增加 `RETURNED`（只证明 callback 返回）；接口增加 `withdrawSource`、`manageWriter`、`checkBoundary`，加上偏好归并/详情后，十四个方法均声明安全异常。所有 v2 caller 必须一起更新，不能混用先前未启用的 v2 测试制品。事件用途固定为 `conversation-archive`；结果许可仅接受已入库 TOOL/ACCEPTED 事实，模型 ASSISTANT 提案与回调 JSON 中的状态文本无效。来源工具事实必须由真实执行器构造，本批没有开放模型自行签名入口。
 
 ## 4. 防互污染规则（测试锁定）
 
