@@ -1,0 +1,389 @@
+package com.bkanent.agent.orchestration;
+
+import com.bkanent.agent.config.AgentRagConsumerProperties;
+import com.bkanent.agent.entity.AgentWorkflowCheckpointEntity;
+import com.bkanent.agent.graph.official.*;
+import com.bkanent.agent.mapper.AgentWorkflowCheckpointMapper;
+import com.bkanent.agent.memory.*;
+import com.bkanent.agent.model.distributed.SupervisorTaskRequest;
+import com.bkanent.agent.security.AgentRagCredentialLeaseStore;
+import com.bkanent.agent.stream.SessionStreamService;
+import com.bkanent.common.agent.SessionStreamEvent;
+import com.bkanent.common.memory.*;
+import com.bkanent.common.rpc.*;
+import com.bkanent.common.skill.core.SkillRegistry;
+import com.bkanent.memory.runtime.MemoryWorkingSetCache;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.dubbo.config.ReferenceConfig;
+import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.messages.*;
+import org.springframework.ai.tool.ToolCallback;
+import org.springframework.ai.tool.definition.ToolDefinition;
+import org.springframework.beans.factory.support.DefaultListableBeanFactory;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.jdbc.datasource.init.ScriptUtils;
+
+import java.lang.reflect.Proxy;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
+import java.time.*;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
+/** Real Graph, persisted checkpoint saver, reference journal, current actor lease and thin runtime.
+ * Only the remote Memory endpoint is a contract fixture; its actual SQL/security is tested in memory-service. */
+class SupervisorMemoryIntegrationTest {
+    @Test void actualModelNodesArchiveOnceReuseWindowAndNeverPersistCredential() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.localToolThenAnswer();
+            var response = f.execute("run", "first input");
+            assertEquals("COMPLETED", response.status());
+            assertEquals(1, f.effects.get());
+            assertEquals(4, f.remote.snapshot.messages().size());
+            assertEquals(1, f.remote.count("readWorkingSet"));
+            assertTrue(f.remote.count("checkBoundary") >= 4);
+            assertEquals(4, f.jdbc.queryForObject("SELECT COUNT(*) FROM agent_memory_delivery WHERE state='RECEIVED'", Integer.class));
+            assertEquals("COMPLETED", f.store.find("run", "call-1").status());
+            for (String json : f.jdbc.queryForList("SELECT snapshot_json FROM agent_workflow_checkpoint", String.class)) assertFalse(json.contains("transport-only-value"));
+            assertFalse(f.store.json(f.store.originalRequest("run")).contains("transport-only-value"));
+            assertEquals(0, f.remote.activeWriters);
+        }
+    }
+
+    @Test void secondRunRestoresSameConversationWithoutDuplicatingCurrentInput() throws Exception {
+        try (Fixture f = new Fixture()) {
+            when(f.model.call(anyList(), anyList())).thenAnswer(call -> {
+                List<Message> messages = call.getArgument(0);
+                f.inputs.add(messages);
+                return new AssistantMessage("answer");
+            });
+            assertEquals("COMPLETED", f.execute("run-1", "unique first input").status());
+            assertEquals("COMPLETED", f.execute("run-2", "unique second input").status());
+            String second = f.inputs.get(1).toString();
+            assertEquals(1, occurrences(second, "unique second input"));
+            assertEquals(1, occurrences(second, "unique first input"));
+            assertEquals(1, f.remote.count("readWorkingSet"));
+        }
+    }
+
+    @Test void completedBusinessToolIsNotRerunWhenLostMemoryReceiptIsRecovered() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.localToolThenAnswer();
+            f.remote.loseToolReceipt = true;
+            var failed = f.execute("run", "find");
+            assertEquals("FAILED", failed.status());
+            assertEquals("COMPLETED", f.store.find("run", "call-1").status());
+            assertEquals(1, f.effects.get());
+            assertTrue(f.jdbc.queryForObject("SELECT COUNT(*) FROM agent_memory_delivery WHERE state='PENDING'", Integer.class) > 0);
+            f.remote.loseToolReceipt = false;
+            f.restartIdentity();
+            assertThrows(com.bkanent.agent.security.AgentRagAuthenticationException.class, () -> f.runner.execute(f.request("run", "find")));
+            assertEquals("COMPLETED", f.execute("run", "find").status());
+            assertEquals(1, f.effects.get());
+            assertEquals(4, f.remote.snapshot.messages().size(), "missing reply retries the same immutable event");
+            assertEquals(0, f.jdbc.queryForObject("SELECT COUNT(*) FROM agent_memory_delivery WHERE state='PENDING'", Integer.class));
+        }
+    }
+
+    @Test void sourceRevokedDuringModelCannotEscapeIntoOutputOrCheckpoint() throws Exception {
+        try (Fixture f = new Fixture()) {
+            when(f.model.call(anyList(), anyList())).thenAnswer(call -> { f.remote.revoked = true; return new AssistantMessage("stale private output"); });
+            var response = f.execute("run", "input");
+            assertEquals("FAILED", response.status());
+            assertEquals("MEMORY_WITHDRAWN", response.governanceMetadata().get("errorCode"));
+            assertEquals("记忆资料当前不可安全使用，已保留执行记录，请重新认证或稍后恢复。", response.finalAnswer());
+            assertTrue(((List<?>) response.governanceMetadata().get("calls")).isEmpty());
+            for (String json : f.jdbc.queryForList("SELECT snapshot_json FROM agent_workflow_checkpoint", String.class)) assertFalse(json.contains("stale private output"));
+            assertEquals(0, f.effects.get());
+        }
+    }
+
+    @Test void v2CheckpointCannotFallBackToRawBodyWhenFeatureIsDisabled() throws Exception {
+        try (Fixture f = new Fixture()) {
+            when(f.model.call(anyList(), anyList())).thenReturn(new AssistantMessage("private old answer"));
+            f.execute("run", "input");
+            f.properties.setEnabled(false);
+            try (var auth = f.identities.openAuthorization("Bearer transport-only-value")) {
+                assertEquals(MemoryErrorCode.MEMORY_UNAVAILABLE, assertThrows(MemoryException.class, () -> f.runner.current("run", "1")).code());
+            }
+        }
+    }
+
+    @Test void disabledForNewRunKeepsOriginalPathWithZeroMemoryRpc() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.properties.setEnabled(false); f.localToolThenAnswer();
+            assertEquals("COMPLETED", f.execute("run", "original request").status());
+            assertEquals(1, f.effects.get());
+            assertTrue(f.remote.calls.isEmpty());
+            assertEquals(0, f.jdbc.queryForObject("SELECT COUNT(*) FROM agent_memory_delivery", Integer.class));
+        }
+    }
+
+    @Test void actualCompressionModelGetsNoToolsAndWindowAdoptsOnlyCommittedCoverage() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.properties.setCompressionEnabled(true); f.properties.setSoftTokens(1); f.properties.setRecentMessages(1);
+            f.localToolThenAnswer();
+            assertEquals("COMPLETED", f.execute("run", "first input").status());
+            assertEquals(1, f.remote.count("submitSummary"));
+            assertEquals(1, f.summaryCalls.get());
+            assertEquals(1, f.remote.snapshot.summaries().get(0).coveredRange().throughSequence());
+            assertEquals(1, f.effects.get());
+            assertEquals(4, f.state("run").messages.size(), "checkpoint keeps execution facts independently from adopted model window");
+        }
+    }
+
+    @Test void hardBudgetStopsBeforeModelAndKeepsCheckpointAndJournal() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.properties.setHardTokens(1);
+            var result = f.execute("run", "input");
+            assertEquals("FAILED", result.status());
+            assertEquals("MEMORY_CONTEXT_BUDGET_EXCEEDED", result.governanceMetadata().get("errorCode"));
+            verifyNoInteractions(f.model);
+            assertEquals(1, f.jdbc.queryForObject("SELECT COUNT(*) FROM agent_memory_delivery", Integer.class));
+            assertEquals(1, f.state("run").messages.size());
+        }
+    }
+
+    @Test void timedOutSummaryKeepsOriginalWindowAndCannotCommitAfterCancellation() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.properties.setCompressionEnabled(true); f.properties.setSoftTokens(1); f.properties.setRecentMessages(1);
+            f.properties.setSummaryTimeoutMs(1000);
+            CountDownLatch interrupted = new CountDownLatch(1);
+            f.onSummary = () -> {
+                try { new CountDownLatch(1).await(5, TimeUnit.SECONDS); }
+                catch (InterruptedException exception) {
+                    interrupted.countDown();
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("summary cancelled", exception);
+                }
+            };
+            f.localToolThenAnswer();
+            assertEquals("COMPLETED", f.execute("run", "first input").status());
+            assertTrue(interrupted.await(2, TimeUnit.SECONDS), "timed out candidate generation is cancelled");
+            assertEquals(0, f.remote.count("submitSummary"));
+            assertTrue(f.remote.snapshot.summaries().isEmpty());
+            assertEquals(4, f.remote.snapshot.messages().size());
+            assertEquals(4, f.state("run").messages.size());
+            assertEquals(1, f.effects.get());
+        }
+    }
+
+    @Test void initialOptionalDependencyFailureDoesNotMasqueradeAsLoadedHistory() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.remote.unavailable = true;
+            when(f.model.call(anyList(), anyList())).thenReturn(new AssistantMessage("independent answer"));
+            var result = f.execute("run", "independent input");
+            assertEquals("COMPLETED", result.status());
+            assertEquals("MEMORY_UNAVAILABLE", result.governanceMetadata().get("memoryStatus"));
+            assertEquals("NOT_APPLIED", f.state("run").memoryMode);
+            assertEquals(0, f.jdbc.queryForObject("SELECT COUNT(*) FROM agent_memory_delivery", Integer.class));
+        }
+    }
+
+    @Test void historicalMemoryCannotBeForwardedToExternalCollaboratorWithoutGrant() throws Exception {
+        try (Fixture f = new Fixture()) {
+            when(f.model.call(anyList(), anyList())).thenReturn(new AssistantMessage("first result"));
+            assertEquals("COMPLETED", f.execute("run-1", "private input").status());
+            AtomicInteger externalEffects = new AtomicInteger();
+            ToolCallback external = new ToolCallback() {
+                public ToolDefinition getToolDefinition() { return ToolDefinition.builder().name("send").description("external collaboration").inputSchema("{\"type\":\"object\"}").build(); }
+                public String call(String arguments) { externalEffects.incrementAndGet(); return "sent"; }
+            };
+            when(f.catalog.snapshot("1", true)).thenReturn(Map.of("a2a:partner:send", new SupervisorCapability("a2a:partner:send", "a2a", "partner", "1", external)));
+            when(f.model.call(anyList(), anyList())).thenReturn(AssistantMessage.builder().content("")
+                    .toolCalls(List.of(new AssistantMessage.ToolCall("call-external", "function", "send", "{}"))).build());
+            var response = f.execute("run-2", "continue with partner");
+            assertEquals("FAILED", response.status());
+            assertEquals("MEMORY_FORBIDDEN", response.governanceMetadata().get("errorCode"));
+            assertEquals(0, externalEffects.get());
+            assertNull(f.store.find("run-2", "call-external"));
+        }
+    }
+
+    @Test void revocationAfterToolEffectWithholdsToolResultEventUntilRecovery() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.onToolCall = () -> f.remote.revoked = true;
+            when(f.model.call(anyList(), anyList())).thenReturn(AssistantMessage.builder().content("")
+                    .toolCalls(List.of(new AssistantMessage.ToolCall("call-1", "function", "find", "{}"))).build());
+            var response = f.execute("run", "input");
+            assertEquals("FAILED", response.status());
+            assertEquals("MEMORY_WITHDRAWN", response.governanceMetadata().get("errorCode"));
+            assertTrue(((List<?>) response.governanceMetadata().get("calls")).isEmpty(), "revoked tool content is withheld from the task response");
+            assertTrue(response.artifactIds().isEmpty(), "memory-derived artifacts are withheld after source revocation");
+            assertEquals(1, f.effects.get(), "memory recovery cannot re-run the completed local action");
+            var events = org.mockito.ArgumentCaptor.forClass(SessionStreamEvent.class);
+            verify(f.stream, atLeastOnce()).publish(events.capture());
+            assertFalse(events.getAllValues().stream().anyMatch(event -> "tool.completed".equals(event.eventType())));
+            assertEquals("COMPLETED", f.store.find("run", "call-1").status());
+            assertTrue(f.remote.snapshot.messages().stream().noneMatch(message -> message.role() == MemoryMessage.Role.TOOL));
+            assertEquals(1, f.state("run").results.size(), "the tool result remains in the recoverable graph checkpoint");
+        }
+    }
+
+    static int occurrences(String text, String needle) { return (text.length() - text.replace(needle, "").length()) / needle.length(); }
+
+    static class Fixture implements AutoCloseable {
+        final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        final OrchestrationStore store = OrchestrationStoreTest.database(mapper);
+        final JdbcTemplate jdbc = (JdbcTemplate) org.springframework.test.util.ReflectionTestUtils.getField(store, "jdbc");
+        final SupervisorMemoryProperties properties = new SupervisorMemoryProperties();
+        final SupervisorModelTurn model = mock(SupervisorModelTurn.class);
+        final SupervisorCapabilityCatalog catalog = mock(SupervisorCapabilityCatalog.class);
+        final SkillRegistry skills = mock(SkillRegistry.class);
+        final SupervisorOrchestrationProperties orchestration = new SupervisorOrchestrationProperties();
+        final AtomicInteger effects = new AtomicInteger();
+        final AtomicInteger summaryCalls = new AtomicInteger();
+        final List<List<Message>> inputs = new ArrayList<>();
+        final SessionStreamService stream = mock(SessionStreamService.class);
+        Runnable onToolCall = () -> { };
+        Runnable onSummary = () -> { };
+        final Remote remote = new Remote();
+        final SupervisorToolLoopGraph factory;
+        final SupervisorToolLoopRunner runner;
+        final com.alibaba.cloud.ai.graph.CompiledGraph graph;
+        SupervisorMemoryLifecycle lifecycle;
+        AgentRagCredentialLeaseStore identities;
+
+        @SuppressWarnings("unchecked") Fixture() throws Exception {
+            Path root = Path.of(System.getProperty("maven.multiModuleProjectDirectory"));
+            String bootstrap = Files.readString(root.resolve("sql/mysql-init.sql"));
+            int start = bootstrap.indexOf("CREATE TABLE IF NOT EXISTS agent_workflow_checkpoint (");
+            int end = bootstrap.indexOf(";", start);
+            String checkpointDdl = bootstrap.substring(start, end + 1).replace("ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", "");
+            try (var connection = Objects.requireNonNull(jdbc.getDataSource()).getConnection()) {
+                ScriptUtils.executeSqlScript(connection, new ByteArrayResource(checkpointDdl.getBytes(StandardCharsets.UTF_8)));
+                String migration = Files.readString(root.resolve("sql/migrations/20261019_supervisor_memory_delivery.sql"))
+                        .replace("USE bk_agent;", "").replace(" CHARACTER SET ascii COLLATE ascii_bin", "").replace("ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", "");
+                ScriptUtils.executeSqlScript(connection, new ByteArrayResource(migration.getBytes(StandardCharsets.UTF_8)));
+                ScriptUtils.executeSqlScript(connection, new ByteArrayResource(migration.getBytes(StandardCharsets.UTF_8)));
+            }
+            properties.setEnabled(true); properties.setSigningSecret(remote.secret); properties.setKeyId("agent-current");
+            properties.setSoftTokens(10000); properties.setHardTokens(20000);
+            var persistence = mock(AgentWorkflowCheckpointMapper.class);
+            TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), "memory-fixture"), AgentWorkflowCheckpointEntity.class);
+            when(persistence.selectOne(any())).thenAnswer(invocation -> rows(task(invocation.getArgument(0))).stream().findFirst().orElse(null));
+            when(persistence.selectList(any())).thenAnswer(invocation -> rows(task(invocation.getArgument(0))));
+            when(persistence.insert(any(AgentWorkflowCheckpointEntity.class))).thenAnswer(invocation -> {
+                AgentWorkflowCheckpointEntity row = invocation.getArgument(0);
+                return jdbc.update("INSERT INTO agent_workflow_checkpoint(task_id,session_id,trace_id,workflow_status,snapshot_json,checkpoint_version) VALUES(?,?,?,?,?,?)",
+                        row.getTaskId(), row.getSessionId(), row.getTraceId(), row.getWorkflowStatus(), row.getSnapshotJson(), row.getCheckpointVersion());
+            });
+            when(skills.findOperationalSkills("supervisor")).thenReturn(List.of()); when(skills.findSupervisorSkills()).thenReturn(List.of());
+            ToolCallback tool = new ToolCallback() {
+                public ToolDefinition getToolDefinition() { return ToolDefinition.builder().name("find").description("local read").inputSchema("{\"type\":\"object\"}").build(); }
+                public String call(String arguments) { effects.incrementAndGet(); onToolCall.run(); return "{\"result\":\"complete structured fact\",\"number\":123}"; }
+            };
+            when(catalog.snapshot("1", true)).thenReturn(Map.of("local:find", new SupervisorCapability("local:find", "local", "find", "1", tool)));
+            factory = new SupervisorToolLoopGraph(catalog, model, skills, store, mapper, orchestration, stream,
+                    new OfficialSupervisorGraphSchema(), new DatabaseCheckpointSaverFactory(persistence, mapper));
+            graph = factory.create();
+            runner = new SupervisorToolLoopRunner(factory, graph, store, orchestration, mock(ApprovalResumeClaimStore.class));
+            restartIdentity();
+        }
+        void restartIdentity() {
+            if (lifecycle != null) lifecycle.close();
+            var auth = mock(AuthPermissionRpcService.class); when(auth.resolvePrincipal("transport-only-value")).thenReturn(new AuthenticatedPrincipal(1L));
+            var beans = new DefaultListableBeanFactory(); beans.registerSingleton("fixtureAuth", auth);
+            identities = new AgentRagCredentialLeaseStore(new AgentRagConsumerProperties(), beans.getBeanProvider(AuthPermissionRpcService.class));
+            var reference = mock(ReferenceConfig.class); when(reference.get()).thenReturn(remote.rpc);
+            lifecycle = new SupervisorMemoryLifecycle(properties, new SupervisorMemoryJournal(jdbc, mapper, new DataSourceTransactionManager(jdbc.getDataSource())),
+                    store, new MemoryWorkingSetCache(8, 8 * 1024 * 1024, 60000, Clock.systemUTC()), reference, identities, mapper, model);
+            factory.setRagCredentials(identities); runner.setRagCredentials(identities); factory.setMemory(lifecycle);
+        }
+        void localToolThenAnswer() {
+            when(model.call(anyList(), anyList())).thenAnswer(invocation -> {
+                List<ToolCallback> tools = invocation.getArgument(1);
+                if (tools.isEmpty()) { summaryCalls.incrementAndGet(); onSummary.run(); return new AssistantMessage("[{\"kind\":\"FACT\",\"text\":\"summarized input\",\"evidence\":[0]}]"); }
+                inputs.add(invocation.getArgument(0));
+                if (effects.get() == 0) return AssistantMessage.builder().content("").toolCalls(List.of(new AssistantMessage.ToolCall("call-1", "function", "find", "{}"))).build();
+                return new AssistantMessage("done");
+            });
+        }
+        SupervisorTaskRequest request(String run, String input) { return new SupervisorTaskRequest("session", "1", run, "trace", input, Map.of(), "api", false); }
+        com.bkanent.agent.model.distributed.SupervisorTaskResponse execute(String run, String input) throws Exception {
+            try (var scope = identities.openAuthorization("Bearer transport-only-value")) { return runner.execute(request(run, input)); }
+        }
+        ToolLoopState state(String run) { return factory.stateOf(graph.lastStateOf(com.alibaba.cloud.ai.graph.RunnableConfig.builder().threadId(run).build()).orElseThrow().state()); }
+        String task(LambdaQueryWrapper<?> query) { query.getSqlSegment(); return (String) query.getParamNameValuePairs().values().iterator().next(); }
+        List<AgentWorkflowCheckpointEntity> rows(String run) { return jdbc.query("SELECT * FROM agent_workflow_checkpoint WHERE task_id=? ORDER BY checkpoint_version DESC", (rs, n) -> {
+            var row = new AgentWorkflowCheckpointEntity(); row.setTaskId(run); row.setCheckpointVersion(rs.getInt("checkpoint_version")); row.setSnapshotJson(rs.getString("snapshot_json")); return row;
+        }, run); }
+        public void close() { lifecycle.close(); factory.close(); runner.close(); }
+    }
+
+    static class Remote {
+        final String secret = UUID.randomUUID().toString() + UUID.randomUUID();
+        final Map<String,Integer> calls = new HashMap<>();
+        final Map<String,List<MemoryReceivePermitRequest.EventSubmission>> permits = new HashMap<>();
+        MemoryWorkingSetResponse snapshot = new MemoryWorkingSetResponse(new MemoryContextKey("1", "supervisor", "supervisor-agent", "session"),
+                new MemoryConversationVersion(0, 0, "fixture-v2"), List.of(), List.of(), List.of());
+        long fence;
+        int activeWriters;
+        boolean loseToolReceipt;
+        boolean revoked;
+        boolean unavailable;
+        final MemoryV2RpcService rpc = (MemoryV2RpcService) Proxy.newProxyInstance(getClass().getClassLoader(), new Class[]{MemoryV2RpcService.class}, (proxy, method, args) -> {
+            String name = method.getName();
+            calls.merge(name, 1, Integer::sum);
+            if (unavailable) throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+            MemoryV2Request request = (MemoryV2Request) args[0];
+            MemoryRequestProof proof = (MemoryRequestProof) args[1];
+            MemoryRequestSigner.verify(request, request.contextKey(), proof, "agent-service", MemoryV2Contract.MEMORY_AUDIENCE,
+                    request.envelope().operation(), "agent-current", Instant.now(), secret.getBytes(StandardCharsets.UTF_8));
+            if (!name.equals("deliverMessages") && proof.actor() != MemoryRequestProof.Actor.USER) throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
+            return switch (name) {
+                case "manageWriter" -> {
+                    var writer = (MemoryWriterRequest) request;
+                    if (writer.action() == MemoryWriterRequest.Action.ACQUIRE) { activeWriters = 1; fence++; }
+                    else if (writer.fence() != fence) throw new MemoryException(MemoryErrorCode.VERSION_CONFLICT);
+                    if (writer.action() == MemoryWriterRequest.Action.RELEASE) activeWriters = 0;
+                    yield new MemoryWriterResponse(new MemoryWriteAuthority(writer.runId(), fence), System.currentTimeMillis() + 120000, snapshot.version());
+                }
+                case "readWorkingSet" -> snapshot;
+                case "checkBoundary" -> {
+                    if (revoked) throw new MemoryException(MemoryErrorCode.WITHDRAWN);
+                    var boundary = (MemoryBoundaryRequest) request;
+                    yield new MemoryBoundaryResponse(snapshot.version(), snapshot.version().equals(boundary.adoptedVersion()));
+                }
+                case "requestReceivePermit" -> {
+                    var permit = (MemoryReceivePermitRequest) request; String id = UUID.randomUUID().toString(); permits.put(id, permit.events());
+                    yield new MemoryReceivePermitResponse(id, permit.events().stream().map(event -> new MemoryReceivePermitResponse.EventAcceptance(event.eventId(), true, null)).toList());
+                }
+                case "deliverMessages" -> {
+                    var delivery = (MemoryDeliveryRequest) request;
+                    List<MemoryMessage> messages = new ArrayList<>(snapshot.messages()); boolean changed = false;
+                    long last = snapshot.version().lastSequence();
+                    for (var message : delivery.messages()) {
+                        if (messages.stream().anyMatch(m -> m.source().sourceEventId().equals(message.source().sourceEventId()))) continue;
+                        if (message.sequence() != last + 1) throw new MemoryException(MemoryErrorCode.VERSION_CONFLICT);
+                        messages.add(message); last++; changed = true;
+                    }
+                    snapshot = new MemoryWorkingSetResponse(snapshot.contextKey(), new MemoryConversationVersion(snapshot.version().revision() + (changed ? 1 : 0), last, "fixture-v2"), messages, snapshot.summaries(), List.of());
+                    if (loseToolReceipt && delivery.messages().stream().anyMatch(m -> m.role() == MemoryMessage.Role.TOOL)) throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+                    yield new MemoryDeliveryResponse(delivery.permitId(), snapshot.version(), delivery.messages().stream().map(m -> new MemoryDeliveryResponse.DeliveryResult(m.sequence(), true, null)).toList());
+                }
+                case "submitSummary" -> {
+                    var summary = ((MemorySummaryRequest) request).summary();
+                    if (summary.expectedConversationRevision() != snapshot.version().revision()) throw new MemoryException(MemoryErrorCode.VERSION_CONFLICT);
+                    snapshot = new MemoryWorkingSetResponse(snapshot.contextKey(), new MemoryConversationVersion(snapshot.version().revision() + 1, snapshot.version().lastSequence(), "fixture-v2"),
+                            snapshot.messages().stream().filter(m -> m.sequence() > summary.coveredRange().throughSequence()).toList(), List.of(summary), List.of());
+                    yield new MemorySummaryResponse(summary.summaryId(), true, null, snapshot.version());
+                }
+                default -> throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+            };
+        });
+        int count(String method) { return calls.getOrDefault(method, 0); }
+    }
+}

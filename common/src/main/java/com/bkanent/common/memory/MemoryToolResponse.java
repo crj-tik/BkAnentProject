@@ -8,7 +8,7 @@ public record MemoryToolResponse(String callId, String toolName, ExecutionState 
                                  DataForm dataForm, MemoryJsonValue responseData, MemorySourceRef fullDataRef,
                                  List<MemorySourceDependency> dependencies) implements Serializable {
     private static final long serialVersionUID = 1L;
-    public enum ExecutionState { SUCCEEDED, FAILED, WAITING_APPROVAL, NOT_EXECUTED, ACCEPTED, PARTIAL, OUTCOME_UNKNOWN }
+    public enum ExecutionState { SUCCEEDED, FAILED, WAITING_APPROVAL, NOT_EXECUTED, ACCEPTED, PARTIAL, OUTCOME_UNKNOWN, RETURNED }
     public enum DataForm { INLINE_COMPLETE, REFERENCED_COMPLETE }
 
     public MemoryToolResponse {

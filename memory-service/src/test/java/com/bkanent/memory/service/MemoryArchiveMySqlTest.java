@@ -48,6 +48,9 @@ class MemoryArchiveMySqlTest {
         var sources = new MemorySourceAuthorizer(store, sharing, new MemoryAccessPolicy());
         var service = new MemoryArchiveService(store, security, sources, transactions);
         try {
+            var writerRequest = request(MemoryV2Contract.OPERATION_WRITER, envelope -> new MemoryWriterRequest(envelope, context,
+                    MemoryWriterRequest.Action.ACQUIRE, "run-1", 0));
+            var writer = service.manageWriter(writerRequest, sign(writerRequest, keyId, secret)).authority();
             var source = new MemorySourceRef(MemorySourceRef.Kind.MESSAGE, context, "message-1", "event-1", 1L,
                     new MemoryRevision(1, "0".repeat(64), "message.v2"));
             var draft = new MemoryMessage("message-1", context, 1, association, MemoryMessage.Role.USER, "synthetic MySQL fact", List.of(), List.of(), source);
@@ -55,8 +58,12 @@ class MemoryArchiveMySqlTest {
                     new MemorySourceRef(source.kind(), context, source.sourceId(), source.sourceEventId(), 1L,
                             new MemoryRevision(1, MemoryCanonicalHash.messageHash(draft), "message.v2")));
             var permitRequest = request(MemoryV2Contract.OPERATION_RECEIVE_PERMIT, envelope -> new MemoryReceivePermitRequest(envelope, context,
-                    List.of(new MemoryReceivePermitRequest.EventSubmission("event-1", message.source().version().contentHash(), "conversation-archive"))));
+                    List.of(new MemoryReceivePermitRequest.EventSubmission("event-1", message.source().version().contentHash(), "conversation-archive")), List.of(), writer));
             var permit = service.requestReceivePermit(permitRequest, sign(permitRequest, keyId, secret));
+            var legacyPermit = request(MemoryV2Contract.OPERATION_RECEIVE_PERMIT, envelope -> new MemoryReceivePermitRequest(envelope, context,
+                    List.of(new MemoryReceivePermitRequest.EventSubmission("event-without-fence", "0".repeat(64), "conversation-archive"))));
+            assertEquals(MemoryErrorCode.VERSION_CONFLICT, assertThrows(MemoryException.class,
+                    () -> service.requestReceivePermit(legacyPermit, sign(legacyPermit, keyId, secret))).code());
             var delivery = request(MemoryV2Contract.OPERATION_DELIVER_MESSAGES, envelope -> new MemoryDeliveryRequest(envelope, context, association, permit.permitId(), List.of(message)));
             var restarted = new MemoryArchiveService(new MemoryArchiveStore(jdbc, mapper), security, sources, transactions);
             var one = CompletableFuture.supplyAsync(() -> service.deliverMessages(delivery, serviceSign(delivery, keyId, secret)));
@@ -70,7 +77,7 @@ class MemoryArchiveMySqlTest {
                     new MemoryCoveredRange(1, 1), List.of(), items, List.of(), dependencies);
             var summary = new MemorySummary(candidate.summaryId(), context, association, new MemoryRevision(1, MemoryCanonicalHash.summaryHash(candidate), "summary.v2"),
                     1, null, candidate.coveredRange(), List.of(), items, List.of(), dependencies);
-            var submit = request(MemoryV2Contract.OPERATION_SUBMIT_SUMMARY, envelope -> new MemorySummaryRequest(envelope, summary));
+            var submit = request(MemoryV2Contract.OPERATION_SUBMIT_SUMMARY, envelope -> new MemorySummaryRequest(envelope, summary, writer));
             assertTrue(restarted.submitSummary(submit, sign(submit, keyId, secret)).accepted());
             var read = request(MemoryV2Contract.OPERATION_WORKING_SET, envelope -> new MemoryWorkingSetRequest(envelope, context));
             assertEquals(List.of(summary), restarted.readWorkingSet(read, sign(read, keyId, secret)).summaries());
@@ -84,6 +91,7 @@ class MemoryArchiveMySqlTest {
                     () -> restarted.deliverMessages(delivery, serviceSign(delivery, keyId, secret))).code());
         } finally {
             // Delete only records whose complete random context belongs to this fixture.
+            jdbc.update("DELETE FROM memory_conversation_writer WHERE context_id=?", contextId);
             jdbc.update("DELETE FROM memory_receive_event WHERE permit_id IN (SELECT permit_id FROM memory_receive_permit WHERE context_id=?)", contextId);
             for (String table : List.of("memory_receive_permit", "memory_result_admission", "memory_summary", "memory_entity_anchor", "memory_matter", "memory_message", "memory_processing_job")) {
                 jdbc.update("DELETE FROM " + table + " WHERE context_id=?", contextId);

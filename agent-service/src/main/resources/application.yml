@@ -28,6 +28,21 @@ a2a:
     response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}
     response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
 
+agent:
+  memory-v2:
+    enabled: ${AGENT_MEMORY_V2_ENABLED:false}
+    compression-enabled: ${AGENT_MEMORY_V2_COMPRESSION_ENABLED:false}
+    key-id: ${AGENT_MEMORY_V2_KEY_ID:agent-memory-current}
+    signing-secret: ${AGENT_MEMORY_V2_SIGNING_SECRET:}
+    cache-entries: ${AGENT_MEMORY_V2_CACHE_ENTRIES:128}
+    cache-bytes: ${AGENT_MEMORY_V2_CACHE_BYTES:33554432}
+    cache-ttl-ms: ${AGENT_MEMORY_V2_CACHE_TTL_MS:60000}
+    soft-tokens: ${AGENT_MEMORY_V2_SOFT_TOKENS:8000}
+    hard-tokens: ${AGENT_MEMORY_V2_HARD_TOKENS:12000}
+    recent-messages: ${AGENT_MEMORY_V2_RECENT_MESSAGES:12}
+    summary-timeout-ms: ${AGENT_MEMORY_V2_SUMMARY_TIMEOUT_MS:5000}
+    cleanup-ms: ${AGENT_MEMORY_V2_CLEANUP_MS:30000}
+
 dubbo:
   application:
     name: agent-service

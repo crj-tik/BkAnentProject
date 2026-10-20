@@ -67,7 +67,13 @@ public class AgentRagCredentialLeaseStore {
         verify(lease, originalUserId);
         return lease.credentials;
     }
-    private void verify(Lease lease, String originalUserId) {
+    public record ActorIdentity(com.bkanent.common.rpc.AuthenticatedPrincipal principal, long expiresAtEpochSecond) { }
+    public ActorIdentity verifiedIdentity(String originalUserId) {
+        Lease lease = CURRENT.get();
+        if (lease == null) throw new AgentRagAuthenticationException("AUTHENTICATION_REQUIRED");
+        return new ActorIdentity(verify(lease, originalUserId), lease.expiresAt / 1000);
+    }
+    private com.bkanent.common.rpc.AuthenticatedPrincipal verify(Lease lease, String originalUserId) {
         if (lease.expiresAt <= clock.millis()) throw new RagException(RagErrorCode.AUTHENTICATION_EXPIRED);
         if (lease.owner != null && !lease.owner.equals(originalUserId)) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
         try {
@@ -76,6 +82,7 @@ public class AgentRagCredentialLeaseStore {
             var principal = provider.resolvePrincipal(lease.credentials.accessToken());
             if (principal == null || !String.valueOf(principal.userId()).equals(originalUserId))
                 throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+            return principal;
         } catch (RagException exception) { throw exception; }
         catch (RuntimeException exception) { throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE); }
     }

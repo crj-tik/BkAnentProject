@@ -40,4 +40,11 @@ public class ToolLoopState {
     public String leaseToken;
     public String lastInputId;
     public List<String> uncertainCallIds = new ArrayList<>();
+    public String memoryMode;
+    public String memoryStatus;
+    public com.bkanent.common.memory.MemoryConversationVersion adoptedMemoryVersion;
+    public String memoryEstimatorVersion;
+    public List<com.bkanent.common.memory.MemorySourceDependency> adoptedMemorySources = new ArrayList<>();
+    public String memoryResumeNode;
+    public String memoryPendingAnswer;
 }

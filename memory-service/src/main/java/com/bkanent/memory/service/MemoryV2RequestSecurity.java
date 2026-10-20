@@ -125,6 +125,8 @@ public class MemoryV2RequestSecurity {
                 || MemoryV2Contract.OPERATION_SEARCH_PREFERENCES.equals(operation)
                 || MemoryV2Contract.OPERATION_SEARCH_EXPERIENCES.equals(operation)
                 || MemoryV2Contract.OPERATION_GET_GRANT.equals(operation)
-                || MemoryV2Contract.OPERATION_WITHDRAW.equals(operation);
+                || MemoryV2Contract.OPERATION_WITHDRAW.equals(operation)
+                || MemoryV2Contract.OPERATION_WRITER.equals(operation)
+                || MemoryV2Contract.OPERATION_BOUNDARY.equals(operation);
     }
 }

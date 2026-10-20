@@ -38,6 +38,7 @@ public class MemoryArchiveService {
         security.authorize(request, proof, MemoryV2Contract.OPERATION_RECEIVE_PERMIT);
         return transaction(() -> {
             store.conversation(request.contextKey());
+            requireWriter(request.contextKey(), request.envelope().caller(), request.writer());
             String contextId = key(request.contextKey());
             var existing = store.one("SELECT * FROM memory_receive_permit WHERE context_id=? AND source_caller=? AND request_id=?",
                     contextId, request.envelope().caller(), request.envelope().requestId());
@@ -128,7 +129,8 @@ public class MemoryArchiveService {
                     require(message.sequence() == last + 1, MemoryErrorCode.VERSION_CONFLICT);
                     require(store.one("SELECT message_id FROM memory_message WHERE context_id=? AND message_id=?", contextId, message.messageId()) == null,
                             MemoryErrorCode.VERSION_CONFLICT);
-                    var dependencies = message.toolResponses().stream().flatMap(response -> response.dependencies().stream()).distinct().toList();
+                    var dependencies = java.util.stream.Stream.concat(message.dependencies().stream(),
+                            message.toolResponses().stream().flatMap(response -> response.dependencies().stream())).distinct().toList();
                     sources.requireCurrent(request.contextKey(), dependencies);
                     store.jdbc.update("INSERT INTO memory_message(context_id,sequence_no,message_id,source_event_id,content_hash,content_revision,"
                                     + "schema_version,source_caller,payload_json) VALUES(?,?,?,?,?,?,?,?,?)",
@@ -233,6 +235,7 @@ public class MemoryArchiveService {
         return transaction(() -> {
             var conversation = store.conversation(request.contextKey());
             String id = key(request.contextKey());
+            requireWriter(request.contextKey(), request.envelope().caller(), request.writer());
             var old = store.one("SELECT * FROM memory_summary WHERE context_id=? AND summary_id=? AND content_revision=?",
                     id, summary.summaryId(), summary.version().revision());
             if (old != null) {
@@ -295,6 +298,66 @@ public class MemoryArchiveService {
         List<MemoryCoveredRange> actual = new ArrayList<>();
         groups.forEach((assistant, responses) -> actual.add(new MemoryToolGroup(assistant, responses).range()));
         require(actual.equals(declared), MemoryErrorCode.INCOMPLETE_TOOL_GROUP);
+    }
+
+    public MemoryWriterResponse manageWriter(MemoryWriterRequest request, MemoryRequestProof proof) {
+        security.authorize(request, proof, MemoryV2Contract.OPERATION_WRITER);
+        return transaction(() -> {
+            var conversation = store.conversation(request.contextKey());
+            String id = key(request.contextKey());
+            long now = System.currentTimeMillis();
+            var writer = store.one("SELECT * FROM memory_conversation_writer WHERE context_id=? FOR UPDATE", id);
+            long fence = writer == null ? 0 : number(writer, "fence");
+            boolean owner = writer != null && request.envelope().caller().equals(writer.get("source_caller"))
+                    && request.runId().equals(writer.get("run_id"));
+            long expires = now + 120_000;
+            if (request.action() == MemoryWriterRequest.Action.ACQUIRE) {
+                boolean active = writer != null && number(writer, "expires_at_ms") > now;
+                require(!active || owner && request.envelope().requestId().equals(writer.get("acquire_id")), MemoryErrorCode.VERSION_CONFLICT);
+                if (!active) fence++;
+                if (writer == null) {
+                    store.jdbc.update("INSERT INTO memory_conversation_writer(context_id,source_caller,run_id,acquire_id,fence,expires_at_ms) VALUES(?,?,?,?,?,?)",
+                            id, request.envelope().caller(), request.runId(), request.envelope().requestId(), fence, expires);
+                } else {
+                    store.jdbc.update("UPDATE memory_conversation_writer SET source_caller=?,run_id=?,acquire_id=?,fence=?,expires_at_ms=? WHERE context_id=?",
+                            request.envelope().caller(), request.runId(), request.envelope().requestId(), fence, expires, id);
+                }
+            } else {
+                require(owner && request.fence() == fence && number(writer, "expires_at_ms") > now, MemoryErrorCode.VERSION_CONFLICT);
+                if (request.action() == MemoryWriterRequest.Action.RELEASE) expires = 0;
+                store.jdbc.update("UPDATE memory_conversation_writer SET expires_at_ms=? WHERE context_id=?", expires, id);
+            }
+            MemoryV2RequestSecurity.requireUnexpired(proof);
+            return new MemoryWriterResponse(new MemoryWriteAuthority(request.runId(), fence), expires, store.version(conversation));
+        });
+    }
+
+    private void requireWriter(MemoryContextKey context, String caller, MemoryWriteAuthority authority) {
+        var writer = store.one("SELECT * FROM memory_conversation_writer WHERE context_id=? FOR UPDATE", key(context));
+        // Contexts are enrolled on first acquire. Enrolled contexts never fall back to unfenced writes.
+        if (writer == null) {
+            require(authority == null, MemoryErrorCode.VERSION_CONFLICT);
+            return;
+        }
+        require(authority != null && caller.equals(writer.get("source_caller")) && authority.runId().equals(writer.get("run_id"))
+                && authority.fence() == number(writer, "fence") && number(writer, "expires_at_ms") > System.currentTimeMillis(), MemoryErrorCode.VERSION_CONFLICT);
+    }
+
+    public MemoryBoundaryResponse checkBoundary(MemoryBoundaryRequest request, MemoryRequestProof proof) {
+        security.authorize(request, proof, MemoryV2Contract.OPERATION_BOUNDARY);
+        transaction(() -> {
+            store.conversation(request.contextKey());
+            sources.requireCurrentMetadata(request.contextKey(), request.dependencies());
+            return null;
+        });
+        security.revalidate(request, proof, Long.parseLong(request.contextKey().ownerId()), MemoryV2Contract.OPERATION_BOUNDARY);
+        return transaction(() -> {
+            var conversation = store.conversation(request.contextKey());
+            sources.requireCurrentMetadata(request.contextKey(), request.dependencies());
+            MemoryV2RequestSecurity.requireUnexpired(proof);
+            var current = store.version(conversation);
+            return new MemoryBoundaryResponse(current, current.equals(request.adoptedVersion()));
+        });
     }
 
     public MemoryWithdrawalResponse withdrawSource(MemoryWithdrawalRequest request, MemoryRequestProof proof) {

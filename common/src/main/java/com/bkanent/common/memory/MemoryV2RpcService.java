@@ -30,4 +30,8 @@ public interface MemoryV2RpcService {
     MemoryGrantResponse getGrant(MemoryGrantRequest request, MemoryRequestProof proof) throws MemoryException;
 
     MemoryWithdrawalResponse withdrawSource(MemoryWithdrawalRequest request, MemoryRequestProof proof) throws MemoryException;
+
+    MemoryWriterResponse manageWriter(MemoryWriterRequest request, MemoryRequestProof proof) throws MemoryException;
+
+    MemoryBoundaryResponse checkBoundary(MemoryBoundaryRequest request, MemoryRequestProof proof) throws MemoryException;
 }

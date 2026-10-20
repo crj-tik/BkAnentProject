@@ -255,7 +255,7 @@ class MemorySharingAccessServiceTest {
             var datasource = new DriverManagerDataSource("jdbc:h2:mem:sharing-" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
             jdbc = new JdbcTemplate(datasource);
             try (var connection = datasource.getConnection()) {
-                for (String file : List.of("20261019_memory_v2_request_nonce.sql", "20261019_memory_share_authorization.sql", "20261019_memory_v2_archive.sql")) {
+                for (String file : List.of("20261019_memory_v2_request_nonce.sql", "20261019_memory_share_authorization.sql", "20261019_memory_v2_archive.sql", "20261019_memory_writer_fence.sql")) {
                     Path root = Path.of(System.getProperty("maven.multiModuleProjectDirectory"));
                     String sql = Files.readString(root.resolve("sql/migrations/" + file))
                             .replace("USE bk_memory;", "").replace(" CHARACTER SET ascii COLLATE ascii_bin", "")

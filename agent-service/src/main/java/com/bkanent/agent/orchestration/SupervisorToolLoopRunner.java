@@ -62,6 +62,22 @@ public class SupervisorToolLoopRunner {
             if (existing != null) {
                 var state = factory.stateOf(existing.state());
                 if (!state.userId.equals(request.userId())) throw new IllegalStateException("CONTINUATION_OWNER_MISMATCH");
+                if ("FAILED".equals(state.status) && state.errorCode != null && state.errorCode.startsWith("MEMORY_")
+                        && state.memoryResumeNode != null) {
+                    validateContinuation(state, request);
+                    if (!state.request.userMessage().equals(request.userMessage())) throw new IllegalArgumentException("CONTINUATION_INPUT_CHANGED");
+                    if (!Set.of("PrepareContext", "Model", "LoadSkill", "WaitInput", "ApprovalGate", "Observe", "ExecuteTool", "Complete")
+                            .contains(state.memoryResumeNode)) throw new IllegalStateException("MEMORY_RECOVERY_INVALID");
+                    state.leaseToken = token; state.status = "RUNNING"; state.errorCode = null;
+                    state.finalAnswer = state.memoryPendingAnswer == null ? "" : state.memoryPendingAnswer;
+                    String nextNode = state.memoryResumeNode; state.memoryResumeNode = null; state.memoryPendingAnswer = null;
+                    Map<String,Object> restored = new LinkedHashMap<>(existing.state().data());
+                    restored.putAll(factory.updates(state, "MemoryRecovery"));
+                    var checkpoint = com.alibaba.cloud.ai.graph.checkpoint.Checkpoint.builder().state(restored).nodeId("MemoryRecovery").nextNodeId(nextNode).build();
+                    var saver = graph.compileConfig.checkpointSaver().orElseThrow();
+                    try { return invoke(Map.of(), saver.put(config(runId), checkpoint).withResume()); }
+                    catch (Exception exception) { throw new IllegalStateException("memory requires checkpoint recovery", exception); }
+                }
                 if (!"RUNNING".equals(state.status)) return factory.responseOf(state);
                 state.leaseToken = token;
                 try { return invoke(Map.of(), graph.updateState(existing.config(), factory.updates(state, "Recovery")).withResume()); }
@@ -193,7 +209,10 @@ public class SupervisorToolLoopRunner {
         if (ragCredentials != null) ragCredentials.credentials(userId);
         store.assertOwner(runId, userId);
         var existing = snapshot(runId);
-        return existing == null ? null : factory.responseOf(factory.stateOf(existing.state()));
+        if (existing == null) return null;
+        var state = factory.stateOf(existing.state());
+        factory.assertMemoryOutput(state);
+        return factory.responseOf(state);
     }
 
     public SupervisorTaskResponse cancel(String runId, String userId) {
@@ -256,12 +275,15 @@ public class SupervisorToolLoopRunner {
             if (ragCredentials != null) ragCredentials.credentials(owner);
             var response = operation.apply(token);
             if (ragCredentials != null) ragCredentials.credentials(owner);
+            var checked = snapshot(runId);
+            if (checked != null) factory.assertMemoryOutput(factory.stateOf(checked.state()));
+            factory.releaseMemory(runId);
             if (ragCredentials != null && AsyncRunStatus.terminal(response.status())) ragCredentials.discard(runId);
             return response;
         }
         catch (RuntimeException exception) { throw exception; }
         catch (Exception exception) { throw new IllegalStateException("credential scope cleanup failed"); }
-        } finally { heartbeat.cancel(false); store.release(runId, token); }
+        } finally { factory.releaseMemory(runId); heartbeat.cancel(false); store.release(runId, token); }
     }
     private SupervisorTaskResponse invoke(Map<String, Object> input, RunnableConfig config) {
         return factory.responseOf(factory.stateOf(graph.invoke(input, config)

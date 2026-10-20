@@ -10,6 +10,34 @@
 
 ## 待修复（OPEN）
 
+## KI-133 [FIXED·P1] 派生 assistant 消息缺失上游来源撤回依赖
+
+**确认日期**：2026-10-20，本变更新工作集测试发现。原 MemoryMessage 只在 tool response 上保留依赖；assistant 对话若从已撤回的来源转述事实，派生 assistant 消息仍可能从旧摘要/历史中读取。
+
+**修复**：2026-10-20，本提交。普通消息统一加入依赖列表并纳入 canonical hash，来源核验遍历该列表；撤回回归覆盖 assistant 转述。最终 242 项相关回归通过，包含真实 MySQL 验证。
+
+**关联**：LR-61/63/65；integrate-domain-agent-memory 3.5/6.4。
+
+## KI-134 [FIXED·P1] Supervisor V2 history 可由原始请求 prompt 及输出节点旁路
+
+**确认日期**：2026-10-20，本变更 Graph 接线审查发现。V2 模型窗口之外，原始请求上下文可再次进入 system prompt；模型之后的审批、工具观察和终态事件也需要独立来源边界。V2 关闭后，旧 checkpoint 不能回退到未过滤正文。
+
+**修复**：2026-10-20，本提交。收敛 V2 prompt 来源，加入审批/补充输入/技能/工具观察/终态输出复核，并在当前 run 保留 memory failure phase 供安全恢复。来源失效后的终态响应隐藏调用、工件及交互元数据，已完成执行事实保留在 checkpoint。回归通过 V2 禁用回退、模型/工具观察期撤回与外域历史阻断；外域拒绝发生在 PENDING invocation 写入之前。
+
+**关联**：LR-22/23/63/65；integrate-domain-agent-memory 3.5/5.4/5.10/10.6。
+
+## KI-135 [FIXED·P2] Windows CRLF 初始化清单使末列校验和携带回车
+
+**确认/修复日期**：2026-10-20，本提交。manifest 在 Windows 工作树中使用 CRLF，Bash 按 tab 读取的末列 `check_checksum` 包含 `\r`，导致升级 dry-run 误报 checksum 不符。两个清单读取循环均只移除末列行结束回车；SQL 文件内容与校验算法不变。完整 040–150 dry-run 和既有开发 MySQL upgrade/check 均通过。
+
+## KI-136 [FIXED·P3] Docker 根构建上下文包含本地工具资料及非构建文档
+
+**确认/修复日期**：2026-10-20，本提交。根上下文原先包含 `.mimosa`、`.zcode` 等本地资料及 docs/openspec，传输逾百秒后触发 build session healthcheck 超时。补齐 `.dockerignore`，完整上下文降至约 4.97 MB、传输约 11 秒。KI-124 的后端过载仍独立存在，本次部署使用本机离线 JAR 覆盖既有镜像完成。
+
+## KI-137 [FIXED·P2] 默认 fork 测试进程缺少 SQL fixture 的仓库根路径
+
+**确认/修复日期**：2026-10-20，本提交。新记忆 fixture 使用 Maven 进程的 `maven.multiModuleProjectDirectory` 定位 SQL；默认独立测试 JVM 没有该属性，导致 `Path.of(null)`。父 POM 固定本机已用的 Surefire 3.5.4，并显式传递根路径。最终以标准 `forkCount=1` 完成 242 项相关回归，避免跨模块不 fork 时的 H2 驱动注册干扰。
+
 ## KI-131 [FIXED·P3] Memory 通用 ID 正则实际接收 256 字符，与 SQL 的 255 不符
 
 **确认/修复日期**：2026-10-19，本提交（LR-60）。原首字符加 `{0,255}` 合计允许 256 字符，超长上下文等字段会在 SQL 写入时错误降级成依赖故障。统一为首字符加 `{0,254}`；255 接受/256 拒绝加入契约回归。最大合法实体 ID 使用 revision+身份 hash 的有界游标，避免游标前缀使合法 ID 再次超长；摘要索引 job 的事件身份同样采用稳定 hash。
@@ -59,6 +87,8 @@
 **确认日期**：2026-10-16。本会话 dev 栈全量恢复后共发生 4 次 Docker Engine API 全面无响应（`docker version` 挂起、Engine API 500、网关 000），均需重启 Docker Desktop + `wsl --shutdown`（25–60 秒恢复）拉回。其中 2 次与 marketing A2A 任务强相关且 2/2 可复现：任务到达 marketing 容器、`marketing-draft` 技能激活后约 10 秒内引擎死亡；涉事容器均非 OOMKilled（RC=1 为引擎重启所致）。致死机制在宿主/WSL2 资源层，约 20 个 JVM 并发 + 多次容器重建加剧。后果：supervisor 基线 marketing fixture 无法测量（任务 1.4 该项未测）、排障中断、Studio 503 无法取日志核实。
 
 **处置**：未执行资源调整（超出授权）。建议后续：给 marketing/media-worker 等容器设 mem_limit、评估 WSL2 VM 资源上限、控制并发 JVM 数量后复测 marketing fixture 与 Studio。多 JVM 并发 start 压垮引擎的现象在本会话第一轮恢复时已出现（8 JVM 同时 start），同根因。证据见 `docs/acceptance/domain-agent-memory-foundation-20261016.md`。
+
+**2026-10-20 补充**：恢复现有开发栈后，Docker 内 Maven 冷构建再次伴随 Engine API 500、容器查询挂起。取消构建并恢复现有后端后，本机离线 package 与仅覆盖对应 JAR 的镜像构建成功；只更新 canonical agent/memory 服务，无应用副本。后端资源根因保持 OPEN。
 
 ## KI-123 [已修源码·运行环境待切换·P1] 会话流 RocketMQ topic 默认名含点号非法，supervisor 全部子 Agent 调用 OUTCOME_UNKNOWN
 
@@ -244,6 +274,8 @@
 **现象与根因**：`nacos/agent-service.yaml` 全文没有 `spring.data.redis` 配置块，但 readiness 把 redis 列为必需依赖（`required-dependencies` 默认含 redis）；代码中唯一 Redis 用途 `RedisSupervisorRateLimiter` 带 `@ConditionalOnProperty(provider=redis)`（`agent-service/src/main/java/com/bkanent/agent/service/RedisSupervisorRateLimiter.java:10`），而默认 provider 是 memory（`nacos/agent-service.yaml:172`）——默认配置下 Redis 实际闲置却因 readiness 依赖它。若把 provider 切成 redis，Lettuce 因无配置回落 `localhost:6379`：compose 注入的是自定义 `REDIS_HOST`（`docker-compose.yml:13`），不是 Spring Boot 认识的 `SPRING_DATA_REDIS_HOST`，会出现 readiness 探活（用 REDIS_HOST）通过、真实读写失败的反差。
 
 **处置方向**：要么默认 provider 改 redis 并补 `spring.data.redis` 配置块（`host: ${REDIS_HOST:...}`），要么从 readiness 必需清单剔除 redis；compose 侧可统一改注入 `SPRING_DATA_REDIS_HOST`。修复时需真实切换 provider 验证客户端连的是配置地址。
+
+**2026-10-20 进展**：Supervisor 记忆模块部署时，Agent readiness 为 UP，但整体 health 为 DOWN；日志确认 `RedisReactiveHealthIndicator` 连接 `localhost:6379`。本提交为既有 `bk-anent-dev` Agent 显式注入 `SPRING_DATA_REDIS_HOST=redis` 和端口，修复开发容器客户端地址，整体 health 与 readiness 均复核为 HTTP 200。默认 memory provider 仍把 Redis 列为必需依赖、以及切换 redis provider 后的真实限流读写验证仍待专项处理，条目保持 OPEN。
 
 **关联**：KI-49（同类 readiness 误配）。
 

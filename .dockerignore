@@ -12,3 +12,10 @@ runtime-logs
 **/__pycache__
 mysql-mcp
 .codex
+.mimosa
+.tmp
+.zcode
+.zcodeignore
+derby.log
+docs
+openspec

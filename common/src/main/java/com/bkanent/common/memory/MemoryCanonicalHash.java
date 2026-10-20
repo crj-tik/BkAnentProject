@@ -27,7 +27,7 @@ public final class MemoryCanonicalHash {
         MemoryContract.required(message, MemoryException.Field.HASH);
         return contentHash(java.util.Arrays.asList(message.messageId(), message.contextKey(), message.sequence(), message.association(),
                 message.role(), message.text(), message.toolCalls(), message.toolResponses(),
-                message.source().sourceEventId(), message.source().version().revision(), message.source().version().schemaVersion()));
+                message.source().sourceEventId(), message.source().version().revision(), message.source().version().schemaVersion(), message.dependencies()));
     }
 
     /** Includes all summary fields except its own content hash. */

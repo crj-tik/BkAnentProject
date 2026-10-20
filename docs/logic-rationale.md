@@ -623,3 +623,33 @@
 **代码位置**：MemoryArchiveStore.utcInstant/enqueue、MemoryArchiveService.requestReceivePermit/deliverMessages；MemoryArchiveServiceTest、MemoryArchiveMySqlTest。
 
 **关联**：KI-132、LR-59/60；只调整 Java 读写，不更改已经应用的迁移字节。
+
+## LR-63 Supervisor 工作集缓存只复用数据，SQL fence 与边界复核才控制写入和授权
+
+**结论**：本地缓存按完整 contextKey 分区并受容量、字节数、TTL 限制；它不是身份、授权或写入权缓存。每次工作集检查、许可、交付和摘要提交仍使用当前 actor 证明与来源边界。conversation 一旦登记 writer 行，permit/summary 就必须匹配当前 caller、run、fence 与有效期；释放或过期后不回退到无 fence 写入。SERVICE 只能凭原始精确 permit 补交付。
+
+**根因**：内存快照可减少模型轮次间重复整窗读取，但不能延长授权有效期。仅以 runId/owner 作为分布式锁会允许旧实例在接管后覆盖 cursor 或摘要；仅在模型调用前检查一次也无法覆盖摘要提交、工具调用和输出前的撤回。
+
+**代码位置**：`common-memory` 的 `MemoryWorkingSetCache`/`MemoryWorkingSession`；`memory-service` 的 `MemoryArchiveService` writer fence 和 `checkBoundary`；迁移 140。租约 120 秒，只在受管节点边界续期；模型或工具耗时超过租约时采取失败关闭。
+
+**关联**：LR-58/60/61、KI-133/134；integrate-domain-agent-memory 5.1/5.2/6.4。摘要库提交与 agent checkpoint adoption 是两个事务，提交后 run adoption 失败由 checkpoint/journal 冷恢复，不宣称跨库原子提交。
+
+## LR-64 Supervisor 记忆交付引用不可变 checkpoint，绝不复制业务工具正文到 journal
+
+**结论**：`agent_memory_delivery` 只保存 context/event/run/checkpointVersion/messageOrdinal/sequence/hash/permit/state；原始 user/assistant/tool 事实仍以现有 `agent_workflow_checkpoint` 为恢复真源。permit 在 SERVICE 交付前写入 journal；服务端回执确认后才标记 RECEIVED。writer acquire 和 receive-permit 使用当前 run/fence/事件集合生成稳定 requestId，签名 nonce 每次新建；响应丢失时重试命中同一服务端记录。交付丢回执后按同一 event、hash 和 permit 重建，依赖 Memory 幂等追加，不重新执行工具。
+
+**根因**：无事实源的入口需要 outbox；Supervisor 已有不可变 checkpoint，另存一份完整 JSON 会制造双真源、增加撤回清理面并复制大型工具结果。引用的 checkpoint 版本、消息序号和内容 hash 能检测缺行、变更和错误 run。
+
+**代码位置**：`SupervisorMemoryJournal`、`agent_memory_cursor`、`agent_memory_delivery`，迁移 150；真实 Graph + 数据库 checkpoint saver 集成用例覆盖正常归档与丢回执重建。checkpoint graphName、runnerVersion、owner、session 或 ordinal 不匹配时拒绝重放。
+
+**关联**：LR-60/61、KI-133/134；integrate-domain-agent-memory 4.3/5.4。工具调用响应文本中的 `ACCEPTED`/`RUNNING` 只是回调返回数据，投影态为 `RETURNED`，不能满足服务端“已受理调用”结果许可。
+
+## LR-65 V2 请求、审批、工具观察和最终答复都从当前授权来源通过边界
+
+**结论**：V2 的模型输入只由已授权摘要、历史资料和本次完整消息投影组成；不会再把原始 request context 或 checkpoint 窗口拼入另一条 prompt。模型之后的审批展示、技能与补充问题、工具结果观察和终态答复均需当前来源核验；失效时保存执行 checkpoint 和已完成调用，返回安全错误，并允许同 run 续接原节点。禁用 V2 后，带 V2 checkpoint 的 run 不回退读取原始正文。
+
+**根因**：只保护 `beforeModel`/普通 answer 会留下旁路：历史引用可能在模型之后撤回，等待审批或技能文本仍对外展示；旧 system prompt / request context 会将原始正文重新拼入压缩窗口；对已完成工具再执行一次来补交付会破坏至少一次副作用约束。
+
+**代码位置**：`SupervisorToolLoopGraph` 的 PrepareContext/Model/ApprovalGate/WaitInput/ExecuteTool/Observe/Complete；`SupervisorToolLoopRunner` 的当前输出核验和 memory phase 恢复；`SupervisorMemoryLifecycle`。每 delta/progress 无新增 Memory RPC。
+
+**关联**：LR-22/23/60/61/63/64、KI-133/134；integrate-domain-agent-memory 3.5/5.4/5.10/6.4/10.6。外部 A2A 的 durable export/grant 链仍未实现；当前有历史摘要或前序 run 时，外域能力在调用前失败关闭。

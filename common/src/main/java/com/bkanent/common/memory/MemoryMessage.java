@@ -7,9 +7,14 @@ import java.util.List;
 public record MemoryMessage(String messageId, MemoryContextKey contextKey, long sequence,
                             MemoryAssociation association, Role role, String text,
                             List<MemoryToolCall> toolCalls, List<MemoryToolResponse> toolResponses,
-                            MemorySourceRef source) implements Serializable {
+                            MemorySourceRef source, List<MemorySourceDependency> dependencies) implements Serializable {
     private static final long serialVersionUID = 1L;
     public enum Role { SYSTEM, USER, ASSISTANT, TOOL }
+
+    public MemoryMessage(String messageId, MemoryContextKey contextKey, long sequence, MemoryAssociation association, Role role,
+                         String text, List<MemoryToolCall> calls, List<MemoryToolResponse> responses, MemorySourceRef source) {
+        this(messageId, contextKey, sequence, association, role, text, calls, responses, source, List.of());
+    }
 
     public MemoryMessage {
         messageId = MemoryContract.id(messageId, MemoryException.Field.SOURCE);
@@ -20,6 +25,7 @@ public record MemoryMessage(String messageId, MemoryContextKey contextKey, long 
         text = MemoryContract.optionalText(text, MemoryException.Field.TEXT);
         toolCalls = MemoryContract.list(toolCalls, MemoryException.Field.TOOL_CALL);
         toolResponses = MemoryContract.list(toolResponses, MemoryException.Field.TOOL_RESPONSE);
+        dependencies = MemoryContract.list(dependencies, MemoryException.Field.SOURCE);
         MemoryContract.require(toolCalls.stream().map(MemoryToolCall::callId).distinct().count() == toolCalls.size(), MemoryException.Field.TOOL_CALL);
         MemoryContract.require(toolResponses.stream().map(MemoryToolResponse::callId).distinct().count() == toolResponses.size(), MemoryException.Field.TOOL_RESPONSE);
         MemoryContract.require(role == Role.ASSISTANT || toolCalls.isEmpty(), MemoryException.Field.ROLE);

@@ -61,8 +61,9 @@ class MemoryV2RpcContractTest {
 
     @Test void everyRequestBindsItsDeclaredOperationAndRoundTrips() throws Exception {
         MemorySummary summary = summary();
+        var dependency = new MemorySourceDependency(source("origin-1", 1), null);
         MemoryMessage message = new MemoryMessage("message-1", CONTEXT, 1, ASSOCIATION,
-                MemoryMessage.Role.USER, "hi", List.of(), List.of(), source("message-1", 1));
+                MemoryMessage.Role.USER, "hi", List.of(), List.of(), source("message-1", 1), List.of(dependency));
         MemoryMatter matter = new MemoryMatter("matter-1", CONTEXT, version(1), "write copy",
                 MemoryMatter.State.ACTIVE, null, List.of(new MemorySourceDependency(source("confirmation", 1), null)));
         List<Object> requests = List.of(
@@ -80,7 +81,12 @@ class MemoryV2RpcContractTest {
                         "copy-draft", null, 20),
                 new MemoryGrantRequest(envelope(MemoryV2Contract.OPERATION_GET_GRANT), CONTEXT,
                         new MemoryExportRef("export-1", CONTEXT, version(1)),
-                        new MemoryScope(MemoryScope.Kind.TASK_SHARED, null, null, "shared-1"), "matter-1", "collaboration"));
+                        new MemoryScope(MemoryScope.Kind.TASK_SHARED, null, null, "shared-1"), "matter-1", "collaboration"),
+                new MemoryWithdrawalRequest(envelope(MemoryV2Contract.OPERATION_WITHDRAW), CONTEXT, "event-1", false),
+                new MemoryWriterRequest(envelope(MemoryV2Contract.OPERATION_WRITER), CONTEXT,
+                        MemoryWriterRequest.Action.ACQUIRE, "run-1", 0),
+                new MemoryBoundaryRequest(envelope(MemoryV2Contract.OPERATION_BOUNDARY), CONTEXT,
+                        new MemoryConversationVersion(1, 1, "policy-v2"), List.of(dependency)));
         for (Object request : requests) {
             assertThat(spi(request, request.getClass())).isEqualTo(request);
         }
@@ -104,7 +110,10 @@ class MemoryV2RpcContractTest {
                 new MemoryEntityQueryResponse(List.of(), "next-1", true),
                 new MemoryPreferenceQueryResponse(List.of(), "next-1", true),
                 new MemoryExperienceQueryResponse(List.of(), null, false),
-                new MemoryGrantResponse(grant(), List.of()));
+                new MemoryGrantResponse(grant(), List.of()),
+                new MemoryWithdrawalResponse("event-1", MemoryState.DELETION_PENDING, conversation),
+                new MemoryWriterResponse(new MemoryWriteAuthority("run-1", 1), 1_798_000_000_000L, conversation),
+                new MemoryBoundaryResponse(conversation, true));
         for (Object response : responses) {
             assertThat(spi(response, response.getClass())).isEqualTo(response);
         }

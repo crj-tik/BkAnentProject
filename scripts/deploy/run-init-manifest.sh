@@ -21,6 +21,8 @@ command -v sha256sum >/dev/null || { printf '%s\n' 'sha256sum is required' >&2; 
 # Validate the entire manifest BEFORE any DDL. Identifiers are a closed reviewed set.
 last=0
 while IFS=$'\t' read -r order phase version db file checksum check check_checksum extra; do
+  check_checksum="${check_checksum%$'\r'}"
+  extra="${extra%$'\r'}"
   case "$order" in ''|\#*) continue ;; esac
   [[ "$order" =~ ^[0-9]{3}$ && "$version" =~ ^[a-z0-9-]+$ ]] || exit 65
   [ "$((10#$order))" -gt "$last" ] || { printf '%s\n' 'Manifest order must be unique and increasing' >&2; exit 65; }
@@ -45,6 +47,8 @@ mysql_sql() {
   fi
 }
 while IFS=$'\t' read -r order phase version db file checksum check check_checksum extra; do
+  check_checksum="${check_checksum%$'\r'}"
+  extra="${extra%$'\r'}"
   case "$order" in ''|\#*) continue ;; esac
   if [ "$MODE" = upgrade ] && [ "$phase" = fresh ]; then continue; fi
   printf '%s %s -> %s [%s]\n' "$order" "$version" "$db" "$phase"

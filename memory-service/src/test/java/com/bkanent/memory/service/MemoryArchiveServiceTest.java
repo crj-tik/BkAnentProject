@@ -442,7 +442,7 @@ class MemoryArchiveServiceTest {
             jdbc = new JdbcTemplate(datasource);
             transactions = new DataSourceTransactionManager(datasource);
             try (var connection = datasource.getConnection()) {
-                for (String file : List.of("20261019_memory_v2_request_nonce.sql", "20261019_memory_share_authorization.sql", "20261019_memory_v2_archive.sql")) {
+                for (String file : List.of("20261019_memory_v2_request_nonce.sql", "20261019_memory_share_authorization.sql", "20261019_memory_v2_archive.sql", "20261019_memory_writer_fence.sql")) {
                     String sql = Files.readString(Path.of(System.getProperty("maven.multiModuleProjectDirectory"), "sql/migrations", file))
                             .replace("USE bk_memory;", "").replace(" CHARACTER SET ascii COLLATE ascii_bin", "")
                             .replace("ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", "");

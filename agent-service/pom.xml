@@ -9,6 +9,7 @@
     </parent>
     <artifactId>agent-service</artifactId>
     <dependencies>
+        <dependency><groupId>com.bkanent</groupId><artifactId>common-memory</artifactId><version>${project.version}</version></dependency>
         <dependency>
             <groupId>com.bkanent</groupId>
             <artifactId>common-a2a</artifactId>

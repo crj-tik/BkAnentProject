@@ -25,19 +25,28 @@ public class MemorySourceAuthorizer {
 
     void requireCurrent(MemoryContextKey recipient, List<MemorySourceDependency> dependencies) {
         int[] budget = {500};
-        for (var dependency : dependencies) check(recipient, dependency, new HashSet<>(), 0, budget);
+        var verified = new HashSet<String>();
+        for (var dependency : dependencies) check(recipient, dependency, new HashSet<>(), 0, budget, false, verified);
+    }
+
+    void requireCurrentMetadata(MemoryContextKey recipient, List<MemorySourceDependency> dependencies) {
+        int[] budget = {500};
+        var verified = new HashSet<String>();
+        for (var dependency : dependencies) check(recipient, dependency, new HashSet<>(), 0, budget, true, verified);
     }
 
     private void check(MemoryContextKey recipient, MemorySourceDependency dependency, Set<String> visiting,
-                       int depth, int[] budget) {
-        require(depth < 8 && --budget[0] >= 0, MemoryErrorCode.FORBIDDEN);
+                       int depth, int[] budget, boolean metadata, Set<String> verified) {
         var source = dependency.source();
-        String identity = MemoryCanonicalHash.contentHash(dependency);
+        String identity = MemoryCanonicalHash.contentHash(List.of(recipient, dependency));
+        if (verified.contains(identity)) return;
+        require(depth < 8 && --budget[0] >= 0, MemoryErrorCode.FORBIDDEN);
         require(visiting.add(identity), MemoryErrorCode.FORBIDDEN);
         try {
             if (source.kind() == MemorySourceRef.Kind.MESSAGE) {
                 require(dependency.grant() == null && recipient.equals(source.contextKey()) && source.sourceEventId() != null, MemoryErrorCode.FORBIDDEN);
-                var row = store.one("SELECT * FROM memory_message WHERE context_id=? AND message_id=? FOR UPDATE",
+                String columns = metadata ? "sequence_no,content_hash,content_revision,schema_version,source_event_id,state" : "*";
+                var row = store.one("SELECT " + columns + " FROM memory_message WHERE context_id=? AND message_id=? FOR UPDATE",
                         key(source.contextKey()), source.sourceId());
                 require(row != null, MemoryErrorCode.ARCHIVE_NOT_CONFIRMED);
                 require("ACTIVE".equals(row.get("state")), MemoryErrorCode.WITHDRAWN);
@@ -46,11 +55,19 @@ public class MemorySourceAuthorizer {
                         && source.version().schemaVersion().equals(row.get("schema_version"))
                         && source.sourceEventId().equals(row.get("source_event_id"))
                         && source.sourceSequence() == number(row, "sequence_no"), MemoryErrorCode.VERSION_CONFLICT);
-                MemoryMessage message = store.decode((String) row.get("payload_json"), MemoryMessage.class);
-                require(source.equals(message.source()) && MemoryCanonicalHash.messageHash(message).equals(row.get("content_hash")),
-                        MemoryErrorCode.MEMORY_UNAVAILABLE);
-                for (var response : message.toolResponses()) {
-                    for (var nested : response.dependencies()) check(recipient, nested, visiting, depth + 1, budget);
+                if (metadata) {
+                    var nestedSources = store.jdbc.query("SELECT dependency_json FROM memory_source_dependency WHERE target_context_id=? "
+                                    + "AND target_kind='MESSAGE' AND target_id=? AND target_revision=? LIMIT 501",
+                            (rs, n) -> store.decode(rs.getString(1), MemorySourceDependency.class), key(recipient), source.sourceId(), source.version().revision());
+                    for (var nested : nestedSources) check(recipient, nested, visiting, depth + 1, budget, true, verified);
+                } else {
+                    MemoryMessage message = store.decode((String) row.get("payload_json"), MemoryMessage.class);
+                    require(source.equals(message.source()) && MemoryCanonicalHash.messageHash(message).equals(row.get("content_hash")),
+                            MemoryErrorCode.MEMORY_UNAVAILABLE);
+                    for (var response : message.toolResponses()) {
+                        for (var nested : response.dependencies()) check(recipient, nested, visiting, depth + 1, budget, false, verified);
+                    }
+                    for (var nested : message.dependencies()) check(recipient, nested, visiting, depth + 1, budget, false, verified);
                 }
             } else if (source.kind() == MemorySourceRef.Kind.SHARED_EXPORT) {
                 require(dependency.grant() != null && recipient.ownerId().equals(source.contextKey().ownerId()), MemoryErrorCode.FORBIDDEN);
@@ -65,11 +82,12 @@ public class MemorySourceAuthorizer {
                 policy.requireShared(Long.parseLong(recipient.ownerId()), request, header, grant, Instant.now());
                 var export = sharing.readPayload(ref);
                 policy.requirePayload(request, header, grant, export);
-                for (var nested : export.dependencies()) check(source.contextKey(), nested, visiting, depth + 1, budget);
+                for (var nested : export.dependencies()) check(source.contextKey(), nested, visiting, depth + 1, budget, metadata, verified);
             } else {
                 // Domain record adapters are enabled only when that domain has a real truth resolver.
                 throw new MemoryException(MemoryErrorCode.FORBIDDEN);
             }
+            verified.add(identity);
         } finally {
             visiting.remove(identity);
         }

@@ -5,11 +5,17 @@ import java.util.List;
 
 /** Server-issuable receive permission request for exact events, per D2 reliable delivery. */
 public record MemoryReceivePermitRequest(MemoryRequestEnvelope envelope, MemoryContextKey contextKey,
-                                          List<EventSubmission> events, List<MemoryResultAdmission> resultAdmissions) implements Serializable, MemoryV2Request {
+                                          List<EventSubmission> events, List<MemoryResultAdmission> resultAdmissions,
+                                          MemoryWriteAuthority writer) implements Serializable, MemoryV2Request {
     private static final long serialVersionUID = 1L;
 
     public MemoryReceivePermitRequest(MemoryRequestEnvelope envelope, MemoryContextKey contextKey, List<EventSubmission> events) {
-        this(envelope, contextKey, events, List.of());
+        this(envelope, contextKey, events, List.of(), null);
+    }
+
+    public MemoryReceivePermitRequest(MemoryRequestEnvelope envelope, MemoryContextKey contextKey,
+                                       List<EventSubmission> events, List<MemoryResultAdmission> admissions) {
+        this(envelope, contextKey, events, admissions, null);
     }
 
     /** One exact event: identity, content hash and purpose bound before acceptance. */
