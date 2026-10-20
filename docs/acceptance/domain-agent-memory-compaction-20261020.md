@@ -37,8 +37,20 @@ mvn -o -gs .mvn-settings.xml -s .mvn-settings.xml -pl agent-service,memory-servi
 
 部署仅更新既有 `bk-anent-dev` 的 `agent-service` 与 `memory-service`，不启动新副本或冗余依赖。使用本机离线构建产物覆盖现有镜像内对应 JAR，避免 KI-124 已确认的 Docker 冷构建过载。V2 及压缩开关保持原状态。
 
-最终部署制品与健康检查结果在完成更新后补录。
+| 服务 | 当前容器 ID | 当前镜像 ID | readiness / health |
+| --- | --- | --- | --- |
+| `bk-anent-dev-agent-service-1` | `7f562b668421` | `abf391b846cb` | 200 / 200 |
+| `bk-anent-dev-memory-service-1` | `287fc674f645` | `258f49d81c8d` | 200 / 200 |
+
+2026-10-20 14:04（Asia/Shanghai）复核：现有项目容器仍为 31 个，其中运行 24 个；除上述更新目标外，其他 29 个容器（包括已停止服务）的名称与 ID 完全不变。没有新建测试容器。Agent 启动完成后，整体 health 与 readiness 均恢复 200；Memory 两项均为 200。
+
+容器内 JAR 与本机离线 package 产物 SHA-256 一致：
+
+- Agent：`f3cea9ee0c4baeb02ccdad4b3e7d9fccb7bb2613d43a6c6453556e47de2b7b9b`
+- Memory：`33870337cc7d52571ad13419bb84d278cab51b0a1fa557b25429a5619886b842`
+
+两镜像记录 `org.opencontainers.image.revision=8e02b8f`。Agent 实际运行配置为 V2/压缩均 `false`、内联阈值 4096、补忆响应上限 8192。本轮没有配置新的签名信任关系或启用 V2；真实开发入口 V2 外部调用仍待完整接入条件满足后验收。
 
 ## 关联
 
-LR-66/67；KI-138/139。前序模块验收见 `domain-agent-memory-supervisor-20261020.md`。本轮实现提交及部署制品关联在最终记录中补录。
+LR-66/67；KI-138/139。前序模块验收见 `domain-agent-memory-supervisor-20261020.md`。本轮实现与修复提交：`8e02b8f`，已推送 `origin/dev-fix`。

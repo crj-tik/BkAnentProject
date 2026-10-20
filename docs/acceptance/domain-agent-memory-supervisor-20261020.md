@@ -6,6 +6,8 @@
 
 实现与修复提交：`6d66c14`。
 
+后续安全压缩模块（`8e02b8f`）已补齐 6.2/6.3；本文件保留前序验收时点，最新进度与部署制品见 `domain-agent-memory-compaction-20261020.md`。
+
 ## 运行边界
 
 - Agent Memory v2 与压缩默认关闭；本地环境未配置专用 `AGENT_MEMORY_V2_SIGNING_SECRET`，因此不能启用该入口。
