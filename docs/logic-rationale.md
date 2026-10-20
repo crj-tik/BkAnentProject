@@ -653,3 +653,23 @@
 **代码位置**：`SupervisorToolLoopGraph` 的 PrepareContext/Model/ApprovalGate/WaitInput/ExecuteTool/Observe/Complete；`SupervisorToolLoopRunner` 的当前输出核验和 memory phase 恢复；`SupervisorMemoryLifecycle`。每 delta/progress 无新增 Memory RPC。
 
 **关联**：LR-22/23/60/61/63/64、KI-133/134；integrate-domain-agent-memory 3.5/5.4/5.10/6.4/10.6。外部 A2A 的 durable export/grant 链仍未实现；当前有历史摘要或前序 run 时，外域能力在调用前失败关闭。
+
+## LR-66 大结果引用只缩小模型视图，补忆必须先核准精确来源再读 checkpoint
+
+**结论**：Supervisor 的原始结构化工具结果仍完整保存在不可变执行 checkpoint 与 Memory 档案。超过内联阈值时只改变入模视图，给出 event/call/版本/hash/执行状态和确定性引用；摘要持久保留这些锚点。`memory_read_result` 是独立只读 Graph 控制节点，单独调用并计入既有工具预算，以 JSON pointer 和有界 JSON 文本分页读取。先从 journal 查元数据，当前 Memory 精确来源授权成功后才打开 checkpoint，返回前再次核验；引用本身不授予权限。
+
+**根因**：直接截断会把不完整结果冒充完整，把已压缩窗口里的来源正文全部回填又会破坏预算。journal 只保存引用，冷恢复仍须通过当前身份和精确来源检查。补忆输出已受独立字符数上限约束，必须内联该页，不能再次转成引用导致递归回取。JSON 文本页含完整度、下一偏移和编码，避免把局部字段或半页当成完整业务结果；分页边界不拆 UTF-16 代理对。
+
+**代码位置**：`SupervisorMemoryResultView`、`SupervisorMemoryLifecycle.readResult`、`SupervisorMemoryJournal.receivedSource/readReceived`、Graph/Runner 的 `MemoryRecall`；common 的 `MemoryToolResultAnchor`、摘要 `toolResults`；Memory provider 校验引用确实对应已归档完整结果的原 call/name/state。
+
+**关联**：LR-61/64/65、KI-138；change 6.2。当前只支持本 Supervisor conversation 中已经 RECEIVED 的执行来源，不扩大到跨域共享或任意 checkpoint。
+
+## LR-67 实体摘要身份来自冻结来源，名称相似不构成实体合并
+
+**结论**：压缩模型只生成严格结构的候选；条目与实体均引用冻结 evidence 下标。新实体 ID 由 context、conversation revision 和候选序号确定，新别名必须逐字出现在所引 USER 文本或工具标量值中；不能用 assistant 自述、元数据键或相似名称建立身份。更新旧实体只引用明确的旧下标、保留既有别名并递增 revision。未更新的实体原样携带到累计摘要，provider 只允许相同内容原 revision 复用，禁止同 revision 改写。
+
+**根因**：让模型指定 ID 或按别名自动去重，会把重名实体错误合并；每次压缩重建所有实体则会丢失旧指代。实体 hash 覆盖自身结构、版本与来源依赖，提交和详情均核验；摘要 hash 覆盖实体和结果锚点。条目支持目标、事实、决定、否定、修正、例外与未决，模型失败字符串、空结果、凭据形状与非法 evidence 均拒绝采用，保留旧窗口。
+
+**代码位置**：`SupervisorMemorySummaryGenerator`、`MemoryCompactionCoordinator.compactStructured`、`MemoryCanonicalHash.entityHash/summaryHash`、`MemoryArchiveService.submitSummary/queryEntities`。
+
+**关联**：LR-55/61/66、KI-139；change 6.3。实体锚点不等于完整事项状态机或自动指代解析，事项关闭/重开与 task 6.6 仍需后续接线。

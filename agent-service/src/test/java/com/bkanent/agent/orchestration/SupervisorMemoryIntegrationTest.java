@@ -128,6 +128,9 @@ class SupervisorMemoryIntegrationTest {
             assertEquals(1, f.effects.get());
             assertTrue(f.remote.calls.isEmpty());
             assertEquals(0, f.jdbc.queryForObject("SELECT COUNT(*) FROM agent_memory_delivery", Integer.class));
+            var tools = org.mockito.ArgumentCaptor.forClass(List.class);
+            verify(f.model, atLeastOnce()).call(anyList(), tools.capture());
+            for (List<?> callbacks : tools.getAllValues()) assertTrue(callbacks.stream().noneMatch(tool -> ((ToolCallback) tool).getToolDefinition().name().equals(SupervisorMemoryResultView.TOOL_NAME)));
         }
     }
 
@@ -232,6 +235,138 @@ class SupervisorMemoryIntegrationTest {
         }
     }
 
+    @Test void largeResultIsArchivedCompletelyAndRecalledThroughDedicatedBoundedGraphNode() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.properties.setToolInlineChars(256); f.properties.setRecallChars(2048);
+            String complete = "detail-value-".repeat(1000);
+            f.toolResult = f.mapper.writeValueAsString(Map.of("detail", complete, "count", 12));
+            AtomicInteger turns = new AtomicInteger();
+            when(f.model.call(anyList(), anyList())).thenAnswer(invocation -> {
+                List<Message> messages = invocation.getArgument(0); List<ToolCallback> tools = invocation.getArgument(1);
+                assertTrue(tools.stream().anyMatch(t -> t.getToolDefinition().name().equals(SupervisorMemoryResultView.TOOL_NAME)));
+                int turn = turns.getAndIncrement();
+                if (turn == 0) return toolCall("call-1", "find", "{}");
+                ToolResponseMessage response = (ToolResponseMessage) messages.get(messages.size() - 1);
+                var data = f.mapper.readTree(response.getResponses().get(0).responseData());
+                if (turn == 1) {
+                    assertEquals("REFERENCED_COMPLETE", data.get("dataForm").asText());
+                    assertFalse(data.toString().contains(complete));
+                    return toolCall("recall-1", SupervisorMemoryResultView.TOOL_NAME, f.mapper.writeValueAsString(Map.of(
+                            "eventId", data.get("eventId").asText(), "callId", data.get("callId").asText(), "referenceId", data.get("referenceId").asText(),
+                            "pointer", "/detail", "offset", 0, "limit", 4096)));
+                }
+                assertTrue(data.has("chunk"), "bounded recall stays inline instead of recursively becoming another reference");
+                assertTrue(data.get("chunk").asText().startsWith("\"detail-value-"));
+                assertTrue(data.toString().length() <= 2048); assertTrue(data.get("hasMore").asBoolean());
+                return new AssistantMessage("done");
+            });
+            assertEquals("COMPLETED", f.execute("run", "find").status());
+            assertEquals(1, f.effects.get()); assertNull(f.store.find("run", "recall-1"));
+            var raw = f.remote.snapshot.messages().stream().flatMap(m -> m.toolResponses().stream()).filter(r -> r.toolName().equals("find")).findFirst().orElseThrow();
+            assertEquals(complete, raw.responseData().properties().get("detail").scalar());
+            assertEquals(MemoryToolResponse.DataForm.INLINE_COMPLETE, raw.dataForm());
+            verify(f.journal).readReceived(any(), any());
+            assertEquals(2, f.state("run").toolCalls);
+        }
+    }
+
+    @Test void coldRunCanRecallCompressedPreviousResultWithoutRepeatingBusinessTool() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.properties.setToolInlineChars(256); f.toolResult = "{\"detail\":\"" + "full-value".repeat(1000) + "\"}";
+            f.localToolThenAnswer(); assertEquals("COMPLETED", f.execute("old-run", "find").status());
+            f.restartIdentity(); f.properties.setCompressionEnabled(true); f.properties.setSoftTokens(1); f.properties.setRecentMessages(1);
+            AtomicInteger turns = new AtomicInteger();
+            when(f.model.call(anyList(), anyList())).thenAnswer(invocation -> {
+                List<ToolCallback> tools = invocation.getArgument(1);
+                if (tools.isEmpty()) return new AssistantMessage("{\"items\":[{\"kind\":\"FACT\",\"text\":\"保留原结果引用\",\"evidence\":[0]}],\"entities\":[]}");
+                if (turns.getAndIncrement() == 0) {
+                    var anchor = f.remote.snapshot.summaries().get(0).toolResults().get(0);
+                    return toolCall("old-recall", SupervisorMemoryResultView.TOOL_NAME, f.mapper.writeValueAsString(Map.of(
+                            "eventId", anchor.source().sourceEventId(), "callId", anchor.callId(), "referenceId", SupervisorMemoryResultView.referenceId(anchor),
+                            "pointer", "/detail", "limit", 40)));
+                }
+                List<Message> messages = invocation.getArgument(0);
+                assertTrue(messages.toString().contains("full-value")); return new AssistantMessage("done");
+            });
+            assertEquals("COMPLETED", f.execute("new-run", "查看上一结果").status());
+            assertEquals(1, f.effects.get());
+            assertEquals(1, f.remote.snapshot.summaries().get(0).toolResults().size(), "later compaction preserves prior result anchors");
+            verify(f.journal).readReceived(any(), any());
+        }
+    }
+
+    @Test void withdrawalAfterReferenceMetadataPreventsBodyReadAndSameRunResumesWithoutBusinessReplay() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.properties.setToolInlineChars(256); f.toolResult = "{\"detail\":\"" + "x".repeat(1000) + "\"}";
+            f.localToolThenAnswer(); assertEquals("COMPLETED", f.execute("old", "find").status());
+            var message = f.remote.snapshot.messages().stream().filter(m -> m.role() == MemoryMessage.Role.TOOL).findFirst().orElseThrow();
+            var anchor = new SupervisorMemoryResultView(f.mapper, 256, 2048).anchors(List.of(message)).get(0);
+            String args = f.mapper.writeValueAsString(Map.of("eventId", anchor.source().sourceEventId(), "callId", anchor.callId(), "referenceId", SupervisorMemoryResultView.referenceId(anchor)));
+            AtomicInteger turns = new AtomicInteger();
+            when(f.model.call(anyList(), anyList())).thenAnswer(invocation -> turns.getAndIncrement() == 0
+                    ? toolCall("recall", SupervisorMemoryResultView.TOOL_NAME, args) : new AssistantMessage("done"));
+            doAnswer(invocation -> { Object source = invocation.callRealMethod(); f.remote.revoked = true; return source; }).when(f.journal).receivedSource(any(), anyString());
+            var failed = f.execute("new", "补忆");
+            assertEquals("FAILED", failed.status()); assertEquals("MEMORY_WITHDRAWN", failed.governanceMetadata().get("errorCode"));
+            verify(f.journal, never()).readReceived(any(), any());
+            assertEquals("MemoryRecall", f.state("new").memoryResumeNode);
+            f.remote.revoked = false; f.restartIdentity();
+            assertEquals("COMPLETED", f.execute("new", "补忆").status());
+            verify(f.journal).readReceived(any(), any()); assertEquals(1, f.effects.get());
+        }
+    }
+
+    @Test void unknownReferenceReturnsSafeReadOnlyFailureWithoutOpeningAnyBody() throws Exception {
+        try (Fixture f = new Fixture()) {
+            AtomicInteger turns = new AtomicInteger();
+            when(f.model.call(anyList(), anyList())).thenAnswer(invocation -> {
+                if (turns.getAndIncrement() == 0) return toolCall("missing", SupervisorMemoryResultView.TOOL_NAME,
+                        f.mapper.writeValueAsString(Map.of("eventId", "a".repeat(64), "callId", "call", "referenceId", "r-" + "b".repeat(64))));
+                List<Message> messages = invocation.getArgument(0); assertTrue(messages.toString().contains("NOT_FOUND"));
+                return new AssistantMessage("无法获取");
+            });
+            assertEquals("COMPLETED", f.execute("run", "补忆").status());
+            verify(f.journal, never()).readReceived(any(), any()); assertEquals(0, f.effects.get());
+        }
+    }
+
+    @Test void recallCannotMixWithBusinessBatchAndToolDefinitionsCountTowardHardBudget() throws Exception {
+        try (Fixture f = new Fixture()) {
+            AtomicInteger turns = new AtomicInteger();
+            when(f.model.call(anyList(), anyList())).thenAnswer(invocation -> turns.getAndIncrement() == 0
+                    ? AssistantMessage.builder().content("").toolCalls(List.of(new AssistantMessage.ToolCall("a", "function", "find", "{}"),
+                        new AssistantMessage.ToolCall("b", "function", SupervisorMemoryResultView.TOOL_NAME, "{}"))).build()
+                    : new AssistantMessage("done"));
+            assertEquals("COMPLETED", f.execute("run", "input").status()); assertEquals(0, f.effects.get());
+            assertTrue(f.state("run").messages.toString().contains("CONTROL_BATCH_REJECTED"));
+        }
+        try (Fixture f = new Fixture()) {
+            ToolCallback enormous = new ToolCallback() {
+                public ToolDefinition getToolDefinition() { return ToolDefinition.builder().name("find").description("large schema").inputSchema("{\"description\":\"" + "x".repeat(100000) + "\",\"type\":\"object\"}").build(); }
+                public String call(String args) { fail("must not execute"); return ""; }
+            };
+            when(f.catalog.snapshot("1", true)).thenReturn(Map.of("local:find", new SupervisorCapability("local:find", "local", "find", "1", enormous)));
+            var response = f.execute("run", "small input");
+            assertEquals("FAILED", response.status()); assertEquals("MEMORY_CONTEXT_BUDGET_EXCEEDED", response.governanceMetadata().get("errorCode"));
+            verifyNoInteractions(f.model);
+        }
+    }
+
+    @Test void recallUsesExistingGlobalToolCallBudget() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.orchestration.setMaxToolCalls(1);
+            AtomicInteger turns = new AtomicInteger();
+            when(f.model.call(anyList(), anyList())).thenAnswer(invocation -> toolCall("read-" + turns.incrementAndGet(), SupervisorMemoryResultView.TOOL_NAME, "{}"));
+            var result = f.execute("run", "补忆");
+            assertEquals("FAILED", result.status()); assertEquals("BUDGET_EXHAUSTED", result.governanceMetadata().get("errorCode"));
+            assertEquals(0, f.effects.get()); verify(f.journal, never()).readReceived(any(), any());
+        }
+    }
+
+    static AssistantMessage toolCall(String id, String tool, String args) {
+        return AssistantMessage.builder().content("").toolCalls(List.of(new AssistantMessage.ToolCall(id, "function", tool, args))).build();
+    }
+
     static int occurrences(String text, String needle) { return (text.length() - text.replace(needle, "").length()) / needle.length(); }
 
     static class Fixture implements AutoCloseable {
@@ -249,6 +384,8 @@ class SupervisorMemoryIntegrationTest {
         final SessionStreamService stream = mock(SessionStreamService.class);
         Runnable onToolCall = () -> { };
         Runnable onSummary = () -> { };
+        String toolResult = "{\"result\":\"complete structured fact\",\"number\":123}";
+        SupervisorMemoryJournal journal;
         final Remote remote = new Remote();
         final SupervisorToolLoopGraph factory;
         final SupervisorToolLoopRunner runner;
@@ -283,7 +420,7 @@ class SupervisorMemoryIntegrationTest {
             when(skills.findOperationalSkills("supervisor")).thenReturn(List.of()); when(skills.findSupervisorSkills()).thenReturn(List.of());
             ToolCallback tool = new ToolCallback() {
                 public ToolDefinition getToolDefinition() { return ToolDefinition.builder().name("find").description("local read").inputSchema("{\"type\":\"object\"}").build(); }
-                public String call(String arguments) { effects.incrementAndGet(); onToolCall.run(); return "{\"result\":\"complete structured fact\",\"number\":123}"; }
+                public String call(String arguments) { effects.incrementAndGet(); onToolCall.run(); return toolResult; }
             };
             when(catalog.snapshot("1", true)).thenReturn(Map.of("local:find", new SupervisorCapability("local:find", "local", "find", "1", tool)));
             factory = new SupervisorToolLoopGraph(catalog, model, skills, store, mapper, orchestration, stream,
@@ -298,14 +435,15 @@ class SupervisorMemoryIntegrationTest {
             var beans = new DefaultListableBeanFactory(); beans.registerSingleton("fixtureAuth", auth);
             identities = new AgentRagCredentialLeaseStore(new AgentRagConsumerProperties(), beans.getBeanProvider(AuthPermissionRpcService.class));
             var reference = mock(ReferenceConfig.class); when(reference.get()).thenReturn(remote.rpc);
-            lifecycle = new SupervisorMemoryLifecycle(properties, new SupervisorMemoryJournal(jdbc, mapper, new DataSourceTransactionManager(jdbc.getDataSource())),
+            journal = spy(new SupervisorMemoryJournal(jdbc, mapper, new DataSourceTransactionManager(jdbc.getDataSource())));
+            lifecycle = new SupervisorMemoryLifecycle(properties, journal,
                     store, new MemoryWorkingSetCache(8, 8 * 1024 * 1024, 60000, Clock.systemUTC()), reference, identities, mapper, model);
             factory.setRagCredentials(identities); runner.setRagCredentials(identities); factory.setMemory(lifecycle);
         }
         void localToolThenAnswer() {
             when(model.call(anyList(), anyList())).thenAnswer(invocation -> {
                 List<ToolCallback> tools = invocation.getArgument(1);
-                if (tools.isEmpty()) { summaryCalls.incrementAndGet(); onSummary.run(); return new AssistantMessage("[{\"kind\":\"FACT\",\"text\":\"summarized input\",\"evidence\":[0]}]"); }
+                if (tools.isEmpty()) { summaryCalls.incrementAndGet(); onSummary.run(); return new AssistantMessage("{\"items\":[{\"kind\":\"FACT\",\"text\":\"summarized input\",\"evidence\":[0]}],\"entities\":[]}"); }
                 inputs.add(invocation.getArgument(0));
                 if (effects.get() == 0) return AssistantMessage.builder().content("").toolCalls(List.of(new AssistantMessage.ToolCall("call-1", "function", "find", "{}"))).build();
                 return new AssistantMessage("done");

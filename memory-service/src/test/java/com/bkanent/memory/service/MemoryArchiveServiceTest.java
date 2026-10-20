@@ -393,6 +393,75 @@ class MemoryArchiveServiceTest {
         assertEquals(0, f.count("memory_summary"));
     }
 
+    @Test void exactCompleteResultAnchorSurvivesColdReadAndRejectsForgedState() throws Exception {
+        Fixture f = new Fixture();
+        var call = build(1, MemoryMessage.Role.ASSISTANT, null, List.of(new MemoryToolCall("call", "draft", "draft", MemoryJsonValue.object(Map.of()))), List.of());
+        var result = tool(2, MemoryToolResponse.ExecutionState.PARTIAL, "complete partial result", "call");
+        var messages = List.of(call, result); f.append(messages);
+        var base = summary(messages, 1, List.of(new MemoryCoveredRange(1, 2)), List.of());
+        var forged = withAnchors(base, List.of(new MemoryToolResultAnchor(result.source(), "call", "draft", MemoryToolResponse.ExecutionState.RETURNED)));
+        var invalid = f.request(MemoryV2Contract.OPERATION_SUBMIT_SUMMARY, envelope -> new MemorySummaryRequest(envelope, forged));
+        code(MemoryErrorCode.ARCHIVE_NOT_CONFIRMED, () -> f.service.submitSummary(invalid, f.sign(invalid)));
+        assertEquals(0, f.count("memory_summary"));
+        var anchor = new MemoryToolResultAnchor(result.source(), "call", "draft", MemoryToolResponse.ExecutionState.PARTIAL);
+        var valid = withAnchors(base, List.of(anchor));
+        var submit = f.request(MemoryV2Contract.OPERATION_SUBMIT_SUMMARY, envelope -> new MemorySummaryRequest(envelope, valid));
+        f.service.submitSummary(submit, f.sign(submit)); f.restart();
+        assertEquals(List.of(anchor), f.read().summaries().get(0).toolResults());
+        var withdrawal = f.request(MemoryV2Contract.OPERATION_WITHDRAW, envelope -> new MemoryWithdrawalRequest(envelope, CONTEXT, result.source().sourceEventId(), false));
+        f.service.withdrawSource(withdrawal, f.sign(withdrawal));
+        assertTrue(f.read().summaries().isEmpty());
+    }
+
+    @Test void unchangedSignedEntityCanBePreservedInNextCumulativeSummary() throws Exception {
+        Fixture f = new Fixture(); var first = message(1, "房源甲"); f.append(List.of(first));
+        var base = summary(List.of(first), 1, List.of(), List.of(new MemoryEntityAnchor("entity", CONTEXT, null,
+                new MemoryRevision(1, ZERO, "entity.v2.1"), List.of("房源甲"), "明确对象", List.of(new MemorySourceDependency(first.source(), null)))));
+        var initial = f.request(MemoryV2Contract.OPERATION_SUBMIT_SUMMARY, envelope -> new MemorySummaryRequest(envelope, base));
+        f.service.submitSummary(initial, f.sign(initial)); var entity = f.entities(null, 10).entities().get(0);
+        var second = message(2, "继续"); f.append(List.of(second));
+        var next = summary(List.of(first, second), 3, List.of(), List.of(entity));
+        next = resign(new MemorySummary("summary-2", CONTEXT, ASSOCIATION, next.version(), 3, null, next.coveredRange(), next.toolGroupRanges(), next.items(), next.entities(), next.dependencies()));
+        var candidate = next;
+        var submit = f.request(MemoryV2Contract.OPERATION_SUBMIT_SUMMARY, envelope -> new MemorySummaryRequest(envelope, candidate));
+        f.service.submitSummary(submit, f.sign(submit)); f.restart();
+        assertEquals(List.of(entity), f.entities(null, 10).entities());
+        assertEquals(List.of(entity), f.read().summaries().get(0).entities());
+        assertEquals("summary-2", f.jdbc.queryForObject("SELECT summary_id FROM memory_entity_anchor", String.class));
+    }
+
+    @Test void forgedEntityHashIsRejectedEvenWhenSummaryHashIsValid() throws Exception {
+        Fixture f = new Fixture(); var message = message(1, "fact"); f.append(List.of(message));
+        var base = summary(List.of(message), 1, List.of(), List.of());
+        var entity = new MemoryEntityAnchor("entity", CONTEXT, null, new MemoryRevision(1, ZERO, "entity.v2.1"), List.of("fact"), "fact", base.dependencies());
+        var candidate = resign(new MemorySummary(base.summaryId(), CONTEXT, ASSOCIATION, base.version(), 1, null,
+                base.coveredRange(), base.toolGroupRanges(), base.items(), List.of(entity), base.dependencies()));
+        var submit = f.request(MemoryV2Contract.OPERATION_SUBMIT_SUMMARY, envelope -> new MemorySummaryRequest(envelope, candidate));
+        code(MemoryErrorCode.VERSION_CONFLICT, () -> f.service.submitSummary(submit, f.sign(submit)));
+        assertEquals(0, f.count("memory_summary")); assertEquals(0, f.count("memory_entity_anchor"));
+    }
+
+    @Test void tamperedEntityDefinitionCannotEscapeThroughDetails() throws Exception {
+        Fixture f = new Fixture(); var message = message(1, "fact"); f.append(List.of(message));
+        var base = summary(List.of(message), 1, List.of(), List.of(new MemoryEntityAnchor("entity", CONTEXT, null,
+                new MemoryRevision(1, ZERO, "entity.v2.1"), List.of("fact"), "original fact", List.of(new MemorySourceDependency(message.source(), null)))));
+        var submit = f.request(MemoryV2Contract.OPERATION_SUBMIT_SUMMARY, envelope -> new MemorySummaryRequest(envelope, base));
+        f.service.submitSummary(submit, f.sign(submit)); var entity = base.entities().get(0);
+        var tampered = new MemoryEntityAnchor(entity.entityId(), CONTEXT, null, entity.version(), entity.aliases(), "tampered fact", entity.dependencies());
+        f.jdbc.update("UPDATE memory_entity_anchor SET payload_json=?", f.mapper.writeValueAsString(tampered));
+        code(MemoryErrorCode.MEMORY_UNAVAILABLE, () -> f.entities(null, 10));
+    }
+
+    static MemorySummary withAnchors(MemorySummary summary, List<MemoryToolResultAnchor> anchors) {
+        return resign(new MemorySummary(summary.summaryId(), summary.contextKey(), summary.association(), summary.version(), summary.expectedConversationRevision(), summary.runVersion(),
+                summary.coveredRange(), summary.toolGroupRanges(), summary.items(), summary.entities(), anchors, summary.dependencies()));
+    }
+    static MemorySummary resign(MemorySummary summary) {
+        return new MemorySummary(summary.summaryId(), summary.contextKey(), summary.association(),
+                new MemoryRevision(summary.version().revision(), MemoryCanonicalHash.summaryHash(summary), summary.version().schemaVersion()),
+                summary.expectedConversationRevision(), summary.runVersion(), summary.coveredRange(), summary.toolGroupRanges(), summary.items(), summary.entities(), summary.toolResults(), summary.dependencies());
+    }
+
     static MemoryMessage message(long sequence, String text) { return build(sequence, MemoryMessage.Role.USER, text, List.of(), List.of()); }
 
     static MemoryMessage tool(long sequence, MemoryToolResponse.ExecutionState state, String text, String callId) {
@@ -410,6 +479,9 @@ class MemoryArchiveServiceTest {
     }
 
     static MemorySummary summary(List<MemoryMessage> messages, long expectedRevision, List<MemoryCoveredRange> groups, List<MemoryEntityAnchor> entities) {
+        entities = entities.stream().map(entity -> new MemoryEntityAnchor(entity.entityId(), entity.contextKey(), entity.matterId(),
+                new MemoryRevision(entity.version().revision(), MemoryCanonicalHash.entityHash(entity), entity.version().schemaVersion()),
+                entity.aliases(), entity.briefDefinition(), entity.dependencies())).toList();
         var dependencies = messages.stream().map(message -> new MemorySourceDependency(message.source(), null)).toList();
         var items = List.of(new MemorySummary.Item(MemorySummary.ItemKind.FACT, "synthetic summary", dependencies));
         var draft = new MemorySummary("summary-1", CONTEXT, ASSOCIATION, new MemoryRevision(1, ZERO, "summary.v2"), expectedRevision, null,

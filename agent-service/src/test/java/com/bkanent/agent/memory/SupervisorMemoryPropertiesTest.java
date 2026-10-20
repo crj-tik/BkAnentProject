@@ -38,4 +38,13 @@ class SupervisorMemoryPropertiesTest {
         properties.setCacheEntries(10001);
         assertThrows(IllegalArgumentException.class, properties::validate);
     }
+
+    @Test void resultProjectionAndRecallBoundsAreValidated() {
+        var properties = new SupervisorMemoryProperties();
+        properties.setToolInlineChars(255); assertThrows(IllegalArgumentException.class, properties::validate);
+        properties.setToolInlineChars(16385); assertThrows(IllegalArgumentException.class, properties::validate);
+        properties.setToolInlineChars(4096); properties.setRecallChars(2047); assertThrows(IllegalArgumentException.class, properties::validate);
+        properties.setRecallChars(16385); assertThrows(IllegalArgumentException.class, properties::validate);
+        properties.setRecallChars(8192); assertDoesNotThrow(properties::validate);
+    }
 }

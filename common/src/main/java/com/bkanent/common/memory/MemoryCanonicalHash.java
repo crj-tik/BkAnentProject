@@ -32,9 +32,17 @@ public final class MemoryCanonicalHash {
 
     /** Includes all summary fields except its own content hash. */
     public static String summaryHash(MemorySummary summary) {
-        return contentHash(java.util.Arrays.asList(summary.summaryId(), summary.contextKey(), summary.association(),
+        var fields = new java.util.ArrayList<>(java.util.Arrays.asList(summary.summaryId(), summary.contextKey(), summary.association(),
                 summary.version().revision(), summary.version().schemaVersion(), summary.expectedConversationRevision(),
                 summary.runVersion(), summary.coveredRange(), summary.toolGroupRanges(), summary.items(), summary.entities(), summary.dependencies()));
+        // Existing summaries without result anchors retain their established digest.
+        if (!summary.toolResults().isEmpty()) fields.add(summary.toolResults());
+        return contentHash(fields);
+    }
+
+    public static String entityHash(MemoryEntityAnchor entity) {
+        return contentHash(java.util.Arrays.asList(entity.entityId(), entity.contextKey(), entity.matterId(),
+                entity.version().revision(), entity.version().schemaVersion(), entity.aliases(), entity.briefDefinition(), entity.dependencies()));
     }
 
     public static String contentHash(Object value) {

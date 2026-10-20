@@ -37,6 +37,10 @@
 
 ## 4. 防互污染规则（测试锁定）
 
+2026-10-20 大结果/实体摘要模块增加摘要 `toolResults` 锚点列表（schema `summary.v2.1`）与实体自身内容 hash（`entity.v2.1`）。缺失 `toolResults` 的旧 JSON 按空列表读取，空列表的既有摘要内容 hash 保持不变；新增列表参与摘要 hash。V2 请求签名对完整 record 字段计算，因此所有尚未启用的 V2 caller/provider 必须随本批同步升级，不允许旧请求制品混用。v1 DTO 与端点不变，无新增 SQL 迁移。
+
+Supervisor 仅在 V2 工作集成功接入时提供只读 `memory_read_result` 控制工具；它读取既有 RECEIVED checkpoint 来源，始终复核当前授权，不通过新增 RPC 或任意 URL 读取。`AGENT_MEMORY_V2_TOOL_INLINE_CHARS` 默认 4096、范围 256–16384；`AGENT_MEMORY_V2_RECALL_CHARS` 默认 8192、范围 2048–16384，限制整份补忆 JSON 响应，单页内容 limit 最大 4096 UTF-16 单元。完整档案 DTO 不被引用视图替换。开发启用状态与证据另见本轮压缩模块验收记录。
+
 1. v2 operation 命名空间 `memory.*` 与 v1 REST 路径 `/internal/memory/...` 不相交（改 REST 路径或 operation 命名需先更新 `MemoryV1V2CompatibilityTest`）。
 2. v2 请求/响应 DTO 不嵌任何 `com.bkanent.common.agent` v1 类型——v2 写路径结构上无法路由进 legacy 表，**不存在静默双写**。
 3. v1 形状保持 v1 字段集（无 historyPage/coveredRange/grant 等 v2 语义字段混入）。

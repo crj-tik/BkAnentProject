@@ -66,7 +66,7 @@ public class SupervisorToolLoopRunner {
                         && state.memoryResumeNode != null) {
                     validateContinuation(state, request);
                     if (!state.request.userMessage().equals(request.userMessage())) throw new IllegalArgumentException("CONTINUATION_INPUT_CHANGED");
-                    if (!Set.of("PrepareContext", "Model", "LoadSkill", "WaitInput", "ApprovalGate", "Observe", "ExecuteTool", "Complete")
+                    if (!Set.of("PrepareContext", "Model", "LoadSkill", "MemoryRecall", "WaitInput", "ApprovalGate", "Observe", "ExecuteTool", "Complete")
                             .contains(state.memoryResumeNode)) throw new IllegalStateException("MEMORY_RECOVERY_INVALID");
                     state.leaseToken = token; state.status = "RUNNING"; state.errorCode = null;
                     state.finalAnswer = state.memoryPendingAnswer == null ? "" : state.memoryPendingAnswer;

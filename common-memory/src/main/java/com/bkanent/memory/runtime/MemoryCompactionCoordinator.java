@@ -9,12 +9,20 @@ public final class MemoryCompactionCoordinator {
     public record Input(MemoryWorkingSetResponse snapshot, long through, List<MemoryMessage> messages,
                         List<MemorySourceDependency> dependencies, List<MemoryCoveredRange> toolGroups, Trigger trigger) { }
     @FunctionalInterface public interface CandidateGenerator { List<MemorySummary.Item> generate(Input input); }
+    public record Candidate(List<MemorySummary.Item> items, List<MemoryEntityAnchor> entities, List<MemoryToolResultAnchor> toolResults) { }
+    @FunctionalInterface public interface StructuredCandidateGenerator { Candidate generate(Input input); }
     public static final String ESTIMATOR_VERSION = "utf16-ceil-div4-v1-coarse";
 
     public int estimate(String text) { return (int) Math.min(Integer.MAX_VALUE, ((long) text.length() + 3) / 4); }
 
     public boolean compact(MemoryWorkingSession session, int recentMessages, Trigger trigger,
                            MemoryMatter.ClosureEvidence closure, CandidateGenerator generator, Runnable assertRunOwnership) {
+        return compactStructured(session, recentMessages, trigger, closure,
+                input -> new Candidate(generator.generate(input), List.of(), List.of()), assertRunOwnership);
+    }
+
+    public boolean compactStructured(MemoryWorkingSession session, int recentMessages, Trigger trigger,
+                                     MemoryMatter.ClosureEvidence closure, StructuredCandidateGenerator generator, Runnable assertRunOwnership) {
         if (recentMessages < 1 || recentMessages > 500) throw new MemoryException(MemoryErrorCode.INVALID_ARGUMENT);
         session.check();
         var snapshot = session.snapshot();
@@ -68,14 +76,19 @@ public final class MemoryCompactionCoordinator {
         snapshot.summaries().forEach(s -> dependencies.addAll(s.dependencies()));
         prefix.forEach(m -> dependencies.add(new MemorySourceDependency(m.source(), null)));
         var input = new Input(snapshot, cut, prefix, List.copyOf(dependencies), List.copyOf(groups), trigger);
-        List<MemorySummary.Item> items = generator.generate(input);
+        Candidate candidate = generator.generate(input);
+        if (candidate == null) throw new MemoryException(MemoryErrorCode.INVALID_EXTRACTION);
+        List<MemorySummary.Item> items = candidate.items();
         if (items == null || items.isEmpty() || items.stream().anyMatch(i -> !dependencies.containsAll(i.evidence()))) throw new MemoryException(MemoryErrorCode.INVALID_EXTRACTION);
         String id = "s-" + MemoryCanonicalHash.contentHash(List.of(snapshot.contextKey(), snapshot.version().revision()));
         var association = new MemoryAssociation(null, session.authority().runId(), null, null);
-        var draft = new MemorySummary(id, snapshot.contextKey(), association, new MemoryRevision(1, "0".repeat(64), "summary.v2"),
-                snapshot.version().revision(), null, new MemoryCoveredRange(1, cut), groups, items, List.of(), List.copyOf(dependencies));
-        var summary = new MemorySummary(id, draft.contextKey(), association, new MemoryRevision(1, MemoryCanonicalHash.summaryHash(draft), "summary.v2"),
-                draft.expectedConversationRevision(), null, draft.coveredRange(), groups, items, List.of(), draft.dependencies());
+        List<MemoryToolResultAnchor> results = new ArrayList<>();
+        snapshot.summaries().forEach(s -> results.addAll(s.toolResults()));
+        if (candidate.toolResults() != null) candidate.toolResults().forEach(result -> { if (!results.contains(result)) results.add(result); });
+        var draft = new MemorySummary(id, snapshot.contextKey(), association, new MemoryRevision(1, "0".repeat(64), "summary.v2.1"),
+                snapshot.version().revision(), null, new MemoryCoveredRange(1, cut), groups, items, candidate.entities(), results, List.copyOf(dependencies));
+        var summary = new MemorySummary(id, draft.contextKey(), association, new MemoryRevision(1, MemoryCanonicalHash.summaryHash(draft), draft.version().schemaVersion()),
+                draft.expectedConversationRevision(), null, draft.coveredRange(), groups, items, draft.entities(), results, draft.dependencies());
         session.commit(summary, assertRunOwnership);
         return true;
     }

@@ -26,6 +26,26 @@ class MemoryContractTest {
             new MemoryAssociation.DomainSessionRef("marketing", "domain-session-1"));
     private final Fastjson2ConstructorSerialization serialization = new Fastjson2ConstructorSerialization();
 
+    @Test void resultAnchorsRoundTripAndParticipateInSummaryHashWithoutChangingLegacyDigest() throws Exception {
+        var original = summary();
+        String legacyHash = MemoryCanonicalHash.contentHash(java.util.Arrays.asList(original.summaryId(), original.contextKey(), original.association(),
+                original.version().revision(), original.version().schemaVersion(), original.expectedConversationRevision(), original.runVersion(),
+                original.coveredRange(), original.toolGroupRanges(), original.items(), original.entities(), original.dependencies()));
+        assertThat(MemoryCanonicalHash.summaryHash(original)).isEqualTo(legacyHash);
+        var anchor = new MemoryToolResultAnchor(original.dependencies().get(0).source(), "call", "search", MemoryToolResponse.ExecutionState.PARTIAL);
+        var extended = new MemorySummary(original.summaryId(), CONTEXT, ASSOCIATION, original.version(), original.expectedConversationRevision(), original.runVersion(),
+                original.coveredRange(), original.toolGroupRanges(), original.items(), original.entities(), List.of(anchor), original.dependencies());
+        assertThat(spi(extended, MemorySummary.class)).isEqualTo(extended);
+        assertThat(javaRoundTrip(extended)).isEqualTo(extended);
+        var mapper = new ObjectMapper();
+        assertThat(mapper.readValue(mapper.writeValueAsBytes(extended), MemorySummary.class)).isEqualTo(extended);
+        assertThat(MemoryCanonicalHash.summaryHash(extended)).isNotEqualTo(legacyHash);
+        var oldJson = mapper.valueToTree(original); ((com.fasterxml.jackson.databind.node.ObjectNode) oldJson).remove("toolResults");
+        assertThat(mapper.treeToValue(oldJson, MemorySummary.class)).isEqualTo(original);
+        assertThatThrownBy(() -> new MemorySummary(original.summaryId(), CONTEXT, ASSOCIATION, original.version(), original.expectedConversationRevision(), original.runVersion(),
+                original.coveredRange(), original.toolGroupRanges(), original.items(), original.entities(), List.of(anchor, anchor), original.dependencies())).isInstanceOf(MemoryException.class);
+    }
+
     @Test void fourIdentitySegmentsRemainIndependent() throws Exception {
         assertThat(CONTEXT).isNotEqualTo(new MemoryContextKey("owner-2", "marketing", "copy-agent", "conversation-1"));
         assertThat(CONTEXT).isNotEqualTo(new MemoryContextKey("owner-1", "interview", "copy-agent", "conversation-1"));

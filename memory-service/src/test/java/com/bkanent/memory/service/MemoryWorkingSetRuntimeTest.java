@@ -211,6 +211,18 @@ class MemoryWorkingSetRuntimeTest {
                     null, input -> List.of(new MemorySummary.Item(MemorySummary.ItemKind.FACT, "must not split", input.dependencies())), () -> { }));
             assertEquals(22, session.snapshot().messages().size());
             assertEquals(0, f.count("memory_summary"));
+            f.append(session, List.of(message(23, "recent input")));
+            var anchor = new MemoryToolResultAnchor(messages.get(21).source(), "long-call", "draft", MemoryToolResponse.ExecutionState.SUCCEEDED);
+            assertTrue(new MemoryCompactionCoordinator().compactStructured(session, 1, MemoryCompactionCoordinator.Trigger.TOKEN_PRESSURE,
+                    null, input -> new MemoryCompactionCoordinator.Candidate(List.of(new MemorySummary.Item(MemorySummary.ItemKind.FACT,
+                            "complete paired result", input.dependencies())), List.of(), List.of(anchor)), () -> { }));
+            assertEquals(List.of(new MemoryCoveredRange(1, 22)), session.snapshot().summaries().get(0).toolGroupRanges());
+            assertEquals(List.of(anchor), session.snapshot().summaries().get(0).toolResults());
+            f.append(session, List.of(message(24, "another input")));
+            assertTrue(new MemoryCompactionCoordinator().compactStructured(session, 1, MemoryCompactionCoordinator.Trigger.TOKEN_PRESSURE,
+                    null, input -> new MemoryCompactionCoordinator.Candidate(List.of(new MemorySummary.Item(MemorySummary.ItemKind.FACT,
+                            "preserve existing anchor", input.dependencies())), List.of(), List.of()), () -> { }));
+            assertEquals(List.of(anchor), session.snapshot().summaries().get(0).toolResults());
         }
     }
 

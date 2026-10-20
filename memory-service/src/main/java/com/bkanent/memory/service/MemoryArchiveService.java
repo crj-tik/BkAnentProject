@@ -231,6 +231,7 @@ public class MemoryArchiveService {
         var summary = request.summary();
         require(summary.runVersion() == null, MemoryErrorCode.VERSION_CONFLICT); // run adoption belongs to its checkpoint owner
         require(MemoryCanonicalHash.summaryHash(summary).equals(summary.version().contentHash()), MemoryErrorCode.VERSION_CONFLICT);
+        for (var entity : summary.entities()) require(MemoryCanonicalHash.entityHash(entity).equals(entity.version().contentHash()), MemoryErrorCode.VERSION_CONFLICT);
         store.encode(summary);
         return transaction(() -> {
             var conversation = store.conversation(request.contextKey());
@@ -255,6 +256,12 @@ public class MemoryArchiveService {
             require(summary.dependencies().containsAll(evidence), MemoryErrorCode.ARCHIVE_NOT_CONFIRMED);
             sources.requireCurrent(request.contextKey(), summary.dependencies());
             requireCompleteToolGroups(messages, summary.toolGroupRanges());
+            for (var anchor : summary.toolResults()) {
+                require(messages.stream().anyMatch(message -> message.source().equals(anchor.source())
+                        && message.toolResponses().stream().anyMatch(response -> response.callId().equals(anchor.callId())
+                        && response.toolName().equals(anchor.toolName()) && response.state() == anchor.state()
+                        && response.dataForm() == MemoryToolResponse.DataForm.INLINE_COMPLETE)), MemoryErrorCode.ARCHIVE_NOT_CONFIRMED);
+            }
             store.jdbc.update("UPDATE memory_summary SET state='INACTIVE' WHERE context_id=? AND state='ACTIVE'", id);
             store.jdbc.update("UPDATE memory_entity_anchor SET state='INACTIVE' WHERE context_id=? AND state='ACTIVE'", id);
             store.jdbc.update("UPDATE memory_conversation SET revision=revision+1,covered_through=? WHERE context_id=?", summary.coveredRange().throughSequence(), id);
@@ -265,7 +272,9 @@ public class MemoryArchiveService {
             store.dependencies(id, "SUMMARY", summary.summaryId(), summary.version().revision(), summary.dependencies());
             for (var entity : summary.entities()) {
                 var current = store.one("SELECT * FROM memory_entity_anchor WHERE context_id=? AND entity_id=?", id, entity.entityId());
-                require(current == null || number(current, "content_revision") < entity.version().revision(), MemoryErrorCode.VERSION_CONFLICT);
+                require(current == null || number(current, "content_revision") < entity.version().revision()
+                        || number(current, "content_revision") == entity.version().revision()
+                        && store.decode((String) current.get("payload_json"), MemoryEntityAnchor.class).equals(entity), MemoryErrorCode.VERSION_CONFLICT);
                 if (current != null) store.jdbc.update("DELETE FROM memory_entity_anchor WHERE context_id=? AND entity_id=?", id, entity.entityId());
                 store.jdbc.update("INSERT INTO memory_entity_anchor(context_id,entity_id,content_revision,summary_id,summary_revision,payload_json) VALUES(?,?,?,?,?,?)",
                         id, entity.entityId(), entity.version().revision(), summary.summaryId(), summary.version().revision(), store.encode(entity));
@@ -395,7 +404,10 @@ public class MemoryArchiveService {
             String after = cursor(request.cursor(), revision, key(request.contextKey()), "memory_entity_anchor", "entity_id");
             var entities = store.jdbc.query("SELECT payload_json FROM memory_entity_anchor WHERE context_id=? AND state='ACTIVE' AND entity_id>? ORDER BY entity_id LIMIT ?",
                     (rs, n) -> store.decode(rs.getString(1), MemoryEntityAnchor.class), key(request.contextKey()), after, request.limit() + 1);
-            for (var entity : entities) sources.requireCurrent(request.contextKey(), entity.dependencies());
+            for (var entity : entities) {
+                require(entity.contextKey().equals(request.contextKey()) && MemoryCanonicalHash.entityHash(entity).equals(entity.version().contentHash()), MemoryErrorCode.MEMORY_UNAVAILABLE);
+                sources.requireCurrent(request.contextKey(), entity.dependencies());
+            }
             boolean more = entities.size() > request.limit();
             var page = more ? entities.subList(0, request.limit()) : entities;
             return new MemoryEntityQueryResponse(page, more ? revision + ":" + MemoryCanonicalHash.contentHash(page.get(page.size() - 1).entityId()) : null, more);

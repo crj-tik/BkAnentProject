@@ -82,6 +82,9 @@ public final class SupervisorMemoryProjection {
         return MemoryJsonValue.nil();
     }
     private String safeText(String text) {
+        return requireSafeText(text);
+    }
+    public static String requireSafeText(String text) {
         if (CREDENTIAL_TEXT.matcher(text).find()) throw new MemoryException(MemoryErrorCode.INVALID_EXTRACTION);
         return text;
     }

@@ -16,6 +16,8 @@ public class SupervisorMemoryProperties {
     private int recentMessages = 12;
     private long summaryTimeoutMs = 5000;
     private long cleanupMs = 30_000;
+    private int toolInlineChars = 4096;
+    private int recallChars = 8192;
 
     public void validate() {
         if (keyId == null || keyId.isBlank() || keyId.length() > 128
@@ -25,7 +27,8 @@ public class SupervisorMemoryProperties {
                 || softTokens < 1 || hardTokens <= softTokens || hardTokens > 1_000_000
                 || recentMessages < 1 || recentMessages > 500
                 || summaryTimeoutMs < 1 || summaryTimeoutMs > 20_000
-                || cleanupMs < 1_000 || cleanupMs > 300_000) {
+                || cleanupMs < 1_000 || cleanupMs > 300_000
+                || toolInlineChars < 256 || toolInlineChars > 16384 || recallChars < 2048 || recallChars > 16384) {
             throw new IllegalArgumentException("invalid agent.memory-v2 bounds");
         }
         if (enabled && (signingSecret == null || signingSecret.getBytes(java.nio.charset.StandardCharsets.UTF_8).length < 32)) {
@@ -47,4 +50,6 @@ public class SupervisorMemoryProperties {
     public int getRecentMessages() { return recentMessages; } public void setRecentMessages(int v) { recentMessages = v; }
     public long getSummaryTimeoutMs() { return summaryTimeoutMs; } public void setSummaryTimeoutMs(long v) { summaryTimeoutMs = v; }
     public long getCleanupMs() { return cleanupMs; } public void setCleanupMs(long v) { cleanupMs = v; }
+    public int getToolInlineChars() { return toolInlineChars; } public void setToolInlineChars(int v) { toolInlineChars = v; }
+    public int getRecallChars() { return recallChars; } public void setRecallChars(int v) { recallChars = v; }
 }

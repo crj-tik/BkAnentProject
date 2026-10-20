@@ -65,6 +65,32 @@ public class SupervisorMemoryJournal {
         var rows = jdbc.queryForList("SELECT * FROM agent_memory_delivery WHERE context_id=? AND state='PENDING' ORDER BY sequence_no LIMIT 50", key);
         List<Fact> facts = new ArrayList<>();
         for (var row : rows) {
+            facts.add(reconstruct(context, row));
+        }
+        return facts;
+    }
+
+    /** Metadata only: callers must authorize this exact source before opening its checkpoint body. */
+    public MemorySourceRef receivedSource(MemoryContextKey context, String eventId) {
+        var row = receivedRow(context, eventId);
+        return new MemorySourceRef(MemorySourceRef.Kind.MESSAGE, context, "m-" + eventId, eventId,
+                ((Number) row.get("sequence_no")).longValue(), new MemoryRevision(1, (String) row.get("content_hash"), "supervisor.message.v2"));
+    }
+
+    public MemoryMessage readReceived(MemoryContextKey context, MemorySourceRef source) {
+        var message = reconstruct(context, receivedRow(context, source.sourceEventId())).message();
+        require(message.source().equals(source));
+        return message;
+    }
+
+    private Map<String,Object> receivedRow(MemoryContextKey context, String eventId) {
+        var rows = jdbc.queryForList("SELECT * FROM agent_memory_delivery WHERE context_id=? AND event_id=? AND state='RECEIVED'",
+                MemoryCanonicalHash.contentHash(context), eventId);
+        if (rows.size() != 1) throw new MemoryException(MemoryErrorCode.NOT_FOUND);
+        return rows.get(0);
+    }
+
+    private Fact reconstruct(MemoryContextKey context, Map<String,Object> row) {
             String run = (String) row.get("run_id");
             var snapshots = jdbc.queryForList("SELECT snapshot_json FROM agent_workflow_checkpoint WHERE task_id=? AND checkpoint_version=?", run, row.get("checkpoint_version"));
             if (snapshots.size() != 1) throw new MemoryException(MemoryErrorCode.ARCHIVE_NOT_CONFIRMED);
@@ -76,9 +102,7 @@ public class SupervisorMemoryJournal {
             require(event.equals(event(run, ordinal, stored)));
             var message = projection.project(context, run, event, ((Number) row.get("sequence_no")).longValue(), stored);
             require(message.source().version().contentHash().equals(row.get("content_hash")));
-            facts.add(new Fact(event, message.sequence(), message.source().version().contentHash(), (String) row.get("permit_id"), "PENDING", message));
-        }
-        return facts;
+            return new Fact(event, message.sequence(), message.source().version().contentHash(), (String) row.get("permit_id"), (String) row.get("state"), message);
     }
 
     public void permit(MemoryContextKey context, Fact fact, String permit) {

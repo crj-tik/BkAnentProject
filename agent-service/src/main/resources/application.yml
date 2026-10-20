@@ -42,6 +42,8 @@ agent:
     recent-messages: ${AGENT_MEMORY_V2_RECENT_MESSAGES:12}
     summary-timeout-ms: ${AGENT_MEMORY_V2_SUMMARY_TIMEOUT_MS:5000}
     cleanup-ms: ${AGENT_MEMORY_V2_CLEANUP_MS:30000}
+    tool-inline-chars: ${AGENT_MEMORY_V2_TOOL_INLINE_CHARS:4096}
+    recall-chars: ${AGENT_MEMORY_V2_RECALL_CHARS:8192}
 
 dubbo:
   application:

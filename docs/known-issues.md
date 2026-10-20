@@ -10,6 +10,22 @@
 
 ## 待修复（OPEN）
 
+## KI-138 [FIXED·P2] Supervisor 硬输入预算漏算工具定义和摘要系统指令
+
+**确认日期**：2026-10-20。**现象**：工作集仅用 system 与消息估算输入，工具 schema/description 在核验之后才组装；摘要模型也只检查资料长度。大工具定义可使已核验调用实际超过配置预算。
+
+**修复**：先构造本轮全部工具定义，把名称、描述与 schema 的序列化长度计入原有版本化估算器；摘要输入同时计入其系统指令。未能安全压缩则在模型调用前返回 CONTEXT_BUDGET_EXCEEDED。估算器仍是显式记录的粗估，不宣称等同供应商 tokenizer。
+
+**验证**：真实 Graph 的十万字符工具 schema 用例拒绝且模型调用为零；摘要系统开销预算回归通过。修复提交：本次模块提交。关联 LR-66。
+
+## KI-139 [FIXED·P2] 实体锚点自身内容 hash 未在提交和详情复核
+
+**确认日期**：2026-10-20。**现象**：实体携带 MemoryRevision，但 provider 原先只核验外层摘要 hash，未校验实体自身 hash；详情也未复核实体正文与版本的一致性。
+
+**修复**：新增框架无关 entityHash，覆盖 ID/context/matter/revision/schema/aliases/brief/evidence；摘要提交及实体详情都核验。累计摘要保留未变实体时允许原内容、原 revision 复用，任何同 revision 内容变更拒绝。
+
+**验证**：伪造实体 hash 即使外层摘要 hash 正确也拒绝；SQL 篡改详情正文失败关闭；实体跨累计摘要与冷读取保持版本和来源。修复提交：本次模块提交。关联 LR-67。
+
 ## KI-133 [FIXED·P1] 派生 assistant 消息缺失上游来源撤回依赖
 
 **确认日期**：2026-10-20，本变更新工作集测试发现。原 MemoryMessage 只在 tool response 上保留依赖；assistant 对话若从已撤回的来源转述事实，派生 assistant 消息仍可能从旧摘要/历史中读取。

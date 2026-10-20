@@ -7,10 +7,18 @@ import java.util.List;
 public record MemorySummary(String summaryId, MemoryContextKey contextKey, MemoryAssociation association,
                             MemoryRevision version, long expectedConversationRevision, MemoryRunVersion runVersion,
                             MemoryCoveredRange coveredRange, List<MemoryCoveredRange> toolGroupRanges,
-                            List<Item> items, List<MemoryEntityAnchor> entities,
+                            List<Item> items, List<MemoryEntityAnchor> entities, List<MemoryToolResultAnchor> toolResults,
                             List<MemorySourceDependency> dependencies) implements Serializable {
     private static final long serialVersionUID = 1L;
     public enum ItemKind { GOAL, FACT, DECISION, NEGATION, CORRECTION, EXCEPTION, UNRESOLVED }
+
+    public MemorySummary(String summaryId, MemoryContextKey contextKey, MemoryAssociation association,
+                         MemoryRevision version, long expectedConversationRevision, MemoryRunVersion runVersion,
+                         MemoryCoveredRange coveredRange, List<MemoryCoveredRange> toolGroupRanges,
+                         List<Item> items, List<MemoryEntityAnchor> entities, List<MemorySourceDependency> dependencies) {
+        this(summaryId, contextKey, association, version, expectedConversationRevision, runVersion, coveredRange,
+                toolGroupRanges, items, entities, List.of(), dependencies);
+    }
 
     public record Item(ItemKind kind, String text, List<MemorySourceDependency> evidence) implements Serializable {
         private static final long serialVersionUID = 1L;
@@ -38,6 +46,7 @@ public record MemorySummary(String summaryId, MemoryContextKey contextKey, Memor
         }
         items = MemoryContract.nonempty(items, MemoryException.Field.SUMMARY);
         entities = MemoryContract.list(entities, MemoryException.Field.SUMMARY);
+        toolResults = MemoryContract.list(toolResults == null ? List.of() : toolResults, MemoryException.Field.SUMMARY);
         dependencies = MemoryContract.nonempty(dependencies, MemoryException.Field.SOURCE);
         int characters = 0;
         for (Item item : items) {
@@ -47,6 +56,12 @@ public record MemorySummary(String summaryId, MemoryContextKey contextKey, Memor
         for (MemoryEntityAnchor entity : entities) {
             characters += entity.briefDefinition().length();
             MemoryContract.require(entity.contextKey().equals(contextKey) && dependencies.containsAll(entity.dependencies()), MemoryException.Field.SOURCE);
+        }
+        java.util.Set<String> resultIds = new java.util.HashSet<>();
+        for (MemoryToolResultAnchor result : toolResults) {
+            MemoryContract.require(result.source().contextKey().equals(contextKey)
+                    && dependencies.stream().anyMatch(d -> d.source().equals(result.source()))
+                    && resultIds.add(result.source().sourceEventId() + ":" + result.callId()), MemoryException.Field.SOURCE);
         }
         MemoryContract.require(characters <= MemoryContract.MAX_TEXT, MemoryException.Field.SUMMARY);
     }
