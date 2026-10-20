@@ -14,7 +14,7 @@
 
 **确认日期**：2026-10-20，本变更新工作集测试发现。原 MemoryMessage 只在 tool response 上保留依赖；assistant 对话若从已撤回的来源转述事实，派生 assistant 消息仍可能从旧摘要/历史中读取。
 
-**修复**：2026-10-20，本提交。普通消息统一加入依赖列表并纳入 canonical hash，来源核验遍历该列表；撤回回归覆盖 assistant 转述。最终 242 项相关回归通过，包含真实 MySQL 验证。
+**修复**：2026-10-20，提交 `6d66c14`。普通消息统一加入依赖列表并纳入 canonical hash，来源核验遍历该列表；撤回回归覆盖 assistant 转述。最终 242 项相关回归通过，包含真实 MySQL 验证。
 
 **关联**：LR-61/63/65；integrate-domain-agent-memory 3.5/6.4。
 
@@ -22,21 +22,21 @@
 
 **确认日期**：2026-10-20，本变更 Graph 接线审查发现。V2 模型窗口之外，原始请求上下文可再次进入 system prompt；模型之后的审批、工具观察和终态事件也需要独立来源边界。V2 关闭后，旧 checkpoint 不能回退到未过滤正文。
 
-**修复**：2026-10-20，本提交。收敛 V2 prompt 来源，加入审批/补充输入/技能/工具观察/终态输出复核，并在当前 run 保留 memory failure phase 供安全恢复。来源失效后的终态响应隐藏调用、工件及交互元数据，已完成执行事实保留在 checkpoint。回归通过 V2 禁用回退、模型/工具观察期撤回与外域历史阻断；外域拒绝发生在 PENDING invocation 写入之前。
+**修复**：2026-10-20，提交 `6d66c14`。收敛 V2 prompt 来源，加入审批/补充输入/技能/工具观察/终态输出复核，并在当前 run 保留 memory failure phase 供安全恢复。来源失效后的终态响应隐藏调用、工件及交互元数据，已完成执行事实保留在 checkpoint。回归通过 V2 禁用回退、模型/工具观察期撤回与外域历史阻断；外域拒绝发生在 PENDING invocation 写入之前。
 
 **关联**：LR-22/23/63/65；integrate-domain-agent-memory 3.5/5.4/5.10/10.6。
 
 ## KI-135 [FIXED·P2] Windows CRLF 初始化清单使末列校验和携带回车
 
-**确认/修复日期**：2026-10-20，本提交。manifest 在 Windows 工作树中使用 CRLF，Bash 按 tab 读取的末列 `check_checksum` 包含 `\r`，导致升级 dry-run 误报 checksum 不符。两个清单读取循环均只移除末列行结束回车；SQL 文件内容与校验算法不变。完整 040–150 dry-run 和既有开发 MySQL upgrade/check 均通过。
+**确认/修复日期**：2026-10-20，提交 `6d66c14`。manifest 在 Windows 工作树中使用 CRLF，Bash 按 tab 读取的末列 `check_checksum` 包含 `\r`，导致升级 dry-run 误报 checksum 不符。两个清单读取循环均只移除末列行结束回车；SQL 文件内容与校验算法不变。完整 040–150 dry-run 和既有开发 MySQL upgrade/check 均通过。
 
 ## KI-136 [FIXED·P3] Docker 根构建上下文包含本地工具资料及非构建文档
 
-**确认/修复日期**：2026-10-20，本提交。根上下文原先包含 `.mimosa`、`.zcode` 等本地资料及 docs/openspec，传输逾百秒后触发 build session healthcheck 超时。补齐 `.dockerignore`，完整上下文降至约 4.97 MB、传输约 11 秒。KI-124 的后端过载仍独立存在，本次部署使用本机离线 JAR 覆盖既有镜像完成。
+**确认/修复日期**：2026-10-20，提交 `6d66c14`。根上下文原先包含 `.mimosa`、`.zcode` 等本地资料及 docs/openspec，传输逾百秒后触发 build session healthcheck 超时。补齐 `.dockerignore`，完整上下文降至约 4.97 MB、传输约 11 秒。KI-124 的后端过载仍独立存在，本次部署使用本机离线 JAR 覆盖既有镜像完成。
 
 ## KI-137 [FIXED·P2] 默认 fork 测试进程缺少 SQL fixture 的仓库根路径
 
-**确认/修复日期**：2026-10-20，本提交。新记忆 fixture 使用 Maven 进程的 `maven.multiModuleProjectDirectory` 定位 SQL；默认独立测试 JVM 没有该属性，导致 `Path.of(null)`。父 POM 固定本机已用的 Surefire 3.5.4，并显式传递根路径。最终以标准 `forkCount=1` 完成 242 项相关回归，避免跨模块不 fork 时的 H2 驱动注册干扰。
+**确认/修复日期**：2026-10-20，提交 `6d66c14`。新记忆 fixture 使用 Maven 进程的 `maven.multiModuleProjectDirectory` 定位 SQL；默认独立测试 JVM 没有该属性，导致 `Path.of(null)`。父 POM 固定本机已用的 Surefire 3.5.4，并显式传递根路径。最终以标准 `forkCount=1` 完成 242 项相关回归，避免跨模块不 fork 时的 H2 驱动注册干扰。
 
 ## KI-131 [FIXED·P3] Memory 通用 ID 正则实际接收 256 字符，与 SQL 的 255 不符
 
@@ -275,7 +275,7 @@
 
 **处置方向**：要么默认 provider 改 redis 并补 `spring.data.redis` 配置块（`host: ${REDIS_HOST:...}`），要么从 readiness 必需清单剔除 redis；compose 侧可统一改注入 `SPRING_DATA_REDIS_HOST`。修复时需真实切换 provider 验证客户端连的是配置地址。
 
-**2026-10-20 进展**：Supervisor 记忆模块部署时，Agent readiness 为 UP，但整体 health 为 DOWN；日志确认 `RedisReactiveHealthIndicator` 连接 `localhost:6379`。本提交为既有 `bk-anent-dev` Agent 显式注入 `SPRING_DATA_REDIS_HOST=redis` 和端口，修复开发容器客户端地址，整体 health 与 readiness 均复核为 HTTP 200。默认 memory provider 仍把 Redis 列为必需依赖、以及切换 redis provider 后的真实限流读写验证仍待专项处理，条目保持 OPEN。
+**2026-10-20 进展**：Supervisor 记忆模块部署时，Agent readiness 为 UP，但整体 health 为 DOWN；日志确认 `RedisReactiveHealthIndicator` 连接 `localhost:6379`。提交 `6d66c14` 为既有 `bk-anent-dev` Agent 显式注入 `SPRING_DATA_REDIS_HOST=redis` 和端口，修复开发容器客户端地址，整体 health 与 readiness 均复核为 HTTP 200。默认 memory provider 仍把 Redis 列为必需依赖、以及切换 redis provider 后的真实限流读写验证仍待专项处理，条目保持 OPEN。
 
 **关联**：KI-49（同类 readiness 误配）。
 

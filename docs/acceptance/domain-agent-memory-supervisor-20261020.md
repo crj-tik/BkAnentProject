@@ -4,6 +4,8 @@
 
 本模块把 `agent-service` Supervisor Graph 接入 Memory v2 工作集、写入 fence、可靠 checkpoint 引用 journal、当前来源复核和安全压缩。仅覆盖 Supervisor。marketing/interview、其他 Agent、v2 RAG、偏好/经验加工、共享 export/grant 和完整物理删除 worker 尚未接入。
 
+实现与修复提交：`6d66c14`。
+
 ## 运行边界
 
 - Agent Memory v2 与压缩默认关闭；本地环境未配置专用 `AGENT_MEMORY_V2_SIGNING_SECRET`，因此不能启用该入口。
