@@ -5,6 +5,18 @@ memory:
     replay-cleanup-ms: ${MEMORY_V2_REPLAY_CLEANUP_MS:60000}
     # Empty by default. Populate from deployment-managed secrets and exact domain/agent mappings.
     trusted-callers: {}
+    preference:
+      processing:
+        enabled: ${MEMORY_V2_PREFERENCE_PROCESSING_ENABLED:false}
+        mode: ${MEMORY_V2_PREFERENCE_PROCESSING_MODE:SHADOW}
+        model: ${MEMORY_V2_PREFERENCE_MODEL:}
+        poll-ms: 5000
+        batch-size: 4
+        max-attempts: 4
+        lease-seconds: 90
+        retry-seconds: 30
+        # Explicit per-domain/agent SERVICE processing registration, in addition to trusted source callers.
+        allowed-agents-by-domain: {}
   rag:
     key-id: ${MEMORY_RAG_RPC_KEY_ID:memory-current}
     signing-secret: ${MEMORY_RAG_RPC_SECRET:}

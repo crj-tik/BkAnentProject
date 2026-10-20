@@ -401,6 +401,8 @@ public class MemoryArchiveService {
                             + "payload_json=CASE WHEN ? THEN NULL ELSE payload_json END WHERE owner_id=? AND source_domain_id=? AND source_agent_id=? AND source_conversation_id=?",
                     state, delete, request.contextKey().ownerId(), request.contextKey().domainId(), request.contextKey().agentId(), request.contextKey().conversationId());
             store.jdbc.update("UPDATE memory_processing_job SET state='CANCELLED',lease_owner=NULL,lease_until=NULL WHERE context_id=? AND job_kind<>'PRIVACY_CLEANUP'", id);
+            if (delete) store.jdbc.update("UPDATE memory_preference_evaluation SET result_json=NULL WHERE job_id IN "
+                    + "(SELECT job_id FROM memory_processing_job WHERE context_id=?)", id);
             store.enqueue(id, request.sourceEventId(), "PRIVACY_CLEANUP");
             store.jdbc.update("UPDATE memory_conversation SET revision=revision+1,covered_through=0 WHERE context_id=?", id);
             MemoryV2RequestSecurity.requireUnexpired(proof);

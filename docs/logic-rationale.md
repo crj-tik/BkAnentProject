@@ -695,3 +695,17 @@
 **代码位置**：`PreferenceHistoryService.read/detail/transitions`、`PreferenceHistoryCursor/Page`、`MemoryArchiveService.deliverMessages/withdrawSource`；迁移 160。来源元数据先授权，才读快照/历程正文，Auth RPC 不占 SQL 锁，输出前再次复核。单块容量为 10000 条、总正文/来源元数据各 8MiB，单响应 1MiB；超过上限显式失败，原历史不截断。来源时间排序包含有界排序，不宣称无 filesort 或已建立性能基线。
 
 **关联**：LR-62/68、KI-140；change 7.4。物理检索片段应携稳定 blockId 转详情；本批不实现 V2 RAG 派发。共享授权与其他主体尚不支持，不能从引用扩大范围。
+
+## LR-70 偏好后台以精确入站事件授权，评估回执与归并分别可靠提交
+
+**结论**：Memory 内部 SERVICE 消费已经与消息同事务入库的 ASSESS_MESSAGE；启用必须同时打开 archive 与 processing，并显式注册 domain→agent 加工范围。来源仍须属于当前可信 caller 的对应映射且密钥配置有效。worker 只读取该 job 的精确、当前有效 USER 证据，不签发 USER proof、不调用通用搜索、不保存用户凭据。来源元数据与传递依赖在读正文前、模型返回后及归并发布前核验；普通用户租约过期不冒充用户续签，也不阻断获准的后台加工。原生 USER 偏好写 RPC 的权限不变。
+
+**根因**：模型和数据库不能共享原子事务，用户在线请求也不能等待模型评估。评估任务使用每次唯一 lease_owner、attempt fence、到期接管、有限重试和安全错误码；模型在事务外、无工具、单次 30 秒超时且 SDK 不自行重试。严格 JSON/字段/结束状态、稳定注册维度、原文值与证据片段核验后，结果和 ASSESSED 状态同事务保存。重启从回执归并，不再调用模型；规则版本、模型标识及规则内容 hash 写入 extractionVersion。归并按稳定逻辑块及同源 sequence 微批排序，历程、revision、索引待办和 job 终态同事务提交；批次失败后逐事件隔离，不让坏候选耗尽其他块的重试。
+
+**修正边界**：模型只判断语义，不选择主体 ID、scope、来源 ID 或 corrects ID。服务端仅链接该维度在同 conversation 的最近较早挂点；跨会话缺少受信关联时不推断被修正对象。无可链接对象的长期修正保留未决，撤销无目标则拒绝。临时例外只采用源消息已有 matter，或逐字出现的 ISO instant 有效期；没有任何可靠适用挂点时不写长期默认。assistant/工具消息跳过模型，问题、事项约束和其他主体不增加偏好证据。分类语义质量不等同于授权证明，参见 KI-142。
+
+**代码位置**：PreferenceProcessingWorker、PreferenceModelEvaluator、MemoryPreferenceProcessingConfiguration、PreferenceHistoryService 的包内追加/同会话关联；迁移 170 的 memory_preference_evaluation 只保存派生结果和来源定位。来源删除在原撤回事务中清除本会话评估正文，保留 tombstone/hash；外部隐私清理状态仍不冒称完成。
+
+**启用与容量**：默认关闭、默认 SHADOW，空加工映射不扫描正文。SHADOW 只保存评估并标记 SHADOWED，不创建生产偏好/索引；切换 PUBLISH 不自动重放旧影子结果。默认微批 4（1–16），最多 4 次（2–10），lease 90 秒（60–300），重试 30 秒（1–3600）；单条输入 16000 字符、最多 32 个注册维度、最多 8 个候选、输出 24000 字符，原档案不截断。各实例使用受管 UTC 时钟且需正常校时；attempt fence 防止过期旧 worker 提交。任务到期按轮询处理，测试使用固定时钟而非假设刚写入的时间立即满足查询条件。
+
+**关联**：LR-61/68/69；change 7.2、4.5 的偏好加工子集。INDEX_SUMMARY/INDEX_PREFERENCE/PRIVACY_CLEANUP 消费者、其他主体/共享偏好及 Agent 装配另行实现，不据本 worker 完成 4.5 或其他任务。

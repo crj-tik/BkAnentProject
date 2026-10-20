@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @EnabledIfEnvironmentVariable(named="MEMORY_ARCHIVE_TEST_MYSQL_URL",matches="jdbc:mysql:.*")
 class PreferenceHistoryMySqlTest {
     @Test void realMysqlFixedRevisionHistoryIdempotenceAndDeletion() throws Exception {
-        var datasource=new DriverManagerDataSource(System.getenv("MEMORY_ARCHIVE_TEST_MYSQL_URL"),System.getenv("MEMORY_ARCHIVE_TEST_MYSQL_USER"),System.getenv("MEMORY_ARCHIVE_TEST_MYSQL_PASSWORD"));
+        var datasource=new DriverManagerDataSource(MemoryArchiveMySqlTest.mysqlUrl(),System.getenv("MEMORY_ARCHIVE_TEST_MYSQL_USER"),System.getenv("MEMORY_ARCHIVE_TEST_MYSQL_PASSWORD"));
         var jdbc=new JdbcTemplate(datasource); var mapper=JsonMapper.builder().addModule(new JavaTimeModule()).build();
         var manager=new DataSourceTransactionManager(datasource); String fixture="pref-"+UUID.randomUUID();
         var context=new MemoryContextKey("42","preference-fixture",fixture,fixture); String contextId=MemoryArchiveStore.key(context);

@@ -34,7 +34,15 @@ public class PreferenceHistoryService {
     public MemoryPreferenceWriteResponse submit(MemoryPreferenceWriteRequest request, MemoryRequestProof proof) {
         security.authorize(request, proof, MemoryV2Contract.OPERATION_PREFERENCE_WRITE);
         return transaction(() -> {
-            var context = request.contextKey(); var candidate = request.candidate();
+            var result = append(request.contextKey(), request.candidate(), request.envelope().caller(), request.expectedRevision());
+            MemoryV2RequestSecurity.requireUnexpired(proof);
+            return result;
+        });
+    }
+
+    /** Package-private: only the leased job consumer calls this inside its exact-evidence transaction. */
+    MemoryPreferenceWriteResponse append(MemoryContextKey context, MemoryPreferenceAssessment candidate, String sourceCaller, Long expectedRevision) {
+            requireTransaction();
             require(properties.getDimensions().contains(candidate.dimensionId()), MemoryErrorCode.INVALID_EXTRACTION);
             safe(candidate.value()); safeText(candidate.applicability());
             var blockKey = new PreferenceBlockKey(context.ownerId(), context.ownerId(), MemoryScope.privateScope(context.domainId(), context.agentId()), candidate.dimensionId());
@@ -42,7 +50,7 @@ public class PreferenceHistoryService {
             sources.requireCurrentMetadata(context, List.of(candidate.source()));
             var source = candidate.source().source();
             var raw = store.one("SELECT payload_json,source_caller FROM memory_message WHERE context_id=? AND source_event_id=?", key(context), source.sourceEventId());
-            require(raw != null && request.envelope().caller().equals(raw.get("source_caller")), MemoryErrorCode.FORBIDDEN);
+            require(raw != null && sourceCaller.equals(raw.get("source_caller")), MemoryErrorCode.FORBIDDEN);
             var message = store.decode((String) raw.get("payload_json"), MemoryMessage.class);
             require(message.role() == MemoryMessage.Role.USER && message.source().equals(source)
                     && MemoryCanonicalHash.messageHash(message).equals(source.version().contentHash()), MemoryErrorCode.INVALID_EXTRACTION);
@@ -69,7 +77,7 @@ public class PreferenceHistoryService {
                 require(candidateHash.equals(existing.get("candidate_hash")), MemoryErrorCode.VERSION_CONFLICT);
                 return new MemoryPreferenceWriteResponse(id, number(existing, "introduced_revision"), transitionId, true);
             }
-            require(request.expectedRevision() == number(block, "revision"), MemoryErrorCode.VERSION_CONFLICT);
+            require(expectedRevision == null || expectedRevision == number(block, "revision"), MemoryErrorCode.VERSION_CONFLICT);
             checkSources(context, dependencies(id, number(block, "revision")));
             var history = transitions(id, number(block, "revision"));
             for (String target : candidate.correctsTransitionIds()) {
@@ -98,9 +106,24 @@ public class PreferenceHistoryService {
             store.jdbc.update("UPDATE memory_preference_block SET revision=?,last_ordinal=? WHERE block_id=?", revision, ordinal, id);
             store.dependencies(key(context), "PREFERENCE", id, revision, List.of(candidate.source()));
             store.enqueue(key(context), MemoryCanonicalHash.contentHash(List.of(id, revision)), "INDEX_PREFERENCE");
-            MemoryV2RequestSecurity.requireUnexpired(proof);
             return new MemoryPreferenceWriteResponse(id, revision, transitionId, true);
-        });
+    }
+
+    MemoryPreferenceAssessment linkWithinConversation(MemoryPreferenceAssessment candidate) {
+        requireTransaction();
+        var change = candidate.change();
+        if (change == PreferenceTransition.Change.OBSERVATION || change == PreferenceTransition.Change.UNRESOLVED_CONFLICT) return candidate;
+        var source = candidate.source().source(); var context = source.contextKey();
+        // The model never chooses another person's source or transition IDs. Only this conversation's older evidence can be linked.
+        var rows = store.jdbc.queryForList("SELECT t.transition_id FROM memory_preference_transition t JOIN memory_preference_block b ON b.block_id=t.block_id "
+                + "JOIN memory_message m ON m.context_id=t.source_context_id AND m.source_event_id=t.source_event_id "
+                + "WHERE t.source_context_id=? AND b.owner_id=? AND b.domain_id=? AND b.agent_id=? AND b.dimension_id=? "
+                + "AND m.sequence_no<? ORDER BY m.sequence_no DESC LIMIT 1", String.class, key(context), context.ownerId(), context.domainId(), context.agentId(), candidate.dimensionId(), source.sourceSequence());
+        var targets = rows.isEmpty() ? List.<String>of() : List.of(rows.get(0));
+        if (change == PreferenceTransition.Change.WITHDRAWAL && targets.isEmpty()) throw new MemoryException(MemoryErrorCode.INVALID_EXTRACTION);
+        if (change == PreferenceTransition.Change.LONG_TERM_CORRECTION && targets.isEmpty()) change = PreferenceTransition.Change.UNRESOLVED_CONFLICT;
+        return new MemoryPreferenceAssessment(candidate.dimensionId(), candidate.assessment(), change, candidate.polarity(), candidate.value(), candidate.applicability(),
+                candidate.matterId(), candidate.effectiveFrom(), candidate.effectiveUntil(), targets, candidate.confidence(), candidate.extractionVersion(), candidate.source());
     }
 
     public MemoryPreferenceDetailResponse read(MemoryPreferenceDetailRequest request, MemoryRequestProof proof) {

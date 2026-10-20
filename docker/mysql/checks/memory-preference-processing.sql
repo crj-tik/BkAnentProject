@@ -1,0 +1,1 @@
+SELECT IF(COUNT(*) = 6, 1, 0) FROM information_schema.columns WHERE table_schema='bk_memory' AND table_name='memory_preference_evaluation' AND column_name IN ('job_id','source_json','result_json','result_hash','extraction_version','assessed_at');

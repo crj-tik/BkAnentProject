@@ -29,7 +29,7 @@
 
 ## 3. v2 能力与启用状态（实现按任务组推进）
 
-十四操作（工作集与档案十二操作，另加已评估偏好归并和固定版本历程详情）+ 四重身份 + 构造期版本/操作拒绝 + 请求 hash 身份。已实现当前用户与 SERVICE 分离、持久 nonce、精确事件/受理结果许可、消息单调追加、摘要覆盖/OCC、实体与事项分页、当前来源复核和撤回。开发库清单 110–160 均已应用并核验，140/150 分别对应写入 fence 与 Supervisor 交付 journal，160 是偏好历程与首次接收时间。原生 provider 已通过进程内 Dubbo 调用测试，Supervisor 已接真实 Graph 节点生命周期并通过受控 RPC fixture 回归；Agent 与 Memory v2 入口默认关闭。其他域消费者、加工 worker、v2 RAG 尚未启用。偏好/经验搜索在当前阶段明确返回 `MEMORY_UNAVAILABLE`，不会伪装成无匹配。
+十四操作（工作集与档案十二操作，另加已评估偏好归并和固定版本历程详情）+ 四重身份 + 构造期版本/操作拒绝 + 请求 hash 身份。已实现当前用户与 SERVICE 分离、持久 nonce、精确事件/受理结果许可、消息单调追加、摘要覆盖/OCC、实体与事项分页、当前来源复核和撤回。开发库清单 110–170 均已应用并核验，140/150 分别对应写入 fence 与 Supervisor 交付 journal，160 是偏好历程与首次接收时间，170 是偏好异步评估回执。原生 provider 已通过进程内 Dubbo 调用测试，Supervisor 已接真实 Graph 节点生命周期并通过受控 RPC fixture 回归；Agent 与 Memory v2 入口默认关闭。偏好后台消费者已实现但默认关闭，其他域消费者、其他加工/索引 worker、v2 RAG 尚未启用。偏好/经验搜索在当前阶段明确返回 `MEMORY_UNAVAILABLE`，不会伪装成无匹配。
 
 首次启用前的 KI-129 契约修正：`MemoryGrantRequest` 独立传递接收 contextKey、来源 exportRef、scope/matter/purpose，`MemoryShareGrant.Participant` 绑定接收 conversationId。此前仅由来源引用推导调用者身份的 v2 测试客户端须随当前源码更新；v1 形状及消费者不受影响。共享引用不是认证凭据，展示/协作许可不兑换 durable export，当前 RPC 详情路径只返回一个明确请求且获准的导出版本。
 
@@ -37,7 +37,9 @@
 
 ## 4. 防互污染规则（测试锁定）
 
-2026-10-20 偏好历程模块新增 `submitPreferenceAssessment` / `readPreferenceHistory`。前者要求当前 USER 断言、同一可信 source_caller、已归档 USER 来源与稳定注册维度，仅归并自身 DOMAIN_PRIVATE 范围；不作为后台 SERVICE 入口，不自动执行模型评估。后者用稳定 blockId + revision/authorization revision 游标读取完整历程，返回不可变快照与独立 asOf/matter 有效状态；检索接入后也须由同一 blockId 解析详情，物理片段不形成新偏好。`PreferenceCurrentState` 新增显式 polarity，有限 Double 增加独立规范 hash 类型标签；启用前 caller/provider 须统一当前 V2 制品。异步学习、其他主体、共享偏好和 Agent 装配仍未接通。
+2026-10-20 偏好历程模块新增 `submitPreferenceAssessment` / `readPreferenceHistory`。前者要求当前 USER 断言、同一可信 source_caller、已归档 USER 来源与稳定注册维度，仅归并自身 DOMAIN_PRIVATE 范围；不作为后台 SERVICE 入口，不自动执行模型评估。后者用稳定 blockId + revision/authorization revision 游标读取完整历程，返回不可变快照与独立 asOf/matter 有效状态；检索接入后也须由同一 blockId 解析详情，物理片段不形成新偏好。`PreferenceCurrentState` 新增显式 polarity，有限 Double 增加独立规范 hash 类型标签；启用前 caller/provider 须统一当前 V2 制品。其他主体、共享偏好和 Agent 装配仍未接通。
+
+随后接入 Memory 内部偏好异步消费者（7.2），无新增 RPC 或 USER/SERVICE proof 放宽。已可靠接收的精确事件经过当前 SERVICE 加工映射、来源及可信 caller 校验，事务外调用无工具模型，结果先可靠保存，再微批归并；重启不重复评估或观察。`MEMORY_V2_PREFERENCE_PROCESSING_ENABLED` 默认 false，模式默认 SHADOW；启用还要求 archive=true、模型和真实密钥，以及 Nacos/部署配置中的 `memory.v2.preference.processing.allowed-agents-by-domain` 精确映射。SHADOW 只存评估；PUBLISH 才创建私有偏好和 INDEX_PREFERENCE 待办。普通交付/逐 delta 路径不调用评估，索引可用状态仍独立。
 
 2026-10-20 大结果/实体摘要模块增加摘要 `toolResults` 锚点列表（schema `summary.v2.1`）与实体自身内容 hash（`entity.v2.1`）。缺失 `toolResults` 的旧 JSON 按空列表读取，空列表的既有摘要内容 hash 保持不变；新增列表参与摘要 hash。V2 请求签名对完整 record 字段计算，因此所有尚未启用的 V2 caller/provider 必须随本批同步升级，不允许旧请求制品混用。v1 DTO 与端点不变，无新增 SQL 迁移。
 

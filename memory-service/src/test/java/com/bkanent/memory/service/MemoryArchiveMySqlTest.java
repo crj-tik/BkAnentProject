@@ -25,8 +25,12 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Uses only the existing development MySQL. Exact random context and nonce cleanup, no DDL/container creation. */
 @EnabledIfEnvironmentVariable(named = "MEMORY_ARCHIVE_TEST_MYSQL_URL", matches = "jdbc:mysql:.*")
 class MemoryArchiveMySqlTest {
+    static String mysqlUrl() {
+        String url=System.getenv("MEMORY_ARCHIVE_TEST_MYSQL_URL");
+        return url+(url.contains("?")?"&":"?")+"connectTimeout=5000&socketTimeout=15000";
+    }
     @Test void realMysqlArchiveRestartConcurrencyCoverageDeletionAndQueryPlan() {
-        var datasource = new DriverManagerDataSource(System.getenv("MEMORY_ARCHIVE_TEST_MYSQL_URL"),
+        var datasource = new DriverManagerDataSource(mysqlUrl(),
                 System.getenv("MEMORY_ARCHIVE_TEST_MYSQL_USER"), System.getenv("MEMORY_ARCHIVE_TEST_MYSQL_PASSWORD"));
         var jdbc = new JdbcTemplate(datasource);
         var mapper = JsonMapper.builder().addModule(new JavaTimeModule()).build();
