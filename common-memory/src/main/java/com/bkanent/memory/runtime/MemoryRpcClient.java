@@ -32,6 +32,14 @@ public final class MemoryRpcClient {
         return invoke(MemoryV2Contract.OPERATION_BOUNDARY, e -> new MemoryBoundaryRequest(e, snapshot.contextKey(), snapshot.version(), dependencies), rpc::checkBoundary);
     }
 
+    public MemoryPreferenceWriteResponse submitPreference(MemoryContextKey context, long expectedRevision, MemoryPreferenceAssessment candidate) {
+        return invoke(MemoryV2Contract.OPERATION_PREFERENCE_WRITE, e -> new MemoryPreferenceWriteRequest(e, context, expectedRevision, candidate), rpc::submitPreferenceAssessment);
+    }
+
+    public MemoryPreferenceDetailResponse preferenceHistory(MemoryContextKey context, String blockId, PreferenceHistoryCursor cursor, int limit, Instant asOf, String matterId) {
+        return invoke(MemoryV2Contract.OPERATION_PREFERENCE_DETAIL, e -> new MemoryPreferenceDetailRequest(e, context, blockId, cursor, limit, asOf, matterId), rpc::readPreferenceHistory);
+    }
+
     public MemoryWriterResponse writer(MemoryContextKey context, MemoryWriterRequest.Action action, String runId, long fence) {
         String requestId = action == MemoryWriterRequest.Action.ACQUIRE
                 ? stableRequestId(List.of("writer-acquire-v1", context, runId)) : UUID.randomUUID().toString();

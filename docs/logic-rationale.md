@@ -673,3 +673,25 @@
 **代码位置**：`SupervisorMemorySummaryGenerator`、`MemoryCompactionCoordinator.compactStructured`、`MemoryCanonicalHash.entityHash/summaryHash`、`MemoryArchiveService.submitSummary/queryEntities`。
 
 **关联**：LR-55/61/66、KI-139；change 6.3。实体锚点不等于完整事项状态机或自动指代解析，事项关闭/重开与 task 6.6 仍需后续接线。
+
+## LR-68 偏好逻辑块跨本 Agent 会话归并，来源顺序与显式修正决定当前值
+
+**结论**：本阶段偏好归并只接受可信调用者与当前用户签名下的已评估 USER 来源，owner/subject 默认为该用户，scope 固定为 domain+agent 私有，维度取部署注册表。blockId 由完整逻辑键确定；同一来源事件在同一块只产生一个 transition，候选 hash 不同则冲突。原生 RPC 不授予 SERVICE 加工权，也不把来源许可兑换为用户读取权。其他主体、共享偏好、异步评估及 Agent 装配尚未接入。
+
+**根因**：按每句话创建键会丢失历程，按 owner 或 domain 归并又会混入未共享 Agent。处理结束顺序不能决定当前偏好：同 conversation 只比较真实 sourceSequence；跨 conversation 不比较局部 sequence，只有明确 corrects 关系才跨源建立优先级，否则不同值/极性保留未决。更早来源迟到时补入历史，不覆盖新修正。问题/事项约束/其他评估不计为长期偏好；assistant 复述不构成新观察。
+
+**代码位置**：`MemoryPreferenceAssessment`、写入/详情 DTO、`PreferenceHistoryService`、`PreferenceStateReducer`；迁移 160。每块以 revision/OCC 和行锁保护，原回执幂等不受后来 revision 影响。写入者必须也是原消息的可信 source_caller，来源与正文 hash、USER 角色和当前状态均核验。
+
+**关联**：LR-55/61、KI-140/141；change 7.3 及 7.1 的自身私有子集。显式确认只可确认同值/同极性，临时例外不覆盖长期默认。来源撤回使依赖块立即不可读；删除清除可还原的快照/历程正文，保留定位与 hash，外部清理仍由既有 DELETION_PENDING 语义表达。
+
+## LR-69 偏好不可变版本、来源时间轴与 asOf 有效视图分别表达
+
+**结论**：每次成功归并追加不可变 transition 和块 revision 快照；`block.currentState` 是该 revision 归并时的快照，实时消费必须使用详情响应独立的 `effectiveState` 与 `asOf`。临时例外按事项和有效期选择，过期后恢复仍有效的长期值，读取不写 revision、confidence 或 lastObservedAt。极性使用显式字段，否定不伪装成肯定值。
+
+**根因**：把时钟变化写成新观察会污染证据；让旧版本页面读取最新值会混页。分页固定 blockId/content revision/authorization revision，按可信接收时间、来源 context、sequence 和 transition ID 排列。游标 ordinal 是该固定版本的展示位置；入库 ordinal 是归并账本位置。迟到旧源可在新版本时间轴中归位，旧版本排除后来引入的事件，继续页不移位。分页用来源元数据连接上的复合 keyset，不使用 offset。
+
+**时间边界**：`memory_message_observation.accepted_at` 与首次归档同事务保存，重投不刷新；它记录 Memory 源事件首次被接受的时间，不冒充用户原始发言的客户端时间。transition.occurredAt 使用该受信源事件时间，observedAt 记录首次归并观察时间，lastObservedAt 基于来源时间；缺少可信时间的旧源拒绝自动回填。
+
+**代码位置**：`PreferenceHistoryService.read/detail/transitions`、`PreferenceHistoryCursor/Page`、`MemoryArchiveService.deliverMessages/withdrawSource`；迁移 160。来源元数据先授权，才读快照/历程正文，Auth RPC 不占 SQL 锁，输出前再次复核。单块容量为 10000 条、总正文/来源元数据各 8MiB，单响应 1MiB；超过上限显式失败，原历史不截断。来源时间排序包含有界排序，不宣称无 filesort 或已建立性能基线。
+
+**关联**：LR-62/68、KI-140；change 7.4。物理检索片段应携稳定 blockId 转详情；本批不实现 V2 RAG 派发。共享授权与其他主体尚不支持，不能从引用扩大范围。

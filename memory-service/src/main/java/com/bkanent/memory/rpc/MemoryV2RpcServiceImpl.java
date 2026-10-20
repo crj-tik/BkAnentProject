@@ -14,11 +14,19 @@ public class MemoryV2RpcServiceImpl implements MemoryV2RpcService {
     private final MemoryArchiveService archive;
     private final MemorySharingAccessService sharing;
     private final MemoryV2RequestSecurity security;
+    private final com.bkanent.memory.service.PreferenceHistoryService preferences;
 
     public MemoryV2RpcServiceImpl(MemoryArchiveService archive, MemorySharingAccessService sharing, MemoryV2RequestSecurity security) {
+        this(archive, sharing, security, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public MemoryV2RpcServiceImpl(MemoryArchiveService archive, MemorySharingAccessService sharing, MemoryV2RequestSecurity security,
+                                  com.bkanent.memory.service.PreferenceHistoryService preferences) {
         this.archive = archive;
         this.sharing = sharing;
         this.security = security;
+        this.preferences = preferences;
     }
 
     public MemoryWorkingSetResponse readWorkingSet(MemoryWorkingSetRequest request, MemoryRequestProof proof) { return archive.readWorkingSet(request, proof); }
@@ -31,6 +39,14 @@ public class MemoryV2RpcServiceImpl implements MemoryV2RpcService {
     public MemoryWithdrawalResponse withdrawSource(MemoryWithdrawalRequest request, MemoryRequestProof proof) { return archive.withdrawSource(request, proof); }
     public MemoryWriterResponse manageWriter(MemoryWriterRequest request, MemoryRequestProof proof) { return archive.manageWriter(request, proof); }
     public MemoryBoundaryResponse checkBoundary(MemoryBoundaryRequest request, MemoryRequestProof proof) { return archive.checkBoundary(request, proof); }
+    public MemoryPreferenceWriteResponse submitPreferenceAssessment(MemoryPreferenceWriteRequest request, MemoryRequestProof proof) {
+        if (preferences == null) { security.authorize(request, proof, MemoryV2Contract.OPERATION_PREFERENCE_WRITE); throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE); }
+        return preferences.submit(request, proof);
+    }
+    public MemoryPreferenceDetailResponse readPreferenceHistory(MemoryPreferenceDetailRequest request, MemoryRequestProof proof) {
+        if (preferences == null) { security.authorize(request, proof, MemoryV2Contract.OPERATION_PREFERENCE_DETAIL); throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE); }
+        return preferences.read(request, proof);
+    }
 
     public MemoryPreferenceQueryResponse searchPreferences(MemoryPreferenceQueryRequest request, MemoryRequestProof proof) {
         security.authorize(request, proof, MemoryV2Contract.OPERATION_SEARCH_PREFERENCES);

@@ -57,8 +57,8 @@
 
 - [ ] 7.1 实现可信owner/subject/canonicalScope与稳定维度注册及唯一block身份，私有scope包含domainId+agentId、共享scope采用明确授权组身份；同owner同域同主体同维度的未共享Agent不碰撞/归并，明确共享组内才归并，测试逐句重复键、模糊主体和未授权范围拒绝。
 - [ ] 7.2 实现异步先评估 PREFERENCE/TASK_CONSTRAINT/QUESTION/OTHER、肯定/否定、长期修正/临时例外后微批归并；记录规则/模型版本，评估故障不阻塞会话或SSE。
-- [ ] 7.3 实现源事件幂等、完整时间挂点、明确修正因果、块revision/OCC与未决冲突；同会话sequence可排序，跨会话不得比较局部序号，测试迟到旧表达不覆盖新修正。
-- [ ] 7.4 实现当前值与过去到现在历程详情、固定blockId/revision的有序keyset分页和完整度；任一检索分片解析为一个逻辑块，版本变化显式继续固定版本或要求重读，禁止静默混页。
+- [x] 7.3 实现源事件幂等、完整时间挂点、明确修正因果、块revision/OCC与未决冲突；同会话sequence可排序，跨会话不得比较局部序号，测试迟到旧表达不覆盖新修正。
+- [x] 7.4 实现当前值与过去到现在历程详情、固定blockId/revision的有序keyset分页和完整度；任一检索分片解析为一个逻辑块，版本变化显式继续固定版本或要求重读，禁止静默混页。
 - [ ] 7.5 实现新事项按目标/范围检索与token内当前值/例外装配、同事项复用、纠正/撤回局部刷新；持久旧值不覆盖当前明确输入。
 - [ ] 7.6 分离confidence/activation/relevance/time weight，统一asOf与有效观察；读取/检索/注入/assistant复述不增证据或lastObserved，不将旧每次减0.05自动用于v2，覆盖否定、例外过期、撤回和删除回归。
 

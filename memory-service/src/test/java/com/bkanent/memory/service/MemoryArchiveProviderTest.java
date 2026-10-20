@@ -31,6 +31,8 @@ class MemoryArchiveProviderTest {
             context.registerBean(MemoryArchiveService.class, () -> f.service);
             context.registerBean(MemorySharingAccessService.class, () -> sharing);
             context.registerBean(MemoryV2RequestSecurity.class, () -> f.security);
+            context.registerBean(PreferenceHistoryService.class, () -> new PreferenceHistoryService(f.store, f.security, f.sources,
+                    new com.bkanent.memory.config.MemoryPreferenceProperties(), f.transactions));
             context.register(MemoryV2RpcServiceImpl.class);
             context.refresh();
             assertNotNull(context.getBean(MemoryV2RpcService.class));
@@ -44,7 +46,8 @@ class MemoryArchiveProviderTest {
     @Test void nativeDubboProviderAndConsumerInvokeRealArchiveWithoutAnyContainerOrRegistry() throws Exception {
         var f = new MemoryArchiveServiceTest.Fixture();
         var sharing = new MemorySharingAccessService(f.security, new MemoryAccessPolicy(), f.sharing, f.sources, f.transactions);
-        var implementation = new MemoryV2RpcServiceImpl(f.service, sharing, f.security);
+        var preferences = new PreferenceHistoryService(f.store, f.security, f.sources, new com.bkanent.memory.config.MemoryPreferenceProperties(), f.transactions);
+        var implementation = new MemoryV2RpcServiceImpl(f.service, sharing, f.security, preferences);
         var provider = new ProviderConfig();
         var application = new ApplicationConfig("memory-archive-fixture-" + UUID.randomUUID());
         application.setQosEnable(false);
@@ -71,6 +74,18 @@ class MemoryArchiveProviderTest {
             assertEquals(1, rpc.deliverMessages(delivery, f.signService(delivery)).version().lastSequence());
             var read = f.request(MemoryV2Contract.OPERATION_WORKING_SET, envelope -> new MemoryWorkingSetRequest(envelope, MemoryArchiveServiceTest.CONTEXT));
             assertEquals(List.of(message), rpc.readWorkingSet(read, f.sign(read)).messages());
+            var write = f.request(MemoryV2Contract.OPERATION_PREFERENCE_WRITE, e -> new MemoryPreferenceWriteRequest(e, MemoryArchiveServiceTest.CONTEXT, 0,
+                    new MemoryPreferenceAssessment("budget", PreferenceTransition.Assessment.PREFERENCE, PreferenceTransition.Change.OBSERVATION,
+                            PreferenceTransition.Polarity.NEGATIVE, MemoryJsonValue.number("100"), null, null, null, null, List.of(), .8,
+                            "extract-v1", new MemorySourceDependency(message.source(), null))));
+            var client = new com.bkanent.memory.runtime.MemoryRpcClient(rpc, MemoryArchiveServiceTest.CALLER, "fixture-key", f.secret.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                    () -> new com.bkanent.memory.runtime.MemoryRpcClient.Actor(new com.bkanent.common.rpc.AuthenticatedPrincipal(42L), java.time.Instant.now().getEpochSecond()+60));
+            var accepted = client.submitPreference(MemoryArchiveServiceTest.CONTEXT, 0, write.candidate());
+            var asOf = java.time.Instant.now();
+            var history = f.request(MemoryV2Contract.OPERATION_PREFERENCE_DETAIL, e -> new MemoryPreferenceDetailRequest(e, MemoryArchiveServiceTest.CONTEXT,
+                    accepted.blockId(), null, 10, asOf, null));
+            assertEquals(PreferenceTransition.Polarity.NEGATIVE, client.preferenceHistory(MemoryArchiveServiceTest.CONTEXT,
+                    accepted.blockId(), null, 10, history.asOf(), null).effectiveState().polarity());
             var delete = f.request(MemoryV2Contract.OPERATION_WITHDRAW, envelope -> new MemoryWithdrawalRequest(envelope, MemoryArchiveServiceTest.CONTEXT, "event-1", true));
             assertEquals(MemoryState.DELETION_PENDING, rpc.withdrawSource(delete, f.sign(delete)).state());
         } finally {

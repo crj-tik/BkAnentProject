@@ -26,6 +26,14 @@ class MemoryContractTest {
             new MemoryAssociation.DomainSessionRef("marketing", "domain-session-1"));
     private final Fastjson2ConstructorSerialization serialization = new Fastjson2ConstructorSerialization();
 
+    @Test void canonicalHashSupportsFiniteConfidenceWithoutChangingExistingTypeTags() {
+        assertThat(MemoryCanonicalHash.contentHash(.8)).isEqualTo(MemoryCanonicalHash.contentHash(Double.valueOf(.8)));
+        assertThat(MemoryCanonicalHash.contentHash(.8)).isNotEqualTo(MemoryCanonicalHash.contentHash(.7));
+        assertThatThrownBy(() -> MemoryCanonicalHash.contentHash(Double.NaN)).isInstanceOf(MemoryException.class);
+        assertThatThrownBy(() -> MemoryCanonicalHash.contentHash(Double.POSITIVE_INFINITY)).isInstanceOf(MemoryException.class);
+        assertThat(MemoryCanonicalHash.contentHash(summary())).hasSize(64);
+    }
+
     @Test void resultAnchorsRoundTripAndParticipateInSummaryHashWithoutChangingLegacyDigest() throws Exception {
         var original = summary();
         String legacyHash = MemoryCanonicalHash.contentHash(java.util.Arrays.asList(original.summaryId(), original.contextKey(), original.association(),

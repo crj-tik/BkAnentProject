@@ -93,7 +93,7 @@ class MemoryArchiveMySqlTest {
             // Delete only records whose complete random context belongs to this fixture.
             jdbc.update("DELETE FROM memory_conversation_writer WHERE context_id=?", contextId);
             jdbc.update("DELETE FROM memory_receive_event WHERE permit_id IN (SELECT permit_id FROM memory_receive_permit WHERE context_id=?)", contextId);
-            for (String table : List.of("memory_receive_permit", "memory_result_admission", "memory_summary", "memory_entity_anchor", "memory_matter", "memory_message", "memory_processing_job")) {
+            for (String table : List.of("memory_message_observation", "memory_receive_permit", "memory_result_admission", "memory_summary", "memory_entity_anchor", "memory_matter", "memory_message", "memory_processing_job")) {
                 jdbc.update("DELETE FROM " + table + " WHERE context_id=?", contextId);
             }
             jdbc.update("DELETE FROM memory_source_dependency WHERE target_context_id=? OR source_context_id=?", contextId, contextId);

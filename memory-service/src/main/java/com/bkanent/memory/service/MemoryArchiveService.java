@@ -136,6 +136,8 @@ public class MemoryArchiveService {
                                     + "schema_version,source_caller,payload_json) VALUES(?,?,?,?,?,?,?,?,?)",
                             contextId, message.sequence(), message.messageId(), event, hash, message.source().version().revision(),
                             message.source().version().schemaVersion(), request.envelope().caller(), store.encode(message));
+                    store.jdbc.update("INSERT INTO memory_message_observation(context_id,source_event_id,accepted_at) VALUES(?,?,?)",
+                            contextId, event, LocalDateTime.ofInstant(Instant.now(), ZoneOffset.UTC));
                     store.dependencies(contextId, "MESSAGE", message.messageId(), message.source().version().revision(), dependencies);
                     store.enqueue(contextId, event, "ASSESS_MESSAGE");
                     last = message.sequence();
@@ -380,6 +382,16 @@ public class MemoryArchiveService {
             String state = delete ? "DELETION_PENDING" : "WITHDRAWN";
             store.jdbc.update("UPDATE memory_message SET state=?,payload_json=CASE WHEN ? THEN NULL ELSE payload_json END WHERE context_id=? AND source_event_id=?",
                     state, delete, id, request.sourceEventId());
+            // Preference blocks span this private agent's conversations. Revoke every dependent block before any old page can be reused.
+            var affectedPreferences = store.jdbc.queryForList("SELECT DISTINCT target_id FROM memory_source_dependency WHERE source_context_id=? "
+                    + "AND source_event_id=? AND target_kind='PREFERENCE'", String.class, id, request.sourceEventId());
+            for (String blockId : affectedPreferences) {
+                store.jdbc.update("UPDATE memory_preference_block SET state=?,authorization_revision=authorization_revision+1 WHERE block_id=?", state, blockId);
+                if (delete) {
+                    store.jdbc.update("UPDATE memory_preference_revision SET snapshot_json=NULL WHERE block_id=?", blockId);
+                    store.jdbc.update("UPDATE memory_preference_transition SET payload_json=NULL WHERE block_id=?", blockId);
+                }
+            }
             // Invalidate the whole private derived set; rebuild from permitted evidence later.
             store.jdbc.update("UPDATE memory_summary SET state=?,payload_json=CASE WHEN ? THEN NULL ELSE payload_json END WHERE context_id=?", state, delete, id);
             store.jdbc.update("UPDATE memory_entity_anchor SET state=?,payload_json=CASE WHEN ? THEN NULL ELSE payload_json END WHERE context_id=?", state, delete, id);

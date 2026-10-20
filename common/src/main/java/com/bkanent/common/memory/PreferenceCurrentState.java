@@ -8,12 +8,20 @@ import java.util.List;
 public record PreferenceCurrentState(Status status, MemoryJsonValue value, List<String> transitionIds,
                                      List<String> exceptionTransitionIds, List<String> conflictTransitionIds,
                                      double confidence, double activation, Instant lastObservedAt,
-                                     List<MemorySourceDependency> evidence) implements Serializable {
+                                     List<MemorySourceDependency> evidence, PreferenceTransition.Polarity polarity) implements Serializable {
     private static final long serialVersionUID = 1L;
+    public PreferenceCurrentState(Status status, MemoryJsonValue value, List<String> transitionIds,
+                                 List<String> exceptionTransitionIds, List<String> conflictTransitionIds,
+                                 double confidence, double activation, Instant lastObservedAt, List<MemorySourceDependency> evidence) {
+        this(status, value, transitionIds, exceptionTransitionIds, conflictTransitionIds, confidence, activation, lastObservedAt,
+                evidence, status == Status.EFFECTIVE ? PreferenceTransition.Polarity.AFFIRMATIVE : null);
+    }
     public enum Status { EFFECTIVE, UNRESOLVED, NO_EFFECTIVE_VALUE }
     public PreferenceCurrentState {
         MemoryContract.required(status, MemoryException.Field.PREFERENCE);
         MemoryContract.require(status == Status.EFFECTIVE ? value != null : value == null, MemoryException.Field.PREFERENCE);
+        if (status == Status.EFFECTIVE && polarity == null) polarity = PreferenceTransition.Polarity.AFFIRMATIVE; // old v2 JSON
+        MemoryContract.require(status == Status.EFFECTIVE || polarity == null, MemoryException.Field.PREFERENCE);
         transitionIds = ids(transitionIds);
         exceptionTransitionIds = ids(exceptionTransitionIds);
         conflictTransitionIds = ids(conflictTransitionIds);

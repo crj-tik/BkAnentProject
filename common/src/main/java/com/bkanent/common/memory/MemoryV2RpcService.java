@@ -34,4 +34,8 @@ public interface MemoryV2RpcService {
     MemoryWriterResponse manageWriter(MemoryWriterRequest request, MemoryRequestProof proof) throws MemoryException;
 
     MemoryBoundaryResponse checkBoundary(MemoryBoundaryRequest request, MemoryRequestProof proof) throws MemoryException;
+
+    MemoryPreferenceWriteResponse submitPreferenceAssessment(MemoryPreferenceWriteRequest request, MemoryRequestProof proof) throws MemoryException;
+
+    MemoryPreferenceDetailResponse readPreferenceHistory(MemoryPreferenceDetailRequest request, MemoryRequestProof proof) throws MemoryException;
 }

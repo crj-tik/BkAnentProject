@@ -27,12 +27,14 @@ public final class MemoryV2Contract {
     public static final String OPERATION_WITHDRAW = "memory.source.withdraw";
     public static final String OPERATION_WRITER = "memory.writer.manage";
     public static final String OPERATION_BOUNDARY = "memory.boundary.check";
+    public static final String OPERATION_PREFERENCE_WRITE = "memory.preference.assessment.submit";
+    public static final String OPERATION_PREFERENCE_DETAIL = "memory.preference.history.read";
 
     private static final Set<String> OPERATIONS = Set.of(
             OPERATION_WORKING_SET, OPERATION_RECEIVE_PERMIT, OPERATION_DELIVER_MESSAGES,
             OPERATION_SUBMIT_SUMMARY, OPERATION_QUERY_MATTERS, OPERATION_QUERY_ENTITIES,
             OPERATION_SEARCH_PREFERENCES, OPERATION_SEARCH_EXPERIENCES, OPERATION_GET_GRANT, OPERATION_WITHDRAW,
-            OPERATION_WRITER, OPERATION_BOUNDARY);
+            OPERATION_WRITER, OPERATION_BOUNDARY, OPERATION_PREFERENCE_WRITE, OPERATION_PREFERENCE_DETAIL);
     private static final String HASH_PATTERN = "[0-9a-f]{64}";
 
     private MemoryV2Contract() { }

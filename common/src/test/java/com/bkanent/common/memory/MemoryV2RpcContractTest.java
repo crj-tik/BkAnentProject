@@ -86,7 +86,12 @@ class MemoryV2RpcContractTest {
                 new MemoryWriterRequest(envelope(MemoryV2Contract.OPERATION_WRITER), CONTEXT,
                         MemoryWriterRequest.Action.ACQUIRE, "run-1", 0),
                 new MemoryBoundaryRequest(envelope(MemoryV2Contract.OPERATION_BOUNDARY), CONTEXT,
-                        new MemoryConversationVersion(1, 1, "policy-v2"), List.of(dependency)));
+                        new MemoryConversationVersion(1, 1, "policy-v2"), List.of(dependency)),
+                new MemoryPreferenceWriteRequest(envelope(MemoryV2Contract.OPERATION_PREFERENCE_WRITE), CONTEXT, 0,
+                        new MemoryPreferenceAssessment("budget", PreferenceTransition.Assessment.PREFERENCE, PreferenceTransition.Change.OBSERVATION,
+                                PreferenceTransition.Polarity.NEGATIVE, MemoryJsonValue.number("100"), null, null, null, null,
+                                List.of(), .8, "extract-v1", new MemorySourceDependency(source("user", 2), null))),
+                new MemoryPreferenceDetailRequest(envelope(MemoryV2Contract.OPERATION_PREFERENCE_DETAIL), CONTEXT, "block", null, 20, AT, null));
         for (Object request : requests) {
             assertThat(spi(request, request.getClass())).isEqualTo(request);
         }
@@ -113,7 +118,8 @@ class MemoryV2RpcContractTest {
                 new MemoryGrantResponse(grant(), List.of()),
                 new MemoryWithdrawalResponse("event-1", MemoryState.DELETION_PENDING, conversation),
                 new MemoryWriterResponse(new MemoryWriteAuthority("run-1", 1), 1_798_000_000_000L, conversation),
-                new MemoryBoundaryResponse(conversation, true));
+                new MemoryBoundaryResponse(conversation, true),
+                new MemoryPreferenceWriteResponse("block", 1, "transition", true));
         for (Object response : responses) {
             assertThat(spi(response, response.getClass())).isEqualTo(response);
         }

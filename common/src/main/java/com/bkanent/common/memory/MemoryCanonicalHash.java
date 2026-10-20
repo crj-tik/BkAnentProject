@@ -85,6 +85,7 @@ public final class MemoryCanonicalHash {
         if (value instanceof Short number) { output.writeByte(5); output.writeShort(number); return; }
         if (value instanceof Byte number) { output.writeByte(6); output.writeByte(number); return; }
         if (value instanceof BigDecimal number) { output.writeByte(7); writeString(output, number.toPlainString()); return; }
+        if (value instanceof Double number && Double.isFinite(number)) { output.writeByte(14); output.writeLong(Double.doubleToLongBits(number)); return; }
         if (value instanceof Instant instant) {
             output.writeByte(8); output.writeLong(instant.getEpochSecond()); output.writeInt(instant.getNano()); return;
         }
