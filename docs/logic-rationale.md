@@ -826,11 +826,11 @@
 
 ## LR-84 私有记忆候选须在重排前取得当前真源许可
 
-**结论**：memory v2 私有检索使用单独的 `MEMORY_SEARCH` 签名 RPC 和短期 owner/domain/agent scope；RAG 将不可覆盖的 owner、domain、agent、active 条件加到两路召回。融合后、把候选正文发送给通用重排前，RAG 只把候选稳定 ID、source type、revision、schema 和内容哈希交给 Memory 的专用许可 RPC；Memory 按当前投影事件、来源版本/哈希、删除状态和派生来源复验后只返回允许的 ID。许可失败关闭，Memory 最终仍以当前 SQL 真源装配正文并复验身份。协作 durable export 与当前 grant 的写入/读取已按 LR-85 接通；协作候选许可仍待 change 9.2，完成前 Memory 搜索不会返回协作候选。
+**结论**：memory v2 私有检索使用单独的 `MEMORY_SEARCH` 签名 RPC 和短期 owner/domain/agent scope；RAG 将不可覆盖的 owner、domain、agent、active 条件加到两路召回。融合后、把候选正文发送给通用重排前，RAG 只把候选稳定 ID、source type、revision、schema 和内容哈希交给 Memory 的专用许可 RPC；Memory 按当前投影事件、来源版本/哈希、删除状态和派生来源复验后只返回允许的 ID。许可失败关闭，Memory 最终仍以当前 SQL 真源装配正文并复验身份。协作候选 scope 还绑定接收方 domain/agent/conversation、matter、purpose 和明确 grant；Memory 对照当前导出 revision/hash、接收方投影回执、grant 历史快照及全部来源依赖，仅授予仍有效候选的 ID。
 
 **根因**：如果在重排后才检查当前权限，已撤回、过期或跨域的旧索引正文已经进入重排模型。索引字段和 namespace 只能缩小召回，不能证明派生来源及共享 grant 此刻仍有效；RAG 需要在取用正文前调用唯一真源许可点，Memory 还需要在结果输出前复核当前事实。
 
-**代码位置**：`common/src/main/java/com/bkanent/common/rag/MemoryRagAuthorizationScope.java`、`RagCandidateReference.java` 与 `RagCandidateAuthorizationRequest.java`；`rag-service/security/RagAccessControl`、`retrieval/RagRetrievalService`、`retrieval/RagMemoryCandidateAuthorizer`；`memory-service/service/MemoryRagCandidateAuthorizationService`、`MemoryRagSecurity`、`MemoryRagSearchFacade` 及偏好/经验服务。候选只授权 ID 的回归在 `RagRetrievalServiceTest`、`MemoryRagSecurityTest` 与 `MemoryRagSearchFacadeTest`；导出数据已有持久 grant 与 SQL 详情边界，尚未通过 9.2 候选许可的协作空间仍不可返回候选。
+**代码位置**：`common/src/main/java/com/bkanent/common/rag/MemoryRagAuthorizationScope.java`、`RagCandidateReference.java` 与 `RagCandidateAuthorizationRequest.java`；`rag-service/security/RagAccessControl`、`retrieval/RagRetrievalService`、`retrieval/RagMemoryCandidateAuthorizer`；`memory-service/service/MemoryRagCandidateAuthorizationService`、`MemoryRagSecurity`、`MemoryRagSearchFacade` 及偏好/经验服务。候选只授权 ID 的回归在 `RagRetrievalServiceTest`、`MemoryRagSecurityTest` 与 `MemoryRagSearchFacadeTest`；协作候选的当前来源删除、grant 撤回和旧索引回执回归在 `MemorySharingWriteServiceTest`。
 
 **关联**：LR-31、LR-32、LR-33、LR-83；change 9.1–9.5。
 
@@ -842,7 +842,17 @@
 
 **代码位置**：common 的 `MemoryShareGrantManagementRequest`、`MemorySharedExportSubmitRequest`、`MemorySharedExportCommitRequest`、`MemorySharedExportStatusResponse` 和 `MemoryCanonicalHash.sharedExportHash`；memory-service 的 `MemorySharingWriteService`、`MemorySharingStore`、`MemoryV2RagProjectionService`、`MemoryRagOutboxDispatcher`；迁移 `20261021_memory_shared_export_runtime.sql` 及部署 manifest。`MemorySharingWriteServiceTest` 覆盖签名创建、重试冲突、两阶段提交、每接收者索引确认和撤回墓碑；`MemorySharingAccessServiceTest.committedExportsWithoutNewRuntimeReceiptRemainReadable` 覆盖迁移兼容。
 
-**关联**：LR-59、LR-84；KI-154；change 10.2。协作候选在 9.2 的来源/grant 候选许可实现前继续失败关闭；不以持有 export reference 或 RAG document ID 授权。
+**关联**：LR-59、LR-84；KI-154；change 9.2、10.2。不以持有 export reference 或 RAG document ID 授权。
+
+## LR-91 协作候选许可只核验当前投影、grant 与来源并返回ID
+
+**结论**：COLLABORATION 空间在RAG双路召回前固定owner及recipient domain/agent、active、grant过滤。可达入口为受签名保护的 `MemoryV2RpcService.searchCollaborations`：Memory从当前SQL生成精确purpose/matter/接收方下有效grant集合签入短期scope，无授权grant不调用RAG。重排前，RAG以候选ID、source type、projection revision、schema和hash调用独立Memory许可RPC；Memory锁定候选核验事务，检查投影事件身份与规范hash、共享导出当前COMMITTED版本/hash、对应接收方投影回执、可信scope中的owner/recipient/matter/purpose和grant revision/状态/时间窗，再按导出版本逐项复核其来源依赖。共享导出写入与候选许可都先按grant ID稳定排序取grant锁；写入再更新export和投影账本，授权回调在grant锁后核验投影，避免两条路径反向取锁。删除、过期、撤回、冲突或无匹配只排除该候选；真源或授权依赖不可用则整个许可请求失败关闭。许可响应只返回稳定document ID，不读取或传递正文；RAG不得在获准前把候选内容交给重排。RAG正文只作为短暂候选，Memory用SQL当前COMMITTED导出和安全payload策略重建结果，并在用户proof复核后再次核验；COLLABORATION只许可受限搜索投影，详情读取仍需DURABLE_EXPORT。合法派发后发生的撤回不能收回已发送正文，但Memory最终查询仍复核当前版本与授权。
+
+**根因**：索引中的grant字段及旧event回执都只是召回线索，不能代表此刻授权；候选正文若先到通用重排模型，之后的SQL拒绝无法撤回已经发生的数据派发。把协作候选权限放在Memory真源内核验且只回传ID，保留Memory为唯一授权点，RAG继续唯一执行搜索与重排，并让真源依赖故障与普通过期候选得到不同的失败语义。
+
+**代码位置**：`MemoryRagSecurity.verifyCandidateCaller`、`MemoryRagCandidateAuthorizationRpcServiceImpl`、`MemoryRagCandidateAuthorizationService.collaboration`、`MemorySharingStore.findCurrentGrantForUpdate`、`MemoryV2RagProjectionService.sharedExport`、`MemoryCollaborationSearchService`、`MemoryRagSearchFacade.searchDomainCandidates` 和 `MemoryV2RpcServiceImpl.searchCollaborations`；测试为 `MemorySharingWriteServiceTest.collaborationCandidatesRequireCurrentGrantAndSourceBeforeAnyBodyCanBeReranked`、`MemorySharingWriteServiceTest.collaborationSearchReturnsCurrentSqlProjectionAndWithholdsRevokedCandidates`、`MemoryRagSearchFacadeTest.collaborationSearchSignsExactRecipientGrantPurposeAndMatterScope`、`RagRetrievalServiceTest` 的拒绝许可零重排用例，以及共享详情拒绝COLLABORATION-only grant的既有回归。
+
+**关联**：LR-84、LR-85；KI-56；change 9.2、9.5。
 
 ## LR-86 A2A终态内容直传，跨域记忆导出只接收受限owner授权
 

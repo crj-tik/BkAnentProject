@@ -50,6 +50,12 @@ public interface MemoryV2RpcService {
 
     MemoryExperienceQueryResponse searchExperiences(MemoryExperienceQueryRequest request, MemoryRequestProof proof) throws MemoryException;
 
+    /** Searches only current collaboration projections granted to the exact recipient context. */
+    default MemoryCollaborationSearchResponse searchCollaborations(
+            MemoryCollaborationSearchRequest request, MemoryRequestProof proof) throws MemoryException {
+        throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+    }
+
     MemoryExperienceEventStatusResponse submitExperienceOutcome(MemoryExperienceOutcomeRequest request, MemoryRequestProof proof) throws MemoryException;
 
     MemoryExperienceEventStatusResponse submitExperienceFeedback(MemoryExperienceFeedbackRequest request, MemoryRequestProof proof) throws MemoryException;

@@ -20,14 +20,16 @@ public class MemoryRagCandidateAuthorizationService {
     private final JdbcTemplate jdbc;
     private final MemoryRagProjectionService projections;
     private final MemoryArchiveStore archive;
+    private final MemorySharingStore sharing;
     private final MemorySourceAuthorizer sources;
     private final TransactionTemplate transactions;
 
     public MemoryRagCandidateAuthorizationService(JdbcTemplate jdbc, MemoryRagProjectionService projections,
-            MemoryArchiveStore archive, MemorySourceAuthorizer sources) {
+            MemoryArchiveStore archive, MemorySharingStore sharing, MemorySourceAuthorizer sources) {
         this.jdbc = jdbc;
         this.projections = projections;
         this.archive = archive;
+        this.sharing = sharing;
         this.sources = sources;
         transactions = new TransactionTemplate(new DataSourceTransactionManager(Objects.requireNonNull(jdbc.getDataSource())));
         transactions.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
@@ -37,17 +39,52 @@ public class MemoryRagCandidateAuthorizationService {
     public RagCandidateAuthorizationResponse authorize(RagCandidateAuthorizationRequest request,
             MemoryRagAuthorizationScope scope) {
         List<String> authorized = transactions.execute(status -> {
+            Map<String, MemoryShareGrant> lockedGrants = lockCandidateGrants(request, scope);
             jdbc.queryForObject("SELECT lock_id FROM memory_rag_lock WHERE lock_id=1 FOR UPDATE", Integer.class);
             List<String> accepted = new ArrayList<>();
             for (RagCandidateReference candidate : request.candidates()) {
-                if (current(candidate, request.search().spaceId(), scope)) accepted.add(candidate.documentId());
+                try {
+                    if (current(candidate, request.search().spaceId(), scope, lockedGrants)) accepted.add(candidate.documentId());
+                } catch (MemoryException staleOrRevoked) {
+                    if (!candidateNoLongerReadable(staleOrRevoked.code())) throw staleOrRevoked;
+                }
             }
             return List.copyOf(accepted);
         });
         return new RagCandidateAuthorizationResponse(RagContract.VERSION, request.search().requestId(), authorized);
     }
 
-    private boolean current(RagCandidateReference ref, String spaceId, MemoryRagAuthorizationScope scope) {
+    /**
+     * Shared-export writers lock the grant before publishing projection events. Lock those same rows first,
+     * in stable order, so candidate checks cannot deadlock against a concurrent export or revocation.
+     */
+    private Map<String, MemoryShareGrant> lockCandidateGrants(RagCandidateAuthorizationRequest request,
+            MemoryRagAuthorizationScope scope) {
+        if (scope.recordType() != MemoryRagRecordType.COLLABORATION) return Map.of();
+        Set<String> grantIds = new TreeSet<>();
+        for (RagCandidateReference candidate : request.candidates()) {
+            if (!"memory_collaboration".equals(candidate.sourceType())) continue;
+            var rows = jdbc.queryForList("SELECT revision,tombstone,event_payload FROM memory_rag_projection WHERE space_id=? AND document_id=?",
+                    request.search().spaceId(), candidate.documentId());
+            if (rows.size() != 1 || truth(rows.get(0).get("tombstone"))) continue;
+            try {
+                RagIndexEvent event = projections.decode((String) rows.get(0).get("event_payload"));
+                String grantId = string(event.document().attributes().get("grantId"));
+                if (event.operation() == RagIndexOperation.UPSERT && "memory_collaboration".equals(event.document().sourceType())
+                        && candidate.sourceId().equals(event.document().sourceId()) && scope.grantIds().contains(grantId)) {
+                    grantIds.add(grantId);
+                }
+            } catch (RuntimeException invalidProjection) {
+                // The authoritative pass below will reject malformed projection data; it is not a reason to lock arbitrary rows.
+            }
+        }
+        Map<String, MemoryShareGrant> locked = new HashMap<>();
+        for (String grantId : grantIds) sharing.findCurrentGrantForUpdate(grantId).ifPresent(grant -> locked.put(grantId, grant));
+        return Map.copyOf(locked);
+    }
+
+    private boolean current(RagCandidateReference ref, String spaceId, MemoryRagAuthorizationScope scope,
+            Map<String, MemoryShareGrant> lockedGrants) {
         var rows = jdbc.queryForList("SELECT revision,tombstone,event_payload FROM memory_rag_projection WHERE space_id=? AND document_id=?",
                 spaceId, ref.documentId());
         if (rows.size() != 1 || number(rows.get(0), "revision") != ref.projectionVersion() || truth(rows.get(0).get("tombstone"))) return false;
@@ -60,13 +97,13 @@ public class MemoryRagCandidateAuthorizationService {
                 || !event.document().sourceType().equals(ref.sourceType()) || !event.document().sourceId().equals(ref.sourceId())
                 || !event.contentHash().equals(RagCanonicalHash.documentHash(RagIndexOperation.UPSERT, event.document()))) return false;
         Map<String, RagValue> attrs = event.document().attributes();
-        if (!scope.ownerId().equals(string(attrs.get("ownerId"))) || !bool(attrs.get("active"))) return false;
         String sourceHash = string(attrs.get("sourceHash"));
         long sourceVersion = numberValue(attrs.get("sourceVersion"));
         if (sourceHash == null || !sourceHash.matches("[0-9a-f]{64}") || sourceVersion < 1) return false;
         if (scope.recordType() == MemoryRagRecordType.COLLABORATION) {
-            return false; // durable export projection and grant state are implemented by task 10.2
+            return collaboration(ref, spaceId, event, attrs, sourceVersion, sourceHash, scope, lockedGrants);
         }
+        if (!scope.ownerId().equals(string(attrs.get("ownerId"))) || !bool(attrs.get("active"))) return false;
         if (!scope.domainId().equals(string(attrs.get("domainId")))
                 || !scope.agentId().equals(string(attrs.get("agentId")))) return false;
         return switch (scope.recordType()) {
@@ -74,6 +111,78 @@ public class MemoryRagCandidateAuthorizationService {
             case EXPERIENCE -> experience(ref, scope, sourceVersion, sourceHash);
             case SUMMARY, SESSION -> summary(ref, scope, sourceVersion, sourceHash);
             case COLLABORATION -> false;
+        };
+    }
+
+    /** Rechecks the source export, current grant, recipient and source evidence without returning its payload. */
+    private boolean collaboration(RagCandidateReference ref, String spaceId, RagIndexEvent event,
+            Map<String, RagValue> attrs, long sourceVersion, String sourceHash, MemoryRagAuthorizationScope scope,
+            Map<String, MemoryShareGrant> lockedGrants) {
+        String grantId = string(attrs.get("grantId"));
+        String exportId = string(attrs.get("exportId"));
+        String sourceDomainId = string(attrs.get("sourceDomainId"));
+        String sourceAgentId = string(attrs.get("sourceAgentId"));
+        String recipientDomainId = string(attrs.get("recipientDomainId"));
+        String recipientAgentId = string(attrs.get("recipientAgentId"));
+        String recipientConversationId = string(attrs.get("recipientConversationId"));
+        if (!"memory_collaboration".equals(ref.sourceType()) || !ref.sourceId().equals(exportId)
+                || !scope.ownerId().equals(string(attrs.get("ownerId"))) || !bool(attrs.get("active"))
+                || grantId == null || !scope.grantIds().contains(grantId) || scope.purpose() == null
+                || scope.conversationId() == null || !scope.domainId().equals(recipientDomainId)
+                || !scope.agentId().equals(recipientAgentId) || !scope.conversationId().equals(recipientConversationId)
+                || sourceDomainId == null || sourceAgentId == null) return false;
+
+        Map<String, Object> header = one("SELECT content_hash,schema_version,owner_id,source_domain_id,source_agent_id,"
+                        + "source_conversation_id,grant_id,grant_revision,matter_id,purpose,state "
+                        + "FROM memory_shared_export WHERE export_id=? AND content_revision=?",
+                exportId, sourceVersion);
+        if (header == null || !"COMMITTED".equals(header.get("state"))
+                || !MemorySharedExportSubmitRequest.SCHEMA_VERSION.equals(header.get("schema_version"))
+                || !sourceHash.equals(header.get("content_hash"))
+                || !scope.ownerId().equals(header.get("owner_id"))
+                || !sourceDomainId.equals(header.get("source_domain_id"))
+                || !sourceAgentId.equals(header.get("source_agent_id"))
+                || !grantId.equals(header.get("grant_id")) || !scope.purpose().equals(header.get("purpose"))
+                || !Objects.equals(scope.matterId(), header.get("matter_id"))) return false;
+
+        MemoryContextKey sourceContext = new MemoryContextKey((String) header.get("owner_id"),
+                (String) header.get("source_domain_id"), (String) header.get("source_agent_id"),
+                (String) header.get("source_conversation_id"));
+        MemoryShareGrant grant = lockedGrants.get(grantId);
+        if (grant == null || !"ACTIVE".equals(grant.state().name())
+                || grant.grant().revision() != number(header, "grant_revision")
+                || !grant.sourceContext().equals(sourceContext) || !grant.purpose().equals(scope.purpose())
+                || !Objects.equals(grant.matterId(), scope.matterId())
+                || !grant.projections().contains(MemoryShareGrant.Projection.COLLABORATION)
+                || !grant.recipients().contains(new MemoryShareGrant.Participant(
+                        scope.domainId(), scope.agentId(), scope.conversationId()))
+                || !grant.validFrom().isBefore(Instant.now()) || !grant.validUntil().isAfter(Instant.now())) return false;
+
+        Map<String, Object> projection = one("SELECT grant_id,space_id,document_id,event_id,index_state "
+                        + "FROM memory_shared_export_projection WHERE export_id=? AND content_revision=? "
+                        + "AND recipient_domain_id=? AND recipient_agent_id=? AND recipient_conversation_id=?",
+                exportId, sourceVersion, scope.domainId(), scope.agentId(), scope.conversationId());
+        if (projection == null || !grantId.equals(projection.get("grant_id"))
+                || !spaceId.equals(projection.get("space_id")) || !ref.documentId().equals(projection.get("document_id"))
+                || !event.eventId().equals(projection.get("event_id"))
+                || "INDEX_REMOVED".equals(projection.get("index_state"))) return false;
+
+        List<MemorySourceDependency> dependencies = jdbc.query("SELECT dependency_json FROM memory_source_dependency "
+                        + "WHERE target_context_id=? AND target_kind='SHARED_EXPORT' AND target_id=? AND target_revision=? LIMIT 501",
+                (rs, n) -> archive.decode(rs.getString(1), MemorySourceDependency.class),
+                key(sourceContext), exportId, sourceVersion);
+        if (dependencies.isEmpty() || dependencies.size() > 500) return false;
+        for (MemorySourceDependency dependency : dependencies) {
+            if (dependency.grant() != null || !grant.sources().contains(dependency.source())) return false;
+        }
+        sources.requireCurrentMetadata(sourceContext, dependencies);
+        return true;
+    }
+
+    private static boolean candidateNoLongerReadable(MemoryErrorCode code) {
+        return switch (code) {
+            case FORBIDDEN, NOT_FOUND, VERSION_CONFLICT, WITHDRAWN, DELETED, ARCHIVE_NOT_CONFIRMED -> true;
+            default -> false;
         };
     }
 

@@ -101,7 +101,9 @@ memory 入站事务将真源变化、处理job与索引outbox原子记录；远�
 
 先看本地实体/事项锚点和近期消息；仅对历史指代、别名或事实缺口触发查询，不为任何新词默认检索。搜索按domain/conversation/matter强范围优先，明确请求与授权才扩大到本域跨会话，再到已获准export。
 
-检索分两道核验：双路召回前施加当前用户/服务/域授权过滤；RAG将有界候选正文送入通用重排前，通过独立受管原生RPC向memory取得当前候选许可（recordId/revision/hash/owner/grant及派生source依赖），排除删除、撤回、失效版本及派生内容。该许可入口仅核验候选身份与授权，不返回正文、不执行搜索、不反向调用RAG，也不改变索引禁止回调获取业务正文的契约；调用无许可或不可用即失败关闭，重排仍只由RAG执行。许可绑定本批候选/请求/短有效期，在实际重排派发前核验，撤回已在该边界生效时未授权正文派发次数为0；已经合法派发的内容不能追溯收回，但后续输出仍必须因撤回排除。memory取得候选后仍再次查真源当前版本/删除/owner/grant，返回briefExplanation、事实/决定/否定、sourceRef/version和评分。无匹配不编造，语义相似不证明实体相同。注入独立memory data section，不解释为系统指令。来源为领域业务档案时只保存/检索获准投影与引用，不能将脱敏映射或逐字稿无限复制到memory。
+检索分两道核验：双路召回前施加当前用户/服务/域授权过滤；RAG将有界候选正文送入通用重排前，通过独立受管原生RPC向memory取得当前候选许可（recordId/revision/hash/owner/grant及派生source依赖），排除删除、撤回、失效版本及派生内容。协作候选的可信scope绑定来源owner、接收方domain/agent/conversation、matter、purpose及当前grant集合；Memory回调核对当前RAG投影回执、不可变导出revision/hash、接收方映射、grant快照和来源依赖，仅返回获准ID。该许可入口仅核验候选身份与授权，不返回正文、不执行搜索、不反向调用RAG，也不改变索引禁止回调获取业务正文的契约；调用无许可或不可用即失败关闭，重排仍只由RAG执行。许可绑定本批候选/请求/短有效期，在实际重排派发前核验，撤回已在该边界生效时未授权正文派发次数为0；已经合法派发的内容不能追溯收回，但后续输出仍必须因撤回排除。
+
+协作检索由受签名保护的 `MemoryV2RpcService.searchCollaborations` 进入：Memory仅从当前SQL读取接收方上下文、purpose、matter下有效的COLLABORATION grants，将有界grant ID集合签入RAG scope。RAG返回的正文只作为短暂候选，不得成为Memory RPC响应；Memory按候选ID定位当前SQL投影、已提交export版本、接收方回执、grant和来源依赖，使用安全投影策略从SQL重建响应正文，并在当前用户proof复核后再次完整查验。授权锁顺序固定为grant（稳定排序）→export→投影，且不跨RAG RPC持锁；COLLABORATION仅允许该受限搜索投影，完整引用详情仍须DURABLE_EXPORT。无授权grant时不访问RAG。无匹配不编造，语义相似不证明实体相同。注入独立memory data section，不解释为系统指令。来源为领域业务档案时只保存/检索获准投影与引用，不能将脱敏映射或逐字稿无限复制到memory。
 
 新逻辑空间按注册域配置 memory.<domain>.session-v2 / preference-v2 / experience-v2，协作空间 memory.coordination-v2；初始化/集合不得由模型/用户请求自动创建。完整正文真源在SQL；RAG只存受控有界分片和评分授权元数据。
 

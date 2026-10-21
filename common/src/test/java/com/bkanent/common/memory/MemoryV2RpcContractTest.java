@@ -80,6 +80,8 @@ class MemoryV2RpcContractTest {
                         "subject-1", "copy_length", null, 20),
                 new MemoryExperienceQueryRequest(envelope(MemoryV2Contract.OPERATION_SEARCH_EXPERIENCES), CONTEXT,
                         "copy-draft", null, 20),
+                new MemoryCollaborationSearchRequest(envelope(MemoryV2Contract.OPERATION_SEARCH_COLLABORATION), CONTEXT,
+                        "matter-1", "agent-handoff", "approved result", 10),
                 new MemoryExperienceOutcomeRequest(envelope(MemoryV2Contract.OPERATION_EXPERIENCE_OUTCOME), CONTEXT,
                         "outcome-1", "experience-1", 0, ASSOCIATION, "buyer request", "short copy", "keep concise",
                         MemoryExperience.Outcome.SUCCEEDED, AT,
@@ -157,12 +159,17 @@ class MemoryV2RpcContractTest {
                         "When facts have been verified", "State verified facts first", "Governance reviewed aggregate evidence",
                         "policy-v1", HASH, AT.plusSeconds(86400), AT)), null, false, AT),
                 new MemoryDomainExperienceUseCheckResponse("dge_guidance-1", 1, 1,
-                        MemoryDomainExperienceUseCheckResponse.State.CURRENT, AT));
+                        MemoryDomainExperienceUseCheckResponse.State.CURRENT, AT),
+                new MemoryCollaborationSearchResponse(List.of(new MemoryCollaborationMatch(
+                        new MemoryExportRef("export-1", CONTEXT, version(1)), "approved result", .9)), AT, 15, false));
         for (Object response : responses) {
             assertThat(spi(response, response.getClass())).isEqualTo(response);
         }
         assertThatThrownBy(() -> new MemoryMatterQueryResponse(List.of(), null, true))
                 .isInstanceOf(MemoryException.class).hasMessage("INVALID_ARGUMENT (CURSOR)");
+        assertThatThrownBy(() -> new MemoryCollaborationSearchResponse(List.of(new MemoryCollaborationMatch(
+                new MemoryExportRef("export-1", CONTEXT, version(1)), "approved result", .9)), AT, 14, false))
+                .isInstanceOf(MemoryException.class).hasMessage("INVALID_ARGUMENT (PAGE)");
     }
 
     @Test void sharedRequestKeepsReceivingContextSeparateFromTheSourceAcrossWire() throws Exception {
@@ -191,6 +198,22 @@ class MemoryV2RpcContractTest {
         assertThatThrownBy(() -> new MemoryGrantRequest(envelope(MemoryV2Contract.OPERATION_GET_GRANT), CONTEXT,
                 new MemoryExportRef("export-1", CONTEXT, version(1)), MemoryScope.privateScope(CONTEXT.domainId(), CONTEXT.agentId()), null, "collaboration"))
                 .isInstanceOf(MemoryException.class);
+    }
+
+    @Test void collaborationSearchContractsRedactTextAndEnforceResponseBounds() {
+        var request = new MemoryCollaborationSearchRequest(envelope(MemoryV2Contract.OPERATION_SEARCH_COLLABORATION),
+                CONTEXT, "matter-1", "agent-handoff", "private query text", 1);
+        var match = new MemoryCollaborationMatch(new MemoryExportRef("export-1", CONTEXT, version(1)),
+                "private response text", .8);
+        assertThat(request.toString()).doesNotContain("private query text");
+        assertThat(match.toString()).doesNotContain("private response text");
+
+        List<MemoryCollaborationMatch> tooMany = java.util.stream.IntStream.range(0,
+                MemoryCollaborationSearchResponse.MAX_MATCHES + 1)
+                .mapToObj(index -> new MemoryCollaborationMatch(new MemoryExportRef("export-" + index, CONTEXT, version(1)), "x", .5))
+                .toList();
+        assertThatThrownBy(() -> new MemoryCollaborationSearchResponse(tooMany, AT, tooMany.size(), false))
+                .isInstanceOf(MemoryException.class).hasMessage("INVALID_ARGUMENT (PAGE)");
     }
 
     @Test void permitEventsAndDeliveryResultsPinExactHashAndSequence() {

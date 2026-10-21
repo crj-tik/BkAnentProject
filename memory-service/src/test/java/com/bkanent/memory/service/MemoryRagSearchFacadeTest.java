@@ -79,6 +79,55 @@ class MemoryRagSearchFacadeTest {
     }
 
     @Test
+    void collaborationSearchSignsExactRecipientGrantPurposeAndMatterScope() {
+        var f = new MemoryRagTestSupport();
+        f.properties.setDomainSearchEnabled(true);
+        AtomicInteger domainCalls = new AtomicInteger();
+        RagRetrievalRpcService legacy = (request, authentication, credentials, scope) -> {
+            fail("collaboration search must never use the legacy route");
+            return null;
+        };
+        MemoryRagRetrievalRpcService domain = (request, authentication, scope) -> {
+            domainCalls.incrementAndGet();
+            assertEquals(RagOperation.MEMORY_SEARCH, authentication.operation());
+            assertEquals(RagActorMode.SERVICE, authentication.actorMode());
+            assertEquals("memory-service", authentication.actorId());
+            assertEquals(RagFailurePolicy.STRICT, request.failurePolicy());
+            assertEquals(64, request.candidateLimit());
+            assertEquals(MemoryRagRecordType.COLLABORATION, scope.recordType());
+            assertEquals("42", scope.ownerId());
+            assertEquals("marketing", scope.domainId());
+            assertEquals("marketing-agent", scope.agentId());
+            assertEquals("conversation-1", scope.conversationId());
+            assertEquals("matter-1", scope.matterId());
+            assertEquals("agent-handoff", scope.purpose());
+            assertEquals(List.of("grant-a", "grant-z"), scope.grantIds());
+            RagRequestSigner.verify(authentication, RagCanonicalHash.requestHash(request), "rag-service",
+                    RagOperation.MEMORY_SEARCH, request.requestId(), null,
+                    new RagSigningKey(f.properties.getKeyId(), "memory-service", "memory-service",
+                            Set.of(RagOperation.MEMORY_SEARCH), MemoryRagTestSupport.MEMORY_SECRET.getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                    Instant.now());
+            MemoryRagScopeSigner.verify(scope, f.properties.getKeyId(),
+                    MemoryRagTestSupport.MEMORY_SECRET.getBytes(java.nio.charset.StandardCharsets.UTF_8), request,
+                    "42", "marketing", "marketing-agent", Instant.now());
+            return MemoryRagTestSupport.response(request, List.of());
+        };
+        var facade = new MemoryRagSearchFacade(legacy, f.security, f.jdbc, f.properties, f.projection, domain);
+        var context = new MemoryContextKey("42", "marketing", "marketing-agent", "conversation-1");
+
+        assertThrows(com.bkanent.common.memory.MemoryException.class, () -> facade.searchDomainCandidates(
+                context, MemoryRagRecordType.COLLABORATION, "approved result", 64,
+                "matter-1", List.of(), "agent-handoff"));
+        assertEquals(0, domainCalls.get(), "missing database-derived grants fail before any RAG call");
+
+        var candidates = facade.searchDomainCandidates(context, MemoryRagRecordType.COLLABORATION,
+                "approved result", 64, "matter-1", List.of("grant-z", "grant-a"), "agent-handoff");
+
+        assertTrue(candidates.isEmpty());
+        assertEquals(1, domainCalls.get());
+    }
+
+    @Test
     void unavailableDomainSearchFailsClosedWithoutTryingTheLegacyRoute() {
         var f = new MemoryRagTestSupport();
         f.properties.setDomainSearchEnabled(true);

@@ -323,7 +323,8 @@ public class MemorySharingWriteService {
             String purpose, String matterId, List<MemorySourceDependency> dependencies) {
         require(grant.sourceContext().equals(context) && grant.grant().equals(requested)
                 && grant.state() == MemoryShareGrant.State.ACTIVE
-                && grant.projections().contains(MemoryShareGrant.Projection.DURABLE_EXPORT)
+                && (grant.projections().contains(MemoryShareGrant.Projection.COLLABORATION)
+                || grant.projections().contains(MemoryShareGrant.Projection.DURABLE_EXPORT))
                 && Objects.equals(grant.matterId(), matterId) && grant.purpose().equals(purpose)
                 && !Instant.now().isBefore(grant.validFrom()) && Instant.now().isBefore(grant.validUntil())
                 && dependencies.stream().allMatch(dependency -> dependency.grant() == null

@@ -49,7 +49,9 @@ public class MemoryRagSearchFacade {
     public List<RagCandidate> searchDomainCandidates(MemoryContextKey context, MemoryRagRecordType type, String query,
             int candidateLimit, String matterId, List<String> grantIds, String purpose) {
         if (!properties.isDomainSearchEnabled() || domainRetrieval == null || type == null
-                || type == MemoryRagRecordType.COLLABORATION) throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+                || (type == MemoryRagRecordType.COLLABORATION && (grantIds == null || grantIds.isEmpty() || purpose == null))) {
+            throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+        }
         try {
             int limit = Math.max(1, Math.min(200, candidateLimit));
             int recall = Math.max(1, (limit + 1) / 2);

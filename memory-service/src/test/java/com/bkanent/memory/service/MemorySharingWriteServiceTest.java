@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -35,6 +36,122 @@ class MemorySharingWriteServiceTest {
     private static final String CALLER = "interview-service";
     private static final String SECRET = "sharing-write-test-secret-at-least-32-bytes";
     private static final String PURPOSE = "verified-result-followup";
+
+    @Test
+    void collaborationCandidatesRequireCurrentGrantAndSourceBeforeAnyBodyCanBeReranked() throws Exception {
+        Fixture f = new Fixture();
+        MemoryShareGrant grant = f.grant("grant-rag-candidate", List.of(MemoryShareGrant.Projection.DURABLE_EXPORT,
+                MemoryShareGrant.Projection.COLLABORATION));
+        var create = f.grantRequest(MemoryShareGrantManagementRequest.Action.CREATE, grant.grant().grantId(), 0, grant);
+        f.writer.manageGrant(create, f.sign(create));
+        var submit = f.submit(grant, "source-export-rag-candidate", "invocation-rag-candidate", "approved collaboration text");
+        var pending = f.writer.submitExport(submit, f.sign(submit));
+        var commit = f.commit(pending);
+        f.writer.commitExport(commit, f.sign(commit));
+
+        String space = MemoryRagSpaceIds.spaceId(MemoryRagRecordType.COLLABORATION,
+                RECIPIENT.domainId(), RECIPIENT.agentId());
+        Map<String, Object> projection = f.jdbc.queryForMap("SELECT document_id,event_id FROM memory_shared_export_projection "
+                        + "WHERE export_id=? AND content_revision=1 AND recipient_domain_id=? AND recipient_agent_id=? AND recipient_conversation_id=?",
+                submit.sourceExportId(), RECIPIENT.domainId(), RECIPIENT.agentId(), RECIPIENT.conversationId());
+        String documentId = (String) projection.get("document_id");
+        String priorEventPayload = f.jdbc.queryForObject("SELECT event_payload FROM memory_rag_projection WHERE space_id=? AND document_id=?",
+                String.class, space, documentId);
+        RagIndexEvent event = f.base.projection.decode(priorEventPayload);
+        RagCandidateReference reference = new RagCandidateReference(event.documentId(), event.document().sourceType(),
+                event.document().sourceId(), event.revision(), event.schemaVersion(), event.contentHash());
+        RagSearchRequest search = collaborationSearch(space);
+        var authorization = new RagCandidateAuthorizationRequest(RagContract.VERSION, search, List.of(reference));
+        var scope = collaborationScope(search, grant.grant().grantId());
+        var service = new MemoryRagCandidateAuthorizationService(f.jdbc, f.base.projection, f.archive, f.sharing, f.sources);
+
+        assertFalse(f.mapper.writeValueAsString(authorization).contains("approved collaboration text"),
+                "candidate permission carries identity and version only, never candidate text");
+        assertEquals(List.of(documentId), service.authorize(authorization, scope).authorizedDocumentIds());
+
+        var orderedSharing = spy(f.sharing);
+        var orderedJdbc = spy(f.jdbc);
+        var orderedService = new MemoryRagCandidateAuthorizationService(orderedJdbc, f.base.projection, f.archive,
+                orderedSharing, f.sources);
+        assertEquals(List.of(documentId), orderedService.authorize(authorization, scope).authorizedDocumentIds());
+        var lockOrder = inOrder(orderedSharing, orderedJdbc);
+        lockOrder.verify(orderedSharing).findCurrentGrantForUpdate(grant.grant().grantId());
+        lockOrder.verify(orderedJdbc).queryForObject("SELECT lock_id FROM memory_rag_lock WHERE lock_id=1 FOR UPDATE", Integer.class);
+
+        AtomicBoolean sourceCurrent = new AtomicBoolean(false);
+        doAnswer(invocation -> {
+            if (!sourceCurrent.get()) throw new MemoryException(MemoryErrorCode.DELETED);
+            return null;
+        }).when(f.sources).requireCurrentMetadata(any(), anyList());
+        assertTrue(service.authorize(authorization, scope).authorizedDocumentIds().isEmpty(),
+                "deleted derivation source is excluded before the RAG callback grants rerank access");
+        sourceCurrent.set(true);
+        assertEquals(List.of(documentId), service.authorize(authorization, scope).authorizedDocumentIds());
+
+        var revoke = f.grantRequest(MemoryShareGrantManagementRequest.Action.REVOKE, grant.grant().grantId(), 1, null);
+        f.writer.manageGrant(revoke, f.sign(revoke));
+        // Simulate a backend which still returns its pre-revocation document and receipt.
+        f.jdbc.update("UPDATE memory_rag_projection SET revision=?,tombstone=FALSE,event_payload=? WHERE space_id=? AND document_id=?",
+                event.revision(), priorEventPayload, space, documentId);
+        f.jdbc.update("UPDATE memory_shared_export_projection SET event_id=?,index_state='INDEX_READY' "
+                        + "WHERE export_id=? AND content_revision=1 AND recipient_domain_id=? AND recipient_agent_id=? AND recipient_conversation_id=?",
+                event.eventId(), submit.sourceExportId(), RECIPIENT.domainId(), RECIPIENT.agentId(), RECIPIENT.conversationId());
+        f.jdbc.update("UPDATE memory_shared_export SET state='COMMITTED' WHERE export_id=? AND content_revision=1",
+                submit.sourceExportId());
+        assertTrue(service.authorize(authorization, scope).authorizedDocumentIds().isEmpty(),
+                "stale index content cannot pass the current grant revision check");
+    }
+
+    @Test
+    void collaborationSearchReturnsCurrentSqlProjectionAndWithholdsRevokedCandidates() throws Exception {
+        Fixture f = new Fixture();
+        MemoryShareGrant grant = f.grant("grant-collaboration-search",
+                List.of(MemoryShareGrant.Projection.COLLABORATION));
+        var create = f.grantRequest(MemoryShareGrantManagementRequest.Action.CREATE, grant.grant().grantId(), 0, grant);
+        f.writer.manageGrant(create, f.sign(create));
+        var submit = f.submit(grant, "source-export-collaboration-search", "invocation-collaboration-search",
+                "approved collaboration SQL text");
+        var pending = f.writer.submitExport(submit, f.sign(submit));
+        var commit = f.commit(pending);
+        f.writer.commitExport(commit, f.sign(commit));
+
+        String space = MemoryRagSpaceIds.spaceId(MemoryRagRecordType.COLLABORATION,
+                RECIPIENT.domainId(), RECIPIENT.agentId());
+        String documentId = f.jdbc.queryForObject("SELECT document_id FROM memory_shared_export_projection "
+                + "WHERE export_id=? AND content_revision=1 AND recipient_domain_id=? AND recipient_agent_id=? AND recipient_conversation_id=?",
+                String.class, submit.sourceExportId(), RECIPIENT.domainId(), RECIPIENT.agentId(), RECIPIENT.conversationId());
+        String payload = f.jdbc.queryForObject("SELECT event_payload FROM memory_rag_projection WHERE space_id=? AND document_id=?",
+                String.class, space, documentId);
+        RagIndexEvent event = f.base.projection.decode(payload);
+        RagCandidate indexed = new RagCandidate(event.documentId(), event.document().sourceType(), event.document().sourceId(),
+                "stale RAG text must never become the response", event.revision(), event.schemaVersion(),
+                List.of(RagRecallMode.VECTOR), null, .7, .7, null, .9, RagScoreKind.SEMANTIC_NORMALIZED,
+                "collaboration-test", event.document().attributes());
+        MemoryRagSearchFacade ragSearch = mock(MemoryRagSearchFacade.class);
+        when(ragSearch.isDomainSearchEnabled()).thenReturn(true);
+        when(ragSearch.searchDomainCandidates(any(), eq(MemoryRagRecordType.COLLABORATION), anyString(), anyInt(),
+                any(), anyList(), anyString())).thenReturn(List.of(indexed));
+        var service = collaborationSearch(f, ragSearch);
+        var search = collaborationRequest(f);
+
+        var response = service.search(search, f.sign(search));
+        assertEquals(1, response.matches().size());
+        assertEquals(submit.sourceExportId(), response.matches().get(0).exportRef().exportId());
+        assertTrue(response.matches().get(0).content().contains("approved collaboration SQL text"));
+        assertFalse(response.matches().get(0).content().contains("stale RAG text"));
+
+        MemoryShareGrant revokeTarget = grant;
+        when(ragSearch.searchDomainCandidates(any(), eq(MemoryRagRecordType.COLLABORATION), anyString(), anyInt(),
+                any(), anyList(), anyString())).thenAnswer(invocation -> {
+            var revoke = f.grantRequest(MemoryShareGrantManagementRequest.Action.REVOKE,
+                    revokeTarget.grant().grantId(), 1, null);
+            f.writer.manageGrant(revoke, f.sign(revoke));
+            return List.of(indexed);
+        });
+        var revokedSearch = collaborationRequest(f);
+        assertTrue(service.search(revokedSearch, f.sign(revokedSearch)).matches().isEmpty(),
+                "current SQL grant state is checked again after RAG returns candidates");
+    }
 
     @Test
     void grantExportRetryCommitAndRevocationKeepDurabilitySeparateFromIndexState() throws Exception {
@@ -199,6 +316,9 @@ class MemorySharingWriteServiceTest {
         final MemoryV2RagProjectionService ragProjection;
         final MemoryV2RequestSecurity requestSecurity;
         final MemorySharingWriteService writer;
+        final MemorySharingStore sharing;
+        final MemorySourceAuthorizer sources;
+        final MemorySharingProperties sharingProperties = new MemorySharingProperties();
         final MemorySourceRef source;
 
         Fixture() throws Exception {
@@ -219,7 +339,8 @@ class MemorySharingWriteServiceTest {
             var trusted = new MemoryV2SecurityProperties.TrustedCaller();
             trusted.setKeyId("memory-test-key");
             trusted.setSigningSecret(SECRET);
-            trusted.setAllowedAgentsByDomain(Map.of("interview", Set.of("interview-agent")));
+            trusted.setAllowedAgentsByDomain(Map.of("interview", Set.of("interview-agent"),
+                    "marketing", Set.of("marketing-agent")));
             securityProperties.setTrustedCallers(Map.of(CALLER, trusted));
             AuthPermissionRpcService auth = new AuthPermissionRpcService() {
                 @Override public boolean validateToken(String token) { return false; }
@@ -231,13 +352,12 @@ class MemorySharingWriteServiceTest {
             };
             requestSecurity = new MemoryV2RequestSecurity(securityProperties, auth, new MemoryV2ReplayGuard(jdbc));
             archive = new MemoryArchiveStore(jdbc, mapper);
-            var sharing = new MemorySharingStore(jdbc, mapper);
-            MemorySourceAuthorizer sources = mock(MemorySourceAuthorizer.class);
+            sharing = new MemorySharingStore(jdbc, mapper);
+            sources = mock(MemorySourceAuthorizer.class);
             doNothing().when(sources).requireCurrent(eq(SOURCE), anyList());
-            var properties = new MemorySharingProperties();
-            properties.setEnabled(true);
+            sharingProperties.setEnabled(true);
             writer = new MemorySharingWriteService(jdbc, archive, sharing, new MemoryAccessPolicy(), sources,
-                    requestSecurity, properties, new MemorySharePayloadPolicy(properties), ragProjection,
+                    requestSecurity, sharingProperties, new MemorySharePayloadPolicy(sharingProperties), ragProjection,
                     new org.springframework.jdbc.datasource.DataSourceTransactionManager(jdbc.getDataSource()));
             source = new MemorySourceRef(MemorySourceRef.Kind.MESSAGE, SOURCE, "message-1", "source-event-1", 1L,
                     new MemoryRevision(1, "a".repeat(64), "memory.v2"));
@@ -326,5 +446,32 @@ class MemorySharingWriteServiceTest {
             MemoryRagOutboxDispatcherTest.due(base);
             new MemoryRagOutboxDispatcher(jdbc, base.projection, ragSecurity, applied, ragProperties).dispatch();
         }
+    }
+
+    private static MemoryCollaborationSearchService collaborationSearch(Fixture f, MemoryRagSearchFacade ragSearch) {
+        var payloadPolicy = new MemorySharePayloadPolicy(f.sharingProperties);
+        return new MemoryCollaborationSearchService(f.requestSecurity, new MemoryAccessPolicy(), f.sharing,
+                f.archive, f.sources, ragSearch, payloadPolicy, f.sharingProperties, f.jdbc,
+                new org.springframework.jdbc.datasource.DataSourceTransactionManager(f.jdbc.getDataSource()));
+    }
+
+    private static MemoryCollaborationSearchRequest collaborationRequest(Fixture f) {
+        return f.request(MemoryV2Contract.OPERATION_SEARCH_COLLABORATION, envelope ->
+                new MemoryCollaborationSearchRequest(envelope, RECIPIENT, "matter-1", PURPOSE,
+                        "approved result", 5));
+    }
+
+    private static RagSearchRequest collaborationSearch(String space) {
+        return new RagSearchRequest(RagContract.VERSION, "collaboration-search", space, "approved result",
+                List.of(), new RagRecallOptions(true, null, 4, 4), new RagFusionOptions(null, null, null, null),
+                true, 4, 4, RagFailurePolicy.STRICT).normalized();
+    }
+
+    private static MemoryRagAuthorizationScope collaborationScope(RagSearchRequest search, String grantId) {
+        long now = Instant.now().getEpochSecond();
+        return new MemoryRagAuthorizationScope(MemoryRagAuthorizationScope.VERSION, "memory-key", "memory-service",
+                RECIPIENT.ownerId(), RECIPIENT.domainId(), RECIPIENT.agentId(), RECIPIENT.conversationId(), "matter-1",
+                MemoryRagRecordType.COLLABORATION, search.spaceId(), search.requestId(), RagCanonicalHash.requestHash(search),
+                List.of(grantId), PURPOSE, now, now + 30, "test-signature");
     }
 }

@@ -19,33 +19,38 @@ public class MemoryV2RpcServiceImpl implements MemoryV2RpcService {
     private final com.bkanent.memory.service.MemoryMatterService matters;
     private final com.bkanent.memory.service.MemoryExperienceService experiences;
     private final com.bkanent.memory.service.MemorySharingWriteService sharingWrites;
+    private final com.bkanent.memory.service.MemoryCollaborationSearchService collaborationSearch;
 
     public MemoryV2RpcServiceImpl(MemoryArchiveService archive, MemorySharingAccessService sharing, MemoryV2RequestSecurity security) {
-        this(archive, sharing, security, null, null, null, null, true);
+        this(archive, sharing, security, null, null, null, null, null, true);
     }
 
     public MemoryV2RpcServiceImpl(MemoryArchiveService archive, MemorySharingAccessService sharing, MemoryV2RequestSecurity security,
                                   com.bkanent.memory.service.PreferenceHistoryService preferences) {
-        this(archive, sharing, security, preferences, null, null, null, true);
+        this(archive, sharing, security, preferences, null, null, null, null, true);
     }
 
     public MemoryV2RpcServiceImpl(MemoryArchiveService archive, MemorySharingAccessService sharing, MemoryV2RequestSecurity security,
                                   com.bkanent.memory.service.PreferenceHistoryService preferences, com.bkanent.memory.service.MemoryMatterService matters) {
-        this(archive, sharing, security, preferences, matters, null, null, true);
+        this(archive, sharing, security, preferences, matters, null, null, null, true);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
     public MemoryV2RpcServiceImpl(MemoryArchiveService archive, MemorySharingAccessService sharing, MemoryV2RequestSecurity security,
                                   com.bkanent.memory.service.PreferenceHistoryService preferences, com.bkanent.memory.service.MemoryMatterService matters,
                                   ObjectProvider<com.bkanent.memory.service.MemoryExperienceService> experiences,
-                                  ObjectProvider<com.bkanent.memory.service.MemorySharingWriteService> sharingWrites) {
-        this(archive, sharing, security, preferences, matters, experiences.getIfAvailable(), sharingWrites.getIfAvailable(), true);
+                                  ObjectProvider<com.bkanent.memory.service.MemorySharingWriteService> sharingWrites,
+                                  ObjectProvider<com.bkanent.memory.service.MemoryCollaborationSearchService> collaborationSearch) {
+        this(archive, sharing, security, preferences, matters, experiences.getIfAvailable(), sharingWrites.getIfAvailable(),
+                collaborationSearch.getIfAvailable(), true);
     }
 
     private MemoryV2RpcServiceImpl(MemoryArchiveService archive, MemorySharingAccessService sharing, MemoryV2RequestSecurity security,
                                    com.bkanent.memory.service.PreferenceHistoryService preferences, com.bkanent.memory.service.MemoryMatterService matters,
                                    com.bkanent.memory.service.MemoryExperienceService experiences,
-                                   com.bkanent.memory.service.MemorySharingWriteService sharingWrites, boolean ignored) {
+                                   com.bkanent.memory.service.MemorySharingWriteService sharingWrites,
+                                   com.bkanent.memory.service.MemoryCollaborationSearchService collaborationSearch,
+                                   boolean ignored) {
         this.archive = archive;
         this.sharing = sharing;
         this.security = security;
@@ -53,6 +58,7 @@ public class MemoryV2RpcServiceImpl implements MemoryV2RpcService {
         this.matters = matters;
         this.experiences = experiences;
         this.sharingWrites = sharingWrites;
+        this.collaborationSearch = collaborationSearch;
     }
 
     public MemoryMatterWriteResponse transitionMatter(MemoryMatterWriteRequest request, MemoryRequestProof proof) {
@@ -115,6 +121,14 @@ public class MemoryV2RpcServiceImpl implements MemoryV2RpcService {
     public MemoryExperienceQueryResponse searchExperiences(MemoryExperienceQueryRequest request, MemoryRequestProof proof) {
         if (experiences != null) return experiences.search(request, proof);
         security.authorize(request, proof, MemoryV2Contract.OPERATION_SEARCH_EXPERIENCES);
+        throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+    }
+
+    @Override
+    public MemoryCollaborationSearchResponse searchCollaborations(
+            MemoryCollaborationSearchRequest request, MemoryRequestProof proof) {
+        if (collaborationSearch != null) return collaborationSearch.search(request, proof);
+        security.authorize(request, proof, MemoryV2Contract.OPERATION_SEARCH_COLLABORATION);
         throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
     }
 

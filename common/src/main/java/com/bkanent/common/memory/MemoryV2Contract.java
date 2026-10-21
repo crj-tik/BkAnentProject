@@ -23,6 +23,7 @@ public final class MemoryV2Contract {
     public static final String OPERATION_QUERY_ENTITIES = "memory.entities.query";
     public static final String OPERATION_SEARCH_PREFERENCES = "memory.preferences.search";
     public static final String OPERATION_SEARCH_EXPERIENCES = "memory.experiences.search";
+    public static final String OPERATION_SEARCH_COLLABORATION = "memory.collaboration.search";
     public static final String OPERATION_GET_GRANT = "memory.grant.get";
     public static final String OPERATION_WITHDRAW = "memory.source.withdraw";
     public static final String OPERATION_WRITER = "memory.writer.manage";
@@ -47,7 +48,7 @@ public final class MemoryV2Contract {
     private static final Set<String> OPERATIONS = Set.of(
             OPERATION_WORKING_SET, OPERATION_RECEIVE_PERMIT, OPERATION_DELIVER_MESSAGES,
             OPERATION_SUBMIT_SUMMARY, OPERATION_QUERY_MATTERS, OPERATION_QUERY_ENTITIES,
-            OPERATION_SEARCH_PREFERENCES, OPERATION_SEARCH_EXPERIENCES, OPERATION_GET_GRANT, OPERATION_WITHDRAW,
+            OPERATION_SEARCH_PREFERENCES, OPERATION_SEARCH_EXPERIENCES, OPERATION_SEARCH_COLLABORATION, OPERATION_GET_GRANT, OPERATION_WITHDRAW,
             OPERATION_WRITER, OPERATION_BOUNDARY, OPERATION_PREFERENCE_WRITE, OPERATION_PREFERENCE_DETAIL,
             OPERATION_MATTER_WRITE, OPERATION_ASSEMBLE_PREFERENCES, OPERATION_PRIVACY_STATUS,
             OPERATION_EXPERIENCE_OUTCOME, OPERATION_EXPERIENCE_FEEDBACK, OPERATION_EXPERIENCE_STATUS,

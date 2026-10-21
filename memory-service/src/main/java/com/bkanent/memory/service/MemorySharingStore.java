@@ -9,6 +9,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
@@ -56,6 +57,26 @@ public class MemorySharingStore {
                 if (snapshots.size() != 1 || !snapshots.get(0).equals(grant.get())) throw unavailable();
             }
             return grant;
+        } catch (DataAccessException exception) {
+            throw unavailable();
+        }
+    }
+
+    /** Candidate IDs only; callers lock and verify each signed grant snapshot before using it. */
+    public java.util.List<String> findActiveGrantIds(String ownerId, String purpose, String matterId,
+            Instant now, int limit) {
+        try {
+            LocalDateTime at = LocalDateTime.ofInstant(now.truncatedTo(ChronoUnit.MICROS), ZoneOffset.UTC);
+            if (matterId == null) {
+                return jdbc.queryForList("SELECT grant_id FROM memory_share_grant WHERE owner_id=? AND purpose=? "
+                                + "AND matter_id IS NULL AND state='ACTIVE' AND valid_from<=? AND valid_until>? "
+                                + "ORDER BY grant_id LIMIT ?",
+                        String.class, ownerId, purpose, at, at, limit);
+            }
+            return jdbc.queryForList("SELECT grant_id FROM memory_share_grant WHERE owner_id=? AND purpose=? "
+                            + "AND matter_id=? AND state='ACTIVE' AND valid_from<=? AND valid_until>? "
+                            + "ORDER BY grant_id LIMIT ?",
+                    String.class, ownerId, purpose, matterId, at, at, limit);
         } catch (DataAccessException exception) {
             throw unavailable();
         }
