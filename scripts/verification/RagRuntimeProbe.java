@@ -34,6 +34,15 @@ final class RagRuntimeProbe implements AutoCloseable {
     private static final Set<String> A2A_AUDIENCES = Set.of("listing-master-service", "business-service",
             "marketing-content-service", "compare-engine-service", "contract-service", "settlement-service",
             "notification-service", "media-worker-service", "interview-service");
+    private static final Map<String, String> MEMORY_V2_DOMAIN_AGENTS = Map.of(
+            "marketing", "marketing-agent",
+            "interview", "interview-agent",
+            "listing", "listing-agent",
+            "trade", "trade-agent",
+            "contract", "contract-agent",
+            "compare", "compare-agent",
+            "settlement", "settlement-agent");
+    private static final Set<String> MEMORY_V2_SPACE_IDS = memoryV2SpaceIds();
     private final List<ReferenceConfig<?>> references = new ArrayList<>();
     private AnnotationConfigApplicationContext context;
     private AuthPermissionRpcService permissions;
@@ -95,7 +104,10 @@ final class RagRuntimeProbe implements AutoCloseable {
             caller = switch (space) {
                 case "listing.knowledge" -> "listing-master-service";
                 case "memory.preference", "memory.constraint" -> "memory-service";
-                default -> throw new RagException(RagErrorCode.FORBIDDEN);
+                default -> {
+                    if (MEMORY_V2_SPACE_IDS.contains(space)) yield "memory-service";
+                    throw new RagException(RagErrorCode.FORBIDDEN);
+                }
             };
             String prefix = "listing-master-service".equals(caller) ? "LISTING" : "MEMORY";
             keyId = required("RAG_PROBE_DOMAIN_KEY_ID");
@@ -266,6 +278,16 @@ final class RagRuntimeProbe implements AutoCloseable {
                 operation, space, hash(result.documentId()), result.state(), result.revision(),
                 result.keyword() == null ? -1 : result.keyword().appliedRevision(),
                 result.vector() == null ? -1 : result.vector().appliedRevision(), result.errorCode());
+    }
+
+    private static Set<String> memoryV2SpaceIds() {
+        Set<String> spaces = new HashSet<>();
+        MEMORY_V2_DOMAIN_AGENTS.forEach((domain, agent) -> {
+            for (MemoryRagRecordType type : MemoryRagRecordType.values()) {
+                spaces.add(MemoryRagSpaceIds.spaceId(type, domain, agent));
+            }
+        });
+        return Set.copyOf(spaces);
     }
 
     private static RagSpaceInspection inspectTimed(RagSpaceAdminRpcService admin, RagInspectRequest request,

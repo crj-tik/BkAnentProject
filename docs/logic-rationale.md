@@ -921,3 +921,11 @@
 **根因**：模型生成的总结或工具终态不能自行证明业务结果达成；把反馈当成业务事实也会混淆意见与可核验结果。分别约束发布主体、来源消息和经验版本，才能保留两种证据的含义，同时阻止 Supervisor 把自己的输出自我验证。
 
 **代码位置**：`common/memory/MemoryExperienceOutcomeRequest`、`MemoryExperienceFeedbackRequest`、`MemoryV2RpcService`；`memory-service/MemoryV2RequestSecurity`、`MemoryExperienceService`、`MemoryV2SecurityProperties`；`nacos/memory-service.yaml`、根 `docker-compose.yml` 的逐域开关映射；`MemoryV2DeploymentConfigurationTest`。关联 LR-75/LR-82，change 8.2/11.1。
+
+## LR-95 管理探针只允许登记的 Memory v2 逻辑空间
+
+**结论**：RAG 运维探针将 Memory v2 空间 ID 限定为 `MemoryRagRecordType` 的五类记录与七个明确登记的 domain/agent 组合，全部以 `memory-service` 作为 owner caller。操作只收逻辑 space ID；ES index、Milvus database/collection、schema 和维度仍由 RAG 受管配置决定。`INSPECT`/`PROVISION` 还必须使用当前 ADMIN 身份，provision 参数须与受管 schema 完全一致。
+
+**根因**：运维工具需要为 Memory v2 空间提供可重复的 provision/status/replay 入口，但不能因此开放任意索引、集合、domain/agent 或维度选择。固定逻辑 allowlist 与服务端 managed registry 双重限制，使新增物理资源只能随审查过的 RAG 配置发布。
+
+**代码位置**：`scripts/verification/RagRuntimeProbe.MEMORY_V2_DOMAIN_AGENTS`、`MEMORY_V2_SPACE_IDS`；`common/rag/MemoryRagSpaceIds`、`MemoryRagRecordType`；`nacos/rag-service.yaml`；`scripts/verification/README.md` 和 `docs/memory-v2-operations.md`。关联 LR-43/LR-92，change 9.1/11.2。

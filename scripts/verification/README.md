@@ -21,12 +21,13 @@
 `RAG_PROBE_MODE=DOMAIN`，`RAG_PROBE_OPERATION=INSPECT|PROVISION|GET_STATUS|REPLAY`。
 
 - `RAG_PROBE_RAG_DUBBO_URL`：真实 RAG 服务直连 Dubbo URL。
-- `RAG_PROBE_SPACE_ID`：仅 `listing.knowledge` / `memory.preference` / `memory.constraint`。
+- `RAG_PROBE_SPACE_ID`：`listing.knowledge` / `memory.preference` / `memory.constraint`，或已登记的 Memory v2 逻辑空间。Memory v2 仅接受 `session`、`summary`、`preference-history`、`experience`、`collaboration` 五类和 `marketing/marketing-agent`、`interview/interview-agent`、`listing/listing-agent`、`trade/trade-agent`、`contract/contract-agent`、`compare/compare-agent`、`settlement/settlement-agent` 七组精确映射；它们全部由 `memory-service` 管理，不能传入物理索引或集合名。
 - `RAG_PROBE_DOMAIN_KEY_ID`：当前运行配置已信任的 owner keyId；listing 使用 `LISTING_RAG_RPC_SECRET`，memory 使用 `MEMORY_RAG_RPC_SECRET`，不新增 key、不扩大 allowedClients/operation。
 - 全部操作要求真实当前 **ADMIN**（执行前与返回前验签/复核）。INSPECT/PROVISION/REPLAY 使用 USER envelope + 专用 token 参数。现有 GET_STATUS 契约无 credential 参数，严格按 owner-domain SERVICE envelope 调用，但探针另外先后验证真实 ADMIN，不新增 SERVICE READ/管理 fallback。
-- PROVISION 必须设置 `RAG_PROBE_ALLOW_MUTATIONS=true`、`RAG_PROBE_SCHEMA_VERSION`、`RAG_PROBE_DIMENSION`，仅调用已配置逻辑空间 provision，不提供物理集合/index 定义。
+- PROVISION 必须设置 `RAG_PROBE_ALLOW_MUTATIONS=true`、`RAG_PROBE_SCHEMA_VERSION`、`RAG_PROBE_DIMENSION`，仅调用已配置逻辑空间 provision，不提供物理集合/index 定义。Memory v2 当前模板的 schema version 为 `memory-v2.1`、dimension 为 `1024`；运行前仍须与 RAG readiness/实际配置及 embedding 模型响应核对，受管注册表不匹配时拒绝 provision。
 - GET_STATUS/REPLAY 必须设置恰好一个 `RAG_PROBE_EVENT_ID` 或 `RAG_PROBE_DOCUMENT_ID`；REPLAY 还须 `RAG_PROBE_ALLOW_MUTATIONS=true`。**个人偏好只接受本人 canonical documentId，不接受 eventId**，避免 service-only status 暴露他人偏好控制事实。
 - INSPECT/PROVISION `ready=false` 非零退出。GET_STATUS/REPLAY 返回水位状态不是证明双路 APPLIED、回填/切流完成。
+- Memory v2 空间按逐项验收清单显式 INSPECT/PROVISION，不批量启用全部空间。Provision 只创建已注册逻辑空间所绑定的 ES/Milvus schema，不开启 memory ingress、投影或索引 worker。
 
 ## A2A
 
