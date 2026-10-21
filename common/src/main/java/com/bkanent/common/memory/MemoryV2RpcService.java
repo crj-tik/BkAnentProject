@@ -58,6 +58,24 @@ public interface MemoryV2RpcService {
 
     MemoryExperienceLifecycleResponse changeExperienceLifecycle(MemoryExperienceLifecycleRequest request, MemoryRequestProof proof) throws MemoryException;
 
+    /** Governance-approved independent domain generalizations; this contract contains no private evidence lookup. */
+    default MemoryDomainExperienceManagementResponse manageDomainExperience(
+            MemoryDomainExperienceManagementRequest request, MemoryRequestProof proof) throws MemoryException {
+        throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+    }
+
+    /** Searches only the caller's exact domain and agent scope. */
+    default MemoryDomainExperienceQueryResponse searchDomainExperiences(
+            MemoryDomainExperienceQueryRequest request, MemoryRequestProof proof) throws MemoryException {
+        throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+    }
+
+    /** Revalidates a previously assembled aggregate immediately before each protected use/output. */
+    default MemoryDomainExperienceUseCheckResponse checkDomainExperienceUse(
+            MemoryDomainExperienceUseCheckRequest request, MemoryRequestProof proof) throws MemoryException {
+        throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+    }
+
     MemoryGrantResponse getGrant(MemoryGrantRequest request, MemoryRequestProof proof) throws MemoryException;
 
     MemoryWithdrawalResponse withdrawSource(MemoryWithdrawalRequest request, MemoryRequestProof proof) throws MemoryException;

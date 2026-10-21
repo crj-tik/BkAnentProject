@@ -21,13 +21,14 @@ import java.util.regex.Pattern;
 
 import static com.bkanent.memory.service.MemoryArchiveStore.*;
 
-/** Private, versioned experience intake, processing, lifecycle and selection. */
+/** Private experience processing plus isolated governance-approved domain aggregates. */
 @Service
 public class MemoryExperienceService {
     private static final String SCHEMA_VERSION = "experience.v1";
     private static final String ASSESSMENT_VERSION = "experience-assessment-v1";
     private static final int MAX_EVIDENCE = 500;
     private static final Pattern CREDENTIAL = Pattern.compile("(?i)(?:\\bBearer\\s+\\S+|\\b(?:password|passwd|passcode|access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key|secret|authorization)\\b\\s*[:=]\\s*\\S+|\\beyJ[A-Za-z0-9_-]{12,}\\.[A-Za-z0-9_-]{12,}\\.[A-Za-z0-9_-]{8,}|\\bsk-[A-Za-z0-9_-]{16,})");
+    private static final Pattern PRIVATE_REFERENCE = Pattern.compile("(?i)\\b(?:owner|user|experience|source|evidence|message|conversation|event|grant|context)(?:[_-]?(?:event|sequence|context))?[_-]?(?:id|ref|reference|hash)\\s*[:=]");
 
     private final MemoryArchiveStore store;
     private final MemoryV2RequestSecurity security;
@@ -523,6 +524,214 @@ public class MemoryExperienceService {
             result.add(new MemorySourceDependency(source, null));
         }
         return result;
+    }
+
+    /** Publishes an independently approved domain aggregate without attaching private source locators. */
+    public MemoryDomainExperienceManagementResponse manageDomainExperience(
+            MemoryDomainExperienceManagementRequest request, MemoryRequestProof proof) {
+        security.authorizeDomainExperienceManagement(request, proof);
+        requireEnabled();
+        return transaction(() -> {
+            String caller = request.envelope().caller();
+            String requestId = request.envelope().requestId();
+            store.jdbc.update("INSERT INTO memory_domain_experience_event(caller_id,request_id,request_hash,domain_id,agent_id,aggregate_id,created_at) "
+                            + "VALUES(?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE request_hash=request_hash",
+                    caller, requestId, request.envelope().bodyHash(), request.contextKey().domainId(), request.targetAgentId(),
+                    request.aggregateId(), now());
+            Map<String, Object> priorEvent = store.one(
+                    "SELECT request_hash,response_json FROM memory_domain_experience_event WHERE caller_id=? AND request_id=? FOR UPDATE",
+                    caller, requestId);
+            require(priorEvent != null, MemoryErrorCode.MEMORY_UNAVAILABLE);
+            require(request.envelope().bodyHash().equals(priorEvent.get("request_hash")), MemoryErrorCode.VERSION_CONFLICT);
+            String priorResponse = (String) priorEvent.get("response_json");
+            if (priorResponse != null) return store.decode(priorResponse, MemoryDomainExperienceManagementResponse.class);
+
+            String domainId = request.contextKey().domainId();
+            String agentId = request.targetAgentId();
+            String aggregateId = request.aggregateId();
+            Map<String, Object> current = store.one("SELECT * FROM memory_domain_experience WHERE domain_id=? AND agent_id=? AND aggregate_id=? FOR UPDATE",
+                    domainId, agentId, aggregateId);
+            MemoryDomainExperienceManagementResponse response;
+            long revision;
+            String state;
+            String contentHash = null;
+            String payload = null;
+            String capabilityTag = null;
+            LocalDateTime validUntil = null;
+            String approvalId = null;
+            String policyVersion = null;
+            String sourceReviewRef = null;
+            String purpose = null;
+            boolean independentNonPersonal = false;
+            boolean retentionAuthorized = false;
+            String withdrawalReason = null;
+            if (request.action() == MemoryDomainExperienceManagementRequest.Action.PUBLISH) {
+                validateDomainGeneralization(request);
+                Instant publishedAt = nowInstant();
+                require(request.validUntil().isAfter(publishedAt), MemoryErrorCode.INVALID_ARGUMENT);
+                requireNoPrivateExperienceIdentity(domainId, agentId, aggregateId);
+                long actualRevision = current == null ? 0 : number(current, "revision");
+                verifyGovernedRevision(request, actualRevision, current);
+                revision = actualRevision + 1;
+                var aggregate = new MemoryDomainExperience(aggregateId, domainId, agentId, revision,
+                        request.purpose(), request.capabilityTag(), request.scenario(), request.applicability(),
+                        request.conclusion(), request.evidenceSummary(), request.policyVersion(), "0".repeat(64),
+                        request.validUntil(), publishedAt);
+                contentHash = MemoryCanonicalHash.contentHash(List.of(domainId, agentId, aggregateId, revision,
+                        request.purpose(), Objects.toString(request.capabilityTag(), ""), request.scenario(),
+                        request.applicability(), request.conclusion(), request.evidenceSummary(), request.policyVersion(),
+                        request.validUntil()));
+                aggregate = new MemoryDomainExperience(aggregate.aggregateId(), aggregate.domainId(), aggregate.agentId(),
+                        aggregate.revision(), aggregate.purpose(), aggregate.capabilityTag(), aggregate.scenario(),
+                        aggregate.applicability(), aggregate.conclusion(), aggregate.evidenceSummary(), aggregate.policyVersion(),
+                        contentHash, aggregate.validUntil(), aggregate.publishedAt());
+                payload = store.encode(aggregate);
+                state = "ACTIVE";
+                capabilityTag = request.capabilityTag();
+                validUntil = sqlTime(request.validUntil());
+                approvalId = request.governanceApprovalId();
+                policyVersion = request.policyVersion();
+                sourceReviewRef = request.sourceReviewRef();
+                purpose = request.purpose();
+                independentNonPersonal = request.independentNonPersonal();
+                retentionAuthorized = request.retentionAuthorized();
+                response = new MemoryDomainExperienceManagementResponse(aggregateId, revision,
+                        MemoryDomainExperienceManagementResponse.State.PUBLISHED, contentHash);
+            } else {
+                require(current != null && "ACTIVE".equals(current.get("state")), MemoryErrorCode.VERSION_CONFLICT);
+                long actualRevision = number(current, "revision");
+                verifyGovernedRevision(request, actualRevision, current);
+                revision = actualRevision + 1;
+                state = "WITHDRAWN";
+                withdrawalReason = request.withdrawalReason();
+                response = new MemoryDomainExperienceManagementResponse(aggregateId, revision,
+                        MemoryDomainExperienceManagementResponse.State.WITHDRAWN, null);
+            }
+
+            if (current == null) {
+                store.jdbc.update("INSERT INTO memory_domain_experience(domain_id,agent_id,aggregate_id,revision,state,capability_tag,content_hash,payload_json,"
+                                + "governance_approval_id,policy_version,source_review_ref,purpose,independent_non_personal,retention_authorized,valid_until,updated_at) "
+                                + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        domainId, agentId, aggregateId, revision, state, capabilityTag, contentHash, payload,
+                        approvalId, policyVersion, sourceReviewRef, purpose, independentNonPersonal, retentionAuthorized, validUntil, now());
+            } else {
+                int changed = store.jdbc.update("UPDATE memory_domain_experience SET revision=?,state=?,capability_tag=?,content_hash=?,payload_json=?,"
+                                + "governance_approval_id=?,policy_version=?,source_review_ref=?,purpose=?,independent_non_personal=?,"
+                                + "retention_authorized=?,valid_until=?,updated_at=? "
+                                + "WHERE domain_id=? AND agent_id=? AND aggregate_id=? AND revision=?",
+                        revision, state, capabilityTag, contentHash, payload, approvalId, policyVersion, sourceReviewRef,
+                        purpose, independentNonPersonal, retentionAuthorized, validUntil, now(), domainId, agentId,
+                        aggregateId, number(current, "revision"));
+                require(changed == 1, MemoryErrorCode.VERSION_CONFLICT);
+            }
+            store.jdbc.update("INSERT INTO memory_domain_experience_revision(domain_id,agent_id,aggregate_id,revision,state,content_hash,"
+                            + "governance_approval_id,policy_version,source_review_ref,purpose,independent_non_personal,retention_authorized,payload_json,withdrawal_reason,changed_at) "
+                            + "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    domainId, agentId, aggregateId, revision, state, contentHash, approvalId, policyVersion, sourceReviewRef,
+                    purpose, independentNonPersonal, retentionAuthorized, payload, withdrawalReason, now());
+            store.jdbc.update("UPDATE memory_domain_experience_event SET revision=?,state=?,response_json=? WHERE caller_id=? AND request_id=?",
+                    revision, response.state().name(), store.encode(response), caller, requestId);
+            return response;
+        });
+    }
+
+    /** Domain shared reads are owner-free and never traverse private experience or source tables. */
+    public MemoryDomainExperienceQueryResponse searchDomainExperiences(MemoryDomainExperienceQueryRequest request,
+                                                                         MemoryRequestProof proof) {
+        long owner = security.authorize(request, proof, MemoryV2Contract.OPERATION_DOMAIN_EXPERIENCE_SEARCH);
+        requireEnabled();
+        Instant asOf = nowInstant();
+        var result = transaction(() -> {
+            StringBuilder sql = new StringBuilder("SELECT aggregate_id,payload_json FROM memory_domain_experience "
+                    + "WHERE domain_id=? AND agent_id=? AND state='ACTIVE' AND valid_until>? ");
+            List<Object> args = new ArrayList<>(List.of(request.contextKey().domainId(), request.contextKey().agentId(), sqlTime(asOf)));
+            if (request.capabilityTag() != null) {
+                sql.append("AND capability_tag=? ");
+                args.add(request.capabilityTag());
+            }
+            if (request.cursor() != null) {
+                sql.append("AND aggregate_id>? ");
+                args.add(request.cursor());
+            }
+            sql.append("ORDER BY aggregate_id LIMIT ?");
+            args.add(request.limit() + 1);
+            List<Map<String, Object>> rows = store.jdbc.queryForList(sql.toString(), args.toArray());
+            boolean hasMore = rows.size() > request.limit();
+            List<MemoryDomainExperience> experiences = new ArrayList<>();
+            for (int i = 0; i < Math.min(rows.size(), request.limit()); i++) {
+                var experience = store.decode((String) rows.get(i).get("payload_json"), MemoryDomainExperience.class);
+                require(experience.domainId().equals(request.contextKey().domainId())
+                        && experience.agentId().equals(request.contextKey().agentId())
+                        && experience.aggregateId().equals(rows.get(i).get("aggregate_id"))
+                        && experience.validUntil().isAfter(asOf), MemoryErrorCode.MEMORY_UNAVAILABLE);
+                experiences.add(experience);
+            }
+            String nextCursor = hasMore && !experiences.isEmpty() ? experiences.get(experiences.size() - 1).aggregateId() : null;
+            return new MemoryDomainExperienceQueryResponse(experiences, nextCursor, hasMore, asOf);
+        });
+        security.revalidate(request, proof, owner, MemoryV2Contract.OPERATION_DOMAIN_EXPERIENCE_SEARCH);
+        return result;
+    }
+
+    /** Consumers call this before using held content and again before emitting it. */
+    public MemoryDomainExperienceUseCheckResponse checkDomainExperienceUse(
+            MemoryDomainExperienceUseCheckRequest request, MemoryRequestProof proof) {
+        long owner = security.authorize(request, proof, MemoryV2Contract.OPERATION_DOMAIN_EXPERIENCE_CHECK);
+        requireEnabled();
+        Instant checkedAt = nowInstant();
+        var result = transaction(() -> {
+            Map<String, Object> row = store.one("SELECT revision,state,content_hash,valid_until FROM memory_domain_experience "
+                    + "WHERE domain_id=? AND agent_id=? AND aggregate_id=?",
+                    request.contextKey().domainId(), request.contextKey().agentId(), request.aggregateId());
+            if (row == null) {
+                return new MemoryDomainExperienceUseCheckResponse(request.aggregateId(), request.expectedRevision(), 0,
+                        MemoryDomainExperienceUseCheckResponse.State.MISSING, checkedAt);
+            }
+            long currentRevision = number(row, "revision");
+            if ("WITHDRAWN".equals(row.get("state"))) {
+                return new MemoryDomainExperienceUseCheckResponse(request.aggregateId(), request.expectedRevision(), currentRevision,
+                        MemoryDomainExperienceUseCheckResponse.State.WITHDRAWN, checkedAt);
+            }
+            require("ACTIVE".equals(row.get("state")), MemoryErrorCode.MEMORY_UNAVAILABLE);
+            if (!utcInstant(row.get("valid_until")).isAfter(checkedAt)) {
+                return new MemoryDomainExperienceUseCheckResponse(request.aggregateId(), request.expectedRevision(), currentRevision,
+                        MemoryDomainExperienceUseCheckResponse.State.EXPIRED, checkedAt);
+            }
+            boolean exact = currentRevision == request.expectedRevision()
+                    && request.expectedContentHash().equals(row.get("content_hash"));
+            return new MemoryDomainExperienceUseCheckResponse(request.aggregateId(), request.expectedRevision(), currentRevision,
+                    exact ? MemoryDomainExperienceUseCheckResponse.State.CURRENT : MemoryDomainExperienceUseCheckResponse.State.REVISED,
+                    checkedAt);
+        });
+        security.revalidate(request, proof, owner, MemoryV2Contract.OPERATION_DOMAIN_EXPERIENCE_CHECK);
+        return result;
+    }
+
+    private void validateDomainGeneralization(MemoryDomainExperienceManagementRequest request) {
+        requireSafeGeneralizationText(request.scenario());
+        requireSafeGeneralizationText(request.applicability());
+        requireSafeGeneralizationText(request.conclusion());
+        requireSafeGeneralizationText(request.evidenceSummary());
+    }
+
+    private static void requireSafeGeneralizationText(String value) {
+        require(value != null && !CREDENTIAL.matcher(value).find()
+                && !PRIVATE_REFERENCE.matcher(value).find()
+                && !value.matches("(?is).*\\b[0-9a-f]{64}\\b.*"), MemoryErrorCode.INVALID_EXTRACTION);
+    }
+
+    private void requireNoPrivateExperienceIdentity(String domainId, String agentId, String aggregateId) {
+        Integer count = store.jdbc.queryForObject("SELECT COUNT(*) FROM memory_experience WHERE domain_id=? AND agent_id=? AND experience_id=?",
+                Integer.class, domainId, agentId, aggregateId);
+        require(count != null && count == 0, MemoryErrorCode.FORBIDDEN);
+    }
+
+    private static void verifyGovernedRevision(MemoryDomainExperienceManagementRequest request, long actualRevision,
+                                                Map<String, Object> current) {
+        require(request.expectedRevision() == actualRevision, MemoryErrorCode.VERSION_CONFLICT);
+        if (request.action() == MemoryDomainExperienceManagementRequest.Action.WITHDRAW) {
+            require(current != null && "ACTIVE".equals(current.get("state")), MemoryErrorCode.VERSION_CONFLICT);
+        }
     }
 
     private static Set<MemorySourceDependency> evidenceDependencies(MemoryExperience experience) {

@@ -643,7 +643,7 @@ class MemoryArchiveServiceTest {
             jdbc = new JdbcTemplate(datasource);
             transactions = new DataSourceTransactionManager(datasource);
             try (var connection = datasource.getConnection()) {
-                for (String file : List.of("20261019_memory_v2_request_nonce.sql", "20261019_memory_share_authorization.sql", "20261019_memory_v2_archive.sql", "20261019_memory_writer_fence.sql", "20261020_memory_preference_history.sql", "20261020_memory_preference_processing.sql", "20261021_memory_matter_lifecycle.sql", "20261021_memory_privacy_cleanup.sql", "20261021_memory_experience_records.sql", "20261021_memory_experience_processing.sql")) {
+                for (String file : List.of("20261019_memory_v2_request_nonce.sql", "20261019_memory_share_authorization.sql", "20261019_memory_v2_archive.sql", "20261019_memory_writer_fence.sql", "20261020_memory_preference_history.sql", "20261020_memory_preference_processing.sql", "20261021_memory_matter_lifecycle.sql", "20261021_memory_privacy_cleanup.sql", "20261021_memory_experience_records.sql", "20261021_memory_experience_processing.sql", "20261021_memory_domain_experience.sql")) {
                     String sql = Files.readString(Path.of(System.getProperty("maven.multiModuleProjectDirectory"), "sql/migrations", file))
                             .replace("USE bk_memory;", "").replace(" CHARACTER SET ascii COLLATE ascii_bin", "")
                             .replace("ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", "");
@@ -657,6 +657,7 @@ class MemoryArchiveServiceTest {
                 }
             }
             caller.setKeyId("fixture-key"); caller.setSigningSecret(secret); caller.setServiceDelivery(true); caller.setExperienceOutcomePublisher(true);
+            caller.setExperienceGovernancePublisher(true);
             caller.setAllowedAgentsByDomain(Map.of("marketing", Set.of("copy-agent")));
             properties.setTrustedCallers(Map.of(CALLER, caller, "other-service", caller));
             experienceProperties.setEnabled(true); experienceProperties.setProcessingEnabled(true);
@@ -733,13 +734,14 @@ class MemoryArchiveServiceTest {
         boolean allowed = true;
         long allowedOwner = 42L;
         int calls;
+        String deniedPermission;
         Runnable onCheck = () -> { };
         public boolean validateToken(String token) { return false; }
         public AuthenticatedPrincipal resolvePrincipal(String token) { return null; }
         public boolean hasPermission(Long owner, String permission) {
             assertFalse(TransactionSynchronizationManager.isActualTransactionActive(), "Auth must stay outside SQL locks");
             calls++; onCheck.run();
-            return allowed && owner == allowedOwner;
+            return allowed && owner == allowedOwner && !java.util.Objects.equals(permission, deniedPermission);
         }
     }
 }

@@ -818,11 +818,11 @@
 
 ## LR-83 经验只由可信结果或同一私域的用户反馈形成，检索不产生新证据
 
-**结论**：本 change 采用用户确认的两类经验来源：受信域的真实结果事件，以及绑定同一 owner/domain/agent/conversation 已归档 USER 消息的用户反馈。业务结果只接受 operation-bound SERVICE 签名且在部署 allowlist 中启用经验发布的 caller；caller/domain/agent 必须精确匹配，配置默认关闭。反馈还必须绑定当前经验 revision。事件收件回执、幂等身份和 `ASSESS_EXPERIENCE` job 与结果一起持久化；worker 只验证精确来源并以 lease 和 expected revision 提交一份新快照，过期评估失败关闭。经验身份及来源查询统一按 owner/domain/agent 隔离；检索仅在当前范围内核验来源 revision，以版本化相关性、置信度、启用度、半衰期时间权重和 token budget 选取，读取不刷新观察时间或确认时间。硬规则仍由 LR-82 的受权入口单独维护。跨用户的脱敏归纳尚无发布契约，本阶段不开放共享。
+**结论**：本 change 采用用户确认的两类经验来源：受信域的真实结果事件，以及绑定同一 owner/domain/agent/conversation 已归档 USER 消息的用户反馈。业务结果只接受 operation-bound SERVICE 签名且在部署 allowlist 中启用经验发布的 caller；caller/domain/agent 必须精确匹配，配置默认关闭。反馈还必须绑定当前经验 revision。事件收件回执、幂等身份和 `ASSESS_EXPERIENCE` job 与结果一起持久化；worker 只验证精确来源并以 lease 和 expected revision 提交一份新快照，过期评估失败关闭。经验身份及来源查询统一按 owner/domain/agent 隔离；检索仅在当前范围内核验来源 revision，以版本化相关性、置信度、启用度、半衰期时间权重和 token budget 选取，读取不刷新观察时间或确认时间。硬规则仍由 LR-82 的受权入口单独维护。跨用户分享只能通过 LR-90 定义的独立受治理归纳对象，不能从私有经验行或 grant 推导。
 
 **根因**：模型自评、请求已受理、检索命中和经验复用都不能证明真实业务结果；userId 或来源引用也不能单独证明反馈者拥有被引用消息。异步评估必须防止重试重复计分，并在多个旧 revision 竞争时阻止迟到 worker 覆盖新反馈。经验 ID 是调用方提供的稳定本地身份，查询若遗漏 owner/domain/agent 会把同号经验的证据混合；缓存命中也必须重新核对当前经验版本和来源授权。共享经验还需要独立治理批准和不可还原的脱敏契约，因此不得借现有私有行或 grant 推断共享权限。
 
-**代码位置**：`MemoryExperienceOutcomeRequest`、`MemoryExperienceFeedbackRequest`、`MemoryExperienceService`、`MemoryExperienceProcessingWorker`、`ExperienceSelectionPolicy`、`MemoryV2RequestSecurity`、`MemorySourceAuthorizer`、`MemoryExperienceProperties`；迁移 `20261021_memory_experience_records.sql` 与 `20261021_memory_experience_processing.sql`；回归 `MemoryExperienceServiceTest` 的幂等重试、过期 feedback、跨 owner 同 ID 隔离、负反馈停用/重新确认、删除墓碑、评分与 token 预算用例。关联 LR-75/LR-82；change 8.2/8.4。当前 publisher 与处理开关默认关闭，代码验收不代表真实业务域已开始发布经验事件。
+**代码位置**：`MemoryExperienceOutcomeRequest`、`MemoryExperienceFeedbackRequest`、`MemoryExperienceService`、`MemoryExperienceProcessingWorker`、`ExperienceSelectionPolicy`、`MemoryV2RequestSecurity`、`MemorySourceAuthorizer`、`MemoryExperienceProperties`；迁移 `20261021_memory_experience_records.sql` 与 `20261021_memory_experience_processing.sql`；回归 `MemoryExperienceServiceTest` 的幂等重试、过期 feedback、跨 owner 同 ID 隔离、负反馈停用/重新确认、删除墓碑、评分与 token 预算用例。关联 LR-75/LR-82/LR-90；change 8.2/8.4。当前 publisher 与处理开关默认关闭，代码验收不代表真实业务域已开始发布经验事件。
 
 ## LR-84 私有记忆候选须在重排前取得当前真源许可
 
@@ -877,3 +877,13 @@
 **根因**：HMAC 密钥硬编码在 Properties 初始值与 Nacos 占位默认值时，仓库内所有实例共享可预知签名权；只删除其中一处仍会被另一层默认回填。环境注入、空默认和最小熵检查必须同时成立，既避免发布源码凭据，也不允许缺配置时继续签发可伪造会话票据。
 
 **代码位置**：`interview-service/config/InterviewRuntimeProperties`、`runtime/InterviewSessionStateMachine`、`nacos/interview-service.yaml`、根 `docker-compose.yml` 与 `.env.example`；回归 `InterviewSessionStateMachineTest.ticketSigningFailsClosedWithoutConfiguredSecret`；关联 KI-157，change 10.7。
+
+## LR-90 域共享经验是无个人来源链接的独立治理归纳
+
+**结论**：私有 `MemoryExperience` 永远按 owner/domain/agent 授权。跨用户共享另用 `MemoryDomainExperience` 与独立 SQL 表，发布要求签名用户同时具备受管治理权限、调用方治理发布 allowlist、精确 domain/agent 范围，并显式确认独立非个人归纳及保留授权；发布必须携带有效期限、用途、政策版本和不透明治理审查引用。共享读模型不包含 owner、私有经验 ID、来源 ID、grant 或审查引用，查询只按认证 domain/agent 限域。来源删除不会级联删除该独立归纳；只有保留授权仍有效且该共享对象未被治理撤回时才可读取。撤回以新版本更新状态并清空当前可读载荷；调用方在装配和输出前用 `checkDomainExperienceUse` 核验原 revision/hash 仍是有效当前版本。
+
+**根因**：复用私有经验行或现有共享 grant 会把个人证据读取权限误当成域知识权限；把来源引用嵌入共享文本又会令共享读者重建个人来源。单纯过滤新查询还不能约束调用方已装配的旧内容，因此共享身份、审批审计、当前载荷和版本复核必须独立，且旧版本失效时不能返回其正文。
+
+**代码位置**：common 的 `MemoryDomainExperience*` RPC DTO 与 `MemoryV2RpcService`；`MemoryV2RequestSecurity`、`MemoryExperienceService`、`MemoryV2RpcServiceImpl`；迁移 `20261021_memory_domain_experience.sql`。回归 `MemoryDomainExperienceServiceTest`、`MemoryV2RpcContractTest` 覆盖治理权限、domain/agent 隔离、不可还原引用、来源删除保留、撤回和使用前版本检查；change 8.3。
+
+**关联**：LR-59、LR-83、LR-84；change 8.3、9.2–9.5。

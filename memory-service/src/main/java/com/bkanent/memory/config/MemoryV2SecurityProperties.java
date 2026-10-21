@@ -11,10 +11,15 @@ import java.util.Set;
 @ConfigurationProperties(prefix = "memory.v2")
 public class MemoryV2SecurityProperties {
     private String currentUserPermission = "agent.chat.use";
+    private String experienceGovernancePermission = "memory.experience.governance.publish";
     private Map<String, TrustedCaller> trustedCallers = new LinkedHashMap<>();
 
     public String getCurrentUserPermission() { return currentUserPermission; }
     public void setCurrentUserPermission(String currentUserPermission) { this.currentUserPermission = currentUserPermission; }
+    public String getExperienceGovernancePermission() { return experienceGovernancePermission; }
+    public void setExperienceGovernancePermission(String experienceGovernancePermission) {
+        this.experienceGovernancePermission = experienceGovernancePermission;
+    }
     public Map<String, TrustedCaller> getTrustedCallers() { return trustedCallers; }
     public void setTrustedCallers(Map<String, TrustedCaller> trustedCallers) {
         this.trustedCallers = trustedCallers == null ? new LinkedHashMap<>() : new LinkedHashMap<>(trustedCallers);
@@ -25,10 +30,15 @@ public class MemoryV2SecurityProperties {
         private String signingSecret;
         private boolean serviceDelivery;
         private boolean experienceOutcomePublisher;
+        private boolean experienceGovernancePublisher;
         public boolean isServiceDelivery() { return serviceDelivery; }
         public void setServiceDelivery(boolean serviceDelivery) { this.serviceDelivery = serviceDelivery; }
         public boolean isExperienceOutcomePublisher() { return experienceOutcomePublisher; }
         public void setExperienceOutcomePublisher(boolean experienceOutcomePublisher) { this.experienceOutcomePublisher = experienceOutcomePublisher; }
+        public boolean isExperienceGovernancePublisher() { return experienceGovernancePublisher; }
+        public void setExperienceGovernancePublisher(boolean experienceGovernancePublisher) {
+            this.experienceGovernancePublisher = experienceGovernancePublisher;
+        }
         /** Exact domain-to-agent allowlist; no cross-product expansion is performed. */
         private Map<String, Set<String>> allowedAgentsByDomain = new LinkedHashMap<>();
 

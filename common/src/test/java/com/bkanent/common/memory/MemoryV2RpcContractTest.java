@@ -91,6 +91,15 @@ class MemoryV2RpcContractTest {
                 new MemoryExperienceEventStatusRequest(envelope(MemoryV2Contract.OPERATION_EXPERIENCE_STATUS), CONTEXT, "outcome-1"),
                 new MemoryExperienceLifecycleRequest(envelope(MemoryV2Contract.OPERATION_EXPERIENCE_LIFECYCLE), CONTEXT,
                         "experience-1", 1, MemoryExperienceLifecycleRequest.Action.DEACTIVATE, null, "owner requested deactivation"),
+                new MemoryDomainExperienceManagementRequest(envelope(MemoryV2Contract.OPERATION_DOMAIN_EXPERIENCE_MANAGE),
+                        CONTEXT, "dge_guidance-1", "copy-agent", 0, MemoryDomainExperienceManagementRequest.Action.PUBLISH,
+                        "gov_approval-1", "policy-v1", "review_source-1", "domain-learning", "copy-draft",
+                        "Concise property copy", "When facts have been verified", "State verified facts first",
+                        "Governance reviewed aggregate evidence", AT.plusSeconds(86400), true, true, null),
+                new MemoryDomainExperienceQueryRequest(envelope(MemoryV2Contract.OPERATION_DOMAIN_EXPERIENCE_SEARCH), CONTEXT,
+                        "copy-draft", null, 20),
+                new MemoryDomainExperienceUseCheckRequest(envelope(MemoryV2Contract.OPERATION_DOMAIN_EXPERIENCE_CHECK), CONTEXT,
+                        "dge_guidance-1", 1, HASH),
                 new MemoryGrantRequest(envelope(MemoryV2Contract.OPERATION_GET_GRANT), CONTEXT,
                         new MemoryExportRef("export-1", CONTEXT, version(1)),
                         new MemoryScope(MemoryScope.Kind.TASK_SHARED, null, null, "shared-1"), "matter-1", "collaboration"),
@@ -140,7 +149,15 @@ class MemoryV2RpcContractTest {
                 new MemoryWriterResponse(new MemoryWriteAuthority("run-1", 1), 1_798_000_000_000L, conversation),
                 new MemoryBoundaryResponse(conversation, true),
                 new MemoryPreferenceWriteResponse("block", 1, "transition", true),
-                new MemoryPreferenceAssemblyResponse("matter-1", 1, HASH, AT, "preference-selection-v1", List.of(), false));
+                new MemoryPreferenceAssemblyResponse("matter-1", 1, HASH, AT, "preference-selection-v1", List.of(), false),
+                new MemoryDomainExperienceManagementResponse("dge_guidance-1", 1,
+                        MemoryDomainExperienceManagementResponse.State.PUBLISHED, HASH),
+                new MemoryDomainExperienceQueryResponse(List.of(new MemoryDomainExperience("dge_guidance-1", "marketing",
+                        "copy-agent", 1, "domain-learning", "copy-draft", "Concise property copy",
+                        "When facts have been verified", "State verified facts first", "Governance reviewed aggregate evidence",
+                        "policy-v1", HASH, AT.plusSeconds(86400), AT)), null, false, AT),
+                new MemoryDomainExperienceUseCheckResponse("dge_guidance-1", 1, 1,
+                        MemoryDomainExperienceUseCheckResponse.State.CURRENT, AT));
         for (Object response : responses) {
             assertThat(spi(response, response.getClass())).isEqualTo(response);
         }

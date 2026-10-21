@@ -9,6 +9,7 @@ import com.bkanent.common.memory.MemoryV2Contract;
 import com.bkanent.common.memory.MemoryV2Request;
 import com.bkanent.common.memory.MemoryDeliveryRequest;
 import com.bkanent.common.memory.MemoryExperienceOutcomeRequest;
+import com.bkanent.common.memory.MemoryDomainExperienceManagementRequest;
 import com.bkanent.common.rpc.AuthPermissionRpcService;
 import com.bkanent.memory.config.MemoryV2SecurityProperties;
 import org.springframework.stereotype.Service;
@@ -90,6 +91,28 @@ public class MemoryV2RequestSecurity {
         return ownerId;
     }
 
+    /** Only a signed, currently authorized governance user may publish or withdraw a domain generalization. */
+    public long authorizeDomainExperienceManagement(MemoryDomainExperienceManagementRequest request,
+                                                     MemoryRequestProof proof) {
+        long ownerId = verifyCurrentUser(request, proof, MemoryV2Contract.OPERATION_DOMAIN_EXPERIENCE_MANAGE);
+        var caller = properties.getTrustedCallers().get(request.envelope().caller());
+        if (caller == null || !caller.isExperienceGovernancePublisher()
+                || !caller.allows(request.contextKey().domainId(), request.targetAgentId())) {
+            throw new MemoryException(MemoryErrorCode.FORBIDDEN);
+        }
+        try {
+            if (!authPermissionRpcService.hasPermission(ownerId, properties.getExperienceGovernancePermission())) {
+                throw new MemoryException(MemoryErrorCode.FORBIDDEN);
+            }
+        } catch (MemoryException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+        }
+        replayGuard.consume(proof.keyId(), proof.nonce(), proof.expiresAtEpochSecond());
+        return ownerId;
+    }
+
     static void requireUnexpired(MemoryRequestProof proof) {
         if (proof.expiresAtEpochSecond() <= Instant.now().getEpochSecond()) {
             throw new MemoryException(MemoryErrorCode.AUTHENTICATION_EXPIRED);
@@ -150,6 +173,9 @@ public class MemoryV2RequestSecurity {
                 || MemoryV2Contract.OPERATION_EXPERIENCE_FEEDBACK.equals(operation)
                 || MemoryV2Contract.OPERATION_EXPERIENCE_STATUS.equals(operation)
                 || MemoryV2Contract.OPERATION_EXPERIENCE_LIFECYCLE.equals(operation)
+                || MemoryV2Contract.OPERATION_DOMAIN_EXPERIENCE_MANAGE.equals(operation)
+                || MemoryV2Contract.OPERATION_DOMAIN_EXPERIENCE_SEARCH.equals(operation)
+                || MemoryV2Contract.OPERATION_DOMAIN_EXPERIENCE_CHECK.equals(operation)
                 || MemoryV2Contract.OPERATION_SHARE_GRANT_MANAGE.equals(operation)
                 || MemoryV2Contract.OPERATION_SHARED_EXPORT_SUBMIT.equals(operation)
                 || MemoryV2Contract.OPERATION_SHARED_EXPORT_COMMIT.equals(operation)

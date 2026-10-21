@@ -121,7 +121,9 @@ confidence是证据支持，activation是使用优先级，relevance是事项适
 
 硬规则仍来自当前受管代码/配置/政策；受权限的修改/停用沿原入口，不由模型学习或时间衰减改变。现有 system-constraints种子逐项审核来源/版本，旧workflow文字仍只是模型指引，不能恢复强业务步骤（LR-17/18）。
 
-经验默认owner+domain/agent私有；人工/领域审核可发布独立非个人知识对象作为域共享经验，但脱敏标签不授予个人原证据读取权、共享对象不能反向泄漏个人来源正文；个人记录及证据仍owner-only。避免从个人内容自动生成跨用户规则。后台验证真实feedback/outcome，保存正负反馈和lastValidatedAt。评分使用versioned relevance × confidence × activation × timeDecay，并在去重后的token预算内选择；active=false/撤回立即排除。被使用不是验证，模型自评成功不是结果。时间衰减降低选择权重，不物理删除事实，保留复核/停用/修正历史。
+经验默认owner+domain/agent私有；可用于经验形成的事实来自受信域结果事件与用户反馈，模型自评或普通调用记录不构成验证。跨用户使用必须由独立治理入口发布另一条不含个人owner、私有经验ID、来源定位符或grant的域级知识对象；发布和撤回均要求当前用户身份、专用治理权限、部署侧caller allowlist及精确domain/agent映射。发布正文只接受独立非个人归纳、显式保留授权、用途、策略版本、有效期与不透明治理审查句柄；这些字段是治理人对独立性的受权确认，不让共享读者取得原证据。来源删除不级联删除已明确获准且不可还原的独立归纳；治理撤回清空当前正文并使搜索和使用复核立即拒绝，消费者在装配与输出前都需按ID、revision、hash复核。该对象与owner私有经验及来源依赖表物理分离，详见LR-90。
+
+私有经验仍记录受信 outcome/feedback 证据并保存正负反馈和lastValidatedAt。评分使用versioned relevance × confidence × activation × timeDecay，并在去重后的token预算内选择；active=false/撤回立即排除。被使用不是验证，模型自评成功不是结果。时间衰减降低选择权重，不物理删除事实，保留复核/停用/修正历史。
 
 ### D9. A2A/SSE与记忆双轨
 

@@ -5,6 +5,7 @@ memory:
       enabled: ${MEMORY_V2_SHARING_ENABLED:false}
       max-export-utf8-bytes: ${MEMORY_V2_SHARING_MAX_EXPORT_UTF8_BYTES:24576}
     current-user-permission: ${MEMORY_V2_USER_PERMISSION:agent.chat.use}
+    experience-governance-permission: ${MEMORY_V2_EXPERIENCE_GOVERNANCE_PERMISSION:memory.experience.governance.publish}
     replay-cleanup-ms: ${MEMORY_V2_REPLAY_CLEANUP_MS:60000}
     privacy-cleanup:
       enabled: ${MEMORY_V2_PRIVACY_CLEANUP_ENABLED:true}
@@ -20,6 +21,7 @@ memory:
         signing-secret: ${MARKETING_MEMORY_V2_SIGNING_SECRET:}
         service-delivery: true
         experience-outcome-publisher: ${MARKETING_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
+        experience-governance-publisher: ${MARKETING_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
         allowed-agents-by-domain:
           marketing: [marketing-agent]
       interview-service:
@@ -27,6 +29,7 @@ memory:
         signing-secret: ${INTERVIEW_MEMORY_V2_SIGNING_SECRET:}
         service-delivery: true
         experience-outcome-publisher: ${INTERVIEW_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
+        experience-governance-publisher: ${INTERVIEW_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
         allowed-agents-by-domain:
           interview: [interview-agent]
       listing-master-service:
@@ -34,6 +37,7 @@ memory:
         signing-secret: ${LISTING_MEMORY_V2_SIGNING_SECRET:}
         service-delivery: true
         experience-outcome-publisher: ${LISTING_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
+        experience-governance-publisher: ${LISTING_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
         allowed-agents-by-domain:
           listing: [listing-agent]
       business-service:
@@ -41,6 +45,7 @@ memory:
         signing-secret: ${BUSINESS_MEMORY_V2_SIGNING_SECRET:}
         service-delivery: true
         experience-outcome-publisher: ${BUSINESS_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
+        experience-governance-publisher: ${BUSINESS_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
         allowed-agents-by-domain:
           trade: [trade-agent]
       contract-service:
@@ -48,6 +53,7 @@ memory:
         signing-secret: ${CONTRACT_MEMORY_V2_SIGNING_SECRET:}
         service-delivery: true
         experience-outcome-publisher: ${CONTRACT_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
+        experience-governance-publisher: ${CONTRACT_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
         allowed-agents-by-domain:
           contract: [contract-agent]
       compare-engine-service:
@@ -55,6 +61,7 @@ memory:
         signing-secret: ${COMPARE_MEMORY_V2_SIGNING_SECRET:}
         service-delivery: true
         experience-outcome-publisher: ${COMPARE_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
+        experience-governance-publisher: ${COMPARE_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
         allowed-agents-by-domain:
           compare: [compare-agent]
       settlement-service:
@@ -62,6 +69,7 @@ memory:
         signing-secret: ${SETTLEMENT_MEMORY_V2_SIGNING_SECRET:}
         service-delivery: true
         experience-outcome-publisher: ${SETTLEMENT_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
+        experience-governance-publisher: ${SETTLEMENT_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
         allowed-agents-by-domain:
           settlement: [settlement-agent]
     preference:

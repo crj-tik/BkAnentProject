@@ -141,4 +141,28 @@ public class MemoryV2RpcServiceImpl implements MemoryV2RpcService {
         security.authorize(request, proof, MemoryV2Contract.OPERATION_EXPERIENCE_LIFECYCLE);
         throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
     }
+
+    @Override
+    public MemoryDomainExperienceManagementResponse manageDomainExperience(
+            MemoryDomainExperienceManagementRequest request, MemoryRequestProof proof) {
+        if (experiences != null) return experiences.manageDomainExperience(request, proof);
+        security.authorizeDomainExperienceManagement(request, proof);
+        throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+    }
+
+    @Override
+    public MemoryDomainExperienceQueryResponse searchDomainExperiences(
+            MemoryDomainExperienceQueryRequest request, MemoryRequestProof proof) {
+        if (experiences != null) return experiences.searchDomainExperiences(request, proof);
+        security.authorize(request, proof, MemoryV2Contract.OPERATION_DOMAIN_EXPERIENCE_SEARCH);
+        throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+    }
+
+    @Override
+    public MemoryDomainExperienceUseCheckResponse checkDomainExperienceUse(
+            MemoryDomainExperienceUseCheckRequest request, MemoryRequestProof proof) {
+        if (experiences != null) return experiences.checkDomainExperienceUse(request, proof);
+        security.authorize(request, proof, MemoryV2Contract.OPERATION_DOMAIN_EXPERIENCE_CHECK);
+        throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+    }
 }
