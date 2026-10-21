@@ -24,7 +24,7 @@
 ## 4. 版本化真源与可靠交付
 
 - [x] 4.1 新增 conversation/message/matter/summary/entity 聚合的版本化结构与复合身份、来源幂等键、消息sequence、covered cursor及索引；执行升级/首启/重复迁移测试，旧 summary 长度字段不承载新完整摘要。
-- [ ] 4.2 新增 preference_block/transition、experience、shared_export/grant、processing_job 结构；明确证据、有效时间、块revision、撤回/删除状态和保留策略，索引与实际查询计划匹配。
+- [x] 4.2 新增 preference_block/transition、experience、shared_export/grant、processing_job 结构；明确证据、有效时间、块revision、撤回/删除状态和保留策略，索引与实际查询计划匹配。
 - [ ] 4.3 仅在缺少可恢复事实源的入口增加必要最小交付 journal/outbox；已有不可变业务账本采用引用重建，验证 input接受前、调用接受时、完成结果后的可恢复顺序，禁止每域无条件复制完整正文。
 - [x] 4.4 实现稳定消息/sourceEventId幂等追加、同身份异hash冲突、会话单调顺序、持久回执与覆盖核验；测试回执丢失/乱序/重启不重复消息或证据。
 - [ ] 4.5 实现入站真源变化与加工/索引job的事务提交；worker使用受管SERVICE和精确证据权限，在事务外执行模型/RPC，具备lease、有限重试、失败状态及授权重放，覆盖跨实例接管与提交前撤回复验。

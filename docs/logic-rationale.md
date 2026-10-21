@@ -747,3 +747,11 @@
 **运行边界**：当前开发配置不启用 Memory V2 归档/索引，未注册外部投影 cleaner；因此此版本的完成状态只覆盖本地派生清理和当前注册集合，不能声称清理未接入的外部索引。今后任何 V2 投影在启用前必须提供受管 cleaner，并在写入投影前对账 tombstone。用户明确删除会清除本地正文；撤回只冻结并阻断内容访问，保持其可恢复语义。
 
 **代码位置**：`MemoryPrivacyCleanupStatusRequest/Response`、`MemoryArchiveService.withdrawSource/privacyCleanupStatus`、`MemoryPrivacyCleanupWorker`、`MemoryPrivacyProjectionCleaner`、迁移 190；关联 LR-61/65/68/69/73、KI-145/146；change 3.5/4.7。
+
+## LR-75 经验以 owner/domain/agent 为私域身份并以版本化证据定位保存
+
+**结论**：经验逻辑身份绑定 owner/domain/agent，不绑定单个 conversation；每个经验 revision 保存独立快照，证据分开保留 outcome/feedback、occurredAt/observedAt 和精确来源版本定位。`retention_until=NULL` 表示不自动清理；撤回立即停用但保留受限历史，删除清空正文和证据细节，只保留 revision/source hash 等反复投递防复活所需的无正文墓碑。经验读取仍关闭，表结构不代表已有消费者已启用。
+
+**根因**：将经验按 conversation 建键会让跨会话的私有经验重复或无法选择；按 owner 单独建键会跨域/Agent 混入。不可变revision分离修改历史，来源倒排索引让撤回/删除能定位精确派生记录，retention截止值支持治理侧有界保留而不擅自定时抹除事实。硬规则不写入经验表，评分和衰减不能改写政策。
+
+**代码位置**：迁移 `20261021_memory_experience_records.sql`、`MemoryExperienceSchemaMySqlTest`；与 `memory_preference_block/transition`、`memory_share_grant/export` 和 `memory_processing_job` 的现有真实查询计划核验；change 4.2。后续经验写入、评估和检索仍受 8.x 任务门控。

@@ -65,13 +65,15 @@ RAG 新 memory scope 单独版本化，由 memory 签发并由 RAG 按可信调�
 | memory_summary | summaryId/version、expectedRevision、coveredFrom/Through、完整工具组边界、structuredSummary、entityRefs、sourceHashes |
 | memory_entity_anchor | scoped entityId、alias、sourceMessageRefs、briefDefinition、最后证据版本 |
 | preference_block / preference_transition | context中的owner/subjectRef/scope/dimension唯一逻辑块、currentState；按证据追加时间挂点与临时例外 |
-| memory_experience | 域/agent/owner、场景、证据、confidence、lastValidatedAt、反馈、policyVersion、active；不与硬规则表混用 |
+| memory_experience | owner/domain/agent稳定私域键、不可变revision、场景/适用性/结论、confidence/activation、lastObservedAt/lastValidatedAt、证据及来源定位；不与硬规则表混用 |
 | memory_shared_export / memory_share_grant | exportId、来源调用/正文hash、revision、获准payload、接收范围、有效期与撤回状态 |
 | memory_processing_job | 评估/归并/索引工作游标、幂等身份、PROCESSING lease、bounded retry、失败状态 |
 
 逐接入口盘点可靠事实源与事务边界；已有不可变输入/完成结果账本可确定重建交付事件时只记录引用，不复制业务正文；没有可恢复事实源才增加最小 journal/outbox。启用可靠记忆前必须验证输入接受前记录、调用接受时绑定交付许可、结果完成事实与待交付身份可恢复的顺序。副作用已完成但记忆交付失败只补交付，不重执工具；不能以 afterAgent 成功作为唯一可靠记录。无可靠材料时标记该消息未记录，禁止压缩移除；原始 streaming chunk 不逐块写 memory，只在完整许可消息/结果形成后交付，现有事件审计继续负责SSE。缓冲是短期交付机制，不是第二个长期真源；确认后按保留策略清理。不无条件要求九服务各建数据库/同名表。
 
 memory 入站事务将真源变化、处理job与索引outbox原子记录；远程模型/索引在事务外执行。异步worker使用受管SERVICE凭据，只能处理已授权入站事件的精确ID/owner/domain，不保存用户token、不因用户租约到期自动冒充用户；读取仅限工作证据，撤回/删除检查后才提交结果，不能授予通用用户搜索权。
+
+经验身份以 owner/domain/agent 为私域范围，不以产生证据的单个 conversation 定义逻辑身份；revision 快照不可变，证据把业务发生时间与系统观察时间分开，并以版本化来源定位连接原始事实。显式 retentionUntil 只作为受管保留策略的到期边界，NULL 表示不自动清理；撤回立即排除使用但保留受限历史，删除清空正文与证据细节并保留不含正文的 revision/source hash tombstone，禁止迟到事件复活旧版本。当前尚未实现经验写入/检索 worker，不依据这些表宣称经验功能已启用。
 
 拒绝“压缩时第一次保存”和“直接把窗口saveAll覆盖完整档案”，它们分别存在崩溃丢历史和截断删除历史风险。
 
