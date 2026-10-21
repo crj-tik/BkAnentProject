@@ -88,7 +88,7 @@
 - [x] 10.5 回归正式SSE入口的parent/child关联、task过滤、visibility、eventId/sequence和Last-Event-ID去重；仅对本链路确认的过滤/可见性缺口做显式增量修复并记录KI，不进行全仓SSE重构。
 - [x] 10.6 故障注入memory延迟2秒/不可用、索引迟到及撤回，验证逐delta/progress新增memory读写/embedding/总结调用为0，前端链不等待回取；单独观测delta限流/审计降级，不伪装成记忆性能问题。
 - [ ] 10.7 扫查测试fixture和实际prompt/checkpoint/SSE/日志/导出确认无用户凭据、专用认证信标、脱敏映射及私有内部材料；所有secret来自ENV/密钥服务，SQL外部输入参数绑定。
-  验证边界：已扫查仓库代码、配置、测试fixture与本机环境变量键名（不读取或输出密钥值），并修复硬编码票据密钥；未启动容器，因此实际运行时prompt、checkpoint与应用日志尚未扫描，须在目标开发实例可用时完成。
+  验证边界：已扫查仓库代码、配置、测试fixture与本机环境变量键名（不读取或输出密钥值），并修复硬编码票据密钥；本轮在 `bk-anent-dev` 原位重建 `memory-service`，readiness 为 `UP`。近20分钟服务日志中 bearer token、凭据赋值和经验 fixture 字符串扫描均为0；单测已确认经验正文不进入 Graph checkpoint。未启动 full profile 的 `agent-service` 及其附属依赖，因此 Supervisor 实际运行时 prompt、checkpoint、SSE 和应用日志仍须在最小联机验收组合可用后扫描。
 
 ## 11. 分阶段启用、回滚与交付验收
 
