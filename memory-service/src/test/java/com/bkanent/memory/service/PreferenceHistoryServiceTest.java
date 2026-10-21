@@ -36,6 +36,104 @@ class PreferenceHistoryServiceTest {
         }
     }
 
+    @Test void preferenceBudgetEstimateAccountsForMultibyteTextConservatively() {
+        var payload = "预算总价".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        assertEquals(4, new PreferenceSelectionPolicy().estimatedTokens(payload));
+    }
+
+    @Test void matterAssemblySelectsOnlyRelevantPrivateValuesAndPinsThemUntilBoundaryCheck() throws Exception {
+        var fixture = new MemoryMatterServiceTest.MatterFixture();
+        var archive = fixture.f;
+        var properties = new MemoryPreferenceProperties();
+        var preferences = new PreferenceHistoryService(archive.store, archive.security, archive.sources, properties, archive.transactions);
+
+        var budgetSource = fixture.event(null);
+        var budget = new MemoryPreferenceAssessment("budget", PreferenceTransition.Assessment.PREFERENCE,
+                PreferenceTransition.Change.OBSERVATION, PreferenceTransition.Polarity.AFFIRMATIVE,
+                MemoryJsonValue.string("100万"), null, null, null, null, List.of(), .8, "fixture-v1",
+                new MemorySourceDependency(budgetSource.source(), null));
+        var budgetWrite = archive.request(MemoryV2Contract.OPERATION_PREFERENCE_WRITE,
+                e -> new MemoryPreferenceWriteRequest(e, CONTEXT, 0, budget));
+        var budgetResult = preferences.submit(budgetWrite, archive.sign(budgetWrite));
+        var expectedKey = new PreferenceBlockKey(CONTEXT.ownerId(), CONTEXT.ownerId(),
+                MemoryScope.privateScope(CONTEXT.domainId(), CONTEXT.agentId()), "budget");
+        assertEquals("p-" + MemoryCanonicalHash.contentHash(expectedKey), budgetResult.blockId(),
+                "the assembly key must retain the persisted private block identity");
+
+        var floorSource = fixture.event(null);
+        var floor = new MemoryPreferenceAssessment("floor", PreferenceTransition.Assessment.PREFERENCE,
+                PreferenceTransition.Change.OBSERVATION, PreferenceTransition.Polarity.AFFIRMATIVE,
+                MemoryJsonValue.string("低楼层"), null, null, null, null, List.of(), .9, "fixture-v1",
+                new MemorySourceDependency(floorSource.source(), null));
+        var floorWrite = archive.request(MemoryV2Contract.OPERATION_PREFERENCE_WRITE,
+                e -> new MemoryPreferenceWriteRequest(e, CONTEXT, 0, floor));
+        preferences.submit(floorWrite, archive.sign(floorWrite));
+
+        var start = fixture.event(new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算和总价上限"));
+        var matter = fixture.write(start).matter();
+        int transitionsBefore = archive.count("memory_preference_transition");
+        var assemblyRequest = archive.request(MemoryV2Contract.OPERATION_ASSEMBLE_PREFERENCES,
+                e -> new MemoryPreferenceAssemblyRequest(e, CONTEXT, matter.matterId(), 800));
+        var assembled = preferences.assemble(assemblyRequest, archive.sign(assemblyRequest));
+
+        assertEquals(matter.version().revision(), assembled.matterRevision());
+        assertEquals(MemoryCanonicalHash.contentHash(matter.goal()), assembled.objectiveHash());
+        assertEquals("preference-selection-v1", assembled.scoringVersion());
+        assertEquals(List.of("budget"), assembled.matches().stream().map(MemoryPreferenceMatch::dimensionId).toList());
+        var match = assembled.matches().get(0);
+        assertEquals("100万", match.effectiveState().value().scalar());
+        assertEquals(.8, match.score().confidence());
+        assertEquals(1.0, match.score().activation());
+        assertTrue(match.score().relevance() > 0);
+        assertTrue(match.score().timeWeight() > 0 && match.score().timeWeight() <= 1);
+        assertEquals(assembled.asOf(), match.score().asOf());
+        assertEquals(transitionsBefore, archive.count("memory_preference_transition"),
+                "selection and scoring must not create evidence");
+
+        var limitedRequest = archive.request(MemoryV2Contract.OPERATION_ASSEMBLE_PREFERENCES,
+                e -> new MemoryPreferenceAssemblyRequest(e, CONTEXT, matter.matterId(), 1));
+        var limited = preferences.assemble(limitedRequest, archive.sign(limitedRequest));
+        assertTrue(limited.budgetLimited());
+        assertTrue(limited.matches().isEmpty());
+        assertEquals(transitionsBefore, archive.count("memory_preference_transition"));
+
+        archive.service = new MemoryArchiveService(archive.store, archive.security, archive.sources, preferences, archive.transactions);
+        var boundary = archive.request(MemoryV2Contract.OPERATION_BOUNDARY,
+                e -> new MemoryBoundaryRequest(e, CONTEXT, archive.read().version(), List.of(), assembled.selections()));
+        assertTrue(archive.service.checkBoundary(boundary, archive.sign(boundary)).unchanged());
+
+        var exceptionSource = fixture.event(new MemoryMatterIntent(MemoryMatterIntent.Action.CONTINUE,
+                matter.matterId(), matter.version().revision(), null));
+        Instant exceptionFrom = Instant.now().minusSeconds(1).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        Instant exceptionUntil = Instant.now().plusSeconds(60).truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        var exception = new MemoryPreferenceAssessment("budget", PreferenceTransition.Assessment.PREFERENCE,
+                PreferenceTransition.Change.TEMPORARY_EXCEPTION, PreferenceTransition.Polarity.AFFIRMATIVE,
+                MemoryJsonValue.string("120万"), "仅当前事项", matter.matterId(), exceptionFrom, exceptionUntil, List.of(), .85, "fixture-v1",
+                new MemorySourceDependency(exceptionSource.source(), null));
+        var exceptionWrite = archive.request(MemoryV2Contract.OPERATION_PREFERENCE_WRITE,
+                e -> new MemoryPreferenceWriteRequest(e, CONTEXT, 1, exception));
+        preferences.submit(exceptionWrite, archive.sign(exceptionWrite));
+        var exceptionRequest = archive.request(MemoryV2Contract.OPERATION_ASSEMBLE_PREFERENCES,
+                e -> new MemoryPreferenceAssemblyRequest(e, CONTEXT, matter.matterId(), 800));
+        var exceptionAssembly = preferences.assemble(exceptionRequest, archive.sign(exceptionRequest));
+        assertEquals("120万", exceptionAssembly.matches().get(0).effectiveState().value().scalar());
+        assertFalse(exceptionAssembly.matches().get(0).effectiveState().exceptionTransitionIds().isEmpty());
+        var exceptionBoundary = archive.request(MemoryV2Contract.OPERATION_BOUNDARY,
+                e -> new MemoryBoundaryRequest(e, CONTEXT, archive.read().version(), List.of(), exceptionAssembly.selections()));
+        assertTrue(archive.service.checkBoundary(exceptionBoundary, archive.sign(exceptionBoundary)).unchanged());
+
+        var staleBoundary = archive.request(MemoryV2Contract.OPERATION_BOUNDARY,
+                e -> new MemoryBoundaryRequest(e, CONTEXT, archive.read().version(), List.of(), assembled.selections()));
+        code(MemoryErrorCode.VERSION_CONFLICT, () -> archive.service.checkBoundary(staleBoundary, archive.sign(staleBoundary)));
+
+        var withdrawal = archive.request(MemoryV2Contract.OPERATION_WITHDRAW,
+                e -> new MemoryWithdrawalRequest(e, CONTEXT, exceptionSource.source().sourceEventId(), false));
+        archive.service.withdrawSource(withdrawal, archive.sign(withdrawal));
+        var revokedBoundary = archive.request(MemoryV2Contract.OPERATION_BOUNDARY,
+                e -> new MemoryBoundaryRequest(e, CONTEXT, archive.read().version(), List.of(), exceptionAssembly.selections()));
+        code(MemoryErrorCode.VERSION_CONFLICT, () -> archive.service.checkBoundary(revokedBoundary, archive.sign(revokedBoundary)));
+    }
+
     @Test void stableBlockPreservesNegativePolarityExactSourceAndIdempotentReceipt() throws Exception {
         var f = new Preferences(); var source = message(1, "do not exceed budget"); f.append(List.of(source));
         var original = f.candidate(source, "100", PreferenceTransition.Change.OBSERVATION, List.of());

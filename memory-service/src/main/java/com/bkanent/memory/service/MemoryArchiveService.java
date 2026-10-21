@@ -22,13 +22,22 @@ public class MemoryArchiveService {
     private final MemoryArchiveStore store;
     private final MemoryV2RequestSecurity security;
     private final MemorySourceAuthorizer sources;
+    private final PreferenceHistoryService preferences;
     private final TransactionTemplate tx;
 
     public MemoryArchiveService(MemoryArchiveStore store, MemoryV2RequestSecurity security,
                                 MemorySourceAuthorizer sources, PlatformTransactionManager transactionManager) {
+        this(store, security, sources, null, transactionManager);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public MemoryArchiveService(MemoryArchiveStore store, MemoryV2RequestSecurity security,
+                                MemorySourceAuthorizer sources, PreferenceHistoryService preferences,
+                                PlatformTransactionManager transactionManager) {
         this.store = store;
         this.security = security;
         this.sources = sources;
+        this.preferences = preferences;
         tx = new TransactionTemplate(transactionManager);
         tx.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
         tx.setTimeout(5);
@@ -357,15 +366,21 @@ public class MemoryArchiveService {
         transaction(() -> {
             store.conversation(request.contextKey());
             sources.requireCurrentMetadata(request.contextKey(), request.dependencies());
+            if (!request.preferenceSelections().isEmpty()) {
+                require(preferences != null && preferences.selectionsCurrent(request.contextKey(), request.preferenceSelections()),
+                        MemoryErrorCode.VERSION_CONFLICT);
+            }
             return null;
         });
         security.revalidate(request, proof, Long.parseLong(request.contextKey().ownerId()), MemoryV2Contract.OPERATION_BOUNDARY);
         return transaction(() -> {
             var conversation = store.conversation(request.contextKey());
             sources.requireCurrentMetadata(request.contextKey(), request.dependencies());
+            boolean preferencesUnchanged = request.preferenceSelections().isEmpty()
+                    || preferences != null && preferences.selectionsCurrent(request.contextKey(), request.preferenceSelections());
             MemoryV2RequestSecurity.requireUnexpired(proof);
             var current = store.version(conversation);
-            return new MemoryBoundaryResponse(current, current.equals(request.adoptedVersion()));
+            return new MemoryBoundaryResponse(current, current.equals(request.adoptedVersion()) && preferencesUnchanged);
         });
     }
 

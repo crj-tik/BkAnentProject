@@ -28,6 +28,10 @@ public interface MemoryV2RpcService {
 
     MemoryPreferenceQueryResponse searchPreferences(MemoryPreferenceQueryRequest request, MemoryRequestProof proof) throws MemoryException;
 
+    default MemoryPreferenceAssemblyResponse assemblePreferences(MemoryPreferenceAssemblyRequest request, MemoryRequestProof proof) throws MemoryException {
+        throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+    }
+
     MemoryExperienceQueryResponse searchExperiences(MemoryExperienceQueryRequest request, MemoryRequestProof proof) throws MemoryException;
 
     MemoryGrantResponse getGrant(MemoryGrantRequest request, MemoryRequestProof proof) throws MemoryException;

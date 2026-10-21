@@ -727,3 +727,13 @@
 **根因**：引用只是定位信息，不能授权其他 owner/domain/Agent/conversation。接口不接受扩大范围字段，matterId 只在已授权 context 中缩小匹配。Memory 先读派生定位与依赖元数据、检查当前来源后再开正文；Agent 补查后及输出前再次检查，并将消费来源存入 tool/assistant 的派生依赖，撤回后不能通过旧 checkpoint 继续输出。输出和依赖超预算明确失败，不静默删减证据。其他 context 的显式共享入口仍由后续共享任务接入。
 
 **代码位置**：SupervisorMemoryReferentResolver、SupervisorMemoryLifecycle.resolveReference/beforeOutput、MemoryArchiveService.queryEntities/readMatters；关联 LR-55/61/67、KI-144；change 6.6。
+
+## LR-73 事项偏好装配固定身份、评估时点与来源版本
+
+**结论**：偏好装配由已签名的 Memory RPC 按当前 owner、domain、agent 和事项读取；主体固定为 owner，scope 固定为该 domain+agent 的私有 scope。目标匹配只使用部署注册的稳定维度与别名，不调用模型或通用 RAG。服务端为一次装配冻结同一 `asOf`，分别返回 relevance、confidence、activation 和 time weight，并在 token 预算内选择当前有效值/事项例外。既有 `PreferenceBlockKey` 的完整逻辑键及 blockId 不变。
+
+**根因**：事项标签只能缩小上下文适用范围，不能扩大主体权限或变成业务路由。只按维度相关匹配可能混入不相干偏好；使用模型检索会额外增加未授权语义和调用边界。把选择结果当永久缓存又可能让修正、撤回或事项版本变化后的旧值继续进入 prompt。因此每个选择附 block revision/content hash、authorization revision、matter revision 与有效状态 hash；Memory 先核来源元数据再读正文，Agent 在入模、工具调用和输出前重新核验。复用键覆盖 context、事项 revision、当前输入事件；新输入重新装配，同事项同一输入的工具/模型轮次复用。
+
+**运行边界**：注入内容标记为数据而非指令，当前明确请求、政策和授权优先。无匹配、预算受限、可选记忆不可用分别表达；认证/授权错误不降级。删除/撤回使旧选择失效；当前错误或变更后的偏好只能在下一次可核验装配中替换，不能把后台尚未归并的修正说成已持久更新。当前仅支持 owner-self 的 domain+agent 私有偏好，不支持其他主体、共享组、经验装配或向量语义检索。
+
+**代码位置**：`MemoryPreferenceAssemblyRequest/Response/Match/SelectionRef`、`MemoryV2Contract`、`PreferenceSelectionPolicy`、`MemoryPreferenceProperties`、`PreferenceHistoryService.assemble/selectionsCurrent`、`MemoryArchiveService.checkBoundary`、`SupervisorMemoryLifecycle.assemblePreferences/modelMessages/beforeTools/beforeOutput`；关联 LR-68/69/70/71/72、KI-140/141/142/144；change 7.5/7.6。

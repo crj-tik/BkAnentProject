@@ -36,7 +36,7 @@ class MemoryV2RpcExceptionEnvelopeTest {
             URL context = URL.valueOf("dubbo://127.0.0.1:20898?serialization=fastjson2").setScopeModel(module);
             Serialization serialization = CodecSupport.getSerialization(context);
 
-            assertThat(MemoryV2RpcService.class.getDeclaredMethods()).hasSize(15).allSatisfy(method ->
+            assertThat(MemoryV2RpcService.class.getDeclaredMethods()).hasSize(16).allSatisfy(method ->
                     assertThat(Arrays.asList((Class<?>[]) method.getExceptionTypes()))
                             .containsExactly(MemoryException.class));
             assertThat(MemoryV2RpcService.CONTRACT_VERSION).isEqualTo(MemoryV2Contract.VERSION);

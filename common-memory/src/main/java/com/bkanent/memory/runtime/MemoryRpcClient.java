@@ -38,7 +38,12 @@ public final class MemoryRpcClient {
     }
 
     public MemoryBoundaryResponse check(MemoryWorkingSetResponse snapshot, java.util.List<MemorySourceDependency> dependencies) {
-        return invoke(MemoryV2Contract.OPERATION_BOUNDARY, e -> new MemoryBoundaryRequest(e, snapshot.contextKey(), snapshot.version(), dependencies), rpc::checkBoundary);
+        return check(snapshot, dependencies, List.of());
+    }
+
+    public MemoryBoundaryResponse check(MemoryWorkingSetResponse snapshot, java.util.List<MemorySourceDependency> dependencies,
+                                        java.util.List<MemoryPreferenceSelectionRef> preferenceSelections) {
+        return invoke(MemoryV2Contract.OPERATION_BOUNDARY, e -> new MemoryBoundaryRequest(e, snapshot.contextKey(), snapshot.version(), dependencies, preferenceSelections), rpc::checkBoundary);
     }
 
     public MemoryPreferenceWriteResponse submitPreference(MemoryContextKey context, long expectedRevision, MemoryPreferenceAssessment candidate) {
@@ -47,6 +52,11 @@ public final class MemoryRpcClient {
 
     public MemoryPreferenceDetailResponse preferenceHistory(MemoryContextKey context, String blockId, PreferenceHistoryCursor cursor, int limit, Instant asOf, String matterId) {
         return invoke(MemoryV2Contract.OPERATION_PREFERENCE_DETAIL, e -> new MemoryPreferenceDetailRequest(e, context, blockId, cursor, limit, asOf, matterId), rpc::readPreferenceHistory);
+    }
+
+    public MemoryPreferenceAssemblyResponse assemblePreferences(MemoryContextKey context, String matterId, int tokenBudget) {
+        return invoke(MemoryV2Contract.OPERATION_ASSEMBLE_PREFERENCES,
+                e -> new MemoryPreferenceAssemblyRequest(e, context, matterId, tokenBudget), rpc::assemblePreferences);
     }
 
     public MemoryWriterResponse writer(MemoryContextKey context, MemoryWriterRequest.Action action, String runId, long fence) {

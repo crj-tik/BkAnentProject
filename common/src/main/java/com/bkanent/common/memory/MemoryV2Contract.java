@@ -12,7 +12,7 @@ public final class MemoryV2Contract {
     public static final int VERSION = 2;
     public static final String INTERFACE_NAME = "com.bkanent.common.memory.MemoryV2RpcService";
     public static final String DUBBO_GROUP = "bkanent-memory";
-    public static final String DUBBO_SERVICE_VERSION = "2.0.0";
+    public static final String DUBBO_SERVICE_VERSION = "2.1.0";
     public static final String MEMORY_AUDIENCE = "memory-service";
 
     public static final String OPERATION_WORKING_SET = "memory.working-set.read";
@@ -30,12 +30,14 @@ public final class MemoryV2Contract {
     public static final String OPERATION_PREFERENCE_WRITE = "memory.preference.assessment.submit";
     public static final String OPERATION_PREFERENCE_DETAIL = "memory.preference.history.read";
     public static final String OPERATION_MATTER_WRITE = "memory.matter.transition";
+    public static final String OPERATION_ASSEMBLE_PREFERENCES = "memory.preferences.assemble";
 
     private static final Set<String> OPERATIONS = Set.of(
             OPERATION_WORKING_SET, OPERATION_RECEIVE_PERMIT, OPERATION_DELIVER_MESSAGES,
             OPERATION_SUBMIT_SUMMARY, OPERATION_QUERY_MATTERS, OPERATION_QUERY_ENTITIES,
             OPERATION_SEARCH_PREFERENCES, OPERATION_SEARCH_EXPERIENCES, OPERATION_GET_GRANT, OPERATION_WITHDRAW,
-            OPERATION_WRITER, OPERATION_BOUNDARY, OPERATION_PREFERENCE_WRITE, OPERATION_PREFERENCE_DETAIL, OPERATION_MATTER_WRITE);
+            OPERATION_WRITER, OPERATION_BOUNDARY, OPERATION_PREFERENCE_WRITE, OPERATION_PREFERENCE_DETAIL,
+            OPERATION_MATTER_WRITE, OPERATION_ASSEMBLE_PREFERENCES);
     private static final String HASH_PATTERN = "[0-9a-f]{64}";
 
     private MemoryV2Contract() { }

@@ -51,4 +51,13 @@ public class ToolLoopState {
     public String memoryMatterStatus;
     public String memoryMatterIntentEvent;
     public String memoryClosureMatterId;
+    public String memoryPreferenceMatterId;
+    public long memoryPreferenceMatterRevision;
+    public String memoryPreferenceContextHash;
+    public String memoryPreferenceInputEvent;
+    public String memoryPreferenceStatus;
+    public java.time.Instant memoryPreferenceAsOf;
+    public String memoryPreferenceObjectiveHash;
+    public java.util.List<com.bkanent.common.memory.MemoryPreferenceMatch> memoryPreferenceMatches = new java.util.ArrayList<>();
+    public java.util.List<com.bkanent.common.memory.MemoryPreferenceSelectionRef> adoptedPreferenceSelections = new java.util.ArrayList<>();
 }

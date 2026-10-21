@@ -137,8 +137,8 @@ public class PreferenceProcessingWorker {
                 // Stable block and source order for the entire microbatch. All dimensions and job receipts commit together.
                 List<Item> items=new ArrayList<>();
                 for(var pending:selected) for(var candidate:pending.result().candidates()) items.add(new Item(pending.source(),candidate));
-                items.sort(Comparator.comparing((Item i) -> MemoryCanonicalHash.contentHash(new PreferenceBlockKey(i.source().context().ownerId(),i.source().context().ownerId(),
-                        MemoryScope.privateScope(i.source().context().domainId(),i.source().context().agentId()),i.candidate().dimensionId())))
+                items.sort(Comparator.comparing((Item i) -> new PreferenceBlockKey(i.source().context().ownerId(),i.source().context().ownerId(),
+                        MemoryScope.privateScope(i.source().context().domainId(),i.source().context().agentId()),i.candidate().dimensionId()).identityHash())
                         .thenComparing(i -> key(i.source().context())).thenComparingLong(i -> i.candidate().source().source().sourceSequence()));
                 if(properties.getMode()==MemoryPreferenceProcessingProperties.Mode.PUBLISH) {
                     for(var item:items) preferences.append(item.source().context(),preferences.linkWithinConversation(item.candidate()),item.source().caller(),null);

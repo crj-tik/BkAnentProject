@@ -79,6 +79,64 @@ class SupervisorMemoryIntegrationTest {
             assertEquals(0, f.remote.count("transitionMatter")); verifyNoInteractions(f.model);
         }
     }
+    @Test void matterPreferenceIsInjectedAndRecheckedBeforeFinalOutput() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.remote.preferenceValue = "100万";
+            when(f.model.call(anyList(), anyList())).thenAnswer(call -> {
+                f.inputs.add(call.getArgument(0));
+                f.remote.preferenceRevision++;
+                return new AssistantMessage("stale answer using an outdated preference");
+            });
+            var response = f.execute("preference", "开始买房", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算"));
+            assertEquals("FAILED", response.status());
+            assertEquals("MEMORY_VERSION_CONFLICT", response.governanceMetadata().get("errorCode"));
+            assertEquals(1, f.remote.count("assemblePreferences"));
+            assertTrue(f.inputs.get(0).toString().contains("100万"));
+            for (String json : f.jdbc.queryForList("SELECT snapshot_json FROM agent_workflow_checkpoint", String.class)) {
+                assertFalse(json.contains("stale answer using an outdated preference"));
+            }
+        }
+    }
+    @Test void sameMatterReusesSelectionAcrossModelToolRounds() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.remote.preferenceValue = "100万";
+            f.localToolThenAnswer();
+            var response = f.execute("preference-refresh", "开始买房", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算"));
+            assertEquals("COMPLETED", response.status(), response.governanceMetadata().toString());
+            assertEquals(1, f.remote.count("assemblePreferences"), "the same valid selection is reused across model/tool rounds");
+            assertTrue(f.inputs.get(0).toString().contains("100万"));
+            assertTrue(f.inputs.get(1).toString().contains("100万"));
+        }
+    }
+    @Test void stalePreferenceCannotAuthorizeAToolResultAfterThePreferenceChangesDuringExecution() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.remote.preferenceValue = "100万";
+            f.localToolThenAnswer();
+            f.onToolCall = () -> { f.remote.preferenceRevision++; f.remote.preferenceValue = "200万"; };
+            var response = f.execute("preference-change-during-tool", "开始买房", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算"));
+            assertEquals("FAILED", response.status());
+            assertEquals("MEMORY_VERSION_CONFLICT", response.governanceMetadata().get("errorCode"));
+            assertEquals(1, f.remote.count("assemblePreferences"));
+            assertEquals(1, f.effects.get());
+            assertTrue(((List<?>) response.governanceMetadata().get("calls")).isEmpty());
+        }
+    }
+    @Test void nextUserTurnAssemblesTheCurrentPreferenceForTheSameActiveMatter() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.remote.preferenceValue = "100万";
+            when(f.model.call(anyList(), anyList())).thenAnswer(call -> {
+                f.inputs.add(call.getArgument(0));
+                return new AssistantMessage("done");
+            });
+            assertEquals("COMPLETED", f.execute("preference-turn-1", "开始买房", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算")).status());
+            f.remote.preferenceRevision++;
+            f.remote.preferenceValue = "200万";
+            assertEquals("COMPLETED", f.execute("preference-turn-2", "预算调整").status());
+            assertEquals(2, f.remote.count("assemblePreferences"));
+            assertTrue(f.inputs.get(0).toString().contains("100万"));
+            assertTrue(f.inputs.get(1).toString().contains("200万"));
+        }
+    }
     @Test void referenceControlUsesMemoryRecallNodeAndNoBusinessExecution() throws Exception {
         try (Fixture f = new Fixture()) {
             when(f.model.call(anyList(), anyList())).thenAnswer(inv -> {
@@ -522,6 +580,8 @@ class SupervisorMemoryIntegrationTest {
         boolean loseToolReceipt;
         boolean revoked;
         boolean unavailable;
+        String preferenceValue;
+        long preferenceRevision = 1;
         final Map<String, MemoryMatterWriteResponse> matterReceipts = new HashMap<>();
         final MemoryV2RpcService rpc = (MemoryV2RpcService) Proxy.newProxyInstance(getClass().getClassLoader(), new Class[]{MemoryV2RpcService.class}, (proxy, method, args) -> {
             String name = method.getName();
@@ -542,6 +602,23 @@ class SupervisorMemoryIntegrationTest {
                 }
                 case "readWorkingSet" -> snapshot;
                 case "queryEntities" -> new MemoryEntityQueryResponse(List.of(), null, false);
+                case "assemblePreferences" -> {
+                    var assembly = (MemoryPreferenceAssemblyRequest) request;
+                    var matter = snapshot.matters().stream().filter(value -> value.matterId().equals(assembly.matterId())).findFirst().orElseThrow();
+                    Instant asOf = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+                    List<MemoryPreferenceMatch> matches = List.of();
+                    if (preferenceValue != null) {
+                        var evidence = matter.dependencies().get(0);
+                        var state = new PreferenceCurrentState(PreferenceCurrentState.Status.EFFECTIVE, MemoryJsonValue.string(preferenceValue),
+                                List.of("transition-fixture"), List.of(), List.of(), .8, 1.0, asOf, List.of(evidence));
+                        var selection = new MemoryPreferenceSelectionRef("p-fixture", preferenceRevision, "1".repeat(64), 1,
+                                matter.matterId(), matter.version().revision(), MemoryCanonicalHash.contentHash(state));
+                        var score = new MemorySelectionScore(.9, .8, 1.0, 1.0, asOf, "preference-selection-v1");
+                        matches = List.of(new MemoryPreferenceMatch("budget", state, score, selection));
+                    }
+                    yield new MemoryPreferenceAssemblyResponse(matter.matterId(), matter.version().revision(),
+                            MemoryCanonicalHash.contentHash(matter.goal()), asOf, "preference-selection-v1", matches, false);
+                }
                 case "transitionMatter" -> {
                     var write = (MemoryMatterWriteRequest) request;
                     String event = write.evidence().source().sourceEventId();
@@ -560,6 +637,8 @@ class SupervisorMemoryIntegrationTest {
                 case "checkBoundary" -> {
                     if (revoked) throw new MemoryException(MemoryErrorCode.WITHDRAWN);
                     var boundary = (MemoryBoundaryRequest) request;
+                    if (boundary.preferenceSelections().stream().anyMatch(selection -> selection.revision() != preferenceRevision))
+                        throw new MemoryException(MemoryErrorCode.VERSION_CONFLICT);
                     yield new MemoryBoundaryResponse(snapshot.version(), snapshot.version().equals(boundary.adoptedVersion()));
                 }
                 case "requestReceivePermit" -> {

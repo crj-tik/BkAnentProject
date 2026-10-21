@@ -29,7 +29,8 @@ class PreferenceHistoryMySqlTest {
         securityProperties.setTrustedCallers(Map.of("preference-fixture",caller));
         var security=new MemoryV2RequestSecurity(securityProperties,new MemoryArchiveServiceTest.AuthStub(),new MemoryV2ReplayGuard(jdbc));
         var store=new MemoryArchiveStore(jdbc,mapper); var sharing=new MemorySharingStore(jdbc,mapper); var sources=new MemorySourceAuthorizer(store,sharing,new MemoryAccessPolicy());
-        var archive=new MemoryArchiveService(store,security,sources,manager); var preferences=new PreferenceHistoryService(store,security,sources,new MemoryPreferenceProperties(),manager);
+        var preferences=new PreferenceHistoryService(store,security,sources,new MemoryPreferenceProperties(),manager);
+        var archive=new MemoryArchiveService(store,security,sources,preferences,manager);
         String blockId=null;
         try {
             var original=PreferenceHistoryServiceTest.otherMessage(context,"mysql-pref-event","exclude expensive");
@@ -41,12 +42,38 @@ class PreferenceHistoryMySqlTest {
                     MemoryJsonValue.number("100"),null,null,null,null,List.of(),.8,"fixture-v1",new MemorySourceDependency(original.source(),null));
             var write=request(MemoryV2Contract.OPERATION_PREFERENCE_WRITE,e -> new MemoryPreferenceWriteRequest(e,context,0,candidate));
             var first=preferences.submit(write,sign(write,fixtureKey,secret)); blockId=first.blockId(); assertEquals(first,preferences.submit(write,sign(write,fixtureKey,secret)));
+
+            var writerRequest=request(MemoryV2Contract.OPERATION_WRITER,e -> new MemoryWriterRequest(e,context,MemoryWriterRequest.Action.ACQUIRE,"run-1",0));
+            var writer=archive.manageWriter(writerRequest,sign(writerRequest,fixtureKey,secret)).authority();
+            var intent=new MemoryMatterIntent(MemoryMatterIntent.Action.START,null,0,"买房预算");
+            var matterMessage=MemoryMatterServiceTest.message(context,2,intent);
+            var matterPermitRequest=request(MemoryV2Contract.OPERATION_RECEIVE_PERMIT,e -> new MemoryReceivePermitRequest(e,context,
+                    List.of(new MemoryReceivePermitRequest.EventSubmission(matterMessage.source().sourceEventId(),matterMessage.source().version().contentHash(),"conversation-archive")),List.of(),writer));
+            var matterPermit=archive.requestReceivePermit(matterPermitRequest,sign(matterPermitRequest,fixtureKey,secret));
+            var matterDelivery=request(MemoryV2Contract.OPERATION_DELIVER_MESSAGES,e -> new MemoryDeliveryRequest(e,context,matterMessage.association(),matterPermit.permitId(),List.of(matterMessage)));
+            archive.deliverMessages(matterDelivery,sign(matterDelivery,fixtureKey,secret));
+            var beforeMatter=request(MemoryV2Contract.OPERATION_WORKING_SET,e -> new MemoryWorkingSetRequest(e,context));
+            long expectedConversationRevision=archive.readWorkingSet(beforeMatter,sign(beforeMatter,fixtureKey,secret)).version().revision();
+            var matterRequest=request(MemoryV2Contract.OPERATION_MATTER_WRITE,e -> new MemoryMatterWriteRequest(e,context,intent,
+                    new MemorySourceDependency(matterMessage.source(),null),expectedConversationRevision,writer));
+            var matter=new MemoryMatterService(store,security,sources,manager).transition(matterRequest,sign(matterRequest,fixtureKey,secret)).matter();
+            var assemblyRequest=request(MemoryV2Contract.OPERATION_ASSEMBLE_PREFERENCES,e -> new MemoryPreferenceAssemblyRequest(e,context,matter.matterId(),800));
+            var assembled=preferences.assemble(assemblyRequest,sign(assemblyRequest,fixtureKey,secret));
+            assertEquals(List.of("budget"),assembled.matches().stream().map(MemoryPreferenceMatch::dimensionId).toList());
+            assertEquals("100",assembled.matches().get(0).effectiveState().value().scalar());
+            var latestRequest=request(MemoryV2Contract.OPERATION_WORKING_SET,e -> new MemoryWorkingSetRequest(e,context));
+            var latest=archive.readWorkingSet(latestRequest,sign(latestRequest,fixtureKey,secret));
+            var boundary=request(MemoryV2Contract.OPERATION_BOUNDARY,e -> new MemoryBoundaryRequest(e,context,latest.version(),List.of(),assembled.selections()));
+            assertTrue(archive.checkBoundary(boundary,sign(boundary,fixtureKey,secret)).unchanged());
+
             var accepted=first;
             Instant asOf=Instant.now();
             var read=request(MemoryV2Contract.OPERATION_PREFERENCE_DETAIL,e -> new MemoryPreferenceDetailRequest(e,context,accepted.blockId(),null,1,asOf,null));
             var view=preferences.read(read,sign(read,fixtureKey,secret)); assertEquals(PreferenceTransition.Polarity.NEGATIVE,view.effectiveState().polarity());
             assertEquals(PreferenceHistoryPage.Completeness.COMPLETE,view.history().completeness());
-            assertEquals(view.history().transitions().get(0).occurredAt(),MemoryArchiveStore.utcInstant(jdbc.queryForObject("SELECT accepted_at FROM memory_message_observation WHERE context_id=?",Object.class,contextId)));
+            assertEquals(view.history().transitions().get(0).occurredAt(),MemoryArchiveStore.utcInstant(jdbc.queryForObject(
+                    "SELECT accepted_at FROM memory_message_observation WHERE context_id=? AND source_event_id=?",
+                    Object.class,contextId,original.source().sourceEventId())));
             var plan=jdbc.queryForList("EXPLAIN SELECT t.transition_id FROM memory_preference_transition t JOIN memory_message_observation o "
                     + "ON o.context_id=t.source_context_id AND o.source_event_id=t.source_event_id JOIN memory_message m ON m.context_id=t.source_context_id AND m.source_event_id=t.source_event_id "
                     + "WHERE t.block_id=? AND t.introduced_revision<=? AND (o.accepted_at,t.source_context_id,m.sequence_no,t.transition_id)>(?,?,?,?) "
@@ -64,7 +91,9 @@ class PreferenceHistoryMySqlTest {
                 jdbc.update("DELETE FROM memory_preference_block WHERE block_id=? AND agent_id=?",blockId,fixture);
             }
             jdbc.update("DELETE FROM memory_receive_event WHERE permit_id IN (SELECT permit_id FROM memory_receive_permit WHERE context_id=?)",contextId);
-            for(String table:List.of("memory_message_observation","memory_receive_permit","memory_message","memory_processing_job")) jdbc.update("DELETE FROM "+table+" WHERE context_id=?",contextId);
+            for(String table:List.of("memory_matter_receipt","memory_matter_revision","memory_matter","memory_conversation_writer",
+                    "memory_message_observation","memory_receive_permit","memory_message","memory_processing_job"))
+                jdbc.update("DELETE FROM "+table+" WHERE context_id=?",contextId);
             jdbc.update("DELETE FROM memory_source_dependency WHERE target_context_id=? OR source_context_id=?",contextId,contextId);
             jdbc.update("DELETE FROM memory_conversation WHERE context_id=? AND agent_id=?",contextId,fixture);
             jdbc.update("DELETE FROM memory_v2_request_nonce WHERE key_id=?",fixtureKey);

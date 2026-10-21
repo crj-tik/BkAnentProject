@@ -65,6 +65,14 @@ public class MemoryV2RpcServiceImpl implements MemoryV2RpcService {
         throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
     }
 
+    public MemoryPreferenceAssemblyResponse assemblePreferences(MemoryPreferenceAssemblyRequest request, MemoryRequestProof proof) {
+        if (preferences == null) {
+            security.authorize(request, proof, MemoryV2Contract.OPERATION_ASSEMBLE_PREFERENCES);
+            throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+        }
+        return preferences.assemble(request, proof);
+    }
+
     public MemoryExperienceQueryResponse searchExperiences(MemoryExperienceQueryRequest request, MemoryRequestProof proof) {
         security.authorize(request, proof, MemoryV2Contract.OPERATION_SEARCH_EXPERIENCES);
         throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);

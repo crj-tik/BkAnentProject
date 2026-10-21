@@ -12,4 +12,10 @@ public record PreferenceBlockKey(String ownerId, String subjectRef, MemoryScope 
         MemoryContract.required(scope, MemoryException.Field.SCOPE);
         dimensionId = MemoryContract.id(dimensionId, MemoryException.Field.PREFERENCE);
     }
+
+    /** Stable persisted identity. */
+    public String identityHash() {
+        // Persisted block IDs are already hashes of this record. Keep that exact wire/storage identity.
+        return MemoryCanonicalHash.contentHash(this);
+    }
 }

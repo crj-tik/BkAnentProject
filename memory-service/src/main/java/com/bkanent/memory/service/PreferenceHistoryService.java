@@ -21,6 +21,7 @@ public class PreferenceHistoryService {
     private final MemoryPreferenceProperties properties;
     private final TransactionTemplate tx;
     private final PreferenceStateReducer reducer = new PreferenceStateReducer();
+    private final PreferenceSelectionPolicy selector = new PreferenceSelectionPolicy();
     private static final int MAX_HISTORY = 10000;
     private static final int MAX_HISTORY_CHARS = 8 * 1024 * 1024;
     private record View(MemoryPreferenceDetailResponse response, List<MemorySourceDependency> sources) { }
@@ -40,13 +41,144 @@ public class PreferenceHistoryService {
         });
     }
 
+    /** Reads only owner/domain/agent-private current values and pins each selection for output-time reauthorization. */
+    public MemoryPreferenceAssemblyResponse assemble(MemoryPreferenceAssemblyRequest request, MemoryRequestProof proof) {
+        long owner = security.authorize(request, proof, MemoryV2Contract.OPERATION_ASSEMBLE_PREFERENCES);
+        Instant asOf = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        var snapshot = transaction(() -> assembleAt(request, asOf));
+        security.revalidate(request, proof, owner, MemoryV2Contract.OPERATION_ASSEMBLE_PREFERENCES);
+        return transaction(() -> {
+            var current = assembleAt(request, asOf);
+            require(snapshot.equals(current), MemoryErrorCode.VERSION_CONFLICT);
+            MemoryV2RequestSecurity.requireUnexpired(proof);
+            store.encode(current);
+            return current;
+        });
+    }
+
+    /** Rechecks selected block revision, source grants and current matter-effective value without accepting caller content. */
+    boolean selectionsCurrent(MemoryContextKey context, List<MemoryPreferenceSelectionRef> selections) {
+        return transaction(() -> {
+            for (var selection : selections) {
+                var block = store.one("SELECT owner_id,domain_id,agent_id,subject_ref,dimension_id,revision,authorization_revision,state "
+                        + "FROM memory_preference_block WHERE block_id=?", selection.blockId());
+                require(block != null, MemoryErrorCode.VERSION_CONFLICT);
+                require(context.ownerId().equals(block.get("owner_id")) && context.domainId().equals(block.get("domain_id"))
+                        && context.agentId().equals(block.get("agent_id")) && context.ownerId().equals(block.get("subject_ref")), MemoryErrorCode.FORBIDDEN);
+                if (!"ACTIVE".equals(block.get("state")) || number(block, "revision") != selection.revision()
+                        || number(block, "authorization_revision") != selection.authorizationRevision()) return false;
+                var matter = store.one("SELECT content_revision,state FROM memory_matter WHERE context_id=? AND matter_id=?", key(context), selection.matterId());
+                if (matter == null || !Set.of("ACTIVE", "REOPENED").contains(matter.get("state"))
+                        || number(matter, "content_revision") != selection.matterRevision()) return false;
+                var version = store.one("SELECT content_hash FROM memory_preference_revision WHERE block_id=? AND revision=?",
+                        selection.blockId(), selection.revision());
+                if (version == null || !selection.contentHash().equals(version.get("content_hash"))) return false;
+                List<MemorySourceDependency> sources = dependencies(selection.blockId(), selection.revision());
+                checkSources(context, sources); // checks current source/grant metadata before reading derived bodies
+                var snapshotRow = store.one("SELECT snapshot_json FROM memory_preference_revision WHERE block_id=? AND revision=?",
+                        selection.blockId(), selection.revision());
+                require(snapshotRow != null && snapshotRow.get("snapshot_json") != null, MemoryErrorCode.WITHDRAWN);
+                var snapshot = store.decode((String) snapshotRow.get("snapshot_json"), PreferenceBlock.class);
+                require(snapshot.blockId().equals(selection.blockId()) && snapshot.version().revision() == selection.revision()
+                        && snapshot.version().contentHash().equals(selection.contentHash()) && blockHash(snapshot).equals(selection.contentHash()),
+                        MemoryErrorCode.MEMORY_UNAVAILABLE);
+                var history = transitions(selection.blockId(), selection.revision());
+                var effective = reducer.reduce(history, Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS), selection.matterId());
+                if (effective.status() != PreferenceCurrentState.Status.EFFECTIVE
+                        || !MemoryCanonicalHash.contentHash(effective).equals(selection.effectiveStateHash())) return false;
+            }
+            return true;
+        });
+    }
+
+    private MemoryPreferenceAssemblyResponse assembleAt(MemoryPreferenceAssemblyRequest request, Instant asOf) {
+        MemoryContextKey context = request.contextKey();
+        store.conversation(context);
+        var matterHeader = store.one("SELECT content_revision,state FROM memory_matter WHERE context_id=? AND matter_id=?",
+                key(context), request.matterId());
+        require(matterHeader != null && Set.of("ACTIVE", "REOPENED").contains(matterHeader.get("state")), MemoryErrorCode.NOT_FOUND);
+        long matterRevision = number(matterHeader, "content_revision");
+        var matterDependencies = dependenciesForTarget(context, "MATTER", request.matterId(), matterRevision);
+        sources.requireCurrentMetadata(context, matterDependencies);
+        var matterBody = store.one("SELECT payload_json FROM memory_matter WHERE context_id=? AND matter_id=? AND content_revision=? AND state=?",
+                key(context), request.matterId(), matterRevision, matterHeader.get("state"));
+        require(matterBody != null && matterBody.get("payload_json") != null, MemoryErrorCode.VERSION_CONFLICT);
+        var matter = store.decode((String) matterBody.get("payload_json"), MemoryMatter.class);
+        require(matter.contextKey().equals(context) && matter.matterId().equals(request.matterId())
+                && matter.version().revision() == matterRevision && matter.state().name().equals(matterHeader.get("state"))
+                && MemoryCanonicalHash.matterHash(matter).equals(matter.version().contentHash())
+                && new HashSet<>(matterDependencies).equals(new HashSet<>(matter.dependencies())), MemoryErrorCode.MEMORY_UNAVAILABLE);
+
+        // The block scope and subject are derived from the authenticated context. No request/model field can widen them.
+        var headers = store.jdbc.queryForList("SELECT block_id,revision,authorization_revision,subject_ref,dimension_id,state "
+                + "FROM memory_preference_block WHERE owner_id=? AND domain_id=? AND agent_id=? AND subject_ref=? AND state='ACTIVE' "
+                + "ORDER BY block_id LIMIT ?", context.ownerId(), context.domainId(), context.agentId(), context.ownerId(),
+                Math.max(1, properties.getDimensions().size() + 1));
+        require(headers.size() <= properties.getDimensions().size(), MemoryErrorCode.CONTEXT_BUDGET_EXCEEDED);
+        List<MemoryPreferenceMatch> candidates = new ArrayList<>();
+        String objectiveHash = MemoryCanonicalHash.contentHash(matter.goal());
+        for (var header : headers) {
+            String dimension = (String) header.get("dimension_id");
+            if (!properties.getDimensions().contains(dimension)) continue;
+            var relevance = selector.relevance(matter.goal(), properties.aliasesFor(dimension));
+            if (relevance.isEmpty()) continue;
+            String blockId = (String) header.get("block_id"); long revision = number(header, "revision");
+            long authorizationRevision = number(header, "authorization_revision");
+            require(context.ownerId().equals(header.get("subject_ref")) && "ACTIVE".equals(header.get("state")), MemoryErrorCode.FORBIDDEN);
+            PreferenceBlockKey expectedKey = new PreferenceBlockKey(context.ownerId(), context.ownerId(),
+                    MemoryScope.privateScope(context.domainId(), context.agentId()), dimension);
+            require(blockId.equals("p-" + expectedKey.identityHash()), MemoryErrorCode.FORBIDDEN);
+            var dependencies = dependencies(blockId, revision);
+            checkSources(context, dependencies);
+            var snapshotRow = store.one("SELECT content_hash,snapshot_json FROM memory_preference_revision WHERE block_id=? AND revision=?",
+                    blockId, revision);
+            require(snapshotRow != null && snapshotRow.get("snapshot_json") != null, MemoryErrorCode.VERSION_CONFLICT);
+            var block = store.decode((String) snapshotRow.get("snapshot_json"), PreferenceBlock.class);
+            require(block.blockId().equals(blockId) && block.version().revision() == revision
+                    && block.version().contentHash().equals(snapshotRow.get("content_hash"))
+                    && blockHash(block).equals(snapshotRow.get("content_hash")) && block.key().equals(expectedKey), MemoryErrorCode.MEMORY_UNAVAILABLE);
+            var history = transitions(blockId, revision);
+            var effective = reducer.reduce(history, asOf, request.matterId());
+            if (effective.status() != PreferenceCurrentState.Status.EFFECTIVE) continue;
+            double timeWeight = selector.timeWeight(effective.lastObservedAt(), asOf, properties.getHalfLifeDays());
+            var score = new MemorySelectionScore(relevance.getAsDouble(), effective.confidence(), effective.activation(),
+                    timeWeight, asOf, PreferenceSelectionPolicy.VERSION);
+            var ref = new MemoryPreferenceSelectionRef(blockId, revision, (String) snapshotRow.get("content_hash"),
+                    authorizationRevision, request.matterId(), matterRevision, MemoryCanonicalHash.contentHash(effective));
+            candidates.add(new MemoryPreferenceMatch(dimension, effective, score, ref));
+        }
+        candidates.sort(Comparator.comparingDouble((MemoryPreferenceMatch match) -> weighted(match.score())).reversed()
+                .thenComparing(MemoryPreferenceMatch::dimensionId));
+        List<MemoryPreferenceMatch> selected = new ArrayList<>();
+        int usedTokens = 0; boolean budgetLimited = false;
+        for (var candidate : candidates) {
+            int tokens = selector.estimatedTokens(store.encode(candidate).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            if (tokens <= request.tokenBudget() - usedTokens) { selected.add(candidate); usedTokens += tokens; }
+            else budgetLimited = true;
+        }
+        return new MemoryPreferenceAssemblyResponse(request.matterId(), matterRevision, objectiveHash, asOf,
+                PreferenceSelectionPolicy.VERSION, selected, budgetLimited);
+    }
+
+    private static double weighted(MemorySelectionScore score) {
+        return score.relevance() * score.confidence() * score.activation() * score.timeWeight();
+    }
+
+    private List<MemorySourceDependency> dependenciesForTarget(MemoryContextKey context, String kind, String target, long revision) {
+        var rows = store.jdbc.query("SELECT dependency_json FROM memory_source_dependency WHERE target_context_id=? AND target_kind=? "
+                        + "AND target_id=? AND target_revision=? LIMIT 501",
+                (rs, n) -> store.decode(rs.getString(1), MemorySourceDependency.class), key(context), kind, target, revision);
+        require(!rows.isEmpty() && rows.size() <= 500, MemoryErrorCode.MEMORY_UNAVAILABLE);
+        return rows;
+    }
+
     /** Package-private: only the leased job consumer calls this inside its exact-evidence transaction. */
     MemoryPreferenceWriteResponse append(MemoryContextKey context, MemoryPreferenceAssessment candidate, String sourceCaller, Long expectedRevision) {
             requireTransaction();
             require(properties.getDimensions().contains(candidate.dimensionId()), MemoryErrorCode.INVALID_EXTRACTION);
             safe(candidate.value()); safeText(candidate.applicability());
             var blockKey = new PreferenceBlockKey(context.ownerId(), context.ownerId(), MemoryScope.privateScope(context.domainId(), context.agentId()), candidate.dimensionId());
-            String hash = MemoryCanonicalHash.contentHash(blockKey), id = "p-" + hash;
+            String hash = blockKey.identityHash(), id = "p-" + hash;
             sources.requireCurrentMetadata(context, List.of(candidate.source()));
             var source = candidate.source().source();
             var raw = store.one("SELECT payload_json,source_caller FROM memory_message WHERE context_id=? AND source_event_id=?", key(context), source.sourceEventId());
