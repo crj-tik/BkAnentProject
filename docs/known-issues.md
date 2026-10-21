@@ -1368,14 +1368,14 @@
 
 **关联**：LR-92；change 11.2。
 
-## KI-159 [OPEN·P1] Memory v2 caller 与领域结果发布开关未接入Compose
+## KI-159 [FIXED·7d41023·P1] Memory v2 caller 与领域结果发布开关未接入Compose
 
 **发现日期**：2026-10-22。Memory v2 RPC 已实现受信域结果事件和用户反馈，但 `agent-service` 的 Supervisor caller 未登记到 Memory 部署配置；各领域 `experience-outcome-publisher` 环境开关只在 Nacos YAML 中引用，没有通过 Compose 暴露到容器或 `.env.example`。因此受信调用无法完成 caller 校验，领域结果发布也无法由本地部署逐域启停。本机 `.env` 键名检查未发现 Supervisor Memory v2 signer 或领域 outcome publisher 配置；运行值保持关闭。
 
-**修复与防回归**：补充 Supervisor 的精确 `supervisor` / `supervisor-agent` caller 映射和共享签名密钥环境绑定；为七个实际受信领域 caller 增加默认关闭的 `.env.example`/Compose outcome publisher 开关。配置测试验证应用配置与 Nacos 配置都只允许显式开关逐域启用，且 Supervisor 不能发布领域结果。当前修复提交完成后补录 commit。
+**修复与防回归（7d41023）**：补充 Supervisor 的精确 `supervisor` / `supervisor-agent` caller 映射和共享签名密钥环境绑定；为七个实际受信领域 caller 增加默认关闭的 `.env.example`/Compose outcome publisher 开关。配置测试验证应用配置与 Nacos 配置都只允许显式开关逐域启用，且 Supervisor 不能发布领域结果。
 
 **关联**：LR-94；change 8.2/11.1。
 
 ---
 
-**变更历史**：f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
+**变更历史**：7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
