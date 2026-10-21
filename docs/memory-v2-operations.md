@@ -53,4 +53,4 @@ Provision、索引投影和读取是独立开关。新空间准备不等于开�
 5. 只有交付与待加工队列清零后，才关闭偏好/经验加工和 RAG dispatcher。之后关闭各领域与 Supervisor 的主开关，并关闭 Memory archive 接收端。Memory 服务的 archive/worker 开关由 Compose 环境变量提供；更改 `.env` 后只在入口已停止且无在途 RPC 时更新现有 Memory 服务。无需创建测试容器。
 6. 切回原业务调用路径前，确认旧路径可用，v2 的当前授权、撤回状态与所有历程仍保留。恢复新链路时按当前版本重新执行配置与水位检查，不回放未知事件，不把完整偏好历程压成旧单值。
 
-本机 2026-10-22 回滚预检只读观察到 `bk-anent-dev` 的运行容器为 Memory、Nacos、MySQL；Memory archive、偏好处理、域投影和域搜索均为关闭，经验开关未设置且按默认关闭，Supervisor 与领域 A2A 服务未运行。`agent_memory_delivery`、`memory_processing_job` 和经验事件收件表均为空；RAG outbox 117 项全部为 `APPLIED`。因此本机当前没有启用的入口或待排空队列，本轮只验证配置/fixture，不启动或重启服务，也不把无切流需求的静态状态记作真实回滚演练通过。
+本机 2026-10-22 回滚预检只读观察到 `bk-anent-dev` 的运行容器为 Memory、Nacos、MySQL；Memory archive、偏好处理、域投影和域搜索均为关闭，经验开关未设置且按默认关闭，Supervisor 与领域 A2A 服务未运行。`agent_memory_delivery`、`memory_processing_job` 和经验事件收件表均为空；RAG outbox 117 项全部为 `APPLIED`。后续最小联机复核按 Compose 默认设置重建共享服务镜像（23 个模块打包成功），但只启动 `agent-service`，复用 Memory、MySQL、Nacos，另启动其依赖 Redis 与 RocketMQ NameServer；将 `agent-service.yaml` 单独发布到本机 Nacos 并读回校验，替换后的 Agent readiness 返回 `UP`。Agent Memory 与 Memory archive、加工、域投影/搜索、RAG dispatcher 仍关闭，领域 A2A 消费者保持停止，没有真实入口或待排空工作，因此不能执行真实切流/排空演练，也不把静态关闭状态记作演练通过。
