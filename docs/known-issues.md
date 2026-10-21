@@ -1290,6 +1290,14 @@
 
 **修复与防回归**：`beforeAgent`/`afterAgent` 显式映射 A2A `RagException`，认证失败、过期和拒绝均失败关闭；只有真正记忆依赖不可用才可降级。`A2aMemoryAgentHookTest.missingA2aLeaseFailsClosedBeforeTheAgentCanUseMemory` 覆盖缺少 lease 的边界。
 
+## KI-150 [FIXED·94fd089] A2A 工具结果中的空文本阻断记忆归档
+
+**现象**：工具响应以结构化 `MemoryToolResponse` 保存，消息本身的 text 为 null。事件 ID 生成将该值传入 `List.of`，抛出空值异常；若本轮已加载私有历史，AFTER_AGENT 会按记忆依赖故障失败，且工具结果未归档。
+
+**根因**：事件哈希输入包含合法空字段，但使用了拒绝 null 的不可变列表构造器。
+
+**修复与防回归**：改用允许空元素的列表构造器，并增加 `A2aMemoryAgentHookTest.listingHookColdLoadsAuthorizedHistoryAndArchivesSourceHashedToolEvidence`，覆盖冷加载、工具结果完整归档及来源哈希。提交 `94fd089` 的 9 项 A2A Hook/三域 Agent 定向测试通过。
+
 ---
 
-**变更历史**：684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
+**变更历史**：94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
