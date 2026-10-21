@@ -144,7 +144,7 @@ services:
       # Server-to-server auth stays off in dev (identity header short-circuit); the
       # console/admin user store still applies (bkagent/BK-AGENT namespace, see .env).
       # Production: set NACOS_AUTH_ENABLE=true and rotate NACOS_AUTH_TOKEN.
-      NACOS_AUTH_ENABLE: "false"
+      NACOS_AUTH_ENABLE: ${NACOS_AUTH_ENABLE:-false}
       NACOS_AUTH_TOKEN: ${NACOS_AUTH_TOKEN:-}
       NACOS_AUTH_IDENTITY_KEY: ${NACOS_AUTH_IDENTITY_KEY:-}
       NACOS_AUTH_IDENTITY_VALUE: ${NACOS_AUTH_IDENTITY_VALUE:-}
@@ -172,6 +172,7 @@ services:
       NACOS_NAMESPACE: ${NACOS_NAMESPACE:-BK-AGENT}
       NACOS_CONFIG_GROUP: DEFAULT_GROUP
       NACOS_CONFIG_DATA_IDS: ${NACOS_CONFIG_DATA_IDS:-}
+      NACOS_AUTH_ENABLE: ${NACOS_AUTH_ENABLE:-false}
       NACOS_USERNAME: ${NACOS_USERNAME:-bkagent}
       NACOS_PASSWORD: ${NACOS_PASSWORD:-}
     entrypoint: ["python", "/scripts/publish-nacos.py"]

@@ -897,3 +897,11 @@
 **代码位置**：common 的 `MemoryDomainExperience*` RPC DTO 与 `MemoryV2RpcService`；`MemoryV2RequestSecurity`、`MemoryExperienceService`、`MemoryV2RpcServiceImpl`；迁移 `20261021_memory_domain_experience.sql`。回归 `MemoryDomainExperienceServiceTest`、`MemoryV2RpcContractTest` 覆盖治理权限、domain/agent 隔离、不可还原引用、来源删除保留、撤回和使用前版本检查；change 8.3。
 
 **关联**：LR-59、LR-83、LR-84；change 8.3、9.2–9.5。
+
+## LR-92 Nacos开发配置发布遵循服务端显式认证模式
+
+**结论**：`NACOS_AUTH_ENABLE` 同时决定开发Nacos服务端与一次性配置发布任务的认证方式。关闭认证时，发布任务不尝试登录，只允许写入固定的 `BK-AGENT` / `DEFAULT_GROUP` 与 `publish-nacos.py` 中的 Data ID allowlist，并逐项回读校验；开启认证时必须使用显式用户名/密码登录，拿到的短期token只附于受限配置读写请求。发布目标仍限定为本地Compose Nacos，拒绝代理与重定向，日志不写凭据或配置正文。
+
+**根因**：开发Compose默认关闭Nacos API认证，而旧发布任务无条件调用登录接口；Nacos 3.1 在该模式下返回403，使初始化任务永远无法发布配置。为部署强行开启认证会改变开发环境安全模式并引入账号初始化依赖；按服务端模式分支并保留固定namespace/group/Data ID白名单及回读校验，能让配置初始化与实际Nacos模式一致。
+
+**代码位置**：根 `docker-compose.yml` 的 `nacos` / `config-init` 环境绑定，`scripts/deploy/publish-nacos.py`；回归 `scripts/deploy/test_publish_nacos.py` 覆盖认证关闭不登录、开启后携带登录token且不打印凭据，以及认证模式必填。关联 KI-158 与 change 11.2。
