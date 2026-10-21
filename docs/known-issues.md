@@ -1384,11 +1384,11 @@
 
 **关联**：LR-92；change 11.2。
 
-## KI-161 [FIXED·待提交·P1] Memory v2 单一消费开关不能安全完成分阶段回滚
+## KI-161 [FIXED·160ffe7·P1] Memory v2 单一消费开关不能安全完成分阶段回滚
 
 **发现日期**：2026-10-22。A2A 域 Agent 与 Supervisor 使用同一 `enabled` 开关控制历史 prompt 读取和本轮结果交付；关闭新读取会同时令仍在执行的任务跳过最终交付，而保持开关开启又会让新任务继续加载历史。
 
-**修复与防回归（待提交）**：新增独立 `read-enabled` / `delivery-enabled` 开关及 `DELIVERY_ONLY` 新任务模式。任务开始时已接受的交付在关闭新交付开关后仍完成；Supervisor 将接受状态写入 workflow checkpoint，普通 V2 任务只有在工作集初始化成功后才认领交付。Nacos 配置逐服务登记这两个开关。`A2aMemoryAgentHookTest.readDisabledDeliveryOnlyTurnDrainsAfterDeliverySwitchIsClosed`、`SupervisorMemoryIntegrationTest.deliveryOnlyModeSkipsPromptReadsAndFinishesAnAcceptedDeliveryAfterCutoff` 与属性测试覆盖切换及队列交付。
+**修复与防回归（160ffe7）**：新增独立 `read-enabled` / `delivery-enabled` 开关及 `DELIVERY_ONLY` 新任务模式。任务开始时已接受的交付在关闭新交付开关后仍完成；Supervisor 将接受状态写入 workflow checkpoint，普通 V2 任务只有在工作集初始化成功后才认领交付。Nacos 配置逐服务登记这两个开关。`A2aMemoryAgentHookTest.readDisabledDeliveryOnlyTurnDrainsAfterDeliverySwitchIsClosed`、`SupervisorMemoryIntegrationTest.deliveryOnlyModeSkipsPromptReadsAndFinishesAnAcceptedDeliveryAfterCutoff` 与属性测试覆盖切换及队列交付。
 
 **验收边界**：本机现有 Memory archive、领域消费者和 Supervisor 均未启用；只读预检确认 Agent 交付、Memory 加工 job、经验事件队列为空，RAG outbox 117 项均已 `APPLIED`。因此代码与配置回归通过，但没有真实流量可执行切流/回滚演练，change 11.5 保持未完成。
 
@@ -1396,4 +1396,4 @@
 
 ---
 
-**变更历史**：本提交补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
+**变更历史**：160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
