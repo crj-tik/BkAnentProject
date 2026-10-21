@@ -40,7 +40,7 @@
 - [x] 5.5 在 common-a2a/marketing 的实际 ReactAgent 生命周期接入工作集、消息记录和受保护压缩扩展；显式注册Hook位置，模型/工具拦截器不重复执行业务，不以未使用ChatClient bean宣称主链接通。
 - [x] 5.6 接 interview 治理面相同适配并测试私有隔离与可许可摘要/引用；保留运行面REST/SSE、三段上下文、脱敏与领域状态真源，不以创建场次终态关闭访谈事项。
 - [x] 5.7 对 listing-master、business、contract 的原生 A2A 入口逐项接线并完成冷/热加载、身份/授权、可靠来源、开关关闭回归，未通过的域保持关闭。
-- [ ] 5.8 对 compare-engine、media-worker、notification、settlement 的原生 A2A 入口逐项接线并完成相同契约回归；没有数据库事实源的入口按第4组策略启用，不无条件新建业务库。
+- [x] 5.8 对 compare-engine、media-worker、notification、settlement 的原生 A2A 入口逐项接线并完成相同契约回归；没有数据库事实源的入口按第4组策略启用，不无条件新建业务库。
 - [ ] 5.9 仅为已确认实际使用的 ChatClient 入口提供本地窗口 ChatMemory/Repository/Advisor 适配；测试 saveAll 不覆盖原文档案、conversationId明确映射、不与Graph累计messages重复注入。
 - [ ] 5.10 实现可选记忆不可用/NOT_APPLIED与无匹配分离、当前明确修正即时覆盖和局部刷新；认证/授权失败始终失败关闭，必要历史缺失不编造。
 

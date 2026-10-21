@@ -27,6 +27,11 @@ a2a:
     signing-secret: ${MEDIA_A2A_SIGNING_SECRET:}
     response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}
     response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
+  memory:
+    enabled: ${MEDIA_MEMORY_V2_ENABLED:false}
+    compression-enabled: ${MEDIA_MEMORY_V2_COMPRESSION_ENABLED:false}
+    key-id: ${MEDIA_MEMORY_V2_KEY_ID:media-memory-current}
+    signing-secret: ${MEDIA_MEMORY_V2_SIGNING_SECRET:}
 
 dubbo:
   application:

@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Arrays;
 import com.bkanent.common.a2a.A2aOutputPolicy;
+import com.bkanent.common.a2a.A2aMemoryAgentHook;
+import com.bkanent.common.a2a.A2aMemoryHookFactory;
 import com.bkanent.common.a2a.OfficialA2aAgentExecutor;
 import com.bkanent.compare.config.CompareAgentProperties;
 import com.bkanent.compare.tool.CompareTools;
@@ -27,12 +29,15 @@ public class CompareOfficialA2aAgent {
 
     private final ReactAgent reactAgent;
     private final SkillRegistry skillRegistry;
+    private final A2aMemoryAgentHook memoryHook;
     private final List<ToolCallback> executionTools;
 
     public CompareOfficialA2aAgent(ChatModel chatModel,
                                    CompareAgentProperties properties,
-                                   CompareTools compareTools, SkillRegistry skillRegistry) {
+                                   CompareTools compareTools, SkillRegistry skillRegistry,
+                                   A2aMemoryHookFactory memoryHookFactory) {
         this.skillRegistry = skillRegistry;
+        this.memoryHook = memoryHookFactory.create("compare-engine-service", "compare", "compare-agent", chatModel);
         List<ToolCallback> tools = new ArrayList<>(Arrays.asList(
                 MethodToolCallbackProvider.builder().toolObjects(compareTools).build().getToolCallbacks()));
         tools.add(new SkillTool(skillRegistry, "compare"));
@@ -43,6 +48,7 @@ public class CompareOfficialA2aAgent {
                 .model(chatModel)
                 .systemPrompt(properties.getSystemPrompt())
                 .tools(tools)
+                .hooks(memoryHook)
                 .interceptors(new com.bkanent.common.a2a.A2aAuthenticationToolInterceptor(), new A2aSupervisorContextInterceptor(),
                         new SkillRoutingModelInterceptor(skillRegistry, "compare"), new SkillRoutingToolInterceptor())
                 .outputKey(OUTPUT_KEY)
@@ -66,6 +72,6 @@ public class CompareOfficialA2aAgent {
     @Bean
     public AgentExecutor compareA2aAgentExecutor(ObjectMapper objectMapper, com.bkanent.common.a2a.A2aExecutionProperties execution) {
         return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("compare"),
-                skillRegistry, "compare", executionTools, execution.getStreamTimeoutMs());
+                skillRegistry, "compare", executionTools, execution.getStreamTimeoutMs(), memoryHook);
     }
 }

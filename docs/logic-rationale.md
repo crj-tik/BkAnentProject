@@ -783,3 +783,11 @@
 **根因**：三个 Agent 的读取工具已有领域事实边界，长期会话可帮助解释用户目标和既往结果，但将工具返回的历史快照当作当前业务状态会绕过原有权限与新鲜度校验。复用相同 Hook 可保留冷/热工作集、来源可追溯和完整工具调用组，同时把记忆权限收窄到固定 Agent；功能默认关闭避免在密钥、存储能力和运行基线尚未验收时产生隐式记忆读写。
 
 **代码位置**：`ListingOfficialA2aAgent`、`TradeOfficialA2aAgent`、`ContractOfficialA2aAgent`；对应 `a2a.memory` 配置、Compose 环境变量和 `memory-service` trusted caller 白名单；回归 `ExplicitSkillAgentWiringTest` 与 `A2aMemoryAgentHookTest`。关联 LR-77；change 5.7。
+
+## LR-79 compare/media/notification/settlement 的 A2A 记忆按真源与主体边界分别授权
+
+**结论**：四个实际 ReactAgent 都接入 common-a2a 完整轮次 Hook，caller/domain/agent 固定为 `compare-engine-service/compare/compare-agent`、`media-worker-service/media/media-agent`、`notification-service/notification/notification-agent`、`settlement-service/settlement/settlement-agent`。Compare 与 settlement 在 memory-service 取得精确域授权；所有服务的读取和压缩开关、签名密钥默认关闭/留空。Media 和 notification 虽完成关闭态代码接线及回归，但不登记 memory-service caller：media 任务结果只存于进程内 map，尚无可恢复结果来源；notification 工具的查询 `userId` 尚未绑定当前 A2A 租约主体（KI-117、KI-151）。没有新增业务库。
+
+**根因**：完整轮次 Hook 只能持久化本轮获准的对话和工具证据，不能替代领域任务结果真源，也不能把模型提供的用户标识当作调用者身份。允许数据写入前必须同时满足来源可恢复、caller/domain/agent 精确匹配和消息主体授权；因此源码接通与运行时启用分开验收。
+
+**代码位置**：四个 `*OfficialA2aAgent`、各服务 `a2a.memory` 配置、Compose/.env 示例、`memory-service` trusted caller 白名单及四项 `ExplicitSkillAgentWiringTest`。关联 LR-78、KI-117、KI-151；change 5.8。

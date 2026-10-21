@@ -5,6 +5,8 @@ import com.bkanent.common.skill.core.SkillRegistry;
 import com.bkanent.common.skill.runtime.SkillRoutingModelInterceptor;
 import com.bkanent.common.skill.runtime.SkillTool;
 import com.bkanent.common.a2a.A2aOutputPolicy;
+import com.bkanent.common.a2a.A2aMemoryAgentHook;
+import com.bkanent.common.a2a.A2aMemoryHookFactory;
 import com.bkanent.common.a2a.OfficialA2aAgentExecutor;
 import com.bkanent.media.config.MediaAgentProperties;
 import com.bkanent.media.tool.MediaTools;
@@ -28,13 +30,16 @@ public class MediaOfficialA2aAgent {
 
     private final ReactAgent reactAgent;
     private final SkillRegistry skillRegistry;
+    private final A2aMemoryAgentHook memoryHook;
     private List<ToolCallback> executionTools;
 
     public MediaOfficialA2aAgent(ChatModel chatModel,
                                  MediaAgentProperties properties,
                                  MediaTools mediaTools,
-                                 SkillRegistry skillRegistry) {
+                                 SkillRegistry skillRegistry,
+                                 A2aMemoryHookFactory memoryHookFactory) {
         this.skillRegistry = skillRegistry;
+        this.memoryHook = memoryHookFactory.create("media-worker-service", DOMAIN, "media-agent", chatModel);
         this.reactAgent = buildAgent(chatModel, properties, mediaTools, skillRegistry);
     }
 
@@ -49,6 +54,7 @@ public class MediaOfficialA2aAgent {
                 .model(chatModel)
                 .systemPrompt(properties.getSystemPrompt())
                 .tools(tools)
+                .hooks(memoryHook)
                 .interceptors(new com.bkanent.common.a2a.A2aAuthenticationToolInterceptor(), new A2aSupervisorContextInterceptor(),
                         new SkillRoutingModelInterceptor(skillRegistry, DOMAIN),
                         new com.bkanent.common.skill.runtime.SkillRoutingToolInterceptor())
@@ -73,6 +79,6 @@ public class MediaOfficialA2aAgent {
     @Bean
     public AgentExecutor mediaA2aAgentExecutor(ObjectMapper objectMapper, com.bkanent.common.a2a.A2aExecutionProperties execution) {
         return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("media"),
-                skillRegistry, DOMAIN, executionTools, execution.getStreamTimeoutMs());
+                skillRegistry, DOMAIN, executionTools, execution.getStreamTimeoutMs(), memoryHook);
     }
 }

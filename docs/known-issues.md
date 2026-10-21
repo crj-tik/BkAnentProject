@@ -1298,6 +1298,14 @@
 
 **修复与防回归**：改用允许空元素的列表构造器，并增加 `A2aMemoryAgentHookTest.listingHookColdLoadsAuthorizedHistoryAndArchivesSourceHashedToolEvidence`，覆盖冷加载、工具结果完整归档及来源哈希。提交 `94fd089` 的 9 项 A2A Hook/三域 Agent 定向测试通过。
 
+## KI-151 [OPEN·P1] 通知 A2A 工具按模型传入的 userId 查询而未绑定当前主体
+
+**确认日期**：2026-10-21。源码核对发现 `NotificationTools.listUserMessages` 与 `countUnreadMessages` 将模型提供的 `userId` 直接传给查询服务；`NotificationManagementServiceImpl` 和 `NotificationRecordDomainServiceImpl` 仅按该值过滤记录，未与 `A2aCredentialContext` 当前租约 actor 对比。当前尚未确认 actorId 与通知 recipientUserId 的受管映射，因此不能安全地把查询结果持久化到调用者的长期记忆。
+
+**处置**：notification 的 ReactAgent 已接入记忆 Hook，但读取/压缩默认关闭，memory-service 不登记 `notification-service` trusted caller；即使误开客户端开关，服务端仍因无精确 caller 授权而拒绝。修复前须在受信认证边界建立并回归调用者与 recipient 的授权映射；不以 agent prompt、Supervisor metadata 或字段同名代替主体校验。当前为源码审查结论，未运行真实接口探测。
+
+**关联**：LR-79、KI-114、KI-117；change 5.8。
+
 ---
 
 **变更历史**：94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。

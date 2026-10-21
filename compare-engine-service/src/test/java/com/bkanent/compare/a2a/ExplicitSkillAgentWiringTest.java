@@ -50,6 +50,7 @@ class ExplicitSkillAgentWiringTest {
         args[2] = ToolCallbackProvider.class.isAssignableFrom(types[2])
                 ? MethodToolCallbackProvider.builder().toolObjects(mock(Class.forName("com.bkanent.listing.tool.ListingTools"))).build()
                 : mock(types[2]);
+        args[4] = disabledMemoryHookFactory();
         Object component = constructor.newInstance(args);
         var card = (AgentCard) CompareOfficialA2aAgent.class.getMethod("comparePublishedAgentCard",
                 com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerProperties.class, com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerAgentCardProperties.class)
@@ -58,6 +59,7 @@ class ExplicitSkillAgentWiringTest {
         assertThat(card.skills()).anySatisfy(skill -> assertThat(skill.name()).isEqualTo(selected.name()));
         var executor = (AgentExecutor) CompareOfficialA2aAgent.class.getMethod("compareA2aAgentExecutor", ObjectMapper.class, com.bkanent.common.a2a.A2aExecutionProperties.class)
                 .invoke(component, new ObjectMapper(), new com.bkanent.common.a2a.A2aExecutionProperties());
+        assertMemoryHookWiring(component, executor, "compare-engine-service", "compare", "compare-agent");
         var selection = Map.of("name", selected.name(), "owner", "compare", "version", selected.version(), "contentHash", selected.contentHash(), "mode", "explicit");
         assertThat(A2aCredentialContext.snapshot()).isNull();
         try (QueueScope unauthenticated = new QueueScope()) {
@@ -90,6 +92,40 @@ class ExplicitSkillAgentWiringTest {
         }
         assertThat(turns).hasValue(2);
     }
+    private com.bkanent.common.a2a.A2aMemoryHookFactory disabledMemoryHookFactory() {
+        var properties = new com.bkanent.common.a2a.A2aMemoryProperties();
+        assertThat(properties.isEnabled()).isFalse();
+        return new com.bkanent.common.a2a.A2aMemoryHookFactory(properties,
+                new org.apache.dubbo.config.ReferenceConfig<com.bkanent.common.memory.MemoryV2RpcService>(),
+                new com.bkanent.memory.runtime.MemoryWorkingSetCache(64, 16L * 1024 * 1024, 60_000, java.time.Clock.systemUTC()),
+                new ObjectMapper());
+    }
+
+    private void assertMemoryHookWiring(Object component, AgentExecutor executor, String caller, String domain, String agentId) throws Exception {
+        var hookField = component.getClass().getDeclaredField("memoryHook");
+        hookField.setAccessible(true);
+        Object hook = hookField.get(component);
+        assertThat(hook).isInstanceOf(com.bkanent.common.a2a.A2aMemoryAgentHook.class);
+        assertHookIdentity(hook, "caller", caller);
+        assertHookIdentity(hook, "domain", domain);
+        assertHookIdentity(hook, "agentId", agentId);
+        assertThat(((com.bkanent.common.a2a.A2aMemoryAgentHook) hook).getHookPositions())
+                .containsExactly(com.alibaba.cloud.ai.graph.agent.hook.HookPosition.BEFORE_AGENT,
+                        com.alibaba.cloud.ai.graph.agent.hook.HookPosition.AFTER_AGENT);
+        var executorHookField = executor.getClass().getDeclaredField("memoryHook");
+        executorHookField.setAccessible(true);
+        assertThat(executorHookField.get(executor)).isSameAs(hook);
+        var propertiesField = hook.getClass().getDeclaredField("properties");
+        propertiesField.setAccessible(true);
+        assertThat(((com.bkanent.common.a2a.A2aMemoryProperties) propertiesField.get(hook)).isEnabled()).isFalse();
+    }
+
+    private void assertHookIdentity(Object hook, String fieldName, String expected) throws Exception {
+        var field = hook.getClass().getDeclaredField(fieldName);
+        field.setAccessible(true);
+        assertThat(field.get(hook)).isEqualTo(expected);
+    }
+
     private void executeAuthenticated(AgentExecutor executor, RequestContext context, EventQueue queue) throws Exception {
         long expiresAt = java.time.Instant.now().getEpochSecond() + 60;
         var binding = new A2aBeaconBinding(1, context.getTaskId() + "-request", "agent-service", AUDIENCE,

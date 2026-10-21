@@ -39,6 +39,18 @@ memory:
         service-delivery: true
         allowed-agents-by-domain:
           contract: [contract-agent]
+      compare-engine-service:
+        key-id: ${COMPARE_MEMORY_V2_KEY_ID:compare-memory-current}
+        signing-secret: ${COMPARE_MEMORY_V2_SIGNING_SECRET:}
+        service-delivery: true
+        allowed-agents-by-domain:
+          compare: [compare-agent]
+      settlement-service:
+        key-id: ${SETTLEMENT_MEMORY_V2_KEY_ID:settlement-memory-current}
+        signing-secret: ${SETTLEMENT_MEMORY_V2_SIGNING_SECRET:}
+        service-delivery: true
+        allowed-agents-by-domain:
+          settlement: [settlement-agent]
   rag:
     key-id: memory-current
     signing-secret: ${MEMORY_RAG_RPC_SECRET:}
