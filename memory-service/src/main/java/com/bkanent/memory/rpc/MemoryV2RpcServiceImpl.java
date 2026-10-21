@@ -15,18 +15,30 @@ public class MemoryV2RpcServiceImpl implements MemoryV2RpcService {
     private final MemorySharingAccessService sharing;
     private final MemoryV2RequestSecurity security;
     private final com.bkanent.memory.service.PreferenceHistoryService preferences;
+    private final com.bkanent.memory.service.MemoryMatterService matters;
 
     public MemoryV2RpcServiceImpl(MemoryArchiveService archive, MemorySharingAccessService sharing, MemoryV2RequestSecurity security) {
         this(archive, sharing, security, null);
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
     public MemoryV2RpcServiceImpl(MemoryArchiveService archive, MemorySharingAccessService sharing, MemoryV2RequestSecurity security,
                                   com.bkanent.memory.service.PreferenceHistoryService preferences) {
+        this(archive,sharing,security,preferences,null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public MemoryV2RpcServiceImpl(MemoryArchiveService archive, MemorySharingAccessService sharing, MemoryV2RequestSecurity security,
+                                  com.bkanent.memory.service.PreferenceHistoryService preferences, com.bkanent.memory.service.MemoryMatterService matters) {
         this.archive = archive;
         this.sharing = sharing;
         this.security = security;
         this.preferences = preferences;
+        this.matters = matters;
+    }
+
+    public MemoryMatterWriteResponse transitionMatter(MemoryMatterWriteRequest request, MemoryRequestProof proof) {
+        if(matters==null) { security.authorize(request,proof,MemoryV2Contract.OPERATION_MATTER_WRITE); throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE); }
+        return matters.transition(request,proof);
     }
 
     public MemoryWorkingSetResponse readWorkingSet(MemoryWorkingSetRequest request, MemoryRequestProof proof) { return archive.readWorkingSet(request, proof); }

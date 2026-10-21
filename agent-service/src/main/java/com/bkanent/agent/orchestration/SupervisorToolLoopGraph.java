@@ -154,7 +154,7 @@ public class SupervisorToolLoopGraph {
                 store.snapshot(state.runId, state.skillSnapshot);
             }
             if (memory != null) memory.prepare(state);
-            state.messages.add(StoredModelMessage.user(state.request.userMessage()));
+            state.messages.add(StoredModelMessage.user(state.request.userMessage(), state.memoryMatterId, state.request.matterIntent()));
         } catch (SkillExecutionException exception) { fail(state, exception.code(), exception.getMessage()); }
         catch (com.bkanent.common.memory.MemoryException exception) { failMemory(state, exception, "PrepareContext"); }
         catch (RuntimeException exception) { fail(state, "CONTEXT_PREPARATION_FAILED", "请求上下文加载失败。"); }
@@ -176,6 +176,9 @@ public class SupervisorToolLoopGraph {
         if (memory != null && "V2".equals(state.memoryMode)) definitions.add(control(com.bkanent.agent.memory.SupervisorMemoryResultView.TOOL_NAME,
                 "仅按当前获准资料中的引用有界读取完整工具结果。引用不是权限；可用JSON pointer选择字段，offset/limit分页读取JSON文本，不代表新业务调用。",
                 com.bkanent.agent.memory.SupervisorMemoryResultView.TOOL_SCHEMA));
+        if (memory != null && "V2".equals(state.memoryMode)) definitions.add(control(com.bkanent.agent.memory.SupervisorMemoryReferentResolver.TOOL_NAME,
+                "按精确实体ID或别名解析当前会话的历史指代，先查本地锚点，有缺口才有界补查。歧义、无证据或扫描未完成时须澄清；不改变事项或业务状态。",
+                com.bkanent.agent.memory.SupervisorMemoryReferentResolver.TOOL_SCHEMA));
         definitions.add(control("skill", "加载本次任务适用的发布技能；须单独调用，等待加载结果后再调用业务工具。",
                 "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"minLength\":1},\"task\":{\"type\":\"string\",\"minLength\":1},\"version\":{\"type\":\"string\"}},\"required\":[\"name\",\"task\"],\"additionalProperties\":false}"));
         definitions.add(control("request_input", "需要用户补充信息时单独调用，明确问题和缺失信息。",
@@ -205,7 +208,7 @@ public class SupervisorToolLoopGraph {
                 });
                 AssistantMessage output = await(task, state, properties.getModelTimeoutMs());
                 if (memory != null) memory.beforeOutput(state);
-                state.messages.add(StoredModelMessage.assistant(output, state.adoptedMemorySources));
+                state.messages.add(StoredModelMessage.assistant(output, state.adoptedMemorySources).inMatter(state.memoryMatterId));
                 state.pendingCalls = new ArrayList<>(output.getToolCalls());
                 state.results.clear();
                 if (!output.hasToolCalls()) state.finalAnswer = output.getText() == null ? "" : output.getText();
@@ -250,7 +253,7 @@ public class SupervisorToolLoopGraph {
         try {
             store.assertActive(state.runId, state.leaseToken);
             if (memory == null || !"V2".equals(state.memoryMode)) throw new com.bkanent.common.memory.MemoryException(com.bkanent.common.memory.MemoryErrorCode.INVALID_ARGUMENT);
-            state.results.add(response(call, memory.readResult(state, call.arguments())));
+            state.results.add(response(call, com.bkanent.agent.memory.SupervisorMemoryReferentResolver.TOOL_NAME.equals(call.name()) ? memory.resolveReference(state, call.arguments()) : memory.readResult(state, call.arguments())));
         } catch (com.bkanent.common.memory.MemoryException exception) {
             if (Set.of(com.bkanent.common.memory.MemoryErrorCode.INVALID_ARGUMENT, com.bkanent.common.memory.MemoryErrorCode.NOT_FOUND).contains(exception.code())) {
                 state.results.add(response(call, "{\"status\":\"FAILED\",\"readOnly\":true,\"code\":\"" + exception.code().name() + "\"}"));
@@ -316,7 +319,7 @@ public class SupervisorToolLoopGraph {
             var invocation = store.prepare(state.runId, call.id(), "control:request_input", call.arguments());
             String result = store.json(Map.of("status", "WAITING_USER_INPUT", "question", state.question, "missingFields", state.missingFields));
             store.complete(state.runId, call.id(), result);
-            state.messages.add(StoredModelMessage.tools(List.of(response(call, result)), state.adoptedMemorySources));
+            state.messages.add(StoredModelMessage.tools(List.of(response(call, result)), state.adoptedMemorySources).inMatter(state.memoryMatterId));
             state.pendingCalls.clear(); state.results.clear(); state.status = "WAITING_USER_INPUT"; state.finalAnswer = state.question;
             publish(state, "supervisor.waiting_user_input", responseOf(state).governanceMetadata());
         } catch (Exception exception) {
@@ -450,7 +453,7 @@ public class SupervisorToolLoopGraph {
                 failMemory(state, exception, "Observe"); state.route = "complete"; return updates(state, "ExecuteTool");
             }
             recordResults(state);
-            state.messages.add(StoredModelMessage.tools(List.copyOf(state.results), state.adoptedMemorySources));
+            state.messages.add(StoredModelMessage.tools(List.copyOf(state.results), state.adoptedMemorySources).inMatter(state.memoryMatterId));
             state.pendingCalls.clear(); state.results.clear();
             fail(state, "OUTCOME_UNKNOWN", "调用结果需要核对，已停止继续执行。");
         }
@@ -545,7 +548,7 @@ public class SupervisorToolLoopGraph {
             failMemory(state, exception, "Observe"); state.route = "complete"; return updates(state, "Observe");
         }
         recordResults(state);
-        state.messages.add(StoredModelMessage.tools(List.copyOf(state.results), state.adoptedMemorySources));
+        state.messages.add(StoredModelMessage.tools(List.copyOf(state.results), state.adoptedMemorySources).inMatter(state.memoryMatterId));
         state.pendingCalls.clear(); state.results.clear();
         return updates(state, "Observe");
     }
@@ -621,7 +624,7 @@ public class SupervisorToolLoopGraph {
             var message = state.messages.get(index);
             if (!"tool".equals(message.role())) continue;
             state.messages.set(index, StoredModelMessage.tools(message.responses().stream().map(result ->
-                    new ToolResponseMessage.ToolResponse(result.id(), result.name(), confirmed.getOrDefault(result.id(), result.responseData()))).toList(), message.memoryDependencies()));
+                    new ToolResponseMessage.ToolResponse(result.id(), result.name(), confirmed.getOrDefault(result.id(), result.responseData()))).toList(), message.memoryDependencies()).inMatter(message.matterId()));
         }
         state.results = new ArrayList<>();
         confirmed.forEach((id, result) -> state.results.add(new ToolResponseMessage.ToolResponse(id, "reconciled", result)));
@@ -648,7 +651,7 @@ public class SupervisorToolLoopGraph {
     }
     private Map<String, SupervisorCapability> available(ToolLoopState state) {
         Map<String, SupervisorCapability> current = new LinkedHashMap<>(catalogSnapshot(state));
-        current.values().removeIf(capability -> com.bkanent.agent.memory.SupervisorMemoryResultView.TOOL_NAME.equals(capability.toolName()));
+        current.values().removeIf(capability -> (com.bkanent.agent.memory.SupervisorMemoryResultView.TOOL_NAME.equals(capability.toolName()) || com.bkanent.agent.memory.SupervisorMemoryReferentResolver.TOOL_NAME.equals(capability.toolName())));
         if (state.skillSnapshot != null) current.keySet().retainAll(state.skillSnapshot.capabilityIds());
         return current;
     }
@@ -706,7 +709,7 @@ public class SupervisorToolLoopGraph {
                 ? "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"minLength\":1},\"task\":{\"type\":\"string\",\"minLength\":1},\"version\":{\"type\":\"string\"}},\"required\":[\"name\",\"task\"],\"additionalProperties\":false}"
                 : "{\"type\":\"object\",\"properties\":{\"question\":{\"type\":\"string\",\"minLength\":1},\"missingFields\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}},\"required\":[\"question\"],\"additionalProperties\":false}";
     }
-    private boolean controlName(String name) { return "skill".equals(name) || "request_input".equals(name) || com.bkanent.agent.memory.SupervisorMemoryResultView.TOOL_NAME.equals(name); }
+    private boolean controlName(String name) { return "skill".equals(name) || "request_input".equals(name) || com.bkanent.agent.memory.SupervisorMemoryResultView.TOOL_NAME.equals(name) || com.bkanent.agent.memory.SupervisorMemoryReferentResolver.TOOL_NAME.equals(name); }
     private void rejectBatch(ToolLoopState state, String error) {
         state.results.clear(); state.pendingCalls.forEach(call -> {
             String result = error + ": 未执行整批调用";

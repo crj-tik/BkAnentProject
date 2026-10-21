@@ -9,6 +9,9 @@ package com.bkanent.common.memory;
  * contract surface.
  */
 public interface MemoryV2RpcService {
+    default MemoryMatterWriteResponse transitionMatter(MemoryMatterWriteRequest request, MemoryRequestProof proof) throws MemoryException {
+        throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+    }
     int CONTRACT_VERSION = MemoryV2Contract.VERSION;
 
     MemoryWorkingSetResponse readWorkingSet(MemoryWorkingSetRequest request, MemoryRequestProof proof) throws MemoryException;

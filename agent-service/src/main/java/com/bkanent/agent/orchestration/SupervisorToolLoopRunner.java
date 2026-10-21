@@ -53,7 +53,7 @@ public class SupervisorToolLoopRunner {
         String sessionId = text(request.sessionId(), UUID.randomUUID().toString());
         String traceId = text(request.traceId(), runId);
         var normalized = new SupervisorTaskRequest(sessionId, request.userId(), runId, traceId, request.userMessage(),
-                com.bkanent.agent.security.AgentRagContextPolicy.normalize(request.context()), request.channel(), request.stream(), request.skill(), null, request.allowMcp());
+                com.bkanent.agent.security.AgentRagContextPolicy.normalize(request.context()), request.channel(), request.stream(), request.skill(), null, request.allowMcp(), request.matterIntent());
         if (!hasRun(runId) && !properties.isAccepting()) throw new IllegalStateException("SUPERVISOR_ACCEPTANCE_PAUSED");
         store.register(runId, normalized);
         if (ragCredentials != null) ragCredentials.capture(runId, normalized.userId());
@@ -62,10 +62,11 @@ public class SupervisorToolLoopRunner {
             if (existing != null) {
                 var state = factory.stateOf(existing.state());
                 if (!state.userId.equals(request.userId())) throw new IllegalStateException("CONTINUATION_OWNER_MISMATCH");
+                if (!java.util.Objects.equals(state.request.matterIntent(), request.matterIntent())) throw new IllegalArgumentException("CONTINUATION_INPUT_CHANGED");
                 if ("FAILED".equals(state.status) && state.errorCode != null && state.errorCode.startsWith("MEMORY_")
                         && state.memoryResumeNode != null) {
                     validateContinuation(state, request);
-                    if (!state.request.userMessage().equals(request.userMessage())) throw new IllegalArgumentException("CONTINUATION_INPUT_CHANGED");
+                    if (!state.request.userMessage().equals(request.userMessage()) || !java.util.Objects.equals(state.request.matterIntent(), request.matterIntent())) throw new IllegalArgumentException("CONTINUATION_INPUT_CHANGED");
                     if (!Set.of("PrepareContext", "Model", "LoadSkill", "MemoryRecall", "WaitInput", "ApprovalGate", "Observe", "ExecuteTool", "Complete")
                             .contains(state.memoryResumeNode)) throw new IllegalStateException("MEMORY_RECOVERY_INVALID");
                     state.leaseToken = token; state.status = "RUNNING"; state.errorCode = null;
@@ -105,7 +106,9 @@ public class SupervisorToolLoopRunner {
             validateContinuation(state, request);
             String id = "input-" + store.hash(store.json(Map.of("requestId", request.requestId())));
             var previous = store.find(runId, id);
-            if (previous != null) store.prepare(runId, id, "control:continue_input", store.json(Map.of("message", request.userMessage())));
+            Map<String,Object> input = new LinkedHashMap<>(); input.put("message",request.userMessage());
+            if(request.matterIntent()!=null) input.put("matterIntent",request.matterIntent());
+            if (previous != null) store.prepare(runId, id, "control:continue_input", store.json(input));
             if (previous != null && "COMPLETED".equals(previous.status()))
                 return store.read(previous.result(), SupervisorTaskResponse.class);
             state.leaseToken = token;
@@ -119,12 +122,12 @@ public class SupervisorToolLoopRunner {
                 } catch (Exception exception) { throw new IllegalStateException("continuation requires checkpoint recovery", exception); }
             }
             if (!"WAITING_USER_INPUT".equals(state.status)) throw new IllegalStateException("CONTINUATION_STATE_INVALID");
-            var invocation = store.prepare(runId, id, "control:continue_input", store.json(Map.of("message", request.userMessage())));
+            var invocation = store.prepare(runId, id, "control:continue_input", store.json(input));
             // Lease ownership proves an abandoned internal input claim can be recovered.
             // No external side effect precedes the checkpoint recording this input identity.
             if (!store.claim(runId, id) && !"EXECUTING".equals(invocation.status()))
                 throw new IllegalStateException("CONTINUATION_ALREADY_PROCESSING");
-            state.messages.add(StoredModelMessage.user(request.userMessage()));
+            state.messages.add(StoredModelMessage.user(request.userMessage(),state.memoryMatterId,request.matterIntent()));
             state.lastInputId = id;
             state.status = "RUNNING"; state.question = null; state.missingFields = List.of(); state.finalAnswer = "";
             try {

@@ -45,6 +45,8 @@
 
 Supervisor 仅在 V2 工作集成功接入时提供只读 `memory_read_result` 控制工具；它读取既有 RECEIVED checkpoint 来源，始终复核当前授权，不通过新增 RPC 或任意 URL 读取。`AGENT_MEMORY_V2_TOOL_INLINE_CHARS` 默认 4096、范围 256–16384；`AGENT_MEMORY_V2_RECALL_CHARS` 默认 8192、范围 2048–16384，限制整份补忆 JSON 响应，单页内容 limit 最大 4096 UTF-16 单元。完整档案 DTO 不被引用视图替换。开发启用状态与证据另见本轮压缩模块验收记录。
 
+2026-10-21 事项 lifecycle 增加 `memory.matter.transition`。`SupervisorTaskRequest.matterIntent` 是可选的 START/CONTINUE/CLOSE/REOPEN 显式用户字段，原 `userMessage` 保持原样。模型工具不提供此写操作；模型或业务工具说任务结束不会自动关闭 matter。调用方、provider、Memory 和 Agent 需要一同更新后才能启用，V2 开关仍默认关闭。`memory_resolve_reference` 是 Graph 里的只读控制工具，先匹配本地摘要锚点，缺失时最多两页、每页 20 条地查询当前 context；同别名歧义和未扫完必须澄清。source withdrawal 会立即阻止派生事项/实体读取，删除同时清除事项可还原正文。
+
 1. v2 operation 命名空间 `memory.*` 与 v1 REST 路径 `/internal/memory/...` 不相交（改 REST 路径或 operation 命名需先更新 `MemoryV1V2CompatibilityTest`）。
 2. v2 请求/响应 DTO 不嵌任何 `com.bkanent.common.agent` v1 类型——v2 写路径结构上无法路由进 legacy 表，**不存在静默双写**。
 3. v1 形状保持 v1 字段集（无 historyPage/coveredRange/grant 等 v2 语义字段混入）。

@@ -219,10 +219,8 @@ public class MemoryArchiveService {
                 if (!unusableSource(exception)) throw exception;
             }
         }
-        var matters = store.jdbc.query("SELECT payload_json FROM memory_matter WHERE context_id=? AND state IN ('ACTIVE','CLOSED','REOPENED') ORDER BY matter_id LIMIT 501",
-                (rs, n) -> store.decode(rs.getString(1), MemoryMatter.class), id);
+        var matters = readMatters(context, "", 501);
         require(matters.size() <= 500, MemoryErrorCode.CONTEXT_BUDGET_EXCEEDED);
-        for (var matter : matters) sources.requireCurrent(context, matter.dependencies());
         var result = new MemoryWorkingSetResponse(context, store.version(conversation), readable, summaries, matters);
         boundRead(result); // hard bound; no silent tail truncation
         return result;
@@ -396,6 +394,10 @@ public class MemoryArchiveService {
             store.jdbc.update("UPDATE memory_summary SET state=?,payload_json=CASE WHEN ? THEN NULL ELSE payload_json END WHERE context_id=?", state, delete, id);
             store.jdbc.update("UPDATE memory_entity_anchor SET state=?,payload_json=CASE WHEN ? THEN NULL ELSE payload_json END WHERE context_id=?", state, delete, id);
             store.jdbc.update("UPDATE memory_matter SET state=?,payload_json=CASE WHEN ? THEN NULL ELSE payload_json END WHERE context_id=?", state, delete, id);
+            if(delete) {
+                store.jdbc.update("UPDATE memory_matter_revision SET payload_json=NULL WHERE context_id=?",id);
+                store.jdbc.update("UPDATE memory_matter_receipt SET response_json=NULL WHERE context_id=?",id);
+            }
             // All exports of this source conversation stop publishing immediately. External copies require cleanup acknowledgements.
             store.jdbc.update("UPDATE memory_shared_export SET state=?,lifecycle_revision=lifecycle_revision+1,"
                             + "payload_json=CASE WHEN ? THEN NULL ELSE payload_json END WHERE owner_id=? AND source_domain_id=? AND source_agent_id=? AND source_conversation_id=?",
@@ -416,11 +418,18 @@ public class MemoryArchiveService {
             var conversation = store.conversation(request.contextKey());
             long revision = number(conversation, "revision");
             String after = cursor(request.cursor(), revision, key(request.contextKey()), "memory_entity_anchor", "entity_id");
-            var entities = store.jdbc.query("SELECT payload_json FROM memory_entity_anchor WHERE context_id=? AND state='ACTIVE' AND entity_id>? ORDER BY entity_id LIMIT ?",
-                    (rs, n) -> store.decode(rs.getString(1), MemoryEntityAnchor.class), key(request.contextKey()), after, request.limit() + 1);
-            for (var entity : entities) {
-                require(entity.contextKey().equals(request.contextKey()) && MemoryCanonicalHash.entityHash(entity).equals(entity.version().contentHash()), MemoryErrorCode.MEMORY_UNAVAILABLE);
-                sources.requireCurrent(request.contextKey(), entity.dependencies());
+            var headers = store.jdbc.queryForList("SELECT entity_id,content_revision FROM memory_entity_anchor WHERE context_id=? AND state='ACTIVE' AND entity_id>? ORDER BY entity_id LIMIT ?",
+                    key(request.contextKey()), after, request.limit() + 1);
+            List<MemoryEntityAnchor> entities = new ArrayList<>();
+            for (var header : headers) {
+                String entityId = (String) header.get("entity_id"); long contentRevision = number(header, "content_revision");
+                var dependencies = authorizedDependencies(request.contextKey(), "ENTITY", entityId, contentRevision);
+                var body = store.one("SELECT payload_json FROM memory_entity_anchor WHERE context_id=? AND entity_id=? AND content_revision=? AND state='ACTIVE'", key(request.contextKey()), entityId, contentRevision);
+                require(body != null, MemoryErrorCode.VERSION_CONFLICT);
+                var entity = store.decode((String) body.get("payload_json"), MemoryEntityAnchor.class);
+                require(entity.contextKey().equals(request.contextKey()) && entity.entityId().equals(entityId) && entity.version().revision() == contentRevision
+                        && MemoryCanonicalHash.entityHash(entity).equals(entity.version().contentHash()) && new HashSet<>(dependencies).equals(new HashSet<>(entity.dependencies())), MemoryErrorCode.MEMORY_UNAVAILABLE);
+                entities.add(entity);
             }
             boolean more = entities.size() > request.limit();
             var page = more ? entities.subList(0, request.limit()) : entities;
@@ -434,13 +443,35 @@ public class MemoryArchiveService {
             var conversation = store.conversation(request.contextKey());
             long revision = number(conversation, "revision");
             String after = cursor(request.cursor(), revision, key(request.contextKey()), "memory_matter", "matter_id");
-            var matters = store.jdbc.query("SELECT payload_json FROM memory_matter WHERE context_id=? AND state IN ('ACTIVE','CLOSED','REOPENED') AND matter_id>? ORDER BY matter_id LIMIT ?",
-                    (rs, n) -> store.decode(rs.getString(1), MemoryMatter.class), key(request.contextKey()), after, request.limit() + 1);
-            for (var matter : matters) sources.requireCurrent(request.contextKey(), matter.dependencies());
+            var matters = readMatters(request.contextKey(), after, request.limit() + 1);
             boolean more = matters.size() > request.limit();
             var page = more ? matters.subList(0, request.limit()) : matters;
             return new MemoryMatterQueryResponse(page, more ? revision + ":" + MemoryCanonicalHash.contentHash(page.get(page.size() - 1).matterId()) : null, more);
         });
+    }
+
+    private List<MemorySourceDependency> authorizedDependencies(MemoryContextKey context, String kind, String target, long revision) {
+        var dependencies = store.jdbc.query("SELECT dependency_json FROM memory_source_dependency WHERE target_context_id=? AND target_kind=? AND target_id=? AND target_revision=? LIMIT 501",
+                (rs, n) -> store.decode(rs.getString(1), MemorySourceDependency.class), key(context), kind, target, revision);
+        require(!dependencies.isEmpty() && dependencies.size() <= 500, MemoryErrorCode.MEMORY_UNAVAILABLE);
+        sources.requireCurrentMetadata(context, dependencies);
+        return dependencies;
+    }
+
+    private List<MemoryMatter> readMatters(MemoryContextKey context, String after, int limit) {
+        var headers = store.jdbc.queryForList("SELECT matter_id,content_revision,state FROM memory_matter WHERE context_id=? AND state IN ('ACTIVE','CLOSED','REOPENED') AND matter_id>? ORDER BY matter_id LIMIT ?", key(context), after, limit);
+        List<MemoryMatter> matters = new ArrayList<>();
+        for (var header : headers) {
+            String matterId = (String) header.get("matter_id"); long revision = number(header, "content_revision");
+            var dependencies = authorizedDependencies(context, "MATTER", matterId, revision);
+            var body = store.one("SELECT payload_json FROM memory_matter WHERE context_id=? AND matter_id=? AND content_revision=? AND state=?", key(context), matterId, revision, header.get("state"));
+            require(body != null, MemoryErrorCode.VERSION_CONFLICT);
+            var matter = store.decode((String) body.get("payload_json"), MemoryMatter.class);
+            require(matter.contextKey().equals(context) && matter.matterId().equals(matterId) && matter.version().revision() == revision && matter.state().name().equals(header.get("state"))
+                    && MemoryCanonicalHash.matterHash(matter).equals(matter.version().contentHash()) && new HashSet<>(dependencies).equals(new HashSet<>(matter.dependencies())), MemoryErrorCode.MEMORY_UNAVAILABLE);
+            matters.add(matter);
+        }
+        return matters;
     }
 
     private String cursor(String cursor, long revision, String contextId, String table, String idColumn) {

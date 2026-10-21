@@ -108,7 +108,7 @@ public class SupervisorAsyncTaskService {
                 request.userMessage(),
                 com.bkanent.agent.security.AgentRagContextPolicy.normalize(request.context()),
                 request.channel(),
-                request.stream(), request.skill(), request.continueRunId(), request.allowMcp()
+                request.stream(), request.skill(), request.continueRunId(), request.allowMcp(), request.matterIntent()
         );
         // Async submission is a persistence/dispatch concern. Planning,
         // approval and Agent selection must happen once inside the official

@@ -92,7 +92,7 @@ public class SupervisorGovernanceService {
                 request.userMessage(),
                 merged,
                 request.channel(),
-                request.stream(), request.skill(), request.continueRunId(), request.allowMcp()
+                request.stream(), request.skill(), request.continueRunId(), request.allowMcp(), request.matterIntent()
         );
     }
 

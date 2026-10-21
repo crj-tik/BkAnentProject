@@ -709,3 +709,21 @@
 **启用与容量**：默认关闭、默认 SHADOW，空加工映射不扫描正文。SHADOW 只保存评估并标记 SHADOWED，不创建生产偏好/索引；切换 PUBLISH 不自动重放旧影子结果。默认微批 4（1–16），最多 4 次（2–10），lease 90 秒（60–300），重试 30 秒（1–3600）；单条输入 16000 字符、最多 32 个注册维度、最多 8 个候选、输出 24000 字符，原档案不截断。各实例使用受管 UTC 时钟且需正常校时；attempt fence 防止过期旧 worker 提交。任务到期按轮询处理，测试使用固定时钟而非假设刚写入的时间立即满足查询条件。
 
 **关联**：LR-61/68/69；change 7.2、4.5 的偏好加工子集。INDEX_SUMMARY/INDEX_PREFERENCE/PRIVACY_CLEANUP 消费者、其他主体/共享偏好及 Agent 装配另行实现，不据本 worker 完成 4.5 或其他任务。
+
+## LR-71 事项状态由显式用户操作推进，关闭证据与压缩覆盖分别校验
+
+**结论**：Supervisor 用户请求的可选 `matterIntent` 单独表达 START/CONTINUE/CLOSE/REOPEN，保留原始 userMessage。模型工具与 A2A/Studio 代建请求不开放此字段；模型说 done、callback 返回和子任务终态均不构成关闭确认。typed intent 与原 USER 消息同档案签名/hash 保存，Memory 只接受当前 USER、原可信 source_caller、同 context 精确已接收来源、有效 writer fence 和 OCC。START 的稳定身份来自 context+源事件；CONTINUE 只选择已打开事项，不增加事项内容版本；关闭/重开追加不可变版本，旧回执幂等且不回退当前视图。
+
+**根因**：事项用于上下文组织，不能决定工具调用、审批或业务完成。用户关闭上下文也不能让待审批/未知结果消失。关闭触发与 token 触发共用冻结覆盖、完整工具组、摘要提交和 run 采用流程；关闭触发另要求当前持久 CLOSED 的 USER_CONFIRMATION，并把 cut 限制为该事项的连续前缀。未归属的精确 START 证据可纳入，其他事项的进行中资料保持原窗口。无安全 cut 或摘要失败不虚报压缩。token 压缩仍保留未决条目，不更改事项状态。
+
+**持久边界**：每条 StoredModelMessage 在创建时冻结 matterId，切换事项不回标旧消息；新增空字段不进入旧 journal JSON，避免恢复时制造新 event。旧 MemoryMessage 的空 intent 不改变内容 hash，新请求签名形状要求尚未启用的 caller/provider 同步升级。关闭待压缩标记进入原 Graph checkpoint；RPC 成功而 checkpoint 未保存时按源事件回执恢复，并重新读取当前真源，禁止采用旧回执版本。
+
+**代码位置**：MemoryMatterIntent、MemoryMatterService、SupervisorMemoryLifecycle、StoredModelMessage、MemoryCompactionCoordinator；迁移 180 的版本表与源事件回执。关联 LR-61/64/65/67、KI-144；change 6.1/6.6。自动事项候选与偏好/经验装配仍属 5.3/7.5。
+
+## LR-72 历史指代先用本地精确锚点，补查不能把不完整扫描解释为唯一匹配
+
+**结论**：只读 `memory_resolve_reference` 复用既有 MemoryRecall Graph 节点与全局工具额度。先匹配当前获准摘要中的稳定实体 ID/精确别名；没有匹配才查同 context 的实体页，最多两页、每页 20。同名不同 ID 必须澄清，不按相似文本合并。末页仍 hasMore 时返回 INCOMPLETE_NEEDS_CLARIFICATION，即使已见一个候选也不声称唯一；无证据返回澄清，brief 和证据随候选返回。
+
+**根因**：引用只是定位信息，不能授权其他 owner/domain/Agent/conversation。接口不接受扩大范围字段，matterId 只在已授权 context 中缩小匹配。Memory 先读派生定位与依赖元数据、检查当前来源后再开正文；Agent 补查后及输出前再次检查，并将消费来源存入 tool/assistant 的派生依赖，撤回后不能通过旧 checkpoint 继续输出。输出和依赖超预算明确失败，不静默删减证据。其他 context 的显式共享入口仍由后续共享任务接入。
+
+**代码位置**：SupervisorMemoryReferentResolver、SupervisorMemoryLifecycle.resolveReference/beforeOutput、MemoryArchiveService.queryEntities/readMatters；关联 LR-55/61/67、KI-144；change 6.6。

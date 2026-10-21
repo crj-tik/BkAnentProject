@@ -67,6 +67,7 @@ class MemoryV2RpcContractTest {
         MemoryMatter matter = new MemoryMatter("matter-1", CONTEXT, version(1), "write copy",
                 MemoryMatter.State.ACTIVE, null, List.of(new MemorySourceDependency(source("confirmation", 1), null)));
         List<Object> requests = List.of(
+                new MemoryMatterWriteRequest(envelope(MemoryV2Contract.OPERATION_MATTER_WRITE), CONTEXT, new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "write copy"), dependency, 0, new MemoryWriteAuthority("run-1", 1)),
                 new MemoryWorkingSetRequest(envelope(MemoryV2Contract.OPERATION_WORKING_SET), CONTEXT),
                 new MemoryReceivePermitRequest(envelope(MemoryV2Contract.OPERATION_RECEIVE_PERMIT), CONTEXT,
                         List.of(new MemoryReceivePermitRequest.EventSubmission("event-1", HASH, "conversation archive"))),
@@ -105,6 +106,7 @@ class MemoryV2RpcContractTest {
     @Test void responsesRoundTripAndPagesNeverClaimMoreWithoutCursor() throws Exception {
         MemoryConversationVersion conversation = new MemoryConversationVersion(5, 3, "policy-v2");
         List<Object> responses = List.of(
+                new MemoryMatterWriteResponse(new MemoryMatter("matter", CONTEXT, version(1), "write copy", MemoryMatter.State.ACTIVE, null, List.of(new MemorySourceDependency(source("confirmation", 1), null))), conversation, true),
                 new MemoryWorkingSetResponse(CONTEXT, conversation, List.of(), List.of(), List.of()),
                 new MemoryReceivePermitResponse("permit-1",
                         List.of(new MemoryReceivePermitResponse.EventAcceptance("event-1", true, null))),

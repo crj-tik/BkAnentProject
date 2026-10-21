@@ -98,7 +98,7 @@ public class SupervisorAsyncWorkflowService {
                 request.userMessage(),
                 com.bkanent.agent.security.AgentRagContextPolicy.normalize(request.context()),
                 request.channel(),
-                request.stream(), request.skill(), request.continueRunId(), request.allowMcp()
+                request.stream(), request.skill(), request.continueRunId(), request.allowMcp(), request.matterIntent()
         );
 
         AgentAsyncWorkflowEntity entity = new AgentAsyncWorkflowEntity();
@@ -240,7 +240,7 @@ public class SupervisorAsyncWorkflowService {
                 originalRequest.userMessage(),
                 originalRequest.context(),
                 originalRequest.channel(),
-                originalRequest.stream(), originalRequest.skill(), originalRequest.continueRunId(), originalRequest.allowMcp()
+                originalRequest.stream(), originalRequest.skill(), originalRequest.continueRunId(), originalRequest.allowMcp(), originalRequest.matterIntent()
         );
         publish(entity.getSessionId(), entity.getTaskId(), "supervisor-agent", "supervisor.workflow_async.retry_requested", Map.of(
                 "asyncWorkflowId", entity.getAsyncWorkflowId(),

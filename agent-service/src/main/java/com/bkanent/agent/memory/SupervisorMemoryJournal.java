@@ -137,5 +137,6 @@ public class SupervisorMemoryJournal {
         for (int i = 0; i < state.messages.size(); i++) ids.add(event(state.runId, i, state.messages.get(i)));
         return ids;
     }
+    public String eventAt(ToolLoopState state, int ordinal) { return event(state.runId, ordinal, state.messages.get(ordinal)); }
     private static void require(boolean valid) { if (!valid) throw new MemoryException(MemoryErrorCode.VERSION_CONFLICT); }
 }

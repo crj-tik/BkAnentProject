@@ -26,14 +26,26 @@ public final class MemoryCompactionCoordinator {
         if (recentMessages < 1 || recentMessages > 500) throw new MemoryException(MemoryErrorCode.INVALID_ARGUMENT);
         session.check();
         var snapshot = session.snapshot();
+        MemoryMatter closedMatter = null;
         if (trigger == Trigger.CONFIRMED_CLOSURE) {
             if (closure == null || !MemoryWorkingSession.dependencies(snapshot).containsAll(closure.evidence())) throw new MemoryException(MemoryErrorCode.FORBIDDEN);
             // A task's completion alone cannot prove a whole matter closed. Only explicit governed confirmation enters here.
             if (closure.kind() != MemoryMatter.ClosureKind.USER_CONFIRMATION) throw new MemoryException(MemoryErrorCode.FORBIDDEN);
+            var matches = snapshot.matters().stream().filter(m -> m.state() == MemoryMatter.State.CLOSED && closure.equals(m.closure())).toList();
+            if (matches.size() != 1) throw new MemoryException(MemoryErrorCode.FORBIDDEN);
+            closedMatter = matches.get(0);
         }
         var tail = snapshot.messages();
         if (tail.size() <= recentMessages) return false;
         long through = tail.get(tail.size() - recentMessages - 1).sequence();
+        if (closedMatter != null) {
+            for (var message : tail) {
+                boolean belongs = closedMatter.matterId().equals(message.association().matterId());
+                boolean explicitStart = message.matterIntent() != null && message.matterIntent().action() == MemoryMatterIntent.Action.START
+                        && closedMatter.dependencies().contains(new MemorySourceDependency(message.source(), null));
+                if (!belongs && !explicitStart) { through = Math.min(through, message.sequence() - 1); break; }
+            }
+        }
         Map<String,MemoryMessage> calls = new LinkedHashMap<>();
         Map<MemoryMessage,List<MemoryMessage>> responses = new LinkedHashMap<>();
         Set<MemoryMessage> protectedGroups = new HashSet<>();

@@ -16,7 +16,8 @@ public final class SupervisorMemoryProjection {
     public SupervisorMemoryProjection(ObjectMapper mapper) { this.mapper = mapper; }
 
     public MemoryMessage project(MemoryContextKey context, String runId, String event, long sequence, StoredModelMessage stored) {
-        var association = new MemoryAssociation(null, runId, null, null);
+        if (stored.matterIntent() != null && stored.matterIntent().goal() != null) requireSafeText(stored.matterIntent().goal());
+        var association = new MemoryAssociation(stored.matterId(), runId, null, null);
         MemoryMessage.Role role = switch (stored.role()) {
             case "user" -> MemoryMessage.Role.USER;
             case "assistant" -> MemoryMessage.Role.ASSISTANT;
@@ -31,10 +32,10 @@ public final class SupervisorMemoryProjection {
         String text = role == MemoryMessage.Role.TOOL || stored.text() == null || stored.text().isEmpty() ? null : safeText(stored.text());
         String id = "m-" + event;
         var source = new MemorySourceRef(MemorySourceRef.Kind.MESSAGE, context, id, event, sequence, new MemoryRevision(1, "0".repeat(64), "supervisor.message.v2"));
-        var draft = new MemoryMessage(id, context, sequence, association, role, text, calls, responses, source, stored.memoryDependencies());
+        var draft = new MemoryMessage(id, context, sequence, association, role, text, calls, responses, source, stored.memoryDependencies(), stored.matterIntent());
         return new MemoryMessage(id, context, sequence, association, role, text, calls, responses,
                 new MemorySourceRef(source.kind(), context, id, event, sequence,
-                        new MemoryRevision(1, MemoryCanonicalHash.messageHash(draft), source.version().schemaVersion())), stored.memoryDependencies());
+                        new MemoryRevision(1, MemoryCanonicalHash.messageHash(draft), source.version().schemaVersion())), stored.memoryDependencies(), stored.matterIntent());
     }
 
     private MemoryToolResponse.ExecutionState responseState(String text) {

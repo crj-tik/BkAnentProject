@@ -1,0 +1,1 @@
+SELECT IF(COUNT(*)=9,1,0) FROM information_schema.columns WHERE table_schema='bk_memory' AND ((table_name='memory_matter_revision' AND column_name IN ('context_id','matter_id','content_revision','content_hash','payload_json')) OR (table_name='memory_matter_receipt' AND column_name IN ('context_id','source_event_id','intent_hash','response_json')));

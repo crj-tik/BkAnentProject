@@ -104,7 +104,7 @@ public class AgentPrincipalContext {
         }
         return new SupervisorTaskRequest(sessionId, userId, request.requestId(), request.traceId(),
                 request.userMessage(), Collections.unmodifiableMap(context), request.channel(), request.stream(),
-                request.skill(), request.continueRunId(), request.allowMcp());
+                request.skill(), request.continueRunId(), request.allowMcp(), request.matterIntent());
     }
 
     private void requireRequest(Object request) {

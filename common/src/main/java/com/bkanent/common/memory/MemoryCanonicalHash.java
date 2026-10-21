@@ -25,9 +25,16 @@ public final class MemoryCanonicalHash {
     /** Stable content identity. The source hash is excluded to avoid a self-referential digest. */
     public static String messageHash(MemoryMessage message) {
         MemoryContract.required(message, MemoryException.Field.HASH);
-        return contentHash(java.util.Arrays.asList(message.messageId(), message.contextKey(), message.sequence(), message.association(),
+        var fields = new java.util.ArrayList<>(java.util.Arrays.asList(message.messageId(), message.contextKey(), message.sequence(), message.association(),
                 message.role(), message.text(), message.toolCalls(), message.toolResponses(),
                 message.source().sourceEventId(), message.source().version().revision(), message.source().version().schemaVersion(), message.dependencies()));
+        if (message.matterIntent() != null) fields.add(message.matterIntent());
+        return contentHash(fields);
+    }
+
+    public static String matterHash(MemoryMatter matter) {
+        return contentHash(java.util.Arrays.asList(matter.matterId(), matter.contextKey(), matter.version().revision(),
+                matter.version().schemaVersion(), matter.goal(), matter.state(), matter.closure(), matter.dependencies()));
     }
 
     /** Includes all summary fields except its own content hash. */

@@ -45,6 +45,52 @@ import static org.mockito.Mockito.*;
 /** Real Graph, persisted checkpoint saver, reference journal, current actor lease and thin runtime.
  * Only the remote Memory endpoint is a contract fixture; its actual SQL/security is tested in memory-service. */
 class SupervisorMemoryIntegrationTest {
+    @Test void explicitCloseTriggersSameCoordinatorBelowSoftThresholdAndReopenIsVersioned() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.properties.setCompressionEnabled(true); f.properties.setRecentMessages(1);
+            when(f.model.call(anyList(), anyList())).thenAnswer(inv -> {
+                List<ToolCallback> tools = inv.getArgument(1);
+                if (tools.isEmpty()) { f.summaryCalls.incrementAndGet(); return new AssistantMessage("{\"items\":[{\"kind\":\"FACT\",\"text\":\"用户事项\",\"evidence\":[0]}],\"entities\":[]}"); }
+                return new AssistantMessage("done");
+            });
+            assertEquals("COMPLETED", f.execute("start", "开始买房事项", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房")).status());
+            var matter = f.remote.snapshot.matters().get(0);
+            assertEquals(MemoryMatter.State.ACTIVE, matter.state(), "assistant done is not user confirmation");
+            assertEquals(0, f.summaryCalls.get());
+            assertEquals("COMPLETED", f.execute("close", "确认关闭", new MemoryMatterIntent(MemoryMatterIntent.Action.CLOSE, matter.matterId(), 1, null)).status());
+            assertEquals(1, f.summaryCalls.get()); assertFalse(f.remote.snapshot.summaries().isEmpty());
+            assertEquals(MemoryMatter.State.CLOSED, f.remote.snapshot.matters().get(0).state());
+            assertEquals(2, f.remote.snapshot.summaries().get(0).coveredRange().throughSequence());
+            assertEquals("COMPLETED", f.execute("closed-ordinary", "开始另一个事情").status());
+            var ordinary = f.state("closed-ordinary").messages.get(0);
+            assertNull(ordinary.matterId(), "a closed matter is not silently selected or reopened");
+            f.restartIdentity();
+            assertEquals("COMPLETED", f.execute("reopen", "继续此事项", new MemoryMatterIntent(MemoryMatterIntent.Action.REOPEN, matter.matterId(), 2, null)).status());
+            assertEquals(MemoryMatter.State.REOPENED, f.remote.snapshot.matters().get(0).state());
+            assertEquals(3, f.remote.snapshot.matters().get(0).version().revision());
+            assertNull(f.state("start").messages.get(0).matterId(), "old archived user event is never retagged");
+            assertEquals(matter.matterId(), f.state("start").messages.get(1).matterId());
+        }
+    }
+    @Test void typedIntentCannotSilentlySucceedWhenMemoryIsOff() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.properties.setEnabled(false);
+            assertEquals("FAILED", f.execute("disabled-intent", "开始事项", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房")).status());
+            assertEquals(0, f.remote.count("transitionMatter")); verifyNoInteractions(f.model);
+        }
+    }
+    @Test void referenceControlUsesMemoryRecallNodeAndNoBusinessExecution() throws Exception {
+        try (Fixture f = new Fixture()) {
+            when(f.model.call(anyList(), anyList())).thenAnswer(inv -> {
+                List<Message> input = inv.getArgument(0); f.inputs.add(input);
+                if (f.inputs.size() == 1) return AssistantMessage.builder().content("").toolCalls(List.of(new AssistantMessage.ToolCall("reference-1", "function", SupervisorMemoryReferentResolver.TOOL_NAME, "{\"reference\":\"那套房\"}"))).build();
+                assertTrue(input.toString().contains("NEEDS_CLARIFICATION")); return new AssistantMessage("请说明所指房源");
+            });
+            assertEquals("COMPLETED", f.execute("reference", "那套房呢").status());
+            assertEquals(1, f.remote.count("queryEntities")); assertEquals(0, f.effects.get());
+            assertTrue(f.state("reference").messages.stream().anyMatch(m -> "tool".equals(m.role()) && m.responses().get(0).name().equals(SupervisorMemoryReferentResolver.TOOL_NAME)));
+        }
+    }
     @Test void actualModelNodesArchiveOnceReuseWindowAndNeverPersistCredential() throws Exception {
         try (Fixture f = new Fixture()) {
             f.localToolThenAnswer();
@@ -453,6 +499,10 @@ class SupervisorMemoryIntegrationTest {
         com.bkanent.agent.model.distributed.SupervisorTaskResponse execute(String run, String input) throws Exception {
             try (var scope = identities.openAuthorization("Bearer transport-only-value")) { return runner.execute(request(run, input)); }
         }
+        com.bkanent.agent.model.distributed.SupervisorTaskResponse execute(String run, String input, MemoryMatterIntent intent) throws Exception {
+            var request = new SupervisorTaskRequest("session", "1", run, "trace", input, Map.of(), "api", false, null, null, null, intent);
+            try (var scope = identities.openAuthorization("Bearer transport-only-value")) { return runner.execute(request); }
+        }
         ToolLoopState state(String run) { return factory.stateOf(graph.lastStateOf(com.alibaba.cloud.ai.graph.RunnableConfig.builder().threadId(run).build()).orElseThrow().state()); }
         String task(LambdaQueryWrapper<?> query) { query.getSqlSegment(); return (String) query.getParamNameValuePairs().values().iterator().next(); }
         List<AgentWorkflowCheckpointEntity> rows(String run) { return jdbc.query("SELECT * FROM agent_workflow_checkpoint WHERE task_id=? ORDER BY checkpoint_version DESC", (rs, n) -> {
@@ -472,6 +522,7 @@ class SupervisorMemoryIntegrationTest {
         boolean loseToolReceipt;
         boolean revoked;
         boolean unavailable;
+        final Map<String, MemoryMatterWriteResponse> matterReceipts = new HashMap<>();
         final MemoryV2RpcService rpc = (MemoryV2RpcService) Proxy.newProxyInstance(getClass().getClassLoader(), new Class[]{MemoryV2RpcService.class}, (proxy, method, args) -> {
             String name = method.getName();
             calls.merge(name, 1, Integer::sum);
@@ -490,6 +541,22 @@ class SupervisorMemoryIntegrationTest {
                     yield new MemoryWriterResponse(new MemoryWriteAuthority(writer.runId(), fence), System.currentTimeMillis() + 120000, snapshot.version());
                 }
                 case "readWorkingSet" -> snapshot;
+                case "queryEntities" -> new MemoryEntityQueryResponse(List.of(), null, false);
+                case "transitionMatter" -> {
+                    var write = (MemoryMatterWriteRequest) request;
+                    String event = write.evidence().source().sourceEventId();
+                    if (matterReceipts.containsKey(event)) yield matterReceipts.get(event);
+                    String id = write.intent().action() == MemoryMatterIntent.Action.START ? "matter-" + MemoryCanonicalHash.contentHash(List.of(write.contextKey(), event)) : write.intent().matterId();
+                    var old = snapshot.matters().stream().filter(m -> id.equals(m.matterId())).findFirst().orElse(null);
+                    var dependencies = new ArrayList<MemorySourceDependency>(old == null ? List.of() : old.dependencies()); dependencies.add(write.evidence());
+                    var state = write.intent().action() == MemoryMatterIntent.Action.CLOSE ? MemoryMatter.State.CLOSED : write.intent().action() == MemoryMatterIntent.Action.REOPEN ? MemoryMatter.State.REOPENED : MemoryMatter.State.ACTIVE;
+                    var closure = state == MemoryMatter.State.CLOSED ? new MemoryMatter.ClosureEvidence(MemoryMatter.ClosureKind.USER_CONFIRMATION, List.of(write.evidence())) : old == null ? null : old.closure();
+                    var draft = new MemoryMatter(id, write.contextKey(), new MemoryRevision(old == null ? 1 : old.version().revision() + 1, "0".repeat(64), "matter.v2.1"), old == null ? write.intent().goal() : old.goal(), state, closure, dependencies);
+                    var matter = new MemoryMatter(id, draft.contextKey(), new MemoryRevision(draft.version().revision(), MemoryCanonicalHash.matterHash(draft), "matter.v2.1"), draft.goal(), state, closure, dependencies);
+                    var matters = new ArrayList<>(snapshot.matters().stream().filter(m -> !id.equals(m.matterId())).toList()); matters.add(matter);
+                    snapshot = new MemoryWorkingSetResponse(snapshot.contextKey(), new MemoryConversationVersion(snapshot.version().revision() + 1, snapshot.version().lastSequence(), "fixture-v2"), snapshot.messages(), snapshot.summaries(), matters);
+                    var response = new MemoryMatterWriteResponse(matter, snapshot.version(), true); matterReceipts.put(event, response); yield response;
+                }
                 case "checkBoundary" -> {
                     if (revoked) throw new MemoryException(MemoryErrorCode.WITHDRAWN);
                     var boundary = (MemoryBoundaryRequest) request;
@@ -508,7 +575,7 @@ class SupervisorMemoryIntegrationTest {
                         if (message.sequence() != last + 1) throw new MemoryException(MemoryErrorCode.VERSION_CONFLICT);
                         messages.add(message); last++; changed = true;
                     }
-                    snapshot = new MemoryWorkingSetResponse(snapshot.contextKey(), new MemoryConversationVersion(snapshot.version().revision() + (changed ? 1 : 0), last, "fixture-v2"), messages, snapshot.summaries(), List.of());
+                    snapshot = new MemoryWorkingSetResponse(snapshot.contextKey(), new MemoryConversationVersion(snapshot.version().revision() + (changed ? 1 : 0), last, "fixture-v2"), messages, snapshot.summaries(), snapshot.matters());
                     if (loseToolReceipt && delivery.messages().stream().anyMatch(m -> m.role() == MemoryMessage.Role.TOOL)) throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
                     yield new MemoryDeliveryResponse(delivery.permitId(), snapshot.version(), delivery.messages().stream().map(m -> new MemoryDeliveryResponse.DeliveryResult(m.sequence(), true, null)).toList());
                 }
@@ -516,7 +583,7 @@ class SupervisorMemoryIntegrationTest {
                     var summary = ((MemorySummaryRequest) request).summary();
                     if (summary.expectedConversationRevision() != snapshot.version().revision()) throw new MemoryException(MemoryErrorCode.VERSION_CONFLICT);
                     snapshot = new MemoryWorkingSetResponse(snapshot.contextKey(), new MemoryConversationVersion(snapshot.version().revision() + 1, snapshot.version().lastSequence(), "fixture-v2"),
-                            snapshot.messages().stream().filter(m -> m.sequence() > summary.coveredRange().throughSequence()).toList(), List.of(summary), List.of());
+                            snapshot.messages().stream().filter(m -> m.sequence() > summary.coveredRange().throughSequence()).toList(), List.of(summary), snapshot.matters());
                     yield new MemorySummaryResponse(summary.summaryId(), true, null, snapshot.version());
                 }
                 default -> throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);

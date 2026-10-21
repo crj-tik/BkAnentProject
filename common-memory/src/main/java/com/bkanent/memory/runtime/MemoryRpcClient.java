@@ -28,6 +28,15 @@ public final class MemoryRpcClient {
         return invoke(MemoryV2Contract.OPERATION_WORKING_SET, e -> new MemoryWorkingSetRequest(e, context), rpc::readWorkingSet);
     }
 
+    public MemoryMatterWriteResponse transitionMatter(MemoryContextKey context, MemoryMatterIntent intent, MemorySourceDependency evidence,
+            long expectedConversationRevision, MemoryWriteAuthority writer) {
+        return invoke(MemoryV2Contract.OPERATION_MATTER_WRITE, e -> new MemoryMatterWriteRequest(e,context,intent,evidence,expectedConversationRevision,writer),rpc::transitionMatter);
+    }
+
+    public MemoryEntityQueryResponse entities(MemoryContextKey context, String cursor, int limit) {
+        return invoke(MemoryV2Contract.OPERATION_QUERY_ENTITIES,e -> new MemoryEntityQueryRequest(e,context,cursor,limit),rpc::queryEntities);
+    }
+
     public MemoryBoundaryResponse check(MemoryWorkingSetResponse snapshot, java.util.List<MemorySourceDependency> dependencies) {
         return invoke(MemoryV2Contract.OPERATION_BOUNDARY, e -> new MemoryBoundaryRequest(e, snapshot.contextKey(), snapshot.version(), dependencies), rpc::checkBoundary);
     }

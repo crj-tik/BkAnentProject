@@ -47,4 +47,8 @@ public class ToolLoopState {
     public List<com.bkanent.common.memory.MemorySourceDependency> adoptedMemorySources = new ArrayList<>();
     public String memoryResumeNode;
     public String memoryPendingAnswer;
+    public String memoryMatterId;
+    public String memoryMatterStatus;
+    public String memoryMatterIntentEvent;
+    public String memoryClosureMatterId;
 }

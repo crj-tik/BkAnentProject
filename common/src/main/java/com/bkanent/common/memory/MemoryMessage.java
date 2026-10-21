@@ -7,13 +7,18 @@ import java.util.List;
 public record MemoryMessage(String messageId, MemoryContextKey contextKey, long sequence,
                             MemoryAssociation association, Role role, String text,
                             List<MemoryToolCall> toolCalls, List<MemoryToolResponse> toolResponses,
-                            MemorySourceRef source, List<MemorySourceDependency> dependencies) implements Serializable {
+                            MemorySourceRef source, List<MemorySourceDependency> dependencies, MemoryMatterIntent matterIntent) implements Serializable {
     private static final long serialVersionUID = 1L;
     public enum Role { SYSTEM, USER, ASSISTANT, TOOL }
 
     public MemoryMessage(String messageId, MemoryContextKey contextKey, long sequence, MemoryAssociation association, Role role,
                          String text, List<MemoryToolCall> calls, List<MemoryToolResponse> responses, MemorySourceRef source) {
-        this(messageId, contextKey, sequence, association, role, text, calls, responses, source, List.of());
+        this(messageId, contextKey, sequence, association, role, text, calls, responses, source, List.of(), null);
+    }
+
+    public MemoryMessage(String messageId, MemoryContextKey contextKey, long sequence, MemoryAssociation association, Role role,
+                         String text, List<MemoryToolCall> calls, List<MemoryToolResponse> responses, MemorySourceRef source, List<MemorySourceDependency> dependencies) {
+        this(messageId, contextKey, sequence, association, role, text, calls, responses, source, dependencies, null);
     }
 
     public MemoryMessage {
@@ -22,6 +27,7 @@ public record MemoryMessage(String messageId, MemoryContextKey contextKey, long 
         MemoryContract.require(sequence > 0, MemoryException.Field.SOURCE);
         MemoryContract.required(association, MemoryException.Field.ASSOCIATION);
         MemoryContract.required(role, MemoryException.Field.ROLE);
+        MemoryContract.require(matterIntent == null || role == Role.USER, MemoryException.Field.ROLE);
         text = MemoryContract.optionalText(text, MemoryException.Field.TEXT);
         toolCalls = MemoryContract.list(toolCalls, MemoryException.Field.TOOL_CALL);
         toolResponses = MemoryContract.list(toolResponses, MemoryException.Field.TOOL_RESPONSE);

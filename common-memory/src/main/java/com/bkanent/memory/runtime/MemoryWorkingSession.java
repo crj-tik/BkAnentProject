@@ -29,6 +29,14 @@ public final class MemoryWorkingSession implements AutoCloseable {
         } catch (RuntimeException exception) { cache.remove(context); throw exception; }
     }
     public void renew() { client.writer(context, MemoryWriterRequest.Action.RENEW, writer.runId(), writer.fence()); }
+    public MemoryMatterWriteResponse transitionMatter(MemoryMessage evidence) {
+        if(evidence.matterIntent()==null || !evidence.contextKey().equals(context)) throw new MemoryException(MemoryErrorCode.INVALID_ARGUMENT);
+        renew(); check();
+        var result=client.transitionMatter(context,evidence.matterIntent(),new MemorySourceDependency(evidence.source(),null),snapshot.version().revision(),writer);
+        check(); // a replay receipt can describe an older conversation version; always adopt current truth
+        if(!result.matter().contextKey().equals(context)) throw new MemoryException(MemoryErrorCode.FORBIDDEN);
+        return result;
+    }
     public MemoryDeliveryResponse deliver(String permit, List<MemoryMessage> messages) {
         var receipt = client.deliver(context, messages.get(0).association(), permit, messages);
         if (!permit.equals(receipt.permitId()) || receipt.results().size() != messages.size()) throw new MemoryException(MemoryErrorCode.ARCHIVE_NOT_CONFIRMED);

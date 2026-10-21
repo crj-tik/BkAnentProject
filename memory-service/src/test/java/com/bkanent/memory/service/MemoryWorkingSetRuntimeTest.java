@@ -27,7 +27,7 @@ class MemoryWorkingSetRuntimeTest {
         boolean losePermitReply;
         RuntimeFixture() throws Exception {
             var access = new MemorySharingAccessService(security, new MemoryAccessPolicy(), sharing, sources, transactions);
-            var real = new MemoryV2RpcServiceImpl(service, access, security);
+            var real = new MemoryV2RpcServiceImpl(service, access, security, null, new MemoryMatterService(store, security, sources, transactions));
             var proxy = (MemoryV2RpcService) Proxy.newProxyInstance(getClass().getClassLoader(), new Class[]{MemoryV2RpcService.class}, (ignored, method, args) -> {
                 calls.merge(method.getName(), 1, Integer::sum);
                 try {
@@ -258,11 +258,17 @@ class MemoryWorkingSetRuntimeTest {
     @Test void closureAndTokenCandidatesCompeteOnOneConversationRevision() throws Exception {
         var f = new RuntimeFixture();
         try (var session = f.open("run")) {
-            f.append(session, List.of(message(1, "one"), message(2, "two"), message(3, "three")));
+            var start = MemoryMatterServiceTest.message(CONTEXT, 1, new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房"));
+            f.append(session, List.of(start));
+            var matter = session.transitionMatter(start).matter();
+            var close = MemoryMatterServiceTest.message(CONTEXT, 2, new MemoryMatterIntent(MemoryMatterIntent.Action.CLOSE, matter.matterId(), 1, null));
+            f.append(session, List.of(close));
+            var closed = session.transitionMatter(close).matter();
+            f.append(session, List.of(message(3, "recent unrelated input")));
             var coordinator = new MemoryCompactionCoordinator();
             code(MemoryErrorCode.VERSION_CONFLICT, () -> coordinator.compact(session, 1,
                     MemoryCompactionCoordinator.Trigger.TOKEN_PRESSURE, null, input -> {
-                        var closure = new MemoryMatter.ClosureEvidence(MemoryMatter.ClosureKind.USER_CONFIRMATION, input.dependencies());
+                        var closure = closed.closure();
                         assertTrue(coordinator.compact(session, 1, MemoryCompactionCoordinator.Trigger.CONFIRMED_CLOSURE, closure,
                                 winner -> List.of(new MemorySummary.Item(MemorySummary.ItemKind.FACT, "confirmed candidate", winner.dependencies())), () -> { }));
                         return List.of(new MemorySummary.Item(MemorySummary.ItemKind.FACT, "losing token candidate", input.dependencies()));
@@ -288,6 +294,29 @@ class MemoryWorkingSetRuntimeTest {
                     }, () -> { }));
             assertEquals(0, f.count("memory_summary"));
             assertNull(f.cache.get(CONTEXT));
+        }
+    }
+    @Test void closureNeedsPersistedClosedMatterNotJustAUserSource() throws Exception {
+        var f = new RuntimeFixture();
+        try (var session = f.open("run")) {
+            f.append(session, List.of(message(1, "done"), message(2, "recent")));
+            var closure = new MemoryMatter.ClosureEvidence(MemoryMatter.ClosureKind.USER_CONFIRMATION, MemoryWorkingSession.dependencies(session.snapshot()));
+            code(MemoryErrorCode.FORBIDDEN, () -> new MemoryCompactionCoordinator().compact(session, 1, MemoryCompactionCoordinator.Trigger.CONFIRMED_CLOSURE, closure,
+                    input -> { fail("unverified closure cannot enter generator"); return List.of(); }, () -> { }));
+        }
+    }
+    @Test void closureKeepsUnrelatedOpenMaterialButTokenPressureCanUseItsOwnSafeCoverage() throws Exception {
+        var f = new RuntimeFixture();
+        try (var session = f.open("run")) {
+            f.append(session, List.of(message(1, "unrelated open matter")));
+            var start = MemoryMatterServiceTest.message(CONTEXT, 2, new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房")); f.append(session, List.of(start));
+            var matter = session.transitionMatter(start).matter();
+            var close = MemoryMatterServiceTest.message(CONTEXT, 3, new MemoryMatterIntent(MemoryMatterIntent.Action.CLOSE, matter.matterId(), 1, null)); f.append(session, List.of(close));
+            var closed = session.transitionMatter(close).matter(); var coordinator = new MemoryCompactionCoordinator();
+            assertFalse(coordinator.compact(session, 1, MemoryCompactionCoordinator.Trigger.CONFIRMED_CLOSURE, closed.closure(), input -> { fail("unrelated prefix stays"); return List.of(); }, () -> { }));
+            assertEquals(3, session.snapshot().messages().size());
+            assertTrue(coordinator.compact(session, 1, MemoryCompactionCoordinator.Trigger.TOKEN_PRESSURE, null, input -> List.of(new MemorySummary.Item(MemorySummary.ItemKind.UNRESOLVED, "unrelated open matter", input.dependencies())), () -> { }));
+            assertEquals(MemoryMatter.State.CLOSED, session.snapshot().matters().get(0).state());
         }
     }
 

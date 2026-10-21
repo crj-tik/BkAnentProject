@@ -31,6 +31,7 @@ class MemoryArchiveProviderTest {
             context.registerBean(MemoryArchiveService.class, () -> f.service);
             context.registerBean(MemorySharingAccessService.class, () -> sharing);
             context.registerBean(MemoryV2RequestSecurity.class, () -> f.security);
+            context.registerBean(MemoryMatterService.class, () -> new MemoryMatterService(f.store, f.security, f.sources, f.transactions));
             context.registerBean(PreferenceHistoryService.class, () -> new PreferenceHistoryService(f.store, f.security, f.sources,
                     new com.bkanent.memory.config.MemoryPreferenceProperties(), f.transactions));
             context.register(MemoryV2RpcServiceImpl.class);
@@ -47,7 +48,7 @@ class MemoryArchiveProviderTest {
         var f = new MemoryArchiveServiceTest.Fixture();
         var sharing = new MemorySharingAccessService(f.security, new MemoryAccessPolicy(), f.sharing, f.sources, f.transactions);
         var preferences = new PreferenceHistoryService(f.store, f.security, f.sources, new com.bkanent.memory.config.MemoryPreferenceProperties(), f.transactions);
-        var implementation = new MemoryV2RpcServiceImpl(f.service, sharing, f.security, preferences);
+        var implementation = new MemoryV2RpcServiceImpl(f.service, sharing, f.security, preferences, new MemoryMatterService(f.store, f.security, f.sources, f.transactions));
         var provider = new ProviderConfig();
         var application = new ApplicationConfig("memory-archive-fixture-" + UUID.randomUUID());
         application.setQosEnable(false);
@@ -67,13 +68,19 @@ class MemoryArchiveProviderTest {
         try {
             service.export();
             var rpc = reference.get();
-            var message = MemoryArchiveServiceTest.message(1, "native RPC fact");
+            var message = MemoryMatterServiceTest.message(MemoryArchiveServiceTest.CONTEXT, 1, new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "native RPC matter"));
             var permitRequest = f.permitRequest(List.of(message), List.of(), "rpc-permit");
             var permit = rpc.requestReceivePermit(permitRequest, f.sign(permitRequest));
-            var delivery = f.delivery(permit.permitId(), List.of(message));
+            var delivery = f.request(MemoryV2Contract.OPERATION_DELIVER_MESSAGES, e -> new MemoryDeliveryRequest(e, MemoryArchiveServiceTest.CONTEXT, message.association(), permit.permitId(), List.of(message)));
             assertEquals(1, rpc.deliverMessages(delivery, f.signService(delivery)).version().lastSequence());
             var read = f.request(MemoryV2Contract.OPERATION_WORKING_SET, envelope -> new MemoryWorkingSetRequest(envelope, MemoryArchiveServiceTest.CONTEXT));
             assertEquals(List.of(message), rpc.readWorkingSet(read, f.sign(read)).messages());
+            var writer = f.request(MemoryV2Contract.OPERATION_WRITER, e -> new MemoryWriterRequest(e, MemoryArchiveServiceTest.CONTEXT, MemoryWriterRequest.Action.ACQUIRE, "run-1", 0));
+            var authority = rpc.manageWriter(writer, f.sign(writer)).authority();
+            var matterWrite = f.request(MemoryV2Contract.OPERATION_MATTER_WRITE, e -> new MemoryMatterWriteRequest(e, MemoryArchiveServiceTest.CONTEXT, message.matterIntent(), new MemorySourceDependency(message.source(), null), 1, authority));
+            var matterReceipt = rpc.transitionMatter(matterWrite, f.sign(matterWrite));
+            assertEquals(MemoryMatter.State.ACTIVE, matterReceipt.matter().state());
+            assertEquals(matterReceipt, rpc.transitionMatter(matterWrite, f.sign(matterWrite)));
             var write = f.request(MemoryV2Contract.OPERATION_PREFERENCE_WRITE, e -> new MemoryPreferenceWriteRequest(e, MemoryArchiveServiceTest.CONTEXT, 0,
                     new MemoryPreferenceAssessment("budget", PreferenceTransition.Assessment.PREFERENCE, PreferenceTransition.Change.OBSERVATION,
                             PreferenceTransition.Polarity.NEGATIVE, MemoryJsonValue.number("100"), null, null, null, null, List.of(), .8,
