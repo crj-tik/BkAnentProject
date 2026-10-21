@@ -10,8 +10,20 @@ memory:
       max-attempts: ${MEMORY_V2_PRIVACY_CLEANUP_MAX_ATTEMPTS:8}
       lease-seconds: ${MEMORY_V2_PRIVACY_CLEANUP_LEASE_SECONDS:60}
       retry-seconds: ${MEMORY_V2_PRIVACY_CLEANUP_RETRY_SECONDS:15}
-    # Empty by default. Populate from deployment-managed secrets and exact domain/agent mappings.
-    trusted-callers: {}
+    # Exact per-service/domain/agent bindings. Callers remain unusable until secrets are configured.
+    trusted-callers:
+      marketing-content-service:
+        key-id: ${MARKETING_MEMORY_V2_KEY_ID:marketing-memory-current}
+        signing-secret: ${MARKETING_MEMORY_V2_SIGNING_SECRET:}
+        service-delivery: true
+        allowed-agents-by-domain:
+          marketing: [marketing-agent]
+      interview-service:
+        key-id: ${INTERVIEW_MEMORY_V2_KEY_ID:interview-memory-current}
+        signing-secret: ${INTERVIEW_MEMORY_V2_SIGNING_SECRET:}
+        service-delivery: true
+        allowed-agents-by-domain:
+          interview: [interview-agent]
     preference:
       processing:
         enabled: ${MEMORY_V2_PREFERENCE_PROCESSING_ENABLED:false}

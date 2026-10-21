@@ -28,11 +28,14 @@ public class MarketingOfficialA2aAgent {
     private final ReactAgent reactAgent;
     private final SkillRegistry skillRegistry;
     private final List<ToolCallback> executionTools;
+    private final com.bkanent.common.a2a.A2aMemoryAgentHook memoryHook;
 
     public MarketingOfficialA2aAgent(ChatModel chatModel,
                                      MarketingAgentProperties properties,
-                                   MarketingTools marketingTools, SkillRegistry skillRegistry) {
+                                   MarketingTools marketingTools, SkillRegistry skillRegistry,
+                                   com.bkanent.common.a2a.A2aMemoryHookFactory memoryHookFactory) {
         this.skillRegistry = skillRegistry;
+        this.memoryHook = memoryHookFactory.create("marketing-content-service", "marketing", "marketing-agent", chatModel);
         List<ToolCallback> tools = new ArrayList<>(Arrays.asList(
                 MethodToolCallbackProvider.builder().toolObjects(marketingTools).build().getToolCallbacks()));
         tools.add(new SkillTool(skillRegistry, "marketing"));
@@ -43,6 +46,7 @@ public class MarketingOfficialA2aAgent {
                 .model(chatModel)
                 .systemPrompt(properties.getSystemPrompt())
                 .tools(tools)
+                .hooks(memoryHook)
                 .interceptors(new com.bkanent.common.a2a.A2aAuthenticationToolInterceptor(), new A2aSupervisorContextInterceptor(),
                         new SkillRoutingModelInterceptor(skillRegistry, "marketing"), new SkillRoutingToolInterceptor())
                 .outputKey(OUTPUT_KEY)
@@ -66,6 +70,6 @@ public class MarketingOfficialA2aAgent {
     @Bean
     public AgentExecutor marketingA2aAgentExecutor(ObjectMapper objectMapper, com.bkanent.common.a2a.A2aExecutionProperties execution) {
         return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("marketing"),
-                skillRegistry, "marketing", executionTools, execution.getStreamTimeoutMs());
+                skillRegistry, "marketing", executionTools, execution.getStreamTimeoutMs(), memoryHook);
     }
 }

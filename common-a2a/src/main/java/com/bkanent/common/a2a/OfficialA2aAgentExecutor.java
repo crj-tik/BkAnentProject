@@ -49,20 +49,28 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
     private final com.bkanent.common.skill.core.SkillRegistry skillRegistry;
     private final String skillOwner;
     private final Map<String, String> capabilities;
+    private final A2aMemoryAgentHook memoryHook;
 
     public OfficialA2aAgentExecutor(ReactAgent agent, ObjectMapper objectMapper, A2aOutputPolicy outputPolicy) {
-        this(agent, objectMapper, outputPolicy, null, null, List.of());
+        this(agent, objectMapper, outputPolicy, null, null, List.of(), 120_000, null);
     }
 
     public OfficialA2aAgentExecutor(ReactAgent agent, ObjectMapper objectMapper, A2aOutputPolicy outputPolicy,
                                   com.bkanent.common.skill.core.SkillRegistry skillRegistry, String skillOwner,
                                   List<org.springframework.ai.tool.ToolCallback> tools) {
-        this(agent, objectMapper, outputPolicy, skillRegistry, skillOwner, tools, 120_000);
+        this(agent, objectMapper, outputPolicy, skillRegistry, skillOwner, tools, 120_000, null);
     }
 
     public OfficialA2aAgentExecutor(ReactAgent agent, ObjectMapper objectMapper, A2aOutputPolicy outputPolicy,
                                   com.bkanent.common.skill.core.SkillRegistry skillRegistry, String skillOwner,
                                   List<org.springframework.ai.tool.ToolCallback> tools, long streamTimeoutMs) {
+        this(agent, objectMapper, outputPolicy, skillRegistry, skillOwner, tools, streamTimeoutMs, null);
+    }
+
+    public OfficialA2aAgentExecutor(ReactAgent agent, ObjectMapper objectMapper, A2aOutputPolicy outputPolicy,
+                                  com.bkanent.common.skill.core.SkillRegistry skillRegistry, String skillOwner,
+                                  List<org.springframework.ai.tool.ToolCallback> tools, long streamTimeoutMs,
+                                  A2aMemoryAgentHook memoryHook) {
         if (streamTimeoutMs < 1) throw new IllegalArgumentException("stream timeout must be positive");
         this.streamTimeoutMs = streamTimeoutMs;
         this.agent = agent;
@@ -71,6 +79,7 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
         this.outputNormalizer = new A2aOutputNormalizer(objectMapper);
         this.skillRegistry = skillRegistry;
         this.skillOwner = skillOwner;
+        this.memoryHook = memoryHook;
         Map<String, String> available = new java.util.LinkedHashMap<>();
         tools.stream().map(tool -> tool.getToolDefinition().name()).filter(name -> !"skill".equals(name))
                 .forEach(name -> available.put(com.bkanent.common.agent.CapabilityId.local(name).value(), name));
@@ -89,6 +98,7 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
         }
         try {
             A2aInput input = inputParser.parse(context, outputPolicy);
+            if (memoryHook != null) execution.memoryInvocation = memoryHook.invocation(context.getTaskId(), context.getContextId());
             var skillExecution = prepareSkillExecution(input);
             execution.skillExecution = skillExecution;
             if (execution.cancelled.get()) {
@@ -114,9 +124,12 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
         }
         catch (Exception exception) {
             LOGGER.warn("Official A2A SubAgent execution failed for task {}", context.getTaskId());
-            failExecution(execution, "EXECUTION_FAILED", "SubAgent execution failed");
+            var memoryException = memoryException(exception);
+            failExecution(execution, memoryException == null ? "EXECUTION_FAILED" : memoryException.code().name(),
+                    memoryException == null ? "SubAgent execution failed" : "Memory authorization or processing failed");
         }
         finally {
+            if (memoryHook != null) memoryHook.finish(execution.memoryInvocation);
             executions.remove(context.getTaskId(), execution);
             A2aCredentialContext.discardTask(context.getTaskId());
         }
@@ -191,7 +204,9 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
                         if (error instanceof com.bkanent.common.rag.RagException rag) {
                             failExecution(execution, rag.code().name(), "Authentication is no longer valid");
                         } else {
-                            failExecution(execution, "EXECUTION_FAILED", "SubAgent streaming execution failed");
+                            var memoryException = memoryException(error);
+                            failExecution(execution, memoryException == null ? "EXECUTION_FAILED" : memoryException.code().name(),
+                                    memoryException == null ? "SubAgent streaming execution failed" : "Memory authorization or processing failed");
                         }
                     }
                     finally {
@@ -242,10 +257,17 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
                     "outputMode", A2aOutputPolicy.JSON_MODE,
                     "terminal", true)), new TextPart(output.summary()))
                     : List.of(new TextPart(output.text()));
-            execution.updater.addArtifact(parts, terminalArtifactId(context.getTaskId()), "result",
-                    Map.of("contentType", output.structured()
-                                    ? String.valueOf(output.data().get("contentType")) : outputPolicy.contentType(),
-                            "outputMode", output.outputMode(), "terminal", true));
+            Map<String, Object> metadata = new java.util.LinkedHashMap<>();
+            metadata.put("contentType", output.structured()
+                    ? String.valueOf(output.data().get("contentType")) : outputPolicy.contentType());
+            metadata.put("outputMode", output.outputMode());
+            metadata.put("terminal", true);
+            if (execution.memoryInvocation != null && !"DISABLED".equals(execution.memoryInvocation.memoryStatus())) {
+                metadata.put("memoryStatus", execution.memoryInvocation.memoryStatus());
+                metadata.put("memoryArchiveStatus", execution.memoryInvocation.archiveStatus());
+                metadata.put("memoryCompactionStatus", execution.memoryInvocation.compactionStatus());
+            }
+            execution.updater.addArtifact(parts, terminalArtifactId(context.getTaskId()), "result", metadata);
             execution.updater.complete();
         }
         catch (A2aOutputException exception) {
@@ -316,7 +338,12 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
     private RunnableConfig runnableConfig(RequestContext context, A2aInput input, ExecutionState execution) {
         RunnableConfig.Builder builder = RunnableConfig.builder();
         builder.threadId(context.getTaskId());
-        input.metadata().forEach(builder::addMetadata);
+        input.metadata().forEach((key, value) -> {
+            if (!A2aMemoryAgentHook.INVOCATION_METADATA_KEY.equals(key)) builder.addMetadata(key, value);
+        });
+        if (execution.memoryInvocation != null) {
+            builder.addMetadata(A2aMemoryAgentHook.INVOCATION_METADATA_KEY, execution.memoryInvocation);
+        }
         if (execution.skillExecution != null) {
             builder.addMetadata(com.bkanent.common.skill.runtime.SkillExecutionContext.KEY, execution.skillExecution);
         }
@@ -357,6 +384,15 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
         return safeAgent + ":" + safeTask;
     }
 
+    private com.bkanent.common.memory.MemoryException memoryException(Throwable failure) {
+        Throwable current = failure;
+        while (current != null) {
+            if (current instanceof com.bkanent.common.memory.MemoryException memory) return memory;
+            current = current.getCause();
+        }
+        return null;
+    }
+
     private static final class ExecutionState {
         private final TaskUpdater updater;
         private A2aCredentialContext.Lease authLease;
@@ -365,6 +401,7 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
         private volatile Disposable subscription;
         private volatile CountDownLatch streamFinished;
         private com.bkanent.common.skill.runtime.SkillExecutionContext skillExecution;
+        private A2aMemoryInvocation memoryInvocation;
 
         private ExecutionState(TaskUpdater updater) {
             this.updater = updater;

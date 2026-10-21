@@ -50,6 +50,7 @@ class ExplicitSkillAgentWiringTest {
         args[2] = ToolCallbackProvider.class.isAssignableFrom(types[2])
                 ? MethodToolCallbackProvider.builder().toolObjects(mock(Class.forName("com.bkanent.listing.tool.ListingTools"))).build()
                 : mock(types[2]);
+        args[4] = disabledMemoryHookFactory();
         Object component = constructor.newInstance(args);
         var card = (AgentCard) MarketingOfficialA2aAgent.class.getMethod("marketingPublishedAgentCard",
                 com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerProperties.class, com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerAgentCardProperties.class)
@@ -89,6 +90,13 @@ class ExplicitSkillAgentWiringTest {
             assertThat(found).isTrue();
         }
         assertThat(turns).hasValue(2);
+    }
+
+    private com.bkanent.common.a2a.A2aMemoryHookFactory disabledMemoryHookFactory() {
+        return new com.bkanent.common.a2a.A2aMemoryHookFactory(new com.bkanent.common.a2a.A2aMemoryProperties(),
+                new org.apache.dubbo.config.ReferenceConfig<com.bkanent.common.memory.MemoryV2RpcService>(),
+                new com.bkanent.memory.runtime.MemoryWorkingSetCache(64, 16L * 1024 * 1024, 60_000, java.time.Clock.systemUTC()),
+                new ObjectMapper());
     }
     private void executeAuthenticated(AgentExecutor executor, RequestContext context, EventQueue queue) throws Exception {
         long expiresAt = java.time.Instant.now().getEpochSecond() + 60;

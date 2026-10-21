@@ -29,12 +29,15 @@ public class InterviewOfficialA2aAgent {
     private final ReactAgent reactAgent;
     private final SkillRegistry skillRegistry;
     private List<ToolCallback> executionTools;
+    private final com.bkanent.common.a2a.A2aMemoryAgentHook memoryHook;
 
     public InterviewOfficialA2aAgent(ChatModel chatModel,
                                      InterviewAgentProperties properties,
                                      InterviewTools interviewTools,
-                                     SkillRegistry skillRegistry) {
+                                     SkillRegistry skillRegistry,
+                                     com.bkanent.common.a2a.A2aMemoryHookFactory memoryHookFactory) {
         this.skillRegistry = skillRegistry;
+        this.memoryHook = memoryHookFactory.create("interview-service", DOMAIN, "interview-agent", chatModel);
         List<ToolCallback> tools = new ArrayList<>(Arrays.asList(
                 MethodToolCallbackProvider.builder().toolObjects(interviewTools).build().getToolCallbacks()));
         tools.add(new SkillTool(skillRegistry, DOMAIN));
@@ -46,6 +49,7 @@ public class InterviewOfficialA2aAgent {
                 .model(chatModel)
                 .systemPrompt(properties.getSystemPrompt())
                 .tools(tools)
+                .hooks(memoryHook)
                 .interceptors(new com.bkanent.common.a2a.A2aAuthenticationToolInterceptor(), new A2aSupervisorContextInterceptor(),
                         new SkillRoutingModelInterceptor(skillRegistry, DOMAIN),
                         new com.bkanent.common.skill.runtime.SkillRoutingToolInterceptor())
@@ -70,6 +74,6 @@ public class InterviewOfficialA2aAgent {
     @Bean
     public AgentExecutor interviewA2aAgentExecutor(ObjectMapper objectMapper, com.bkanent.common.a2a.A2aExecutionProperties execution) {
         return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("interview"),
-                skillRegistry, DOMAIN, executionTools, execution.getStreamTimeoutMs());
+                skillRegistry, DOMAIN, executionTools, execution.getStreamTimeoutMs(), memoryHook);
     }
 }

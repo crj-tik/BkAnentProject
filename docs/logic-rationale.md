@@ -765,3 +765,13 @@
 **代码位置**：`SupervisorMemoryJournal`、`SupervisorMemoryLifecycle.flush`、`MemoryArchiveService.deliverMessages`、`PreferenceProcessingWorker`、`MemoryRagOutboxDispatcher`；迁移 `20261021_memory_rag_outbox_lease.sql`。回归包括 `SupervisorMemoryIntegrationTest.completedBusinessToolIsNotRerunWhenLostMemoryReceiptIsRecovered`、偏好 worker 跨实例 lease/revocation 用例、`MemoryRagOutboxDispatcherTest.expiredLeaseCanBeTakenOverAndLateWorkerCannotOverwriteNewerState` 和真实 MySQL `MemoryRagOutboxMySqlTest`。RAG RPC 接口未改变，fixture 验证的是租约/回执边界，不代表本轮真实 RAG 服务联机验收。
 
 **关联**：LR-60/61/64/70、KI-147；integrate-domain-agent-memory 4.3/4.5/4.6。开发默认不启用 Memory V2 归档/索引；未确认接收、认证或授权失败仍按既有错误语义失败关闭。
+
+## LR-77 A2A 记忆仅接入受信任 ReactAgent 完整轮次并按域隔离
+
+**结论**：marketing 与 interview 的实际 ReactAgent 显式注册同一个 common-a2a `AgentHook`：在 `BEFORE_AGENT` 读取当前 owner/domain/agent 的获准工作集，在 `AFTER_AGENT` 归档完整轮次；进度回调不访问记忆。owner 来自当前 A2A task lease 的已认证 actor，caller/domain/agent 固定在各服务装配代码中；A2A `contextId` 先哈希，只用于会话映射，不作为授权。历史摘要及近期消息按记忆版本/来源依赖复核，summary 只接受有证据的结构候选；token 压缩由可靠提交协调器执行，未决、待审批及结果未知的工具调用组留在未覆盖尾部。Memory V2 与压缩在两个服务均默认关闭，部署 secret 默认留空。
+
+**根因**：A2A beacon 是 task 身份证明，不是 memory 的调用凭据；必须从有效 lease 派生当前用户身份，并用各服务独立配置的 Memory RPC 签名调用。单独使用 contextId 会让同一用户跨 domain/agent 读到不相关私有上下文。把记忆请求放在工具或 progress interceptor 中会重复执行业务或拖慢 SSE；只有 AgentHook 的完整轮次边界能同时读入授权历史、取得实际工具结果并在单次模型执行后提交消息。压缩前沿不得穿过待审批或结果未知的工具组。
+
+**运行边界**：interview 仅接入治理面原生 A2A ReactAgent；REST/SSE、三段上下文、访谈状态机和领域事实源未迁移，task 完成不会闭合访谈事项。Memory 依赖不可用可按可选功能降级，但 A2A lease 或 Memory RPC 的认证/授权错误失败关闭。开发开关仍关闭，未做联机记忆读取/归档或前端性能基线验收。
+
+**代码位置**：`A2aMemoryAgentHook`、`A2aMemoryInvocation`、`A2aMemorySummaryGenerator`、`A2aMemoryHookFactory`、`OfficialA2aAgentExecutor`、`MarketingOfficialA2aAgent`、`InterviewOfficialA2aAgent`、`A2aMemoryAutoConfiguration`、`SupervisorMemoryLifecycle`；回归 `A2aMemoryAgentHookTest`、`SupervisorMemoryWiringTest`、`InterviewControllerTest`、`InterviewSessionStateMachineTest`。关联 LR-33/41/61/76、KI-148/149；change 5.5/5.6。

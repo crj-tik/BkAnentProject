@@ -37,8 +37,8 @@
 - [x] 5.2 实现持久更新权、conversation revision/OCC与采用版本记录；测试并发输入、失效租约、跨实例接管和旧更新不会覆盖较新消息，恢复保留全部未覆盖尾部。
 - [ ] 5.3 在现有请求分析中输出上下文用事项标签及开始/继续/闭合候选，按目标与范围装配偏好/经验；事项标签不控制业务调用，不引入关键词路由、步骤DAG、每轮独立事项大模型或nextHints自动交接。
 - [x] 5.4 在 Supervisor PrepareContext/Observe及续接恢复路径接相同生命周期，沿用原run/session/skill/审批/累计预算/远端任务；回归已完成调用复用、OUTCOME_UNKNOWN对账、不盲重发和输入不重复入模。
-- [ ] 5.5 在 common-a2a/marketing 的实际 ReactAgent 生命周期接入工作集、消息记录和受保护压缩扩展；显式注册Hook位置，模型/工具拦截器不重复执行业务，不以未使用ChatClient bean宣称主链接通。
-- [ ] 5.6 接 interview 治理面相同适配并测试私有隔离与可许可摘要/引用；保留运行面REST/SSE、三段上下文、脱敏与领域状态真源，不以创建场次终态关闭访谈事项。
+- [x] 5.5 在 common-a2a/marketing 的实际 ReactAgent 生命周期接入工作集、消息记录和受保护压缩扩展；显式注册Hook位置，模型/工具拦截器不重复执行业务，不以未使用ChatClient bean宣称主链接通。
+- [x] 5.6 接 interview 治理面相同适配并测试私有隔离与可许可摘要/引用；保留运行面REST/SSE、三段上下文、脱敏与领域状态真源，不以创建场次终态关闭访谈事项。
 - [ ] 5.7 对 listing-master、business、contract 的原生 A2A 入口逐项接线并完成冷/热加载、身份/授权、可靠来源、开关关闭回归，未通过的域保持关闭。
 - [ ] 5.8 对 compare-engine、media-worker、notification、settlement 的原生 A2A 入口逐项接线并完成相同契约回归；没有数据库事实源的入口按第4组策略启用，不无条件新建业务库。
 - [ ] 5.9 仅为已确认实际使用的 ChatClient 入口提供本地窗口 ChatMemory/Repository/Advisor 适配；测试 saveAll 不覆盖原文档案、conversationId明确映射、不与Graph累计messages重复注入。

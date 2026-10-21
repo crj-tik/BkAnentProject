@@ -29,6 +29,11 @@ dubbo:
     check: false
 
 a2a:
+  memory:
+    enabled: ${INTERVIEW_MEMORY_V2_ENABLED:false}
+    compression-enabled: ${INTERVIEW_MEMORY_V2_COMPRESSION_ENABLED:false}
+    key-id: ${INTERVIEW_MEMORY_V2_KEY_ID:interview-memory-current}
+    signing-secret: ${INTERVIEW_MEMORY_V2_SIGNING_SECRET:}
   auth:
     key-id: ${INTERVIEW_A2A_KEY_ID:interview-a2a-current}
     signing-secret: ${INTERVIEW_A2A_SIGNING_SECRET:}

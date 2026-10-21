@@ -6,6 +6,7 @@ import com.bkanent.common.memory.*;
 import com.bkanent.memory.runtime.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.dubbo.config.ReferenceConfig;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.ai.chat.messages.*;
 import jakarta.annotation.PreDestroy;
@@ -32,7 +33,8 @@ public class SupervisorMemoryLifecycle {
     }, new ThreadPoolExecutor.AbortPolicy());
 
     public SupervisorMemoryLifecycle(SupervisorMemoryProperties properties, SupervisorMemoryJournal journal, OrchestrationStore runs,
-                                      MemoryWorkingSetCache cache, ReferenceConfig<MemoryV2RpcService> supervisorMemoryReference,
+                                      @Qualifier("supervisorMemoryCache") MemoryWorkingSetCache cache,
+                                      @Qualifier("supervisorMemoryReference") ReferenceConfig<MemoryV2RpcService> supervisorMemoryReference,
                                       AgentRagCredentialLeaseStore identities, ObjectMapper mapper, SupervisorModelTurn model) {
         this.properties = properties; this.journal = journal; this.runs = runs; this.cache = cache; this.reference = supervisorMemoryReference;
         this.identities = identities; this.mapper = mapper; this.model = model;

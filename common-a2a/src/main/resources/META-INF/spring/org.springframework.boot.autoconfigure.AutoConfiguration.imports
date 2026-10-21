@@ -1,2 +1,3 @@
 com.bkanent.common.a2a.SkillNacosCompatibilityAutoConfiguration
 com.bkanent.common.a2a.LiveSkillAgentCardAutoConfiguration
+com.bkanent.common.a2a.A2aMemoryAutoConfiguration

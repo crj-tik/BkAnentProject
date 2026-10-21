@@ -1274,6 +1274,22 @@
 **现象**：`sendDirectorCommand` 只返回回执不落库，运行面下一轮话轮不读取——指令不会真正生效。
 **修复**：新表 `interview_director_command`（PENDING/CONSUMED + source 留痕）+ 双端点落库（A2A 工具 / `POST /{id}/director-commands` 直连）+ 话轮决策点消费（见 LR-7）。
 
+## KI-148 [FIXED] common-a2a 记忆 Bean 与 Supervisor 注入类型冲突
+
+**现象**：`agent-service` 引入 common-a2a 自动配置后，Supervisor 与 A2A 配置各自提供一个 `MemoryWorkingSetCache` 和 `ReferenceConfig<MemoryV2RpcService>`；仅按类型注入的 Supervisor 工作集依赖会因候选 Bean 不唯一而阻止应用启动。
+
+**根因**：共享自动配置添加了独立于 Supervisor 生命周期的 memory client/cache，原有构造注入没有声明预期 Bean 名称。
+
+**修复与防回归**：`SupervisorMemoryLifecycle` 明确限定 `supervisorMemoryCache` 与 `supervisorMemoryReference`；A2A Hook factory 也限定自己的 Bean。`SupervisorMemoryWiringTest` 同时加载两组配置并校验注入对象身份。定向 Maven 回归通过；未做容器启动验收。
+
+## KI-149 [FIXED] A2A lease 认证错误被错误降级为记忆依赖不可用
+
+**现象**：A2A Hook 的 lease 缺失或过期会抛 `RagException`；若由通用运行时异常分支捕获，就会被记为 `MEMORY_UNAVAILABLE` 并继续调用 Agent。
+
+**根因**：Hook 最初只对 `MemoryException` 做认证/授权分类，将 A2A 凭据上下文错误混同于可选记忆 RPC 故障。
+
+**修复与防回归**：`beforeAgent`/`afterAgent` 显式映射 A2A `RagException`，认证失败、过期和拒绝均失败关闭；只有真正记忆依赖不可用才可降级。`A2aMemoryAgentHookTest.missingA2aLeaseFailsClosedBeforeTheAgentCanUseMemory` 覆盖缺少 lease 的边界。
+
 ---
 
-**变更历史**：本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
+**变更历史**：本提交 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
