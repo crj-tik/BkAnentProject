@@ -1314,47 +1314,47 @@
 
 **关联**：LR-73、LR-81；change 5.10。
 
-## KI-153 [FIXED·本提交·P2] Memory v2空间配置超过YAML集合别名默认上限
+## KI-153 [FIXED·13c7fb1·P2] Memory v2空间配置超过YAML集合别名默认上限
 
 **发现日期**：2026-10-21（新增 memory v2 Nacos 空间后，以仓库现有 SnakeYAML 默认解析器校验模板）。
 
 **现象与根因**：35 个新空间分别复用向量 schema、字段、limits 和 rerank profile 的 mapping alias，累计超过 SnakeYAML 对集合 alias 的默认上限 50；普通解析直接抛出 `Number of aliases for non-scalar nodes exceeds the specified max=50`，模板无法稳定加载。
 
-**修复与验证（本提交）**：将 35 个 memory v2 空间所需字段、物理目标、limits 和 profile 展开为显式注册项，保留原有知识/v1空间模板。`NacosRagTemplateTest.memoryV2SpacesAreRegisteredWithRequiredScopeAndUniquePhysicalTargets` 用默认 SnakeYAML 解析器确认 35 项、授权字段和 ES/Milvus 目标唯一；同类测试及新记忆检索/许可定向回归通过。未执行容器或 Nacos 发布。
+**修复与验证（13c7fb1）**：将 35 个 memory v2 空间所需字段、物理目标、limits 和 profile 展开为显式注册项，保留原有知识/v1空间模板。`NacosRagTemplateTest.memoryV2SpacesAreRegisteredWithRequiredScopeAndUniquePhysicalTargets` 用默认 SnakeYAML 解析器确认 35 项、授权字段和 ES/Milvus 目标唯一；同类测试及新记忆检索/许可定向回归通过。未执行容器或 Nacos 发布。
 
-## KI-154 [FIXED·本提交·P1] 共享导出新增运行态表不能成为历史正文读取的硬依赖
+## KI-154 [FIXED·13c7fb1·P1] 共享导出新增运行态表不能成为历史正文读取的硬依赖
 
 **发现日期**：2026-10-21。为共享导出增加 invocation/hash 与独立索引回执表时，读路径若对旧 `memory_shared_export` 行使用内连接，历史已提交正文因没有新回执行会变成不可读；撤回旧行若强制读取回执也会失败。
 
-**修复与防回归（本提交）**：读取改用左连接，缺少运行态行时保留既有已提交授权并将索引状态报告为 `NOT_REQUESTED`；撤回同样兼容缺失回执。`MemorySharingAccessServiceTest.committedExportsWithoutNewRuntimeReceiptRemainReadable` 验证历史兼容，`MemorySharingWriteServiceTest` 验证新版本运行态、重试和撤回状态。
+**修复与防回归（13c7fb1）**：读取改用左连接，缺少运行态行时保留既有已提交授权并将索引状态报告为 `NOT_REQUESTED`；撤回同样兼容缺失回执。`MemorySharingAccessServiceTest.committedExportsWithoutNewRuntimeReceiptRemainReadable` 验证历史兼容，`MemorySharingWriteServiceTest` 验证新版本运行态、重试和撤回状态。
 
 **关联**：LR-59、LR-85；change 10.2。
 
-## KI-155 [FIXED·本提交·P1] durable export brief 可绕过敏感内容检查
+## KI-155 [FIXED·13c7fb1·P1] durable export brief 可绕过敏感内容检查
 
 **发现日期**：2026-10-21。
 
 **现象与根因**：共享导出原先校验结构payload中的私有字段名，却未检查 brief 自由文本；带凭据的 summary/note 也可经允许字段进入持久共享投影。
 
-**修复与防回归（本提交）**：brief 与递归字符串值现在调用 common `AgentOutputSanitizer` 的凭据/认证信标/内部材料检测，任何命中均拒绝导出；字段allowlist继续约束结构内容。`MemorySharedExportPolicyTest` 覆盖 brief、嵌套值和私有字段拒绝。
+**修复与防回归（13c7fb1）**：brief 与递归字符串值现在调用 common `AgentOutputSanitizer` 的凭据/认证信标/内部材料检测，任何命中均拒绝导出；字段allowlist继续约束结构内容。`MemorySharedExportPolicyTest` 覆盖 brief、嵌套值和私有字段拒绝。
 
 **关联**：LR-88；change 10.7。
 
-## KI-156 [FIXED·本提交·P1] SSE 父任务回放漏掉子事件且子 metadata 可伪造关联
+## KI-156 [FIXED·13c7fb1·P1] SSE 父任务回放漏掉子事件且子 metadata 可伪造关联
 
 **发现日期**：2026-10-21。
 
 **现象与根因**：正式订阅按精确 taskId 过滤，父任务无法回放或接收直接子任务事件；另一方面，子端原始 metadata 可覆盖可信 parentTaskId/visibility 或携带伪造终态memory receipt。event ID 游标查询也未限定 session。
 
-**修复与防回归（本提交）**：持久回放与实时订阅共享直接父子关系和 visibility 规则，SQL 候选父任务条件绑定参数并在返回前复核；游标以 sessionId+eventId 定位。远端 metadata 先脱敏并移除保留字段，再由本地可信上下文写入关联，终态回执只取服务端响应。`SessionEventAuditServiceTest`、`InMemorySessionStreamServiceTest`、`A2aExecutionServiceTest` 覆盖父子回放、重连去重、会话游标和伪造 metadata。
+**修复与防回归（13c7fb1）**：持久回放与实时订阅共享直接父子关系和 visibility 规则，SQL 候选父任务条件绑定参数并在返回前复核；游标以 sessionId+eventId 定位。远端 metadata 先脱敏并移除保留字段，再由本地可信上下文写入关联，终态回执只取服务端响应。`SessionEventAuditServiceTest`、`InMemorySessionStreamServiceTest`、`A2aExecutionServiceTest` 覆盖父子回放、重连去重、会话游标和伪造 metadata。
 
 **关联**：LR-87/LR-88；change 10.5。
 
-## KI-157 [FIXED·本提交·P1] 访谈会话票据使用仓库内硬编码 HMAC 默认密钥
+## KI-157 [FIXED·13c7fb1·P1] 访谈会话票据使用仓库内硬编码 HMAC 默认密钥
 
 **发现日期**：2026-10-21。配置扫描发现 `InterviewRuntimeProperties.Ticket` 与 `nacos/interview-service.yaml` 都含有非空源码默认值，Compose 未要求访谈票据密钥。
 
-**修复与防回归（本提交）**：删除两层默认，统一改为 `INTERVIEW_TICKET_SECRET` 环境变量；Compose 要求非空配置，`.env.example` 只给空占位，本机 `.env` 使用随机值且不纳入提交。`issueTicket` 对缺失或少于32 UTF-8字节的密钥失败关闭；`InterviewSessionStateMachineTest.ticketSigningFailsClosedWithoutConfiguredSecret` 验证默认空配置不会签发。
+**修复与防回归（13c7fb1）**：删除两层默认，统一改为 `INTERVIEW_TICKET_SECRET` 环境变量；Compose 要求非空配置，`.env.example` 只给空占位，本机 `.env` 使用随机值且不纳入提交。`issueTicket` 对缺失或少于32 UTF-8字节的密钥失败关闭；`InterviewSessionStateMachineTest.ticketSigningFailsClosedWithoutConfiguredSecret` 验证默认空配置不会签发。
 
 **关联**：LR-89；change 10.7。轮换后旧开发票据按预期失效。
 
