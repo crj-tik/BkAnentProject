@@ -64,6 +64,9 @@ public final class OfficialA2aMetadataMapper {
         putText(supervisor, "idempotencyKey", request.idempotencyKey());
         putList(supervisor, "artifactIds", request.artifactIds());
         putList(supervisor, "constraints", request.constraints());
+        if (request.durableMemoryExport() != null) {
+            supervisor.put("memoryExport", request.durableMemoryExport());
+        }
         if (request.structuredContext() != null && !request.structuredContext().isEmpty()) {
             Map<String, Object> structuredContext = new LinkedHashMap<>();
             request.structuredContext().forEach((key, value) -> {

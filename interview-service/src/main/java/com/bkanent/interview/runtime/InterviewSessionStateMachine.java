@@ -171,9 +171,13 @@ public class InterviewSessionStateMachine {
     }
 
     private String hmac(String payload) {
+        String secret = properties.getTicket().getSecret();
+        if (secret == null || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalStateException("INTERVIEW_TICKET_SECRET must contain at least 32 UTF-8 bytes");
+        }
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(properties.getTicket().getSecret().getBytes(StandardCharsets.UTF_8),
+            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8),
                     "HmacSHA256"));
             return HexFormat.of().formatHex(mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)));
         } catch (Exception e) {

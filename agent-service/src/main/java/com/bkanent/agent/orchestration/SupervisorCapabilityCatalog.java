@@ -92,6 +92,10 @@ public class SupervisorCapabilityCatalog {
         String actor = required(context, "userId");
         if (!permissions.canInvokeChildAgent(actor, descriptor)) throw new IllegalStateException("CAPABILITY_PERMISSION_DENIED");
         String runId = required(context, "runId"), callId = required(context, "callId");
+        Object exportValue = context.get("durableMemoryExport");
+        if (exportValue != null && !(exportValue instanceof com.bkanent.common.agent.DurableMemoryExportDirective)) {
+            throw new IllegalStateException("MEMORY_EXPORT_DIRECTIVE_INVALID");
+        }
         Map<String, Object> structured = new LinkedHashMap<>();
         if (arguments.get("context") instanceof Map<?, ?> raw) raw.forEach((key, value) -> structured.put(String.valueOf(key), value));
         structured.put("userId", actor);
@@ -101,7 +105,8 @@ public class SupervisorCapabilityCatalog {
         var request = new AgentTaskInvokeRequest(required(context, "sessionId"), childId, runId,
                 required(context, "traceId"), "supervisor-agent", agentId, null, null,
                 (String) arguments.get("instruction"), structured, List.of(), List.of(), "json", callId,
-                Boolean.TRUE.equals(context.get("stream")), skill);
+                Boolean.TRUE.equals(context.get("stream")), skill,
+                (com.bkanent.common.agent.DurableMemoryExportDirective) exportValue);
         Map<String, Object> metadata = Map.of("capabilityId", CapabilityId.a2a(agentId).value(), "callId", callId, "parentRunId", runId);
         if (context.get("acceptedTaskRecorder") instanceof java.util.function.Consumer<?> recorder) {
             @SuppressWarnings("unchecked") var accepted = (java.util.function.Consumer<com.bkanent.agent.client.AcceptedA2aTask>) recorder;

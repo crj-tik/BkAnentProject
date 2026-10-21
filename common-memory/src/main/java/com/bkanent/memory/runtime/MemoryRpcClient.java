@@ -59,6 +59,29 @@ public final class MemoryRpcClient {
                 e -> new MemoryPreferenceAssemblyRequest(e, context, matterId, tokenBudget), rpc::assemblePreferences);
     }
 
+    public MemoryShareGrantManagementResponse createShareGrant(MemoryContextKey context, MemoryShareGrant grant) {
+        return invoke(MemoryV2Contract.OPERATION_SHARE_GRANT_MANAGE,
+                e -> new MemoryShareGrantManagementRequest(e, context, MemoryShareGrantManagementRequest.Action.CREATE,
+                        grant.grant().grantId(), 0, grant), rpc::manageShareGrant);
+    }
+
+    public MemorySharedExportStatusResponse submitSharedExport(MemoryContextKey context, String exportId,
+            String sourceInvocationId, MemoryAssociation association, MemoryGrantRef grant, String purpose,
+            String brief, MemoryJsonValue payload, List<MemorySourceDependency> dependencies) {
+        return invoke(MemoryV2Contract.OPERATION_SHARED_EXPORT_SUBMIT,
+                e -> new MemorySharedExportSubmitRequest(e, context, exportId, 0, sourceInvocationId,
+                        association, grant, purpose, brief, payload, dependencies), rpc::submitSharedExport);
+    }
+
+    public MemorySharedExportStatusResponse commitSharedExport(MemoryContextKey context,
+            MemorySharedExportStatusResponse staged) {
+        if (staged == null || staged.version() == null) throw new MemoryException(MemoryErrorCode.VERSION_CONFLICT);
+        if (staged.state() != MemorySharedExport.State.PENDING) return staged;
+        return invoke(MemoryV2Contract.OPERATION_SHARED_EXPORT_COMMIT,
+                e -> new MemorySharedExportCommitRequest(e, context, staged.sourceExportId(),
+                        staged.version().revision(), staged.version().contentHash()), rpc::commitSharedExport);
+    }
+
     public MemoryWriterResponse writer(MemoryContextKey context, MemoryWriterRequest.Action action, String runId, long fence) {
         String requestId = action == MemoryWriterRequest.Action.ACQUIRE
                 ? stableRequestId(List.of("writer-acquire-v1", context, runId)) : UUID.randomUUID().toString();

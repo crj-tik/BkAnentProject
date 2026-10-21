@@ -16,7 +16,7 @@ public class InterviewRuntimeProperties {
     private final Collection collection = new Collection();
 
     public static class Ticket {
-        private String secret = "change-me-interview-ticket-secret";
+        private String secret = "";
         private int ttlHours = 24;
 
         public String getSecret() { return secret; }

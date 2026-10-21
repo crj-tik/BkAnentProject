@@ -25,14 +25,24 @@ public record AgentTaskInvokeRequest(
         String expectedOutput,
         String idempotencyKey,
         Boolean stream,
-        SkillSelection skillSelection
+        SkillSelection skillSelection,
+        DurableMemoryExportDirective durableMemoryExport
 ) {
+    public AgentTaskInvokeRequest(String sessionId, String taskId, String parentTaskId, String traceId,
+                                  String sourceAgentId, String targetAgentId, String intent, String domain,
+                                  String instruction, Map<String, Object> structuredContext, List<String> artifactIds,
+                                  List<String> constraints, String expectedOutput, String idempotencyKey,
+                                  Boolean stream, SkillSelection skillSelection) {
+        this(sessionId, taskId, parentTaskId, traceId, sourceAgentId, targetAgentId, intent, domain, instruction,
+                structuredContext, artifactIds, constraints, expectedOutput, idempotencyKey, stream, skillSelection, null);
+    }
+
     public AgentTaskInvokeRequest(String sessionId, String taskId, String parentTaskId, String traceId,
                                   String sourceAgentId, String targetAgentId, String intent, String domain,
                                   String instruction, Map<String, Object> structuredContext, List<String> artifactIds,
                                   List<String> constraints, String expectedOutput, String idempotencyKey,
                                   Boolean stream) {
         this(sessionId, taskId, parentTaskId, traceId, sourceAgentId, targetAgentId, intent, domain, instruction,
-                structuredContext, artifactIds, constraints, expectedOutput, idempotencyKey, stream, null);
+                structuredContext, artifactIds, constraints, expectedOutput, idempotencyKey, stream, null, null);
     }
 }

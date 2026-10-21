@@ -1,6 +1,9 @@
 package com.bkanent.common.a2a;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.bkanent.common.agent.DurableMemoryExportDirective;
+import com.bkanent.common.memory.MemoryScope;
+import com.bkanent.common.memory.MemoryShareGrant;
 import io.a2a.server.agentexecution.RequestContext;
 import io.a2a.spec.DataPart;
 import io.a2a.spec.Message;
@@ -12,13 +15,15 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class A2aInputParserTest {
 
-    private final A2aInputParser parser = new A2aInputParser(new ObjectMapper());
+    private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+    private final A2aInputParser parser = new A2aInputParser(mapper);
     private final A2aOutputPolicy policy = new A2aOutputPolicy("listing", true, 200, 500);
 
     @Test
@@ -76,6 +81,39 @@ class A2aInputParserTest {
 
         assertThat(input.instruction()).isEmpty();
         assertThat(input.structuredContext()).isEmpty();
+    }
+
+    @Test
+    void parsesExplicitMemoryExportOnlyFromSupervisorMetadata() {
+        DurableMemoryExportDirective directive = exportDirective();
+        RequestContext context = context(List.of(new TextPart("查询房源")),
+                Map.of("supervisor", Map.of("memoryExport", directive)), List.of("application/json"));
+
+        A2aInput input = parser.parse(context, new A2aOutputPolicy("listing", true, 2_000, 500));
+
+        assertThat(input.durableMemoryExport()).isEqualTo(directive);
+        assertThat(input.structuredContext()).doesNotContainKey("memoryExport");
+    }
+
+    @Test
+    void rejectsInvalidMemoryExportDirectiveBeforeAgentExecution() {
+        Map<String, Object> invalid = new LinkedHashMap<>(mapper.convertValue(exportDirective(), Map.class));
+        invalid.put("exportFields", List.of("memoryRefs"));
+        RequestContext context = context(List.of(new TextPart("查询房源")),
+                Map.of("supervisor", Map.of("memoryExport", invalid)), List.of("application/json"));
+
+        assertThatThrownBy(() -> parser.parse(context, new A2aOutputPolicy("listing", true, 2_000, 500)))
+                .isInstanceOf(A2aInputException.class)
+                .hasMessageContaining("directive is invalid");
+    }
+
+    private DurableMemoryExportDirective exportDirective() {
+        Instant from = Instant.parse("2026-10-21T00:00:00Z");
+        return new DurableMemoryExportDirective("grant-1",
+                new MemoryScope(MemoryScope.Kind.SESSION_SHARED, null, null, "session-1"), null,
+                "listing-review", List.of(new MemoryShareGrant.Participant("listing", "listing-agent", "conversation-1")),
+                List.of(MemoryShareGrant.Projection.DURABLE_EXPORT), List.of("result"), false,
+                from, from.plusSeconds(3600));
     }
 
     private RequestContext context(List<io.a2a.spec.Part<?>> parts,

@@ -49,6 +49,10 @@ public class InMemorySessionStreamService implements SessionStreamService {
         }
     }
 
+    SseEmitter createEmitter() {
+        return new SseEmitter(0L);
+    }
+
     @Override
     public SseEmitter subscribe(String sessionId) {
         return subscribe(sessionId, null, null, null);
@@ -59,7 +63,7 @@ public class InMemorySessionStreamService implements SessionStreamService {
                                 String taskId,
                                 String afterEventId,
                                 Long afterSequence) {
-        SseEmitter emitter = new SseEmitter(0L);
+        SseEmitter emitter = createEmitter();
         String subscriberId = UUID.randomUUID().toString();
         AtomicLong lastDeliveredSequence = new AtomicLong(afterSequence == null ? 0L : afterSequence);
         AtomicLong replayCursor = new AtomicLong(afterSequence == null
@@ -184,10 +188,7 @@ public class InMemorySessionStreamService implements SessionStreamService {
                            SessionStreamEvent event,
                            AtomicLong lastDeliveredSequence,
                            AtomicBoolean closed) {
-        if (closed.get() || !SessionStreamVisibility.isExternallyVisible(event.visibility())) {
-            return;
-        }
-        if (taskId != null && !taskId.equals(event.taskId())) {
+        if (closed.get() || !SessionStreamVisibility.isVisibleToTask(event, taskId)) {
             return;
         }
         synchronized (emitter) {

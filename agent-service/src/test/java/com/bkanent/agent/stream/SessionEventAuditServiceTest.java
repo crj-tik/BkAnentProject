@@ -2,6 +2,8 @@ package com.bkanent.agent.stream;
 
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.bkanent.agent.config.DistributedAgentProperties;
 import com.bkanent.agent.entity.AgentEventAuditEntity;
 import com.bkanent.agent.mapper.AgentEventAuditMapper;
@@ -18,6 +20,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import org.mockito.ArgumentCaptor;
 
 class SessionEventAuditServiceTest {
 
@@ -123,5 +127,63 @@ class SessionEventAuditServiceTest {
                 .singleElement()
                 .extracting(event -> event.metadata().get("result"))
                 .isEqualTo(terminalResult);
+    }
+
+    @Test
+    void parentTaskReplayIncludesOnlyEventsDirectlyLinkedToThatParent() {
+        AgentEventAuditMapper mapper = mock(AgentEventAuditMapper.class);
+        when(mapper.selectOne(any())).thenReturn(null);
+        when(mapper.selectCount(any())).thenReturn(0L);
+        AgentEventAuditEntity child = persisted("session-1", "child-1", 51L,
+                "{\"parentTaskId\":\"parent-1\",\"visibility\":\"progress\"}");
+        AgentEventAuditEntity unrelated = persisted("session-1", "child-2", 52L,
+                "{\"parentTaskId\":\"parent-2\",\"visibility\":\"progress\"}");
+        when(mapper.selectList(any())).thenReturn(java.util.List.of(child, unrelated));
+        SessionEventAuditService service = new SessionEventAuditService(
+                new DistributedAgentProperties(), mapper, new ObjectMapper());
+
+        assertThat(service.replay("session-1", "parent-1", null, 0L, 10))
+                .extracting(SessionStreamEvent::taskId)
+                .containsExactly("child-1");
+
+        ArgumentCaptor<Wrapper<AgentEventAuditEntity>> query = ArgumentCaptor.forClass(Wrapper.class);
+        verify(mapper).selectList(query.capture());
+        LambdaQueryWrapper<?> lambda = (LambdaQueryWrapper<?>) query.getValue();
+        assertThat(lambda.getSqlSegment()).contains("JSON_UNQUOTE", "JSON_EXTRACT", "parentTaskId", "session_id", "task_id");
+        assertThat(lambda.getParamNameValuePairs().values()).contains("session-1", "parent-1");
+    }
+
+    @Test
+    void afterEventIdCursorIsScopedToItsSession() {
+        AgentEventAuditMapper mapper = mock(AgentEventAuditMapper.class);
+        when(mapper.selectCount(any())).thenReturn(0L);
+        AgentEventAuditEntity cursor = new AgentEventAuditEntity();
+        cursor.setId(20L);
+        when(mapper.selectOne(any())).thenReturn(cursor);
+        when(mapper.selectList(any())).thenReturn(java.util.List.of());
+        SessionEventAuditService service = new SessionEventAuditService(
+                new DistributedAgentProperties(), mapper, new ObjectMapper());
+
+        service.replay("session-1", null, "event-from-another-session", null, 10);
+
+        ArgumentCaptor<Wrapper<AgentEventAuditEntity>> query = ArgumentCaptor.forClass(Wrapper.class);
+        verify(mapper).selectOne(query.capture());
+        LambdaQueryWrapper<?> lambda = (LambdaQueryWrapper<?>) query.getValue();
+        assertThat(lambda.getSqlSegment()).contains("session_id", "event_id");
+        assertThat(lambda.getParamNameValuePairs().values()).contains("session-1", "event-from-another-session");
+    }
+
+    private AgentEventAuditEntity persisted(String sessionId, String taskId, long sequence, String metadata) {
+        AgentEventAuditEntity entity = new AgentEventAuditEntity();
+        entity.setId(sequence);
+        entity.setEventId("event-" + sequence);
+        entity.setSessionId(sessionId);
+        entity.setTaskId(taskId);
+        entity.setAgentId("agent");
+        entity.setEventType("agent.delta");
+        entity.setContent("chunk");
+        entity.setMetadataJson(metadata);
+        entity.setEventTimestamp(sequence);
+        return entity;
     }
 }

@@ -134,7 +134,9 @@ SubAgent许可结果
         → 后续协作者授权详情/检索，RAG可稍后就绪
 ```
 
-不将A2A改成引用-only；delta/status/final仍直接携带必要正文。current Supervisor 已收到payload无需重复read；大档案只携brief+ref，确有需要才读。displayPayload、collaborationPayload、durableExport分别白名单和大小预算，按需共享，私有history不因能在SSE展示一段进度而授权全域访问。
+不将A2A改成引用-only；delta/status/final仍直接携带必要正文和结构结果。display 使用当前A2A响应策略的 `maxOutputChars`（默认64,000字符）并移除凭据/内部推理字段；它是调用方收到的结果，不通过记忆grant重新读取。Supervisor直接消费同一终态Artifact/Message，不因收到 `memoryRefs` 再调用 Memory 取回正文。
+
+跨域共享只走新的来源owner授权：`COLLABORATION` 可把已选中的安全字段投影给明确的recipient空间，`DURABLE_EXPORT` 才允许后续授权详情读取；创建/转交grant必须由当前owner身份重新签名。两种共享投影共用严格根字段白名单（`result`、`summary`、`facts`、`fact`、`decisions`、`decision`、`evidence`、`status`、`outcome`、`recommendations`、`citations`、`links`），并限制投影正文总量不超过24,576 UTF-8字节；A2A指令最多选择32个根字段、64个接收方，grant最长30天。协作投影只从该不可变export生成，私有history不会因一段进度可见而获得共享许可。引用仍只是定位数据，不是auth beacon。
 
 引用为定位数据不是auth beacon；auth材料沿既有专用transport，永不进入SSE/普通metadata。新增 memoryRefs/exportState/version 字段为增量兼容。commit前可带稳定sourceExportId及PENDING状态但不可宣称引用可读取；memory确认后经独立通知或后续查询提供COMMITTED，RAG状态单独INDEX_PENDING/INDEX_READY。memory失败不阻塞delta，不撤回子任务执行事实，不虚报归档成功。
 

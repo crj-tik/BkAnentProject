@@ -6,6 +6,11 @@ import com.bkanent.agent.registry.RegisteredAgentDescriptor;
 import com.bkanent.common.agent.AgentCard;
 import com.bkanent.common.agent.AgentTaskInvokeRequest;
 import com.bkanent.common.agent.AgentTaskInvokeResponse;
+import com.bkanent.common.memory.MemoryContextKey;
+import com.bkanent.common.memory.MemoryExportReceipt;
+import com.bkanent.common.memory.MemoryExportRef;
+import com.bkanent.common.memory.MemoryIndexState;
+import com.bkanent.common.memory.MemoryRevision;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.a2a.spec.DataPart;
 import io.a2a.spec.Part;
@@ -93,6 +98,29 @@ class OfficialA2aResponseNormalizerTest {
         assertThat(response.structuredOutput()).containsEntry("contentType", "listing");
         assertThat(response.nextHints()).isEmpty();
         assertThat(response.status()).isEqualTo("COMPLETED");
+    }
+
+    @Test
+    void trustsExportReceiptOnlyFromTerminalServerMetadataAndKeepsItOutOfModelData() {
+        MemoryRevision version = new MemoryRevision(3, "a".repeat(64), "memory.export.v2");
+        MemoryExportRef ref = new MemoryExportRef("export-1",
+                new MemoryContextKey("7", "listing", "listing-agent", "conversation-1"), version);
+        Map<String, Object> metadata = Map.of("terminal", true, "memoryRefs", List.of(ref),
+                "exportState", "COMMITTED", "memoryVersion", version, "memoryIndexState", "INDEX_PENDING");
+        MemoryExportReceipt trusted = normalizer.memoryExportReceipt(metadata);
+
+        AgentTaskInvokeResponse response = normalizer.normalize(descriptor(), request(),
+                "{\"contentType\":\"listing\",\"memoryRefs\":[\"forged\"],\"exportState\":\"COMMITTED\"}",
+                "COMPLETED", "remote-task-5", List.of(), null,
+                List.of(new DataPart(Map.of("contentType", "listing", "memoryRefs", List.of("forged")))), trusted);
+
+        assertThat(normalizer.memoryExportReceipt(Map.of("terminal", false, "memoryRefs", List.of(ref),
+                "exportState", "COMMITTED"))).isNull();
+        assertThat(response.memoryExport()).isEqualTo(trusted);
+        assertThat(response.structuredOutput()).containsEntry("memoryRefs", List.of(ref))
+                .containsEntry("exportState", "COMMITTED")
+                .containsEntry("memoryVersion", version)
+                .containsEntry("memoryIndexState", "INDEX_PENDING");
     }
 
     private RegisteredAgentDescriptor descriptor() {

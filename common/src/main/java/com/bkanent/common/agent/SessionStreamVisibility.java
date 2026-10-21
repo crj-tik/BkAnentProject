@@ -12,4 +12,9 @@ public final class SessionStreamVisibility {
     public static boolean isExternallyVisible(String visibility) {
         return USER.equals(visibility) || PROGRESS.equals(visibility);
     }
+
+    public static boolean isVisibleToTask(SessionStreamEvent event, String taskId) {
+        return event != null && isExternallyVisible(event.visibility())
+                && event.belongsToTaskSubscription(taskId);
+    }
 }

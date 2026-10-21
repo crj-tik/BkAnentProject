@@ -1,10 +1,14 @@
 package com.bkanent.agent.client;
 
 import com.bkanent.common.agent.AgentTaskInvokeRequest;
+import com.bkanent.common.agent.DurableMemoryExportDirective;
+import com.bkanent.common.memory.MemoryScope;
+import com.bkanent.common.memory.MemoryShareGrant;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -86,5 +90,27 @@ class OfficialA2aMetadataMapperTest {
         Map<String, Object> supervisor = (Map<String, Object>) metadata.get(
                 OfficialA2aMetadataMapper.SUPERVISOR_METADATA_KEY);
         assertThat(supervisor.containsKey(OfficialA2aMetadataMapper.SKILL_HINT_KEY)).isFalse();
+    }
+
+    @Test
+    void carriesOwnerAuthorizedExportDirectiveOnlyInSupervisorNamespace() {
+        Instant from = Instant.parse("2026-10-21T00:00:00Z");
+        DurableMemoryExportDirective directive = new DurableMemoryExportDirective("grant-1",
+                new MemoryScope(MemoryScope.Kind.SESSION_SHARED, null, null, "session-1"), null,
+                "listing-review", List.of(new MemoryShareGrant.Participant("listing", "listing-agent", "conversation-1")),
+                List.of(MemoryShareGrant.Projection.DURABLE_EXPORT), List.of("result"), false,
+                from, from.plusSeconds(3600));
+        AgentTaskInvokeRequest request = new AgentTaskInvokeRequest(
+                "session-1", "task-1", "parent-1", "trace-1", "supervisor-agent", "listing-agent",
+                "listing.search", "listing", "查找房源", Map.of("keyword", "浦东"),
+                List.of(), List.of(), "json", "idem-1", true, null, directive);
+
+        Map<String, Object> metadata = OfficialA2aMetadataMapper.toMetadata(request, true);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> supervisor = (Map<String, Object>) metadata.get("supervisor");
+
+        assertThat(supervisor.get("memoryExport")).isEqualTo(directive);
+        assertThat(((Map<?, ?>) supervisor.get("structuredContext")).containsKey("memoryExport")).isFalse();
+        assertThat(metadata).doesNotContainKey("memoryExport");
     }
 }

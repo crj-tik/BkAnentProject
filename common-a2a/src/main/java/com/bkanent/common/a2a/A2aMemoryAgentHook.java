@@ -6,6 +6,7 @@ import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.alibaba.cloud.ai.graph.agent.hook.AgentHook;
 import com.alibaba.cloud.ai.graph.agent.hook.HookPosition;
 import com.alibaba.cloud.ai.graph.state.ReplaceAllWith;
+import com.bkanent.common.agent.DurableMemoryExportDirective;
 import com.bkanent.common.memory.*;
 import com.bkanent.common.rag.RagErrorCode;
 import com.bkanent.common.rag.RagException;
@@ -65,6 +66,10 @@ public final class A2aMemoryAgentHook extends AgentHook {
 
     A2aMemoryInvocation invocation(String taskId, String contextId) {
         return new A2aMemoryInvocation(taskId, contextId, properties.isEnabled());
+    }
+
+    A2aMemoryInvocation invocation(String taskId, String contextId, DurableMemoryExportDirective exportDirective) {
+        return new A2aMemoryInvocation(taskId, contextId, properties.isEnabled(), exportDirective);
     }
 
     @Override public String getName() { return "a2aMemoryLifecycle"; }
@@ -152,6 +157,10 @@ public final class A2aMemoryAgentHook extends AgentHook {
             String permit = session.permit(archived);
             session.deliver(permit, archived);
             if (invocation.privateMaterialLoaded()) session.check();
+            MemoryMessage finalAssistant = archived.stream()
+                    .filter(message -> message.role() == MemoryMessage.Role.ASSISTANT && StringUtils.hasText(message.text()))
+                    .reduce((first, later) -> later).orElse(null);
+            invocation.currentTurnSources(finalAssistant == null ? List.of() : List.of(finalAssistant.source()));
             invocation.archiveStatus("RECORDED");
             return CompletableFuture.completedFuture(Map.of());
         } catch (MemoryException exception) {
@@ -189,6 +198,77 @@ public final class A2aMemoryAgentHook extends AgentHook {
             try { session.close(); }
             finally { invocation.session(null); }
         }
+    }
+
+    /** Publishes only an explicit trusted-context directive and only after the current turn was archived. */
+    MemoryExportReceipt publishExport(A2aMemoryInvocation invocation, A2aOutput output) {
+        if (invocation == null || invocation.durableMemoryExport() == null) return null;
+        if (!properties.isEnabled()) return rememberExport(invocation, MemoryExportReceipt.failure("UNAVAILABLE"));
+        if (!"RECORDED".equals(invocation.archiveStatus()) || invocation.contextKey() == null
+                || invocation.currentTurnSources().isEmpty()) {
+            return rememberExport(invocation, MemoryExportReceipt.failure("NOT_RECORDED"));
+        }
+        if (invocation.currentTurnSources().size() > 64) {
+            return rememberExport(invocation, MemoryExportReceipt.failure("FAILED"));
+        }
+
+        MemorySharedExportStatusResponse staged = null;
+        try (var ignored = A2aCredentialContext.openTask(invocation.taskId())) {
+            A2aCredentialContext.Lease lease = A2aCredentialContext.required();
+            lease.verify();
+            DurableMemoryExportDirective directive = invocation.durableMemoryExport();
+            MemoryContextKey context = invocation.contextKey();
+            MemoryRpcClient client = client(invocation.taskId(), context, lease);
+            List<MemorySourceRef> sources = invocation.currentTurnSources();
+            Map<String, Object> selected = selectedExportFields(directive, output);
+            MemoryJsonValue payload = memoryValue(mapper.valueToTree(selected), 0);
+            String brief = directive.includeBrief() ? output.summary() : null;
+            MemorySharedExportPolicy.project(brief, payload);
+            MemoryShareGrant grant = new MemoryShareGrant(new MemoryGrantRef(directive.grantId(), 1), context,
+                    directive.scope(), directive.matterId(), directive.purpose(), directive.recipients(),
+                    directive.projections(), sources, directive.validFrom(), directive.validUntil(), MemoryShareGrant.State.ACTIVE);
+            client.createShareGrant(context, grant);
+
+            String sourceExportId = stableId("a2a-export-", List.of(context, invocation.taskId(), directive.grantId()));
+            String sourceInvocationId = stableId("a2a-publish-", List.of(invocation.taskId(), directive.grantId()));
+            String runId = stableId("a2a-run-", invocation.taskId());
+            String taskId = stableId("a2a-task-", invocation.taskId());
+            MemoryAssociation association = new MemoryAssociation(directive.matterId(), runId, taskId,
+                    new MemoryAssociation.DomainSessionRef(domain, context.conversationId()));
+            List<MemorySourceDependency> dependencies = sources.stream()
+                    .map(source -> new MemorySourceDependency(source, null)).toList();
+            staged = client.submitSharedExport(context, sourceExportId, sourceInvocationId, association,
+                    grant.grant(), directive.purpose(), brief, payload, dependencies);
+            MemorySharedExportStatusResponse completed = client.commitSharedExport(context, staged);
+            return rememberExport(invocation, MemoryExportReceipt.from(completed));
+        } catch (MemoryException exception) {
+            if (staged != null && staged.state() == MemorySharedExport.State.PENDING) {
+                return rememberExport(invocation, MemoryExportReceipt.from(staged));
+            }
+            String state = exception.code() == MemoryErrorCode.MEMORY_UNAVAILABLE
+                    || exception.code() == MemoryErrorCode.AUTHENTICATION_EXPIRED ? "UNAVAILABLE" : "FAILED";
+            return rememberExport(invocation, MemoryExportReceipt.failure(state));
+        } catch (RuntimeException exception) {
+            if (staged != null && staged.state() == MemorySharedExport.State.PENDING) {
+                return rememberExport(invocation, MemoryExportReceipt.from(staged));
+            }
+            return rememberExport(invocation, MemoryExportReceipt.failure("UNAVAILABLE"));
+        }
+    }
+
+    private MemoryExportReceipt rememberExport(A2aMemoryInvocation invocation, MemoryExportReceipt receipt) {
+        invocation.exportReceipt(receipt);
+        return receipt;
+    }
+
+    private Map<String, Object> selectedExportFields(DurableMemoryExportDirective directive, A2aOutput output) {
+        Map<String, Object> source = output.structured() ? output.data() : Map.of("text", output.text());
+        Map<String, Object> selected = new LinkedHashMap<>();
+        for (String field : directive.exportFields()) {
+            if (!source.containsKey(field)) throw new MemoryException(MemoryErrorCode.INVALID_EXTRACTION);
+            selected.put(field, source.get(field));
+        }
+        return java.util.Collections.unmodifiableMap(selected);
     }
 
     private CompletableFuture<Map<String, Object>> degradeOrFail(A2aMemoryInvocation invocation, OverAllState state,

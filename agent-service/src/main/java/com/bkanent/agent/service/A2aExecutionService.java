@@ -14,7 +14,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -151,10 +150,10 @@ public class A2aExecutionService {
                 if (terminalWithResult) {
                     terminalEventSeen.set(true);
                 }
-                Map<String, Object> eventMetadata = terminalWithResult
+                Map<String, Object> eventMetadata = sanitizeMetadata(event.metadata());
+                eventMetadata.putAll(terminalWithResult
                         ? terminalMetadata(metadata, phase, request, event.result())
-                        : lifecycleMetadata(metadata, phase, request, false);
-                eventMetadata.putAll(sanitizeMetadata(event.metadata()));
+                        : lifecycleMetadata(metadata, phase, request, false));
                 String content = limitContent(event.content(), event.eventType());
                 publish(
                         request.sessionId(),
@@ -590,7 +589,7 @@ public class A2aExecutionService {
     }
 
     private String limitContent(String content, String eventType) {
-        String normalized = content == null ? "" : content;
+        String normalized = com.bkanent.common.agent.AgentOutputSanitizer.sanitizeText(content == null ? "" : content);
         int limit = "agent.delta".equals(eventType)
                 ? distributedAgentProperties.getStreaming().getMaxDeltaChars()
                 : distributedAgentProperties.getStreaming().getMaxMetadataChars();
@@ -602,18 +601,13 @@ public class A2aExecutionService {
 
     private Map<String, Object> sanitizeMetadata(Map<String, Object> metadata) {
         if (metadata == null || metadata.isEmpty()) {
-            return Map.of();
+            return new LinkedHashMap<>();
         }
-        Map<String, Object> sanitized = new HashMap<>();
-        metadata.forEach((key, value) -> {
-            if (key == null || "raw".equalsIgnoreCase(key) || "reasoning".equalsIgnoreCase(key)
-                    || "arguments".equalsIgnoreCase(key) || "input".equalsIgnoreCase(key)) {
-                return;
-            }
-            if (value != null) {
-                sanitized.put(key, value);
-            }
-        });
+        Map<String, Object> sanitized = com.bkanent.common.agent.AgentOutputSanitizer.sanitizeMap(metadata);
+        for (String key : java.util.List.of("phase", "terminal", "visibility", "parentTaskId", "childRunId",
+                "branchId", "result", "memoryRefs", "exportState", "memoryVersion", "memoryIndexState")) {
+            sanitized.remove(key);
+        }
         return sanitized;
     }
 
@@ -627,6 +621,7 @@ public class A2aExecutionService {
                 "visibility", "progress"
         ));
         addIfText(lifecycle, "childRunId", request.structuredContext(), "childRunId");
+        lifecycle.remove("parentTaskId");
         addIfText(lifecycle, "parentTaskId", request.parentTaskId());
         addIfText(lifecycle, "branchId", request.structuredContext(), "branchId");
         return lifecycle;
@@ -647,6 +642,14 @@ public class A2aExecutionService {
         result.put("structuredOutput", sanitizeResultValue(response.structuredOutput()));
         result.put("nextHints", response.nextHints() == null ? java.util.List.of() : response.nextHints());
         result.put("summary", response.summary() == null ? "" : response.summary());
+        if (response.memoryExport() != null) {
+            result.put("memoryRefs", response.memoryExport().memoryRefs());
+            result.put("exportState", response.memoryExport().exportState());
+            if (response.memoryExport().version() != null) result.put("memoryVersion", response.memoryExport().version());
+            if (response.memoryExport().indexState() != null) {
+                result.put("memoryIndexState", response.memoryExport().indexState().name());
+            }
+        }
         Object error = response.structuredOutput() == null ? null : response.structuredOutput().get("error");
         if (error != null) {
             result.put("error", error);
@@ -668,30 +671,7 @@ public class A2aExecutionService {
     }
 
     private Object sanitizeResultValue(Object value) {
-        if (value instanceof Map<?, ?> map) {
-            Map<String, Object> sanitized = new LinkedHashMap<>();
-            map.forEach((key, nestedValue) -> {
-                String normalizedKey = key == null ? "" : String.valueOf(key);
-                if (normalizedKey.isBlank() || isSensitiveResultKey(normalizedKey)) {
-                    return;
-                }
-                sanitized.put(normalizedKey, sanitizeResultValue(nestedValue));
-            });
-            return sanitized;
-        }
-        if (value instanceof Iterable<?> iterable) {
-            java.util.List<Object> sanitized = new java.util.ArrayList<>();
-            iterable.forEach(item -> sanitized.add(sanitizeResultValue(item)));
-            return sanitized;
-        }
-        return value;
-    }
-
-    private boolean isSensitiveResultKey(String key) {
-        return "raw".equalsIgnoreCase(key)
-                || "reasoning".equalsIgnoreCase(key)
-                || "arguments".equalsIgnoreCase(key)
-                || "input".equalsIgnoreCase(key);
+        return com.bkanent.common.agent.AgentOutputSanitizer.sanitizeValue(value);
     }
 
     private void addIfText(Map<String, Object> metadata, String key, String value) {

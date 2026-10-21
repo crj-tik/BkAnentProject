@@ -1,5 +1,6 @@
 package com.bkanent.common.a2a;
 
+import com.bkanent.common.agent.DurableMemoryExportDirective;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.a2a.server.agentexecution.RequestContext;
@@ -67,8 +68,22 @@ public final class A2aInputParser {
         }
 
         MessageSendConfiguration configuration = context.getConfiguration();
+        DurableMemoryExportDirective exportDirective = parseMemoryExportDirective(metadata);
         return new A2aInput(instruction, Map.copyOf(structuredContext), metadata,
-                policy.requestsJson(configuration));
+                policy.requestsJson(configuration), exportDirective);
+    }
+
+    private DurableMemoryExportDirective parseMemoryExportDirective(Map<String, Object> metadata) {
+        Object supervisorValue = metadata.get("supervisor");
+        if (!(supervisorValue instanceof Map<?, ?> supervisor)) return null;
+        Object directive = supervisor.get("memoryExport");
+        if (directive == null) return null;
+        try {
+            return objectMapper.convertValue(directive, DurableMemoryExportDirective.class);
+        }
+        catch (IllegalArgumentException exception) {
+            throw new A2aInputException("INVALID_MEMORY_EXPORT", "A2A memory export directive is invalid");
+        }
     }
 
     private String serializeStructuredContext(Map<String, Object> structuredContext) {

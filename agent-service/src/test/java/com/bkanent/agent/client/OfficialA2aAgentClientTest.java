@@ -6,6 +6,13 @@ import com.bkanent.agent.registry.RegisteredAgentDescriptor;
 import com.bkanent.common.agent.AgentCard;
 import com.bkanent.common.agent.AgentTaskInvokeRequest;
 import com.bkanent.common.agent.AgentTaskInvokeResponse;
+import com.bkanent.common.agent.DurableMemoryExportDirective;
+import com.bkanent.common.memory.MemoryContextKey;
+import com.bkanent.common.memory.MemoryExportRef;
+import com.bkanent.common.memory.MemoryIndexState;
+import com.bkanent.common.memory.MemoryRevision;
+import com.bkanent.common.memory.MemoryScope;
+import com.bkanent.common.memory.MemoryShareGrant;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.a2a.client.A2AClient;
 import io.a2a.spec.Artifact;
@@ -129,6 +136,37 @@ class OfficialA2aAgentClientTest {
     }
 
     @Test
+    void sendsExportDirectiveInOfficialSupervisorTransportMetadata() throws Exception {
+        A2AClient remote = mock(A2AClient.class);
+        Task task = new Task("remote-task-export", "context-1", new TaskStatus(TaskState.WORKING),
+                List.of(), List.of(), Map.of());
+        when(remote.sendMessage(any())).thenReturn(new SendMessageResponse(null, task));
+        OfficialA2aAgentClient client = new OfficialA2aAgentClient(
+                new OfficialA2aResponseNormalizer(new ObjectMapper()), ignored -> remote);
+        var from = java.time.Instant.parse("2026-10-21T00:00:00Z");
+        DurableMemoryExportDirective directive = new DurableMemoryExportDirective("grant-1",
+                new MemoryScope(MemoryScope.Kind.SESSION_SHARED, null, null, "session-1"), null,
+                "listing-review", List.of(new MemoryShareGrant.Participant("listing", "listing-agent", "conversation-1")),
+                List.of(MemoryShareGrant.Projection.DURABLE_EXPORT), List.of("result"), false,
+                from, from.plusSeconds(3600));
+        AgentTaskInvokeRequest original = request();
+        AgentTaskInvokeRequest withDirective = new AgentTaskInvokeRequest(
+                original.sessionId(), original.taskId(), original.parentTaskId(), original.traceId(),
+                original.sourceAgentId(), original.targetAgentId(), original.intent(), original.domain(),
+                original.instruction(), original.structuredContext(), original.artifactIds(), original.constraints(),
+                original.expectedOutput(), original.idempotencyKey(), original.stream(), original.skillSelection(), directive);
+
+        client.submitAsync(descriptor(), withDirective);
+
+        ArgumentCaptor<MessageSendParams> captor = ArgumentCaptor.forClass(MessageSendParams.class);
+        verify(remote).sendMessage(captor.capture());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> supervisor = (Map<String, Object>) captor.getValue().metadata().get("supervisor");
+        assertThat(supervisor.get("memoryExport")).isEqualTo(directive);
+        assertThat(captor.getValue().metadata()).doesNotContainKey("memoryExport");
+    }
+
+    @Test
     void syncStreamingAndAsyncResultsUseTheSameNormalizedContract() throws Exception {
         A2AClient a2aClient = mock(A2AClient.class);
         OfficialA2aAgentClient client = new OfficialA2aAgentClient(
@@ -168,6 +206,9 @@ class OfficialA2aAgentClientTest {
                     assertThat(response.status()).isEqualTo("COMPLETED");
                     assertThat(response.structuredOutput()).containsEntry("remoteTaskId", "remote-task-1");
                     assertThat(response.artifactIds()).containsExactly("remote-artifact-1");
+                    assertThat(response.structuredOutput()).containsEntry("exportState", "COMMITTED")
+                            .containsEntry("memoryIndexState", "INDEX_PENDING");
+                    assertThat(response.memoryExport()).isNotNull();
                 });
     }
 
@@ -199,9 +240,14 @@ class OfficialA2aAgentClientTest {
     }
 
     private Artifact artifact() {
+        MemoryRevision version = new MemoryRevision(3, "a".repeat(64), "memory.export.v2");
+        MemoryExportRef ref = new MemoryExportRef("export-1",
+                new MemoryContextKey("7", "listing", "listing-agent", "conversation-1"), version);
         return new Artifact(
                 "remote-artifact-1", "listing", "listing result",
-                List.of(new DataPart(Map.of("contentType", "listing", "listingCount", 2))), Map.of());
+                List.of(new DataPart(Map.of("contentType", "listing", "listingCount", 2))),
+                Map.of("terminal", true, "memoryRefs", List.of(ref), "exportState", "COMMITTED",
+                        "memoryVersion", version, "memoryIndexState", MemoryIndexState.INDEX_PENDING.name()));
     }
 
     private RegisteredAgentDescriptor descriptor() {

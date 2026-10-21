@@ -24,6 +24,12 @@ public record SessionStreamEvent(
         String visibility
 ) {
 
+    /** True when this event belongs to the subscribed task or to one of its direct children. */
+    public boolean belongsToTaskSubscription(String subscribedTaskId) {
+        return subscribedTaskId == null || subscribedTaskId.isBlank()
+                || subscribedTaskId.equals(taskId) || subscribedTaskId.equals(parentTaskId);
+    }
+
     /**
      * Backward-compatible constructor for existing Supervisor event producers.
      */

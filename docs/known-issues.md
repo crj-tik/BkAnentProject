@@ -1330,6 +1330,34 @@
 
 **关联**：LR-59、LR-85；change 10.2。
 
+## KI-155 [FIXED·本提交·P1] durable export brief 可绕过敏感内容检查
+
+**发现日期**：2026-10-21。
+
+**现象与根因**：共享导出原先校验结构payload中的私有字段名，却未检查 brief 自由文本；带凭据的 summary/note 也可经允许字段进入持久共享投影。
+
+**修复与防回归（本提交）**：brief 与递归字符串值现在调用 common `AgentOutputSanitizer` 的凭据/认证信标/内部材料检测，任何命中均拒绝导出；字段allowlist继续约束结构内容。`MemorySharedExportPolicyTest` 覆盖 brief、嵌套值和私有字段拒绝。
+
+**关联**：LR-88；change 10.7。
+
+## KI-156 [FIXED·本提交·P1] SSE 父任务回放漏掉子事件且子 metadata 可伪造关联
+
+**发现日期**：2026-10-21。
+
+**现象与根因**：正式订阅按精确 taskId 过滤，父任务无法回放或接收直接子任务事件；另一方面，子端原始 metadata 可覆盖可信 parentTaskId/visibility 或携带伪造终态memory receipt。event ID 游标查询也未限定 session。
+
+**修复与防回归（本提交）**：持久回放与实时订阅共享直接父子关系和 visibility 规则，SQL 候选父任务条件绑定参数并在返回前复核；游标以 sessionId+eventId 定位。远端 metadata 先脱敏并移除保留字段，再由本地可信上下文写入关联，终态回执只取服务端响应。`SessionEventAuditServiceTest`、`InMemorySessionStreamServiceTest`、`A2aExecutionServiceTest` 覆盖父子回放、重连去重、会话游标和伪造 metadata。
+
+**关联**：LR-87/LR-88；change 10.5。
+
+## KI-157 [FIXED·本提交·P1] 访谈会话票据使用仓库内硬编码 HMAC 默认密钥
+
+**发现日期**：2026-10-21。配置扫描发现 `InterviewRuntimeProperties.Ticket` 与 `nacos/interview-service.yaml` 都含有非空源码默认值，Compose 未要求访谈票据密钥。
+
+**修复与防回归（本提交）**：删除两层默认，统一改为 `INTERVIEW_TICKET_SECRET` 环境变量；Compose 要求非空配置，`.env.example` 只给空占位，本机 `.env` 使用随机值且不纳入提交。`issueTicket` 对缺失或少于32 UTF-8字节的密钥失败关闭；`InterviewSessionStateMachineTest.ticketSigningFailsClosedWithoutConfiguredSecret` 验证默认空配置不会签发。
+
+**关联**：LR-89；change 10.7。轮换后旧开发票据按预期失效。
+
 ---
 
 **变更历史**：f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。

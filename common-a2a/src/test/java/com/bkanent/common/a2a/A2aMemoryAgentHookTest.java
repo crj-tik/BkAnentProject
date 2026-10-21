@@ -5,6 +5,7 @@ import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.state.ReplaceAllWith;
 import com.alibaba.cloud.ai.graph.state.strategy.AppendStrategy;
+import com.bkanent.common.agent.DurableMemoryExportDirective;
 import com.bkanent.common.memory.*;
 import com.bkanent.common.rag.A2aBeaconBinding;
 import com.bkanent.common.rag.RagCredentialContext;
@@ -31,6 +32,73 @@ import static org.mockito.Mockito.*;
 
 class A2aMemoryAgentHookTest {
     private static final String SECRET = "test-memory-signing-secret-at-least-32-bytes";
+
+    @Test
+    void publishesOnlyTheExplicitSafeFieldsFromTheArchivedFinalAssistantTurn() throws Exception {
+        var fixture = new MemoryFixture(List.of(), new MemoryConversationVersion(0, 0, "policy-v1"));
+        AtomicReference<MemoryShareGrant> createdGrant = new AtomicReference<>();
+        AtomicReference<MemorySharedExportSubmitRequest> submittedExport = new AtomicReference<>();
+        AtomicReference<MemoryRequestProof> grantProof = new AtomicReference<>();
+        when(fixture.rpc.manageShareGrant(any(), any())).thenAnswer(call -> {
+            MemoryShareGrantManagementRequest request = call.getArgument(0);
+            grantProof.set(call.getArgument(1));
+            createdGrant.set(request.grant());
+            return new MemoryShareGrantManagementResponse(request.grant(), true);
+        });
+        when(fixture.rpc.submitSharedExport(any(), any())).thenAnswer(call -> {
+            MemorySharedExportSubmitRequest request = call.getArgument(0);
+            submittedExport.set(request);
+            MemoryRevision version = new MemoryRevision(1, "b".repeat(64), MemorySharedExportSubmitRequest.SCHEMA_VERSION);
+            return new MemorySharedExportStatusResponse(request.sourceExportId(), version,
+                    MemorySharedExport.State.PENDING, null, MemoryIndexState.NOT_REQUESTED);
+        });
+        when(fixture.rpc.commitSharedExport(any(), any())).thenAnswer(call -> {
+            MemorySharedExportCommitRequest request = call.getArgument(0);
+            MemoryRevision version = new MemoryRevision(request.contentRevision(), request.contentHash(),
+                    MemorySharedExportSubmitRequest.SCHEMA_VERSION);
+            MemoryExportRef ref = new MemoryExportRef(request.sourceExportId(), request.contextKey(), version);
+            return new MemorySharedExportStatusResponse(request.sourceExportId(), version,
+                    MemorySharedExport.State.COMMITTED, ref, MemoryIndexState.INDEX_PENDING);
+        });
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        var hook = new A2aMemoryAgentHook("listing-master-service", "listing", "listing-agent", () -> fixture.rpc,
+                new MemoryWorkingSetCache(8, 1024 * 1024, 60_000, Clock.systemUTC()), enabledProperties(),
+                mock(ChatModel.class), new ObjectMapper(), executor);
+        String taskId = "listing-task-shared-export";
+        var directive = exportDirective();
+        var invocation = hook.invocation(taskId, "listing-context-shared-export", directive);
+        var lease = lease(taskId, "7", "listing-master-service");
+        register(lease);
+        var config = config(taskId, invocation);
+        try {
+            hook.beforeAgent(state(List.of(new SystemMessage("listing rules"),
+                    new UserMessage("核对并整理房源结果"))), config).join();
+            hook.afterAgent(state(List.of(new SystemMessage("listing rules"),
+                    new UserMessage("核对并整理房源结果"), new AssistantMessage("房源结果已核实"))), config).join();
+
+            A2aOutput output = new A2aOutput(A2aOutputPolicy.JSON_MODE,
+                    Map.of("result", "可正常带看", "status", "ACTIVE", "privateDetail", "must not export"),
+                    "{}", "房源已核实", List.of());
+            MemoryExportReceipt receipt = hook.publishExport(invocation, output);
+
+            assertThat(receipt.exportState()).isEqualTo("COMMITTED");
+            assertThat(receipt.memoryRefs()).hasSize(1);
+            assertThat(createdGrant.get().projections()).containsExactly(
+                    MemoryShareGrant.Projection.COLLABORATION, MemoryShareGrant.Projection.DURABLE_EXPORT);
+            assertThat(fixture.delivered.get().messages()).singleElement().satisfies(message -> {
+                assertThat(message.role()).isEqualTo(MemoryMessage.Role.ASSISTANT);
+                assertThat(createdGrant.get().sources()).containsExactly(message.source());
+            });
+            assertThat(submittedExport.get().payload().properties().keySet()).containsExactlyInAnyOrder("result", "status");
+            assertThat(submittedExport.get().brief()).isEqualTo("房源已核实");
+            assertThat(grantProof.get().actor()).isEqualTo(MemoryRequestProof.Actor.USER);
+            assertThat(createdGrant.get().sourceContext().ownerId()).isEqualTo("7");
+        } finally {
+            hook.finish(invocation);
+            discard(lease);
+            executor.shutdownNow();
+        }
+    }
 
     @Test
     void actualReactAgentLoadsAuthorizedHistoryAndArchivesTheCurrentTurnUnderTrustedIdentity() throws Exception {
@@ -538,6 +606,16 @@ class A2aMemoryAgentHookTest {
         properties.setSigningSecret(SECRET);
         properties.validate();
         return properties;
+    }
+
+    private DurableMemoryExportDirective exportDirective() {
+        Instant now = Instant.now();
+        return new DurableMemoryExportDirective("grant-a2a-1",
+                new MemoryScope(MemoryScope.Kind.SESSION_SHARED, null, null, "session-shared-1"), null,
+                "listing-review", List.of(new MemoryShareGrant.Participant(
+                        "supervisor", "supervisor-agent", "supervisor-conversation")),
+                List.of(MemoryShareGrant.Projection.COLLABORATION, MemoryShareGrant.Projection.DURABLE_EXPORT),
+                List.of("result", "status"), true, now.minusSeconds(60), now.plusSeconds(3600));
     }
 
     private A2aCredentialContext.Lease lease(String taskId, String actorId, String audience) {

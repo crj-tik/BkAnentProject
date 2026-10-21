@@ -11,11 +11,13 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.inOrder;
 
 class PersistArtifactsNodeTest {
 
@@ -78,6 +80,48 @@ class PersistArtifactsNodeTest {
         assertThat(second).containsExactly("remote-artifact-1", "local-artifact-1");
         verify(store).save(eq("task-1"), eq("session-1"), eq("listing-agent"), eq("listing_result"),
                 eq(1), any(), any(), eq("trace-1"));
+    }
+
+    @Test
+    void publishesEachArtifactCreatedOnlyAfterItsArtifactSaveSucceeds() {
+        TaskArtifactStore store = mock(TaskArtifactStore.class);
+        SessionStreamService events = mock(SessionStreamService.class);
+        when(store.findBySourceArtifactId(any(), any(), any(), any())).thenReturn(Optional.empty());
+        when(store.save(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn("primary", "derived");
+        var response = new AgentTaskInvokeResponse("session", "child", "marketing-agent", "COMPLETED",
+                Map.of("contentType", "copy_draft", "draftText", "saved draft"),
+                List.of("remote"), List.of(), "done", "trace");
+
+        new PersistArtifactsNode(store, events).persistSingle("run", "session", "marketing-agent", "1", "trace", response);
+
+        var order = inOrder(store, events);
+        order.verify(store).save(eq("run"), eq("session"), eq("marketing-agent"), eq("copy_draft"),
+                eq(1), any(), any(), eq("trace"));
+        order.verify(events).publish(argThat(event -> "artifact.created".equals(event.eventType())
+                && "primary".equals(event.metadata().get("artifactId"))));
+        order.verify(store).findBySourceArtifactId("run", "session", "marketing-agent", "remote:copy_draft_body");
+        order.verify(store).save(eq("run"), eq("session"), eq("marketing-agent"), eq("copy_draft_body"),
+                eq(1), any(), any(), eq("trace"));
+        order.verify(events).publish(argThat(event -> "artifact.created".equals(event.eventType())
+                && "derived".equals(event.metadata().get("artifactId"))));
+    }
+
+    @Test
+    void doesNotPublishArtifactCreatedWhenDurableArtifactSaveFails() {
+        TaskArtifactStore store = mock(TaskArtifactStore.class);
+        SessionStreamService events = mock(SessionStreamService.class);
+        when(store.findBySourceArtifactId(any(), any(), any(), any())).thenReturn(Optional.empty());
+        when(store.save(any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenThrow(new IllegalStateException("artifact store unavailable"));
+        var response = new AgentTaskInvokeResponse("session", "child", "marketing-agent", "COMPLETED",
+                Map.of("contentType", "listing_result", "value", "verified"),
+                List.of("remote"), List.of(), "done", "trace");
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new PersistArtifactsNode(store, events)
+                .persistSingle("run", "session", "marketing-agent", "1", "trace", response))
+                .isInstanceOf(IllegalStateException.class);
+        verify(events, never()).publish(any());
     }
 
 }

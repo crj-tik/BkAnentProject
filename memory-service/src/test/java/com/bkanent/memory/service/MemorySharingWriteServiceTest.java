@@ -127,6 +127,18 @@ class MemorySharingWriteServiceTest {
         MemorySharedExportSubmitRequest request = unsafe;
         assertCode(MemoryErrorCode.INVALID_ARGUMENT, () -> f.writer.submitExport(request, f.sign(request)));
         assertEquals(0, f.jdbc.queryForObject("SELECT COUNT(*) FROM memory_shared_export", Integer.class));
+
+        var oversized = f.submit(grant, "source-export-too-large", "invocation-too-large", "safe");
+        oversized = new MemorySharedExportSubmitRequest(oversized.envelope(), oversized.contextKey(),
+                oversized.sourceExportId(), oversized.expectedRevision(), oversized.sourceInvocationId(),
+                oversized.association(), oversized.grant(), oversized.purpose(), oversized.brief(),
+                MemoryJsonValue.object(Map.of("result", MemoryJsonValue.string("x".repeat(25_000)))),
+                oversized.dependencies());
+        oversized = f.rehash(oversized);
+        MemorySharedExportSubmitRequest overBudget = oversized;
+        assertCode(MemoryErrorCode.CONTEXT_BUDGET_EXCEEDED,
+                () -> f.writer.submitExport(overBudget, f.sign(overBudget)));
+        assertEquals(0, f.jdbc.queryForObject("SELECT COUNT(*) FROM memory_shared_export", Integer.class));
     }
 
     @Test

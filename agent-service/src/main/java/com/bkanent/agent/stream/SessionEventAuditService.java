@@ -225,6 +225,7 @@ public class SessionEventAuditService {
         if (cursor == null && hasText(afterEventId)) {
             AgentEventAuditEntity cursorEntity = agentEventAuditMapper.selectOne(
                     new LambdaQueryWrapper<AgentEventAuditEntity>()
+                            .eq(AgentEventAuditEntity::getSessionId, sessionId)
                             .eq(AgentEventAuditEntity::getEventId, afterEventId)
                             .last("limit 1")
             );
@@ -235,12 +236,15 @@ public class SessionEventAuditService {
                 .orderByAsc(AgentEventAuditEntity::getId)
                 .last("limit " + size);
         if (hasText(taskId)) {
-            wrapper.eq(AgentEventAuditEntity::getTaskId, taskId);
+            wrapper.and(scope -> scope.eq(AgentEventAuditEntity::getTaskId, taskId)
+                    .or().apply("JSON_UNQUOTE(JSON_EXTRACT(metadata_json, '$.parentTaskId')) = {0}", taskId));
         }
         if (cursor != null && cursor > 0) {
             wrapper.gt(AgentEventAuditEntity::getId, cursor);
         }
-        return agentEventAuditMapper.selectList(wrapper).stream().map(this::toEvent).toList();
+        return agentEventAuditMapper.selectList(wrapper).stream().map(this::toEvent)
+                .filter(event -> !hasText(taskId) || event.belongsToTaskSubscription(taskId))
+                .toList();
     }
 
     public Map<String, Object> summarize() {

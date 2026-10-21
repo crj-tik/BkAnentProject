@@ -843,3 +843,37 @@
 **代码位置**：common 的 `MemoryShareGrantManagementRequest`、`MemorySharedExportSubmitRequest`、`MemorySharedExportCommitRequest`、`MemorySharedExportStatusResponse` 和 `MemoryCanonicalHash.sharedExportHash`；memory-service 的 `MemorySharingWriteService`、`MemorySharingStore`、`MemoryV2RagProjectionService`、`MemoryRagOutboxDispatcher`；迁移 `20261021_memory_shared_export_runtime.sql` 及部署 manifest。`MemorySharingWriteServiceTest` 覆盖签名创建、重试冲突、两阶段提交、每接收者索引确认和撤回墓碑；`MemorySharingAccessServiceTest.committedExportsWithoutNewRuntimeReceiptRemainReadable` 覆盖迁移兼容。
 
 **关联**：LR-59、LR-84；KI-154；change 10.2。协作候选在 9.2 的来源/grant 候选许可实现前继续失败关闭；不以持有 export reference 或 RAG document ID 授权。
+
+## LR-86 A2A终态内容直传，跨域记忆导出只接收受限owner授权
+
+**结论**：A2A display 继续在响应正文/结构结果直接返回，默认终态正文上限为64,000字符；Supervisor消费同一终态artifact并直接保留现有content/result，不因存在记忆引用而重复调用 Memory。显式 durable export 只能从 Supervisor 可信运行上下文的 `durableMemoryExport` 指令进入 `supervisor.memoryExport`，模型输出和工具参数不能生成指令或 `memoryRefs`。agent只在当前turn归档确认后创建以当前认证用户签名的grant，且来源限定为最终ASSISTANT消息；根字段只允许 `MemorySharedExportFields` 的安全集合，选中的payload与brief合计UTF-8字节不超过24,576，最多32个字段、64个接收方和30天有效期。协作索引只从已提交不可变export投影；只有 `DURABLE_EXPORT` grant 才允许详情读。terminal `memoryRefs/exportState/memoryVersion/memoryIndexState` 由服务端放在终态artifact metadata与结构part metadata，客户端仅接受 `terminal=true` 的回执并继续把原正文、结构字段和终态状态传入Supervisor执行事件。
+
+**根因**：A2A内容是当前获准调用的工作结果，引用是后续共享对象的定位信息；若以引用代替正文会破坏现有Supervisor和SSE消费契约，若从普通metadata或模型JSON接受引用则可伪造权限状态。分开保留直传内容、受限owner签名grant、不可变payload投影和终态服务端回执，能让索引延迟不阻塞业务完成，也避免跨域只凭引用继承权限。
+
+**代码位置**：`common/src/main/java/com/bkanent/common/agent/DurableMemoryExportDirective` 与 `common/memory/MemorySharedExportFields`；`common-a2a` 的 `A2aMemoryAgentHook`、`A2aOutputNormalizer`、`OfficialA2aAgentExecutor`；`agent-service` 的 `OfficialA2aMetadataMapper`、`OfficialA2aResponseNormalizer`、`OfficialA2aAgentClient`、`A2aExecutionService`；`memory-service/MemorySharePayloadPolicy`。回归覆盖指令allowlist/大小边界、可信metadata入口、final-assistant单源与USER签名grant、服务端终态metadata、传输client、伪造字段剔除和Supervisor事件结果。
+
+**关联**：LR-59、LR-85；change 10.1/10.3。A2A/Memory代码回归不等于真实前端浏览器与部署拓扑验收；10.4–10.7仍分别验收。
+
+## LR-87 SSE 父任务订阅只接受直接关联子任务并按会话核验回放游标
+
+**结论**：实时及持久回放共享 `SessionStreamVisibility.isVisibleToTask` 的可见性和直接父任务关系：无 task 过滤时保留兼容行为；指定 parent task 时只接收 `taskId == parentTaskId` 的父事件及 `metadata.parentTaskId == subscribedTaskId` 的直接子事件，不递归收取孙任务。回放 SQL 用参数化的 JSON 父任务条件缩小候选，结果返回前再执行同一 Java 关系校验。`Last-Event-ID` 查找同时绑定 sessionId/eventId，回放与实时重叠按 session sequence 去重。子服务提交的 parent、visibility、terminal 和 memory receipt 元数据先剔除/脱敏，再由可信 Supervisor 请求和服务端终态结果写入。
+
+**根因**：taskId 是单个执行者的身份，不能表达父调用所订阅的完整结果；仅对实时流加父子过滤会让断线重放静默丢掉子成果，仅信任客户端 metadata 又允许子任务伪造父链或终态回执。跨会话复用 event ID 还会把另一会话的序号当作游标。持久和实时出口必须共用关系规则，绑定会话后才能保持回放一致且不越权。
+
+**代码位置**：`common/agent/SessionStreamEvent`、`SessionStreamVisibility`；`agent-service/stream/InMemorySessionStreamService`、`SessionEventAuditService`、`service/A2aExecutionService`。回归 `SessionEventAuditServiceTest`、`InMemorySessionStreamServiceTest`、`A2aExecutionServiceTest`；关联 KI-156，change 10.5。
+
+## LR-88 Agent 输出统一脱敏，持久共享导出对敏感材料失败关闭
+
+**结论**：跨服务展示/协作结果经 common `AgentOutputSanitizer` 递归移除敏感字段、对包含凭据或私有执行材料的自由文本整体替换；共享导出的 payload 字段由固定 allowlist 限制，brief 与递归字符串值经相同检测器核验，命中时拒绝写入而不截断保存。SSE 事件、terminal metadata 与输出 normalizer 复用统一策略，服务端可信生成的 terminal memory receipt 在远端值过滤之后单独映射。
+
+**根因**：字段名过滤挡不住普通 `note`/`summary` 字段里的 bearer、凭据或脱敏映射；反过来，对已授权面向用户的结果可安全隐藏敏感段，但对不可变共享载荷做静默替换会令 owner 签认内容与实际导出内容不一致，因此共享写必须拒绝并由来源域修正。把 terminal receipt 和子端普通 metadata 混为一体会允许远端伪造权限状态。
+
+**代码位置**：`common/agent/AgentOutputSanitizer`、`common/a2a/A2aOutputNormalizer`、`common-a2a/A2aMemoryAgentHook`、`agent-service/client/OfficialA2aResponseNormalizer` 与 `service/A2aExecutionService`、`common/memory/MemorySharedExportPolicy`。回归 `AgentOutputSanitizerTest`、`A2aOutputNormalizerTest`、`MemorySharedExportPolicyTest`、`A2aExecutionServiceTest`；关联 KI-155/KI-156，change 10.3/10.5/10.7。
+
+## LR-89 访谈会话票据签名密钥只从受管环境注入且缺失时拒绝签发
+
+**结论**：访谈运行面 `INTERVIEW_TICKET_SECRET` 不设源码或 Nacos 明文默认值；服务 Compose 要求显式注入，本地开发值只保留在未跟踪 `.env`。签发票据前要求 UTF-8 密钥至少32字节，缺失或过短立即失败，不退回共享默认密钥。
+
+**根因**：HMAC 密钥硬编码在 Properties 初始值与 Nacos 占位默认值时，仓库内所有实例共享可预知签名权；只删除其中一处仍会被另一层默认回填。环境注入、空默认和最小熵检查必须同时成立，既避免发布源码凭据，也不允许缺配置时继续签发可伪造会话票据。
+
+**代码位置**：`interview-service/config/InterviewRuntimeProperties`、`runtime/InterviewSessionStateMachine`、`nacos/interview-service.yaml`、根 `docker-compose.yml` 与 `.env.example`；回归 `InterviewSessionStateMachineTest.ticketSigningFailsClosedWithoutConfiguredSecret`；关联 KI-157，change 10.7。

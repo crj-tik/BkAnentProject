@@ -1,5 +1,7 @@
 package com.bkanent.common.agent;
 
+import com.bkanent.common.memory.MemoryExportReceipt;
+
 import java.util.List;
 import java.util.Map;
 
@@ -17,6 +19,12 @@ public record AgentTaskInvokeResponse(
         List<String> artifactIds,
         List<String> nextHints,
         String summary,
-        String traceId
+        String traceId,
+        MemoryExportReceipt memoryExport
 ) {
+    public AgentTaskInvokeResponse(String sessionId, String taskId, String agentId, String status,
+                                   Map<String, Object> structuredOutput, List<String> artifactIds,
+                                   List<String> nextHints, String summary, String traceId) {
+        this(sessionId, taskId, agentId, status, structuredOutput, artifactIds, nextHints, summary, traceId, null);
+    }
 }

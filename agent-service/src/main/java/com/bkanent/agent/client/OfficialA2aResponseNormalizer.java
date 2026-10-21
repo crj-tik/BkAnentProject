@@ -7,6 +7,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.bkanent.agent.registry.RegisteredAgentDescriptor;
 import com.bkanent.common.agent.AgentTaskInvokeRequest;
 import com.bkanent.common.agent.AgentTaskInvokeResponse;
+import com.bkanent.common.memory.MemoryExportReceipt;
+import com.bkanent.common.memory.MemoryExportRef;
+import com.bkanent.common.memory.MemoryIndexState;
+import com.bkanent.common.memory.MemoryRevision;
 import io.a2a.spec.DataPart;
 import io.a2a.spec.Part;
 import io.a2a.spec.TextPart;
@@ -20,6 +24,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 将官方 A2A 的 Message、Task、Artifact part 统一转换为 Supervisor 内部响应。
@@ -48,9 +53,22 @@ public final class OfficialA2aResponseNormalizer {
                                               Collection<String> artifactIds,
                                               String errorMessage,
                                               Collection<? extends Part<?>> parts) {
+        return normalize(descriptor, request, output, status, remoteTaskId, artifactIds, errorMessage, parts, null);
+    }
+
+    public AgentTaskInvokeResponse normalize(RegisteredAgentDescriptor descriptor,
+                                              AgentTaskInvokeRequest request,
+                                              String output,
+                                              String status,
+                                              String remoteTaskId,
+                                              Collection<String> artifactIds,
+                                              String errorMessage,
+                                              Collection<? extends Part<?>> parts,
+                                              MemoryExportReceipt memoryExport) {
         String normalizedOutput = StringUtils.hasText(output) ? output : extractText(parts);
         Map<String, Object> structuredOutput = new LinkedHashMap<>();
         Map<String, Object> parsedOutput = parseStructuredOutput(normalizedOutput, parts);
+        parsedOutput.keySet().removeIf(this::isMemoryExportField);
         structuredOutput.putAll(parsedOutput);
         structuredOutput.putIfAbsent("officialA2a", true);
         if (!structuredOutput.containsKey("output")) {
@@ -63,6 +81,12 @@ public final class OfficialA2aResponseNormalizer {
         }
         if (StringUtils.hasText(errorMessage)) {
             structuredOutput.put("error", errorMessage);
+        }
+        if (memoryExport != null) {
+            structuredOutput.put("memoryRefs", memoryExport.memoryRefs());
+            structuredOutput.put("exportState", memoryExport.exportState());
+            if (memoryExport.version() != null) structuredOutput.put("memoryVersion", memoryExport.version());
+            if (memoryExport.indexState() != null) structuredOutput.put("memoryIndexState", memoryExport.indexState().name());
         }
 
         List<String> normalizedArtifactIds = normalizeArtifactIds(artifactIds);
@@ -82,8 +106,30 @@ public final class OfficialA2aResponseNormalizer {
                 normalizedArtifactIds,
                 nextHints,
                 summary,
-                request == null ? null : request.traceId()
+                request == null ? null : request.traceId(),
+                memoryExport
         );
+    }
+
+    public MemoryExportReceipt memoryExportReceipt(Map<?, ?> metadata) {
+        if (metadata == null || !Boolean.TRUE.equals(metadata.get("terminal"))
+                || !(metadata.get("exportState") instanceof String state)) return null;
+        try {
+            List<MemoryExportRef> refs = metadata.get("memoryRefs") == null ? List.of()
+                    : objectMapper.convertValue(metadata.get("memoryRefs"), new TypeReference<List<MemoryExportRef>>() { });
+            MemoryRevision version = metadata.get("memoryVersion") == null ? null
+                    : objectMapper.convertValue(metadata.get("memoryVersion"), MemoryRevision.class);
+            MemoryIndexState indexState = metadata.get("memoryIndexState") == null ? null
+                    : MemoryIndexState.valueOf(String.valueOf(metadata.get("memoryIndexState")));
+            return new MemoryExportReceipt(refs, state, version, indexState);
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
+    private boolean isMemoryExportField(String key) {
+        return Set.of("memoryrefs", "exportstate", "memoryversion", "memoryindexstate")
+                .contains(key.replaceAll("[^A-Za-z]", "").toLowerCase(java.util.Locale.ROOT));
     }
 
     public String extractText(Collection<? extends Part<?>> parts) {

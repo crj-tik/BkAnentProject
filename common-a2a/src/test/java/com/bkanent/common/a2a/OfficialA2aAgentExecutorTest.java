@@ -3,6 +3,14 @@ package com.bkanent.common.a2a;
 import com.alibaba.cloud.ai.graph.OverAllState;
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.streaming.StreamingOutput;
+import com.bkanent.common.agent.DurableMemoryExportDirective;
+import com.bkanent.common.memory.MemoryContextKey;
+import com.bkanent.common.memory.MemoryExportReceipt;
+import com.bkanent.common.memory.MemoryExportRef;
+import com.bkanent.common.memory.MemoryIndexState;
+import com.bkanent.common.memory.MemoryRevision;
+import com.bkanent.common.memory.MemoryScope;
+import com.bkanent.common.memory.MemoryShareGrant;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.a2a.server.agentexecution.RequestContext;
 import io.a2a.server.events.EventQueue;
@@ -28,6 +36,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -102,6 +111,99 @@ class OfficialA2aAgentExecutorTest {
                 TaskStatusUpdateEvent.class,
                 status -> assertThat(status.getStatus().state()).isEqualTo(TaskState.COMPLETED)));
         queue.close();
+    }
+
+    @Test
+    void terminalArtifactCarriesTrustedReceiptMetadataWithoutChangingResultContent() throws Exception {
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        MemoryRevision version = new MemoryRevision(3, "a".repeat(64), "memory.export.v2");
+        MemoryExportRef ref = new MemoryExportRef("export-1",
+                new MemoryContextKey("7", "listing", "listing-agent", "conversation-1"), version);
+        MemoryExportReceipt receipt = new MemoryExportReceipt(List.of(ref), "COMMITTED", version,
+                MemoryIndexState.INDEX_PENDING);
+        A2aMemoryAgentHook hook = org.mockito.Mockito.mock(A2aMemoryAgentHook.class);
+        org.mockito.Mockito.when(hook.invocation(anyString(), anyString(), any())).thenReturn(null);
+        org.mockito.Mockito.when(hook.publishExport(any(), any())).thenReturn(receipt);
+        ReactAgent agent = mockAgent("{\"result\":\"房源已核实\",\"summary\":\"找到有效房源\"}");
+        var executor = new OfficialA2aAgentExecutor(agent, mapper, policy, null, null, List.of(), 120_000, hook);
+        EventQueue queue = EventQueue.create();
+        try {
+            executeAuthenticated(executor, context("task-memory-receipt", Map.of("supervisor", Map.of(
+                    "memoryExport", exportDirective())), List.of("text", "application/json")), queue);
+
+            Artifact artifact = drain(queue).stream().filter(TaskArtifactUpdateEvent.class::isInstance)
+                    .map(TaskArtifactUpdateEvent.class::cast).map(TaskArtifactUpdateEvent::getArtifact)
+                    .findFirst().orElseThrow();
+            assertThat(artifact.metadata()).containsEntry("terminal", true).containsEntry("exportState", "COMMITTED")
+                    .containsEntry("memoryRefs", List.of(ref)).containsEntry("memoryIndexState", "INDEX_PENDING");
+            DataPart data = (DataPart) artifact.parts().get(0);
+            assertThat(data.getData()).containsEntry("result", "房源已核实").doesNotContainKeys("memoryRefs", "exportState");
+            assertThat(data.getMetadata()).containsEntry("exportState", "COMMITTED")
+                    .containsEntry("memoryRefs", List.of(ref));
+            assertThat(((TextPart) artifact.parts().get(1)).getText()).isEqualTo("找到有效房源");
+        } finally {
+            hook.finish(null);
+            queue.close();
+        }
+    }
+
+    @Test
+    void slowMemoryExportDoesNotDelayProgressAndReturnsPendingIndexState() throws Exception {
+        ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+        MemoryRevision version = new MemoryRevision(3, "a".repeat(64), "memory.export.v2");
+        MemoryExportRef ref = new MemoryExportRef("export-slow",
+                new MemoryContextKey("7", "listing", "listing-agent", "conversation-1"), version);
+        MemoryExportReceipt receipt = new MemoryExportReceipt(List.of(ref), "COMMITTED", version,
+                MemoryIndexState.INDEX_PENDING);
+        A2aMemoryAgentHook hook = org.mockito.Mockito.mock(A2aMemoryAgentHook.class);
+        org.mockito.Mockito.when(hook.invocation(anyString(), anyString(), any())).thenReturn(null);
+        EventQueue queue = EventQueue.create();
+        CountDownLatch memoryExportStarted = new CountDownLatch(1);
+        AtomicReference<List<Event>> eventsWhenMemoryStarted = new AtomicReference<>();
+        org.mockito.Mockito.doAnswer(invocation -> {
+            eventsWhenMemoryStarted.set(drain(queue));
+            memoryExportStarted.countDown();
+            Thread.sleep(2_000L);
+            return receipt;
+        }).when(hook).publishExport(any(), any());
+        ReactAgent agent = mockAgent("{\"decision\":\"SUCCESS\",\"summary\":\"完成\"}");
+        when(agent.stream(anyString(), any())).thenReturn(Flux.just(
+                new StreamingOutput<>("{\"decision\":\"SUCCESS\",", "llm", "listing-agent", new OverAllState()),
+                new StreamingOutput<>("\"summary\":\"完成\"}", "llm", "listing-agent", new OverAllState())));
+        var executor = new OfficialA2aAgentExecutor(agent, mapper, policy, null, null, List.of(), 120_000, hook);
+        ExecutorService worker = Executors.newSingleThreadExecutor();
+        try {
+            Future<?> execution = worker.submit(() -> executeAuthenticated(executor,
+                    context("task-slow-memory", Map.of("isStreaming", true,
+                            "supervisor", Map.of("memoryExport", exportDirective())),
+                            List.of("text", "application/json")), queue));
+
+            assertThat(memoryExportStarted.await(1, TimeUnit.SECONDS)).isTrue();
+            List<Event> beforeExportReturned = eventsWhenMemoryStarted.get();
+            List<TaskArtifactUpdateEvent> progress = beforeExportReturned.stream()
+                    .filter(TaskArtifactUpdateEvent.class::isInstance)
+                    .map(TaskArtifactUpdateEvent.class::cast)
+                    .toList();
+            assertThat(progress).hasSize(2);
+            assertThat(progress).allSatisfy(event -> assertThat(event.getArtifact().metadata())
+                    .containsEntry("terminal", false));
+            assertThat(beforeExportReturned).noneMatch(event -> event instanceof TaskArtifactUpdateEvent artifact
+                    && "listing-agent:task-slow-memory:result".equals(artifact.getArtifact().artifactId()));
+
+            execution.get(5, TimeUnit.SECONDS);
+            Artifact terminal = drain(queue).stream()
+                    .filter(TaskArtifactUpdateEvent.class::isInstance)
+                    .map(TaskArtifactUpdateEvent.class::cast)
+                    .map(TaskArtifactUpdateEvent::getArtifact)
+                    .filter(artifact -> "listing-agent:task-slow-memory:result".equals(artifact.artifactId()))
+                    .findFirst().orElseThrow();
+            assertThat(terminal.metadata()).containsEntry("exportState", "COMMITTED")
+                    .containsEntry("memoryIndexState", "INDEX_PENDING");
+            org.mockito.Mockito.verify(hook, org.mockito.Mockito.times(1)).publishExport(any(), any());
+        } finally {
+            worker.shutdownNow();
+            queue.close();
+        }
     }
 
     @Test
@@ -210,6 +312,15 @@ class OfficialA2aAgentExecutorTest {
         try (var ignored = A2aCredentialContext.open(testLease(context.getTaskId(), () -> { }))) {
             executor.execute(context, queue);
         }
+    }
+
+    private DurableMemoryExportDirective exportDirective() {
+        var from = java.time.Instant.parse("2026-10-21T00:00:00Z");
+        return new DurableMemoryExportDirective("grant-1",
+                new MemoryScope(MemoryScope.Kind.SESSION_SHARED, null, null, "session-1"), null,
+                "listing-review", List.of(new MemoryShareGrant.Participant("supervisor", "supervisor-agent", "conversation-1")),
+                List.of(MemoryShareGrant.Projection.DURABLE_EXPORT), List.of("result"), false,
+                from, from.plusSeconds(3600));
     }
 
     @Test

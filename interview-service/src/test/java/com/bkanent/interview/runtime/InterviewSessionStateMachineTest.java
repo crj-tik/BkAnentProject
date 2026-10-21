@@ -1,5 +1,7 @@
 package com.bkanent.interview.runtime;
 
+import com.bkanent.interview.config.InterviewRuntimeProperties;
+import com.bkanent.interview.entity.InterviewSessionEntity;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -9,6 +11,16 @@ import static org.junit.jupiter.api.Assertions.*;
  * 每个用例对应一个真实调用点。
  */
 class InterviewSessionStateMachineTest {
+
+    @Test
+    void ticketSigningFailsClosedWithoutConfiguredSecret() {
+        var stateMachine = new InterviewSessionStateMachine(null, new InterviewRuntimeProperties());
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+                () -> stateMachine.issueTicket(new InterviewSessionEntity()));
+
+        assertTrue(exception.getMessage().contains("INTERVIEW_TICKET_SECRET"));
+    }
 
     // ---- 调用点对齐：每个 transition(...) 调用必须能通过权限表 ----
 

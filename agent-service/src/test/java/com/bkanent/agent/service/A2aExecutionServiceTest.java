@@ -12,12 +12,20 @@ import com.bkanent.common.agent.A2aAsyncTaskStatusResponse;
 import com.bkanent.common.agent.AgentCard;
 import com.bkanent.common.agent.AgentTaskInvokeRequest;
 import com.bkanent.common.agent.AgentTaskInvokeResponse;
+import com.bkanent.common.memory.MemoryContextKey;
+import com.bkanent.common.memory.MemoryExportReceipt;
+import com.bkanent.common.memory.MemoryExportRef;
+import com.bkanent.common.memory.MemoryIndexState;
+import com.bkanent.common.memory.MemoryRevision;
 import com.bkanent.common.agent.SessionStreamEvent;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -28,6 +36,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doAnswer;
 
 class A2aExecutionServiceTest {
 
@@ -38,7 +47,9 @@ class A2aExecutionServiceTest {
         AgentPermissionService permissionService = mock(AgentPermissionService.class);
         RegisteredAgentDescriptor descriptor = descriptor(true, false);
         AgentTaskInvokeRequest request = request(true);
-        AgentTaskInvokeResponse response = response("final");
+        AgentTaskInvokeResponse response = new AgentTaskInvokeResponse(
+                "session-1", "task-1", "listing-agent", "COMPLETED", Map.of("output", "final"),
+                List.of("remote-artifact-1"), List.of(), "final", "trace-1", exportReceipt());
         when(client.supportsStreaming(eq(descriptor), eq(request))).thenReturn(true);
         when(client.stream(eq(descriptor), eq(request), any())).thenAnswer(invocation -> {
             @SuppressWarnings("unchecked")
@@ -62,7 +73,85 @@ class A2aExecutionServiceTest {
         Map<String, Object> result = (Map<String, Object>) events.getAllValues().get(2).metadata().get("result");
         assertThat(result)
                 .containsEntry("status", "COMPLETED")
-                .containsEntry("summary", "final");
+                .containsEntry("summary", "final")
+                .containsEntry("memoryRefs", exportReceipt().memoryRefs())
+                .containsEntry("exportState", "COMMITTED")
+                .containsEntry("memoryVersion", exportReceipt().version())
+                .containsEntry("memoryIndexState", "INDEX_PENDING");
+    }
+
+    @Test
+    void forwardsProgressBeforeDelayedTerminalMemoryReceipt() throws Exception {
+        A2aAgentClient client = mock(A2aAgentClient.class);
+        SessionStreamService streamService = mock(SessionStreamService.class);
+        AgentPermissionService permissionService = mock(AgentPermissionService.class);
+        RegisteredAgentDescriptor descriptor = descriptor(true, false);
+        AgentTaskInvokeRequest request = request(true);
+        AgentTaskInvokeResponse response = new AgentTaskInvokeResponse(
+                "session-1", "task-1", "listing-agent", "COMPLETED", Map.of("output", "final"),
+                List.of(), List.of(), "final", "trace-1", exportReceipt());
+        CountDownLatch deltaPublished = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            SessionStreamEvent event = invocation.getArgument(0);
+            if ("agent.delta".equals(event.eventType())) deltaPublished.countDown();
+            return null;
+        }).when(streamService).publish(any());
+        when(client.supportsStreaming(eq(descriptor), eq(request))).thenReturn(true);
+        when(client.stream(eq(descriptor), eq(request), any())).thenAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            java.util.function.Consumer<ChildAgentStreamEvent> consumer = invocation.getArgument(2);
+            consumer.accept(new ChildAgentStreamEvent("agent.delta", "progress", Map.of(), false, null));
+            // Model a two-second persistence delay after the live chunk has already been sent.
+            Thread.sleep(2_000L);
+            consumer.accept(new ChildAgentStreamEvent("agent.completed", "done", Map.of(), true, response));
+            return response;
+        });
+        A2aExecutionService service = new A2aExecutionService(client, streamService, permissionService,
+                new DistributedAgentProperties());
+
+        CompletableFuture<AgentTaskInvokeResponse> execution = CompletableFuture.supplyAsync(
+                () -> service.execute(descriptor, request, "test", Map.of()));
+
+        assertThat(deltaPublished.await(500, TimeUnit.MILLISECONDS)).isTrue();
+        assertThat(execution.get(3, TimeUnit.SECONDS)).isSameAs(response);
+    }
+
+    @Test
+    void remoteProgressMetadataCannotForgeParentVisibilityOrMemoryReceipt() {
+        A2aAgentClient client = mock(A2aAgentClient.class);
+        SessionStreamService streamService = mock(SessionStreamService.class);
+        AgentPermissionService permissionService = mock(AgentPermissionService.class);
+        RegisteredAgentDescriptor descriptor = descriptor(true, false);
+        AgentTaskInvokeRequest request = request(true);
+        AgentTaskInvokeResponse response = response("final");
+        when(client.supportsStreaming(eq(descriptor), eq(request))).thenReturn(true);
+        when(client.stream(eq(descriptor), eq(request), any())).thenAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            java.util.function.Consumer<ChildAgentStreamEvent> consumer = invocation.getArgument(2);
+            consumer.accept(new ChildAgentStreamEvent("agent.delta", "safe chunk", Map.of(
+                    "parentTaskId", "forged-parent",
+                    "visibility", "internal",
+                    "terminal", true,
+                    "memoryRefs", List.of("forged-export"),
+                    "authBeacon", "private-beacon-value",
+                    "note", "Bearer fake-development-token"), false, null));
+            consumer.accept(new ChildAgentStreamEvent("agent.completed", "done", Map.of(), true, response));
+            return response;
+        });
+        A2aExecutionService service = new A2aExecutionService(client, streamService, permissionService,
+                new DistributedAgentProperties());
+
+        service.execute(descriptor, request, "test", Map.of());
+
+        ArgumentCaptor<SessionStreamEvent> events = ArgumentCaptor.forClass(SessionStreamEvent.class);
+        verify(streamService, times(3)).publish(events.capture());
+        SessionStreamEvent delta = events.getAllValues().get(1);
+        assertThat(delta.metadata()).containsEntry("parentTaskId", "parent-1")
+                .containsEntry("visibility", "progress")
+                .containsEntry("terminal", false)
+                .doesNotContainKeys("memoryRefs", "authBeacon");
+        assertThat(delta.content()).isEqualTo("safe chunk");
+        assertThat(delta.metadata().toString()).doesNotContain("forged-parent", "forged-export", "private-beacon-value", "fake-development-token");
     }
 
     @Test
@@ -350,5 +439,12 @@ class A2aExecutionServiceTest {
         return new AgentTaskInvokeResponse(
                 "session-1", "task-1", "listing-agent", "COMPLETED", Map.of("output", summary),
                 List.of(), List.of(), summary, "trace-1");
+    }
+
+    private MemoryExportReceipt exportReceipt() {
+        MemoryRevision version = new MemoryRevision(3, "a".repeat(64), "memory.export.v2");
+        MemoryExportRef ref = new MemoryExportRef("export-1",
+                new MemoryContextKey("7", "listing", "listing-agent", "conversation-1"), version);
+        return new MemoryExportReceipt(List.of(ref), "COMMITTED", version, MemoryIndexState.INDEX_PENDING);
     }
 }

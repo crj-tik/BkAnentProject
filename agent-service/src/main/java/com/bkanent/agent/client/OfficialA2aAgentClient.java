@@ -5,6 +5,7 @@ import com.bkanent.common.agent.A2aAsyncTaskCreateResponse;
 import com.bkanent.common.agent.A2aAsyncTaskStatusResponse;
 import com.bkanent.common.agent.AgentTaskInvokeRequest;
 import com.bkanent.common.agent.AgentTaskInvokeResponse;
+import com.bkanent.common.memory.MemoryExportReceipt;
 import io.a2a.client.A2AClient;
 import io.a2a.spec.A2AServerException;
 import io.a2a.spec.Artifact;
@@ -37,6 +38,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.UUID;
@@ -129,7 +131,8 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
             EventKind result = response.getResult();
             if (result instanceof Message message) {
                 return responseNormalizer.normalize(descriptor, request, extractMessageText(message), "COMPLETED",
-                        message.getTaskId(), Set.of(), null, message.getParts());
+                        message.getTaskId(), Set.of(), null, message.getParts(),
+                        responseNormalizer.memoryExportReceipt(message.getMetadata()));
             }
             if (result instanceof Task task) {
                 rememberTask(descriptor, task.getId(), request, client);
@@ -160,6 +163,7 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
         StringBuilder output = new StringBuilder();
         Set<String> artifactIds = new LinkedHashSet<>();
         List<Part<?>> responseParts = new ArrayList<>();
+        AtomicReference<MemoryExportReceipt> memoryExport = new AtomicReference<>();
         AtomicBoolean completed = new AtomicBoolean();
         var snapshot = credentialSnapshot();
         try (var identity = authenticate(descriptor, request)) {
@@ -170,7 +174,7 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
                         try (var ignored = snapshot.get()) {
                             verifyCurrent(request);
                             handleStreamingEvent(descriptor, request, eventConsumer, result, output,
-                                    artifactIds, responseParts, completed, client, event);
+                                    artifactIds, responseParts, completed, client, memoryExport, event);
                         } catch (Exception failure) {
                             completed.set(true);
                             result.completeExceptionally(failure);
@@ -219,6 +223,7 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
                                       List<Part<?>> responseParts,
                                       AtomicBoolean completed,
                                       A2AClient client,
+                                      AtomicReference<MemoryExportReceipt> memoryExport,
                                       StreamingEventKind event) {
         if (completed.get()) {
             return;
@@ -234,6 +239,8 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
         if (event instanceof TaskArtifactUpdateEvent artifactUpdate) {
             rememberTask(descriptor, artifactUpdate.getTaskId(), request, client);
             Artifact artifact = artifactUpdate.getArtifact();
+            MemoryExportReceipt artifactReceipt = artifact == null ? null : responseNormalizer.memoryExportReceipt(artifact.metadata());
+            if (artifactReceipt != null) memoryExport.set(artifactReceipt);
             if (artifact != null && StringUtils.hasText(artifact.artifactId())) {
                 artifactIds.add(artifact.artifactId());
             }
@@ -274,7 +281,7 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
             emit(eventConsumer, "agent.progress", statusText, metadata, false, null);
             if (statusUpdate.isFinal()) {
                 completeFromStatus(descriptor, request, eventConsumer, result, output, artifactIds, responseParts,
-                        completed, status, statusUpdate.getTaskId(), statusText);
+                        completed, status, statusUpdate.getTaskId(), statusText, memoryExport.get());
             }
             return;
         }
@@ -282,6 +289,8 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
             rememberTask(descriptor, task.getId(), request, client);
             artifactIds.addAll(extractArtifactIds(task));
             addTaskParts(responseParts, task);
+            MemoryExportReceipt taskReceipt = memoryExportReceipt(task);
+            if (taskReceipt != null) memoryExport.set(taskReceipt);
             String taskOutput = extractTaskOutput(task);
             if (StringUtils.hasText(taskOutput)) {
                 output.setLength(0);
@@ -293,7 +302,7 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
             if (isTerminal(status)) {
                 completeFromStatus(descriptor, request, eventConsumer, result, output, artifactIds, responseParts,
                         completed, status, task.getId(), extractMessageText(
-                                task.getStatus() == null ? null : task.getStatus().message()));
+                                task.getStatus() == null ? null : task.getStatus().message()), memoryExport.get());
             }
         }
     }
@@ -308,13 +317,14 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
                                     AtomicBoolean completed,
                                     String status,
                                     String remoteTaskId,
-                                    String errorMessage) {
+                                    String errorMessage,
+                                    MemoryExportReceipt memoryExport) {
         if (!completed.compareAndSet(false, true)) {
             return;
         }
         if (!"COMPLETED".equalsIgnoreCase(status)) {
             AgentTaskInvokeResponse failedResponse = responseNormalizer.normalize(
-                    descriptor, request, output.toString(), status, remoteTaskId, artifactIds, errorMessage, responseParts);
+                    descriptor, request, output.toString(), status, remoteTaskId, artifactIds, errorMessage, responseParts, memoryExport);
             Map<String, Object> metadata = new LinkedHashMap<>();
             metadata.put("source", "a2a.status");
             metadata.put("status", status);
@@ -326,7 +336,7 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
             return;
         }
         AgentTaskInvokeResponse finalResponse = responseNormalizer.normalize(
-                descriptor, request, output.toString(), status, remoteTaskId, artifactIds, null, responseParts);
+                descriptor, request, output.toString(), status, remoteTaskId, artifactIds, null, responseParts, memoryExport);
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("source", "a2a.status");
         metadata.put("status", status);
@@ -596,7 +606,19 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
                 extractArtifactIds(task),
                 !"COMPLETED".equalsIgnoreCase(status) && task.getStatus() != null
                         ? extractMessageText(task.getStatus().message()) : null,
-                extractTaskParts(task));
+                extractTaskParts(task),
+                memoryExportReceipt(task));
+    }
+
+    private MemoryExportReceipt memoryExportReceipt(Task task) {
+        if (task == null || task.getArtifacts() == null) return null;
+        for (int index = task.getArtifacts().size() - 1; index >= 0; index--) {
+            Artifact artifact = task.getArtifacts().get(index);
+            if (artifact == null) continue;
+            MemoryExportReceipt receipt = responseNormalizer.memoryExportReceipt(artifact.metadata());
+            if (receipt != null) return receipt;
+        }
+        return null;
     }
 
     private List<Part<?>> extractTaskParts(Task task) {

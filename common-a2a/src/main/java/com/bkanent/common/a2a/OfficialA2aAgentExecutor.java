@@ -1,5 +1,7 @@
 package com.bkanent.common.a2a;
 
+import com.bkanent.common.agent.DurableMemoryExportDirective;
+import com.bkanent.common.memory.MemoryExportReceipt;
 import com.alibaba.cloud.ai.graph.NodeOutput;
 import com.alibaba.cloud.ai.graph.OverAllState;
 import com.alibaba.cloud.ai.graph.RunnableConfig;
@@ -98,7 +100,9 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
         }
         try {
             A2aInput input = inputParser.parse(context, outputPolicy);
-            if (memoryHook != null) execution.memoryInvocation = memoryHook.invocation(context.getTaskId(), context.getContextId());
+            execution.durableMemoryExport = input.durableMemoryExport();
+            if (memoryHook != null) execution.memoryInvocation = memoryHook.invocation(
+                    context.getTaskId(), context.getContextId(), input.durableMemoryExport());
             var skillExecution = prepareSkillExecution(input);
             execution.skillExecution = skillExecution;
             if (execution.cancelled.get()) {
@@ -251,17 +255,31 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
         try {
             execution.authLease.verify();
             A2aOutput output = outputNormalizer.normalize(rawOutput, outputPolicy, jsonOutput);
-            List<Part<?>> parts = output.structured()
-                    ? List.of(new DataPart(output.data(), Map.of(
-                    "contentType", String.valueOf(output.data().get("contentType")),
-                    "outputMode", A2aOutputPolicy.JSON_MODE,
-                    "terminal", true)), new TextPart(output.summary()))
-                    : List.of(new TextPart(output.text()));
+            if (execution.durableMemoryExport != null) {
+                MemoryExportReceipt receipt = memoryHook == null
+                        ? MemoryExportReceipt.failure("UNAVAILABLE")
+                        : memoryHook.publishExport(execution.memoryInvocation, output);
+                output = output.withMemoryExport(receipt == null
+                        ? MemoryExportReceipt.failure("NOT_RECORDED") : receipt);
+            }
+            Map<String, Object> exportMetadata = memoryExportMetadata(output.memoryExport());
+            List<Part<?>> parts;
+            if (output.structured()) {
+                Map<String, Object> dataMetadata = new java.util.LinkedHashMap<>();
+                dataMetadata.put("contentType", String.valueOf(output.data().get("contentType")));
+                dataMetadata.put("outputMode", A2aOutputPolicy.JSON_MODE);
+                dataMetadata.put("terminal", true);
+                dataMetadata.putAll(exportMetadata);
+                parts = List.of(new DataPart(output.data(), Map.copyOf(dataMetadata)), new TextPart(output.summary()));
+            } else {
+                parts = List.of(new TextPart(output.text()));
+            }
             Map<String, Object> metadata = new java.util.LinkedHashMap<>();
             metadata.put("contentType", output.structured()
                     ? String.valueOf(output.data().get("contentType")) : outputPolicy.contentType());
             metadata.put("outputMode", output.outputMode());
             metadata.put("terminal", true);
+            metadata.putAll(exportMetadata);
             if (execution.memoryInvocation != null && !"DISABLED".equals(execution.memoryInvocation.memoryStatus())) {
                 metadata.put("memoryStatus", execution.memoryInvocation.memoryStatus());
                 metadata.put("memoryArchiveStatus", execution.memoryInvocation.archiveStatus());
@@ -282,6 +300,16 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
             execution.terminal.set(false);
             failExecution(execution, "INVALID_STRUCTURED_OUTPUT", "SubAgent result cannot be serialized");
         }
+    }
+
+    private Map<String, Object> memoryExportMetadata(MemoryExportReceipt receipt) {
+        if (receipt == null) return Map.of();
+        Map<String, Object> metadata = new java.util.LinkedHashMap<>();
+        metadata.put("memoryRefs", receipt.memoryRefs());
+        metadata.put("exportState", receipt.exportState());
+        if (receipt.version() != null) metadata.put("memoryVersion", receipt.version());
+        if (receipt.indexState() != null) metadata.put("memoryIndexState", receipt.indexState().name());
+        return Map.copyOf(metadata);
     }
 
     private void failExecution(ExecutionState execution, String code, String message) {
@@ -402,6 +430,7 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
         private volatile CountDownLatch streamFinished;
         private com.bkanent.common.skill.runtime.SkillExecutionContext skillExecution;
         private A2aMemoryInvocation memoryInvocation;
+        private DurableMemoryExportDirective durableMemoryExport;
 
         private ExecutionState(TaskUpdater updater) {
             this.updater = updater;
