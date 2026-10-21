@@ -102,7 +102,7 @@ public final class A2aMemoryAgentHook extends AgentHook {
                 invocation.memoryStatus(history.isEmpty() ? "NO_MATCH" : "APPLIED");
                 invocation.historyCount(history.size());
                 invocation.prepared(true);
-                if (history.isEmpty()) return CompletableFuture.completedFuture(Map.of());
+                if (history.isEmpty()) return CompletableFuture.completedFuture(noMatchUpdate(invocation, original));
                 List<Message> merged = new ArrayList<>(original.size() + history.size());
                 merged.addAll(original.subList(0, invocation.insertionIndex()));
                 merged.addAll(history);
@@ -116,6 +116,16 @@ public final class A2aMemoryAgentHook extends AgentHook {
         } catch (RuntimeException exception) {
             return degradeOrFail(invocation, state, new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE));
         }
+    }
+
+    private Map<String, Object> noMatchUpdate(A2aMemoryInvocation invocation, List<Message> original) {
+        // Treat the clarification instruction as the one system-history slot so AFTER_AGENT archives only this turn.
+        invocation.historyCount(1);
+        List<Message> assembled = new ArrayList<>(original.size() + 1);
+        assembled.addAll(original.subList(0, invocation.insertionIndex()));
+        assembled.add(new SystemMessage("当前会话没有找到可验证的历史记忆。若本轮请求依赖未提供的既往对象、约定或决定，请先向用户澄清；不得根据缺失的历史内容猜测。若请求可独立完成，继续处理。"));
+        assembled.addAll(original.subList(invocation.insertionIndex(), original.size()));
+        return Map.of("messages", ReplaceAllWith.of(assembled));
     }
 
     @Override

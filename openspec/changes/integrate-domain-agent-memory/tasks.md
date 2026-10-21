@@ -41,8 +41,8 @@
 - [x] 5.6 接 interview 治理面相同适配并测试私有隔离与可许可摘要/引用；保留运行面REST/SSE、三段上下文、脱敏与领域状态真源，不以创建场次终态关闭访谈事项。
 - [x] 5.7 对 listing-master、business、contract 的原生 A2A 入口逐项接线并完成冷/热加载、身份/授权、可靠来源、开关关闭回归，未通过的域保持关闭。
 - [x] 5.8 对 compare-engine、media-worker、notification、settlement 的原生 A2A 入口逐项接线并完成相同契约回归；没有数据库事实源的入口按第4组策略启用，不无条件新建业务库。
-- [ ] 5.9 仅为已确认实际使用的 ChatClient 入口提供本地窗口 ChatMemory/Repository/Advisor 适配；测试 saveAll 不覆盖原文档案、conversationId明确映射、不与Graph累计messages重复注入。
-- [ ] 5.10 实现可选记忆不可用/NOT_APPLIED与无匹配分离、当前明确修正即时覆盖和局部刷新；认证/授权失败始终失败关闭，必要历史缺失不编造。
+- [x] 5.9 核实实际 ChatClient 调用均为无 conversationId 的一次性任务，正式 Supervisor 对话已由 Graph 管理记忆；记录 LR-80，不为单次调用造会话或重复注入历史。
+- [x] 5.10 明确区分历史无匹配与依赖不可用并向模型提供不猜测提示；当前用户修正优先，新的用户事件触发局部偏好重查；认证/授权失败仍失败关闭，回归必要历史缺失时澄清。
 
 ## 6. 双触发安全压缩与历史补忆
 

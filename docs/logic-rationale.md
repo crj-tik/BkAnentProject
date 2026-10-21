@@ -791,3 +791,19 @@
 **根因**：完整轮次 Hook 只能持久化本轮获准的对话和工具证据，不能替代领域任务结果真源，也不能把模型提供的用户标识当作调用者身份。允许数据写入前必须同时满足来源可恢复、caller/domain/agent 精确匹配和消息主体授权；因此源码接通与运行时启用分开验收。
 
 **代码位置**：四个 `*OfficialA2aAgent`、各服务 `a2a.memory` 配置、Compose/.env 示例、`memory-service` trusted caller 白名单及四项 `ExplicitSkillAgentWiringTest`。关联 LR-78、KI-117、KI-151；change 5.8。
+
+## LR-80 无会话标识的一次性 ChatClient 不创建本地对话记忆窗口
+
+**结论**：agent-service 的实际 `AgentChatService.call(systemPrompt,userPrompt,allowMcp)` 调用，以及领域服务的 ChatClient fallback，都是单次任务请求且没有稳定的 `conversationId`；正式 `/chat` 对话沿 Supervisor Graph 与 `SupervisorMemoryLifecycle` 管理累计消息和授权历史。无需给一次性调用套用 ChatMemory/Repository/Advisor，也不能从当前任务或临时请求文本猜造 conversationId。
+
+**根因**：短任务没有跨轮对话边界，给它绑定隐式窗口会把不相关任务串到同一历史；而 Supervisor Graph 已自行读取、核验并装配历史，再由 ChatClient Advisor 注入会重复提供累计消息并绕过现有来源版本检查。
+
+**代码位置**：`AgentChatService.call`、`AgentCapabilityServiceImpl`、领域服务 `*AgentServiceImpl` 的 ChatClient fallback、`SupervisorToolLoopGraph` 与 `SupervisorMemoryLifecycle`；change 5.9。只有未来出现稳定业务会话 ID、明确调用路径且不与 Graph 重叠的 ChatClient 对话入口时，才重新评估本地窗口适配。
+
+## LR-81 历史无匹配与依赖不可用分别提示且当前请求优先
+
+**结论**：A2A 工作集成功返回空历史时标记 `NO_MATCH`，向 Agent 插入不会归档的系统提示；Memory 依赖故障标记 `MEMORY_UNAVAILABLE` 并使用独立降级提示。Supervisor 整体可选记忆未应用时在 Graph system prompt 中明确告知；事项偏好无匹配与偏好 RPC 不可用分别写入当轮 SystemMessage。请求可独立完成时继续，若依赖缺失的历史对象、约定或偏好则向用户澄清且不猜测。新 user event 进入偏好装配复用键，触发局部刷新；当前轮明确修正优先于召回的旧偏好数据。认证/授权失败继续失败关闭。
+
+**根因**：将空结果和依赖故障合并会误报服务状态，或让模型把未知历史当成已确认事实；系统提示必须随真实装配状态进入当前模型窗口。A2A 的内部提示需要从后续归档切片中排除，避免实现指令进入用户档案。Supervisor 偏好读取可能单独失败而其余历史仍有效，故须在偏好内容所在模型窗口携带状态；按 user event 刷新可令明确修正即时成为当前输入，但不伪称后台偏好转换已持久化。
+
+**代码位置**：`A2aMemoryAgentHook.noMatchUpdate/degradeOrFail`、`A2aMemoryInvocation.currentInputStart`、`SupervisorMemoryLifecycle.assemblePreferences/modelMessages`、`SupervisorToolLoopGraph.prompt`；回归 `A2aMemoryAgentHookTest.noMatchIsReportedSeparatelyAndMissingHistoricalReferentsAreNotGuessed`、`SupervisorMemoryIntegrationTest.explicitCurrentCorrectionOverridesAnOlderRetrievedPreference` 与 `missingAndUnavailableHistoricalPreferencesHaveDistinctPromptStates`；关联 KI-152、LR-73；change 5.10。

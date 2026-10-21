@@ -137,6 +137,28 @@ class SupervisorMemoryIntegrationTest {
             assertTrue(f.inputs.get(1).toString().contains("200万"));
         }
     }
+    @Test void explicitCurrentCorrectionOverridesAnOlderRetrievedPreference() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.remote.preferenceValue = "100万";
+            when(f.model.call(anyList(), anyList())).thenAnswer(call -> {
+                f.inputs.add(call.getArgument(0));
+                return new AssistantMessage("done");
+            });
+            assertEquals("COMPLETED", f.execute("preference-correction-start", "开始买房",
+                    new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算")).status());
+            assertEquals("COMPLETED", f.execute("preference-correction", "更正：本轮预算改为200万，之前的100万不再适用。").status());
+            assertEquals(2, f.remote.count("assemblePreferences"), "the new user event refreshes the local selection");
+            List<String> currentMessages = f.inputs.get(1).stream().map(Message::getText).filter(Objects::nonNull).toList();
+            String currentInput = String.join("\n", currentMessages);
+            assertTrue(currentInput.contains("100万"), "the authorized retrieved preference remains visible as history data");
+            assertTrue(currentInput.contains("本轮预算改为200万，之前的100万不再适用"));
+            assertTrue(currentInput.contains("当前用户本轮明确表达、政策、授权与审批规则优先"));
+            int retrievedPreference = indexContaining(currentMessages, "偏好数据");
+            int currentCorrection = indexContaining(currentMessages, "更正：本轮预算改为200万");
+            assertTrue(retrievedPreference >= 0 && currentCorrection > retrievedPreference,
+                    "the current user correction follows older preference data in the model window");
+        }
+    }
     @Test void referenceControlUsesMemoryRecallNodeAndNoBusinessExecution() throws Exception {
         try (Fixture f = new Fixture()) {
             when(f.model.call(anyList(), anyList())).thenAnswer(inv -> {
@@ -290,12 +312,45 @@ class SupervisorMemoryIntegrationTest {
     @Test void initialOptionalDependencyFailureDoesNotMasqueradeAsLoadedHistory() throws Exception {
         try (Fixture f = new Fixture()) {
             f.remote.unavailable = true;
-            when(f.model.call(anyList(), anyList())).thenReturn(new AssistantMessage("independent answer"));
+            when(f.model.call(anyList(), anyList())).thenAnswer(call -> {
+                f.inputs.add(call.getArgument(0));
+                return new AssistantMessage("independent answer");
+            });
             var result = f.execute("run", "independent input");
             assertEquals("COMPLETED", result.status());
             assertEquals("MEMORY_UNAVAILABLE", result.governanceMetadata().get("memoryStatus"));
             assertEquals("NOT_APPLIED", f.state("run").memoryMode);
+            assertTrue(f.inputs.get(0).stream().filter(SystemMessage.class::isInstance).map(Message::getText)
+                    .anyMatch(text -> text.contains("可选历史记忆不可用且未应用") && text.contains("不得猜测历史事实")));
             assertEquals(0, f.jdbc.queryForObject("SELECT COUNT(*) FROM agent_memory_delivery", Integer.class));
+        }
+    }
+
+    @Test void missingAndUnavailableHistoricalPreferencesHaveDistinctPromptStates() throws Exception {
+        try (Fixture noMatch = new Fixture()) {
+            when(noMatch.model.call(anyList(), anyList())).thenAnswer(call -> {
+                noMatch.inputs.add(call.getArgument(0));
+                return new AssistantMessage("请补充预算");
+            });
+            var response = noMatch.execute("preference-no-match", "开始买房事项，预算按之前确认的金额继续",
+                    new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算"));
+            assertEquals("COMPLETED", response.status());
+            assertEquals("NO_MATCH", noMatch.state("preference-no-match").memoryPreferenceStatus);
+            assertTrue(noMatch.inputs.get(0).stream().filter(SystemMessage.class::isInstance).map(Message::getText)
+                    .anyMatch(text -> text.contains("未找到与本轮请求匹配") && text.contains("不得猜测偏好")));
+        }
+        try (Fixture unavailable = new Fixture()) {
+            unavailable.remote.preferenceUnavailable = true;
+            when(unavailable.model.call(anyList(), anyList())).thenAnswer(call -> {
+                unavailable.inputs.add(call.getArgument(0));
+                return new AssistantMessage("请补充预算");
+            });
+            var response = unavailable.execute("preference-unavailable", "开始买房事项，预算按之前确认的金额继续",
+                    new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算"));
+            assertEquals("COMPLETED", response.status());
+            assertEquals("MEMORY_UNAVAILABLE", unavailable.state("preference-unavailable").memoryPreferenceStatus);
+            assertTrue(unavailable.inputs.get(0).stream().filter(SystemMessage.class::isInstance).map(Message::getText)
+                    .anyMatch(text -> text.contains("历史偏好查询不可用") && text.contains("不得猜测或沿用未经本轮确认的偏好")));
         }
     }
 
@@ -490,6 +545,10 @@ class SupervisorMemoryIntegrationTest {
     }
 
     static int occurrences(String text, String needle) { return (text.length() - text.replace(needle, "").length()) / needle.length(); }
+    static int indexContaining(List<String> values, String needle) {
+        for (int i = 0; i < values.size(); i++) if (values.get(i).contains(needle)) return i;
+        return -1;
+    }
 
     static class Fixture implements AutoCloseable {
         final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
@@ -598,6 +657,7 @@ class SupervisorMemoryIntegrationTest {
         boolean loseToolReceipt;
         boolean revoked;
         boolean unavailable;
+        boolean preferenceUnavailable;
         String preferenceValue;
         long preferenceRevision = 1;
         final Map<String, MemoryMatterWriteResponse> matterReceipts = new HashMap<>();
@@ -621,6 +681,7 @@ class SupervisorMemoryIntegrationTest {
                 case "readWorkingSet" -> snapshot;
                 case "queryEntities" -> new MemoryEntityQueryResponse(List.of(), null, false);
                 case "assemblePreferences" -> {
+                    if (preferenceUnavailable) throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
                     var assembly = (MemoryPreferenceAssemblyRequest) request;
                     var matter = snapshot.matters().stream().filter(value -> value.matterId().equals(assembly.matterId())).findFirst().orElseThrow();
                     Instant asOf = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);

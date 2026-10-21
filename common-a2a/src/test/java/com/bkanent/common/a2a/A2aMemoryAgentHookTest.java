@@ -203,6 +203,41 @@ class A2aMemoryAgentHookTest {
     }
 
     @Test
+    void noMatchIsReportedSeparatelyAndMissingHistoricalReferentsAreNotGuessed() throws Exception {
+        var fixture = new MemoryFixture(List.of(), new MemoryConversationVersion(0, 0, "policy-v1"));
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        var hook = new A2aMemoryAgentHook("marketing-content-service", "marketing", "marketing-agent", () -> fixture.rpc,
+                new MemoryWorkingSetCache(8, 1024 * 1024, 60_000, Clock.systemUTC()), enabledProperties(),
+                mock(ChatModel.class), new ObjectMapper(), executor);
+        String taskId = "marketing-task-no-match";
+        var lease = lease(taskId, "7", "marketing-content-service");
+        register(lease);
+        var invocation = hook.invocation(taskId, "context-no-match");
+        var config = config(taskId, invocation);
+        try {
+            Map<String, Object> update = hook.beforeAgent(state(List.of(new SystemMessage("system"),
+                    new UserMessage("沿用之前确认的方案继续"))), config).join();
+            @SuppressWarnings("unchecked")
+            List<Message> assembled = (List<Message>) ((ReplaceAllWith<?>) update.get("messages")).newValues();
+            assertThat(invocation.memoryStatus()).isEqualTo("NO_MATCH");
+            assertThat(assembled).anySatisfy(message -> assertThat(message.getText())
+                    .contains("没有找到可验证的历史记忆", "向用户澄清", "不得根据缺失的历史内容猜测"));
+
+            List<Message> completedTurn = new ArrayList<>(assembled);
+            completedTurn.add(new AssistantMessage("请补充之前确认的方案"));
+            hook.afterAgent(state(completedTurn), config).join();
+            assertThat(fixture.delivered.get().messages()).extracting(MemoryMessage::role)
+                    .containsExactly(MemoryMessage.Role.USER, MemoryMessage.Role.ASSISTANT);
+            assertThat(fixture.delivered.get().messages()).extracting(MemoryMessage::text)
+                    .contains("沿用之前确认的方案继续", "请补充之前确认的方案");
+        } finally {
+            hook.finish(invocation);
+            discard(lease);
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     void memoryUnavailableIsReportedAndAddsNoHistoryWhileAuthorizationDenialFailsClosed() throws Exception {
         MemoryV2RpcService unavailable = mock(MemoryV2RpcService.class);
         when(unavailable.manageWriter(any(), any())).thenThrow(new IllegalStateException("fixture unavailable"));
@@ -222,7 +257,8 @@ class A2aMemoryAgentHookTest {
             assertThat(update).containsKey("messages");
             assertThat(invocation.memoryStatus()).isEqualTo("MEMORY_UNAVAILABLE");
             @SuppressWarnings("unchecked") List<Message> degraded = (List<Message>) ((ReplaceAllWith<?>) update.get("messages")).newValues();
-            assertThat(degraded).anySatisfy(message -> assertThat(message.getText()).contains("不要猜测历史事实"));
+            assertThat(degraded).anySatisfy(message -> assertThat(message.getText())
+                    .contains("历史记忆不可用", "向用户询问补充", "不要猜测历史事实"));
         } finally {
             hook.finish(invocation);
             discard(lease);
