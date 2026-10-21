@@ -393,6 +393,10 @@ public class MemoryArchiveService {
                 require(preferences != null && preferences.selectionsCurrent(request.contextKey(), request.preferenceSelections()),
                         MemoryErrorCode.VERSION_CONFLICT);
             }
+            if (!request.experienceSelections().isEmpty()) {
+                require(experiences != null && experiences.selectionsCurrent(request.contextKey(), request.experienceSelections()),
+                        MemoryErrorCode.VERSION_CONFLICT);
+            }
             return null;
         });
         security.revalidate(request, proof, Long.parseLong(request.contextKey().ownerId()), MemoryV2Contract.OPERATION_BOUNDARY);
@@ -401,9 +405,11 @@ public class MemoryArchiveService {
             sources.requireCurrentMetadata(request.contextKey(), request.dependencies());
             boolean preferencesUnchanged = request.preferenceSelections().isEmpty()
                     || preferences != null && preferences.selectionsCurrent(request.contextKey(), request.preferenceSelections());
+            boolean experiencesUnchanged = request.experienceSelections().isEmpty()
+                    || experiences != null && experiences.selectionsCurrent(request.contextKey(), request.experienceSelections());
             MemoryV2RequestSecurity.requireUnexpired(proof);
             var current = store.version(conversation);
-            return new MemoryBoundaryResponse(current, current.equals(request.adoptedVersion()) && preferencesUnchanged);
+            return new MemoryBoundaryResponse(current, current.equals(request.adoptedVersion()) && preferencesUnchanged && experiencesUnchanged);
         });
     }
 

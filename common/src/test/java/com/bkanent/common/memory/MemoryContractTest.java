@@ -87,14 +87,21 @@ class MemoryContractTest {
     @Test void privatePreferenceScopeCannotCollideAcrossAgentsOrEscapedSegments() throws Exception {
         MemoryScope one = MemoryScope.privateScope("marketing", "copy-agent");
         MemoryScope two = MemoryScope.privateScope("marketing", "other-agent");
-        assertThat(new PreferenceBlockKey("owner-1", "owner-1", one, "copy_length"))
-                .isNotEqualTo(new PreferenceBlockKey("owner-1", "owner-1", two, "copy_length"));
+        PreferenceBlockKey first = new PreferenceBlockKey("owner-1", "owner-1", one, "copy_length");
+        assertThat(first).isEqualTo(new PreferenceBlockKey("owner-1", "owner-1", one, "copy_length"));
+        assertThat(first.identityHash()).isEqualTo(new PreferenceBlockKey("owner-1", "owner-1", one, "copy_length").identityHash())
+                .matches("[a-f0-9]{64}");
+        assertThat(first.identityHash()).isNotEqualTo(new PreferenceBlockKey("owner-1", "owner-1", two, "copy_length").identityHash());
+        assertThat(first.identityHash()).isNotEqualTo(new PreferenceBlockKey("owner-1", "owner-1", one, "style").identityHash());
         assertThat(one.canonicalScopeId()).isNotEqualTo(two.canonicalScopeId());
         assertThat(MemoryScope.privateScope("a:b", "c").canonicalScopeId())
                 .isNotEqualTo(MemoryScope.privateScope("a", "b:c").canonicalScopeId());
         assertThat(spi(one, MemoryScope.class)).isEqualTo(one);
-        assertThat(new MemoryScope(MemoryScope.Kind.TASK_SHARED, null, null, "group-1"))
-                .isEqualTo(new MemoryScope(MemoryScope.Kind.TASK_SHARED, null, null, "group-1"));
+        MemoryScope shared = new MemoryScope(MemoryScope.Kind.TASK_SHARED, null, null, "group-1");
+        MemoryScope otherShared = new MemoryScope(MemoryScope.Kind.TASK_SHARED, null, null, "group-2");
+        assertThat(shared).isEqualTo(new MemoryScope(MemoryScope.Kind.TASK_SHARED, null, null, "group-1"));
+        assertThat(new PreferenceBlockKey("owner-1", "owner-1", shared, "copy_length").identityHash())
+                .isNotEqualTo(new PreferenceBlockKey("owner-1", "owner-1", otherShared, "copy_length").identityHash());
         assertThatThrownBy(() -> new MemoryScope(MemoryScope.Kind.DOMAIN_PRIVATE, "marketing", null, null))
                 .isInstanceOf(MemoryException.class);
         assertThatThrownBy(() -> new MemoryScope(MemoryScope.Kind.TASK_SHARED, "marketing", "agent", "group-1"))
@@ -396,7 +403,8 @@ class MemoryContractTest {
                 MemoryRevision.class, MemoryMessage.class, MemoryToolCall.class, MemoryToolResponse.class,
                 MemoryJsonValue.class, MemorySummary.class, PreferenceBlock.class, PreferenceBlockKey.class,
                 PreferenceTransition.class, PreferenceHistoryCursor.class, PreferenceHistoryPage.class,
-                MemoryExperience.class, MemoryShareGrant.class, MemorySharedExport.class, MemoryExportRef.class)) {
+                MemoryExperience.class, MemoryExperienceSelectionRef.class, MemoryShareGrant.class,
+                MemorySharedExport.class, MemoryExportRef.class)) {
             assertThat(Serializable.class.isAssignableFrom(type)).isTrue();
             for (var component : type.getRecordComponents()) {
                 assertThat(component.getType()).isNotEqualTo(Object.class);

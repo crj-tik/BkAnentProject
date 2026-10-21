@@ -263,6 +263,28 @@ public class MemoryExperienceService {
         return checked;
     }
 
+    /** Revalidates cached matter assembly without returning experience bodies to the caller. */
+    boolean selectionsCurrent(MemoryContextKey context, List<MemoryExperienceSelectionRef> selections) {
+        return transaction(() -> {
+            Map<String, MemoryMatter> matters = new HashMap<>();
+            for (var selection : selections) {
+                if (!ExperienceSelectionPolicy.VERSION.equals(selection.scoringVersion())) return false;
+                var matter = matters.computeIfAbsent(selection.matterId(), id -> currentMatter(context, id));
+                if (matter.version().revision() != selection.matterRevision()
+                        || !MemoryCanonicalHash.contentHash(matter.goal()).equals(selection.matterGoalHash())) return false;
+                try {
+                    var current = currentExperienceOrNull(context, selection.experienceId(), false);
+                    if (current == null || current.experience().state() != MemoryState.ACTIVE
+                            || !current.experience().version().equals(selection.experienceVersion())) return false;
+                } catch (MemoryException exception) {
+                    if (Set.of(MemoryErrorCode.NOT_FOUND, MemoryErrorCode.WITHDRAWN, MemoryErrorCode.DELETED).contains(exception.code())) return false;
+                    throw exception;
+                }
+            }
+            return true;
+        });
+    }
+
     private MemoryExperienceQueryResponse assemble(MemoryExperienceQueryRequest request, Instant asOf, Set<String> candidateIds) {
         MemoryContextKey context = request.contextKey();
         store.conversation(context);

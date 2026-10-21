@@ -43,7 +43,14 @@ public final class MemoryRpcClient {
 
     public MemoryBoundaryResponse check(MemoryWorkingSetResponse snapshot, java.util.List<MemorySourceDependency> dependencies,
                                         java.util.List<MemoryPreferenceSelectionRef> preferenceSelections) {
-        return invoke(MemoryV2Contract.OPERATION_BOUNDARY, e -> new MemoryBoundaryRequest(e, snapshot.contextKey(), snapshot.version(), dependencies, preferenceSelections), rpc::checkBoundary);
+        return check(snapshot, dependencies, preferenceSelections, List.of());
+    }
+
+    public MemoryBoundaryResponse check(MemoryWorkingSetResponse snapshot, java.util.List<MemorySourceDependency> dependencies,
+                                        java.util.List<MemoryPreferenceSelectionRef> preferenceSelections,
+                                        java.util.List<MemoryExperienceSelectionRef> experienceSelections) {
+        return invoke(MemoryV2Contract.OPERATION_BOUNDARY, e -> new MemoryBoundaryRequest(e, snapshot.contextKey(), snapshot.version(),
+                dependencies, preferenceSelections, experienceSelections), rpc::checkBoundary);
     }
 
     public MemoryPreferenceWriteResponse submitPreference(MemoryContextKey context, long expectedRevision, MemoryPreferenceAssessment candidate) {
@@ -57,6 +64,11 @@ public final class MemoryRpcClient {
     public MemoryPreferenceAssemblyResponse assemblePreferences(MemoryContextKey context, String matterId, int tokenBudget) {
         return invoke(MemoryV2Contract.OPERATION_ASSEMBLE_PREFERENCES,
                 e -> new MemoryPreferenceAssemblyRequest(e, context, matterId, tokenBudget), rpc::assemblePreferences);
+    }
+
+    public MemoryExperienceQueryResponse searchExperiences(MemoryContextKey context, String matterId, int limit, int tokenBudget) {
+        return invoke(MemoryV2Contract.OPERATION_SEARCH_EXPERIENCES,
+                e -> new MemoryExperienceQueryRequest(e, context, null, null, limit, null, matterId, tokenBudget), rpc::searchExperiences);
     }
 
     public MemoryShareGrantManagementResponse createShareGrant(MemoryContextKey context, MemoryShareGrant grant) {

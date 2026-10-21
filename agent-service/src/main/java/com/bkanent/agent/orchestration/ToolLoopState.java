@@ -60,4 +60,15 @@ public class ToolLoopState {
     public String memoryPreferenceObjectiveHash;
     public java.util.List<com.bkanent.common.memory.MemoryPreferenceMatch> memoryPreferenceMatches = new java.util.ArrayList<>();
     public java.util.List<com.bkanent.common.memory.MemoryPreferenceSelectionRef> adoptedPreferenceSelections = new java.util.ArrayList<>();
+    public String memoryExperienceMatterId;
+    public long memoryExperienceMatterRevision;
+    public String memoryExperienceContextHash;
+    public String memoryExperienceInputEvent;
+    public String memoryExperienceStatus;
+    public java.time.Instant memoryExperienceAsOf;
+    public String memoryExperienceObjectiveHash;
+    public String memoryExperienceScoringVersion;
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    public java.util.List<com.bkanent.common.memory.MemoryExperienceMatch> memoryExperienceMatches;
+    public java.util.List<com.bkanent.common.memory.MemoryExperienceSelectionRef> adoptedExperienceSelections = new java.util.ArrayList<>();
 }

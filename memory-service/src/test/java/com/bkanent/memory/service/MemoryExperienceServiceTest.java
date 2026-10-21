@@ -51,7 +51,7 @@ class MemoryExperienceServiceTest {
         var limited = query(f, matter.matterId(), 1);
         assertTrue(limited.matches().isEmpty());
         assertTrue(limited.budgetLimited());
-        var selected = query(f, matter.matterId(), 2048);
+        var selected = assertDoesNotThrow(() -> query(f, matter.matterId(), 2048), "search current matter experience");
         assertEquals(1, selected.matches().size());
         var match = selected.matches().get(0);
         assertEquals(ExperienceSelectionPolicy.VERSION, selected.scoringVersion());
@@ -67,6 +67,36 @@ class MemoryExperienceServiceTest {
         assertEquals(selected, sameMatterAgain, "the same matter reuses its validated selection snapshot");
         assertEquals(beforeObserved, f.jdbc.queryForObject("SELECT last_observed_at FROM memory_experience", Object.class));
         assertEquals(1, f.count("memory_experience_evidence"), "retrieval adds no evidence");
+    }
+
+    @Test void boundaryRevalidatesSelectedExperienceAndItsMatterBeforeReuse() throws Exception {
+        var matterFixture = new MemoryMatterServiceTest.MatterFixture();
+        var start = matterFixture.event(new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算"));
+        var matter = matterFixture.write(start).matter();
+        var f = matterFixture.f;
+        var outcome = outcome(f, matter.matterId(), "outcome-boundary", "先核对总价", MemoryExperience.Outcome.SUCCEEDED, 0);
+        f.experiences.submitOutcome(outcome, f.signService(outcome));
+        worker(f).runOnce();
+
+        var selected = query(f, matter.matterId(), 2048);
+        var experience = selected.matches().get(0).experience();
+        var selection = new MemoryExperienceSelectionRef(experience.experienceId(), experience.version(), matter.matterId(),
+                matter.version().revision(), MemoryCanonicalHash.contentHash(matter.goal()), selected.scoringVersion());
+        var workingSetRequest = f.request(MemoryV2Contract.OPERATION_WORKING_SET,
+                envelope -> new MemoryWorkingSetRequest(envelope, CONTEXT));
+        var workingSet = assertDoesNotThrow(() -> f.service.readWorkingSet(workingSetRequest, f.sign(workingSetRequest)), "read current working set");
+        var boundary = assertDoesNotThrow(() -> f.request(MemoryV2Contract.OPERATION_BOUNDARY, envelope -> new MemoryBoundaryRequest(envelope,
+                CONTEXT, workingSet.version(), List.of(), List.of(), List.of(selection))), "construct selection boundary");
+        assertTrue(assertDoesNotThrow(() -> f.experiences.selectionsCurrent(CONTEXT, List.of(selection)), "validate selected experience"),
+                "the selected active experience and matter should match the reference");
+        assertTrue(assertDoesNotThrow(() -> f.service.checkBoundary(boundary, f.sign(boundary)), "validate initial selection boundary").unchanged());
+
+        var deactivate = f.request(MemoryV2Contract.OPERATION_EXPERIENCE_LIFECYCLE, envelope -> new MemoryExperienceLifecycleRequest(
+                envelope, CONTEXT, experience.experienceId(), experience.version().revision(),
+                MemoryExperienceLifecycleRequest.Action.DEACTIVATE, "outcome-boundary", "owner no longer applies this advice"));
+        f.experiences.changeLifecycle(deactivate, f.sign(deactivate));
+        var stale = assertThrows(MemoryException.class, () -> f.service.checkBoundary(boundary, f.sign(boundary)));
+        assertEquals(MemoryErrorCode.VERSION_CONFLICT, stale.code(), "a stale active selection must be rejected after deactivation");
     }
 
     @Test void sameExperienceIdRemainsIsolatedAcrossPrivateOwners() throws Exception {

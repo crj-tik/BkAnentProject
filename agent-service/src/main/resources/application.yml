@@ -44,6 +44,7 @@ agent:
     cleanup-ms: ${AGENT_MEMORY_V2_CLEANUP_MS:30000}
     tool-inline-chars: ${AGENT_MEMORY_V2_TOOL_INLINE_CHARS:4096}
     recall-chars: ${AGENT_MEMORY_V2_RECALL_CHARS:8192}
+    experience-budget-tokens: ${AGENT_MEMORY_V2_EXPERIENCE_BUDGET_TOKENS:512}
 
 dubbo:
   application:

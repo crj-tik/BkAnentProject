@@ -905,3 +905,11 @@
 **根因**：开发Compose默认关闭Nacos API认证，而旧发布任务无条件调用登录接口；Nacos 3.1 在该模式下返回403，使初始化任务永远无法发布配置。为部署强行开启认证会改变开发环境安全模式并引入账号初始化依赖；按服务端模式分支并保留固定namespace/group/Data ID白名单及回读校验，能让配置初始化与实际Nacos模式一致。
 
 **代码位置**：根 `docker-compose.yml` 的 `nacos` / `config-init` 环境绑定，`scripts/deploy/publish-nacos.py`；回归 `scripts/deploy/test_publish_nacos.py` 覆盖认证关闭不登录、开启后携带登录token且不打印凭据，以及认证模式必填。关联 KI-158 与 change 11.2。
+
+## LR-93 事项经验正文仅在执行进程内暂存，检查点只保存版本引用
+
+**结论**：Supervisor 按当前事项、可信 context、事项版本及最新用户事件检索有界经验；执行进程用 runId 暂存本轮安全经验投影，供同事项的模型/工具轮次复用，结束或销毁时清除。Graph 检查点忽略经验正文，只保存经验 ID/revision、评分版本、事项 ID/revision/goal hash 等无正文引用。每次入模、工具调用和输出前由 Memory 对当前经验状态及事项目标版本复核；安全读取/解析也复用相同检查。进程恢复时若无短暂投影缓存，按当前事项重新检索，不能从检查点重建旧正文。
+
+**根因**：持久化经验正文会在输出授权撤回或经验停用后残留于旧 checkpoint，并扩大跨轮持久化的私有材料范围；每个模型轮次都重新检索又会造成多余跨服务读取。将正文留在 run 生命周期内的进程缓存、将检查点降为可复核版本引用，可以复用同事项装配，同时使持久恢复必须重新取得当前授权内容。
+
+**代码位置**：`agent-service/orchestration/ToolLoopState`、`agent-service/memory/SupervisorMemoryLifecycle`；`common/memory/MemoryExperienceSelectionRef`、`MemoryBoundaryRequest`；`memory-service/MemoryExperienceService.selectionsCurrent`、`MemoryArchiveService.checkBoundary`。回归 `SupervisorMemoryIntegrationTest.matterExperiencesAreInjectedAndReusedAcrossModelToolRounds` 与 `deactivatedExperienceCannotAuthorizeModelOutput`；关联 LR-73/75/83，change 5.3/8.4/10.7。

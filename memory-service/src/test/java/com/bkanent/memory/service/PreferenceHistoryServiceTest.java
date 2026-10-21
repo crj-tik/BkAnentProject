@@ -220,6 +220,7 @@ class PreferenceHistoryServiceTest {
     @Test void anotherAgentCannotReadBlockAndForgedDimensionsOrAssistantEvidenceAreRejected() throws Exception {
         var f = new Preferences(); var source = message(1,"fact"); f.append(List.of(source));
         var first = f.submit(0,f.candidate(source,"100",PreferenceTransition.Change.OBSERVATION,List.of()));
+        assertEquals("42", f.jdbc.queryForObject("SELECT subject_ref FROM memory_preference_block WHERE block_id=?", String.class, first.blockId()));
         f.caller.setAllowedAgentsByDomain(Map.of("marketing",Set.of("copy-agent","other-agent")));
         var guarded=org.mockito.Mockito.spy(f.store);
         f.preferences=new PreferenceHistoryService(guarded,f.security,f.sources,new MemoryPreferenceProperties(),f.transactions);

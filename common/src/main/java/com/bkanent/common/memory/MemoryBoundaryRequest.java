@@ -7,10 +7,16 @@ import java.util.List;
 public record MemoryBoundaryRequest(MemoryRequestEnvelope envelope, MemoryContextKey contextKey,
                                      MemoryConversationVersion adoptedVersion,
                                      List<MemorySourceDependency> dependencies,
-                                     List<MemoryPreferenceSelectionRef> preferenceSelections) implements Serializable, MemoryV2Request {
+                                     List<MemoryPreferenceSelectionRef> preferenceSelections,
+                                     List<MemoryExperienceSelectionRef> experienceSelections) implements Serializable, MemoryV2Request {
     public MemoryBoundaryRequest(MemoryRequestEnvelope envelope, MemoryContextKey contextKey,
                                  MemoryConversationVersion adoptedVersion, List<MemorySourceDependency> dependencies) {
-        this(envelope, contextKey, adoptedVersion, dependencies, List.of());
+        this(envelope, contextKey, adoptedVersion, dependencies, List.of(), List.of());
+    }
+    public MemoryBoundaryRequest(MemoryRequestEnvelope envelope, MemoryContextKey contextKey,
+                                 MemoryConversationVersion adoptedVersion, List<MemorySourceDependency> dependencies,
+                                 List<MemoryPreferenceSelectionRef> preferenceSelections) {
+        this(envelope, contextKey, adoptedVersion, dependencies, preferenceSelections, List.of());
     }
     public MemoryBoundaryRequest {
         MemoryV2Contract.requireOperation(envelope, MemoryV2Contract.OPERATION_BOUNDARY);
@@ -18,5 +24,6 @@ public record MemoryBoundaryRequest(MemoryRequestEnvelope envelope, MemoryContex
         MemoryContract.required(adoptedVersion, MemoryException.Field.VERSION);
         dependencies = MemoryContract.list(dependencies, MemoryException.Field.SOURCE);
         preferenceSelections = MemoryContract.list(preferenceSelections, MemoryException.Field.PREFERENCE);
+        experienceSelections = MemoryContract.unique(experienceSelections, MemoryException.Field.EVIDENCE);
     }
 }

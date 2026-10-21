@@ -19,6 +19,7 @@ public class SupervisorMemoryProperties {
     private int toolInlineChars = 4096;
     private int recallChars = 8192;
     private int preferenceBudgetTokens = 800;
+    private int experienceBudgetTokens = 512;
 
     public void validate() {
         if (keyId == null || keyId.isBlank() || keyId.length() > 128
@@ -30,7 +31,8 @@ public class SupervisorMemoryProperties {
                 || summaryTimeoutMs < 1 || summaryTimeoutMs > 20_000
                 || cleanupMs < 1_000 || cleanupMs > 300_000
                 || toolInlineChars < 256 || toolInlineChars > 16384 || recallChars < 2048 || recallChars > 16384
-                || preferenceBudgetTokens < 1 || preferenceBudgetTokens > 4096) {
+                || preferenceBudgetTokens < 1 || preferenceBudgetTokens > 4096
+                || experienceBudgetTokens < 1 || experienceBudgetTokens > 4096) {
             throw new IllegalArgumentException("invalid agent.memory-v2 bounds");
         }
         if (enabled && (signingSecret == null || signingSecret.getBytes(java.nio.charset.StandardCharsets.UTF_8).length < 32)) {
@@ -55,4 +57,5 @@ public class SupervisorMemoryProperties {
     public int getToolInlineChars() { return toolInlineChars; } public void setToolInlineChars(int v) { toolInlineChars = v; }
     public int getRecallChars() { return recallChars; } public void setRecallChars(int v) { recallChars = v; }
     public int getPreferenceBudgetTokens() { return preferenceBudgetTokens; } public void setPreferenceBudgetTokens(int v) { preferenceBudgetTokens = v; }
+    public int getExperienceBudgetTokens() { return experienceBudgetTokens; } public void setExperienceBudgetTokens(int v) { experienceBudgetTokens = v; }
 }

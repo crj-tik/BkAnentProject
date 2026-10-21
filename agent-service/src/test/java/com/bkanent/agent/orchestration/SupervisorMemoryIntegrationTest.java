@@ -108,6 +108,34 @@ class SupervisorMemoryIntegrationTest {
             assertTrue(f.inputs.get(1).toString().contains("100万"));
         }
     }
+    @Test void matterExperiencesAreInjectedAndReusedAcrossModelToolRounds() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.remote.experienceValue = "买房预算建议先核对总价和月供";
+            f.localToolThenAnswer();
+            var response = f.execute("experience-selection", "开始买房", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算"));
+            assertEquals("COMPLETED", response.status(), response.governanceMetadata().toString());
+            assertEquals(1, f.remote.count("searchExperiences"), "the same matter reuses experience selection across model/tool rounds");
+            assertTrue(f.inputs.get(0).toString().contains("买房预算建议先核对总价和月供"));
+            assertTrue(f.inputs.get(1).toString().contains("买房预算建议先核对总价和月供"));
+            assertTrue(f.inputs.get(0).toString().contains("不得把经验转换为业务流程"));
+        }
+    }
+    @Test void deactivatedExperienceCannotAuthorizeModelOutput() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.remote.experienceValue = "旧经验";
+            when(f.model.call(anyList(), anyList())).thenAnswer(call -> {
+                f.remote.experienceRevision++;
+                return new AssistantMessage("根据旧经验生成的回答");
+            });
+            var response = f.execute("experience-revoked", "开始买房", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算"));
+            assertEquals("FAILED", response.status());
+            assertEquals("MEMORY_VERSION_CONFLICT", response.governanceMetadata().get("errorCode"));
+            for (String json : f.jdbc.queryForList("SELECT snapshot_json FROM agent_workflow_checkpoint", String.class))
+                assertFalse(json.contains("根据旧经验生成的回答"));
+            for (String json : f.jdbc.queryForList("SELECT snapshot_json FROM agent_workflow_checkpoint", String.class))
+                assertFalse(json.contains("旧经验"), "private experience bodies are transient and never enter graph checkpoints");
+        }
+    }
     @Test void stalePreferenceCannotAuthorizeAToolResultAfterThePreferenceChangesDuringExecution() throws Exception {
         try (Fixture f = new Fixture()) {
             f.remote.preferenceValue = "100万";
@@ -660,6 +688,9 @@ class SupervisorMemoryIntegrationTest {
         boolean preferenceUnavailable;
         String preferenceValue;
         long preferenceRevision = 1;
+        boolean experienceUnavailable;
+        String experienceValue;
+        long experienceRevision = 1;
         final Map<String, MemoryMatterWriteResponse> matterReceipts = new HashMap<>();
         final MemoryV2RpcService rpc = (MemoryV2RpcService) Proxy.newProxyInstance(getClass().getClassLoader(), new Class[]{MemoryV2RpcService.class}, (proxy, method, args) -> {
             String name = method.getName();
@@ -698,6 +729,15 @@ class SupervisorMemoryIntegrationTest {
                     yield new MemoryPreferenceAssemblyResponse(matter.matterId(), matter.version().revision(),
                             MemoryCanonicalHash.contentHash(matter.goal()), asOf, "preference-selection-v1", matches, false);
                 }
+                case "searchExperiences" -> {
+                    if (experienceUnavailable) throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+                    var query = (MemoryExperienceQueryRequest) request;
+                    var matter = snapshot.matters().stream().filter(value -> value.matterId().equals(query.matterId())).findFirst().orElseThrow();
+                    Instant asOf = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+                    List<MemoryExperienceMatch> matches = experienceValue == null ? List.of() : List.of(experienceMatch(matter, asOf));
+                    yield new MemoryExperienceQueryResponse(matches, null, false, "experience-selection-v1", asOf,
+                            matter.matterId(), matter.version().revision(), "3".repeat(64), matches.stream().mapToInt(MemoryExperienceMatch::estimatedTokens).sum(), false);
+                }
                 case "transitionMatter" -> {
                     var write = (MemoryMatterWriteRequest) request;
                     String event = write.evidence().source().sourceEventId();
@@ -717,6 +757,8 @@ class SupervisorMemoryIntegrationTest {
                     if (revoked) throw new MemoryException(MemoryErrorCode.WITHDRAWN);
                     var boundary = (MemoryBoundaryRequest) request;
                     if (boundary.preferenceSelections().stream().anyMatch(selection -> selection.revision() != preferenceRevision))
+                        throw new MemoryException(MemoryErrorCode.VERSION_CONFLICT);
+                    if (boundary.experienceSelections().stream().anyMatch(selection -> selection.experienceVersion().revision() != experienceRevision))
                         throw new MemoryException(MemoryErrorCode.VERSION_CONFLICT);
                     yield new MemoryBoundaryResponse(snapshot.version(), snapshot.version().equals(boundary.adoptedVersion()));
                 }
@@ -748,5 +790,18 @@ class SupervisorMemoryIntegrationTest {
             };
         });
         int count(String method) { return calls.getOrDefault(method, 0); }
+
+        private MemoryExperienceMatch experienceMatch(MemoryMatter matter, Instant asOf) {
+            var dependency = matter.dependencies().get(0);
+            var evidence = new MemoryExperience.Evidence("experience-evidence", MemoryExperience.EvidenceKind.BUSINESS_OUTCOME,
+                    MemoryExperience.Outcome.SUCCEEDED, MemoryExperience.Feedback.NONE, true, asOf, asOf, List.of(dependency));
+            var context = matter.contextKey();
+            var experience = new MemoryExperience("experience-fixture", context,
+                    new MemoryAssociation(matter.matterId(), null, null, null),
+                    new MemoryRevision(experienceRevision, "2".repeat(64), "experience.v1"), "买房", "预算相关", experienceValue,
+                    MemoryState.ACTIVE, "fixture", null, .8, 1.0, asOf, asOf, "experience-assessment-v1", List.of(evidence));
+            var score = new MemoryExperienceScore(.8, .8, 1.0, 1.0, .64, asOf, "experience-selection-v1");
+            return new MemoryExperienceMatch(experience, score, 24);
+        }
     }
 }
