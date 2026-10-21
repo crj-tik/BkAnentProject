@@ -52,6 +52,15 @@ public final class MemoryCanonicalHash {
                 entity.version().revision(), entity.version().schemaVersion(), entity.aliases(), entity.briefDefinition(), entity.dependencies()));
     }
 
+    /** Hashes a full immutable experience revision while excluding only its self-referential content hash. */
+    public static String experienceHash(MemoryExperience experience) {
+        return contentHash(java.util.Arrays.asList(experience.experienceId(), experience.contextKey(), experience.association(),
+                experience.version().revision(), experience.version().schemaVersion(), experience.scenario(), experience.applicability(),
+                experience.conclusion(), experience.state(), experience.changeReason(), experience.supersedesRevision(),
+                experience.confidence(), experience.activation(), experience.lastObservedAt(), experience.lastValidatedAt(),
+                experience.policyVersion(), experience.evidence()));
+    }
+
     public static String contentHash(Object value) {
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();

@@ -1,6 +1,7 @@
 package com.bkanent.memory.service;
 
 import com.bkanent.common.memory.*;
+import com.bkanent.memory.config.MemoryV2SecurityProperties;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -16,11 +17,19 @@ public class MemorySourceAuthorizer {
     private final MemoryArchiveStore store;
     private final MemorySharingStore sharing;
     private final MemoryAccessPolicy policy;
+    private final MemoryV2SecurityProperties callers;
 
     public MemorySourceAuthorizer(MemoryArchiveStore store, MemorySharingStore sharing, MemoryAccessPolicy policy) {
+        this(store, sharing, policy, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public MemorySourceAuthorizer(MemoryArchiveStore store, MemorySharingStore sharing, MemoryAccessPolicy policy,
+                                  MemoryV2SecurityProperties callers) {
         this.store = store;
         this.sharing = sharing;
         this.policy = policy;
+        this.callers = callers;
     }
 
     void requireCurrent(MemoryContextKey recipient, List<MemorySourceDependency> dependencies) {
@@ -85,6 +94,30 @@ public class MemorySourceAuthorizer {
                 var export = sharing.readPayload(ref);
                 policy.requirePayload(request, header, grant, export);
                 for (var nested : export.dependencies()) check(source.contextKey(), nested, visiting, depth + 1, budget, metadata, verified);
+            } else if (source.kind() == MemorySourceRef.Kind.OUTCOME || source.kind() == MemorySourceRef.Kind.DOMAIN_RECORD) {
+                require(dependency.grant() == null && source.sourceEventId() != null, MemoryErrorCode.FORBIDDEN);
+                var row = store.one("SELECT owner_id,domain_id,agent_id,source_caller,source_kind,source_id,source_event_id,"
+                                + "source_revision,source_hash,source_schema_version,source_state FROM memory_experience_event "
+                                + "WHERE source_context_id=? AND source_event_id=? FOR UPDATE",
+                        key(source.contextKey()), source.sourceEventId());
+                require(row != null, MemoryErrorCode.ARCHIVE_NOT_CONFIRMED);
+                require("ACTIVE".equals(row.get("source_state")), "DELETED".equals(row.get("source_state"))
+                        ? MemoryErrorCode.DELETED : MemoryErrorCode.WITHDRAWN);
+                require(source.contextKey().ownerId().equals(row.get("owner_id"))
+                        && source.contextKey().domainId().equals(row.get("domain_id"))
+                        && source.contextKey().agentId().equals(row.get("agent_id"))
+                        && source.kind().name().equals(row.get("source_kind"))
+                        && source.sourceId().equals(row.get("source_id"))
+                        && source.sourceEventId().equals(row.get("source_event_id"))
+                        && source.version().revision() == number(row, "source_revision")
+                        && source.version().contentHash().equals(row.get("source_hash"))
+                        && source.version().schemaVersion().equals(row.get("source_schema_version")), MemoryErrorCode.VERSION_CONFLICT);
+                if (callers != null) {
+                    var caller = callers.getTrustedCallers().get(row.get("source_caller"));
+                    require(caller != null && caller.isExperienceOutcomePublisher()
+                                    && caller.allows(source.contextKey().domainId(), source.contextKey().agentId()),
+                            MemoryErrorCode.FORBIDDEN);
+                }
             } else {
                 // Domain record adapters are enabled only when that domain has a real truth resolver.
                 throw new MemoryException(MemoryErrorCode.FORBIDDEN);

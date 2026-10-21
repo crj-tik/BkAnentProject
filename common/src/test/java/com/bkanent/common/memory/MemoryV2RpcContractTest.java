@@ -80,6 +80,17 @@ class MemoryV2RpcContractTest {
                         "subject-1", "copy_length", null, 20),
                 new MemoryExperienceQueryRequest(envelope(MemoryV2Contract.OPERATION_SEARCH_EXPERIENCES), CONTEXT,
                         "copy-draft", null, 20),
+                new MemoryExperienceOutcomeRequest(envelope(MemoryV2Contract.OPERATION_EXPERIENCE_OUTCOME), CONTEXT,
+                        "outcome-1", "experience-1", 0, ASSOCIATION, "buyer request", "short copy", "keep concise",
+                        MemoryExperience.Outcome.SUCCEEDED, AT,
+                        new MemorySourceDependency(new MemorySourceRef(MemorySourceRef.Kind.OUTCOME, CONTEXT,
+                                "domain-result-1", "outcome-1", null, version(1)), null)),
+                new MemoryExperienceFeedbackRequest(envelope(MemoryV2Contract.OPERATION_EXPERIENCE_FEEDBACK), CONTEXT,
+                        "feedback-1", "experience-1", 1, ASSOCIATION, MemoryExperience.Feedback.NEGATIVE, AT,
+                        new MemorySourceDependency(source("feedback-message", 1), null)),
+                new MemoryExperienceEventStatusRequest(envelope(MemoryV2Contract.OPERATION_EXPERIENCE_STATUS), CONTEXT, "outcome-1"),
+                new MemoryExperienceLifecycleRequest(envelope(MemoryV2Contract.OPERATION_EXPERIENCE_LIFECYCLE), CONTEXT,
+                        "experience-1", 1, MemoryExperienceLifecycleRequest.Action.DEACTIVATE, null, "owner requested deactivation"),
                 new MemoryGrantRequest(envelope(MemoryV2Contract.OPERATION_GET_GRANT), CONTEXT,
                         new MemoryExportRef("export-1", CONTEXT, version(1)),
                         new MemoryScope(MemoryScope.Kind.TASK_SHARED, null, null, "shared-1"), "matter-1", "collaboration"),
@@ -120,6 +131,8 @@ class MemoryV2RpcContractTest {
                 new MemoryEntityQueryResponse(List.of(), "next-1", true),
                 new MemoryPreferenceQueryResponse(List.of(), "next-1", true),
                 new MemoryExperienceQueryResponse(List.of(), null, false),
+                new MemoryExperienceEventStatusResponse("event-1", MemoryExperienceEventStatusResponse.State.PENDING, 0, null, AT, AT),
+                new MemoryExperienceLifecycleResponse("experience-1", 2, MemoryState.INACTIVE, "manual deactivation"),
                 new MemoryGrantResponse(grant(), List.of()),
                 new MemoryWithdrawalResponse("event-1", MemoryState.DELETION_PENDING, conversation),
                 new MemoryPrivacyCleanupStatusResponse(CONTEXT, "event-1", MemoryState.DELETION_PENDING,
@@ -190,7 +203,7 @@ class MemoryV2RpcContractTest {
         var status = new MemoryPrivacyCleanupStatusResponse(CONTEXT, "event-1", MemoryState.DELETED,
                 MemoryPrivacyCleanupState.COMPLETE, 2, null, AT, AT.plusSeconds(1));
         assertThat(spi(status, MemoryPrivacyCleanupStatusResponse.class)).isEqualTo(status);
-        assertThat(MemoryV2Contract.DUBBO_SERVICE_VERSION).isEqualTo("2.2.0");
+        assertThat(MemoryV2Contract.DUBBO_SERVICE_VERSION).isEqualTo("2.3.0");
         var proof = new MemoryRequestProof("key", 100, 160, "n".repeat(22), "s".repeat(43), MemoryRequestProof.Actor.SERVICE);
         assertThat(spi(proof, MemoryRequestProof.class)).isEqualTo(proof);
     }

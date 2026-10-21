@@ -34,6 +34,14 @@ public interface MemoryV2RpcService {
 
     MemoryExperienceQueryResponse searchExperiences(MemoryExperienceQueryRequest request, MemoryRequestProof proof) throws MemoryException;
 
+    MemoryExperienceEventStatusResponse submitExperienceOutcome(MemoryExperienceOutcomeRequest request, MemoryRequestProof proof) throws MemoryException;
+
+    MemoryExperienceEventStatusResponse submitExperienceFeedback(MemoryExperienceFeedbackRequest request, MemoryRequestProof proof) throws MemoryException;
+
+    MemoryExperienceEventStatusResponse experienceEventStatus(MemoryExperienceEventStatusRequest request, MemoryRequestProof proof) throws MemoryException;
+
+    MemoryExperienceLifecycleResponse changeExperienceLifecycle(MemoryExperienceLifecycleRequest request, MemoryRequestProof proof) throws MemoryException;
+
     MemoryGrantResponse getGrant(MemoryGrantRequest request, MemoryRequestProof proof) throws MemoryException;
 
     MemoryWithdrawalResponse withdrawSource(MemoryWithdrawalRequest request, MemoryRequestProof proof) throws MemoryException;

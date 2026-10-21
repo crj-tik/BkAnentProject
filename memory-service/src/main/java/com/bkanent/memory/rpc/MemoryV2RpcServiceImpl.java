@@ -5,6 +5,7 @@ import com.bkanent.memory.service.MemoryArchiveService;
 import com.bkanent.memory.service.MemorySharingAccessService;
 import com.bkanent.memory.service.MemoryV2RequestSecurity;
 import org.apache.dubbo.config.annotation.DubboService;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 /** Opt-in native Dubbo provider. Unimplemented learning/search capability fails explicitly. */
@@ -16,24 +17,38 @@ public class MemoryV2RpcServiceImpl implements MemoryV2RpcService {
     private final MemoryV2RequestSecurity security;
     private final com.bkanent.memory.service.PreferenceHistoryService preferences;
     private final com.bkanent.memory.service.MemoryMatterService matters;
+    private final com.bkanent.memory.service.MemoryExperienceService experiences;
 
     public MemoryV2RpcServiceImpl(MemoryArchiveService archive, MemorySharingAccessService sharing, MemoryV2RequestSecurity security) {
-        this(archive, sharing, security, null);
+        this(archive, sharing, security, null, null, null, true);
     }
 
     public MemoryV2RpcServiceImpl(MemoryArchiveService archive, MemorySharingAccessService sharing, MemoryV2RequestSecurity security,
                                   com.bkanent.memory.service.PreferenceHistoryService preferences) {
-        this(archive,sharing,security,preferences,null);
+        this(archive, sharing, security, preferences, null, null, true);
+    }
+
+    public MemoryV2RpcServiceImpl(MemoryArchiveService archive, MemorySharingAccessService sharing, MemoryV2RequestSecurity security,
+                                  com.bkanent.memory.service.PreferenceHistoryService preferences, com.bkanent.memory.service.MemoryMatterService matters) {
+        this(archive, sharing, security, preferences, matters, null, true);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
     public MemoryV2RpcServiceImpl(MemoryArchiveService archive, MemorySharingAccessService sharing, MemoryV2RequestSecurity security,
-                                  com.bkanent.memory.service.PreferenceHistoryService preferences, com.bkanent.memory.service.MemoryMatterService matters) {
+                                  com.bkanent.memory.service.PreferenceHistoryService preferences, com.bkanent.memory.service.MemoryMatterService matters,
+                                  ObjectProvider<com.bkanent.memory.service.MemoryExperienceService> experiences) {
+        this(archive, sharing, security, preferences, matters, experiences.getIfAvailable(), true);
+    }
+
+    private MemoryV2RpcServiceImpl(MemoryArchiveService archive, MemorySharingAccessService sharing, MemoryV2RequestSecurity security,
+                                   com.bkanent.memory.service.PreferenceHistoryService preferences, com.bkanent.memory.service.MemoryMatterService matters,
+                                   com.bkanent.memory.service.MemoryExperienceService experiences, boolean ignored) {
         this.archive = archive;
         this.sharing = sharing;
         this.security = security;
         this.preferences = preferences;
         this.matters = matters;
+        this.experiences = experiences;
     }
 
     public MemoryMatterWriteResponse transitionMatter(MemoryMatterWriteRequest request, MemoryRequestProof proof) {
@@ -77,7 +92,32 @@ public class MemoryV2RpcServiceImpl implements MemoryV2RpcService {
     }
 
     public MemoryExperienceQueryResponse searchExperiences(MemoryExperienceQueryRequest request, MemoryRequestProof proof) {
+        if (experiences != null) return experiences.search(request, proof);
         security.authorize(request, proof, MemoryV2Contract.OPERATION_SEARCH_EXPERIENCES);
+        throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+    }
+
+    public MemoryExperienceEventStatusResponse submitExperienceOutcome(MemoryExperienceOutcomeRequest request, MemoryRequestProof proof) {
+        if (experiences != null) return experiences.submitOutcome(request, proof);
+        security.authorizeExperienceOutcome(request, proof);
+        throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+    }
+
+    public MemoryExperienceEventStatusResponse submitExperienceFeedback(MemoryExperienceFeedbackRequest request, MemoryRequestProof proof) {
+        if (experiences != null) return experiences.submitFeedback(request, proof);
+        security.authorize(request, proof, MemoryV2Contract.OPERATION_EXPERIENCE_FEEDBACK);
+        throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+    }
+
+    public MemoryExperienceEventStatusResponse experienceEventStatus(MemoryExperienceEventStatusRequest request, MemoryRequestProof proof) {
+        if (experiences != null) return experiences.status(request, proof);
+        security.authorize(request, proof, MemoryV2Contract.OPERATION_EXPERIENCE_STATUS);
+        throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+    }
+
+    public MemoryExperienceLifecycleResponse changeExperienceLifecycle(MemoryExperienceLifecycleRequest request, MemoryRequestProof proof) {
+        if (experiences != null) return experiences.changeLifecycle(request, proof);
+        security.authorize(request, proof, MemoryV2Contract.OPERATION_EXPERIENCE_LIFECYCLE);
         throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
     }
 }

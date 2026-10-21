@@ -8,6 +8,7 @@ import com.bkanent.common.memory.MemoryRequestSigner;
 import com.bkanent.common.memory.MemoryV2Contract;
 import com.bkanent.common.memory.MemoryV2Request;
 import com.bkanent.common.memory.MemoryDeliveryRequest;
+import com.bkanent.common.memory.MemoryExperienceOutcomeRequest;
 import com.bkanent.common.rpc.AuthPermissionRpcService;
 import com.bkanent.memory.config.MemoryV2SecurityProperties;
 import org.springframework.stereotype.Service;
@@ -77,6 +78,18 @@ public class MemoryV2RequestSecurity {
         }
     }
 
+    /** Domain publishers may assert only exact outcome events under an explicit deployment allowlist. */
+    public long authorizeExperienceOutcome(MemoryExperienceOutcomeRequest request, MemoryRequestProof proof) {
+        if (proof == null || proof.actor() != MemoryRequestProof.Actor.SERVICE) {
+            throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
+        }
+        long ownerId = verifyCaller(request, proof, MemoryV2Contract.OPERATION_EXPERIENCE_OUTCOME, false);
+        var caller = properties.getTrustedCallers().get(request.envelope().caller());
+        if (caller == null || !caller.isExperienceOutcomePublisher()) throw new MemoryException(MemoryErrorCode.FORBIDDEN);
+        replayGuard.consume(proof.keyId(), proof.nonce(), proof.expiresAtEpochSecond());
+        return ownerId;
+    }
+
     static void requireUnexpired(MemoryRequestProof proof) {
         if (proof.expiresAtEpochSecond() <= Instant.now().getEpochSecond()) {
             throw new MemoryException(MemoryErrorCode.AUTHENTICATION_EXPIRED);
@@ -132,6 +145,10 @@ public class MemoryV2RequestSecurity {
                 || MemoryV2Contract.OPERATION_MATTER_WRITE.equals(operation)
                 || MemoryV2Contract.OPERATION_PREFERENCE_DETAIL.equals(operation)
                 || MemoryV2Contract.OPERATION_ASSEMBLE_PREFERENCES.equals(operation)
-                || MemoryV2Contract.OPERATION_PRIVACY_STATUS.equals(operation);
+                || MemoryV2Contract.OPERATION_PRIVACY_STATUS.equals(operation)
+                || MemoryV2Contract.OPERATION_EXPERIENCE_OUTCOME.equals(operation)
+                || MemoryV2Contract.OPERATION_EXPERIENCE_FEEDBACK.equals(operation)
+                || MemoryV2Contract.OPERATION_EXPERIENCE_STATUS.equals(operation)
+                || MemoryV2Contract.OPERATION_EXPERIENCE_LIFECYCLE.equals(operation);
     }
 }

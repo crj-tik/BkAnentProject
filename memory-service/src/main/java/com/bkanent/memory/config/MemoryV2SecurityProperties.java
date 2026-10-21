@@ -24,8 +24,11 @@ public class MemoryV2SecurityProperties {
         private String keyId;
         private String signingSecret;
         private boolean serviceDelivery;
+        private boolean experienceOutcomePublisher;
         public boolean isServiceDelivery() { return serviceDelivery; }
         public void setServiceDelivery(boolean serviceDelivery) { this.serviceDelivery = serviceDelivery; }
+        public boolean isExperienceOutcomePublisher() { return experienceOutcomePublisher; }
+        public void setExperienceOutcomePublisher(boolean experienceOutcomePublisher) { this.experienceOutcomePublisher = experienceOutcomePublisher; }
         /** Exact domain-to-agent allowlist; no cross-product expansion is performed. */
         private Map<String, Set<String>> allowedAgentsByDomain = new LinkedHashMap<>();
 

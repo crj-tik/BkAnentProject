@@ -23,6 +23,7 @@ public class MemoryArchiveService {
     private final MemoryV2RequestSecurity security;
     private final MemorySourceAuthorizer sources;
     private final PreferenceHistoryService preferences;
+    private final MemoryExperienceService experiences;
     private final TransactionTemplate tx;
 
     public MemoryArchiveService(MemoryArchiveStore store, MemoryV2RequestSecurity security,
@@ -34,10 +35,18 @@ public class MemoryArchiveService {
     public MemoryArchiveService(MemoryArchiveStore store, MemoryV2RequestSecurity security,
                                 MemorySourceAuthorizer sources, PreferenceHistoryService preferences,
                                 PlatformTransactionManager transactionManager) {
+        this(store, security, sources, preferences, null, transactionManager);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public MemoryArchiveService(MemoryArchiveStore store, MemoryV2RequestSecurity security,
+                                MemorySourceAuthorizer sources, PreferenceHistoryService preferences,
+                                MemoryExperienceService experiences, PlatformTransactionManager transactionManager) {
         this.store = store;
         this.security = security;
         this.sources = sources;
         this.preferences = preferences;
+        this.experiences = experiences;
         tx = new TransactionTemplate(transactionManager);
         tx.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
         tx.setTimeout(5);
@@ -390,7 +399,20 @@ public class MemoryArchiveService {
             store.conversation(request.contextKey());
             String id = key(request.contextKey());
             var row = store.one("SELECT * FROM memory_message WHERE context_id=? AND source_event_id=? FOR UPDATE", id, request.sourceEventId());
-            require(row != null, MemoryErrorCode.NOT_FOUND);
+            if (row == null) {
+                var experienceEvent = store.one("SELECT owner_id,domain_id,agent_id,source_state FROM memory_experience_event "
+                        + "WHERE source_context_id=? AND source_event_id=? FOR UPDATE", id, request.sourceEventId());
+                require(experienceEvent != null && experiences != null, MemoryErrorCode.NOT_FOUND);
+                require(request.contextKey().ownerId().equals(experienceEvent.get("owner_id"))
+                        && request.contextKey().domainId().equals(experienceEvent.get("domain_id"))
+                        && request.contextKey().agentId().equals(experienceEvent.get("agent_id")), MemoryErrorCode.FORBIDDEN);
+                boolean delete = request.delete() || "DELETED".equals(experienceEvent.get("source_state"));
+                experiences.sourceWithdrawn(request.contextKey(), request.sourceEventId(), delete);
+                store.jdbc.update("UPDATE memory_conversation SET revision=revision+1 WHERE context_id=?", id);
+                MemoryV2RequestSecurity.requireUnexpired(proof);
+                return new MemoryWithdrawalResponse(request.sourceEventId(), delete ? MemoryState.DELETED : MemoryState.WITHDRAWN,
+                        store.version(store.conversation(request.contextKey())));
+            }
             var manifest = store.one("SELECT * FROM memory_privacy_deletion WHERE context_id=? AND source_event_id=? FOR UPDATE", id, request.sourceEventId());
             boolean delete = request.delete() || "DELETION_PENDING".equals(row.get("state")) || "DELETED".equals(row.get("state"))
                     || manifest != null && "DELETE".equals(manifest.get("action_kind"));
@@ -416,6 +438,7 @@ public class MemoryArchiveService {
             if (changed) {
                 store.jdbc.update("UPDATE memory_message SET state=?,payload_json=CASE WHEN ? THEN NULL ELSE payload_json END WHERE context_id=? AND source_event_id=?",
                         state, delete, id, request.sourceEventId());
+                if (experiences != null) experiences.sourceWithdrawn(request.contextKey(), request.sourceEventId(), delete);
             // Preference blocks span this private agent's conversations. Revoke every dependent block before any old page can be reused.
                 var affectedPreferences = store.jdbc.queryForList("SELECT DISTINCT target_id FROM memory_source_dependency WHERE source_context_id=? "
                         + "AND source_event_id=? AND target_kind='PREFERENCE'", String.class, id, request.sourceEventId());

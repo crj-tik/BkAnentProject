@@ -4,6 +4,7 @@ import com.bkanent.common.memory.*;
 import com.bkanent.common.rpc.AuthPermissionRpcService;
 import com.bkanent.common.rpc.AuthenticatedPrincipal;
 import com.bkanent.memory.config.MemoryV2SecurityProperties;
+import com.bkanent.memory.config.MemoryExperienceProperties;
 import com.bkanent.memory.rpc.MemoryV2RpcServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
@@ -634,32 +635,41 @@ class MemoryArchiveServiceTest {
         MemorySourceAuthorizer sources;
         MemoryV2RequestSecurity security;
         MemoryArchiveService service;
+        MemoryExperienceService experiences;
+        final MemoryExperienceProperties experienceProperties = new MemoryExperienceProperties();
 
         Fixture() throws Exception {
             datasource = new DriverManagerDataSource("jdbc:h2:mem:archive-" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=10000", "sa", "");
             jdbc = new JdbcTemplate(datasource);
             transactions = new DataSourceTransactionManager(datasource);
             try (var connection = datasource.getConnection()) {
-                for (String file : List.of("20261019_memory_v2_request_nonce.sql", "20261019_memory_share_authorization.sql", "20261019_memory_v2_archive.sql", "20261019_memory_writer_fence.sql", "20261020_memory_preference_history.sql", "20261020_memory_preference_processing.sql", "20261021_memory_matter_lifecycle.sql", "20261021_memory_privacy_cleanup.sql")) {
+                for (String file : List.of("20261019_memory_v2_request_nonce.sql", "20261019_memory_share_authorization.sql", "20261019_memory_v2_archive.sql", "20261019_memory_writer_fence.sql", "20261020_memory_preference_history.sql", "20261020_memory_preference_processing.sql", "20261021_memory_matter_lifecycle.sql", "20261021_memory_privacy_cleanup.sql", "20261021_memory_experience_records.sql", "20261021_memory_experience_processing.sql")) {
                     String sql = Files.readString(Path.of(System.getProperty("maven.multiModuleProjectDirectory"), "sql/migrations", file))
                             .replace("USE bk_memory;", "").replace(" CHARACTER SET ascii COLLATE ascii_bin", "")
                             .replace("ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", "");
+                    if (file.equals("20261021_memory_experience_records.sql")) {
+                        int start = sql.indexOf("SELECT COUNT(*) INTO @memory_experience_scope_index_count");
+                        int end = sql.indexOf("DEALLOCATE PREPARE memory_experience_scope_index_stmt;", start);
+                        if (start >= 0 && end >= 0) sql = sql.substring(0, start) + sql.substring(end + "DEALLOCATE PREPARE memory_experience_scope_index_stmt;".length());
+                    }
                     ScriptUtils.executeSqlScript(connection, new ByteArrayResource(sql.getBytes(StandardCharsets.UTF_8)));
                     ScriptUtils.executeSqlScript(connection, new ByteArrayResource(sql.getBytes(StandardCharsets.UTF_8)));
                 }
             }
-            caller.setKeyId("fixture-key"); caller.setSigningSecret(secret); caller.setServiceDelivery(true);
+            caller.setKeyId("fixture-key"); caller.setSigningSecret(secret); caller.setServiceDelivery(true); caller.setExperienceOutcomePublisher(true);
             caller.setAllowedAgentsByDomain(Map.of("marketing", Set.of("copy-agent")));
             properties.setTrustedCallers(Map.of(CALLER, caller, "other-service", caller));
+            experienceProperties.setEnabled(true); experienceProperties.setProcessingEnabled(true);
             restart();
         }
 
         void restart() {
             store = new MemoryArchiveStore(jdbc, mapper);
             sharing = new MemorySharingStore(jdbc, mapper);
-            sources = new MemorySourceAuthorizer(store, sharing, new MemoryAccessPolicy());
+            sources = new MemorySourceAuthorizer(store, sharing, new MemoryAccessPolicy(), properties);
             security = new MemoryV2RequestSecurity(properties, auth, new MemoryV2ReplayGuard(jdbc));
-            service = newService();
+            experiences = new MemoryExperienceService(store, security, sources, experienceProperties, properties, transactions);
+            service = new MemoryArchiveService(store, security, sources, null, experiences, transactions);
         }
 
         MemoryArchiveService newService() { return new MemoryArchiveService(store, security, sources, transactions); }
@@ -712,10 +722,16 @@ class MemoryArchiveServiceTest {
             return MemoryRequestSigner.signServiceDelivery(request, "fixture-key", now, now + 60,
                     UUID.randomUUID().toString().replace("-", ""), secret.getBytes(StandardCharsets.UTF_8));
         }
+        MemoryRequestProof signService(MemoryExperienceOutcomeRequest request) {
+            long now = Instant.now().getEpochSecond();
+            return MemoryRequestSigner.signServiceExperienceOutcome(request, "fixture-key", now, now + 60,
+                    UUID.randomUUID().toString().replace("-", ""), secret.getBytes(StandardCharsets.UTF_8));
+        }
     }
 
     static class AuthStub implements AuthPermissionRpcService {
         boolean allowed = true;
+        long allowedOwner = 42L;
         int calls;
         Runnable onCheck = () -> { };
         public boolean validateToken(String token) { return false; }
@@ -723,7 +739,7 @@ class MemoryArchiveServiceTest {
         public boolean hasPermission(Long owner, String permission) {
             assertFalse(TransactionSynchronizationManager.isActualTransactionActive(), "Auth must stay outside SQL locks");
             calls++; onCheck.run();
-            return allowed && owner == 42L;
+            return allowed && owner == allowedOwner;
         }
     }
 }

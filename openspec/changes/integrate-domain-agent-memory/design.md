@@ -73,7 +73,7 @@ RAG 新 memory scope 单独版本化，由 memory 签发并由 RAG 按可信调�
 
 memory 入站事务将真源变化、处理job与索引outbox原子记录；远程模型/索引在事务外执行。异步worker使用受管SERVICE凭据，只能处理已授权入站事件的精确ID/owner/domain，不保存用户token、不因用户租约到期自动冒充用户；读取仅限工作证据，撤回/删除检查后才提交结果，不能授予通用用户搜索权。索引dispatcher以短事务加 `FOR UPDATE SKIP LOCKED` 领取到期事件并写入 owner/expiry lease，事务外调用原生 RAG RPC；回写必须匹配仍有效的 lease owner，防止过期 worker 的迟到回执覆盖接管后的状态。失败保持同一稳定事件身份，采用有界重试与安全错误码；归档未确认时保留 checkpoint/journal 和未覆盖窗口，索引未追平也不改变领域业务完成状态。
 
-经验身份以 owner/domain/agent 为私域范围，不以产生证据的单个 conversation 定义逻辑身份；revision 快照不可变，证据把业务发生时间与系统观察时间分开，并以版本化来源定位连接原始事实。显式 retentionUntil 只作为受管保留策略的到期边界，NULL 表示不自动清理；撤回立即排除使用但保留受限历史，删除清空正文与证据细节并保留不含正文的 revision/source hash tombstone，禁止迟到事件复活旧版本。当前尚未实现经验写入/检索 worker，不依据这些表宣称经验功能已启用。
+经验身份以 owner/domain/agent 为私域范围，不以产生证据的单个 conversation 定义逻辑身份；revision 快照不可变，证据把业务发生时间与系统观察时间分开，并以版本化来源定位连接原始事实。显式 retentionUntil 只作为受管保留策略的到期边界，NULL 表示不自动清理；撤回立即排除使用但保留受限历史，删除清空正文与证据细节并保留不含正文的 revision/source hash tombstone，禁止迟到事件复活旧版本。实现阶段新增 operation-bound 可信结果收件、同一私域 USER 消息反馈、幂等事件收件箱与租约评估 worker，以及 SQL 真源上的版本化私有选择。发布 caller 与经验读写开关默认关闭，未经后续人工/领域治理批准的脱敏归纳不得进入共享导出；当前代码实现不代表目标环境已有真实结果发布者或已启用经验检索。
 
 拒绝“压缩时第一次保存”和“直接把窗口saveAll覆盖完整档案”，它们分别存在崩溃丢历史和截断删除历史风险。
 

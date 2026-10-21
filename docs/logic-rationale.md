@@ -815,3 +815,11 @@
 **根因**：软经验的正面结果、重复使用和近期读取都不能授予政策修改权；将初始化脚本当作持续覆盖同步会重新启用人工停用的规则，解析历史流程文字也会绕开已确立的模型选择与审批边界。Bootstrap 的“只补缺”及维护入口的授权分离同时保留初始化可恢复性与运行期治理。
 
 **代码位置**：`memory-service/src/main/resources/system-constraints.yml`、`SystemConstraintBootstrapRunner`、`SystemConstraintMemoryService.bootstrapMissing/upsert`、`MemoryController`、`MemoryRagSecurity`；回归 `SystemConstraintBootstrapRunnerTest.disabledDoesNotReadOrWriteAndEnabledOnlyAddsMissing`、`MemoryRagLifecycleTest.bootstrapOnlyAddsMissingAndConstraintUpsertHandlesDisableRevive`；业务流程边界见 LR-17/LR-18；change 8.1。
+
+## LR-83 经验只由可信结果或同一私域的用户反馈形成，检索不产生新证据
+
+**结论**：业务结果只接受 operation-bound SERVICE 签名且在部署 allowlist 中启用经验发布的 caller；caller/domain/agent 必须精确匹配，配置默认关闭。用户反馈必须指向同一 owner/domain/agent/conversation 内已归档的 USER 消息和当前经验 revision。事件收件回执、幂等身份和 `ASSESS_EXPERIENCE` job 与结果一起持久化；worker 只验证精确来源并以 lease 和 expected revision 提交一份新快照，过期评估失败关闭。经验身份及来源查询统一按 owner/domain/agent 隔离；检索仅在当前范围内核验来源 revision，以版本化相关性、置信度、启用度、半衰期时间权重和 token budget 选取，读取不刷新观察时间或确认时间。硬规则仍由 LR-82 的受权入口单独维护。跨用户的脱敏归纳尚无发布契约，本阶段不开放共享。
+
+**根因**：模型自评、请求已受理、检索命中和经验复用都不能证明真实业务结果；userId 或来源引用也不能单独证明反馈者拥有被引用消息。异步评估必须防止重试重复计分，并在多个旧 revision 竞争时阻止迟到 worker 覆盖新反馈。经验 ID 是调用方提供的稳定本地身份，查询若遗漏 owner/domain/agent 会把同号经验的证据混合；缓存命中也必须重新核对当前经验版本和来源授权。共享经验还需要独立治理批准和不可还原的脱敏契约，因此不得借现有私有行或 grant 推断共享权限。
+
+**代码位置**：`MemoryExperienceOutcomeRequest`、`MemoryExperienceFeedbackRequest`、`MemoryExperienceService`、`MemoryExperienceProcessingWorker`、`ExperienceSelectionPolicy`、`MemoryV2RequestSecurity`、`MemorySourceAuthorizer`、`MemoryExperienceProperties`；迁移 `20261021_memory_experience_records.sql` 与 `20261021_memory_experience_processing.sql`；回归 `MemoryExperienceServiceTest` 的幂等重试、过期 feedback、跨 owner 同 ID 隔离、负反馈停用/重新确认、删除墓碑、评分与 token 预算用例。关联 LR-75/LR-82；change 8.2/8.4。当前 publisher 与处理开关默认关闭，代码验收不代表真实业务域已开始发布经验事件。

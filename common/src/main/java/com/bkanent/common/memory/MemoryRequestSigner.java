@@ -43,6 +43,14 @@ public final class MemoryRequestSigner {
         return signBound(request, keyId, issued, expires, nonce, secret, MemoryRequestProof.Actor.SERVICE);
     }
 
+    /** Domain result publishers have a separate operation-bound signature; it grants no read or delivery access. */
+    public static MemoryRequestProof signServiceExperienceOutcome(MemoryExperienceOutcomeRequest request, String keyId,
+                                                                  long issued, long expires, String nonce, byte[] secret) {
+        requireInputs(request, request == null ? null : request.contextKey(), secret);
+        authenticate(MemoryV2Contract.OPERATION_EXPERIENCE_OUTCOME.equals(request.envelope().operation()));
+        return signBound(request, keyId, issued, expires, nonce, secret, MemoryRequestProof.Actor.SERVICE);
+    }
+
     private static MemoryRequestProof signBound(MemoryV2Request request, String keyId, long issuedAtEpochSecond,
                                                 long expiresAtEpochSecond, String nonce, byte[] secret,
                                                 MemoryRequestProof.Actor actor) {

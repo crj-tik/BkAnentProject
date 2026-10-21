@@ -16,42 +16,49 @@ memory:
         key-id: ${MARKETING_MEMORY_V2_KEY_ID:marketing-memory-current}
         signing-secret: ${MARKETING_MEMORY_V2_SIGNING_SECRET:}
         service-delivery: true
+        experience-outcome-publisher: ${MARKETING_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
         allowed-agents-by-domain:
           marketing: [marketing-agent]
       interview-service:
         key-id: ${INTERVIEW_MEMORY_V2_KEY_ID:interview-memory-current}
         signing-secret: ${INTERVIEW_MEMORY_V2_SIGNING_SECRET:}
         service-delivery: true
+        experience-outcome-publisher: ${INTERVIEW_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
         allowed-agents-by-domain:
           interview: [interview-agent]
       listing-master-service:
         key-id: ${LISTING_MEMORY_V2_KEY_ID:listing-memory-current}
         signing-secret: ${LISTING_MEMORY_V2_SIGNING_SECRET:}
         service-delivery: true
+        experience-outcome-publisher: ${LISTING_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
         allowed-agents-by-domain:
           listing: [listing-agent]
       business-service:
         key-id: ${BUSINESS_MEMORY_V2_KEY_ID:business-memory-current}
         signing-secret: ${BUSINESS_MEMORY_V2_SIGNING_SECRET:}
         service-delivery: true
+        experience-outcome-publisher: ${BUSINESS_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
         allowed-agents-by-domain:
           trade: [trade-agent]
       contract-service:
         key-id: ${CONTRACT_MEMORY_V2_KEY_ID:contract-memory-current}
         signing-secret: ${CONTRACT_MEMORY_V2_SIGNING_SECRET:}
         service-delivery: true
+        experience-outcome-publisher: ${CONTRACT_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
         allowed-agents-by-domain:
           contract: [contract-agent]
       compare-engine-service:
         key-id: ${COMPARE_MEMORY_V2_KEY_ID:compare-memory-current}
         signing-secret: ${COMPARE_MEMORY_V2_SIGNING_SECRET:}
         service-delivery: true
+        experience-outcome-publisher: ${COMPARE_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
         allowed-agents-by-domain:
           compare: [compare-agent]
       settlement-service:
         key-id: ${SETTLEMENT_MEMORY_V2_KEY_ID:settlement-memory-current}
         signing-secret: ${SETTLEMENT_MEMORY_V2_SIGNING_SECRET:}
         service-delivery: true
+        experience-outcome-publisher: ${SETTLEMENT_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
         allowed-agents-by-domain:
           settlement: [settlement-agent]
     preference:
@@ -66,6 +73,17 @@ memory:
         retry-seconds: 30
         # Explicit per-domain/agent SERVICE processing registration, in addition to trusted source callers.
         allowed-agents-by-domain: {}
+    experience:
+      enabled: ${MEMORY_V2_EXPERIENCE_ENABLED:false}
+      processing-enabled: ${MEMORY_V2_EXPERIENCE_PROCESSING_ENABLED:false}
+      poll-ms: ${MEMORY_V2_EXPERIENCE_POLL_MS:5000}
+      batch-size: ${MEMORY_V2_EXPERIENCE_BATCH_SIZE:4}
+      max-attempts: ${MEMORY_V2_EXPERIENCE_MAX_ATTEMPTS:4}
+      lease-seconds: ${MEMORY_V2_EXPERIENCE_LEASE_SECONDS:90}
+      retry-seconds: ${MEMORY_V2_EXPERIENCE_RETRY_SECONDS:30}
+      max-candidates: ${MEMORY_V2_EXPERIENCE_MAX_CANDIDATES:128}
+      max-token-budget: ${MEMORY_V2_EXPERIENCE_MAX_TOKEN_BUDGET:2048}
+      half-life-days: ${MEMORY_V2_EXPERIENCE_HALF_LIFE_DAYS:180}
   rag:
     key-id: ${MEMORY_RAG_RPC_KEY_ID:memory-current}
     signing-secret: ${MEMORY_RAG_RPC_SECRET:}
