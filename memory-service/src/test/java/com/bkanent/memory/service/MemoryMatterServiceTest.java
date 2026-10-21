@@ -75,7 +75,7 @@ class MemoryMatterServiceTest {
         assertTrue(f.f.read().matters().isEmpty());
         assertEquals(0, f.f.jdbc.queryForObject("SELECT COUNT(*) FROM memory_matter_revision WHERE payload_json IS NOT NULL", Integer.class));
         assertEquals(0, f.f.jdbc.queryForObject("SELECT COUNT(*) FROM memory_matter_receipt WHERE response_json IS NOT NULL", Integer.class));
-        code(MemoryErrorCode.WITHDRAWN, () -> f.write(start));
+        code(MemoryErrorCode.DELETED, () -> f.write(start));
     }
     @Test void changedMatterBodyHashAndCredentialGoalAreRejected() throws Exception {
         var f = new MatterFixture(); var start = f.event(new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房")); f.write(start);

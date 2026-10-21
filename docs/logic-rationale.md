@@ -737,3 +737,13 @@
 **运行边界**：注入内容标记为数据而非指令，当前明确请求、政策和授权优先。无匹配、预算受限、可选记忆不可用分别表达；认证/授权错误不降级。删除/撤回使旧选择失效；当前错误或变更后的偏好只能在下一次可核验装配中替换，不能把后台尚未归并的修正说成已持久更新。当前仅支持 owner-self 的 domain+agent 私有偏好，不支持其他主体、共享组、经验装配或向量语义检索。
 
 **代码位置**：`MemoryPreferenceAssemblyRequest/Response/Match/SelectionRef`、`MemoryV2Contract`、`PreferenceSelectionPolicy`、`MemoryPreferenceProperties`、`PreferenceHistoryService.assemble/selectionsCurrent`、`MemoryArchiveService.checkBoundary`、`SupervisorMemoryLifecycle.assemblePreferences/modelMessages/beforeTools/beforeOutput`；关联 LR-68/69/70/71/72、KI-140/141/142/144；change 7.5/7.6。
+
+## LR-74 隐私撤回先封锁来源，再按受管投影确认清理
+
+**结论**：撤回/删除在单个数据库事务中先让来源、摘要、锚点、事项、偏好与共享导出失效，并写入只含 context、event、source hash、动作和状态的清理清单；状态查询只返回生命周期元数据。bounded worker 以租约和 attempt fence 领取任务，逐个调用精确投影 cleaner，并记录每个 projection 的回执；仅全部已注册投影完成后才把清理标为 `COMPLETE`。删除立即擦除本地正文与回执正文，撤回保留受限的本地历史但不再允许读取/装配。最终 `DELETED` 来源的迟到事件继续以删除终态拒绝。
+
+**根因**：本地事务无法与外部检索/共享投影原子提交。先撤权可立即关闭旧 checkpoint、工作集和边界读取；无正文 manifest 让异步执行可恢复而不把副本正文保留在任务里；精确 source hash、租约和幂等 cleaner 允许崩溃后至少一次重试，同时避免迟到回执复活来源或虚报删除完成。
+
+**运行边界**：当前开发配置不启用 Memory V2 归档/索引，未注册外部投影 cleaner；因此此版本的完成状态只覆盖本地派生清理和当前注册集合，不能声称清理未接入的外部索引。今后任何 V2 投影在启用前必须提供受管 cleaner，并在写入投影前对账 tombstone。用户明确删除会清除本地正文；撤回只冻结并阻断内容访问，保持其可恢复语义。
+
+**代码位置**：`MemoryPrivacyCleanupStatusRequest/Response`、`MemoryArchiveService.withdrawSource/privacyCleanupStatus`、`MemoryPrivacyCleanupWorker`、`MemoryPrivacyProjectionCleaner`、迁移 190；关联 LR-61/65/68/69/73、KI-145/146；change 3.5/4.7。

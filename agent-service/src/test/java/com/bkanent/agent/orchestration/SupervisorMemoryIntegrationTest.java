@@ -319,6 +319,24 @@ class SupervisorMemoryIntegrationTest {
         }
     }
 
+    @Test void restoredCheckpointRechecksSourceAuthorizationBeforeReusingItsModelWindow() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.localToolThenAnswer();
+            assertEquals("COMPLETED", f.execute("run", "input").status());
+            var restored = f.state("run");
+            assertFalse(restored.adoptedMemorySources.isEmpty(), "persisted run state pins the source dependencies it adopted");
+            f.remote.revoked = true;
+            int callsBeforeResume = mockingDetails(f.model).getInvocations().size();
+            MemoryException error;
+            try (var scope = f.identities.openAuthorization("Bearer transport-only-value")) {
+                error = assertThrows(MemoryException.class, () -> f.lifecycle.beforeModel(restored, "system"));
+            }
+            assertEquals(MemoryErrorCode.WITHDRAWN, error.code());
+            assertEquals(callsBeforeResume, mockingDetails(f.model).getInvocations().size(),
+                    "stale checkpoint memory must be rejected before another model call");
+        }
+    }
+
     @Test void revocationAfterToolEffectWithholdsToolResultEventUntilRecovery() throws Exception {
         try (Fixture f = new Fixture()) {
             f.onToolCall = () -> f.remote.revoked = true;

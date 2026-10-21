@@ -131,6 +131,7 @@ public class MemoryV2RequestSecurity {
                 || MemoryV2Contract.OPERATION_PREFERENCE_WRITE.equals(operation)
                 || MemoryV2Contract.OPERATION_MATTER_WRITE.equals(operation)
                 || MemoryV2Contract.OPERATION_PREFERENCE_DETAIL.equals(operation)
-                || MemoryV2Contract.OPERATION_ASSEMBLE_PREFERENCES.equals(operation);
+                || MemoryV2Contract.OPERATION_ASSEMBLE_PREFERENCES.equals(operation)
+                || MemoryV2Contract.OPERATION_PRIVACY_STATUS.equals(operation);
     }
 }

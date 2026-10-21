@@ -31,7 +31,7 @@ class MemoryV1V2CompatibilityTest {
                     try { return (String) field.get(null); }
                     catch (ReflectiveOperationException exception) { throw new IllegalStateException(exception); }
                 }).toList();
-        assertThat(v2Operations).hasSize(16).allSatisfy(operation -> {
+        assertThat(v2Operations).hasSize(17).allSatisfy(operation -> {
             assertThat(operation).startsWith("memory.");
             assertThat(legacyPaths).noneMatch(path -> operation.contains(path));
         });

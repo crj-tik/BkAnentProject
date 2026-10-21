@@ -69,6 +69,8 @@ class MemoryMatterMySqlTest {
             assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM memory_matter_receipt WHERE context_id=? AND response_json IS NOT NULL", Integer.class, contextId));
         } finally {
             jdbc.update("DELETE FROM memory_receive_event WHERE permit_id IN (SELECT permit_id FROM memory_receive_permit WHERE context_id=?)", contextId);
+            jdbc.update("DELETE FROM memory_privacy_cleanup_target WHERE context_id=?", contextId);
+            jdbc.update("DELETE FROM memory_privacy_deletion WHERE context_id=?", contextId);
             for (String table : List.of("memory_conversation_writer", "memory_message_observation", "memory_receive_permit", "memory_result_admission", "memory_summary", "memory_entity_anchor", "memory_matter_revision", "memory_matter_receipt", "memory_matter", "memory_message", "memory_processing_job")) jdbc.update("DELETE FROM " + table + " WHERE context_id=?", contextId);
             jdbc.update("DELETE FROM memory_source_dependency WHERE target_context_id=? OR source_context_id=?", contextId, contextId);
             jdbc.update("DELETE FROM memory_conversation WHERE context_id=? AND conversation_id=?", contextId, fixture);

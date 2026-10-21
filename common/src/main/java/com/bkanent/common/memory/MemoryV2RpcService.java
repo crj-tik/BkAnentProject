@@ -38,6 +38,9 @@ public interface MemoryV2RpcService {
 
     MemoryWithdrawalResponse withdrawSource(MemoryWithdrawalRequest request, MemoryRequestProof proof) throws MemoryException;
 
+    MemoryPrivacyCleanupStatusResponse privacyCleanupStatus(MemoryPrivacyCleanupStatusRequest request,
+                                                            MemoryRequestProof proof) throws MemoryException;
+
     MemoryWriterResponse manageWriter(MemoryWriterRequest request, MemoryRequestProof proof) throws MemoryException;
 
     MemoryBoundaryResponse checkBoundary(MemoryBoundaryRequest request, MemoryRequestProof proof) throws MemoryException;

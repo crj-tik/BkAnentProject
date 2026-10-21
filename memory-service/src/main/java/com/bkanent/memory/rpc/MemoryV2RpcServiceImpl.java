@@ -49,6 +49,9 @@ public class MemoryV2RpcServiceImpl implements MemoryV2RpcService {
     public MemoryEntityQueryResponse queryEntities(MemoryEntityQueryRequest request, MemoryRequestProof proof) { return archive.queryEntities(request, proof); }
     public MemoryGrantResponse getGrant(MemoryGrantRequest request, MemoryRequestProof proof) { return sharing.getGrant(request, proof); }
     public MemoryWithdrawalResponse withdrawSource(MemoryWithdrawalRequest request, MemoryRequestProof proof) { return archive.withdrawSource(request, proof); }
+    public MemoryPrivacyCleanupStatusResponse privacyCleanupStatus(MemoryPrivacyCleanupStatusRequest request, MemoryRequestProof proof) {
+        return archive.privacyCleanupStatus(request, proof);
+    }
     public MemoryWriterResponse manageWriter(MemoryWriterRequest request, MemoryRequestProof proof) { return archive.manageWriter(request, proof); }
     public MemoryBoundaryResponse checkBoundary(MemoryBoundaryRequest request, MemoryRequestProof proof) { return archive.checkBoundary(request, proof); }
     public MemoryPreferenceWriteResponse submitPreferenceAssessment(MemoryPreferenceWriteRequest request, MemoryRequestProof proof) {

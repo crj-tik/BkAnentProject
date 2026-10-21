@@ -49,7 +49,9 @@ public class MemorySourceAuthorizer {
                 var row = store.one("SELECT " + columns + " FROM memory_message WHERE context_id=? AND message_id=? FOR UPDATE",
                         key(source.contextKey()), source.sourceId());
                 require(row != null, MemoryErrorCode.ARCHIVE_NOT_CONFIRMED);
-                require("ACTIVE".equals(row.get("state")), MemoryErrorCode.WITHDRAWN);
+                String state = (String) row.get("state");
+                require("ACTIVE".equals(state), "DELETION_PENDING".equals(state) || "DELETED".equals(state)
+                        ? MemoryErrorCode.DELETED : MemoryErrorCode.WITHDRAWN);
                 require(source.version().contentHash().equals(row.get("content_hash"))
                         && source.version().revision() == number(row, "content_revision")
                         && source.version().schemaVersion().equals(row.get("schema_version"))

@@ -20,6 +20,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.time.Clock;
+import java.time.ZoneOffset;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
@@ -281,7 +283,9 @@ class MemoryArchiveServiceTest {
     @Test void deletionErasesLocalBodiesButReportsPendingExternalCleanupAndRetainsTombstone() throws Exception {
         Fixture f = new Fixture();
         var first = message(1, "body-to-erase");
-        f.append(List.of(first));
+        var permit = f.permit(List.of(first));
+        var acceptedDelivery = f.delivery(permit.permitId(), List.of(first));
+        f.service.deliverMessages(acceptedDelivery, f.signService(acceptedDelivery));
         var summary = summary(List.of(first), 1, List.of(), List.of());
         var submit = f.request(MemoryV2Contract.OPERATION_SUBMIT_SUMMARY, envelope -> new MemorySummaryRequest(envelope, summary));
         f.service.submitSummary(submit, f.sign(submit));
@@ -290,9 +294,131 @@ class MemoryArchiveServiceTest {
         assertEquals(0, f.jdbc.queryForObject("SELECT COUNT(*) FROM memory_message WHERE payload_json IS NOT NULL", Integer.class));
         assertEquals(0, f.jdbc.queryForObject("SELECT COUNT(*) FROM memory_summary WHERE payload_json IS NOT NULL", Integer.class));
         assertEquals(1, f.jdbc.queryForObject("SELECT COUNT(*) FROM memory_processing_job WHERE job_kind='PRIVACY_CLEANUP' AND state='PENDING'", Integer.class));
+        assertEquals(MemoryPrivacyCleanupState.PENDING, f.privacyStatus("event-1").cleanupState());
+        assertEquals(0, f.jdbc.queryForObject("SELECT COUNT(*) FROM memory_privacy_deletion WHERE source_hash<>? OR source_event_id<>?", Integer.class,
+                MemoryCanonicalHash.messageHash(first), "event-1"));
+        assertEquals(0, f.jdbc.queryForObject("SELECT COUNT(*) FROM memory_privacy_deletion WHERE source_event_id=? AND "
+                + "(source_hash IS NULL OR action_kind<>'DELETE' OR cleanup_state<>'PENDING')", Integer.class, "event-1"));
+        new MemoryPrivacyCleanupWorker(f.store, f.transactions, List.of(), true, 4, 3, 60, 1, Clock.systemUTC()).runOnce();
+        var completed = f.privacyStatus("event-1");
+        assertEquals(MemoryPrivacyCleanupState.COMPLETE, completed.cleanupState());
+        assertEquals(MemoryState.DELETED, completed.sourceState());
+        assertNotNull(completed.completedAt());
+        assertEquals("DELETED", f.jdbc.queryForObject("SELECT state FROM memory_message WHERE context_id=? AND source_event_id=?", String.class,
+                MemoryArchiveStore.key(CONTEXT), "event-1"));
         var late = f.permitRequest(List.of(first), List.of(), "late-permit");
         code(MemoryErrorCode.DELETED, () -> f.service.requestReceivePermit(late, f.sign(late)));
+        var lateDelivery = f.delivery(permit.permitId(), List.of(first));
+        code(MemoryErrorCode.DELETED, () -> f.service.deliverMessages(lateDelivery, f.signService(lateDelivery)));
         assertEquals(1, f.count("memory_message"));
+    }
+
+    @Test void privacyProjectionFailureStaysPendingAndRetriesWithOnlyExactSourceIdentity() throws Exception {
+        Fixture f = new Fixture();
+        var first = message(1, "private body must never reach the cleaner");
+        f.append(List.of(first));
+        var request = f.request(MemoryV2Contract.OPERATION_WITHDRAW,
+                envelope -> new MemoryWithdrawalRequest(envelope, CONTEXT, "event-1", true));
+        f.service.withdrawSource(request, f.sign(request));
+        var initial = Instant.now().plusSeconds(10);
+        var clock = Clock.fixed(initial, ZoneOffset.UTC);
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        MemoryPrivacyProjectionCleaner cleaner = new MemoryPrivacyProjectionCleaner() {
+            public String projectionId() { return "fixture-index"; }
+            public void remove(MemoryContextKey context, String sourceEventId, String sourceHash) {
+                assertEquals(CONTEXT, context);
+                assertEquals("event-1", sourceEventId);
+                assertEquals(MemoryCanonicalHash.messageHash(first), sourceHash);
+                if (calls.getAndIncrement() == 0) throw new IllegalStateException("external projection unavailable");
+            }
+        };
+        new MemoryPrivacyCleanupWorker(f.store, f.transactions, List.of(cleaner), true, 4, 3, 60, 1, clock).runOnce();
+        assertEquals(MemoryPrivacyCleanupState.RETRY, f.privacyStatus("event-1").cleanupState());
+        assertEquals(MemoryState.DELETION_PENDING, f.privacyStatus("event-1").sourceState());
+        new MemoryPrivacyCleanupWorker(f.store, f.transactions, List.of(cleaner), true, 4, 3, 60, 1,
+                Clock.fixed(initial.plusSeconds(2), ZoneOffset.UTC)).runOnce();
+        assertEquals(MemoryPrivacyCleanupState.COMPLETE, f.privacyStatus("event-1").cleanupState());
+        assertEquals(2, calls.get());
+        assertEquals("COMPLETE", f.jdbc.queryForObject("SELECT cleanup_state FROM memory_privacy_cleanup_target WHERE "
+                + "context_id=? AND source_event_id=? AND projection_id=?", String.class,
+                MemoryArchiveStore.key(CONTEXT), "event-1", "fixture-index"));
+    }
+
+    @Test void privacyCleanupStatusIsOwnerScopedAndReturnsNoBody() throws Exception {
+        Fixture f = new Fixture();
+        f.append(List.of(message(1, "private state")));
+        var status = f.privacyStatus("event-1");
+        assertEquals(MemoryPrivacyCleanupState.NOT_REQUESTED, status.cleanupState());
+        assertNull(status.updatedAt());
+        assertNull(status.completedAt());
+        var foreign = new MemoryContextKey("43", CONTEXT.domainId(), CONTEXT.agentId(), CONTEXT.conversationId());
+        var request = f.request(MemoryV2Contract.OPERATION_PRIVACY_STATUS,
+                envelope -> new MemoryPrivacyCleanupStatusRequest(envelope, foreign, "event-1"));
+        code(MemoryErrorCode.AUTHENTICATION_FAILED, () -> f.service.privacyCleanupStatus(request, f.sign(request)));
+    }
+
+    @Test void privacyCleanupLeasePreventsTwoInstancesFromRunningTheSameProjection() throws Exception {
+        Fixture f = new Fixture();
+        var message = message(1, "private projection");
+        f.append(List.of(message));
+        var request = f.request(MemoryV2Contract.OPERATION_WITHDRAW,
+                envelope -> new MemoryWithdrawalRequest(envelope, CONTEXT, "event-1", true));
+        f.service.withdrawSource(request, f.sign(request));
+        var entered = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        MemoryPrivacyProjectionCleaner cleaner = new MemoryPrivacyProjectionCleaner() {
+            public String projectionId() { return "serialized-index"; }
+            public void remove(MemoryContextKey context, String sourceEventId, String sourceHash) {
+                calls.incrementAndGet();
+                entered.countDown();
+                try {
+                    if (!release.await(5, java.util.concurrent.TimeUnit.SECONDS)) throw new IllegalStateException("test gate timeout");
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("test interrupted");
+                }
+            }
+        };
+        var first = new MemoryPrivacyCleanupWorker(f.store, f.transactions, List.of(cleaner), true, 4, 3, 60, 1, Clock.systemUTC());
+        var second = new MemoryPrivacyCleanupWorker(f.store, f.transactions, List.of(cleaner), true, 4, 3, 60, 1, Clock.systemUTC());
+        var executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+        try {
+            var running = executor.submit(first::runOnce);
+            assertTrue(entered.await(3, java.util.concurrent.TimeUnit.SECONDS));
+            second.runOnce();
+            assertEquals(1, calls.get());
+            release.countDown();
+            running.get(3, java.util.concurrent.TimeUnit.SECONDS);
+            assertEquals(1, calls.get());
+            assertEquals(MemoryPrivacyCleanupState.COMPLETE, f.privacyStatus("event-1").cleanupState());
+        } finally {
+            release.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test void withdrawnSourceCanEscalateToDeletionButCannotBeRevivedByARepeat() throws Exception {
+        Fixture f = new Fixture();
+        var first = message(1, "retract then erase");
+        f.append(List.of(first));
+        var withdraw = f.request(MemoryV2Contract.OPERATION_WITHDRAW,
+                envelope -> new MemoryWithdrawalRequest(envelope, CONTEXT, "event-1", false));
+        assertEquals(MemoryState.WITHDRAWN, f.service.withdrawSource(withdraw, f.sign(withdraw)).state());
+        new MemoryPrivacyCleanupWorker(f.store, f.transactions, List.of(), true, 4, 3, 60, 1, Clock.systemUTC()).runOnce();
+        assertEquals(MemoryPrivacyCleanupState.COMPLETE, f.privacyStatus("event-1").cleanupState());
+        assertNotNull(f.jdbc.queryForObject("SELECT payload_json FROM memory_message WHERE context_id=? AND source_event_id=?", String.class,
+                MemoryArchiveStore.key(CONTEXT), "event-1"));
+        var deletion = f.request(MemoryV2Contract.OPERATION_WITHDRAW,
+                envelope -> new MemoryWithdrawalRequest(envelope, CONTEXT, "event-1", true));
+        assertEquals(MemoryState.DELETION_PENDING, f.service.withdrawSource(deletion, f.sign(deletion)).state());
+        assertNull(f.jdbc.queryForObject("SELECT payload_json FROM memory_message WHERE context_id=? AND source_event_id=?", String.class,
+                MemoryArchiveStore.key(CONTEXT), "event-1"));
+        new MemoryPrivacyCleanupWorker(f.store, f.transactions, List.of(), true, 4, 3, 60, 1, Clock.systemUTC()).runOnce();
+        var repeated = f.request(MemoryV2Contract.OPERATION_WITHDRAW,
+                envelope -> new MemoryWithdrawalRequest(envelope, CONTEXT, "event-1", false));
+        assertEquals(MemoryState.DELETED, f.service.withdrawSource(repeated, f.sign(repeated)).state());
+        assertEquals(MemoryPrivacyCleanupState.COMPLETE, f.privacyStatus("event-1").cleanupState());
     }
 
     @Test void sourcesAreRecheckedAfterCurrentAuthAndBeforeOutputEvenWhenVersionDidNotChange() throws Exception {
@@ -514,7 +640,7 @@ class MemoryArchiveServiceTest {
             jdbc = new JdbcTemplate(datasource);
             transactions = new DataSourceTransactionManager(datasource);
             try (var connection = datasource.getConnection()) {
-                for (String file : List.of("20261019_memory_v2_request_nonce.sql", "20261019_memory_share_authorization.sql", "20261019_memory_v2_archive.sql", "20261019_memory_writer_fence.sql", "20261020_memory_preference_history.sql", "20261020_memory_preference_processing.sql", "20261021_memory_matter_lifecycle.sql")) {
+                for (String file : List.of("20261019_memory_v2_request_nonce.sql", "20261019_memory_share_authorization.sql", "20261019_memory_v2_archive.sql", "20261019_memory_writer_fence.sql", "20261020_memory_preference_history.sql", "20261020_memory_preference_processing.sql", "20261021_memory_matter_lifecycle.sql", "20261021_memory_privacy_cleanup.sql")) {
                     String sql = Files.readString(Path.of(System.getProperty("maven.multiModuleProjectDirectory"), "sql/migrations", file))
                             .replace("USE bk_memory;", "").replace(" CHARACTER SET ascii COLLATE ascii_bin", "")
                             .replace("ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", "");
@@ -563,6 +689,11 @@ class MemoryArchiveServiceTest {
         MemoryEntityQueryResponse entities(String cursor, int limit) {
             var request = request(MemoryV2Contract.OPERATION_QUERY_ENTITIES, envelope -> new MemoryEntityQueryRequest(envelope, CONTEXT, cursor, limit));
             return service.queryEntities(request, sign(request));
+        }
+        MemoryPrivacyCleanupStatusResponse privacyStatus(String eventId) {
+            var request = request(MemoryV2Contract.OPERATION_PRIVACY_STATUS,
+                    envelope -> new MemoryPrivacyCleanupStatusRequest(envelope, CONTEXT, eventId));
+            return service.privacyCleanupStatus(request, sign(request));
         }
         <T extends MemoryV2Request> T request(String operation, Function<MemoryRequestEnvelope, T> factory) {
             return request(operation, CALLER, UUID.randomUUID().toString(), factory);

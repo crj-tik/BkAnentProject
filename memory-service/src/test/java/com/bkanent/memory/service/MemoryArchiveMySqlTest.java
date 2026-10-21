@@ -93,10 +93,31 @@ class MemoryArchiveMySqlTest {
             assertTrue(restarted.readWorkingSet(read, sign(read, keyId, secret)).summaries().isEmpty());
             assertEquals(MemoryErrorCode.DELETED, assertThrows(MemoryException.class,
                     () -> restarted.deliverMessages(delivery, serviceSign(delivery, keyId, secret))).code());
+            var statusRequest = request(MemoryV2Contract.OPERATION_PRIVACY_STATUS,
+                    envelope -> new MemoryPrivacyCleanupStatusRequest(envelope, context, "event-1"));
+            assertEquals(MemoryPrivacyCleanupState.PENDING,
+                    restarted.privacyCleanupStatus(statusRequest, sign(statusRequest, keyId, secret)).cleanupState());
+            int otherEligibleJobs = jdbc.queryForObject("SELECT COUNT(*) FROM memory_processing_job j "
+                            + "JOIN memory_privacy_deletion d ON d.context_id=j.context_id AND d.source_event_id=j.source_event_id "
+                            + "WHERE j.job_kind='PRIVACY_CLEANUP' AND j.context_id<>? "
+                            + "AND d.cleanup_state IN ('PENDING','PROCESSING','RETRY') "
+                            + "AND ((j.state IN ('PENDING','RETRY') AND j.available_at<=UTC_TIMESTAMP(6)) "
+                            + "OR (j.state='PROCESSING' AND j.lease_until<=UTC_TIMESTAMP(6)))",
+                    Integer.class, contextId);
+            org.junit.jupiter.api.Assumptions.assumeTrue(otherEligibleJobs == 0,
+                    "Do not run a shared MySQL worker while unrelated privacy cleanup is eligible");
+            new MemoryPrivacyCleanupWorker(store, transactions, List.of(), true, 8, 8, 60, 1).runOnce();
+            var completedRequest = request(MemoryV2Contract.OPERATION_PRIVACY_STATUS,
+                    envelope -> new MemoryPrivacyCleanupStatusRequest(envelope, context, "event-1"));
+            var completed = restarted.privacyCleanupStatus(completedRequest, sign(completedRequest, keyId, secret));
+            assertEquals(MemoryPrivacyCleanupState.COMPLETE, completed.cleanupState());
+            assertEquals(MemoryState.DELETED, completed.sourceState());
         } finally {
             // Delete only records whose complete random context belongs to this fixture.
             jdbc.update("DELETE FROM memory_conversation_writer WHERE context_id=?", contextId);
             jdbc.update("DELETE FROM memory_receive_event WHERE permit_id IN (SELECT permit_id FROM memory_receive_permit WHERE context_id=?)", contextId);
+            jdbc.update("DELETE FROM memory_privacy_cleanup_target WHERE context_id=?", contextId);
+            jdbc.update("DELETE FROM memory_privacy_deletion WHERE context_id=?", contextId);
             for (String table : List.of("memory_message_observation", "memory_receive_permit", "memory_result_admission", "memory_summary", "memory_entity_anchor", "memory_matter", "memory_message", "memory_processing_job")) {
                 jdbc.update("DELETE FROM " + table + " WHERE context_id=?", contextId);
             }

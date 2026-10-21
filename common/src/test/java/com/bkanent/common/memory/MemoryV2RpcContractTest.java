@@ -84,6 +84,7 @@ class MemoryV2RpcContractTest {
                         new MemoryExportRef("export-1", CONTEXT, version(1)),
                         new MemoryScope(MemoryScope.Kind.TASK_SHARED, null, null, "shared-1"), "matter-1", "collaboration"),
                 new MemoryWithdrawalRequest(envelope(MemoryV2Contract.OPERATION_WITHDRAW), CONTEXT, "event-1", false),
+                new MemoryPrivacyCleanupStatusRequest(envelope(MemoryV2Contract.OPERATION_PRIVACY_STATUS), CONTEXT, "event-1"),
                 new MemoryWriterRequest(envelope(MemoryV2Contract.OPERATION_WRITER), CONTEXT,
                         MemoryWriterRequest.Action.ACQUIRE, "run-1", 0),
                 new MemoryBoundaryRequest(envelope(MemoryV2Contract.OPERATION_BOUNDARY), CONTEXT,
@@ -121,6 +122,8 @@ class MemoryV2RpcContractTest {
                 new MemoryExperienceQueryResponse(List.of(), null, false),
                 new MemoryGrantResponse(grant(), List.of()),
                 new MemoryWithdrawalResponse("event-1", MemoryState.DELETION_PENDING, conversation),
+                new MemoryPrivacyCleanupStatusResponse(CONTEXT, "event-1", MemoryState.DELETION_PENDING,
+                        MemoryPrivacyCleanupState.RETRY, 2, "CLEANUP_FAILED", AT, null),
                 new MemoryWriterResponse(new MemoryWriteAuthority("run-1", 1), 1_798_000_000_000L, conversation),
                 new MemoryBoundaryResponse(conversation, true),
                 new MemoryPreferenceWriteResponse("block", 1, "transition", true),
@@ -184,6 +187,10 @@ class MemoryV2RpcContractTest {
         assertThat(spi(withdrawal, MemoryWithdrawalRequest.class)).isEqualTo(withdrawal);
         var response = new MemoryWithdrawalResponse("event-1", MemoryState.DELETION_PENDING, new MemoryConversationVersion(2, 1, "v2"));
         assertThat(spi(response, MemoryWithdrawalResponse.class)).isEqualTo(response);
+        var status = new MemoryPrivacyCleanupStatusResponse(CONTEXT, "event-1", MemoryState.DELETED,
+                MemoryPrivacyCleanupState.COMPLETE, 2, null, AT, AT.plusSeconds(1));
+        assertThat(spi(status, MemoryPrivacyCleanupStatusResponse.class)).isEqualTo(status);
+        assertThat(MemoryV2Contract.DUBBO_SERVICE_VERSION).isEqualTo("2.2.0");
         var proof = new MemoryRequestProof("key", 100, 160, "n".repeat(22), "s".repeat(43), MemoryRequestProof.Actor.SERVICE);
         assertThat(spi(proof, MemoryRequestProof.class)).isEqualTo(proof);
     }

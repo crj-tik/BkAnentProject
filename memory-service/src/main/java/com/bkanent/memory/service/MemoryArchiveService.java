@@ -391,39 +391,79 @@ public class MemoryArchiveService {
             String id = key(request.contextKey());
             var row = store.one("SELECT * FROM memory_message WHERE context_id=? AND source_event_id=? FOR UPDATE", id, request.sourceEventId());
             require(row != null, MemoryErrorCode.NOT_FOUND);
-            boolean delete = request.delete() || "DELETION_PENDING".equals(row.get("state"));
-            String state = delete ? "DELETION_PENDING" : "WITHDRAWN";
-            store.jdbc.update("UPDATE memory_message SET state=?,payload_json=CASE WHEN ? THEN NULL ELSE payload_json END WHERE context_id=? AND source_event_id=?",
-                    state, delete, id, request.sourceEventId());
+            var manifest = store.one("SELECT * FROM memory_privacy_deletion WHERE context_id=? AND source_event_id=? FOR UPDATE", id, request.sourceEventId());
+            boolean delete = request.delete() || "DELETION_PENDING".equals(row.get("state")) || "DELETED".equals(row.get("state"))
+                    || manifest != null && "DELETE".equals(manifest.get("action_kind"));
+            String action = delete ? "DELETE" : "WITHDRAW";
+            boolean complete = manifest != null && "COMPLETE".equals(manifest.get("cleanup_state"))
+                    && action.equals(manifest.get("action_kind"));
+            String state = delete ? (complete ? "DELETED" : "DELETION_PENDING") : "WITHDRAWN";
+            boolean changed = !state.equals(row.get("state")) || manifest == null;
+            LocalDateTime now = LocalDateTime.ofInstant(Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS), ZoneOffset.UTC);
+            if (manifest == null) {
+                store.jdbc.update("INSERT INTO memory_privacy_deletion(context_id,source_event_id,source_hash,action_kind,cleanup_state,requested_at,updated_at) "
+                                + "VALUES(?,?,?,?,'PENDING',?,?)", id, request.sourceEventId(), row.get("content_hash"), action, now, now);
+            } else if (!action.equals(manifest.get("action_kind")) || "FAILED".equals(manifest.get("cleanup_state"))) {
+                // A delete may escalate a prior withdrawal; a failed cleanup is retried only after a fresh owner request.
+                store.jdbc.update("UPDATE memory_privacy_deletion SET action_kind=?,cleanup_state='PENDING',attempts=0,last_error=NULL,updated_at=?,completed_at=NULL "
+                                + "WHERE context_id=? AND source_event_id=?", action, now, id, request.sourceEventId());
+                store.jdbc.update("UPDATE memory_processing_job SET state='PENDING',attempts=0,last_error=NULL,available_at=?,lease_owner=NULL,lease_until=NULL "
+                                + "WHERE context_id=? AND source_event_id=? AND job_kind='PRIVACY_CLEANUP'",
+                        now, id, request.sourceEventId());
+                complete = false;
+                changed = true;
+            }
+            if (changed) {
+                store.jdbc.update("UPDATE memory_message SET state=?,payload_json=CASE WHEN ? THEN NULL ELSE payload_json END WHERE context_id=? AND source_event_id=?",
+                        state, delete, id, request.sourceEventId());
             // Preference blocks span this private agent's conversations. Revoke every dependent block before any old page can be reused.
-            var affectedPreferences = store.jdbc.queryForList("SELECT DISTINCT target_id FROM memory_source_dependency WHERE source_context_id=? "
-                    + "AND source_event_id=? AND target_kind='PREFERENCE'", String.class, id, request.sourceEventId());
-            for (String blockId : affectedPreferences) {
-                store.jdbc.update("UPDATE memory_preference_block SET state=?,authorization_revision=authorization_revision+1 WHERE block_id=?", state, blockId);
-                if (delete) {
-                    store.jdbc.update("UPDATE memory_preference_revision SET snapshot_json=NULL WHERE block_id=?", blockId);
-                    store.jdbc.update("UPDATE memory_preference_transition SET payload_json=NULL WHERE block_id=?", blockId);
+                var affectedPreferences = store.jdbc.queryForList("SELECT DISTINCT target_id FROM memory_source_dependency WHERE source_context_id=? "
+                        + "AND source_event_id=? AND target_kind='PREFERENCE'", String.class, id, request.sourceEventId());
+                for (String blockId : affectedPreferences) {
+                    store.jdbc.update("UPDATE memory_preference_block SET state=?,authorization_revision=authorization_revision+1 WHERE block_id=? AND state<>?", state, blockId, state);
+                    if (delete) {
+                        store.jdbc.update("UPDATE memory_preference_revision SET snapshot_json=NULL WHERE block_id=?", blockId);
+                        store.jdbc.update("UPDATE memory_preference_transition SET payload_json=NULL WHERE block_id=?", blockId);
+                    }
                 }
-            }
             // Invalidate the whole private derived set; rebuild from permitted evidence later.
-            store.jdbc.update("UPDATE memory_summary SET state=?,payload_json=CASE WHEN ? THEN NULL ELSE payload_json END WHERE context_id=?", state, delete, id);
-            store.jdbc.update("UPDATE memory_entity_anchor SET state=?,payload_json=CASE WHEN ? THEN NULL ELSE payload_json END WHERE context_id=?", state, delete, id);
-            store.jdbc.update("UPDATE memory_matter SET state=?,payload_json=CASE WHEN ? THEN NULL ELSE payload_json END WHERE context_id=?", state, delete, id);
-            if(delete) {
-                store.jdbc.update("UPDATE memory_matter_revision SET payload_json=NULL WHERE context_id=?",id);
-                store.jdbc.update("UPDATE memory_matter_receipt SET response_json=NULL WHERE context_id=?",id);
+                store.jdbc.update("UPDATE memory_summary SET state=?,payload_json=CASE WHEN ? THEN NULL ELSE payload_json END WHERE context_id=? AND state<>'DELETED'", state, delete, id);
+                store.jdbc.update("UPDATE memory_entity_anchor SET state=?,payload_json=CASE WHEN ? THEN NULL ELSE payload_json END WHERE context_id=? AND state<>'DELETED'", state, delete, id);
+                store.jdbc.update("UPDATE memory_matter SET state=?,payload_json=CASE WHEN ? THEN NULL ELSE payload_json END WHERE context_id=? AND state<>'DELETED'", state, delete, id);
+                if (delete) {
+                    store.jdbc.update("UPDATE memory_matter_revision SET payload_json=NULL WHERE context_id=?", id);
+                    store.jdbc.update("UPDATE memory_matter_receipt SET response_json=NULL WHERE context_id=?", id);
+                }
+                // All exports from the source conversation stop publishing immediately; downstream copies clean asynchronously.
+                store.jdbc.update("UPDATE memory_shared_export SET state=?,lifecycle_revision=lifecycle_revision+1,"
+                                + "payload_json=CASE WHEN ? THEN NULL ELSE payload_json END WHERE owner_id=? AND source_domain_id=? AND source_agent_id=? "
+                                + "AND source_conversation_id=? AND state<>?",
+                        state, delete, request.contextKey().ownerId(), request.contextKey().domainId(), request.contextKey().agentId(), request.contextKey().conversationId(), state);
+                store.jdbc.update("UPDATE memory_processing_job SET state='CANCELLED',lease_owner=NULL,lease_until=NULL WHERE context_id=? AND job_kind<>'PRIVACY_CLEANUP'", id);
+                if (delete) store.jdbc.update("UPDATE memory_preference_evaluation SET result_json=NULL WHERE job_id IN "
+                        + "(SELECT job_id FROM memory_processing_job WHERE context_id=? AND source_event_id=?)", id, request.sourceEventId());
+                store.jdbc.update("UPDATE memory_conversation SET revision=revision+1,covered_through=0 WHERE context_id=?", id);
             }
-            // All exports of this source conversation stop publishing immediately. External copies require cleanup acknowledgements.
-            store.jdbc.update("UPDATE memory_shared_export SET state=?,lifecycle_revision=lifecycle_revision+1,"
-                            + "payload_json=CASE WHEN ? THEN NULL ELSE payload_json END WHERE owner_id=? AND source_domain_id=? AND source_agent_id=? AND source_conversation_id=?",
-                    state, delete, request.contextKey().ownerId(), request.contextKey().domainId(), request.contextKey().agentId(), request.contextKey().conversationId());
-            store.jdbc.update("UPDATE memory_processing_job SET state='CANCELLED',lease_owner=NULL,lease_until=NULL WHERE context_id=? AND job_kind<>'PRIVACY_CLEANUP'", id);
-            if (delete) store.jdbc.update("UPDATE memory_preference_evaluation SET result_json=NULL WHERE job_id IN "
-                    + "(SELECT job_id FROM memory_processing_job WHERE context_id=?)", id);
-            store.enqueue(id, request.sourceEventId(), "PRIVACY_CLEANUP");
-            store.jdbc.update("UPDATE memory_conversation SET revision=revision+1,covered_through=0 WHERE context_id=?", id);
+            if (!complete) store.enqueue(id, request.sourceEventId(), "PRIVACY_CLEANUP");
             MemoryV2RequestSecurity.requireUnexpired(proof);
             return new MemoryWithdrawalResponse(request.sourceEventId(), MemoryState.valueOf(state), store.version(store.conversation(request.contextKey())));
+        });
+    }
+
+    public MemoryPrivacyCleanupStatusResponse privacyCleanupStatus(MemoryPrivacyCleanupStatusRequest request, MemoryRequestProof proof) {
+        security.authorize(request, proof, MemoryV2Contract.OPERATION_PRIVACY_STATUS);
+        return checkedRead(request, proof, MemoryV2Contract.OPERATION_PRIVACY_STATUS, () -> {
+            String contextId = key(request.contextKey());
+            var source = store.one("SELECT state FROM memory_message WHERE context_id=? AND source_event_id=?", contextId, request.sourceEventId());
+            require(source != null, MemoryErrorCode.NOT_FOUND);
+            var status = store.one("SELECT cleanup_state,attempts,last_error,updated_at,completed_at FROM memory_privacy_deletion "
+                    + "WHERE context_id=? AND source_event_id=?", contextId, request.sourceEventId());
+            if (status == null) return new MemoryPrivacyCleanupStatusResponse(request.contextKey(), request.sourceEventId(),
+                    MemoryState.valueOf((String) source.get("state")), MemoryPrivacyCleanupState.NOT_REQUESTED, 0, null, null, null);
+            var completedAt = status.get("completed_at") == null ? null : utcInstant(status.get("completed_at"));
+            return new MemoryPrivacyCleanupStatusResponse(request.contextKey(), request.sourceEventId(),
+                    MemoryState.valueOf((String) source.get("state")), MemoryPrivacyCleanupState.valueOf((String) status.get("cleanup_state")),
+                    (int) number(status, "attempts"), (String) status.get("last_error"), utcInstant(status.get("updated_at")), completedAt);
         });
     }
 
@@ -530,7 +570,9 @@ public class MemoryArchiveService {
     }
 
     private static void requireActive(Map<String, Object> row) {
-        require("ACTIVE".equals(row.get("state")), "DELETION_PENDING".equals(row.get("state")) ? MemoryErrorCode.DELETED : MemoryErrorCode.WITHDRAWN);
+        String state = (String) row.get("state");
+        require("ACTIVE".equals(state), "DELETION_PENDING".equals(state) || "DELETED".equals(state)
+                ? MemoryErrorCode.DELETED : MemoryErrorCode.WITHDRAWN);
     }
 
     private <T> T transaction(Supplier<T> action) {

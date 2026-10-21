@@ -74,6 +74,8 @@ class PreferenceProcessingMySqlTest {
             }
             jdbc.update("DELETE FROM memory_preference_evaluation WHERE job_id IN (SELECT job_id FROM memory_processing_job WHERE context_id=?)",contextId);
             jdbc.update("DELETE FROM memory_receive_event WHERE permit_id IN (SELECT permit_id FROM memory_receive_permit WHERE context_id=?)",contextId);
+            jdbc.update("DELETE FROM memory_privacy_cleanup_target WHERE context_id=?",contextId);
+            jdbc.update("DELETE FROM memory_privacy_deletion WHERE context_id=?",contextId);
             for(String table:List.of("memory_message_observation","memory_receive_permit","memory_message","memory_processing_job")) jdbc.update("DELETE FROM "+table+" WHERE context_id=?",contextId);
             jdbc.update("DELETE FROM memory_source_dependency WHERE target_context_id=? OR source_context_id=?",contextId,contextId);
             jdbc.update("DELETE FROM memory_conversation WHERE context_id=? AND agent_id=?",contextId,fixture);

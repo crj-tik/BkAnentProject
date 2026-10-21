@@ -3,6 +3,13 @@ memory:
     archive-enabled: ${MEMORY_V2_ARCHIVE_ENABLED:false}
     current-user-permission: ${MEMORY_V2_USER_PERMISSION:agent.chat.use}
     replay-cleanup-ms: ${MEMORY_V2_REPLAY_CLEANUP_MS:60000}
+    privacy-cleanup:
+      enabled: ${MEMORY_V2_PRIVACY_CLEANUP_ENABLED:true}
+      poll-ms: ${MEMORY_V2_PRIVACY_CLEANUP_POLL_MS:5000}
+      batch-size: ${MEMORY_V2_PRIVACY_CLEANUP_BATCH_SIZE:8}
+      max-attempts: ${MEMORY_V2_PRIVACY_CLEANUP_MAX_ATTEMPTS:8}
+      lease-seconds: ${MEMORY_V2_PRIVACY_CLEANUP_LEASE_SECONDS:60}
+      retry-seconds: ${MEMORY_V2_PRIVACY_CLEANUP_RETRY_SECONDS:15}
     # Empty by default. Populate from deployment-managed secrets and exact domain/agent mappings.
     trusted-callers: {}
     preference:
