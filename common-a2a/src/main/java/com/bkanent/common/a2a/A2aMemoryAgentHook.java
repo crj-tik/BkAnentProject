@@ -339,7 +339,7 @@ public final class A2aMemoryAgentHook extends AgentHook {
             }
             if ((text == null || text.isBlank()) && calls.isEmpty() && responses.isEmpty()) continue;
             long next = ++sequence;
-            String eventId = stableId("a2a-event-", List.of(invocation.taskId(), event++, role, text, calls, responses));
+            String eventId = stableId("a2a-event-", Arrays.asList(invocation.taskId(), event++, role, text, calls, responses));
             String messageId = stableId("a2a-message-", List.of(invocation.contextKey(), eventId));
             var source = new MemorySourceRef(MemorySourceRef.Kind.MESSAGE, invocation.contextKey(), messageId, eventId,
                     next, new MemoryRevision(1, "0".repeat(64), MESSAGE_SCHEMA));

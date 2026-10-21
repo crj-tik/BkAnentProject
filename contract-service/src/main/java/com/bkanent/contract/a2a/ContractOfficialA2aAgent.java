@@ -2,6 +2,8 @@ package com.bkanent.contract.a2a;
 
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.bkanent.common.a2a.A2aOutputPolicy;
+import com.bkanent.common.a2a.A2aMemoryAgentHook;
+import com.bkanent.common.a2a.A2aMemoryHookFactory;
 import com.bkanent.common.a2a.OfficialA2aAgentExecutor;
 import com.bkanent.common.skill.core.SkillRegistry;
 import com.bkanent.common.skill.runtime.SkillRoutingModelInterceptor;
@@ -28,13 +30,16 @@ public class ContractOfficialA2aAgent {
 
     private final ReactAgent reactAgent;
     private final SkillRegistry skillRegistry;
+    private final A2aMemoryAgentHook memoryHook;
     private List<ToolCallback> executionTools;
 
     public ContractOfficialA2aAgent(ChatModel chatModel,
                                     ContractAgentProperties properties,
                                     ContractTools contractTools,
-                                    SkillRegistry skillRegistry) {
+                                    SkillRegistry skillRegistry,
+                                    A2aMemoryHookFactory memoryHookFactory) {
         this.skillRegistry = skillRegistry;
+        this.memoryHook = memoryHookFactory.create("contract-service", DOMAIN, "contract-agent", chatModel);
         List<ToolCallback> tools = new ArrayList<>(Arrays.asList(
                 MethodToolCallbackProvider.builder().toolObjects(contractTools).build().getToolCallbacks()));
         tools.add(new SkillTool(skillRegistry, DOMAIN));
@@ -46,6 +51,7 @@ public class ContractOfficialA2aAgent {
                 .model(chatModel)
                 .systemPrompt(properties.getSystemPrompt())
                 .tools(tools)
+                .hooks(memoryHook)
                 .interceptors(new com.bkanent.common.a2a.A2aAuthenticationToolInterceptor(), new A2aSupervisorContextInterceptor(),
                         new SkillRoutingModelInterceptor(skillRegistry, DOMAIN),
                         new com.bkanent.common.skill.runtime.SkillRoutingToolInterceptor())
@@ -70,6 +76,6 @@ public class ContractOfficialA2aAgent {
     @Bean
     public AgentExecutor contractA2aAgentExecutor(ObjectMapper objectMapper, com.bkanent.common.a2a.A2aExecutionProperties execution) {
         return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("contract"),
-                skillRegistry, DOMAIN, executionTools, execution.getStreamTimeoutMs());
+                skillRegistry, DOMAIN, executionTools, execution.getStreamTimeoutMs(), memoryHook);
     }
 }

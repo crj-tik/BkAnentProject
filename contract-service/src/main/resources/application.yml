@@ -27,6 +27,11 @@ a2a:
     signing-secret: ${CONTRACT_A2A_SIGNING_SECRET:}
     response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}
     response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
+  memory:
+    enabled: ${CONTRACT_MEMORY_V2_ENABLED:false}
+    compression-enabled: ${CONTRACT_MEMORY_V2_COMPRESSION_ENABLED:false}
+    key-id: ${CONTRACT_MEMORY_V2_KEY_ID:contract-memory-current}
+    signing-secret: ${CONTRACT_MEMORY_V2_SIGNING_SECRET:}
 
 dubbo:
   application:

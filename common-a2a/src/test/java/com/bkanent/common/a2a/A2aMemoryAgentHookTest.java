@@ -40,22 +40,23 @@ class A2aMemoryAgentHookTest {
         AtomicReference<MemoryRequestProof> permitProof = new AtomicReference<>();
         String taskId = "marketing-task-1";
         var oldVersion = new MemoryConversationVersion(1, 1, "policy-v1");
+        AtomicReference<MemoryConversationVersion> currentVersion = new AtomicReference<>(oldVersion);
         when(rpc.manageWriter(any(), any())).thenAnswer(invocation -> {
             MemoryWriterRequest request = invocation.getArgument(0);
             observedContext.set(request.contextKey());
             return new MemoryWriterResponse(new MemoryWriteAuthority(request.runId(), 4),
-                    System.currentTimeMillis() + 60_000, oldVersion);
+                    System.currentTimeMillis() + 60_000, currentVersion.get());
         });
         when(rpc.readWorkingSet(any(), any())).thenAnswer(invocation -> {
             MemoryWorkingSetRequest request = invocation.getArgument(0);
             observedContext.set(request.contextKey());
-            return new MemoryWorkingSetResponse(request.contextKey(), oldVersion,
+            return new MemoryWorkingSetResponse(request.contextKey(), currentVersion.get(),
                     List.of(oldMessage(request.contextKey())), List.of(), List.of());
         });
         when(rpc.checkBoundary(any(), any())).thenAnswer(invocation -> {
             MemoryBoundaryRequest request = invocation.getArgument(0);
             observedContext.set(request.contextKey());
-            return new MemoryBoundaryResponse(oldVersion, true);
+            return new MemoryBoundaryResponse(request.adoptedVersion(), true);
         });
         when(rpc.requestReceivePermit(any(), any())).thenAnswer(invocation -> {
             MemoryReceivePermitRequest request = invocation.getArgument(0);
@@ -69,7 +70,9 @@ class A2aMemoryAgentHookTest {
             observedContext.set(request.contextKey());
             delivered.set(request);
             long last = request.messages().get(request.messages().size() - 1).sequence();
-            return new MemoryDeliveryResponse(request.permitId(), new MemoryConversationVersion(2, last, "policy-v1"),
+            var updated = new MemoryConversationVersion(currentVersion.get().revision() + 1, last, "policy-v1");
+            currentVersion.set(updated);
+            return new MemoryDeliveryResponse(request.permitId(), updated,
                     request.messages().stream().map(message -> new MemoryDeliveryResponse.DeliveryResult(message.sequence(), true, null)).toList());
         });
 
@@ -114,6 +117,84 @@ class A2aMemoryAgentHookTest {
                     .doesNotContain(SECRET, "opaque-a2a-test-token", "beacon", "A2aLease", "RagCredentialContext");
             verify(rpc, times(1)).readWorkingSet(any(), any());
             verify(rpc, times(1)).deliverMessages(any(), any());
+            hook.finish(invocation);
+            discard(lease);
+
+            String nextTaskId = "marketing-task-2";
+            var nextLease = lease(nextTaskId, "7", "marketing-content-service");
+            register(nextLease);
+            var nextInvocation = hook.invocation(nextTaskId, "private-context-id");
+            var nextConfig = RunnableConfig.builder().threadId(nextTaskId)
+                    .addMetadata(A2aMemoryAgentHook.INVOCATION_METADATA_KEY, nextInvocation).build();
+            try {
+                agent.call(List.of(new SystemMessage("固定系统规则"), new UserMessage("沿用刚才的方案继续")), nextConfig);
+                assertThat(received.get().getContents()).contains("之前确认的预算是100万", "本轮答复", "沿用刚才的方案继续");
+                assertThat(nextInvocation.memoryStatus()).isEqualTo("APPLIED");
+                assertThat(nextInvocation.archiveStatus()).isEqualTo("RECORDED");
+                verify(rpc, times(1)).readWorkingSet(any(), any());
+                verify(rpc, times(2)).deliverMessages(any(), any());
+            } finally {
+                hook.finish(nextInvocation);
+                discard(nextLease);
+            }
+        } finally {
+            summaryExecutor.shutdownNow();
+        }
+    }
+
+    @Test
+    void listingHookColdLoadsAuthorizedHistoryAndArchivesSourceHashedToolEvidence() throws Exception {
+        var fixture = new MemoryFixture(List.of(), new MemoryConversationVersion(2, 1, "policy-v1"));
+        doAnswer(call -> {
+            MemoryWorkingSetRequest request = call.getArgument(0);
+            return new MemoryWorkingSetResponse(request.contextKey(), fixture.version.get(),
+                    List.of(oldMessage(request.contextKey())), List.of(), List.of());
+        }).when(fixture.rpc).readWorkingSet(any(), any());
+        ExecutorService summaryExecutor = Executors.newSingleThreadExecutor();
+        var hook = new A2aMemoryAgentHook("listing-master-service", "listing", "listing-agent", () -> fixture.rpc,
+                new MemoryWorkingSetCache(8, 1024 * 1024, 60_000, Clock.systemUTC()), enabledProperties(),
+                mock(ChatModel.class), new ObjectMapper(), summaryExecutor);
+        String taskId = "listing-task-source-proof";
+        var lease = lease(taskId, "7", "listing-master-service");
+        register(lease);
+        var invocation = hook.invocation(taskId, "listing-context-source-proof");
+        try {
+            var config = config(taskId, invocation);
+            var update = hook.beforeAgent(state(List.of(new SystemMessage("listing rules"), new UserMessage("继续核对这个房源"))), config).join();
+            @SuppressWarnings("unchecked")
+            List<Message> assembled = (List<Message>) ((ReplaceAllWith<?>) update.get("messages")).newValues();
+            assertThat(assembled).extracting(Message::getText)
+                    .contains("之前确认的预算是100万", "继续核对这个房源");
+            assertThat(invocation.contextKey().ownerId()).isEqualTo("7");
+            assertThat(invocation.contextKey().domainId()).isEqualTo("listing");
+            assertThat(invocation.contextKey().agentId()).isEqualTo("listing-agent");
+
+            List<Message> completedTurn = new ArrayList<>(assembled);
+            completedTurn.add(AssistantMessage.builder().content("调用只读房源工具")
+                    .toolCalls(List.of(new AssistantMessage.ToolCall("listing-read-1", "function", "getListingDetail",
+                            "{\"listingId\":42}"))).build());
+            completedTurn.add(ToolResponseMessage.builder().responses(List.of(new ToolResponseMessage.ToolResponse(
+                    "listing-read-1", "getListingDetail", "{\"listingId\":42,\"status\":\"ACTIVE\",\"source\":\"listing_info\"}"))).build());
+            completedTurn.add(new AssistantMessage("房源仍处于有效挂牌状态"));
+            hook.afterAgent(state(completedTurn), config).join();
+
+            assertThat(invocation.memoryStatus()).isEqualTo("APPLIED");
+            assertThat(invocation.archiveStatus()).isEqualTo("RECORDED");
+            MemoryDeliveryRequest delivery = fixture.delivered.get();
+            assertThat(delivery).isNotNull();
+            assertThat(delivery.messages()).extracting(MemoryMessage::role)
+                    .containsExactly(MemoryMessage.Role.USER, MemoryMessage.Role.ASSISTANT,
+                            MemoryMessage.Role.TOOL, MemoryMessage.Role.ASSISTANT);
+            MemoryMessage toolEvidence = delivery.messages().get(2);
+            assertThat(toolEvidence.toolResponses()).singleElement().satisfies(response -> {
+                assertThat(response.toolName()).isEqualTo("getListingDetail");
+                assertThat(new ObjectMapper().writeValueAsString(response.responseData()))
+                        .contains("listing_info", "42", "ACTIVE");
+            });
+            assertThat(toolEvidence.source().kind()).isEqualTo(MemorySourceRef.Kind.MESSAGE);
+            assertThat(toolEvidence.source().version().contentHash())
+                    .isEqualTo(MemoryCanonicalHash.messageHash(toolEvidence));
+            verify(fixture.rpc, times(1)).readWorkingSet(any(), any());
         } finally {
             hook.finish(invocation);
             discard(lease);
@@ -371,6 +452,7 @@ class A2aMemoryAgentHookTest {
         private final MemoryV2RpcService rpc = mock(MemoryV2RpcService.class);
         private final AtomicReference<MemoryConversationVersion> version;
         private final AtomicReference<MemorySummary> summary = new AtomicReference<>();
+        private final AtomicReference<MemoryDeliveryRequest> delivered = new AtomicReference<>();
 
         private MemoryFixture(List<MemoryMessage> messages, MemoryConversationVersion initialVersion) throws Exception {
             version = new AtomicReference<>(initialVersion);
@@ -403,6 +485,7 @@ class A2aMemoryAgentHookTest {
             });
             when(rpc.deliverMessages(any(), any())).thenAnswer(invocation -> {
                 MemoryDeliveryRequest request = invocation.getArgument(0);
+                delivered.set(request);
                 long last = request.messages().get(request.messages().size() - 1).sequence();
                 var updated = new MemoryConversationVersion(version.get().revision() + 1, last, version.get().policyVersion());
                 version.set(updated);

@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Arrays;
 import com.bkanent.common.a2a.A2aOutputPolicy;
+import com.bkanent.common.a2a.A2aMemoryAgentHook;
+import com.bkanent.common.a2a.A2aMemoryHookFactory;
 import com.bkanent.common.a2a.OfficialA2aAgentExecutor;
 import com.bkanent.business.config.TradeAgentProperties;
 import com.bkanent.business.tool.TradeTools;
@@ -24,18 +26,22 @@ import org.springframework.stereotype.Component;
 public class TradeOfficialA2aAgent {
 
     private static final String OUTPUT_KEY = "output";
+    private static final String DOMAIN = "trade";
 
     private final ReactAgent reactAgent;
     private final SkillRegistry skillRegistry;
     private final List<ToolCallback> executionTools;
+    private final A2aMemoryAgentHook memoryHook;
 
     public TradeOfficialA2aAgent(ChatModel chatModel,
                                   TradeAgentProperties properties,
-                                   TradeTools tradeTools, SkillRegistry skillRegistry) {
+                                   TradeTools tradeTools, SkillRegistry skillRegistry,
+                                   A2aMemoryHookFactory memoryHookFactory) {
         this.skillRegistry = skillRegistry;
+        this.memoryHook = memoryHookFactory.create("business-service", DOMAIN, "trade-agent", chatModel);
         List<ToolCallback> tools = new ArrayList<>(Arrays.asList(
                 MethodToolCallbackProvider.builder().toolObjects(tradeTools).build().getToolCallbacks()));
-        tools.add(new SkillTool(skillRegistry, "trade"));
+        tools.add(new SkillTool(skillRegistry, DOMAIN));
         this.executionTools = List.copyOf(tools);
         this.reactAgent = ReactAgent.builder()
                 .name("trade-agent")
@@ -43,8 +49,9 @@ public class TradeOfficialA2aAgent {
                 .model(chatModel)
                 .systemPrompt(properties.getSystemPrompt())
                 .tools(tools)
+                .hooks(memoryHook)
                 .interceptors(new com.bkanent.common.a2a.A2aAuthenticationToolInterceptor(), new A2aSupervisorContextInterceptor(),
-                        new SkillRoutingModelInterceptor(skillRegistry, "trade"), new SkillRoutingToolInterceptor())
+                        new SkillRoutingModelInterceptor(skillRegistry, DOMAIN), new SkillRoutingToolInterceptor())
                 .outputKey(OUTPUT_KEY)
                 .build();
     }
@@ -65,7 +72,7 @@ public class TradeOfficialA2aAgent {
 
     @Bean
     public AgentExecutor tradeA2aAgentExecutor(ObjectMapper objectMapper, com.bkanent.common.a2a.A2aExecutionProperties execution) {
-        return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured("trade"),
-                skillRegistry, "trade", executionTools, execution.getStreamTimeoutMs());
+        return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured(DOMAIN),
+                skillRegistry, DOMAIN, executionTools, execution.getStreamTimeoutMs(), memoryHook);
     }
 }

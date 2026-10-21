@@ -775,3 +775,11 @@
 **运行边界**：interview 仅接入治理面原生 A2A ReactAgent；REST/SSE、三段上下文、访谈状态机和领域事实源未迁移，task 完成不会闭合访谈事项。Memory 依赖不可用可按可选功能降级，但 A2A lease 或 Memory RPC 的认证/授权错误失败关闭。开发开关仍关闭，未做联机记忆读取/归档或前端性能基线验收。
 
 **代码位置**：`A2aMemoryAgentHook`、`A2aMemoryInvocation`、`A2aMemorySummaryGenerator`、`A2aMemoryHookFactory`、`OfficialA2aAgentExecutor`、`MarketingOfficialA2aAgent`、`InterviewOfficialA2aAgent`、`A2aMemoryAutoConfiguration`、`SupervisorMemoryLifecycle`；回归 `A2aMemoryAgentHookTest`、`SupervisorMemoryWiringTest`、`InterviewControllerTest`、`InterviewSessionStateMachineTest`。关联 LR-33/41/61/76、KI-148/149；change 5.5/5.6。
+
+## LR-78 listing/trade/contract 记忆只保存有身份边界的会话证据
+
+**结论**：listing、trade、contract 的实际 ReactAgent 复用 common-a2a 完整轮次 Hook，caller、domain、agent 分别固定为 `listing-master-service/listing/listing-agent`、`business-service/trade/trade-agent`、`contract-service/contract/contract-agent`。Hook 只归档经当前租约认证的用户、Agent 和只读业务工具消息；这些消息及其来源哈希说明“本轮看到了什么”，不替代 listing/analytics/contract 的数据库或 RPC 真源，也不产生业务事实。三个服务及 memory-service 都以各自独立密钥、精确 caller/domain/agent 授权和关闭开关交付，启用与压缩仍需部署侧显式配置。
+
+**根因**：三个 Agent 的读取工具已有领域事实边界，长期会话可帮助解释用户目标和既往结果，但将工具返回的历史快照当作当前业务状态会绕过原有权限与新鲜度校验。复用相同 Hook 可保留冷/热工作集、来源可追溯和完整工具调用组，同时把记忆权限收窄到固定 Agent；功能默认关闭避免在密钥、存储能力和运行基线尚未验收时产生隐式记忆读写。
+
+**代码位置**：`ListingOfficialA2aAgent`、`TradeOfficialA2aAgent`、`ContractOfficialA2aAgent`；对应 `a2a.memory` 配置、Compose 环境变量和 `memory-service` trusted caller 白名单；回归 `ExplicitSkillAgentWiringTest` 与 `A2aMemoryAgentHookTest`。关联 LR-77；change 5.7。

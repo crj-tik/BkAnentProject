@@ -130,3 +130,10 @@ trade:
       If you cannot determine the answer with confidence, set decision to MANUAL_REVIEW.
       The top-level JSON must also include contentType="trade", summary (string), and nextHints (string array; use [] when no next agent is needed).
       Return only the JSON object without Markdown fences, internal IDs, reasoning, tool arguments, or extra prose.
+
+a2a:
+  memory:
+    enabled: ${BUSINESS_MEMORY_V2_ENABLED:false}
+    compression-enabled: ${BUSINESS_MEMORY_V2_COMPRESSION_ENABLED:false}
+    key-id: ${BUSINESS_MEMORY_V2_KEY_ID:business-memory-current}
+    signing-secret: ${BUSINESS_MEMORY_V2_SIGNING_SECRET:}

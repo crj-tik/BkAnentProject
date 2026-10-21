@@ -129,3 +129,10 @@ contract:
       If you cannot determine the answer with confidence, set decision to MANUAL_REVIEW.
       The top-level JSON must also include contentType="contract", summary (string), and nextHints (string array; use [] when no next agent is needed).
       Return only the JSON object without Markdown fences, internal IDs, reasoning, tool arguments, or extra prose.
+
+a2a:
+  memory:
+    enabled: ${CONTRACT_MEMORY_V2_ENABLED:false}
+    compression-enabled: ${CONTRACT_MEMORY_V2_COMPRESSION_ENABLED:false}
+    key-id: ${CONTRACT_MEMORY_V2_KEY_ID:contract-memory-current}
+    signing-secret: ${CONTRACT_MEMORY_V2_SIGNING_SECRET:}

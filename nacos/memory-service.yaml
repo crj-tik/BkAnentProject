@@ -21,6 +21,24 @@ memory:
         service-delivery: true
         allowed-agents-by-domain:
           interview: [interview-agent]
+      listing-master-service:
+        key-id: ${LISTING_MEMORY_V2_KEY_ID:listing-memory-current}
+        signing-secret: ${LISTING_MEMORY_V2_SIGNING_SECRET:}
+        service-delivery: true
+        allowed-agents-by-domain:
+          listing: [listing-agent]
+      business-service:
+        key-id: ${BUSINESS_MEMORY_V2_KEY_ID:business-memory-current}
+        signing-secret: ${BUSINESS_MEMORY_V2_SIGNING_SECRET:}
+        service-delivery: true
+        allowed-agents-by-domain:
+          trade: [trade-agent]
+      contract-service:
+        key-id: ${CONTRACT_MEMORY_V2_KEY_ID:contract-memory-current}
+        signing-secret: ${CONTRACT_MEMORY_V2_SIGNING_SECRET:}
+        service-delivery: true
+        allowed-agents-by-domain:
+          contract: [contract-agent]
   rag:
     key-id: memory-current
     signing-secret: ${MEMORY_RAG_RPC_SECRET:}
