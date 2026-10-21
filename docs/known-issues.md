@@ -425,7 +425,7 @@
 
 **现象与根因**：`ListingManagementServiceImpl` 在业务事务提交前写 ES 并调用 agent 索引 RPC，agent 再回调房源读取文档；外部写入不随事务回滚，失败主要告警。memory 的偏好 upsert/decay（含删除）及系统约束更新/停用没有覆盖全部向量同步，agent bootstrap 单独双写也不能保证一致。旧 ES 写入默认关闭，不能据配置推断旧索引完整。
 
-**处置（实施中）**：已实现领域 revision/outbox 完整投影及 RAG 应用账本、两路状态、补偿和 tombstone；账本侧 21 项 H2 测试通过，包括不可取消的迟到旧写、实际 hash 核对及失败关闭。领域入口覆盖已通过房源/记忆完整回归；真实 MySQL 8.4、ES/Milvus、回填水位与切流尚未完整验收。允许短暂漏检/延迟，不承诺跨后端原子事务或 exactly-once；本项保持 OPEN。
+**处置（实施中）**：已实现领域 revision/outbox 完整投影及 RAG 应用账本、两路状态、补偿和 tombstone；账本侧 21 项 H2 测试通过，包括不可取消的迟到旧写、实际 hash 核对及失败关闭。`5e76d5e` 接通受当前SQL grant约束的协作搜索、重排前候选许可及输出前再次真源复核；memory reactor 220 项（7 项可选 MySQL 专项跳过）和 RAG 17 项本地回归通过。真实 MySQL 8.4、ES/Milvus、回填水位与切流尚未完整验收。允许短暂漏检/延迟，不承诺跨后端原子事务或 exactly-once；本项保持 OPEN。
 
 **关联**：LR-31；design D7/D8、rag-index-lifecycle spec。
 
