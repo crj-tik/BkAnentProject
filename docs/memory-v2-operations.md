@@ -54,3 +54,5 @@ Provision、索引投影和读取是独立开关。新空间准备不等于开�
 6. 切回原业务调用路径前，确认旧路径可用，v2 的当前授权、撤回状态与所有历程仍保留。恢复新链路时按当前版本重新执行配置与水位检查，不回放未知事件，不把完整偏好历程压成旧单值。
 
 本机 2026-10-22 回滚预检只读观察到 `bk-anent-dev` 的运行容器为 Memory、Nacos、MySQL；Memory archive、偏好处理、域投影和域搜索均为关闭，经验开关未设置且按默认关闭，Supervisor 与领域 A2A 服务未运行。`agent_memory_delivery`、`memory_processing_job` 和经验事件收件表均为空；RAG outbox 117 项全部为 `APPLIED`。后续最小联机复核按 Compose 默认设置重建共享服务镜像（23 个模块打包成功），但只启动 `agent-service`，复用 Memory、MySQL、Nacos，另启动其依赖 Redis 与 RocketMQ NameServer；将 `agent-service.yaml` 单独发布到本机 Nacos 并读回校验，替换后的 Agent readiness 返回 `UP`。Agent Memory 与 Memory archive、加工、域投影/搜索、RAG dispatcher 仍关闭，领域 A2A 消费者保持停止，没有真实入口或待排空工作，因此不能执行真实切流/排空演练，也不把静态关闭状态记作演练通过。
+
+2026-10-22 旧物理存储只读盘点：ES 共 5 个索引，`rag_memory_constraint_v1` 有 17 文档；`rag_memory_preference_v1`、`rag_listing_knowledge_v1`、`marketing_content`、`listing_info` 均为空，ES alias 列表为空。Milvus 默认库共 3 集合，constraint 有 17 行，preference/listing 各 0 行；三者字段均为 `doc_id`、`content`、`metadata`、1024 维 `embedding`，向量索引为 COSINE，collection alias 为空。未读取正文或更改存储。盘点结束后已停止 ES、Milvus、etcd 和 Milvus MinIO，只保留原有 Memory、MySQL、Nacos。
