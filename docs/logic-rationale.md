@@ -807,3 +807,11 @@
 **根因**：将空结果和依赖故障合并会误报服务状态，或让模型把未知历史当成已确认事实；系统提示必须随真实装配状态进入当前模型窗口。A2A 的内部提示需要从后续归档切片中排除，避免实现指令进入用户档案。Supervisor 偏好读取可能单独失败而其余历史仍有效，故须在偏好内容所在模型窗口携带状态；按 user event 刷新可令明确修正即时成为当前输入，但不伪称后台偏好转换已持久化。
 
 **代码位置**：`A2aMemoryAgentHook.noMatchUpdate/degradeOrFail`、`A2aMemoryInvocation.currentInputStart`、`SupervisorMemoryLifecycle.assemblePreferences/modelMessages`、`SupervisorToolLoopGraph.prompt`；回归 `A2aMemoryAgentHookTest.noMatchIsReportedSeparatelyAndMissingHistoricalReferentsAreNotGuessed`、`SupervisorMemoryIntegrationTest.explicitCurrentCorrectionOverridesAnOlderRetrievedPreference` 与 `missingAndUnavailableHistoricalPreferencesHaveDistinctPromptStates`；关联 KI-152、LR-73；change 5.10。
+
+## LR-82 硬规则只由受管配置与授权入口维护，经验不能改变规则
+
+**结论**：记忆约束种子来自 `system-constraints.yml`，启动 bootstrap 仅对数据库中不存在的 key 执行插入；已有内容、手工修改或停用状态均保持原样。后续修改和停用只能通过现有受权约束维护入口，经验评估、反馈和时间权重不能写入或重启硬规则。历史 skill/workflow 文字继续作为模型提示，由通用 Graph 按当前能力、权限、预算和审批执行调用，不转换成业务 DAG。
+
+**根因**：软经验的正面结果、重复使用和近期读取都不能授予政策修改权；将初始化脚本当作持续覆盖同步会重新启用人工停用的规则，解析历史流程文字也会绕开已确立的模型选择与审批边界。Bootstrap 的“只补缺”及维护入口的授权分离同时保留初始化可恢复性与运行期治理。
+
+**代码位置**：`memory-service/src/main/resources/system-constraints.yml`、`SystemConstraintBootstrapRunner`、`SystemConstraintMemoryService.bootstrapMissing/upsert`、`MemoryController`、`MemoryRagSecurity`；回归 `SystemConstraintBootstrapRunnerTest.disabledDoesNotReadOrWriteAndEnabledOnlyAddsMissing`、`MemoryRagLifecycleTest.bootstrapOnlyAddsMissingAndConstraintUpsertHandlesDisableRevive`；业务流程边界见 LR-17/LR-18；change 8.1。
