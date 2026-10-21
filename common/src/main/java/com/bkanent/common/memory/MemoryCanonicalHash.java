@@ -61,6 +61,15 @@ public final class MemoryCanonicalHash {
                 experience.policyVersion(), experience.evidence()));
     }
 
+    /** Immutable durable export content identity; lifecycle and index receipts are deliberately excluded. */
+    public static String sharedExportHash(String exportId, MemoryContextKey sourceContext,
+            MemoryAssociation association, String sourceInvocationId, long revision, String schemaVersion,
+            MemoryGrantRef grant, String purpose, String brief, MemoryJsonValue payload,
+            List<MemorySourceDependency> dependencies) {
+        return contentHash(java.util.Arrays.asList(exportId, sourceContext, association, sourceInvocationId,
+                revision, schemaVersion, grant, purpose, brief, payload, dependencies));
+    }
+
     public static String contentHash(Object value) {
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();

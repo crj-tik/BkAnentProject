@@ -31,7 +31,7 @@ class MemoryV1V2CompatibilityTest {
                     try { return (String) field.get(null); }
                     catch (ReflectiveOperationException exception) { throw new IllegalStateException(exception); }
                 }).toList();
-        assertThat(v2Operations).hasSize(21).allSatisfy(operation -> {
+        assertThat(v2Operations).hasSize(25).allSatisfy(operation -> {
             assertThat(operation).startsWith("memory.");
             assertThat(legacyPaths).noneMatch(path -> operation.contains(path));
         });
@@ -58,7 +58,10 @@ class MemoryV1V2CompatibilityTest {
         List<Class<?>> v2Types = List.of(MemoryRequestEnvelope.class, MemoryRequestProof.class, MemoryWorkingSetRequest.class,
                 MemoryWorkingSetResponse.class, MemoryReceivePermitRequest.class, MemoryReceivePermitResponse.class,
                 MemoryDeliveryRequest.class, MemoryDeliveryResponse.class, MemorySummaryRequest.class,
-                MemorySummaryResponse.class, MemoryGrantRequest.class, MemoryGrantResponse.class);
+                MemorySummaryResponse.class, MemoryGrantRequest.class, MemoryGrantResponse.class,
+                MemoryShareGrantManagementRequest.class, MemoryShareGrantManagementResponse.class,
+                MemorySharedExportSubmitRequest.class, MemorySharedExportCommitRequest.class,
+                MemorySharedExportStatusRequest.class, MemorySharedExportStatusResponse.class);
         for (Class<?> v1 : v1Types) {
             for (Class<?> v2 : v2Types) {
                 assertThat(v1).isNotEqualTo(v2);

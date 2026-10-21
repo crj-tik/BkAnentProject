@@ -1,6 +1,7 @@
 package com.bkanent.memory.service;
 
 import com.bkanent.common.rag.*;
+import com.bkanent.common.memory.MemoryIndexState;
 import com.bkanent.common.rpc.RagIndexRpcService;
 import com.bkanent.memory.config.MemoryRagProperties;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -71,8 +72,10 @@ public class MemoryRagOutboxDispatcher {
     private void process(Claim claim) {
         RagErrorCode error = null;
         String state = "PENDING";
+        RagIndexEvent completedEvent = null;
         try {
             RagIndexEvent event = projection.decode(claim.payload());
+            completedEvent = event;
             RagIndexStatus status;
             if ("WAITING".equals(claim.state())) {
                 RagStatusRequest request = new RagStatusRequest(1, UUID.randomUUID().toString(), event.spaceId(), event.eventId(), null);
@@ -98,9 +101,52 @@ public class MemoryRagOutboxDispatcher {
         // Late results from an expired/taken-over lease cannot overwrite newer progress.
         Timestamp now = Timestamp.from(Instant.now());
         Timestamp nextAttempt = Timestamp.from(Instant.now().plusMillis(properties.getRetryDelayMs() * (1L << Math.min(nextAttempts, 4))));
-        transactions.executeWithoutResult(status -> jdbc.update("UPDATE memory_rag_outbox SET state=?,attempts=?,next_attempt_at=?,error_code=?,lease_owner=NULL,lease_until=NULL "
-                        + "WHERE event_id=? AND lease_owner=? AND lease_until>? AND state IN ('PENDING','WAITING')",
-                completedState, completedAttempts, nextAttempt, errorCode, claim.eventId(), claim.leaseOwner(), now));
+        RagIndexEvent resultEvent = completedEvent;
+        transactions.executeWithoutResult(status -> {
+            int updated = jdbc.update("UPDATE memory_rag_outbox SET state=?,attempts=?,next_attempt_at=?,error_code=?,lease_owner=NULL,lease_until=NULL "
+                            + "WHERE event_id=? AND lease_owner=? AND lease_until>? AND state IN ('PENDING','WAITING')",
+                    completedState, completedAttempts, nextAttempt, errorCode, claim.eventId(), claim.leaseOwner(), now);
+            if (updated == 1 && resultEvent != null) updateSharedExportIndexState(claim.eventId(), resultEvent, completedState, errorCode);
+        });
+    }
+
+    private void updateSharedExportIndexState(String eventId, RagIndexEvent event, String outboxState, String errorCode) {
+        List<Map<String, Object>> mappings = jdbc.queryForList(
+                "SELECT export_id,content_revision FROM memory_shared_export_projection WHERE event_id=? FOR UPDATE", eventId);
+        if (mappings.isEmpty()) return;
+        MemoryIndexState itemState = switch (outboxState) {
+            case "APPLIED" -> event.operation() == RagIndexOperation.DELETE
+                    ? MemoryIndexState.INDEX_REMOVED : MemoryIndexState.INDEX_READY;
+            case "STALE", "CONFLICT", "EXHAUSTED" -> MemoryIndexState.INDEX_FAILED;
+            default -> MemoryIndexState.INDEX_PENDING;
+        };
+        jdbc.update("UPDATE memory_shared_export_projection SET index_state=? WHERE event_id=?", itemState.name(), eventId);
+        for (Map<String, Object> mapping : mappings) {
+            String exportId = mapping.get("export_id").toString();
+            long revision = ((Number) mapping.get("content_revision")).longValue();
+            List<String> states = jdbc.queryForList("SELECT index_state FROM memory_shared_export_projection "
+                    + "WHERE export_id=? AND content_revision=?", String.class, exportId, revision);
+            if (states.isEmpty()) continue;
+            String exportState = jdbc.queryForObject("SELECT state FROM memory_shared_export WHERE export_id=? AND content_revision=?",
+                    String.class, exportId, revision);
+            MemoryIndexState aggregate;
+            if ("WITHDRAWN".equals(exportState) || "DELETION_PENDING".equals(exportState) || "DELETED".equals(exportState)) {
+                aggregate = states.stream().allMatch(MemoryIndexState.INDEX_REMOVED.name()::equals)
+                        ? MemoryIndexState.INDEX_REMOVED
+                        : states.stream().anyMatch(MemoryIndexState.INDEX_FAILED.name()::equals)
+                                ? MemoryIndexState.INDEX_FAILED : MemoryIndexState.INDEX_PENDING;
+            } else {
+                boolean projectionsSettled = states.stream().allMatch(value ->
+                        MemoryIndexState.INDEX_READY.name().equals(value) || MemoryIndexState.INDEX_REMOVED.name().equals(value));
+                boolean anyReady = states.stream().anyMatch(MemoryIndexState.INDEX_READY.name()::equals);
+                aggregate = projectionsSettled && anyReady
+                        ? MemoryIndexState.INDEX_READY
+                        : states.stream().anyMatch(MemoryIndexState.INDEX_FAILED.name()::equals)
+                                ? MemoryIndexState.INDEX_FAILED : MemoryIndexState.INDEX_PENDING;
+            }
+            jdbc.update("UPDATE memory_shared_export_runtime SET index_state=?,last_error=? WHERE export_id=? AND content_revision=?",
+                    aggregate.name(), aggregate == MemoryIndexState.INDEX_FAILED ? errorCode : null, exportId, revision);
+        }
     }
 
     private RagIndexStatus submit(RagIndexEvent event) {

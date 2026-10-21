@@ -18,37 +18,41 @@ public class MemoryV2RpcServiceImpl implements MemoryV2RpcService {
     private final com.bkanent.memory.service.PreferenceHistoryService preferences;
     private final com.bkanent.memory.service.MemoryMatterService matters;
     private final com.bkanent.memory.service.MemoryExperienceService experiences;
+    private final com.bkanent.memory.service.MemorySharingWriteService sharingWrites;
 
     public MemoryV2RpcServiceImpl(MemoryArchiveService archive, MemorySharingAccessService sharing, MemoryV2RequestSecurity security) {
-        this(archive, sharing, security, null, null, null, true);
+        this(archive, sharing, security, null, null, null, null, true);
     }
 
     public MemoryV2RpcServiceImpl(MemoryArchiveService archive, MemorySharingAccessService sharing, MemoryV2RequestSecurity security,
                                   com.bkanent.memory.service.PreferenceHistoryService preferences) {
-        this(archive, sharing, security, preferences, null, null, true);
+        this(archive, sharing, security, preferences, null, null, null, true);
     }
 
     public MemoryV2RpcServiceImpl(MemoryArchiveService archive, MemorySharingAccessService sharing, MemoryV2RequestSecurity security,
                                   com.bkanent.memory.service.PreferenceHistoryService preferences, com.bkanent.memory.service.MemoryMatterService matters) {
-        this(archive, sharing, security, preferences, matters, null, true);
+        this(archive, sharing, security, preferences, matters, null, null, true);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
     public MemoryV2RpcServiceImpl(MemoryArchiveService archive, MemorySharingAccessService sharing, MemoryV2RequestSecurity security,
                                   com.bkanent.memory.service.PreferenceHistoryService preferences, com.bkanent.memory.service.MemoryMatterService matters,
-                                  ObjectProvider<com.bkanent.memory.service.MemoryExperienceService> experiences) {
-        this(archive, sharing, security, preferences, matters, experiences.getIfAvailable(), true);
+                                  ObjectProvider<com.bkanent.memory.service.MemoryExperienceService> experiences,
+                                  ObjectProvider<com.bkanent.memory.service.MemorySharingWriteService> sharingWrites) {
+        this(archive, sharing, security, preferences, matters, experiences.getIfAvailable(), sharingWrites.getIfAvailable(), true);
     }
 
     private MemoryV2RpcServiceImpl(MemoryArchiveService archive, MemorySharingAccessService sharing, MemoryV2RequestSecurity security,
                                    com.bkanent.memory.service.PreferenceHistoryService preferences, com.bkanent.memory.service.MemoryMatterService matters,
-                                   com.bkanent.memory.service.MemoryExperienceService experiences, boolean ignored) {
+                                   com.bkanent.memory.service.MemoryExperienceService experiences,
+                                   com.bkanent.memory.service.MemorySharingWriteService sharingWrites, boolean ignored) {
         this.archive = archive;
         this.sharing = sharing;
         this.security = security;
         this.preferences = preferences;
         this.matters = matters;
         this.experiences = experiences;
+        this.sharingWrites = sharingWrites;
     }
 
     public MemoryMatterWriteResponse transitionMatter(MemoryMatterWriteRequest request, MemoryRequestProof proof) {
@@ -63,6 +67,22 @@ public class MemoryV2RpcServiceImpl implements MemoryV2RpcService {
     public MemoryMatterQueryResponse queryMatters(MemoryMatterQueryRequest request, MemoryRequestProof proof) { return archive.queryMatters(request, proof); }
     public MemoryEntityQueryResponse queryEntities(MemoryEntityQueryRequest request, MemoryRequestProof proof) { return archive.queryEntities(request, proof); }
     public MemoryGrantResponse getGrant(MemoryGrantRequest request, MemoryRequestProof proof) { return sharing.getGrant(request, proof); }
+    public MemoryShareGrantManagementResponse manageShareGrant(MemoryShareGrantManagementRequest request, MemoryRequestProof proof) {
+        if (sharingWrites == null) { security.authorize(request, proof, MemoryV2Contract.OPERATION_SHARE_GRANT_MANAGE); throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE); }
+        return sharingWrites.manageGrant(request, proof);
+    }
+    public MemorySharedExportStatusResponse submitSharedExport(MemorySharedExportSubmitRequest request, MemoryRequestProof proof) {
+        if (sharingWrites == null) { security.authorize(request, proof, MemoryV2Contract.OPERATION_SHARED_EXPORT_SUBMIT); throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE); }
+        return sharingWrites.submitExport(request, proof);
+    }
+    public MemorySharedExportStatusResponse commitSharedExport(MemorySharedExportCommitRequest request, MemoryRequestProof proof) {
+        if (sharingWrites == null) { security.authorize(request, proof, MemoryV2Contract.OPERATION_SHARED_EXPORT_COMMIT); throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE); }
+        return sharingWrites.commitExport(request, proof);
+    }
+    public MemorySharedExportStatusResponse sharedExportStatus(MemorySharedExportStatusRequest request, MemoryRequestProof proof) {
+        if (sharingWrites == null) { security.authorize(request, proof, MemoryV2Contract.OPERATION_SHARED_EXPORT_STATUS); throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE); }
+        return sharingWrites.status(request, proof);
+    }
     public MemoryWithdrawalResponse withdrawSource(MemoryWithdrawalRequest request, MemoryRequestProof proof) { return archive.withdrawSource(request, proof); }
     public MemoryPrivacyCleanupStatusResponse privacyCleanupStatus(MemoryPrivacyCleanupStatusRequest request, MemoryRequestProof proof) {
         return archive.privacyCleanupStatus(request, proof);

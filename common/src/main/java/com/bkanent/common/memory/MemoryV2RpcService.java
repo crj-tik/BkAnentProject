@@ -32,6 +32,22 @@ public interface MemoryV2RpcService {
         throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
     }
 
+    default MemoryShareGrantManagementResponse manageShareGrant(MemoryShareGrantManagementRequest request, MemoryRequestProof proof) throws MemoryException {
+        throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+    }
+
+    default MemorySharedExportStatusResponse submitSharedExport(MemorySharedExportSubmitRequest request, MemoryRequestProof proof) throws MemoryException {
+        throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+    }
+
+    default MemorySharedExportStatusResponse commitSharedExport(MemorySharedExportCommitRequest request, MemoryRequestProof proof) throws MemoryException {
+        throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+    }
+
+    default MemorySharedExportStatusResponse sharedExportStatus(MemorySharedExportStatusRequest request, MemoryRequestProof proof) throws MemoryException {
+        throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+    }
+
     MemoryExperienceQueryResponse searchExperiences(MemoryExperienceQueryRequest request, MemoryRequestProof proof) throws MemoryException;
 
     MemoryExperienceEventStatusResponse submitExperienceOutcome(MemoryExperienceOutcomeRequest request, MemoryRequestProof proof) throws MemoryException;

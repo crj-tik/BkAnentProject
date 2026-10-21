@@ -592,7 +592,7 @@
 
 **代码位置**：`MemoryGrantRequest`、`MemoryShareGrant.Participant`；memory-service 的 `MemoryAccessPolicy`、`MemorySharingStore`、`MemorySharingAccessService`；迁移 `20261019_memory_share_authorization.sql`。共享读取只接受服务端 SQL 记录，不接受请求携带的 grant 对象；索引未追平不影响已获准详情读取。
 
-**关联**：LR-33/40/41/55/58、KI-129/130；change 3.2，4.2 的 grant/export 子集。v2 provider 与真实客户端仍待后续接线；来源当前删除/撤回及派生依赖复核属 3.5/4.7，带上游 grant 的链式导出在该复核实现前失败关闭。grant 签发/更新与来源域发布属后续 10.2，本次没有对外写入口或运行 grant 数据。
+**关联**：LR-33/40/41/55/58、KI-129/130；change 3.2，4.2 的 grant/export 子集。当前 provider 已有签名 grant 创建/撤回及两阶段 export 接口，10.2 的不可变导出和运行态决策见 LR-85。来源当前删除/撤回及派生依赖复核仍按 3.5/4.7 执行，带上游 grant 的链式导出失败关闭。
 
 ## LR-60 精确归档接收与迟到结果只授予受限 SERVICE 交付权
 
@@ -818,7 +818,7 @@
 
 ## LR-83 经验只由可信结果或同一私域的用户反馈形成，检索不产生新证据
 
-**结论**：业务结果只接受 operation-bound SERVICE 签名且在部署 allowlist 中启用经验发布的 caller；caller/domain/agent 必须精确匹配，配置默认关闭。用户反馈必须指向同一 owner/domain/agent/conversation 内已归档的 USER 消息和当前经验 revision。事件收件回执、幂等身份和 `ASSESS_EXPERIENCE` job 与结果一起持久化；worker 只验证精确来源并以 lease 和 expected revision 提交一份新快照，过期评估失败关闭。经验身份及来源查询统一按 owner/domain/agent 隔离；检索仅在当前范围内核验来源 revision，以版本化相关性、置信度、启用度、半衰期时间权重和 token budget 选取，读取不刷新观察时间或确认时间。硬规则仍由 LR-82 的受权入口单独维护。跨用户的脱敏归纳尚无发布契约，本阶段不开放共享。
+**结论**：本 change 采用用户确认的两类经验来源：受信域的真实结果事件，以及绑定同一 owner/domain/agent/conversation 已归档 USER 消息的用户反馈。业务结果只接受 operation-bound SERVICE 签名且在部署 allowlist 中启用经验发布的 caller；caller/domain/agent 必须精确匹配，配置默认关闭。反馈还必须绑定当前经验 revision。事件收件回执、幂等身份和 `ASSESS_EXPERIENCE` job 与结果一起持久化；worker 只验证精确来源并以 lease 和 expected revision 提交一份新快照，过期评估失败关闭。经验身份及来源查询统一按 owner/domain/agent 隔离；检索仅在当前范围内核验来源 revision，以版本化相关性、置信度、启用度、半衰期时间权重和 token budget 选取，读取不刷新观察时间或确认时间。硬规则仍由 LR-82 的受权入口单独维护。跨用户的脱敏归纳尚无发布契约，本阶段不开放共享。
 
 **根因**：模型自评、请求已受理、检索命中和经验复用都不能证明真实业务结果；userId 或来源引用也不能单独证明反馈者拥有被引用消息。异步评估必须防止重试重复计分，并在多个旧 revision 竞争时阻止迟到 worker 覆盖新反馈。经验 ID 是调用方提供的稳定本地身份，查询若遗漏 owner/domain/agent 会把同号经验的证据混合；缓存命中也必须重新核对当前经验版本和来源授权。共享经验还需要独立治理批准和不可还原的脱敏契约，因此不得借现有私有行或 grant 推断共享权限。
 
@@ -826,10 +826,20 @@
 
 ## LR-84 私有记忆候选须在重排前取得当前真源许可
 
-**结论**：memory v2 私有检索使用单独的 `MEMORY_SEARCH` 签名 RPC 和短期 owner/domain/agent scope；RAG 将不可覆盖的 owner、domain、agent、active 条件加到两路召回。融合后、把候选正文发送给通用重排前，RAG 只把候选稳定 ID、source type、revision、schema 和内容哈希交给 Memory 的专用许可 RPC；Memory 按当前投影事件、来源版本/哈希、删除状态和派生来源复验后只返回允许的 ID。许可失败关闭，Memory 最终仍以当前 SQL 真源装配正文并复验身份。协作空间先注册独立 schema 和目标，但在可写 durable export 与当前 grant 核验接好前保持拒绝。
+**结论**：memory v2 私有检索使用单独的 `MEMORY_SEARCH` 签名 RPC 和短期 owner/domain/agent scope；RAG 将不可覆盖的 owner、domain、agent、active 条件加到两路召回。融合后、把候选正文发送给通用重排前，RAG 只把候选稳定 ID、source type、revision、schema 和内容哈希交给 Memory 的专用许可 RPC；Memory 按当前投影事件、来源版本/哈希、删除状态和派生来源复验后只返回允许的 ID。许可失败关闭，Memory 最终仍以当前 SQL 真源装配正文并复验身份。协作 durable export 与当前 grant 的写入/读取已按 LR-85 接通；协作候选许可仍待 change 9.2，完成前 Memory 搜索不会返回协作候选。
 
 **根因**：如果在重排后才检查当前权限，已撤回、过期或跨域的旧索引正文已经进入重排模型。索引字段和 namespace 只能缩小召回，不能证明派生来源及共享 grant 此刻仍有效；RAG 需要在取用正文前调用唯一真源许可点，Memory 还需要在结果输出前复核当前事实。
 
-**代码位置**：`common/src/main/java/com/bkanent/common/rag/MemoryRagAuthorizationScope.java`、`RagCandidateReference.java` 与 `RagCandidateAuthorizationRequest.java`；`rag-service/security/RagAccessControl`、`retrieval/RagRetrievalService`、`retrieval/RagMemoryCandidateAuthorizer`；`memory-service/service/MemoryRagCandidateAuthorizationService`、`MemoryRagSecurity`、`MemoryRagSearchFacade` 及偏好/经验服务。候选只授权 ID 的回归在 `RagRetrievalServiceTest`、`MemoryRagSecurityTest` 与 `MemoryRagSearchFacadeTest`；协作 grant 的读取仍属 change 10.2，完成前其空间不可返回候选。
+**代码位置**：`common/src/main/java/com/bkanent/common/rag/MemoryRagAuthorizationScope.java`、`RagCandidateReference.java` 与 `RagCandidateAuthorizationRequest.java`；`rag-service/security/RagAccessControl`、`retrieval/RagRetrievalService`、`retrieval/RagMemoryCandidateAuthorizer`；`memory-service/service/MemoryRagCandidateAuthorizationService`、`MemoryRagSecurity`、`MemoryRagSearchFacade` 及偏好/经验服务。候选只授权 ID 的回归在 `RagRetrievalServiceTest`、`MemoryRagSecurityTest` 与 `MemoryRagSearchFacadeTest`；导出数据已有持久 grant 与 SQL 详情边界，尚未通过 9.2 候选许可的协作空间仍不可返回候选。
 
 **关联**：LR-31、LR-32、LR-33、LR-83；change 9.1–9.5。
+
+## LR-85 共享导出先持久确认，再独立跟踪每个接收方的索引状态
+
+**结论**：只有来源 owner 的受签名写请求可创建/撤回不可变 grant。导出提交记录来源调用 ID、请求 hash、精确来源依赖和内容 hash，状态先为 `PENDING` 且不返回可读引用；第二个绑定版本和 hash 的提交请求在重新核验 grant 与来源后才转为 `COMMITTED` 并返回稳定引用。协作投影按明确 recipient domain/agent/conversation 分开写入 RAG，持久索引状态由各 outbox event 的围栏回执汇总；撤回立即改变 SQL 授权状态并为当前投影排入删除事件，墓碑确认后报告 `INDEX_REMOVED`。旧提交记录没有新运行态回执时仍按已提交来源读取，索引状态视为 `NOT_REQUESTED`。共享写事务使用独立锁行，不与消息/RAG 写路径形成反向锁序。
+
+**根因**：引用和 namespace 都只是定位符，不能授权读取；索引就绪也不能决定导出是否已持久提交。分开记录 sourceInvocationId/request hash、durable state 和每个 recipient 的索引回执后，重试可以复用同一版本、索引延迟不会隐藏 SQL 真源，撤回可以立即拒绝正文并让异步删除保持可观测。
+
+**代码位置**：common 的 `MemoryShareGrantManagementRequest`、`MemorySharedExportSubmitRequest`、`MemorySharedExportCommitRequest`、`MemorySharedExportStatusResponse` 和 `MemoryCanonicalHash.sharedExportHash`；memory-service 的 `MemorySharingWriteService`、`MemorySharingStore`、`MemoryV2RagProjectionService`、`MemoryRagOutboxDispatcher`；迁移 `20261021_memory_shared_export_runtime.sql` 及部署 manifest。`MemorySharingWriteServiceTest` 覆盖签名创建、重试冲突、两阶段提交、每接收者索引确认和撤回墓碑；`MemorySharingAccessServiceTest.committedExportsWithoutNewRuntimeReceiptRemainReadable` 覆盖迁移兼容。
+
+**关联**：LR-59、LR-84；KI-154；change 10.2。协作候选在 9.2 的来源/grant 候选许可实现前继续失败关闭；不以持有 export reference 或 RAG document ID 授权。

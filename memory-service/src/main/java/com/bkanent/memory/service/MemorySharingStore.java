@@ -65,12 +65,30 @@ public class MemorySharingStore {
     public MemorySharedExport readPayload(MemoryExportRef reference) {
         requireTransaction();
         try {
-            var rows = jdbc.query("SELECT payload_json FROM memory_shared_export "
-                            + "WHERE export_id=? AND content_revision=? AND state='COMMITTED'",
-                    (rs, row) -> decode(rs.getString(1), MemorySharedExport.class),
+            var rows = jdbc.query("SELECT e.payload_json,r.index_state FROM memory_shared_export e "
+                            + "LEFT JOIN memory_shared_export_runtime r ON r.export_id=e.export_id AND r.content_revision=e.content_revision "
+                            + "WHERE e.export_id=? AND e.content_revision=? AND e.state='COMMITTED'",
+                    (rs, row) -> {
+                        MemorySharedExport stored = decode(rs.getString("payload_json"), MemorySharedExport.class);
+                        return new MemorySharedExport(stored.sourceExportId(), stored.sourceContext(), stored.association(),
+                                stored.sourceInvocationId(), stored.version(), stored.grant(), stored.purpose(), stored.brief(),
+                                stored.payload(), stored.dependencies(), stored.state(), stored.committedRef(),
+                                rs.getString("index_state") == null ? MemoryIndexState.NOT_REQUESTED
+                                        : MemoryIndexState.valueOf(rs.getString("index_state")));
+                    },
                     reference.exportId(), reference.version().revision());
             if (rows.size() != 1) throw unavailable();
             return rows.get(0);
+        } catch (DataAccessException exception) {
+            throw unavailable();
+        }
+    }
+
+    /** Serializes first inserts that do not yet have an export/grant row to lock. */
+    public void lockWriter() {
+        requireTransaction();
+        try {
+            jdbc.queryForObject("SELECT lock_id FROM memory_shared_export_lock WHERE lock_id=1 FOR UPDATE", Integer.class);
         } catch (DataAccessException exception) {
             throw unavailable();
         }

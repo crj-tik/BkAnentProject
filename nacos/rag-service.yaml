@@ -595,6 +595,10 @@ rag:
           type: STRING
           operators: [EQ]
           required: true
+        recipientConversationId:
+          type: STRING
+          operators: [EQ]
+          required: true
         grantId:
           type: STRING
           operators: [EQ, IN]
@@ -611,7 +615,7 @@ rag:
           type: STRING
           operators: [EQ]
           required: true
-      return-fields: [active, exportId, sourceDomainId, sourceAgentId, recipientDomainId, recipientAgentId, grantId]
+      return-fields: [active, exportId, sourceDomainId, sourceAgentId, recipientDomainId, recipientAgentId, recipientConversationId, grantId]
       search-roles: [ADMIN, BROKER]
       admin-roles: [ADMIN]
       allowed-clients:
@@ -992,6 +996,10 @@ rag:
           type: STRING
           operators: [EQ]
           required: true
+        recipientConversationId:
+          type: STRING
+          operators: [EQ]
+          required: true
         grantId:
           type: STRING
           operators: [EQ, IN]
@@ -1008,7 +1016,7 @@ rag:
           type: STRING
           operators: [EQ]
           required: true
-      return-fields: [active, exportId, sourceDomainId, sourceAgentId, recipientDomainId, recipientAgentId, grantId]
+      return-fields: [active, exportId, sourceDomainId, sourceAgentId, recipientDomainId, recipientAgentId, recipientConversationId, grantId]
       search-roles: [ADMIN, BROKER]
       admin-roles: [ADMIN]
       allowed-clients:
@@ -1389,6 +1397,10 @@ rag:
           type: STRING
           operators: [EQ]
           required: true
+        recipientConversationId:
+          type: STRING
+          operators: [EQ]
+          required: true
         grantId:
           type: STRING
           operators: [EQ, IN]
@@ -1405,7 +1417,7 @@ rag:
           type: STRING
           operators: [EQ]
           required: true
-      return-fields: [active, exportId, sourceDomainId, sourceAgentId, recipientDomainId, recipientAgentId, grantId]
+      return-fields: [active, exportId, sourceDomainId, sourceAgentId, recipientDomainId, recipientAgentId, recipientConversationId, grantId]
       search-roles: [ADMIN, BROKER]
       admin-roles: [ADMIN]
       allowed-clients:
@@ -1786,6 +1798,10 @@ rag:
           type: STRING
           operators: [EQ]
           required: true
+        recipientConversationId:
+          type: STRING
+          operators: [EQ]
+          required: true
         grantId:
           type: STRING
           operators: [EQ, IN]
@@ -1802,7 +1818,7 @@ rag:
           type: STRING
           operators: [EQ]
           required: true
-      return-fields: [active, exportId, sourceDomainId, sourceAgentId, recipientDomainId, recipientAgentId, grantId]
+      return-fields: [active, exportId, sourceDomainId, sourceAgentId, recipientDomainId, recipientAgentId, recipientConversationId, grantId]
       search-roles: [ADMIN, BROKER]
       admin-roles: [ADMIN]
       allowed-clients:
@@ -2183,6 +2199,10 @@ rag:
           type: STRING
           operators: [EQ]
           required: true
+        recipientConversationId:
+          type: STRING
+          operators: [EQ]
+          required: true
         grantId:
           type: STRING
           operators: [EQ, IN]
@@ -2199,7 +2219,7 @@ rag:
           type: STRING
           operators: [EQ]
           required: true
-      return-fields: [active, exportId, sourceDomainId, sourceAgentId, recipientDomainId, recipientAgentId, grantId]
+      return-fields: [active, exportId, sourceDomainId, sourceAgentId, recipientDomainId, recipientAgentId, recipientConversationId, grantId]
       search-roles: [ADMIN, BROKER]
       admin-roles: [ADMIN]
       allowed-clients:
@@ -2580,6 +2600,10 @@ rag:
           type: STRING
           operators: [EQ]
           required: true
+        recipientConversationId:
+          type: STRING
+          operators: [EQ]
+          required: true
         grantId:
           type: STRING
           operators: [EQ, IN]
@@ -2596,7 +2620,7 @@ rag:
           type: STRING
           operators: [EQ]
           required: true
-      return-fields: [active, exportId, sourceDomainId, sourceAgentId, recipientDomainId, recipientAgentId, grantId]
+      return-fields: [active, exportId, sourceDomainId, sourceAgentId, recipientDomainId, recipientAgentId, recipientConversationId, grantId]
       search-roles: [ADMIN, BROKER]
       admin-roles: [ADMIN]
       allowed-clients:
@@ -2977,6 +3001,10 @@ rag:
           type: STRING
           operators: [EQ]
           required: true
+        recipientConversationId:
+          type: STRING
+          operators: [EQ]
+          required: true
         grantId:
           type: STRING
           operators: [EQ, IN]
@@ -2993,7 +3021,7 @@ rag:
           type: STRING
           operators: [EQ]
           required: true
-      return-fields: [active, exportId, sourceDomainId, sourceAgentId, recipientDomainId, recipientAgentId, grantId]
+      return-fields: [active, exportId, sourceDomainId, sourceAgentId, recipientDomainId, recipientAgentId, recipientConversationId, grantId]
       search-roles: [ADMIN, BROKER]
       admin-roles: [ADMIN]
       allowed-clients:

@@ -36,6 +36,10 @@ public final class MemoryV2Contract {
     public static final String OPERATION_EXPERIENCE_FEEDBACK = "memory.experience.feedback.submit";
     public static final String OPERATION_EXPERIENCE_STATUS = "memory.experience.event.status";
     public static final String OPERATION_EXPERIENCE_LIFECYCLE = "memory.experience.lifecycle";
+    public static final String OPERATION_SHARE_GRANT_MANAGE = "memory.share-grant.manage";
+    public static final String OPERATION_SHARED_EXPORT_SUBMIT = "memory.shared-export.submit";
+    public static final String OPERATION_SHARED_EXPORT_COMMIT = "memory.shared-export.commit";
+    public static final String OPERATION_SHARED_EXPORT_STATUS = "memory.shared-export.status";
 
     private static final Set<String> OPERATIONS = Set.of(
             OPERATION_WORKING_SET, OPERATION_RECEIVE_PERMIT, OPERATION_DELIVER_MESSAGES,
@@ -44,7 +48,8 @@ public final class MemoryV2Contract {
             OPERATION_WRITER, OPERATION_BOUNDARY, OPERATION_PREFERENCE_WRITE, OPERATION_PREFERENCE_DETAIL,
             OPERATION_MATTER_WRITE, OPERATION_ASSEMBLE_PREFERENCES, OPERATION_PRIVACY_STATUS,
             OPERATION_EXPERIENCE_OUTCOME, OPERATION_EXPERIENCE_FEEDBACK, OPERATION_EXPERIENCE_STATUS,
-            OPERATION_EXPERIENCE_LIFECYCLE);
+            OPERATION_EXPERIENCE_LIFECYCLE, OPERATION_SHARE_GRANT_MANAGE, OPERATION_SHARED_EXPORT_SUBMIT,
+            OPERATION_SHARED_EXPORT_COMMIT, OPERATION_SHARED_EXPORT_STATUS);
     private static final String HASH_PATTERN = "[0-9a-f]{64}";
 
     private MemoryV2Contract() { }

@@ -15,6 +15,8 @@ public class MemoryV2RagProjectionService {
     public static final String SCHEMA = "memory-v2.1";
     private static final int MAX_FRAGMENT_BYTES = 20 * 1024;
     private static final int MAX_FRAGMENTS = 256;
+    public record SharedExportProjection(String spaceId, String documentId, String eventId,
+            MemoryShareGrant.Participant recipient) { }
     private final MemoryRagProjectionService projections;
     private final MemoryRagProperties properties;
     private final JdbcTemplate jdbc;
@@ -116,6 +118,92 @@ public class MemoryV2RagProjectionService {
         }
     }
 
+    /** One source export is copied into each explicitly authorized recipient space, with current grant filters. */
+    public List<SharedExportProjection> sharedExport(MemorySharedExport export, MemoryShareGrant grant, String content) {
+        if (!enabled() || !grant.projections().contains(MemoryShareGrant.Projection.COLLABORATION)) return List.of();
+        if (export.state() != MemorySharedExport.State.COMMITTED || content == null || content.isBlank()) {
+            throw new MemoryException(MemoryErrorCode.INVALID_ARGUMENT);
+        }
+        requireBodyBound(content);
+        String prefix = sharedExportPrefix(export.sourceContext().ownerId(), export.sourceExportId());
+        Set<String> live = new HashSet<>();
+        List<SharedExportProjection> published = new ArrayList<>();
+        for (MemoryShareGrant.Participant recipient : grant.recipients()) {
+            String space = MemoryRagSpaceIds.spaceId(MemoryRagRecordType.COLLABORATION,
+                    recipient.domainId(), recipient.agentId());
+            String documentId = prefix + "-" + hash(List.of(recipient.domainId(), recipient.agentId(), recipient.conversationId()));
+            live.add(space + "\u0000" + documentId);
+            Map<String, RagValue> attrs = new LinkedHashMap<>();
+            attrs.put("ownerId", RagValue.string(export.sourceContext().ownerId()));
+            attrs.put("active", RagValue.bool(true));
+            attrs.put("sourceVersion", RagValue.number(export.version().revision()));
+            attrs.put("sourceHash", RagValue.string(export.version().contentHash()));
+            attrs.put("recipientDomainId", RagValue.string(recipient.domainId()));
+            attrs.put("recipientAgentId", RagValue.string(recipient.agentId()));
+            attrs.put("recipientConversationId", RagValue.string(recipient.conversationId()));
+            attrs.put("grantId", RagValue.string(grant.grant().grantId()));
+            attrs.put("exportId", RagValue.string(export.sourceExportId()));
+            attrs.put("sourceDomainId", RagValue.string(export.sourceContext().domainId()));
+            attrs.put("sourceAgentId", RagValue.string(export.sourceContext().agentId()));
+            var document = new RagDocument("memory_collaboration", export.sourceExportId(), content, attrs);
+            RagIndexEvent event = projections.publish(space, documentId, SCHEMA, document);
+            published.add(new SharedExportProjection(space, documentId, event.eventId(), recipient));
+        }
+        published.addAll(removeStaleAcrossSpaces(export.sourceExportId(), prefix, live));
+        return List.copyOf(published);
+    }
+
+    public List<SharedExportProjection> removeSharedExport(String ownerId, String sourceExportId) {
+        String prefix = sharedExportPrefix(ownerId, sourceExportId);
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT p.space_id,p.document_id,m.recipient_domain_id,m.recipient_agent_id,m.recipient_conversation_id "
+                        + "FROM memory_rag_projection p JOIN memory_shared_export_projection m "
+                        + "ON m.space_id=p.space_id AND m.document_id=p.document_id "
+                        + "JOIN (SELECT export_id,recipient_domain_id,recipient_agent_id,recipient_conversation_id,MAX(content_revision) content_revision "
+                        + "FROM memory_shared_export_projection WHERE export_id=? GROUP BY export_id,recipient_domain_id,recipient_agent_id,recipient_conversation_id) latest "
+                        + "ON latest.export_id=m.export_id AND latest.recipient_domain_id=m.recipient_domain_id "
+                        + "AND latest.recipient_agent_id=m.recipient_agent_id AND latest.recipient_conversation_id=m.recipient_conversation_id "
+                        + "AND latest.content_revision=m.content_revision "
+                        + "WHERE p.document_id LIKE ? AND p.tombstone=FALSE ORDER BY p.space_id,p.document_id",
+                sourceExportId, prefix + "%");
+        List<SharedExportProjection> tombstones = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            MemoryShareGrant.Participant recipient = new MemoryShareGrant.Participant(
+                    (String) row.get("recipient_domain_id"), (String) row.get("recipient_agent_id"),
+                    (String) row.get("recipient_conversation_id"));
+            RagIndexEvent event = projections.publish((String) row.get("space_id"),
+                    (String) row.get("document_id"), SCHEMA, null);
+            tombstones.add(new SharedExportProjection(event.spaceId(), event.documentId(), event.eventId(), recipient));
+        }
+        return List.copyOf(tombstones);
+    }
+
+    private List<SharedExportProjection> removeStaleAcrossSpaces(String exportId, String prefix, Set<String> live) {
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT p.space_id,p.document_id,m.recipient_domain_id,m.recipient_agent_id,m.recipient_conversation_id "
+                        + "FROM memory_rag_projection p JOIN memory_shared_export_projection m "
+                        + "ON m.space_id=p.space_id AND m.document_id=p.document_id "
+                        + "JOIN (SELECT export_id,recipient_domain_id,recipient_agent_id,recipient_conversation_id,MAX(content_revision) content_revision "
+                        + "FROM memory_shared_export_projection WHERE export_id=? GROUP BY export_id,recipient_domain_id,recipient_agent_id,recipient_conversation_id) latest "
+                        + "ON latest.export_id=m.export_id AND latest.recipient_domain_id=m.recipient_domain_id "
+                        + "AND latest.recipient_agent_id=m.recipient_agent_id AND latest.recipient_conversation_id=m.recipient_conversation_id "
+                        + "AND latest.content_revision=m.content_revision "
+                        + "WHERE p.document_id LIKE ? AND p.tombstone=FALSE ORDER BY p.space_id,p.document_id",
+                exportId, prefix + "%");
+        List<SharedExportProjection> tombstones = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            String space = (String) row.get("space_id");
+            String documentId = (String) row.get("document_id");
+            if (live.contains(space + "\u0000" + documentId)) continue;
+            MemoryShareGrant.Participant recipient = new MemoryShareGrant.Participant(
+                    (String) row.get("recipient_domain_id"), (String) row.get("recipient_agent_id"),
+                    (String) row.get("recipient_conversation_id"));
+            RagIndexEvent event = projections.publish(space, documentId, SCHEMA, null);
+            tombstones.add(new SharedExportProjection(space, documentId, event.eventId(), recipient));
+        }
+        return List.copyOf(tombstones);
+    }
+
     private List<String> fragments(PreferenceBlock block, List<PreferenceTransition> history) {
         List<String> entries = new ArrayList<>();
         for (PreferenceTransition transition : history) {
@@ -179,6 +267,10 @@ public class MemoryV2RagProjectionService {
     private static String summaryDocumentId(MemoryRagRecordType type, MemoryContextKey context, String summaryId) {
         return "m" + type.id().replace("-", "") + "-" + hash(List.of(context.ownerId(), context.domainId(),
                 context.agentId(), context.conversationId(), summaryId));
+    }
+
+    private static String sharedExportPrefix(String ownerId, String sourceExportId) {
+        return "mcol-" + hash(List.of(ownerId, sourceExportId));
     }
 
     private static String hash(Object value) { return MemoryCanonicalHash.contentHash(value); }

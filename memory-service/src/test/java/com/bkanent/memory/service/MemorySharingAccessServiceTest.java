@@ -61,6 +61,26 @@ class MemorySharingAccessServiceTest {
         assertEquals(MemoryIndexState.INDEX_PENDING, result.exports().get(0).indexState());
         assertEquals(1, f.store.payloadReads);
         assertEquals(2, f.auth.calls);
+
+        f.jdbc.update("UPDATE memory_shared_export_runtime SET index_state=? WHERE export_id=? AND content_revision=?",
+                MemoryIndexState.INDEX_READY.name(), REFERENCE.exportId(), REFERENCE.version().revision());
+        MemoryGrantResponse refreshed = f.service.getGrant(request, f.sign(request));
+        assertEquals(MemoryIndexState.INDEX_READY, refreshed.exports().get(0).indexState());
+        assertEquals(2, f.store.payloadReads);
+        assertEquals(4, f.auth.calls);
+    }
+
+    @Test
+    void committedExportsWithoutNewRuntimeReceiptRemainReadable() throws Exception {
+        Fixture f = new Fixture(MemoryScope.Kind.TASK_SHARED, UnaryOperator.identity());
+        f.jdbc.update("DELETE FROM memory_shared_export_runtime WHERE export_id=? AND content_revision=?",
+                REFERENCE.exportId(), REFERENCE.version().revision());
+        var request = f.request(RECIPIENT, REFERENCE, f.scope, "matter-1", PURPOSE);
+
+        MemoryGrantResponse result = f.service.getGrant(request, f.sign(request));
+
+        assertEquals(1, result.exports().size());
+        assertEquals(MemoryIndexState.NOT_REQUESTED, result.exports().get(0).indexState());
     }
 
     @Test
@@ -255,7 +275,7 @@ class MemorySharingAccessServiceTest {
             var datasource = new DriverManagerDataSource("jdbc:h2:mem:sharing-" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
             jdbc = new JdbcTemplate(datasource);
             try (var connection = datasource.getConnection()) {
-                for (String file : List.of("20261019_memory_v2_request_nonce.sql", "20261019_memory_share_authorization.sql", "20261019_memory_v2_archive.sql", "20261019_memory_writer_fence.sql")) {
+                for (String file : List.of("20261019_memory_v2_request_nonce.sql", "20261019_memory_share_authorization.sql", "20261019_memory_v2_archive.sql", "20261019_memory_writer_fence.sql", "20261021_memory_shared_export_runtime.sql")) {
                     Path root = Path.of(System.getProperty("maven.multiModuleProjectDirectory"));
                     String sql = Files.readString(root.resolve("sql/migrations/" + file))
                             .replace("USE bk_memory;", "").replace(" CHARACTER SET ascii COLLATE ascii_bin", "")
@@ -288,6 +308,8 @@ class MemorySharingAccessServiceTest {
             jdbc.update("INSERT INTO memory_shared_export(export_id,content_revision,content_hash,schema_version,owner_id,source_domain_id,source_agent_id,source_conversation_id,grant_id,grant_revision,matter_id,purpose,state,payload_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     "export-1", 1, VERSION.contentHash(), VERSION.schemaVersion(), "42", SOURCE.domainId(), SOURCE.agentId(), SOURCE.conversationId(),
                     "grant-1", 1, matter, PURPOSE, "COMMITTED", mapper.writeValueAsString(export));
+            jdbc.update("INSERT INTO memory_shared_export_runtime(export_id,content_revision,source_invocation_id,submit_request_hash,index_state) VALUES (?,?,?,?,?)",
+                    "export-1", 1, "invocation-1", "b".repeat(64), MemoryIndexState.INDEX_PENDING.name());
             var properties = new MemoryV2SecurityProperties();
             var caller = new MemoryV2SecurityProperties.TrustedCaller();
             caller.setKeyId("fixture-memory-key"); caller.setSigningSecret(secret);

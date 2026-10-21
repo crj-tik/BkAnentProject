@@ -7,6 +7,9 @@ spring:
 
 memory:
   v2:
+    sharing:
+      enabled: ${MEMORY_V2_SHARING_ENABLED:false}
+      max-export-utf8-bytes: ${MEMORY_V2_SHARING_MAX_EXPORT_UTF8_BYTES:24576}
     # Exact caller/domain/agent grants. Empty secrets keep these paths fail-closed until configured in .env.
     trusted-callers:
       marketing-content-service:

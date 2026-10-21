@@ -28,6 +28,9 @@ public record MemorySharedExport(String sourceExportId, MemoryContextKey sourceC
         MemoryContract.require(committedRef == null || committedRef.sourceContext().equals(sourceContext)
                 && committedRef.version().equals(version), MemoryException.Field.EXPORT);
         MemoryContract.require(indexState != MemoryIndexState.INDEX_READY || state == State.COMMITTED, MemoryException.Field.STATE);
+        MemoryContract.require(indexState != MemoryIndexState.INDEX_REMOVED
+                || state == State.WITHDRAWN || state == State.DELETION_PENDING || state == State.DELETED,
+                MemoryException.Field.STATE);
         MemoryContract.require(state != State.DELETED || payload == null && brief == null && committedRef == null, MemoryException.Field.EXPORT);
     }
 }

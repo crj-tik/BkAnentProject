@@ -1322,6 +1322,14 @@
 
 **修复与验证（本提交）**：将 35 个 memory v2 空间所需字段、物理目标、limits 和 profile 展开为显式注册项，保留原有知识/v1空间模板。`NacosRagTemplateTest.memoryV2SpacesAreRegisteredWithRequiredScopeAndUniquePhysicalTargets` 用默认 SnakeYAML 解析器确认 35 项、授权字段和 ES/Milvus 目标唯一；同类测试及新记忆检索/许可定向回归通过。未执行容器或 Nacos 发布。
 
+## KI-154 [FIXED·本提交·P1] 共享导出新增运行态表不能成为历史正文读取的硬依赖
+
+**发现日期**：2026-10-21。为共享导出增加 invocation/hash 与独立索引回执表时，读路径若对旧 `memory_shared_export` 行使用内连接，历史已提交正文因没有新回执行会变成不可读；撤回旧行若强制读取回执也会失败。
+
+**修复与防回归（本提交）**：读取改用左连接，缺少运行态行时保留既有已提交授权并将索引状态报告为 `NOT_REQUESTED`；撤回同样兼容缺失回执。`MemorySharingAccessServiceTest.committedExportsWithoutNewRuntimeReceiptRemainReadable` 验证历史兼容，`MemorySharingWriteServiceTest` 验证新版本运行态、重试和撤回状态。
+
+**关联**：LR-59、LR-85；change 10.2。
+
 ---
 
 **变更历史**：f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。

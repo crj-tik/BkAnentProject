@@ -80,7 +80,7 @@
 ## 10. A2A 协作导出与 SSE 成果回归
 
 - [ ] 10.1 定义display/collaboration/durable export三种许可投影与大小上限，A2A保持正文/结构结果直传，Supervisor当前已收到结果不重复回取；跨域转交必须重新核授权。
-- [ ] 10.2 实现来源域不可变export版本、来源调用/hash关联、参与者grant、PENDING/COMMITTED及独立索引状态；持久确认后稳定ID可读，迟到回执/重试幂等，不把引用当认证信标。
+- [x] 10.2 实现来源域不可变export版本、来源调用/hash关联、参与者grant、PENDING/COMMITTED及独立索引状态；持久确认后稳定ID可读，迟到回执/重试幂等，不把引用当认证信标。
 - [ ] 10.3 在A2A服务端输出、transport、normalizer、客户端及执行事件链贯通增量memoryRefs/exportState/version字段，验证现有content/result字段兼容，不只在一端metadata加字段就宣称贯通。
 - [ ] 10.4 保持artifact.created在成果保存成功后及既有tool/workflow完成时序，回归KI-24部分成功/回放；Studio生成与人工修订来源不混写，不把KI-114其他领域动作纳入本变更实现。
 - [ ] 10.5 回归正式SSE入口的parent/child关联、task过滤、visibility、eventId/sequence和Last-Event-ID去重；仅对本链路确认的过滤/可见性缺口做显式增量修复并记录KI，不进行全仓SSE重构。

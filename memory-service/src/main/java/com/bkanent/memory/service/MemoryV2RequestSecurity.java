@@ -149,6 +149,10 @@ public class MemoryV2RequestSecurity {
                 || MemoryV2Contract.OPERATION_EXPERIENCE_OUTCOME.equals(operation)
                 || MemoryV2Contract.OPERATION_EXPERIENCE_FEEDBACK.equals(operation)
                 || MemoryV2Contract.OPERATION_EXPERIENCE_STATUS.equals(operation)
-                || MemoryV2Contract.OPERATION_EXPERIENCE_LIFECYCLE.equals(operation);
+                || MemoryV2Contract.OPERATION_EXPERIENCE_LIFECYCLE.equals(operation)
+                || MemoryV2Contract.OPERATION_SHARE_GRANT_MANAGE.equals(operation)
+                || MemoryV2Contract.OPERATION_SHARED_EXPORT_SUBMIT.equals(operation)
+                || MemoryV2Contract.OPERATION_SHARED_EXPORT_COMMIT.equals(operation)
+                || MemoryV2Contract.OPERATION_SHARED_EXPORT_STATUS.equals(operation);
     }
 }
