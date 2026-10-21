@@ -1376,14 +1376,14 @@
 
 **关联**：LR-94；change 8.2/11.1。
 
-## KI-160 [OPEN·P1] Memory v2 迁移清单漏登记四项 SQL 且既有校验 checksum 失配
+## KI-160 [FIXED·6b0a44b·P1] Memory v2 迁移清单漏登记四项 SQL 且既有校验 checksum 失配
 
 **发现日期**：2026-10-22。升级 dry-run 在任何数据库操作前发现 manifest 第 200 项的 schema-check checksum 与当前文件不符；随后逐表盘点发现经验版本记录、经验事件处理、域级归纳和 Memory RAG outbox 租约四份 SQL 没有对应的版本/checksum/schema-check 清单项。部分表曾在开发库以清单外方式创建，导致运行表与迁移版本账本不一致。
 
-**修复与防回归**：修正第 200 项 checksum；新增 210-240 四个 `bk_memory` 受管版本与 schema checks，补齐全量升级 dry-run 和重复执行复核。实际增量升级提交后补录 commit 与库内校验结果。已有 RAG outbox 业务行必须保留，版本登记不得将清单外已存在表误认为数据可清空。
+**修复与防回归（6b0a44b）**：修正第 200 项 checksum；新增 210-240 四个 `bk_memory` 受管版本与 schema checks，整份升级 dry-run、现有 `bk-anent-dev` 的增量升级及重复执行复核均通过。运行脚本在两个执行轮次中都对 040-240 全部版本报告 `Verified`。升级前后认证用户（8）、workflow checkpoint（261）、共享记忆（26）、RAG projection（27）和 RAG outbox（117）行数完全一致；五个缺失版本已登记，四项 schema check 通过。实际表行数只读计数，不读取记忆正文。fresh volume 与 ES/Milvus 目标空间实物验收仍未执行，保留在 change 11.2 未验项中。
 
 **关联**：LR-92；change 11.2。
 
 ---
 
-**变更历史**：7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
+**变更历史**：6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。

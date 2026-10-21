@@ -95,7 +95,7 @@
 - [x] 11.1 发布逐域入站、影子加工、生产加工、索引派发、prompt读取开关及有界容量/TTL/token预算配置；影子模式允许评估但不影响生产投影或可见输出，指标不包含正文/凭据。
   验收边界：各域 ingress、Supervisor prompt read、archive、preference/experience worker 和 RAG dispatcher 均默认关闭或可独立切换；偏好 `SHADOW` 只写评估/作业状态、不写生产偏好投影，`PUBLISH` 才归并。经验评估由受信域结果事件和用户反馈驱动，七个领域 publisher 开关独立且默认关闭；Supervisor caller 精确限制为 `supervisor` + `supervisor-agent`，没有 outcome publisher 权限。经验 worker 只有独立开关，当前不提供影子投影，故保持关闭；影子模式当前只用于偏好提取。签名密钥只从环境注入，缓存、队列、批次、重试、TTL 与 token 上限有界。目标 `.env` 当前缺少 Supervisor Memory v2 signer 与领域 publisher 键，运行实例仍关闭，待迁移/fixture 验收后配置。
 - [ ] 11.2 编写新版本SQL和初始化清单/checksum与受管空间运维步骤；盘点目标库及旧集合，保留种子/用户/共享记忆/workflow/checkpoint，未知owner/domain来源隔离；升级、首启、重复执行达到同版本。
-  验收边界：清单已覆盖四项 Memory v2 漏项并修正既有 checksum，整份升级 dry-run 已通过；本机 `bk-anent-dev` MySQL 已登记的旧版本齐全，当前升级将只处理缺少的共享导出运行态和四个 Memory v2 版本。真实升级及重复运行待本轮完成后补证；fresh-volume 验收需要独立 MySQL 容器，受资源约束本轮不启动，因此在完成实际增量升级后仍保留为未测。
+  验收边界：清单已覆盖四项 Memory v2 漏项并修正既有 checksum；整份升级 dry-run、现有 `bk-anent-dev` MySQL 增量升级及紧接的重复执行均通过，040-240 全部版本都报告 `Verified`。缺少的共享导出运行态和四个 Memory v2 版本已写入各目标库版本账本，schema checks 全通过。升级前后认证用户（8）、workflow checkpoint（261）、共享记忆（26）、RAG projection（27）、RAG outbox（117）行数相同。fresh-volume 验收需要独立 MySQL 容器，本轮按资源约束未启动；ES/Milvus 旧集合与 35 个 Memory v2 受管目标空间的实物盘点/provision 也未执行，因此任务仍保持未完成。
 - [ ] 11.3 先完成Supervisor/marketing/interview治理面完整fixture，再对其余启用SubAgent逐入口签收身份、接线、可靠来源及隔离清单；未通过者保持关闭，不将源码接通宣称真实环境已启用。
 - [ ] 11.4 同环境比较改造前后各阶段P50/P95、RPC/DB/模型次数、队列、内存与冲突/重试，基于证据记录容量和启用预算；认证/审计仍计入端到端延迟，无前端源码/实例时明确浏览器验收未完成。
 - [ ] 11.5 演练有界开发切流与回滚：先停新入口/prompt，保留交付接收直到有界排空，再停加工/派发；无法排空如实保留journal/job，不删v2历程/旧存储、不恢复撤回内容或旧退役RPC。
