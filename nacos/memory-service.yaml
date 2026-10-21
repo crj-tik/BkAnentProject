@@ -12,6 +12,12 @@ memory:
       max-export-utf8-bytes: ${MEMORY_V2_SHARING_MAX_EXPORT_UTF8_BYTES:24576}
     # Exact caller/domain/agent grants. Empty secrets keep these paths fail-closed until configured in .env.
     trusted-callers:
+      agent-service:
+        key-id: ${AGENT_MEMORY_V2_KEY_ID:agent-memory-current}
+        signing-secret: ${AGENT_MEMORY_V2_SIGNING_SECRET:}
+        service-delivery: true
+        allowed-agents-by-domain:
+          supervisor: [supervisor-agent]
       marketing-content-service:
         key-id: ${MARKETING_MEMORY_V2_KEY_ID:marketing-memory-current}
         signing-secret: ${MARKETING_MEMORY_V2_SIGNING_SECRET:}
@@ -86,7 +92,7 @@ memory:
     constraint-admin-roles: [ADMIN]
     # LR-43: deploy only the exact verified scoringVersion; missing registration fails closed.
     semantic-scoring-versions: ${MEMORY_RAG_SEMANTIC_SCORING_VERSIONS:}
-    dispatcher-enabled: false
+    dispatcher-enabled: ${MEMORY_RAG_DISPATCHER_ENABLED:false}
     domain-projection-enabled: ${MEMORY_RAG_DOMAIN_PROJECTION_ENABLED:false}
     domain-search-enabled: ${MEMORY_RAG_DOMAIN_SEARCH_ENABLED:false}
     candidate-authorization-key-id: ${RAG_MEMORY_CANDIDATE_KEY_ID:rag-memory-candidate-current}

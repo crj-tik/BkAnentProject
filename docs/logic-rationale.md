@@ -913,3 +913,11 @@
 **根因**：持久化经验正文会在输出授权撤回或经验停用后残留于旧 checkpoint，并扩大跨轮持久化的私有材料范围；每个模型轮次都重新检索又会造成多余跨服务读取。将正文留在 run 生命周期内的进程缓存、将检查点降为可复核版本引用，可以复用同事项装配，同时使持久恢复必须重新取得当前授权内容。
 
 **代码位置**：`agent-service/orchestration/ToolLoopState`、`agent-service/memory/SupervisorMemoryLifecycle`；`common/memory/MemoryExperienceSelectionRef`、`MemoryBoundaryRequest`；`memory-service/MemoryExperienceService.selectionsCurrent`、`MemoryArchiveService.checkBoundary`。回归 `SupervisorMemoryIntegrationTest.matterExperiencesAreInjectedAndReusedAcrossModelToolRounds` 与 `deactivatedExperienceCannotAuthorizeModelOutput`；关联 LR-73/75/83，change 5.3/8.4/10.7。
+
+## LR-94 经验只接收受信域结果事件与有来源的用户反馈
+
+**结论**：业务结果证据只接受经过签名的受信领域服务请求，并要求该 caller 对应的逐域 `experience-outcome-publisher` 开关显式开启；Supervisor/模型自身没有结果发布权限。用户反馈走当前 owner 的用户认证通道，必须引用该 owner 当前归档的 USER 消息和准确的经验 revision。两类事件均异步、幂等评估；调用受理、模型自评和工具完成信号本身不构成业务结果。
+
+**根因**：模型生成的总结或工具终态不能自行证明业务结果达成；把反馈当成业务事实也会混淆意见与可核验结果。分别约束发布主体、来源消息和经验版本，才能保留两种证据的含义，同时阻止 Supervisor 把自己的输出自我验证。
+
+**代码位置**：`common/memory/MemoryExperienceOutcomeRequest`、`MemoryExperienceFeedbackRequest`、`MemoryV2RpcService`；`memory-service/MemoryV2RequestSecurity`、`MemoryExperienceService`、`MemoryV2SecurityProperties`；`nacos/memory-service.yaml`、根 `docker-compose.yml` 的逐域开关映射；`MemoryV2DeploymentConfigurationTest`。关联 LR-75/LR-82，change 8.2/11.1。

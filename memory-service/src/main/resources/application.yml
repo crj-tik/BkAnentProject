@@ -16,6 +16,12 @@ memory:
       retry-seconds: ${MEMORY_V2_PRIVACY_CLEANUP_RETRY_SECONDS:15}
     # Exact per-service/domain/agent bindings. Callers remain unusable until secrets are configured.
     trusted-callers:
+      agent-service:
+        key-id: ${AGENT_MEMORY_V2_KEY_ID:agent-memory-current}
+        signing-secret: ${AGENT_MEMORY_V2_SIGNING_SECRET:}
+        service-delivery: true
+        allowed-agents-by-domain:
+          supervisor: [supervisor-agent]
       marketing-content-service:
         key-id: ${MARKETING_MEMORY_V2_KEY_ID:marketing-memory-current}
         signing-secret: ${MARKETING_MEMORY_V2_SIGNING_SECRET:}
