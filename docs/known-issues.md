@@ -10,11 +10,11 @@
 
 ## 待修复（OPEN）
 
-## KI-144 [FIXED·P2] 事项与实体详情先读取派生正文再核验来源
+## KI-144 [FIXED·777787e·P2] 事项与实体详情先读取派生正文再核验来源
 
 **确认日期**：2026-10-21。**现象/根因**：工作集事项、事项分页和实体分页直接 SELECT payload_json、反序列化后才检查 dependencies；虽然输出前会拒绝失效来源，内部仍提前打开已失去授权的正文。与 LR-61/69 规定的先元数据授权顺序不一致。
 
-**修复**：先查询 ID/revision/state，再由 memory_source_dependency 的精确 target 定位进行当前来源及传递依赖核验，最后读取对应版本正文，检查身份、revision、hash 与依赖集合一致。新增事项回执重放也先授权当前版本依赖。回归故意同时撤回源元数据并破坏派生 JSON，必须返回 WITHDRAWN、不能进入正文解码。修复提交见本模块验收记录；关联 LR-71/72。
+**修复**：先查询 ID/revision/state，再由 memory_source_dependency 的精确 target 定位进行当前来源及传递依赖核验，最后读取对应版本正文，检查身份、revision、hash 与依赖集合一致。新增事项回执重放也先授权当前版本依赖。回归故意同时撤回源元数据并破坏派生 JSON，必须返回 WITHDRAWN、不能进入正文解码。修复提交 `777787e`；验收见 `docs/acceptance/domain-agent-memory-matter-20261021.md`；关联 LR-71/72。
 
 ## KI-143 [FIXED·P2] 外部 MySQL 验证缺少连接读取超时，依赖失联时清理也会挂起
 
