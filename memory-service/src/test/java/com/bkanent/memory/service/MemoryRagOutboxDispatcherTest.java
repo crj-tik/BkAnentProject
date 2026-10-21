@@ -11,6 +11,10 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -98,6 +102,53 @@ class MemoryRagOutboxDispatcherTest {
             dispatcher.dispatch();
             assertEquals(1, sent.size());
             assertEquals("APPLIED", state(f));
+        }
+    }
+    @Test
+    void expiredLeaseCanBeTakenOverAndLateWorkerCannotOverwriteNewerState() throws Exception {
+        var f = new MemoryRagTestSupport();
+        f.upsert(MemoryRagTestSupport.preference("lease", ".8", LocalDateTime.now()));
+        f.properties.setDispatcherEnabled(true);
+        var firstStarted = new CountDownLatch(1);
+        var releaseFirst = new CountDownLatch(1);
+        var calls = new AtomicInteger();
+        var fake = new RagIndexRpcService() {
+            public RagIndexStatus submit(RagIndexEvent event, RagAuthEnvelope auth) {
+                assertFalse(TransactionSynchronizationManager.isActualTransactionActive());
+                if (calls.incrementAndGet() == 1) {
+                    firstStarted.countDown();
+                    try {
+                        if (!releaseFirst.await(5, TimeUnit.SECONDS)) throw new AssertionError("first dispatcher was not released");
+                    } catch (InterruptedException exception) {
+                        Thread.currentThread().interrupt();
+                        throw new AssertionError(exception);
+                    }
+                    return status(event, RagIndexState.ACCEPTED);
+                }
+                return status(event, RagIndexState.APPLIED);
+            }
+            public RagIndexStatus getStatus(RagStatusRequest request, RagAuthEnvelope auth) { fail("unexpected status lookup"); return null; }
+        };
+        var first = new MemoryRagOutboxDispatcher(f.jdbc, f.projection, f.security, fake, f.properties);
+        var second = new MemoryRagOutboxDispatcher(f.jdbc, f.projection, f.security, fake, f.properties);
+        var executor = Executors.newSingleThreadExecutor();
+        try {
+            due(f);
+            var delayed = executor.submit(first::dispatch);
+            assertTrue(firstStarted.await(5, TimeUnit.SECONDS));
+            Timestamp expired = Timestamp.from(Instant.now().minusSeconds(1));
+            f.jdbc.update("UPDATE memory_rag_outbox SET lease_until=?,next_attempt_at=?", expired, expired);
+            second.dispatch();
+            assertEquals("APPLIED", state(f));
+            releaseFirst.countDown();
+            delayed.get(5, TimeUnit.SECONDS);
+            assertEquals(2, calls.get());
+            assertEquals("APPLIED", state(f));
+            assertNull(f.jdbc.queryForObject("SELECT lease_owner FROM memory_rag_outbox", String.class));
+            assertNull(f.jdbc.queryForObject("SELECT lease_until FROM memory_rag_outbox", Timestamp.class));
+        } finally {
+            releaseFirst.countDown();
+            executor.shutdownNow();
         }
     }
     static int eligible(MemoryRagTestSupport f, Instant cutoff) { return f.jdbc.queryForObject("SELECT COUNT(*) FROM memory_rag_outbox WHERE state IN ('PENDING','WAITING') AND next_attempt_at<=? AND attempts<?", Integer.class, Timestamp.from(cutoff), f.properties.getMaxAttempts()); }

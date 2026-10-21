@@ -24,6 +24,7 @@ public class MemoryRagProperties {
     private int dispatchBatchSize = 25;
     private int maxAttempts = 5;
     private long retryDelayMs = 1000;
+    private long dispatchLeaseMs = 30000;
     public String getKeyId() { return keyId; }
     public void setKeyId(String value) { keyId = value; }
     public String getSigningSecret() { return signingSecret; }
@@ -50,6 +51,8 @@ public class MemoryRagProperties {
     public void setMaxAttempts(int value) { if (value < 1 || value > 5) throw new IllegalArgumentException("maxAttempts"); maxAttempts = value; }
     public long getRetryDelayMs() { return retryDelayMs; }
     public void setRetryDelayMs(long value) { if (value < 1 || value > 60000) throw new IllegalArgumentException("retryDelayMs"); retryDelayMs = value; }
+    public long getDispatchLeaseMs() { return dispatchLeaseMs; }
+    public void setDispatchLeaseMs(long value) { if (value < 1000 || value > 300000) throw new IllegalArgumentException("dispatchLeaseMs"); dispatchLeaseMs = value; }
     public static class TrustedCaller {
         private String callerService;
         private String secret;

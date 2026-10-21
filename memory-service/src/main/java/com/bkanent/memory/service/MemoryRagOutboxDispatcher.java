@@ -5,11 +5,17 @@ import com.bkanent.common.rpc.RagIndexRpcService;
 import com.bkanent.memory.config.MemoryRagProperties;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.Map;
+import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 
 /** Reads committed rows only. Unknown submit/status outcomes retry the original event identity. */
@@ -20,44 +26,81 @@ public class MemoryRagOutboxDispatcher {
     private final MemoryRagSecurity security;
     private final RagIndexRpcService index;
     private final MemoryRagProperties properties;
+    private final TransactionTemplate transactions;
+    private record Claim(String eventId, String payload, String state, int attempts, String leaseOwner) { }
     public MemoryRagOutboxDispatcher(JdbcTemplate jdbc, MemoryRagProjectionService projection, MemoryRagSecurity security, RagIndexRpcService index, MemoryRagProperties properties) {
         this.jdbc = jdbc; this.projection = projection; this.security = security; this.index = index; this.properties = properties;
+        this.transactions = new TransactionTemplate(new DataSourceTransactionManager(Objects.requireNonNull(jdbc.getDataSource())));
+        this.transactions.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
+        this.transactions.setTimeout(5);
     }
 
     @Scheduled(fixedDelayString = "${memory.rag.dispatch-interval-ms:1000}")
     public void dispatch() {
         if (!properties.isDispatcherEnabled()) return;
         if (TransactionSynchronizationManager.isActualTransactionActive()) throw new IllegalStateException("Outbox dispatch inside source transaction");
-        var rows = jdbc.queryForList("SELECT event_id,event_payload,state,attempts FROM memory_rag_outbox WHERE state IN ('PENDING','WAITING') AND next_attempt_at<=? AND attempts<? ORDER BY created_at,event_id LIMIT ?", Timestamp.from(Instant.now()), properties.getMaxAttempts(), properties.getDispatchBatchSize());
-        for (var row : rows) {
-            String id = row.get("event_id").toString();
-            int attempts = ((Number) row.get("attempts")).intValue();
-            RagErrorCode error = null;
-            String state = "PENDING";
-            try {
-                RagIndexEvent event = projection.decode(jdbc.queryForObject("SELECT event_payload FROM memory_rag_outbox WHERE event_id=?", String.class, id));
-                RagIndexStatus status;
-                if ("WAITING".equals(row.get("state"))) {
-                    RagStatusRequest request = new RagStatusRequest(1, UUID.randomUUID().toString(), event.spaceId(), event.eventId(), null);
-                    try { status = index.getStatus(request, security.serviceAuthentication(RagOperation.GET_STATUS, request.requestId(), request)); }
-                    catch (RagException ex) { if (ex.code() != RagErrorCode.NOT_FOUND) throw ex; status = submit(event); }
-                } else status = submit(event);
-                verifyStatus(event, status);
-                state = switch (status.state()) {
-                    case APPLIED -> "APPLIED";
-                    case STALE -> "STALE";
-                    case CONFLICT -> "CONFLICT";
-                    default -> "WAITING";
-                };
-                error = status.errorCode();
-            } catch (RagException ex) { error = ex.code(); }
-            catch (RuntimeException ex) { error = RagErrorCode.DEPENDENCY_UNAVAILABLE; }
-            boolean failed = error != null || "PENDING".equals(state);
-            int nextAttempts = failed ? attempts + 1 : 0;
-            if (failed && nextAttempts >= properties.getMaxAttempts()) state = "EXHAUSTED";
-            // No exception text or signed credentials can enter persisted payload/error.
-            jdbc.update("UPDATE memory_rag_outbox SET state=?,attempts=?,next_attempt_at=?,error_code=? WHERE event_id=? AND state IN ('PENDING','WAITING')", state, nextAttempts, Timestamp.from(Instant.now().plusMillis(properties.getRetryDelayMs() * (1L << Math.min(nextAttempts, 4)))), error == null ? null : error.name(), id);
+        for (int i = 0; i < properties.getDispatchBatchSize(); i++) {
+            Claim claim = claimNext();
+            if (claim == null) return;
+            process(claim);
         }
+    }
+
+    private Claim claimNext() {
+        Instant now = Instant.now();
+        Timestamp nowTimestamp = Timestamp.from(now);
+        return transactions.execute(status -> {
+            List<Map<String, Object>> rows = jdbc.queryForList("SELECT event_id,event_payload,state,attempts FROM memory_rag_outbox "
+                    + "WHERE state IN ('PENDING','WAITING') AND next_attempt_at<=? AND attempts<? AND (lease_until IS NULL OR lease_until<=?) "
+                    + "ORDER BY created_at,event_id LIMIT 1 FOR UPDATE SKIP LOCKED",
+                    nowTimestamp, properties.getMaxAttempts(), nowTimestamp);
+            if (rows.isEmpty()) return null;
+            var row = rows.get(0);
+            String id = row.get("event_id").toString();
+            String leaseOwner = UUID.randomUUID().toString();
+            Timestamp leaseUntil = Timestamp.from(now.plusMillis(properties.getDispatchLeaseMs()));
+            int updated = jdbc.update("UPDATE memory_rag_outbox SET lease_owner=?,lease_until=? WHERE event_id=? AND state=? "
+                            + "AND (lease_until IS NULL OR lease_until<=?)",
+                    leaseOwner, leaseUntil, id, row.get("state"), nowTimestamp);
+            if (updated != 1) return null;
+            return new Claim(id, row.get("event_payload").toString(), row.get("state").toString(),
+                    ((Number) row.get("attempts")).intValue(), leaseOwner);
+        });
+    }
+
+    private void process(Claim claim) {
+        RagErrorCode error = null;
+        String state = "PENDING";
+        try {
+            RagIndexEvent event = projection.decode(claim.payload());
+            RagIndexStatus status;
+            if ("WAITING".equals(claim.state())) {
+                RagStatusRequest request = new RagStatusRequest(1, UUID.randomUUID().toString(), event.spaceId(), event.eventId(), null);
+                try { status = index.getStatus(request, security.serviceAuthentication(RagOperation.GET_STATUS, request.requestId(), request)); }
+                catch (RagException ex) { if (ex.code() != RagErrorCode.NOT_FOUND) throw ex; status = submit(event); }
+            } else status = submit(event);
+            verifyStatus(event, status);
+            state = switch (status.state()) {
+                case APPLIED -> "APPLIED";
+                case STALE -> "STALE";
+                case CONFLICT -> "CONFLICT";
+                default -> "WAITING";
+            };
+            error = status.errorCode();
+        } catch (RagException ex) { error = ex.code(); }
+        catch (RuntimeException ex) { error = RagErrorCode.DEPENDENCY_UNAVAILABLE; }
+        boolean failed = error != null || "PENDING".equals(state);
+        int nextAttempts = failed ? claim.attempts() + 1 : 0;
+        if (failed && nextAttempts >= properties.getMaxAttempts()) state = "EXHAUSTED";
+        String completedState = state;
+        int completedAttempts = nextAttempts;
+        String errorCode = error == null ? null : error.name();
+        // Late results from an expired/taken-over lease cannot overwrite newer progress.
+        Timestamp now = Timestamp.from(Instant.now());
+        Timestamp nextAttempt = Timestamp.from(Instant.now().plusMillis(properties.getRetryDelayMs() * (1L << Math.min(nextAttempts, 4))));
+        transactions.executeWithoutResult(status -> jdbc.update("UPDATE memory_rag_outbox SET state=?,attempts=?,next_attempt_at=?,error_code=?,lease_owner=NULL,lease_until=NULL "
+                        + "WHERE event_id=? AND lease_owner=? AND lease_until>? AND state IN ('PENDING','WAITING')",
+                completedState, completedAttempts, nextAttempt, errorCode, claim.eventId(), claim.leaseOwner(), now));
     }
 
     private RagIndexStatus submit(RagIndexEvent event) {

@@ -755,3 +755,13 @@
 **根因**：将经验按 conversation 建键会让跨会话的私有经验重复或无法选择；按 owner 单独建键会跨域/Agent 混入。不可变revision分离修改历史，来源倒排索引让撤回/删除能定位精确派生记录，retention截止值支持治理侧有界保留而不擅自定时抹除事实。硬规则不写入经验表，评分和衰减不能改写政策。
 
 **代码位置**：迁移 `20261021_memory_experience_records.sql`、`MemoryExperienceSchemaMySqlTest`；与 `memory_preference_block/transition`、`memory_share_grant/export` 和 `memory_processing_job` 的现有真实查询计划核验；change 4.2。后续经验写入、评估和检索仍受 8.x 任务门控。
+
+## LR-76 记忆可靠交付只持久引用真源，索引回执由租约围栏
+
+**结论**：Supervisor 的 `agent_memory_delivery` 持久化 checkpoint 版本、消息序号、内容 hash、permit 与交付状态，消息正文仍从不可变 `agent_workflow_checkpoint` 重建；丢失回执时重放同一 event/hash，不重新执行已完成业务工具。Memory 将入站真源、消息回执和加工 job 在数据库事务内提交，受管 SERVICE worker 只处理精确已授权来源，模型/RAG RPC 在事务外执行。RAG outbox 以短 READ_COMMITTED 事务和 `FOR UPDATE SKIP LOCKED` 领取 PENDING/WAITING 事件，使用有界 owner/expiry lease；外部 RPC 仍携带稳定 eventId，终态回写必须匹配尚有效的 owner lease。有限重试、安全错误码及 EXHAUSTED 状态不伪装成索引已应用。可靠归档未确认时保留 checkpoint/journal 和未覆盖消息，不能压缩移除；索引失败不更改领域业务完成事实。
+
+**根因**：给已有不可变业务账本再复制完整正文会制造双真源并扩大隐私清理面；仅有稳定索引事件 ID 虽能支持下游幂等，却不能阻止多个 dispatcher 同时投递，也不能阻止慢 worker 的旧回执覆盖新状态。短领取事务与事务外远程调用避免持锁等待，lease owner 与有效期共同围栏迟到结果。归档交付和领域副作用分离，补记忆只能重放原事实，不能重跑业务工具。
+
+**代码位置**：`SupervisorMemoryJournal`、`SupervisorMemoryLifecycle.flush`、`MemoryArchiveService.deliverMessages`、`PreferenceProcessingWorker`、`MemoryRagOutboxDispatcher`；迁移 `20261021_memory_rag_outbox_lease.sql`。回归包括 `SupervisorMemoryIntegrationTest.completedBusinessToolIsNotRerunWhenLostMemoryReceiptIsRecovered`、偏好 worker 跨实例 lease/revocation 用例、`MemoryRagOutboxDispatcherTest.expiredLeaseCanBeTakenOverAndLateWorkerCannotOverwriteNewerState` 和真实 MySQL `MemoryRagOutboxMySqlTest`。RAG RPC 接口未改变，fixture 验证的是租约/回执边界，不代表本轮真实 RAG 服务联机验收。
+
+**关联**：LR-60/61/64/70、KI-147；integrate-domain-agent-memory 4.3/4.5/4.6。开发默认不启用 Memory V2 归档/索引；未确认接收、认证或授权失败仍按既有错误语义失败关闭。
