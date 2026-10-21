@@ -1358,6 +1358,16 @@
 
 **关联**：LR-89；change 10.7。轮换后旧开发票据按预期失效。
 
+## KI-158 [FIXED·3560359·P1] Nacos开发配置发布在默认关闭认证时无法启动Memory
+
+**发现日期**：2026-10-22。`bk-anent-dev` 的Nacos 3.1启用了开发认证关闭模式，但一次性 `config-init` 发布器仍无条件请求登录，登录接口返回403，导致Memory依赖的配置发布任务失败。
+
+**修复与防回归（3560359）**：Compose将同一显式 `NACOS_AUTH_ENABLE` 模式传给Nacos与配置发布器；认证关闭时仅对固定 `BK-AGENT` / `DEFAULT_GROUP` 与Data ID allowlist发布并回读，不执行登录；认证开启时仍要求显式账号并携带短期登录token。`scripts/deploy/test_publish_nacos.py` 的3项回归覆盖两种认证模式、凭据不进入日志和缺少模式失败关闭。本机随后成功发布并回读 `memory-service.yaml`（内容hash `6dbd1f59…`），更新的Memory镜像启动且readiness为UP。
+
+**验证边界**：本轮运行的只有memory-service、MySQL、Nacos；RAG/ES/Milvus未启动以控制资源，因此协作检索的容器间端到端调用未执行。
+
+**关联**：LR-92；change 11.2。
+
 ---
 
-**变更历史**：f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
+**变更历史**：f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
