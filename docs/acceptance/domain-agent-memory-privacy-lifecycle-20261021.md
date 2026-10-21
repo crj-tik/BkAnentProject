@@ -2,7 +2,7 @@
 
 **日期**：2026-10-21
 **OpenSpec**：`integrate-domain-agent-memory`，`spec-driven`，本模块完成 3.5、4.7；总进度 30/66。
-**Git**：分支 `dev-fix`；提交号待最终提交后回填。
+**Git**：分支 `dev-fix`；实现提交 `b38975a`。
 
 ## 本次交付
 

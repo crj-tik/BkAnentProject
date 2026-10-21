@@ -10,17 +10,17 @@
 
 ## 待修复（OPEN）
 
-## KI-146 [FIXED·本提交·P3] MySQL 集成 fixture 未清理隐私清理清单
+## KI-146 [FIXED·b38975a·P3] MySQL 集成 fixture 未清理隐私清理清单
 
 **确认日期**：2026-10-21。**现象/根因**：新增隐私删除清单和投影目标表后，已有真实 MySQL 集成 fixture 在删除随机 context 的消息与 job 时没有清除这两张表，测试通过也会在开发库残留不含正文的 tombstone。
 
 **修复**：四个 MySQL fixture 的 `finally` 均按精确随机 `context_id` 先删除投影目标、再删除清单；归档用例另外覆盖清理 worker 的真实 MySQL claim/status/finalize。真实 MySQL 四类测试均通过，fixture 的其余历史数据也继续按原有精确身份清理。关联 LR-74、change 4.7。
 
-## KI-145 [FIXED·本提交·P2] 已删除来源在迟到补交付时误报撤回
+## KI-145 [FIXED·b38975a·P2] 已删除来源在迟到补交付时误报撤回
 
 **确认日期**：2026-10-21。**现象/根因**：来源进入最终 `DELETED` 后，重投/传递授权只把 `DELETION_PENDING` 映射为 `DELETED`，终态会落入默认 `WITHDRAWN` 错误，掩盖删除状态。
 
-**修复**：Memory 归档读取与来源授权统一将 `DELETION_PENDING`、`DELETED` 映射为 `MemoryErrorCode.DELETED`；覆盖删除完成后的重复写入/迟到事件拒绝，并验证恢复的 Supervisor checkpoint 在重新授权前不调用模型。修复提交待回填；验收见 `docs/acceptance/domain-agent-memory-privacy-lifecycle-20261021.md`。关联 LR-74、change 3.5/4.7。
+**修复**：Memory 归档读取与来源授权统一将 `DELETION_PENDING`、`DELETED` 映射为 `MemoryErrorCode.DELETED`；覆盖删除完成后的重复写入/迟到事件拒绝，并验证恢复的 Supervisor checkpoint 在重新授权前不调用模型。修复提交 `b38975a`；验收见 `docs/acceptance/domain-agent-memory-privacy-lifecycle-20261021.md`。关联 LR-74、change 3.5/4.7。
 
 ## KI-144 [FIXED·777787e·P2] 事项与实体详情先读取派生正文再核验来源
 
