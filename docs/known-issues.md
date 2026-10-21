@@ -14,7 +14,7 @@
 
 **确认日期**：2026-10-20。**现象**：本轮最后联机复核期间 Docker 引擎连 `_ping` 都不返回，MySQL 新 TCP 连接建立后不发送握手；线程取证停在驱动 `readServerCapabilities`，随后 finally 的首个清理连接也无界等待。没有证据将此归因于新 worker；故障前真实 MySQL 用例、清单升级已通过。
 
-**修复**：三个真实 MySQL 测试共用有界 URL，连接超时 5 秒、读取超时 15 秒，避免测试进程永久占住。无界卡住的本轮 Maven/test 子进程已精确结束，不影响其他 Java 服务；Docker 恢复后仍须复核外部测试及必要 fixture 清理。本条不宣称修复 Docker 根因，既有环境问题关联 KI-124。修复提交见本轮验收记录。
+**修复**：三个真实 MySQL 测试共用有界 URL，连接超时 5 秒、读取超时 15 秒，避免测试进程永久占住。无界卡住的本轮 Maven/test 子进程已精确结束，不影响其他 Java 服务；2026-10-21 Docker 恢复后，三个真实数据库类与一个真实模型类共 4 项复核全部通过，零失败/错误/跳过。中断 fixture 的无正文 header 与 SUMMARY 定位经精确身份核验后清理，专用 fixture context 为零。本条不宣称修复 Docker 根因，既有环境问题关联 KI-124。修复提交：`2cd4ea8`；详见本轮验收记录。
 
 ## KI-142 [LIMIT·P2] 自动偏好分类依赖模型语义，跨会话修正不猜测目标
 
@@ -135,6 +135,8 @@
 **处置**：未执行资源调整（超出授权）。建议后续：给 marketing/media-worker 等容器设 mem_limit、评估 WSL2 VM 资源上限、控制并发 JVM 数量后复测 marketing fixture 与 Studio。多 JVM 并发 start 压垮引擎的现象在本会话第一轮恢复时已出现（8 JVM 同时 start），同根因。证据见 `docs/acceptance/domain-agent-memory-foundation-20261016.md`。
 
 **2026-10-20 补充**：恢复现有开发栈后，Docker 内 Maven 冷构建再次伴随 Engine API 500、容器查询挂起。取消构建并恢复现有后端后，本机离线 package 与仅覆盖对应 JAR 的镜像构建成功；只更新 canonical agent/memory 服务，无应用副本。后端资源根因保持 OPEN。
+
+**2026-10-21 补充**：偏好加工模块联机复核曾遇到宿主 Engine API/MySQL 握手挂起，控制通道报内部 `192.168.65.7:2376` 不可达，VM 可用内存很低；不能只凭此认定具体内核或网络根因。用户明确授权 Docker 重启后，确认其他 WSL 发行版已停止，完整关闭仅 Docker 占用的 WSL VM 并重启 Docker Desktop，宿主控制通道恢复。暂时停止 10 个无关业务服务，保持 31 个既有项目容器、14 个运行；4 项外部复核通过，只有 Memory 容器重建，health/readiness 200，其他 30 个名称/ID 不变。未调整资源上限、未更换软件版本，根因仍 OPEN。证据见 `docs/acceptance/domain-agent-memory-preference-processing-20261020.md`。
 
 ## KI-123 [已修源码·运行环境待切换·P1] 会话流 RocketMQ topic 默认名含点号非法，supervisor 全部子 Agent 调用 OUTCOME_UNKNOWN
 
