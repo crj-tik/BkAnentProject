@@ -10,13 +10,13 @@
 
 ## 待修复（OPEN）
 
-## KI-147 [FIXED·P2] 记忆 RAG outbox 缺少多实例领取租约
+## KI-147 [FIXED·28f4594·P2] 记忆 RAG outbox 缺少多实例领取租约
 
 **确认日期**：2026-10-21。**现象**：多个 memory 实例可以同时读取同一条到期 PENDING/WAITING outbox 并并发调用 RAG；较慢实例的迟到回执还可能覆盖已接管实例写入的状态。稳定 eventId 只能帮助下游幂等，不能围栏本地并发回写。
 
 **根因**：原 dispatcher 只查询待发送行，没有持久 claim owner/lease，也未在最终更新时验证领取者身份和有效期。
 
-**修复**：迁移 `20261021_memory_rag_outbox_lease.sql` 增加 owner/expiry 与到期扫描索引。dispatcher 在短 READ_COMMITTED 事务中用 `FOR UPDATE SKIP LOCKED` 领取一条，事务外执行原 Dubbo RPC；回写要求 owner 一致且 lease 未过期，保留有限重试与稳定 eventId。focused H2 并发接管测试及真实 MySQL SQL 集成测试通过。修复提交待本轮代码提交后补入。
+**修复**：迁移 `20261021_memory_rag_outbox_lease.sql` 增加 owner/expiry 与到期扫描索引。dispatcher 在短 READ_COMMITTED 事务中用 `FOR UPDATE SKIP LOCKED` 领取一条，事务外执行原 Dubbo RPC；回写要求 owner 一致且 lease 未过期，保留有限重试与稳定 eventId。focused H2 并发接管测试及真实 MySQL SQL 集成测试通过。修复提交：`28f4594`。
 
 **关联**：LR-76；integrate-domain-agent-memory 4.5。
 
