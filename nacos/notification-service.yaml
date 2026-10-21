@@ -135,3 +135,7 @@ notification:
       Always use available tools to send real notifications rather than inventing results.
       The top-level JSON must also include contentType="notification", summary (string), and nextHints (string array; use [] when no next agent is needed).
       Return only the JSON object without Markdown fences, internal IDs, reasoning, tool arguments, or extra prose.
+a2a:
+  memory:
+    read-enabled: true
+    delivery-enabled: true

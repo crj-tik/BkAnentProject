@@ -6,6 +6,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "a2a.memory")
 public class A2aMemoryProperties {
     private boolean enabled;
+    private boolean readEnabled = true;
+    private boolean deliveryEnabled = true;
     private boolean compressionEnabled;
     private String keyId = "domain-memory-current";
     private String signingSecret = "";
@@ -20,6 +22,11 @@ public class A2aMemoryProperties {
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
+    public boolean isReadEnabled() { return enabled && readEnabled; }
+    public void setReadEnabled(boolean readEnabled) { this.readEnabled = readEnabled; }
+    public boolean isDeliveryEnabled() { return enabled && deliveryEnabled; }
+    public void setDeliveryEnabled(boolean deliveryEnabled) { this.deliveryEnabled = deliveryEnabled; }
+    public boolean isPromptReadEnabled() { return isReadEnabled(); }
     public boolean isCompressionEnabled() { return compressionEnabled; }
     public void setCompressionEnabled(boolean compressionEnabled) { this.compressionEnabled = compressionEnabled; }
     public String getKeyId() { return keyId; }

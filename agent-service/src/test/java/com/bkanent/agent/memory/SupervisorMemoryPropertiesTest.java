@@ -28,6 +28,19 @@ class SupervisorMemoryPropertiesTest {
         assertThrows(IllegalArgumentException.class, properties::validate);
     }
 
+    @Test void promptReadsAndAcceptedDeliveriesHaveIndependentSwitches() {
+        var properties = new SupervisorMemoryProperties();
+        properties.setEnabled(true);
+        properties.setSigningSecret("a".repeat(32));
+        properties.setReadEnabled(false);
+        properties.setDeliveryEnabled(true);
+        assertFalse(properties.isReadEnabled());
+        assertTrue(properties.isDeliveryEnabled());
+        properties.setDeliveryEnabled(false);
+        assertFalse(properties.isDeliveryEnabled());
+        assertDoesNotThrow(properties::validate);
+    }
+
     @Test void inconsistentBudgetsAndUnboundedCacheAreRejected() {
         var properties = new SupervisorMemoryProperties();
         properties.setSoftTokens(12000);

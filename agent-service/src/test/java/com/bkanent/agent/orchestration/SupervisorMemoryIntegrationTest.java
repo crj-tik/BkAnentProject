@@ -79,6 +79,27 @@ class SupervisorMemoryIntegrationTest {
             assertEquals(0, f.remote.count("transitionMatter")); verifyNoInteractions(f.model);
         }
     }
+    @Test void deliveryOnlyModeSkipsPromptReadsAndFinishesAnAcceptedDeliveryAfterCutoff() throws Exception {
+        try (Fixture f = new Fixture()) {
+            f.properties.setReadEnabled(false);
+            when(f.model.call(anyList(), anyList())).thenAnswer(invocation -> {
+                f.inputs.add(invocation.getArgument(0));
+                assertEquals(0, f.remote.count("readWorkingSet"), "delivery-only mode must not load memory before the prompt");
+                f.properties.setDeliveryEnabled(false); // close new delivery admission after this run was accepted
+                return new AssistantMessage("本轮完成");
+            });
+
+            var response = f.execute("delivery-only", "独立请求");
+
+            assertEquals("COMPLETED", response.status());
+            assertEquals("DELIVERY_ONLY", f.state("delivery-only").memoryMode);
+            assertTrue(f.state("delivery-only").memoryDeliveryAccepted);
+            assertEquals(1, f.remote.count("readWorkingSet"), "the writer baseline is loaded only when the completed turn is delivered");
+            assertEquals(1, f.remote.count("requestReceivePermit"));
+            assertEquals(1, f.remote.count("deliverMessages"));
+            assertTrue(f.inputs.get(0).toString().contains("独立请求"));
+        }
+    }
     @Test void matterPreferenceIsInjectedAndRecheckedBeforeFinalOutput() throws Exception {
         try (Fixture f = new Fixture()) {
             f.remote.preferenceValue = "100万";

@@ -29,3 +29,28 @@ Memory v2 的逻辑空间由 `nacos/rag-service.yaml` 注册，覆盖五类记�
 逐项操作使用 [私有 RAG / A2A 运行探针](../scripts/verification/README.md)：先以 `DOMAIN / INSPECT` 查询具体逻辑空间，再按获批的目标清单执行 `DOMAIN / PROVISION`。探针要求真实当前 ADMIN token、Memory RAG 的受信 key、现有项目私有 Docker 网络、已 package 的服务 jar 和本机已存在的 JDK 镜像；它不启动 RAG、ES、Milvus 或新的服务容器。对每次 provision 只能传配置所列 schema version 和维度，不接受物理名称。`ready=false` 需要按失败 stage 排查，不得打开 dispatcher 或把未就绪标为成功。
 
 Provision、索引投影和读取是独立开关。新空间准备不等于开启 memory archive、经验/偏好处理、Supervisor prompt read、RAG dispatcher 或业务消费者；默认关闭值保持关闭，只有相应迁移和治理 fixture 通过后，才按逐域验收单独启用。不得在 Agent 侧绕过 Memory 的授权核验直接搜索私有空间。
+
+## 分阶段停用与回滚
+
+每个 A2A 消费服务使用 `a2a.memory.enabled` 主开关与两个独立运行开关：`a2a.memory.read-enabled` 控制是否把获准历史装入模型上下文，`a2a.memory.delivery-enabled` 控制本轮结果是否交付到 Memory。Supervisor 对应 `agent.memory-v2.enabled`、`agent.memory-v2.read-enabled` 和 `agent.memory-v2.delivery-enabled`。读取与交付开关位于各服务 Nacos 配置中；发布时确认服务已收到配置刷新。主开关在切流前保持开启。
+
+`read-enabled=false, delivery-enabled=true` 是排空模式。新 A2A 任务不加载历史内容，模型结束后才建立写入会话并归档当前结果；Supervisor 新任务使用 `DELIVERY_ONLY`，不向模型添加 Memory 历史，在任务完成时交付执行消息。已接受任务会记录其交付许可，即使随后关闭交付开关也会尝试完成该次交付。排空模式仍需读取 Memory 的当前版本以生成正确序号，但只在结果归档阶段读取，不把历史正文放入模型上下文。
+
+按以下顺序回滚：
+
+1. 先让网关或当前任务入口停止接收新的 Agent 工作，保持服务进程可用；不要直接停止正在处理任务的容器。
+2. 在各实际启用域和 Supervisor 配置中将 `read-enabled` 设为 `false`，保持 `delivery-enabled=true`；保持 Memory archive 接收端、偏好/经验 worker 与 RAG dispatcher 运行。确认配置刷新后，检查新任务没有加载 Memory 历史。
+3. 等待所有已接收 Agent 任务结束，然后将各域 `delivery-enabled` 设为 `false`。这一步之后新任务不会创建记忆交付，已接受任务仍可提交其交付。
+4. 在受控截止时间内检查交付与加工水位：
+
+   ```sql
+   SELECT state, COUNT(*) FROM bk_agent.agent_memory_delivery GROUP BY state;
+   SELECT job_kind, state, COUNT(*) FROM bk_memory.memory_processing_job GROUP BY job_kind, state;
+   SELECT state, COUNT(*) FROM bk_memory.memory_rag_outbox GROUP BY state;
+   ```
+
+   `agent_memory_delivery` 的 `PENDING`、处理 job 的 `PENDING/RETRY/PROCESSING`、以及 RAG outbox 的 `PENDING/WAITING` 或未过期租约表示仍有工作。到截止时间仍未排空时，记录准确状态并保留 journal、job、outbox、tombstone 与 v2 真源；不得清空队列、删表、删集合或恢复已撤回正文。
+5. 只有交付与待加工队列清零后，才关闭偏好/经验加工和 RAG dispatcher。之后关闭各领域与 Supervisor 的主开关，并关闭 Memory archive 接收端。Memory 服务的 archive/worker 开关由 Compose 环境变量提供；更改 `.env` 后只在入口已停止且无在途 RPC 时更新现有 Memory 服务。无需创建测试容器。
+6. 切回原业务调用路径前，确认旧路径可用，v2 的当前授权、撤回状态与所有历程仍保留。恢复新链路时按当前版本重新执行配置与水位检查，不回放未知事件，不把完整偏好历程压成旧单值。
+
+本机 2026-10-22 回滚预检只读观察到 `bk-anent-dev` 的运行容器为 Memory、Nacos、MySQL；Memory archive、偏好处理、域投影和域搜索均为关闭，经验开关未设置且按默认关闭，Supervisor 与领域 A2A 服务未运行。`agent_memory_delivery`、`memory_processing_job` 和经验事件收件表均为空；RAG outbox 117 项全部为 `APPLIED`。因此本机当前没有启用的入口或待排空队列，本轮只验证配置/fixture，不启动或重启服务，也不把无切流需求的静态状态记作真实回滚演练通过。

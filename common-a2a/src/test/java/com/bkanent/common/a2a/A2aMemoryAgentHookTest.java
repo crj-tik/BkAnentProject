@@ -211,6 +211,49 @@ class A2aMemoryAgentHookTest {
     }
 
     @Test
+    void readDisabledDeliveryOnlyTurnDrainsAfterDeliverySwitchIsClosed() throws Exception {
+        var fixture = new MemoryFixture(List.of(), new MemoryConversationVersion(1, 1, "policy-v1"));
+        doAnswer(call -> {
+            MemoryWorkingSetRequest request = call.getArgument(0);
+            return new MemoryWorkingSetResponse(request.contextKey(), fixture.version.get(),
+                    List.of(oldMessage(request.contextKey())), List.of(), List.of());
+        }).when(fixture.rpc).readWorkingSet(any(), any());
+        var properties = enabledProperties();
+        properties.setReadEnabled(false);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        var hook = new A2aMemoryAgentHook("marketing-content-service", "marketing", "marketing-agent", () -> fixture.rpc,
+                new MemoryWorkingSetCache(8, 1024 * 1024, 60_000, Clock.systemUTC()), properties,
+                mock(ChatModel.class), new ObjectMapper(), executor);
+        String taskId = "marketing-task-delivery-only";
+        var invocation = hook.invocation(taskId, "delivery-only-context");
+        var lease = lease(taskId, "7", "marketing-content-service");
+        register(lease);
+        var config = config(taskId, invocation);
+        try {
+            var start = List.<Message>of(new SystemMessage("marketing rules"), new UserMessage("当前请求"));
+            assertThat(hook.beforeAgent(state(start), config).join()).isEmpty();
+            assertThat(invocation.memoryStatus()).isEqualTo("DELIVERY_ONLY");
+            verify(fixture.rpc, never()).readWorkingSet(any(), any());
+            properties.setDeliveryEnabled(false); // close new delivery admission after this task was accepted
+            hook.afterAgent(state(List.of(new SystemMessage("marketing rules"), new UserMessage("当前请求"),
+                    new AssistantMessage("本轮结果"))), config).join();
+
+            assertThat(invocation.archiveStatus()).isEqualTo("RECORDED");
+            assertThat(fixture.delivered.get().messages()).extracting(MemoryMessage::role)
+                    .containsExactly(MemoryMessage.Role.USER, MemoryMessage.Role.ASSISTANT);
+            assertThat(fixture.delivered.get().messages()).extracting(MemoryMessage::text)
+                    .containsExactly("当前请求", "本轮结果");
+            verify(fixture.rpc, times(1)).requestReceivePermit(any(), any());
+            verify(fixture.rpc, times(1)).deliverMessages(any(), any());
+            verify(fixture.rpc, times(1)).readWorkingSet(any(), any());
+        } finally {
+            hook.finish(invocation);
+            discard(lease);
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
     void listingHookColdLoadsAuthorizedHistoryAndArchivesSourceHashedToolEvidence() throws Exception {
         var fixture = new MemoryFixture(List.of(), new MemoryConversationVersion(2, 1, "policy-v1"));
         doAnswer(call -> {

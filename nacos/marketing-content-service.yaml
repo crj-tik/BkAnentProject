@@ -102,6 +102,9 @@ a2a:
     signing-secret: ${MARKETING_A2A_SIGNING_SECRET:}
     response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}
     response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
+  memory:
+    read-enabled: true
+    delivery-enabled: true
 
 marketing:
   listing-read:

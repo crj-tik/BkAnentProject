@@ -43,8 +43,25 @@ public class SupervisorMemoryLifecycle {
 
     public void prepare(ToolLoopState state) {
         if (!properties.isEnabled()) { requireNoIntent(state); return; }
+        if (!properties.isReadEnabled()) {
+            requireNoIntent(state);
+            state.memoryDeliveryAccepted |= properties.isDeliveryEnabled();
+            if (state.memoryDeliveryAccepted) {
+                state.memoryMode = "DELIVERY_ONLY";
+                state.memoryStatus = "DELIVERY_ONLY";
+                clearPromptMaterial(state);
+            } else {
+                state.memoryMode = "NOT_APPLIED";
+                state.memoryStatus = "DISABLED";
+            }
+            return;
+        }
         state.memoryMode = "V2";
-        try { selectMatter(state, session(state).snapshot()); state.memoryStatus = "LOADED"; }
+        try {
+            selectMatter(state, session(state).snapshot());
+            state.memoryDeliveryAccepted |= properties.isDeliveryEnabled();
+            state.memoryStatus = "LOADED";
+        }
         catch (MemoryException exception) {
             if (exception.code() != MemoryErrorCode.MEMORY_UNAVAILABLE) throw exception;
             state.memoryMode = "NOT_APPLIED"; state.memoryStatus = "MEMORY_UNAVAILABLE";
@@ -53,6 +70,7 @@ public class SupervisorMemoryLifecycle {
     }
     public boolean applies(ToolLoopState state) {
         if ("V2".equals(state.memoryMode) && !properties.isEnabled()) throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+        if ("DELIVERY_ONLY".equals(state.memoryMode)) { requireNoIntent(state); return false; }
         if (!properties.isEnabled() || "NOT_APPLIED".equals(state.memoryMode)) { requireNoIntent(state); return false; }
         if (!"V2".equals(state.memoryMode)) throw new MemoryException(MemoryErrorCode.ARCHIVE_NOT_CONFIRMED);
         return true;
@@ -318,9 +336,29 @@ public class SupervisorMemoryLifecycle {
         }
     }
     public void finish(ToolLoopState state) {
-        if (!applies(state)) return;
+        if (!state.memoryDeliveryAccepted) { release(state.runId); return; }
         try { var session = session(state); flush(state, session); session.check(); }
         finally { release(state.runId); }
+    }
+
+    private void clearPromptMaterial(ToolLoopState state) {
+        state.adoptedMemoryVersion = null;
+        state.adoptedMemorySources = new ArrayList<>();
+        state.memoryPreferenceAsOf = null;
+        state.memoryPreferenceObjectiveHash = null;
+        state.memoryPreferenceStatus = "DISABLED";
+        state.memoryPreferenceMatches = new ArrayList<>();
+        state.adoptedPreferenceSelections = new ArrayList<>();
+        state.memoryExperienceMatterId = null;
+        state.memoryExperienceMatterRevision = 0;
+        state.memoryExperienceContextHash = null;
+        state.memoryExperienceInputEvent = null;
+        state.memoryExperienceAsOf = null;
+        state.memoryExperienceObjectiveHash = null;
+        state.memoryExperienceScoringVersion = null;
+        state.memoryExperienceStatus = "DISABLED";
+        state.memoryExperienceMatches = List.of();
+        state.adoptedExperienceSelections = new ArrayList<>();
     }
     public void release(String runId) {
         var session = sessions.remove(runId);

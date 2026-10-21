@@ -31,6 +31,8 @@ a2a:
 agent:
   memory-v2:
     enabled: ${AGENT_MEMORY_V2_ENABLED:false}
+    read-enabled: true
+    delivery-enabled: true
     compression-enabled: ${AGENT_MEMORY_V2_COMPRESSION_ENABLED:false}
     key-id: ${AGENT_MEMORY_V2_KEY_ID:agent-memory-current}
     signing-secret: ${AGENT_MEMORY_V2_SIGNING_SECRET:}

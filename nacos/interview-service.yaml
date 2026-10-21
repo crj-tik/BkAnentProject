@@ -128,3 +128,7 @@ interview:
     lease-minutes: 10
     renew-ratio: 3
     max-retries: 3
+a2a:
+  memory:
+    read-enabled: true
+    delivery-enabled: true

@@ -134,6 +134,8 @@ trade:
 a2a:
   memory:
     enabled: ${BUSINESS_MEMORY_V2_ENABLED:false}
+    read-enabled: true
+    delivery-enabled: true
     compression-enabled: ${BUSINESS_MEMORY_V2_COMPRESSION_ENABLED:false}
     key-id: ${BUSINESS_MEMORY_V2_KEY_ID:business-memory-current}
     signing-secret: ${BUSINESS_MEMORY_V2_SIGNING_SECRET:}

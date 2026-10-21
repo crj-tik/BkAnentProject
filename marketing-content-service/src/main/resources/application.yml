@@ -24,6 +24,8 @@ spring:
 a2a:
   memory:
     enabled: ${MARKETING_MEMORY_V2_ENABLED:false}
+    read-enabled: true
+    delivery-enabled: true
     compression-enabled: ${MARKETING_MEMORY_V2_COMPRESSION_ENABLED:false}
     key-id: ${MARKETING_MEMORY_V2_KEY_ID:marketing-memory-current}
     signing-secret: ${MARKETING_MEMORY_V2_SIGNING_SECRET:}

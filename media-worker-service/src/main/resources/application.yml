@@ -29,6 +29,8 @@ a2a:
     response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
   memory:
     enabled: ${MEDIA_MEMORY_V2_ENABLED:false}
+    read-enabled: true
+    delivery-enabled: true
     compression-enabled: ${MEDIA_MEMORY_V2_COMPRESSION_ENABLED:false}
     key-id: ${MEDIA_MEMORY_V2_KEY_ID:media-memory-current}
     signing-secret: ${MEDIA_MEMORY_V2_SIGNING_SECRET:}

@@ -31,6 +31,8 @@ dubbo:
 a2a:
   memory:
     enabled: ${INTERVIEW_MEMORY_V2_ENABLED:false}
+    read-enabled: true
+    delivery-enabled: true
     compression-enabled: ${INTERVIEW_MEMORY_V2_COMPRESSION_ENABLED:false}
     key-id: ${INTERVIEW_MEMORY_V2_KEY_ID:interview-memory-current}
     signing-secret: ${INTERVIEW_MEMORY_V2_SIGNING_SECRET:}

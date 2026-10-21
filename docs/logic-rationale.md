@@ -929,3 +929,11 @@
 **根因**：运维工具需要为 Memory v2 空间提供可重复的 provision/status/replay 入口，但不能因此开放任意索引、集合、domain/agent 或维度选择。固定逻辑 allowlist 与服务端 managed registry 双重限制，使新增物理资源只能随审查过的 RAG 配置发布。
 
 **代码位置**：`scripts/verification/RagRuntimeProbe.MEMORY_V2_DOMAIN_AGENTS`、`MEMORY_V2_SPACE_IDS`；`common/rag/MemoryRagSpaceIds`、`MemoryRagRecordType`；`nacos/rag-service.yaml`；`scripts/verification/README.md` 和 `docs/memory-v2-operations.md`。关联 LR-43/LR-92，change 9.1/11.2。
+
+## LR-96 回滚时将历史读取与已接受交付分阶段关闭
+
+**结论**：A2A 域 Agent 与 Supervisor 的 Memory v2 总开关下分别控制 prompt 历史读取和结果交付。读取关闭后，新 A2A 任务与 Supervisor run 进入 `DELIVERY_ONLY`，不将历史正文放入模型上下文，但可在执行完成时归档本轮事实。任务开始时已接受的交付许可记录在 invocation 或 workflow checkpoint；随后关闭新交付入口不取消该次交付。Supervisor 只有在工作集初始化成功后才把普通 V2 交付标记为已接受，避免可选 Memory 读取失败时在结束节点误触发新的记忆调用。
+
+**根因**：单一开关同时控制模型读取与终态归档，直接关闭会让仍在执行的任务跳过结果交付；保持总开关开启又会让新任务继续读取历史。分开读取/交付并记录任务级交付接受状态，才能先停止新增 prompt 依赖，再有界完成已接受事件。
+
+**代码位置**：`common-a2a/A2aMemoryProperties`、`A2aMemoryInvocation`、`A2aMemoryAgentHook`；`agent-service/SupervisorMemoryProperties`、`SupervisorMemoryLifecycle`、`ToolLoopState`；相关域 Nacos 配置与 `docs/memory-v2-operations.md`。回归 `A2aMemoryAgentHookTest.readDisabledDeliveryOnlyTurnDrainsAfterDeliverySwitchIsClosed`、`SupervisorMemoryIntegrationTest.deliveryOnlyModeSkipsPromptReadsAndFinishesAnAcceptedDeliveryAfterCutoff`、`SupervisorMemoryPropertiesTest.promptReadsAndAcceptedDeliveriesHaveIndependentSwitches`；关联 change 11.5。

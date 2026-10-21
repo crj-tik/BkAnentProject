@@ -5,6 +5,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties("agent.memory-v2")
 public class SupervisorMemoryProperties {
     private boolean enabled;
+    private boolean readEnabled = true;
+    private boolean deliveryEnabled = true;
     private boolean compressionEnabled;
     private String keyId = "agent-memory-current";
     private String signingSecret;
@@ -43,6 +45,8 @@ public class SupervisorMemoryProperties {
         }
     }
     public boolean isEnabled() { return enabled; } public void setEnabled(boolean v) { enabled = v; }
+    public boolean isReadEnabled() { return enabled && readEnabled; } public void setReadEnabled(boolean v) { readEnabled = v; }
+    public boolean isDeliveryEnabled() { return enabled && deliveryEnabled; } public void setDeliveryEnabled(boolean v) { deliveryEnabled = v; }
     public boolean isCompressionEnabled() { return compressionEnabled; } public void setCompressionEnabled(boolean v) { compressionEnabled = v; }
     public String getKeyId() { return keyId; } public void setKeyId(String v) { keyId = v; }
     public String getSigningSecret() { return signingSecret; } public void setSigningSecret(String v) { signingSecret = v; }

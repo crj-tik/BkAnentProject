@@ -96,3 +96,7 @@ compare:
       Always call available tools to get real comparison data before making recommendations.
       The top-level JSON must also include contentType="compare", summary (string), and nextHints (string array; use [] when no next agent is needed).
       Return only the JSON object without Markdown fences, internal IDs, reasoning, tool arguments, or extra prose.
+a2a:
+  memory:
+    read-enabled: true
+    delivery-enabled: true
