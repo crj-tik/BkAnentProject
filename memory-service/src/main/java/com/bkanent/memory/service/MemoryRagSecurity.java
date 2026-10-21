@@ -1,6 +1,7 @@
 package com.bkanent.memory.service;
 
 import com.bkanent.common.rag.*;
+import com.bkanent.common.memory.MemoryContextKey;
 import com.bkanent.common.rpc.RagPrincipalRpcService;
 import com.bkanent.memory.config.MemoryRagProperties;
 import org.springframework.stereotype.Service;
@@ -89,6 +90,46 @@ public class MemoryRagSecurity {
 
     public RagAuthEnvelope serviceAuthentication(RagOperation op, String id, Object request) {
         return sign("rag-service", op, id, RagCanonicalHash.requestHash(request), RagActorMode.SERVICE, "memory-service", null);
+    }
+
+    public RagAuthEnvelope memorySearchAuthentication(RagSearchRequest request) {
+        return serviceAuthentication(RagOperation.MEMORY_SEARCH, request.requestId(), request);
+    }
+
+    public MemoryRagAuthorizationScope memoryScope(RagSearchRequest request, MemoryContextKey context,
+            MemoryRagRecordType type, String matterId, java.util.List<String> grantIds, String purpose) {
+        if (request == null || context == null || type == null || !MemoryRagSpaceIds.spaceId(type, context.domainId(), context.agentId()).equals(request.spaceId())) {
+            throw new RagException(RagErrorCode.FORBIDDEN);
+        }
+        long issued = Instant.now().getEpochSecond();
+        var unsigned = new MemoryRagAuthorizationScope(MemoryRagAuthorizationScope.VERSION, properties.getKeyId(),
+                "memory-service", context.ownerId(), context.domainId(), context.agentId(), context.conversationId(),
+                matterId, type, request.spaceId(), request.requestId(), RagCanonicalHash.requestHash(request),
+                grantIds, purpose, issued, issued + 30, null);
+        return MemoryRagScopeSigner.sign(unsigned, secret(properties.getSigningSecret()));
+    }
+
+    /** Dedicated RAG callback key cannot call legacy search or write/index operations. */
+    public void verifyCandidateCaller(RagCandidateAuthorizationRequest request, RagAuthEnvelope authentication,
+            MemoryRagAuthorizationScope scope) {
+        if (request == null || request.search() == null || scope == null || authentication == null) {
+            throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+        }
+        String secret = properties.getCandidateAuthorizationSecret();
+        String keyId = properties.getCandidateAuthorizationKeyId();
+        RagSigningKey caller = new RagSigningKey(keyId, "rag-service", null,
+                Set.of(RagOperation.AUTHORIZE_CANDIDATES), secret(secret));
+        RagRequestSigner.verify(authentication, RagCanonicalHash.requestHash(request), "memory-service",
+                RagOperation.AUTHORIZE_CANDIDATES, request.search().requestId(), null, caller, Instant.now());
+        if (authentication.actorMode() != RagActorMode.SERVICE || !"rag-service".equals(authentication.actorId())
+                || !scope.spaceId().equals(request.search().spaceId())
+                || !scope.requestId().equals(request.search().requestId())
+                || !scope.requestHash().equals(RagCanonicalHash.requestHash(request.search()))
+                || !MemoryRagSpaceIds.spaceId(scope.recordType(), scope.domainId(), scope.agentId()).equals(scope.spaceId())) {
+            throw new RagException(RagErrorCode.FORBIDDEN);
+        }
+        MemoryRagScopeSigner.verify(scope, properties.getKeyId(), secret(properties.getSigningSecret()),
+                request.search(), scope.ownerId(), scope.domainId(), scope.agentId(), Instant.now());
     }
 
     private RagAuthEnvelope sign(String audience, RagOperation op, String id, String hash, RagActorMode mode, String actor, String digest) {

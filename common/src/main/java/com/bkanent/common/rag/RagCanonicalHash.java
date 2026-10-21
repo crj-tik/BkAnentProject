@@ -27,11 +27,13 @@ import java.util.Set;
 public final class RagCanonicalHash {
     private static final Set<Class<?>> REQUESTS = Set.of(RagSearchRequest.class, RagIndexEvent.class,
             RagStatusRequest.class, RagInspectRequest.class, RagProvisionRequest.class, RagReplayRequest.class,
-            RagListingSearchRequest.class, RagListingReadRequest.class, RagListingIndexRequest.class, MemoryRagSearchRequest.class, A2aBeaconBinding.class);
+            RagListingSearchRequest.class, RagListingReadRequest.class, RagListingIndexRequest.class, MemoryRagSearchRequest.class,
+            RagCandidateAuthorizationRequest.class, A2aBeaconBinding.class);
     private static final Set<Class<?>> BUSINESS = Set.of(RagSearchRequest.class, RagRecallOptions.class,
             RagFusionOptions.class, RagFilter.class, RagValue.class, RagDocument.class, RagIndexEvent.class,
             RagStatusRequest.class, RagInspectRequest.class, RagProvisionRequest.class, RagReplayRequest.class,
-            RagListingSearchRequest.class, RagListingReadRequest.class, RagListingIndexRequest.class, MemoryRagSearchRequest.class, A2aBeaconBinding.class);
+            RagListingSearchRequest.class, RagListingReadRequest.class, RagListingIndexRequest.class, MemoryRagSearchRequest.class,
+            RagCandidateAuthorizationRequest.class, RagCandidateReference.class, A2aBeaconBinding.class);
 
     private RagCanonicalHash() { }
 
@@ -42,6 +44,10 @@ public final class RagCanonicalHash {
         if (request instanceof MemoryRagSearchRequest memory) {
             request = new MemoryRagSearchRequest(memory.search().normalized(), memory.topK(),
                     memory.minimumSemanticRelevance(), memory.halfLifeDays());
+        }
+        if (request instanceof RagCandidateAuthorizationRequest authorization) {
+            request = new RagCandidateAuthorizationRequest(authorization.contractVersion(),
+                    authorization.search().normalized(), authorization.candidates());
         }
         return hash(encode("rag.request.v1", request, false));
     }

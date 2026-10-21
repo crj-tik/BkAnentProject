@@ -1,6 +1,8 @@
 package com.bkanent.memory.service;
 
 import com.bkanent.common.memory.*;
+import com.bkanent.common.rag.MemoryRagRecordType;
+import com.bkanent.common.rag.RagCandidate;
 import com.bkanent.memory.config.MemoryPreferenceProperties;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
@@ -19,6 +21,8 @@ public class PreferenceHistoryService {
     private final MemoryV2RequestSecurity security;
     private final MemorySourceAuthorizer sources;
     private final MemoryPreferenceProperties properties;
+    private final MemoryV2RagProjectionService ragProjection;
+    private final MemoryRagSearchFacade ragSearch;
     private final TransactionTemplate tx;
     private final PreferenceStateReducer reducer = new PreferenceStateReducer();
     private final PreferenceSelectionPolicy selector = new PreferenceSelectionPolicy();
@@ -28,7 +32,15 @@ public class PreferenceHistoryService {
 
     public PreferenceHistoryService(MemoryArchiveStore store, MemoryV2RequestSecurity security, MemorySourceAuthorizer sources,
                                     MemoryPreferenceProperties properties, PlatformTransactionManager manager) {
+        this(store, security, sources, properties, manager, null, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public PreferenceHistoryService(MemoryArchiveStore store, MemoryV2RequestSecurity security, MemorySourceAuthorizer sources,
+                                    MemoryPreferenceProperties properties, PlatformTransactionManager manager,
+                                    MemoryV2RagProjectionService ragProjection, MemoryRagSearchFacade ragSearch) {
         this.store = store; this.security = security; this.sources = sources; this.properties = properties;
+        this.ragProjection = ragProjection; this.ragSearch = ragSearch;
         tx = new TransactionTemplate(manager); tx.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED); tx.setTimeout(10);
     }
 
@@ -45,10 +57,19 @@ public class PreferenceHistoryService {
     public MemoryPreferenceAssemblyResponse assemble(MemoryPreferenceAssemblyRequest request, MemoryRequestProof proof) {
         long owner = security.authorize(request, proof, MemoryV2Contract.OPERATION_ASSEMBLE_PREFERENCES);
         Instant asOf = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
-        var snapshot = transaction(() -> assembleAt(request, asOf));
+        Set<String> candidateIds = null;
+        if (ragSearch != null && ragSearch.isDomainSearchEnabled()) {
+            String objective = transaction(() -> matterGoal(request.contextKey(), request.matterId()));
+            candidateIds = ragSearch.searchDomainCandidates(request.contextKey(), MemoryRagRecordType.PREFERENCE_HISTORY,
+                    objective, Math.min(200, Math.max(16, properties.getDimensions().size() * 4)), request.matterId(),
+                    List.of(), "preference-assembly").stream().map(RagCandidate::sourceId)
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        }
+        final Set<String> permittedIds = candidateIds;
+        var snapshot = transaction(() -> assembleAt(request, asOf, permittedIds));
         security.revalidate(request, proof, owner, MemoryV2Contract.OPERATION_ASSEMBLE_PREFERENCES);
         return transaction(() -> {
-            var current = assembleAt(request, asOf);
+            var current = assembleAt(request, asOf, permittedIds);
             require(snapshot.equals(current), MemoryErrorCode.VERSION_CONFLICT);
             MemoryV2RequestSecurity.requireUnexpired(proof);
             store.encode(current);
@@ -91,7 +112,7 @@ public class PreferenceHistoryService {
         });
     }
 
-    private MemoryPreferenceAssemblyResponse assembleAt(MemoryPreferenceAssemblyRequest request, Instant asOf) {
+    private MemoryPreferenceAssemblyResponse assembleAt(MemoryPreferenceAssemblyRequest request, Instant asOf, Set<String> candidateIds) {
         MemoryContextKey context = request.contextKey();
         store.conversation(context);
         var matterHeader = store.one("SELECT content_revision,state FROM memory_matter WHERE context_id=? AND matter_id=?",
@@ -110,10 +131,15 @@ public class PreferenceHistoryService {
                 && new HashSet<>(matterDependencies).equals(new HashSet<>(matter.dependencies())), MemoryErrorCode.MEMORY_UNAVAILABLE);
 
         // The block scope and subject are derived from the authenticated context. No request/model field can widen them.
+        List<String> allowedBlockIds = candidateIds == null ? List.of() : candidateIds.stream().sorted().toList();
+        String candidateClause = candidateIds == null ? "" : allowedBlockIds.isEmpty() ? "AND 1=0 "
+                : "AND block_id IN (" + String.join(",", Collections.nCopies(allowedBlockIds.size(), "?")) + ") ";
+        List<Object> headerArgs = new ArrayList<>(List.of(context.ownerId(), context.domainId(), context.agentId(), context.ownerId()));
+        headerArgs.addAll(allowedBlockIds);
+        headerArgs.add(Math.max(1, properties.getDimensions().size() + 1));
         var headers = store.jdbc.queryForList("SELECT block_id,revision,authorization_revision,subject_ref,dimension_id,state "
                 + "FROM memory_preference_block WHERE owner_id=? AND domain_id=? AND agent_id=? AND subject_ref=? AND state='ACTIVE' "
-                + "ORDER BY block_id LIMIT ?", context.ownerId(), context.domainId(), context.agentId(), context.ownerId(),
-                Math.max(1, properties.getDimensions().size() + 1));
+                + candidateClause + "ORDER BY block_id LIMIT ?", headerArgs.toArray());
         require(headers.size() <= properties.getDimensions().size(), MemoryErrorCode.CONTEXT_BUDGET_EXCEEDED);
         List<MemoryPreferenceMatch> candidates = new ArrayList<>();
         String objectiveHash = MemoryCanonicalHash.contentHash(matter.goal());
@@ -238,7 +264,89 @@ public class PreferenceHistoryService {
             store.jdbc.update("UPDATE memory_preference_block SET revision=?,last_ordinal=? WHERE block_id=?", revision, ordinal, id);
             store.dependencies(key(context), "PREFERENCE", id, revision, List.of(candidate.source()));
             store.enqueue(key(context), MemoryCanonicalHash.contentHash(List.of(id, revision)), "INDEX_PREFERENCE");
+            if (ragProjection != null) ragProjection.preference(snapshot, history);
             return new MemoryPreferenceWriteResponse(id, revision, transitionId, true);
+    }
+
+    public MemoryPreferenceQueryResponse search(MemoryPreferenceQueryRequest request, MemoryRequestProof proof) {
+        long owner = security.authorize(request, proof, MemoryV2Contract.OPERATION_SEARCH_PREFERENCES);
+        require(owner > 0 && Long.toString(owner).equals(request.contextKey().ownerId()), MemoryErrorCode.FORBIDDEN);
+        require(ragSearch != null && ragSearch.isDomainSearchEnabled(), MemoryErrorCode.MEMORY_UNAVAILABLE);
+        String subject = request.verifiedSubjectRef() == null ? request.contextKey().ownerId() : request.verifiedSubjectRef();
+        require(subject.equals(request.contextKey().ownerId()), MemoryErrorCode.FORBIDDEN);
+        if (request.dimensionId() != null) require(properties.getDimensions().contains(request.dimensionId()), MemoryErrorCode.INVALID_ARGUMENT);
+        String query = request.dimensionId() == null ? "preference history" : request.dimensionId();
+        Set<String> candidateIds = ragSearch.searchDomainCandidates(request.contextKey(), MemoryRagRecordType.PREFERENCE_HISTORY,
+                query, Math.min(200, Math.max(request.limit() * 4, request.limit() + 1)), null, List.of(),
+                "preference-history-search").stream().map(RagCandidate::sourceId)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        var first = transaction(() -> searchAt(request, subject, candidateIds));
+        security.revalidate(request, proof, owner, MemoryV2Contract.OPERATION_SEARCH_PREFERENCES);
+        return transaction(() -> {
+            var current = searchAt(request, subject, candidateIds);
+            require(first.equals(current), MemoryErrorCode.VERSION_CONFLICT);
+            MemoryV2RequestSecurity.requireUnexpired(proof);
+            return current;
+        });
+    }
+
+    private MemoryPreferenceQueryResponse searchAt(MemoryPreferenceQueryRequest request, String subject, Set<String> candidateIds) {
+        MemoryContextKey context = request.contextKey();
+        store.conversation(context);
+        List<String> allowed = candidateIds.stream().sorted().toList();
+        if (allowed.isEmpty()) return new MemoryPreferenceQueryResponse(List.of(), null, false);
+        List<Object> args = new ArrayList<>(List.of(context.ownerId(), context.domainId(), context.agentId(), subject));
+        String placeholders = String.join(",", Collections.nCopies(allowed.size(), "?"));
+        String sql = "SELECT block_id,revision,authorization_revision,dimension_id FROM memory_preference_block "
+                + "WHERE owner_id=? AND domain_id=? AND agent_id=? AND subject_ref=? AND state='ACTIVE' AND block_id IN (" + placeholders + ") ";
+        args.addAll(allowed);
+        if (request.dimensionId() != null) { sql += "AND dimension_id=? "; args.add(request.dimensionId()); }
+        if (request.cursor() != null) { sql += "AND block_id>? "; args.add(request.cursor()); }
+        sql += "ORDER BY block_id LIMIT ?"; args.add(request.limit() + 1);
+        var headers = store.jdbc.queryForList(sql, args.toArray());
+        boolean more = headers.size() > request.limit();
+        List<PreferenceBlock> blocks = new ArrayList<>();
+        Instant asOf = Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        for (var header : headers.subList(0, Math.min(request.limit(), headers.size()))) {
+            String blockId = (String) header.get("block_id");
+            long revision = number(header, "revision");
+            var expectedKey = new PreferenceBlockKey(context.ownerId(), subject,
+                    MemoryScope.privateScope(context.domainId(), context.agentId()), (String) header.get("dimension_id"));
+            require(blockId.equals("p-" + expectedKey.identityHash()), MemoryErrorCode.FORBIDDEN);
+            List<MemorySourceDependency> dependencies = dependencies(blockId, revision);
+            checkSources(context, dependencies);
+            var row = store.one("SELECT content_hash,snapshot_json FROM memory_preference_revision WHERE block_id=? AND revision=?", blockId, revision);
+            require(row != null && row.get("snapshot_json") != null, MemoryErrorCode.VERSION_CONFLICT);
+            PreferenceBlock stored = store.decode((String) row.get("snapshot_json"), PreferenceBlock.class);
+            require(stored.blockId().equals(blockId) && stored.version().revision() == revision
+                    && stored.version().contentHash().equals(row.get("content_hash"))
+                    && blockHash(stored).equals(row.get("content_hash")) && stored.key().equals(expectedKey), MemoryErrorCode.MEMORY_UNAVAILABLE);
+            var current = new PreferenceBlock(stored.blockId(), stored.key(), stored.version(), stored.state(),
+                    reducer.reduce(transitions(blockId, revision), asOf, null), stored.historyStart());
+            blocks.add(current);
+        }
+        String nextCursor = more && !blocks.isEmpty() ? blocks.get(blocks.size() - 1).blockId() : null;
+        return new MemoryPreferenceQueryResponse(blocks, nextCursor, more);
+    }
+
+    private String matterGoal(MemoryContextKey context, String matterId) {
+        var row = store.one("SELECT content_revision,state FROM memory_matter WHERE context_id=? AND matter_id=?", key(context), matterId);
+        require(row != null && Set.of("ACTIVE", "REOPENED").contains(row.get("state")), MemoryErrorCode.NOT_FOUND);
+        long revision = number(row, "content_revision");
+        var dependencies = dependenciesForTarget(context, "MATTER", matterId, revision);
+        sources.requireCurrentMetadata(context, dependencies);
+        var body = store.one("SELECT payload_json FROM memory_matter WHERE context_id=? AND matter_id=? AND content_revision=? AND state=?",
+                key(context), matterId, revision, row.get("state"));
+        require(body != null && body.get("payload_json") != null, MemoryErrorCode.VERSION_CONFLICT);
+        MemoryMatter matter = store.decode((String) body.get("payload_json"), MemoryMatter.class);
+        require(matter.contextKey().equals(context) && matter.matterId().equals(matterId)
+                && matter.version().revision() == revision && MemoryCanonicalHash.matterHash(matter).equals(matter.version().contentHash())
+                && new HashSet<>(dependencies).equals(new HashSet<>(matter.dependencies())), MemoryErrorCode.MEMORY_UNAVAILABLE);
+        return matter.goal();
+    }
+
+    public void removeProjection(MemoryContextKey context, String blockId) {
+        if (ragProjection != null) ragProjection.removePreference(context, blockId);
     }
 
     MemoryPreferenceAssessment linkWithinConversation(MemoryPreferenceAssessment candidate) {

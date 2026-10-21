@@ -79,6 +79,7 @@ public class MemoryV2RpcServiceImpl implements MemoryV2RpcService {
     }
 
     public MemoryPreferenceQueryResponse searchPreferences(MemoryPreferenceQueryRequest request, MemoryRequestProof proof) {
+        if (preferences != null) return preferences.search(request, proof);
         security.authorize(request, proof, MemoryV2Contract.OPERATION_SEARCH_PREFERENCES);
         throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
     }

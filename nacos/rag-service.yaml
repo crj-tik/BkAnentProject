@@ -89,13 +89,16 @@ rag:
       memory-current:
         caller-service: memory-service
         owner-domain: memory-service
-        allowed-operations: [SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+        allowed-operations: [SEARCH, MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
         secret: ${MEMORY_RAG_RPC_SECRET:}
       agent-current:
         caller-service: agent-service
         owner-domain: agent-service
         allowed-operations: [SEARCH]
         secret: ${AGENT_RAG_RPC_SECRET:}
+  memory-candidate-authorization:
+    key-id: ${RAG_MEMORY_CANDIDATE_KEY_ID:rag-memory-candidate-current}
+    secret: ${RAG_MEMORY_CANDIDATE_KEY_SECRET:}
   index:
     worker:
       enabled: false
@@ -235,6 +238,2786 @@ rag:
         memory-service: [SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
       limits: *space-limits
       rerank-profile: *measured-governed-profile
+    '[memory.v2.session.marketing.marketing-agent]':
+      space-id: memory.v2.session.marketing.marketing-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_session_marketing_marketing_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_session_marketing_marketing_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        sessionId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        summaryId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, sessionId, summaryId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: session
+      memory-domain-id: marketing
+      memory-agent-id: marketing-agent
+      candidate-authorization-required: true
+    '[memory.v2.summary.marketing.marketing-agent]':
+      space-id: memory.v2.summary.marketing.marketing-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_summary_marketing_marketing_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_summary_marketing_marketing_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        summaryId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        sessionId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, summaryId, sessionId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: summary
+      memory-domain-id: marketing
+      memory-agent-id: marketing-agent
+      candidate-authorization-required: true
+    '[memory.v2.preference-history.marketing.marketing-agent]':
+      space-id: memory.v2.preference-history.marketing.marketing-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_preference_history_marketing_marketing_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_preference_history_marketing_marketing_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        blockId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        dimensionId:
+          type: STRING
+          operators: [EQ, IN]
+          required: true
+        fragmentIndex:
+          type: NUMBER
+          operators: []
+          required: true
+        fragmentCount:
+          type: NUMBER
+          operators: []
+          required: true
+      return-fields: [active, blockId, dimensionId, fragmentIndex, fragmentCount]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: preference-history
+      memory-domain-id: marketing
+      memory-agent-id: marketing-agent
+      candidate-authorization-required: true
+    '[memory.v2.experience.marketing.marketing-agent]':
+      space-id: memory.v2.experience.marketing.marketing-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_experience_marketing_marketing_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_experience_marketing_marketing_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        experienceId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, experienceId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: experience
+      memory-domain-id: marketing
+      memory-agent-id: marketing-agent
+      candidate-authorization-required: true
+    '[memory.v2.collaboration.marketing.marketing-agent]':
+      space-id: memory.v2.collaboration.marketing.marketing-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_collaboration_marketing_marketing_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_collaboration_marketing_marketing_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        recipientDomainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        recipientAgentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        grantId:
+          type: STRING
+          operators: [EQ, IN]
+          required: true
+        exportId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        sourceDomainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        sourceAgentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, exportId, sourceDomainId, sourceAgentId, recipientDomainId, recipientAgentId, grantId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: collaboration
+      memory-domain-id: marketing
+      memory-agent-id: marketing-agent
+      candidate-authorization-required: true
+    '[memory.v2.session.interview.interview-agent]':
+      space-id: memory.v2.session.interview.interview-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_session_interview_interview_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_session_interview_interview_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        sessionId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        summaryId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, sessionId, summaryId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: session
+      memory-domain-id: interview
+      memory-agent-id: interview-agent
+      candidate-authorization-required: true
+    '[memory.v2.summary.interview.interview-agent]':
+      space-id: memory.v2.summary.interview.interview-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_summary_interview_interview_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_summary_interview_interview_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        summaryId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        sessionId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, summaryId, sessionId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: summary
+      memory-domain-id: interview
+      memory-agent-id: interview-agent
+      candidate-authorization-required: true
+    '[memory.v2.preference-history.interview.interview-agent]':
+      space-id: memory.v2.preference-history.interview.interview-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_preference_history_interview_interview_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_preference_history_interview_interview_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        blockId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        dimensionId:
+          type: STRING
+          operators: [EQ, IN]
+          required: true
+        fragmentIndex:
+          type: NUMBER
+          operators: []
+          required: true
+        fragmentCount:
+          type: NUMBER
+          operators: []
+          required: true
+      return-fields: [active, blockId, dimensionId, fragmentIndex, fragmentCount]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: preference-history
+      memory-domain-id: interview
+      memory-agent-id: interview-agent
+      candidate-authorization-required: true
+    '[memory.v2.experience.interview.interview-agent]':
+      space-id: memory.v2.experience.interview.interview-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_experience_interview_interview_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_experience_interview_interview_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        experienceId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, experienceId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: experience
+      memory-domain-id: interview
+      memory-agent-id: interview-agent
+      candidate-authorization-required: true
+    '[memory.v2.collaboration.interview.interview-agent]':
+      space-id: memory.v2.collaboration.interview.interview-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_collaboration_interview_interview_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_collaboration_interview_interview_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        recipientDomainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        recipientAgentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        grantId:
+          type: STRING
+          operators: [EQ, IN]
+          required: true
+        exportId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        sourceDomainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        sourceAgentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, exportId, sourceDomainId, sourceAgentId, recipientDomainId, recipientAgentId, grantId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: collaboration
+      memory-domain-id: interview
+      memory-agent-id: interview-agent
+      candidate-authorization-required: true
+    '[memory.v2.session.listing.listing-agent]':
+      space-id: memory.v2.session.listing.listing-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_session_listing_listing_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_session_listing_listing_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        sessionId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        summaryId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, sessionId, summaryId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: session
+      memory-domain-id: listing
+      memory-agent-id: listing-agent
+      candidate-authorization-required: true
+    '[memory.v2.summary.listing.listing-agent]':
+      space-id: memory.v2.summary.listing.listing-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_summary_listing_listing_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_summary_listing_listing_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        summaryId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        sessionId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, summaryId, sessionId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: summary
+      memory-domain-id: listing
+      memory-agent-id: listing-agent
+      candidate-authorization-required: true
+    '[memory.v2.preference-history.listing.listing-agent]':
+      space-id: memory.v2.preference-history.listing.listing-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_preference_history_listing_listing_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_preference_history_listing_listing_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        blockId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        dimensionId:
+          type: STRING
+          operators: [EQ, IN]
+          required: true
+        fragmentIndex:
+          type: NUMBER
+          operators: []
+          required: true
+        fragmentCount:
+          type: NUMBER
+          operators: []
+          required: true
+      return-fields: [active, blockId, dimensionId, fragmentIndex, fragmentCount]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: preference-history
+      memory-domain-id: listing
+      memory-agent-id: listing-agent
+      candidate-authorization-required: true
+    '[memory.v2.experience.listing.listing-agent]':
+      space-id: memory.v2.experience.listing.listing-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_experience_listing_listing_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_experience_listing_listing_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        experienceId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, experienceId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: experience
+      memory-domain-id: listing
+      memory-agent-id: listing-agent
+      candidate-authorization-required: true
+    '[memory.v2.collaboration.listing.listing-agent]':
+      space-id: memory.v2.collaboration.listing.listing-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_collaboration_listing_listing_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_collaboration_listing_listing_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        recipientDomainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        recipientAgentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        grantId:
+          type: STRING
+          operators: [EQ, IN]
+          required: true
+        exportId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        sourceDomainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        sourceAgentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, exportId, sourceDomainId, sourceAgentId, recipientDomainId, recipientAgentId, grantId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: collaboration
+      memory-domain-id: listing
+      memory-agent-id: listing-agent
+      candidate-authorization-required: true
+    '[memory.v2.session.trade.trade-agent]':
+      space-id: memory.v2.session.trade.trade-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_session_trade_trade_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_session_trade_trade_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        sessionId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        summaryId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, sessionId, summaryId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: session
+      memory-domain-id: trade
+      memory-agent-id: trade-agent
+      candidate-authorization-required: true
+    '[memory.v2.summary.trade.trade-agent]':
+      space-id: memory.v2.summary.trade.trade-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_summary_trade_trade_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_summary_trade_trade_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        summaryId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        sessionId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, summaryId, sessionId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: summary
+      memory-domain-id: trade
+      memory-agent-id: trade-agent
+      candidate-authorization-required: true
+    '[memory.v2.preference-history.trade.trade-agent]':
+      space-id: memory.v2.preference-history.trade.trade-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_preference_history_trade_trade_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_preference_history_trade_trade_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        blockId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        dimensionId:
+          type: STRING
+          operators: [EQ, IN]
+          required: true
+        fragmentIndex:
+          type: NUMBER
+          operators: []
+          required: true
+        fragmentCount:
+          type: NUMBER
+          operators: []
+          required: true
+      return-fields: [active, blockId, dimensionId, fragmentIndex, fragmentCount]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: preference-history
+      memory-domain-id: trade
+      memory-agent-id: trade-agent
+      candidate-authorization-required: true
+    '[memory.v2.experience.trade.trade-agent]':
+      space-id: memory.v2.experience.trade.trade-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_experience_trade_trade_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_experience_trade_trade_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        experienceId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, experienceId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: experience
+      memory-domain-id: trade
+      memory-agent-id: trade-agent
+      candidate-authorization-required: true
+    '[memory.v2.collaboration.trade.trade-agent]':
+      space-id: memory.v2.collaboration.trade.trade-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_collaboration_trade_trade_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_collaboration_trade_trade_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        recipientDomainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        recipientAgentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        grantId:
+          type: STRING
+          operators: [EQ, IN]
+          required: true
+        exportId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        sourceDomainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        sourceAgentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, exportId, sourceDomainId, sourceAgentId, recipientDomainId, recipientAgentId, grantId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: collaboration
+      memory-domain-id: trade
+      memory-agent-id: trade-agent
+      candidate-authorization-required: true
+    '[memory.v2.session.contract.contract-agent]':
+      space-id: memory.v2.session.contract.contract-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_session_contract_contract_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_session_contract_contract_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        sessionId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        summaryId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, sessionId, summaryId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: session
+      memory-domain-id: contract
+      memory-agent-id: contract-agent
+      candidate-authorization-required: true
+    '[memory.v2.summary.contract.contract-agent]':
+      space-id: memory.v2.summary.contract.contract-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_summary_contract_contract_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_summary_contract_contract_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        summaryId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        sessionId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, summaryId, sessionId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: summary
+      memory-domain-id: contract
+      memory-agent-id: contract-agent
+      candidate-authorization-required: true
+    '[memory.v2.preference-history.contract.contract-agent]':
+      space-id: memory.v2.preference-history.contract.contract-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_preference_history_contract_contract_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_preference_history_contract_contract_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        blockId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        dimensionId:
+          type: STRING
+          operators: [EQ, IN]
+          required: true
+        fragmentIndex:
+          type: NUMBER
+          operators: []
+          required: true
+        fragmentCount:
+          type: NUMBER
+          operators: []
+          required: true
+      return-fields: [active, blockId, dimensionId, fragmentIndex, fragmentCount]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: preference-history
+      memory-domain-id: contract
+      memory-agent-id: contract-agent
+      candidate-authorization-required: true
+    '[memory.v2.experience.contract.contract-agent]':
+      space-id: memory.v2.experience.contract.contract-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_experience_contract_contract_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_experience_contract_contract_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        experienceId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, experienceId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: experience
+      memory-domain-id: contract
+      memory-agent-id: contract-agent
+      candidate-authorization-required: true
+    '[memory.v2.collaboration.contract.contract-agent]':
+      space-id: memory.v2.collaboration.contract.contract-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_collaboration_contract_contract_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_collaboration_contract_contract_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        recipientDomainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        recipientAgentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        grantId:
+          type: STRING
+          operators: [EQ, IN]
+          required: true
+        exportId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        sourceDomainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        sourceAgentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, exportId, sourceDomainId, sourceAgentId, recipientDomainId, recipientAgentId, grantId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: collaboration
+      memory-domain-id: contract
+      memory-agent-id: contract-agent
+      candidate-authorization-required: true
+    '[memory.v2.session.compare.compare-agent]':
+      space-id: memory.v2.session.compare.compare-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_session_compare_compare_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_session_compare_compare_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        sessionId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        summaryId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, sessionId, summaryId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: session
+      memory-domain-id: compare
+      memory-agent-id: compare-agent
+      candidate-authorization-required: true
+    '[memory.v2.summary.compare.compare-agent]':
+      space-id: memory.v2.summary.compare.compare-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_summary_compare_compare_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_summary_compare_compare_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        summaryId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        sessionId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, summaryId, sessionId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: summary
+      memory-domain-id: compare
+      memory-agent-id: compare-agent
+      candidate-authorization-required: true
+    '[memory.v2.preference-history.compare.compare-agent]':
+      space-id: memory.v2.preference-history.compare.compare-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_preference_history_compare_compare_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_preference_history_compare_compare_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        blockId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        dimensionId:
+          type: STRING
+          operators: [EQ, IN]
+          required: true
+        fragmentIndex:
+          type: NUMBER
+          operators: []
+          required: true
+        fragmentCount:
+          type: NUMBER
+          operators: []
+          required: true
+      return-fields: [active, blockId, dimensionId, fragmentIndex, fragmentCount]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: preference-history
+      memory-domain-id: compare
+      memory-agent-id: compare-agent
+      candidate-authorization-required: true
+    '[memory.v2.experience.compare.compare-agent]':
+      space-id: memory.v2.experience.compare.compare-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_experience_compare_compare_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_experience_compare_compare_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        experienceId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, experienceId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: experience
+      memory-domain-id: compare
+      memory-agent-id: compare-agent
+      candidate-authorization-required: true
+    '[memory.v2.collaboration.compare.compare-agent]':
+      space-id: memory.v2.collaboration.compare.compare-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_collaboration_compare_compare_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_collaboration_compare_compare_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        recipientDomainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        recipientAgentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        grantId:
+          type: STRING
+          operators: [EQ, IN]
+          required: true
+        exportId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        sourceDomainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        sourceAgentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, exportId, sourceDomainId, sourceAgentId, recipientDomainId, recipientAgentId, grantId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: collaboration
+      memory-domain-id: compare
+      memory-agent-id: compare-agent
+      candidate-authorization-required: true
+    '[memory.v2.session.settlement.settlement-agent]':
+      space-id: memory.v2.session.settlement.settlement-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_session_settlement_settlement_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_session_settlement_settlement_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        sessionId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        summaryId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, sessionId, summaryId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: session
+      memory-domain-id: settlement
+      memory-agent-id: settlement-agent
+      candidate-authorization-required: true
+    '[memory.v2.summary.settlement.settlement-agent]':
+      space-id: memory.v2.summary.settlement.settlement-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_summary_settlement_settlement_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_summary_settlement_settlement_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        summaryId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        sessionId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, summaryId, sessionId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: summary
+      memory-domain-id: settlement
+      memory-agent-id: settlement-agent
+      candidate-authorization-required: true
+    '[memory.v2.preference-history.settlement.settlement-agent]':
+      space-id: memory.v2.preference-history.settlement.settlement-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_preference_history_settlement_settlement_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_preference_history_settlement_settlement_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        blockId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        dimensionId:
+          type: STRING
+          operators: [EQ, IN]
+          required: true
+        fragmentIndex:
+          type: NUMBER
+          operators: []
+          required: true
+        fragmentCount:
+          type: NUMBER
+          operators: []
+          required: true
+      return-fields: [active, blockId, dimensionId, fragmentIndex, fragmentCount]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: preference-history
+      memory-domain-id: settlement
+      memory-agent-id: settlement-agent
+      candidate-authorization-required: true
+    '[memory.v2.experience.settlement.settlement-agent]':
+      space-id: memory.v2.experience.settlement.settlement-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_experience_settlement_settlement_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_experience_settlement_settlement_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        domainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        agentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        experienceId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, experienceId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: experience
+      memory-domain-id: settlement
+      memory-agent-id: settlement-agent
+      candidate-authorization-required: true
+    '[memory.v2.collaboration.settlement.settlement-agent]':
+      space-id: memory.v2.collaboration.settlement.settlement-agent
+      owner-domain: memory-service
+      policy-version: memory-v2
+      schema-version: memory-v2.1
+      elasticsearch-index: rag_memory_v2_collaboration_settlement_settlement_agent_v1
+      vector-schema:
+        database: default
+        collection: rag_memory_v2_collaboration_settlement_settlement_agent_v1
+        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        dimension: 1024
+        id-field: doc_id
+        content-field: content
+        metadata-field: metadata
+        vector-field: embedding
+        source-type-field: source_type
+        source-id-field: source_id
+        metric-type: COSINE
+        index-type: IVF_FLAT
+        index-parameters: '{"nlist":1024}'
+      fields:
+        ownerId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        active:
+          type: BOOLEAN
+          operators: [EQ]
+          required: true
+        sourceVersion:
+          type: NUMBER
+          operators: []
+          required: true
+        sourceHash:
+          type: STRING
+          operators: []
+          required: true
+        recipientDomainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        recipientAgentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        grantId:
+          type: STRING
+          operators: [EQ, IN]
+          required: true
+        exportId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        sourceDomainId:
+          type: STRING
+          operators: [EQ]
+          required: true
+        sourceAgentId:
+          type: STRING
+          operators: [EQ]
+          required: true
+      return-fields: [active, exportId, sourceDomainId, sourceAgentId, recipientDomainId, recipientAgentId, grantId]
+      search-roles: [ADMIN, BROKER]
+      admin-roles: [ADMIN]
+      allowed-clients:
+        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
+      limits:
+        max-recall-candidates: 500
+        max-rerank-candidates: 500
+        max-candidate-limit: 200
+        max-document-utf8-bytes: 32768
+        max-recall-utf8-bytes: 1048576
+        max-rerank-utf8-bytes: 524288
+        overall-timeout-millis: 20000
+        recall-timeout-millis: 5000
+        rerank-timeout-millis: 8000
+      rerank-profile:
+        provider: governed
+        model-version: bge-reranker-v2-m3-v1
+        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
+        scale: LOGIT
+      memory-record-type: collaboration
+      memory-domain-id: settlement
+      memory-agent-id: settlement-agent
+      candidate-authorization-required: true
+
     '[memory.constraint]':
       space-id: memory.constraint
       owner-domain: memory-service

@@ -1314,6 +1314,14 @@
 
 **关联**：LR-73、LR-81；change 5.10。
 
+## KI-153 [FIXED·本提交·P2] Memory v2空间配置超过YAML集合别名默认上限
+
+**发现日期**：2026-10-21（新增 memory v2 Nacos 空间后，以仓库现有 SnakeYAML 默认解析器校验模板）。
+
+**现象与根因**：35 个新空间分别复用向量 schema、字段、limits 和 rerank profile 的 mapping alias，累计超过 SnakeYAML 对集合 alias 的默认上限 50；普通解析直接抛出 `Number of aliases for non-scalar nodes exceeds the specified max=50`，模板无法稳定加载。
+
+**修复与验证（本提交）**：将 35 个 memory v2 空间所需字段、物理目标、limits 和 profile 展开为显式注册项，保留原有知识/v1空间模板。`NacosRagTemplateTest.memoryV2SpacesAreRegisteredWithRequiredScopeAndUniquePhysicalTargets` 用默认 SnakeYAML 解析器确认 35 项、授权字段和 ES/Milvus 目标唯一；同类测试及新记忆检索/许可定向回归通过。未执行容器或 Nacos 发布。
+
 ---
 
 **变更历史**：f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。

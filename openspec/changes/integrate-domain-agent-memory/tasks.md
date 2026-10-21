@@ -71,7 +71,7 @@
 
 ## 9. 新记忆 RAG 投影与域最终核验
 
-- [ ] 9.1 注册新会话/摘要、偏好历程、经验及协作空间/schema；不同domain及需隔离SubAgent分配独立ES/Milvus目标，空间内owner/agent/grant过滤仍不可覆盖，未注册请求零后端访问。
+- [x] 9.1 注册新会话/摘要、偏好历程、经验及协作空间/schema；不同domain及需隔离SubAgent分配独立ES/Milvus目标，空间内owner/agent/grant过滤仍不可覆盖，未注册请求零后端访问。
 - [ ] 9.2 扩展可信memory授权scope及双路过滤；新增独立受管候选许可RPC，由RAG在派发重排正文前核验有界候选的真源revision/hash/删除/grant及派生source当前状态，许可只返回授权结论不取正文/不执行搜索，失败关闭；个人ADMIN仍self-only，后台投影权限不含通用用户读取权。
 - [ ] 9.3 实现新记忆受控完整投影、revision/hash/schema/eventId、块分片清单及旧片段tombstone；复用事务outbox/两路应用状态和迟到写补偿，测试增减片段/乱序/删除/部分应用不混版本。
 - [ ] 9.4 扩展memory领域搜索与稳定ID详情：候选后最终SQL/版本/hash/删除/grant再核验，返回安全当前正文/证据；至多一次补取且累计有界，详情不等待索引。

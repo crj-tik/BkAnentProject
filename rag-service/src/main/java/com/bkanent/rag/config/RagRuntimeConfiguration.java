@@ -25,7 +25,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.*;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties({RagProperties.class, RagSecurityProperties.class})
+@EnableConfigurationProperties({RagProperties.class, RagSecurityProperties.class, RagMemoryCandidateAuthorizationProperties.class})
 public class RagRuntimeConfiguration {
     @DubboReference(check = false, init = false, timeout = 5000, retries = 0)
     private RagPrincipalRpcService auth;

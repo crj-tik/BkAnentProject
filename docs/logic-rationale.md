@@ -823,3 +823,13 @@
 **根因**：模型自评、请求已受理、检索命中和经验复用都不能证明真实业务结果；userId 或来源引用也不能单独证明反馈者拥有被引用消息。异步评估必须防止重试重复计分，并在多个旧 revision 竞争时阻止迟到 worker 覆盖新反馈。经验 ID 是调用方提供的稳定本地身份，查询若遗漏 owner/domain/agent 会把同号经验的证据混合；缓存命中也必须重新核对当前经验版本和来源授权。共享经验还需要独立治理批准和不可还原的脱敏契约，因此不得借现有私有行或 grant 推断共享权限。
 
 **代码位置**：`MemoryExperienceOutcomeRequest`、`MemoryExperienceFeedbackRequest`、`MemoryExperienceService`、`MemoryExperienceProcessingWorker`、`ExperienceSelectionPolicy`、`MemoryV2RequestSecurity`、`MemorySourceAuthorizer`、`MemoryExperienceProperties`；迁移 `20261021_memory_experience_records.sql` 与 `20261021_memory_experience_processing.sql`；回归 `MemoryExperienceServiceTest` 的幂等重试、过期 feedback、跨 owner 同 ID 隔离、负反馈停用/重新确认、删除墓碑、评分与 token 预算用例。关联 LR-75/LR-82；change 8.2/8.4。当前 publisher 与处理开关默认关闭，代码验收不代表真实业务域已开始发布经验事件。
+
+## LR-84 私有记忆候选须在重排前取得当前真源许可
+
+**结论**：memory v2 私有检索使用单独的 `MEMORY_SEARCH` 签名 RPC 和短期 owner/domain/agent scope；RAG 将不可覆盖的 owner、domain、agent、active 条件加到两路召回。融合后、把候选正文发送给通用重排前，RAG 只把候选稳定 ID、source type、revision、schema 和内容哈希交给 Memory 的专用许可 RPC；Memory 按当前投影事件、来源版本/哈希、删除状态和派生来源复验后只返回允许的 ID。许可失败关闭，Memory 最终仍以当前 SQL 真源装配正文并复验身份。协作空间先注册独立 schema 和目标，但在可写 durable export 与当前 grant 核验接好前保持拒绝。
+
+**根因**：如果在重排后才检查当前权限，已撤回、过期或跨域的旧索引正文已经进入重排模型。索引字段和 namespace 只能缩小召回，不能证明派生来源及共享 grant 此刻仍有效；RAG 需要在取用正文前调用唯一真源许可点，Memory 还需要在结果输出前复核当前事实。
+
+**代码位置**：`common/src/main/java/com/bkanent/common/rag/MemoryRagAuthorizationScope.java`、`RagCandidateReference.java` 与 `RagCandidateAuthorizationRequest.java`；`rag-service/security/RagAccessControl`、`retrieval/RagRetrievalService`、`retrieval/RagMemoryCandidateAuthorizer`；`memory-service/service/MemoryRagCandidateAuthorizationService`、`MemoryRagSecurity`、`MemoryRagSearchFacade` 及偏好/经验服务。候选只授权 ID 的回归在 `RagRetrievalServiceTest`、`MemoryRagSecurityTest` 与 `MemoryRagSearchFacadeTest`；协作 grant 的读取仍属 change 10.2，完成前其空间不可返回候选。
+
+**关联**：LR-31、LR-32、LR-33、LR-83；change 9.1–9.5。

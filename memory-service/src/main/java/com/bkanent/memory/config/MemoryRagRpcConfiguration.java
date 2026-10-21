@@ -3,6 +3,7 @@ package com.bkanent.memory.config;
 import com.bkanent.common.rpc.RagIndexRpcService;
 import com.bkanent.common.rpc.RagPrincipalRpcService;
 import com.bkanent.common.rpc.RagRetrievalRpcService;
+import com.bkanent.common.rpc.MemoryRagRetrievalRpcService;
 import com.bkanent.common.rpc.AuthPermissionRpcService;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.apache.dubbo.config.ReferenceConfig;
@@ -24,6 +25,8 @@ public class MemoryRagRpcConfiguration {
     @Bean(destroyMethod = "destroy")
     public ReferenceConfig<RagRetrievalRpcService> memoryRetrievalReference() { return reference(RagRetrievalRpcService.class); }
     @Bean(destroyMethod = "destroy")
+    public ReferenceConfig<MemoryRagRetrievalRpcService> memoryDomainRetrievalReference() { return reference(MemoryRagRetrievalRpcService.class); }
+    @Bean(destroyMethod = "destroy")
     public ReferenceConfig<RagIndexRpcService> memoryIndexReference() { return reference(RagIndexRpcService.class); }
     @Bean
     public AuthPermissionRpcService memoryAuthPermissions(ReferenceConfig<AuthPermissionRpcService> memoryAuthPermissionReference) {
@@ -40,6 +43,10 @@ public class MemoryRagRpcConfiguration {
     @Bean
     public RagRetrievalRpcService memoryRetrieval(ReferenceConfig<RagRetrievalRpcService> memoryRetrievalReference) {
         return (request, authentication, credentials, scope) -> memoryRetrievalReference.get().search(request, authentication, credentials, scope);
+    }
+    @Bean
+    public MemoryRagRetrievalRpcService memoryDomainRetrieval(ReferenceConfig<MemoryRagRetrievalRpcService> memoryDomainRetrievalReference) {
+        return (request, authentication, scope) -> memoryDomainRetrievalReference.get().search(request, authentication, scope);
     }
     @Bean
     public RagIndexRpcService memoryIndex(ReferenceConfig<RagIndexRpcService> memoryIndexReference) {

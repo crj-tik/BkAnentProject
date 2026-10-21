@@ -2,7 +2,9 @@ package com.bkanent.memory.service;
 
 import com.bkanent.common.agent.SystemConstraintRecord;
 import com.bkanent.common.agent.UserPreferenceRecord;
+import com.bkanent.common.memory.MemoryContextKey;
 import com.bkanent.common.rag.*;
+import com.bkanent.common.rpc.MemoryRagRetrievalRpcService;
 import com.bkanent.common.rpc.RagRetrievalRpcService;
 import com.bkanent.memory.config.MemoryRagProperties;
 import org.junit.jupiter.api.Test;
@@ -20,6 +22,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -38,6 +41,63 @@ class MemoryRagSearchFacadeTest {
     private static final String SCORING_ENV = "MEMORY_RAG_SEMANTIC_SCORING_VERSIONS";
     private static final String SCORING_PROPERTY = "memory.rag.semantic-scoring-versions";
 
+    @Test
+    void domainV2SearchUsesStrictSignedMemoryRpcAndNeverCallsTheLegacySearchRoute() {
+        var f = new MemoryRagTestSupport();
+        f.properties.setDomainSearchEnabled(true);
+        AtomicInteger legacyCalls = new AtomicInteger();
+        RagRetrievalRpcService legacy = (request, authentication, credentials, scope) -> {
+            legacyCalls.incrementAndGet();
+            throw new AssertionError("legacy RAG search is not a fallback for memory v2");
+        };
+        MemoryRagRetrievalRpcService domain = (request, authentication, scope) -> {
+            assertEquals(RagOperation.MEMORY_SEARCH, authentication.operation());
+            assertEquals(RagActorMode.SERVICE, authentication.actorMode());
+            assertEquals("memory-service", authentication.actorId());
+            assertEquals(RagFailurePolicy.STRICT, request.failurePolicy());
+            assertEquals(MemoryRagRecordType.EXPERIENCE, scope.recordType());
+            assertEquals("42", scope.ownerId());
+            assertEquals("marketing", scope.domainId());
+            assertEquals("marketing-agent", scope.agentId());
+            RagRequestSigner.verify(authentication, RagCanonicalHash.requestHash(request), "rag-service",
+                    RagOperation.MEMORY_SEARCH, request.requestId(), null,
+                    new RagSigningKey(f.properties.getKeyId(), "memory-service", "memory-service",
+                            Set.of(RagOperation.MEMORY_SEARCH), MemoryRagTestSupport.MEMORY_SECRET.getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                    Instant.now());
+            MemoryRagScopeSigner.verify(scope, f.properties.getKeyId(),
+                    MemoryRagTestSupport.MEMORY_SECRET.getBytes(java.nio.charset.StandardCharsets.UTF_8), request,
+                    "42", "marketing", "marketing-agent", Instant.now());
+            return MemoryRagTestSupport.response(request, List.of());
+        };
+        var facade = new MemoryRagSearchFacade(legacy, f.security, f.jdbc, f.properties, f.projection, domain);
+
+        var candidates = facade.searchDomainCandidates(new MemoryContextKey("42", "marketing", "marketing-agent", "conversation-1"),
+                MemoryRagRecordType.EXPERIENCE, "similar result", 20, null, List.of(), "experience-search");
+
+        assertTrue(candidates.isEmpty());
+        assertEquals(0, legacyCalls.get());
+    }
+
+    @Test
+    void unavailableDomainSearchFailsClosedWithoutTryingTheLegacyRoute() {
+        var f = new MemoryRagTestSupport();
+        f.properties.setDomainSearchEnabled(true);
+        AtomicInteger legacyCalls = new AtomicInteger();
+        RagRetrievalRpcService legacy = (request, authentication, credentials, scope) -> {
+            legacyCalls.incrementAndGet();
+            return MemoryRagTestSupport.response(request, List.of());
+        };
+        MemoryRagRetrievalRpcService unavailable = (request, authentication, scope) -> {
+            throw new IllegalStateException("RAG dependency unavailable");
+        };
+        var facade = new MemoryRagSearchFacade(legacy, f.security, f.jdbc, f.properties, f.projection, unavailable);
+
+        assertThrows(com.bkanent.common.memory.MemoryException.class, () -> facade.searchDomainCandidates(
+                new MemoryContextKey("42", "marketing", "marketing-agent", "conversation-1"),
+                MemoryRagRecordType.EXPERIENCE, "query", 20, null, List.of(), "experience-search"));
+        assertEquals(0, legacyCalls.get());
+    }
+
     private static java.nio.file.Path repositoryFile(String relative) {
         var path = java.nio.file.Path.of(relative);
         return java.nio.file.Files.exists(path) ? path : java.nio.file.Path.of("..").resolve(relative);
@@ -53,6 +113,18 @@ class MemoryRagSearchFacadeTest {
         return Binder.get(environment).bind("memory.rag", Bindable.of(MemoryRagProperties.class)).get();
     }
 
+    private static MemoryRagProperties configuredDomainGates(String template, boolean enabled) throws Exception {
+        var environment = new MockEnvironment();
+        var source = new YamlPropertySourceLoader().load("memory-template",
+                new FileSystemResource(repositoryFile(template))).get(0);
+        environment.getPropertySources().addFirst(source);
+        if (enabled) {
+            environment.setProperty("MEMORY_RAG_DOMAIN_PROJECTION_ENABLED", "true");
+            environment.setProperty("MEMORY_RAG_DOMAIN_SEARCH_ENABLED", "true");
+        }
+        return Binder.get(environment).bind("memory.rag", Bindable.of(MemoryRagProperties.class)).get();
+    }
+
     @Test
     void scoringRegistrationTemplatesBindOnlyExplicitVersionsAndDefaultEmpty() throws Exception {
         for (String template : List.of("memory-service/src/main/resources/application.yml", "nacos/memory-service.yaml")) {
@@ -65,15 +137,33 @@ class MemoryRagSearchFacadeTest {
     }
 
     @Test
+    void domainProjectionAndSearchGatesDefaultClosedAndCanBeExplicitlyEnabled() throws Exception {
+        for (String template : List.of("memory-service/src/main/resources/application.yml", "nacos/memory-service.yaml")) {
+            var defaults = configuredDomainGates(template, false);
+            assertFalse(defaults.isDomainProjectionEnabled());
+            assertFalse(defaults.isDomainSearchEnabled());
+            var enabled = configuredDomainGates(template, true);
+            assertTrue(enabled.isDomainProjectionEnabled());
+            assertTrue(enabled.isDomainSearchEnabled());
+        }
+    }
+
+    @Test
     void composeAndEnvExampleKeepMemoryRegistrationEmptyDespiteGovernedProfiles() throws Exception {
         Map<?, ?> compose = new Yaml().load(java.nio.file.Files.readString(repositoryFile("docker-compose.yml")));
         var services = (Map<?, ?>) compose.get("services");
         var memory = (Map<?, ?>) services.get("memory-service");
         var environment = (Map<?, ?>) memory.get("environment");
         assertEquals("${" + SCORING_ENV + ":-}", environment.get(SCORING_ENV));
+        assertEquals("${MEMORY_RAG_DOMAIN_PROJECTION_ENABLED:-false}", environment.get("MEMORY_RAG_DOMAIN_PROJECTION_ENABLED"));
+        assertEquals("${MEMORY_RAG_DOMAIN_SEARCH_ENABLED:-false}", environment.get("MEMORY_RAG_DOMAIN_SEARCH_ENABLED"));
         assertFalse(((Map<?, ?>) ((Map<?, ?>) services.get("rag-service")).get("environment")).containsKey(SCORING_ENV));
         String example = java.nio.file.Files.readString(repositoryFile(".env.example"));
         assertEquals(List.of(SCORING_ENV + "="), example.lines().filter(line -> line.startsWith(SCORING_ENV + "=")).toList());
+        assertEquals(List.of("MEMORY_RAG_DOMAIN_PROJECTION_ENABLED=false"), example.lines()
+                .filter(line -> line.startsWith("MEMORY_RAG_DOMAIN_PROJECTION_ENABLED=")).toList());
+        assertEquals(List.of("MEMORY_RAG_DOMAIN_SEARCH_ENABLED=false"), example.lines()
+                .filter(line -> line.startsWith("MEMORY_RAG_DOMAIN_SEARCH_ENABLED=")).toList());
         assertTrue(example.contains("# " + GOVERNED_SCORING_VERSION));
         Map<?, ?> rag = new Yaml().load(java.nio.file.Files.readString(repositoryFile("nacos/rag-service.yaml")));
         var spaces = (Map<?, ?>) ((Map<?, ?>) rag.get("rag")).get("spaces");

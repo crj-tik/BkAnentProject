@@ -3,6 +3,8 @@ package com.bkanent.memory.service;
 import com.bkanent.common.memory.*;
 import com.bkanent.memory.config.MemoryExperienceProperties;
 import com.bkanent.memory.config.MemoryV2SecurityProperties;
+import com.bkanent.common.rag.MemoryRagRecordType;
+import com.bkanent.common.rag.RagCandidate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -32,22 +34,39 @@ public class MemoryExperienceService {
     private final MemorySourceAuthorizer sources;
     private final MemoryExperienceProperties properties;
     private final MemoryV2SecurityProperties callers;
+    private final MemoryV2RagProjectionService ragProjection;
+    private final MemoryRagSearchFacade ragSearch;
     private final TransactionTemplate tx;
     private final Clock clock;
     private final ExperienceSelectionPolicy selector = new ExperienceSelectionPolicy();
 
     public MemoryExperienceService(MemoryArchiveStore store, MemoryV2RequestSecurity security, MemorySourceAuthorizer sources,
             MemoryExperienceProperties properties, MemoryV2SecurityProperties callers, PlatformTransactionManager manager) {
-        this(store, security, sources, properties, callers, manager, Clock.systemUTC());
+        this(store, security, sources, properties, callers, manager, Clock.systemUTC(), null, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public MemoryExperienceService(MemoryArchiveStore store, MemoryV2RequestSecurity security, MemorySourceAuthorizer sources,
+            MemoryExperienceProperties properties, MemoryV2SecurityProperties callers, PlatformTransactionManager manager,
+            MemoryV2RagProjectionService ragProjection, MemoryRagSearchFacade ragSearch) {
+        this(store, security, sources, properties, callers, manager, Clock.systemUTC(), ragProjection, ragSearch);
     }
 
     MemoryExperienceService(MemoryArchiveStore store, MemoryV2RequestSecurity security, MemorySourceAuthorizer sources,
             MemoryExperienceProperties properties, MemoryV2SecurityProperties callers, PlatformTransactionManager manager, Clock clock) {
+        this(store, security, sources, properties, callers, manager, clock, null, null);
+    }
+
+    private MemoryExperienceService(MemoryArchiveStore store, MemoryV2RequestSecurity security, MemorySourceAuthorizer sources,
+            MemoryExperienceProperties properties, MemoryV2SecurityProperties callers, PlatformTransactionManager manager,
+            Clock clock, MemoryV2RagProjectionService ragProjection, MemoryRagSearchFacade ragSearch) {
         this.store = store;
         this.security = security;
         this.sources = sources;
         this.properties = properties;
         this.callers = callers;
+        this.ragProjection = ragProjection;
+        this.ragSearch = ragSearch;
         this.clock = clock;
         this.tx = new TransactionTemplate(manager);
         this.tx.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
@@ -218,10 +237,24 @@ public class MemoryExperienceService {
         require(properties.isEnabled(), MemoryErrorCode.MEMORY_UNAVAILABLE);
         require(request.tokenBudget() <= properties.getMaxTokenBudget(), MemoryErrorCode.CONTEXT_BUDGET_EXCEEDED);
         Instant asOf = nowInstant();
-        var first = transaction(() -> assemble(request, asOf));
+        Set<String> candidateIds = null;
+        if (ragSearch != null && ragSearch.isDomainSearchEnabled()) {
+            String query = request.objective();
+            if (request.matterId() != null) {
+                query = transaction(() -> currentMatter(request.contextKey(), request.matterId()).goal());
+            }
+            if (query == null || query.isBlank()) query = request.capabilityTag();
+            if (query == null || query.isBlank()) query = "domain agent experience";
+            int limit = Math.min(200, Math.max(request.limit() + 1, request.limit() * 4));
+            candidateIds = ragSearch.searchDomainCandidates(request.contextKey(), MemoryRagRecordType.EXPERIENCE,
+                    query, limit, request.matterId(), List.of(), "experience-search").stream()
+                    .map(RagCandidate::sourceId).collect(java.util.stream.Collectors.toUnmodifiableSet());
+        }
+        final Set<String> permittedIds = candidateIds;
+        var first = transaction(() -> assemble(request, asOf, permittedIds));
         security.revalidate(request, proof, owner, MemoryV2Contract.OPERATION_SEARCH_EXPERIENCES);
         var checked = transaction(() -> {
-            var current = assemble(request, asOf);
+            var current = assemble(request, asOf, permittedIds);
             require(first.equals(current), MemoryErrorCode.VERSION_CONFLICT);
             MemoryV2RequestSecurity.requireUnexpired(proof);
             return current;
@@ -229,7 +262,7 @@ public class MemoryExperienceService {
         return checked;
     }
 
-    private MemoryExperienceQueryResponse assemble(MemoryExperienceQueryRequest request, Instant asOf) {
+    private MemoryExperienceQueryResponse assemble(MemoryExperienceQueryRequest request, Instant asOf, Set<String> candidateIds) {
         MemoryContextKey context = request.contextKey();
         store.conversation(context);
         String objective = request.objective();
@@ -242,7 +275,8 @@ public class MemoryExperienceService {
             objective = matter.goal();
             matterRevision = matter.version().revision();
         }
-        String objectiveHash = MemoryCanonicalHash.contentHash(Arrays.asList(objective, request.capabilityTag(), request.limit(), request.cursor()));
+        String objectiveHash = MemoryCanonicalHash.contentHash(Arrays.asList(objective, request.capabilityTag(), request.limit(), request.cursor(),
+                candidateIds == null ? null : candidateIds.stream().sorted().toList()));
         if (matterId != null) {
             var cached = cachedSelection(context, matterId, matterRevision, objectiveHash, request.tokenBudget());
             if (cached != null) return cached;
@@ -250,10 +284,15 @@ public class MemoryExperienceService {
 
         int pageLimit = Math.min(request.limit(), properties.getMaxCandidates());
         int fetchLimit = Math.min(pageLimit + 1, properties.getMaxCandidates() + 1);
+        List<String> orderedCandidates = candidateIds == null ? List.of() : candidateIds.stream().sorted().toList();
+        String candidateClause = candidateIds == null ? "" : orderedCandidates.isEmpty() ? "AND 1=0 "
+                : "AND experience_id IN (" + String.join(",", Collections.nCopies(orderedCandidates.size(), "?")) + ") ";
         String sql = "SELECT experience_id FROM memory_experience WHERE owner_id=? AND domain_id=? AND agent_id=? AND state='ACTIVE' "
-                + "AND (retention_until IS NULL OR retention_until>?) " + (request.cursor() == null ? "" : "AND experience_id>? ")
+                + "AND (retention_until IS NULL OR retention_until>?) " + candidateClause
+                + (request.cursor() == null ? "" : "AND experience_id>? ")
                 + "ORDER BY experience_id LIMIT ?";
         List<Object> args = new ArrayList<>(List.of(context.ownerId(), context.domainId(), context.agentId(), now()));
+        args.addAll(orderedCandidates);
         if (request.cursor() != null) args.add(request.cursor());
         args.add(fetchLimit);
         var ids = store.jdbc.query(sql, (rs, n) -> rs.getString(1), args.toArray());
@@ -520,6 +559,7 @@ public class MemoryExperienceService {
                     evidence.outcome().name(), evidence.feedback().name(), evidence.verified(), sqlTime(evidence.occurredAt()), sqlTime(evidence.observedAt()));
             for (var dependency : evidence.sources()) persistSource(experience, revision, evidence.evidenceId(), dependency);
         }
+        if (ragProjection != null) ragProjection.experience(experience);
     }
 
     private void persistSource(MemoryExperience experience, long revision, String evidenceId, MemorySourceDependency dependency) {
@@ -630,6 +670,7 @@ public class MemoryExperienceService {
                                 + "WHERE owner_id=? AND domain_id=? AND agent_id=? AND experience_id=? AND state IN ('ACTIVE','INACTIVE')",
                         now(), ids[0], ids[1], ids[2], ids[3]);
             }
+            if (ragProjection != null) ragProjection.removeExperience(ids[0], ids[1], ids[2], ids[3]);
             invalidateSelections(ids[0], ids[1], ids[2]);
         }
     }

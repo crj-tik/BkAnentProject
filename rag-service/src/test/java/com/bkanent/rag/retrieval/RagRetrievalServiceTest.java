@@ -190,6 +190,143 @@ class RagRetrievalServiceTest {
             assertEquals(4, result.stageStats().stream().filter(s -> s.stage() == RagStage.RERANK).findFirst().orElseThrow().candidateCount());
         } finally { service.close(); }
     }
+
+    @Test void memoryCandidatesAreAuthorizedByIdentityBeforeTheirBodiesReachReranking() {
+        RagSpaceDefinition memory = memorySpace();
+        RagSpaceRegistry memoryRegistry = memoryRegistry(memory);
+        RagSearchRequest request = memoryRequest(memory.spaceId());
+        MemoryRagAuthorizationScope scope = memoryScope(request);
+        AtomicInteger authorizationCalls = new AtomicInteger();
+        AtomicInteger rerankCalls = new AtomicInteger();
+        RagRetrievalService.Recall recall = (s, q, f, n, d) -> List.of(
+                memoryHit("allowed", "authorized body", RagRecallMode.KEYWORD),
+                memoryHit("denied", "must not reach reranker", RagRecallMode.KEYWORD));
+        var service = new RagRetrievalService(memoryRegistry, recall,
+                (s, q, f, n, d) -> List.of(
+                        memoryHit("allowed", "authorized body", RagRecallMode.VECTOR),
+                        memoryHit("denied", "must not reach reranker", RagRecallMode.VECTOR)),
+                (q, candidates, profile) -> {
+                    rerankCalls.incrementAndGet();
+                    assertEquals(List.of("allowed"), candidates.stream().map(RagCandidate::documentId).toList());
+                    assertEquals("authorized body", candidates.get(0).content());
+                    return candidates;
+                }, (space, candidate) -> true, (authorization, authorizedScope) -> {
+                    authorizationCalls.incrementAndGet();
+                    assertEquals(request, authorization.search());
+                    assertSame(scope, authorizedScope);
+                    assertEquals(Set.of("allowed", "denied"), authorization.candidates().stream()
+                            .map(RagCandidateReference::documentId).collect(java.util.stream.Collectors.toSet()));
+                    assertEquals("a".repeat(64), authorization.candidates().stream()
+                            .filter(ref -> ref.documentId().equals("allowed")).findFirst().orElseThrow().contentHash());
+                    return Set.of("allowed");
+                }, 2);
+        try {
+            var response = service.search(request, memoryFilters(), scope);
+            assertEquals(1, authorizationCalls.get());
+            assertEquals(1, rerankCalls.get());
+            assertEquals(List.of("allowed"), response.candidates().stream().map(RagCandidate::documentId).toList());
+        } finally { service.close(); }
+    }
+
+    @Test void memoryAuthorizationMissingOrUnavailableFailsClosedBeforeReranking() {
+        RagSpaceDefinition memory = memorySpace();
+        RagSpaceRegistry memoryRegistry = memoryRegistry(memory);
+        RagSearchRequest request = memoryRequest(memory.spaceId());
+        MemoryRagAuthorizationScope scope = memoryScope(request);
+        AtomicInteger rerankCalls = new AtomicInteger();
+        RagRetrievalService.Recall recall = (s, q, f, n, d) -> List.of(
+                memoryHit("candidate", "private body", RagRecallMode.KEYWORD));
+
+        var missingAuthorizer = new RagRetrievalService(memoryRegistry, recall, recall,
+                (q, candidates, profile) -> { rerankCalls.incrementAndGet(); return candidates; },
+                (space, candidate) -> true, (RagRetrievalService.CandidateAuthorizer) null, 2);
+        try {
+            RagException error = assertThrows(RagException.class,
+                    () -> missingAuthorizer.search(request, memoryFilters(), scope));
+            assertEquals(RagErrorCode.DEPENDENCY_UNAVAILABLE, error.code());
+            assertEquals(0, rerankCalls.get());
+        } finally { missingAuthorizer.close(); }
+
+        var failedAuthorizer = new RagRetrievalService(memoryRegistry, recall, recall,
+                (q, candidates, profile) -> { rerankCalls.incrementAndGet(); return candidates; },
+                (space, candidate) -> true, (authorization, authorizedScope) -> {
+                    throw new IllegalStateException("authorization unavailable");
+                }, 2);
+        try {
+            RagException error = assertThrows(RagException.class,
+                    () -> failedAuthorizer.search(request, memoryFilters(), scope));
+            assertEquals(RagErrorCode.DEPENDENCY_UNAVAILABLE, error.code());
+            assertEquals(0, rerankCalls.get());
+        } finally { failedAuthorizer.close(); }
+
+        var noMatch = new RagRetrievalService(memoryRegistry, recall, recall,
+                (q, candidates, profile) -> { rerankCalls.incrementAndGet(); return candidates; },
+                (space, candidate) -> true, (authorization, authorizedScope) -> Set.of(), 2);
+        try {
+            var response = noMatch.search(request, memoryFilters(), scope);
+            assertTrue(response.candidates().isEmpty());
+            assertEquals(0, rerankCalls.get());
+        } finally { noMatch.close(); }
+    }
+
+    private static RagSpaceDefinition memorySpace() {
+        String id = MemoryRagSpaceIds.spaceId(MemoryRagRecordType.EXPERIENCE, "marketing", "marketing-agent");
+        Map<String, RagSpaceDefinition.FilterField> fields = Map.of(
+                "ownerId", required(RagValueType.STRING), "domainId", required(RagValueType.STRING),
+                "agentId", required(RagValueType.STRING), "active", required(RagValueType.BOOLEAN),
+                "experienceId", required(RagValueType.STRING), "sourceVersion", required(RagValueType.NUMBER),
+                "sourceHash", required(RagValueType.STRING));
+        RagSpaceDefinition base = space();
+        return new RagSpaceDefinition(id, "memory-service", "memory-v2", "memory-v2.1", "memory_v2_experience_test",
+                base.vectorSchema(), fields, Set.of("ownerId", "domainId", "agentId", "active", "experienceId", "sourceVersion", "sourceHash"),
+                Set.of("ADMIN", "BROKER"), Set.of("ADMIN"), Map.of("memory-service", Set.of(RagOperation.MEMORY_SEARCH)),
+                base.limits(), base.rerankProfile(), "experience", "marketing", "marketing-agent", true);
+    }
+
+    private static RagSpaceRegistry memoryRegistry(RagSpaceDefinition memory) {
+        return new RagSpaceRegistry() {
+            public RagSpaceDefinition require(String id) { assertEquals(memory.spaceId(), id); return memory; }
+            public RagSpaceDefinition requireReady(String id) { return require(id); }
+        };
+    }
+
+    private static RagSpaceDefinition.FilterField required(RagValueType type) {
+        return new RagSpaceDefinition.FilterField(type, Set.of(RagFilterOperator.EQ), true);
+    }
+
+    private static RagSearchRequest memoryRequest(String spaceId) {
+        return new RagSearchRequest(RagContract.VERSION, "memory-request", spaceId, "query", List.of(),
+                new RagRecallOptions(true, null, 2, 2), new RagFusionOptions(null, null, null, null),
+                true, 2, 2, RagFailurePolicy.STRICT).normalized();
+    }
+
+    private static MemoryRagAuthorizationScope memoryScope(RagSearchRequest request) {
+        long now = Instant.now().getEpochSecond();
+        return new MemoryRagAuthorizationScope(MemoryRagAuthorizationScope.VERSION, "memory-current", "memory-service",
+                "42", "marketing", "marketing-agent", "conversation-1", null, MemoryRagRecordType.EXPERIENCE,
+                request.spaceId(), request.requestId(), RagCanonicalHash.requestHash(request), List.of(), null,
+                now, now + 10, "test-signature");
+    }
+
+    private static List<RagFilter> memoryFilters() {
+        return List.of(new RagFilter("ownerId", RagFilterOperator.EQ, RagValue.string("42")),
+                new RagFilter("domainId", RagFilterOperator.EQ, RagValue.string("marketing")),
+                new RagFilter("agentId", RagFilterOperator.EQ, RagValue.string("marketing-agent")),
+                new RagFilter("active", RagFilterOperator.EQ, RagValue.bool(true)));
+    }
+
+    private static RecallHit memoryHit(String id, String body, RagRecallMode mode) {
+        String hash = "allowed".equals(id) ? "a".repeat(64) : "b".repeat(64);
+        RagCandidate candidate = new RagCandidate(id, "memory_experience", "experience-" + id, body, 3,
+                "memory-v2.1", List.of(mode), mode == RagRecallMode.KEYWORD ? 10.0 : null,
+                mode == RagRecallMode.VECTOR ? .9 : null, null, null, null, null, null,
+                Map.of("contentHash", RagValue.string(hash), "ownerId", RagValue.string("42"),
+                        "domainId", RagValue.string("marketing"), "agentId", RagValue.string("marketing-agent"),
+                        "active", RagValue.bool(true), "experienceId", RagValue.string("experience-" + id),
+                        "sourceVersion", RagValue.number(3), "sourceHash", RagValue.string(hash)));
+        return new RecallHit(candidate, hash);
+    }
+
     @Test void knownProbeDownStillAllowsOnlyExplicitDegradedRuntimeRecall() {
         List<com.bkanent.rag.config.RagCapabilityProbe> probes = new ArrayList<>();
         for (RagStage stage : List.of(RagStage.KEYWORD, RagStage.VECTOR, RagStage.EMBEDDING, RagStage.RERANK)) {

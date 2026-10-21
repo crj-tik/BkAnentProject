@@ -84,6 +84,10 @@ memory:
     # LR-43: deploy only the exact verified scoringVersion; missing registration fails closed.
     semantic-scoring-versions: ${MEMORY_RAG_SEMANTIC_SCORING_VERSIONS:}
     dispatcher-enabled: false
+    domain-projection-enabled: ${MEMORY_RAG_DOMAIN_PROJECTION_ENABLED:false}
+    domain-search-enabled: ${MEMORY_RAG_DOMAIN_SEARCH_ENABLED:false}
+    candidate-authorization-key-id: ${RAG_MEMORY_CANDIDATE_KEY_ID:rag-memory-candidate-current}
+    candidate-authorization-secret: ${RAG_MEMORY_CANDIDATE_KEY_SECRET:}
     dispatch-batch-size: 25
     max-attempts: 5
     retry-delay-ms: 1000

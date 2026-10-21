@@ -24,29 +24,37 @@ public class MemoryArchiveService {
     private final MemorySourceAuthorizer sources;
     private final PreferenceHistoryService preferences;
     private final MemoryExperienceService experiences;
+    private final MemoryV2RagProjectionService ragProjection;
     private final TransactionTemplate tx;
 
     public MemoryArchiveService(MemoryArchiveStore store, MemoryV2RequestSecurity security,
                                 MemorySourceAuthorizer sources, PlatformTransactionManager transactionManager) {
-        this(store, security, sources, null, transactionManager);
+        this(store, security, sources, null, null, null, transactionManager);
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
     public MemoryArchiveService(MemoryArchiveStore store, MemoryV2RequestSecurity security,
                                 MemorySourceAuthorizer sources, PreferenceHistoryService preferences,
                                 PlatformTransactionManager transactionManager) {
-        this(store, security, sources, preferences, null, transactionManager);
+        this(store, security, sources, preferences, null, null, transactionManager);
+    }
+
+    public MemoryArchiveService(MemoryArchiveStore store, MemoryV2RequestSecurity security,
+                                MemorySourceAuthorizer sources, PreferenceHistoryService preferences,
+                                MemoryExperienceService experiences, PlatformTransactionManager transactionManager) {
+        this(store, security, sources, preferences, experiences, null, transactionManager);
     }
 
     @org.springframework.beans.factory.annotation.Autowired
     public MemoryArchiveService(MemoryArchiveStore store, MemoryV2RequestSecurity security,
                                 MemorySourceAuthorizer sources, PreferenceHistoryService preferences,
-                                MemoryExperienceService experiences, PlatformTransactionManager transactionManager) {
+                                MemoryExperienceService experiences, MemoryV2RagProjectionService ragProjection,
+                                PlatformTransactionManager transactionManager) {
         this.store = store;
         this.security = security;
         this.sources = sources;
         this.preferences = preferences;
         this.experiences = experiences;
+        this.ragProjection = ragProjection;
         tx = new TransactionTemplate(transactionManager);
         tx.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
         tx.setTimeout(5);
@@ -263,8 +271,8 @@ public class MemoryArchiveService {
                 sources.requireCurrent(request.contextKey(), summary.dependencies());
                 return store.decode((String) old.get("receipt_json"), MemorySummaryResponse.class);
             }
-            var previous = store.one("SELECT MAX(content_revision) AS maximum FROM memory_summary WHERE context_id=? AND summary_id=?", id, summary.summaryId());
-            require(previous.get("maximum") == null || summary.version().revision() > ((Number) previous.get("maximum")).longValue(), MemoryErrorCode.VERSION_CONFLICT);
+            var previousRevision = store.one("SELECT MAX(content_revision) AS maximum FROM memory_summary WHERE context_id=? AND summary_id=?", id, summary.summaryId());
+            require(previousRevision.get("maximum") == null || summary.version().revision() > ((Number) previousRevision.get("maximum")).longValue(), MemoryErrorCode.VERSION_CONFLICT);
             require(summary.expectedConversationRevision() == number(conversation, "revision"), MemoryErrorCode.VERSION_CONFLICT);
             require(summary.coveredRange().fromSequence() == 1 && summary.coveredRange().throughSequence() <= number(conversation, "last_sequence")
                     && summary.coveredRange().throughSequence() > number(conversation, "covered_through"), MemoryErrorCode.ARCHIVE_NOT_CONFIRMED);
@@ -280,6 +288,8 @@ public class MemoryArchiveService {
                         && response.toolName().equals(anchor.toolName()) && response.state() == anchor.state()
                         && response.dataForm() == MemoryToolResponse.DataForm.INLINE_COMPLETE)), MemoryErrorCode.ARCHIVE_NOT_CONFIRMED);
             }
+            List<String> previousSummaries = store.jdbc.queryForList("SELECT summary_id FROM memory_summary WHERE context_id=? AND state='ACTIVE'",
+                    String.class, id);
             store.jdbc.update("UPDATE memory_summary SET state='INACTIVE' WHERE context_id=? AND state='ACTIVE'", id);
             store.jdbc.update("UPDATE memory_entity_anchor SET state='INACTIVE' WHERE context_id=? AND state='ACTIVE'", id);
             store.jdbc.update("UPDATE memory_conversation SET revision=revision+1,covered_through=? WHERE context_id=?", summary.coveredRange().throughSequence(), id);
@@ -288,6 +298,10 @@ public class MemoryArchiveService {
                             + "VALUES(?,?,?,?,?,?,?,?)", id, summary.summaryId(), summary.version().revision(), summary.version().contentHash(),
                     1, summary.coveredRange().throughSequence(), store.encode(summary), store.encode(receipt));
             store.dependencies(id, "SUMMARY", summary.summaryId(), summary.version().revision(), summary.dependencies());
+            if (ragProjection != null) {
+                for (String previous : previousSummaries) if (!previous.equals(summary.summaryId())) ragProjection.removeSummary(request.contextKey(), previous);
+                ragProjection.summary(summary);
+            }
             for (var entity : summary.entities()) {
                 var current = store.one("SELECT * FROM memory_entity_anchor WHERE context_id=? AND entity_id=?", id, entity.entityId());
                 require(current == null || number(current, "content_revision") < entity.version().revision()
@@ -444,12 +458,17 @@ public class MemoryArchiveService {
                         + "AND source_event_id=? AND target_kind='PREFERENCE'", String.class, id, request.sourceEventId());
                 for (String blockId : affectedPreferences) {
                     store.jdbc.update("UPDATE memory_preference_block SET state=?,authorization_revision=authorization_revision+1 WHERE block_id=? AND state<>?", state, blockId, state);
+                    if (ragProjection != null) ragProjection.removePreference(request.contextKey(), blockId);
                     if (delete) {
                         store.jdbc.update("UPDATE memory_preference_revision SET snapshot_json=NULL WHERE block_id=?", blockId);
                         store.jdbc.update("UPDATE memory_preference_transition SET payload_json=NULL WHERE block_id=?", blockId);
                     }
                 }
             // Invalidate the whole private derived set; rebuild from permitted evidence later.
+                if (ragProjection != null) {
+                    List<String> summaryIds = store.jdbc.queryForList("SELECT summary_id FROM memory_summary WHERE context_id=? AND state='ACTIVE'", String.class, id);
+                    for (String summaryId : summaryIds) ragProjection.removeSummary(request.contextKey(), summaryId);
+                }
                 store.jdbc.update("UPDATE memory_summary SET state=?,payload_json=CASE WHEN ? THEN NULL ELSE payload_json END WHERE context_id=? AND state<>'DELETED'", state, delete, id);
                 store.jdbc.update("UPDATE memory_entity_anchor SET state=?,payload_json=CASE WHEN ? THEN NULL ELSE payload_json END WHERE context_id=? AND state<>'DELETED'", state, delete, id);
                 store.jdbc.update("UPDATE memory_matter SET state=?,payload_json=CASE WHEN ? THEN NULL ELSE payload_json END WHERE context_id=? AND state<>'DELETED'", state, delete, id);

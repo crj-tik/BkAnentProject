@@ -29,6 +29,7 @@ public final class RagAccessControl {
     public List<RagFilter> search(RagSearchRequest request, RagAuthEnvelope envelope,
             RagCredentialContext credentials, RagAuthorizationScope scope) {
         RagSpaceDefinition space = registry.require(request.spaceId());
+        require(!space.candidateAuthorizationRequired()); // v2 memory spaces have no legacy/user-scope route.
         String hash = RagCanonicalHash.requestHash(request);
         verify(space, envelope, credentials, RagOperation.SEARCH, request.requestId(), hash);
         require(envelope.actorMode() == RagActorMode.USER);
@@ -64,6 +65,43 @@ public final class RagAccessControl {
         if (Boolean.TRUE.equals(scope.activeOnly())) {
             requiredField(space, "active", RagValueType.BOOLEAN);
             mandatory.add(new RagFilter("active", RagFilterOperator.EQ, RagValue.bool(true)));
+        }
+        return List.copyOf(mandatory);
+    }
+
+    /** Memory v2 has a separate, short-lived signed scope and never falls through legacy/user search. */
+    public List<RagFilter> searchMemory(RagSearchRequest request, RagAuthEnvelope envelope,
+                                        com.bkanent.common.rag.MemoryRagAuthorizationScope scope) {
+        RagSpaceDefinition space = registry.require(request.spaceId());
+        String hash = RagCanonicalHash.requestHash(request);
+        RagSigningKey caller = verify(space, envelope, null, RagOperation.MEMORY_SEARCH, request.requestId(), hash);
+        require(envelope.actorMode() == RagActorMode.SERVICE && "memory-service".equals(caller.callerService())
+                && space.candidateAuthorizationRequired() && Objects.equals(space.ownerDomain(), caller.ownerDomain()));
+        var type = com.bkanent.common.rag.MemoryRagRecordType.fromId(space.memoryRecordType());
+        require(scope != null && scope.recordType() == type && space.memoryDomainId().equals(scope.domainId())
+                && space.memoryAgentId().equals(scope.agentId()));
+        com.bkanent.common.rag.MemoryRagScopeSigner.verify(scope, caller.keyId(), caller.secret(), request,
+                scope.ownerId(), space.memoryDomainId(), space.memoryAgentId(), clock.instant());
+
+        List<RagFilter> mandatory = new ArrayList<>();
+        require(!scope.ownerId().isBlank());
+        requiredField(space, "ownerId", RagValueType.STRING);
+        requiredField(space, "active", RagValueType.BOOLEAN);
+        mandatory.add(new RagFilter("ownerId", RagFilterOperator.EQ, RagValue.string(scope.ownerId())));
+        mandatory.add(new RagFilter("active", RagFilterOperator.EQ, RagValue.bool(true)));
+        if (type == com.bkanent.common.rag.MemoryRagRecordType.COLLABORATION) {
+            require(!scope.grantIds().isEmpty());
+            requiredField(space, "recipientDomainId", RagValueType.STRING);
+            requiredField(space, "recipientAgentId", RagValueType.STRING);
+            requiredField(space, "grantId", RagValueType.STRING);
+            mandatory.add(new RagFilter("recipientDomainId", RagFilterOperator.EQ, RagValue.string(scope.domainId())));
+            mandatory.add(new RagFilter("recipientAgentId", RagFilterOperator.EQ, RagValue.string(scope.agentId())));
+            mandatory.add(new RagFilter("grantId", RagFilterOperator.IN, RagValue.strings(scope.grantIds())));
+        } else {
+            requiredField(space, "domainId", RagValueType.STRING);
+            requiredField(space, "agentId", RagValueType.STRING);
+            mandatory.add(new RagFilter("domainId", RagFilterOperator.EQ, RagValue.string(scope.domainId())));
+            mandatory.add(new RagFilter("agentId", RagFilterOperator.EQ, RagValue.string(scope.agentId())));
         }
         return List.copyOf(mandatory);
     }

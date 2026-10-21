@@ -2,7 +2,11 @@ package com.bkanent.memory.service;
 
 import com.bkanent.common.agent.SystemConstraintRecord;
 import com.bkanent.common.agent.UserPreferenceRecord;
+import com.bkanent.common.memory.MemoryContextKey;
+import com.bkanent.common.memory.MemoryErrorCode;
+import com.bkanent.common.memory.MemoryException;
 import com.bkanent.common.rag.*;
+import com.bkanent.common.rpc.MemoryRagRetrievalRpcService;
 import com.bkanent.common.rpc.RagRetrievalRpcService;
 import com.bkanent.memory.config.MemoryRagProperties;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -24,12 +28,48 @@ public class MemoryRagSearchFacade {
     private static final Set<String> PREFERENCE_RETURN_FIELDS = Set.of("preferenceKey", "category", "confidence", "observationCount", "lastObservedAt", "active");
     private static final Set<String> CONSTRAINT_RETURN_FIELDS = Set.of("constraintKey", "category", "tags", "active");
     private final RagRetrievalRpcService retrieval;
+    private final MemoryRagRetrievalRpcService domainRetrieval;
     private final MemoryRagSecurity security;
     private final JdbcTemplate jdbc;
     private final MemoryRagProperties properties;
     private final MemoryRagProjectionService projection;
     public MemoryRagSearchFacade(RagRetrievalRpcService retrieval, MemoryRagSecurity security, JdbcTemplate jdbc, MemoryRagProperties properties, MemoryRagProjectionService projection) {
-        this.retrieval = retrieval; this.security = security; this.jdbc = jdbc; this.properties = properties; this.projection = projection;
+        this(retrieval, security, jdbc, properties, projection, null);
+    }
+    @org.springframework.beans.factory.annotation.Autowired
+    public MemoryRagSearchFacade(RagRetrievalRpcService retrieval, MemoryRagSecurity security, JdbcTemplate jdbc,
+            MemoryRagProperties properties, MemoryRagProjectionService projection, MemoryRagRetrievalRpcService domainRetrieval) {
+        this.retrieval = retrieval; this.domainRetrieval = domainRetrieval; this.security = security; this.jdbc = jdbc;
+        this.properties = properties; this.projection = projection;
+    }
+
+    public boolean isDomainSearchEnabled() { return properties.isDomainSearchEnabled(); }
+
+    /** Strict memory-v2 route. It issues one operation-bound RAG request and has no SQL-scan fallback. */
+    public List<RagCandidate> searchDomainCandidates(MemoryContextKey context, MemoryRagRecordType type, String query,
+            int candidateLimit, String matterId, List<String> grantIds, String purpose) {
+        if (!properties.isDomainSearchEnabled() || domainRetrieval == null || type == null
+                || type == MemoryRagRecordType.COLLABORATION) throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+        try {
+            int limit = Math.max(1, Math.min(200, candidateLimit));
+            int recall = Math.max(1, (limit + 1) / 2);
+            String spaceId = MemoryRagSpaceIds.spaceId(type, context.domainId(), context.agentId());
+            RagSearchRequest request = new RagSearchRequest(RagContract.VERSION, UUID.randomUUID().toString(), spaceId,
+                    query, List.of(), new RagRecallOptions(true, null, recall, recall), new RagFusionOptions(null, null, null, null),
+                    true, limit, limit, RagFailurePolicy.STRICT).normalized();
+            var scope = security.memoryScope(request, context, type, matterId, grantIds, purpose);
+            var authentication = security.memorySearchAuthentication(request);
+            RagSearchResponse response = domainRetrieval.search(request, authentication, scope);
+            if (response == null || response.contractVersion() != RagContract.VERSION
+                    || !request.requestId().equals(response.requestId()) || !spaceId.equals(response.spaceId())
+                    || response.candidates().size() > request.candidateLimit() || response.degraded()
+                    || !response.failedStages().isEmpty()) throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+            return response.candidates();
+        } catch (MemoryException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+        }
     }
 
     public MemoryRagSearchResponse search(MemoryRagSearchRequest domain, AuthRagPrincipal principal, RagCredentialContext credentials) {

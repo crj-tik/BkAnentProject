@@ -289,6 +289,8 @@ public final class ManagedRagSpaceRegistry implements RagSpaceRegistry {
                 || l.recallTimeoutMillis() < 1 || l.rerankTimeoutMillis() < 1
                 || l.recallTimeoutMillis() > l.overallTimeoutMillis() || l.rerankTimeoutMillis() > l.overallTimeoutMillis()) invalid();
         s.allowedClients().forEach((caller, ops) -> { if (!logical(caller) || ops == null || ops.isEmpty()) invalid(); });
+        if (s.candidateAuthorizationRequired()
+                && !s.allowedClients().getOrDefault("memory-service", Set.of()).contains(RagOperation.MEMORY_SEARCH)) invalid();
         s.fields().forEach((field, definition) -> {
             if (!physical(field) || definition.type() == null || definition.operators() == null) invalid();
         });

@@ -5,6 +5,9 @@ import com.bkanent.rag.index.RagIndexService;
 import com.bkanent.rag.rerank.BgeRerankService;
 import com.bkanent.rag.security.http.RagHttpDeadline;
 import com.bkanent.rag.storage.*;
+import com.bkanent.common.rag.MemoryRagAuthorizationScope;
+import com.bkanent.common.rag.RagCandidateAuthorizationRequest;
+import com.bkanent.common.rag.RagCandidateReference;
 import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -13,6 +16,7 @@ import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.BiPredicate;
+import java.util.Set;
 
 /** Authorized bounded execution; caller-supplied filters can only narrow mandatory scope. */
 @Service
@@ -23,25 +27,37 @@ public class RagRetrievalService {
     @FunctionalInterface public interface Rerank {
         List<RagCandidate> apply(String query, List<RagCandidate> candidates, com.bkanent.rag.rerank.RerankProfile profile);
     }
+    @FunctionalInterface public interface CandidateAuthorizer {
+        Set<String> authorize(RagCandidateAuthorizationRequest request, MemoryRagAuthorizationScope scope);
+    }
     private final RagSpaceRegistry registry;
     private final Recall keyword;
     private final Recall vector;
     private final Rerank rerank;
     private final BiPredicate<String, RagCandidate> visible;
+    private final CandidateAuthorizer candidateAuthorizer;
     private final ThreadPoolExecutor workers;
     private final RrfFusion fusion = new RrfFusion();
 
     @org.springframework.beans.factory.annotation.Autowired
     public RagRetrievalService(RagSpaceRegistry registry, ElasticsearchProjectionStore keyword,
             SpringAiMilvusDocumentStore vector, BgeRerankService rerank, RagIndexService ledger,
+            CandidateAuthorizer candidateAuthorizer,
             @Value("${rag.execution.max-concurrency:8}") int concurrency) {
-        this(registry, keyword::search, (s, q, f, n, d) -> vector.search(s, q, f, n), rerank::rerank, ledger::visible, concurrency);
+        this(registry, keyword::search, (s, q, f, n, d) -> vector.search(s, q, f, n), rerank::rerank,
+                ledger::visible, candidateAuthorizer, concurrency);
     }
 
     public RagRetrievalService(RagSpaceRegistry registry, Recall keyword, Recall vector,
             Rerank rerank, BiPredicate<String, RagCandidate> visible, int concurrency) {
+        this(registry, keyword, vector, rerank, visible, null, concurrency);
+    }
+
+    public RagRetrievalService(RagSpaceRegistry registry, Recall keyword, Recall vector,
+            Rerank rerank, BiPredicate<String, RagCandidate> visible, CandidateAuthorizer candidateAuthorizer,
+            int concurrency) {
         this.registry = registry; this.keyword = keyword; this.vector = vector;
-        this.rerank = rerank; this.visible = visible;
+        this.rerank = rerank; this.visible = visible; this.candidateAuthorizer = candidateAuthorizer;
         if (concurrency < 2 || concurrency > 64) throw new RagException(RagErrorCode.INVALID_ARGUMENT, "maxConcurrency");
         workers = new ThreadPoolExecutor(concurrency, concurrency, 0, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(concurrency),
                 task -> { Thread thread = new Thread(task, "rag-retrieval"); thread.setDaemon(true); return thread; },
@@ -50,6 +66,12 @@ public class RagRetrievalService {
 
     /** Authentication/scope verification occurs in RPC before this non-public-network execution entry. */
     public RagSearchResponse search(RagSearchRequest request, List<RagFilter> mandatoryFilters) {
+        return search(request, mandatoryFilters, null);
+    }
+
+    /** Memory v2 scope is passed only by the dedicated native RPC path. */
+    public RagSearchResponse search(RagSearchRequest request, List<RagFilter> mandatoryFilters,
+                                    MemoryRagAuthorizationScope memoryScope) {
         RagSearchRequest normalized = request.normalized();
         Set<RagStage> requiredStages = EnumSet.noneOf(RagStage.class);
         if (normalized.recall().hybrid() || normalized.recall().singleRecall() == RagRecallMode.KEYWORD) requiredStages.add(RagStage.KEYWORD);
@@ -100,6 +122,12 @@ public class RagRetrievalService {
             List<RagCandidate> candidates = fusion.fuse(keywords, vectors, normalized.fusion(), effectiveKeyword, effectiveVector,
                     normalized.semanticRerank() ? normalized.rerankCandidates() : normalized.candidateLimit());
             stats.add(new RagStageStats(RagStage.FUSION, candidates.size(), elapsed(started)));
+            if (space.candidateAuthorizationRequired() && !candidates.isEmpty()) {
+                if (candidateAuthorizer == null || memoryScope == null) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE, "memoryAuthorization");
+                requireTime(deadline);
+                candidates = authorizeCandidates(normalized, memoryScope, candidates);
+                requireTime(deadline);
+            }
             boolean semantic = normalized.semanticRerank();
             if (semantic && !candidates.isEmpty()) {
                 long bytes = candidates.stream().mapToLong(c -> c.content().getBytes(StandardCharsets.UTF_8).length).sum()
@@ -124,6 +152,28 @@ public class RagRetrievalService {
                     failures, output, stats);
         }
         finally { if (k != null && !k.isDone()) k.cancel(true); if (v != null && !v.isDone()) v.cancel(true); }
+    }
+
+    private List<RagCandidate> authorizeCandidates(RagSearchRequest request, MemoryRagAuthorizationScope scope,
+            List<RagCandidate> candidates) {
+        List<RagCandidateReference> references = candidates.stream().map(candidate -> {
+            RagValue hash = candidate.metadata().get("contentHash");
+            if (hash == null || hash.type() != RagValueType.STRING || !hash.scalar().matches("[0-9a-f]{64}")) {
+                throw new RagException(RagErrorCode.SPACE_NOT_READY, "candidateHash");
+            }
+            return new RagCandidateReference(candidate.documentId(), candidate.sourceType(), candidate.sourceId(),
+                    candidate.projectionVersion(), candidate.schemaVersion(), hash.scalar());
+        }).toList();
+        RagCandidateAuthorizationRequest authorization = new RagCandidateAuthorizationRequest(
+                RagContract.VERSION, request, references);
+        Set<String> permitted;
+        try { permitted = candidateAuthorizer.authorize(authorization, scope); }
+        catch (RagException failure) { throw failure; }
+        catch (RuntimeException failure) { throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE, "memoryAuthorization"); }
+        if (permitted == null) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE, "memoryAuthorization");
+        Set<String> requested = references.stream().map(RagCandidateReference::documentId).collect(java.util.stream.Collectors.toSet());
+        if (!requested.containsAll(permitted)) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE, "memoryAuthorization");
+        return candidates.stream().filter(candidate -> permitted.contains(candidate.documentId())).toList();
     }
 
     private List<RecallHit> authorized(RagSpaceDefinition space, List<RecallHit> hits) {

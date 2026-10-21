@@ -30,7 +30,7 @@ class RagApplicationBootstrapTest {
     @Autowired ManagedRagSpaceRegistry registry;
     @Test void startsWithMissingBackendCredentialsAndReadinessFailsClosedWithoutNetwork() throws Exception {
         assertThat(context.getBean(RagIndexService.class)).isNotNull();
-        assertThat(context.getBeansOfType(org.apache.dubbo.config.spring.ServiceBean.class)).hasSize(3);
+        assertThat(context.getBeansOfType(org.apache.dubbo.config.spring.ServiceBean.class)).hasSize(4);
         assertThat(context.getBean(SpringAiMilvusDocumentStore.class)).isNotNull();
         assertThat(registry.snapshot()).isEmpty();
         assertThat(context.getBeanFactory().containsSingleton("ragActualMilvusClient")).isFalse();

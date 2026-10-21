@@ -1,6 +1,7 @@
 package com.bkanent.memory.service;
 
 import com.bkanent.common.rag.*;
+import com.bkanent.common.memory.MemoryContextKey;
 import com.bkanent.memory.config.MemoryRagProperties;
 import com.bkanent.memory.rpc.MemoryRagRpcServiceImpl;
 import org.junit.jupiter.api.Test;
@@ -181,5 +182,41 @@ class MemoryRagSecurityTest {
             return MemoryRagTestSupport.principal("ADMIN");
         });
         assertThrows(RagException.class, () -> security.authenticate(f.credentials));
+    }
+
+    @Test
+    void candidateCallbackRequiresItsDedicatedKeyAndExactSignedSearchScope() {
+        var f = new MemoryRagTestSupport();
+        f.properties.setCandidateAuthorizationKeyId("rag-candidate-callback");
+        f.properties.setCandidateAuthorizationSecret("dedicated-test-callback-secret-with-32-bytes");
+        var search = new RagSearchRequest(RagContract.VERSION, "candidate-search",
+                MemoryRagSpaceIds.spaceId(MemoryRagRecordType.EXPERIENCE, "marketing", "marketing-agent"),
+                "find similar result", List.of(), new RagRecallOptions(true, null, 2, 2),
+                new RagFusionOptions(null, null, null, null), true, 2, 2, RagFailurePolicy.STRICT).normalized();
+        var reference = new RagCandidateReference("experience-doc", "memory_experience", "experience-1", 3,
+                "memory-v2.1", "a".repeat(64));
+        var request = new RagCandidateAuthorizationRequest(RagContract.VERSION, search, List.of(reference));
+        var context = new MemoryContextKey("42", "marketing", "marketing-agent", "conversation-1");
+        var scope = f.security.memoryScope(search, context, MemoryRagRecordType.EXPERIENCE, null, List.of(), null);
+        long now = Instant.now().getEpochSecond();
+        var unsigned = new RagAuthEnvelope(RagContract.VERSION, "rag-candidate-callback", "memory-service", "rag-service",
+                RagOperation.AUTHORIZE_CANDIDATES, search.requestId(), RagCanonicalHash.requestHash(request),
+                RagActorMode.SERVICE, "rag-service", now, now + 5, null, null);
+        var authentication = RagRequestSigner.sign(unsigned,
+                f.properties.getCandidateAuthorizationSecret().getBytes(StandardCharsets.UTF_8));
+
+        assertDoesNotThrow(() -> f.security.verifyCandidateCaller(request, authentication, scope));
+
+        var wrongOperation = RagRequestSigner.sign(new RagAuthEnvelope(RagContract.VERSION,
+                "rag-candidate-callback", "memory-service", "rag-service", RagOperation.MEMORY_SEARCH,
+                search.requestId(), RagCanonicalHash.requestHash(request), RagActorMode.SERVICE, "rag-service",
+                now, now + 5, null, null), f.properties.getCandidateAuthorizationSecret().getBytes(StandardCharsets.UTF_8));
+        assertThrows(RagException.class, () -> f.security.verifyCandidateCaller(request, wrongOperation, scope));
+
+        var changedSearch = new RagSearchRequest(search.contractVersion(), search.requestId(), search.spaceId(),
+                "different query", search.filters(), search.recall(), search.fusion(), search.semanticRerank(),
+                search.rerankCandidates(), search.candidateLimit(), search.failurePolicy());
+        var changedRequest = new RagCandidateAuthorizationRequest(RagContract.VERSION, changedSearch, List.of(reference));
+        assertThrows(RagException.class, () -> f.security.verifyCandidateCaller(changedRequest, authentication, scope));
     }
 }

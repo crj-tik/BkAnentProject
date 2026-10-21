@@ -77,12 +77,16 @@ public class MemoryRagProjectionService {
     }
 
     public RagIndexEvent publish(String space, String id, RagDocument document) {
+        return publish(space, id, SCHEMA, document);
+    }
+
+    public RagIndexEvent publish(String space, String id, String schemaVersion, RagDocument document) {
         lock();
         var versions = jdbc.queryForList("SELECT revision FROM memory_rag_projection WHERE space_id=? AND document_id=?", Long.class, space, id);
         long revision = versions.isEmpty() ? 1 : Math.addExact(versions.get(0), 1);
         RagIndexOperation op = document == null ? RagIndexOperation.DELETE : RagIndexOperation.UPSERT;
         String eventId = UUID.randomUUID().toString();
-        RagIndexEvent event = new RagIndexEvent(1, eventId, eventId, space, id, revision, SCHEMA, op,
+        RagIndexEvent event = new RagIndexEvent(1, eventId, eventId, space, id, revision, schemaVersion, op,
                 RagCanonicalHash.documentHash(op, document), document, Instant.now());
         String payload = encode(event);
         if (versions.isEmpty()) jdbc.update("INSERT INTO memory_rag_projection(space_id,document_id,revision,tombstone,event_payload) VALUES (?,?,?,?,?)", space, id, revision, document == null, payload);
