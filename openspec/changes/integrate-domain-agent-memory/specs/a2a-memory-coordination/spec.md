@@ -66,7 +66,7 @@ A2A SHALL 继续直接交付获准展示的进度、正文及本次结构化结�
 
 ### Requirement: 认证与延迟观测不进入记忆正文
 
-认证材料 SHALL 只沿受支持专用传输流转，MUST NOT 进入 prompt、普通 metadata、记忆记录、checkpoint、日志或 SSE。验收 SHALL 在相同 fixture 下分别记录首个可见事件、A2A 终态展示、成果持久可读、共享记忆可读、索引可检索和 Studio 可读的延迟分布及新增 I/O，不能把其中一项完成误报为其他项完成。
+认证材料 SHALL 只沿受支持专用传输流转，MUST NOT 进入 prompt、普通 metadata、记忆记录、checkpoint、日志或 SSE。验收 SHALL 在相同 fixture 下分别验证首个可见事件、A2A 终态展示、成果持久可读、共享记忆可读、索引可检索和 Studio 可读性，并记录功能结果及必要 I/O；不能把其中一项完成误报为其他项完成。验收 MUST NOT 要求记录延迟分布、改造前性能基线或前后性能对比。Studio 前端仍在设计、当前无可执行实例时 SHALL 明确标记浏览器验收为未测，并在可用后补验。
 
 #### Scenario: 专用认证信标与共享引用同时存在
 - **WHEN** 一个 A2A 调用携带有效专用身份及获准共享引用
