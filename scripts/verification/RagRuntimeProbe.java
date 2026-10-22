@@ -185,11 +185,20 @@ final class RagRuntimeProbe implements AutoCloseable {
     }
 
     private <T> T reference(Class<T> type, String url) {
+        return reference(type, url, "fastjson2");
+    }
+
+    private <T> T ragReference(Class<T> type, String url) {
+        // RAG providers pin this SPI so record responses with list fields decode safely (KI-113).
+        return reference(type, url, "fastjson2ctor");
+    }
+
+    private <T> T reference(Class<T> type, String url, String serialization) {
         ReferenceConfig<T> reference = new ReferenceConfig<>();
         reference.setInterface(type);
         reference.setApplication(context.getBean(ApplicationConfig.class));
         reference.setRegistry(context.getBean(RegistryConfig.class));
-        reference.setUrl(directUrl(url));
+        reference.setUrl(directUrl(url, serialization));
         reference.setCheck(false);
         reference.setInjvm(false);
         reference.setRetries(0);
@@ -229,7 +238,7 @@ final class RagRuntimeProbe implements AutoCloseable {
         String requestId = UUID.randomUUID().toString();
         String url = required("RAG_PROBE_RAG_DUBBO_URL");
         if (Set.of("INSPECT", "PROVISION").contains(operation)) {
-            RagSpaceAdminRpcService admin = reference(RagSpaceAdminRpcService.class, url);
+            RagSpaceAdminRpcService admin = ragReference(RagSpaceAdminRpcService.class, url);
             RagSpaceInspection result;
             if ("INSPECT".equals(operation)) {
                 RagInspectRequest request = new RagInspectRequest(1, requestId, space);
@@ -263,11 +272,11 @@ final class RagRuntimeProbe implements AutoCloseable {
         RagIndexStatus result;
         if ("GET_STATUS".equals(operation)) {
             RagStatusRequest request = new RagStatusRequest(1, requestId, space, eventId, documentId);
-            result = reference(RagIndexRpcService.class, url).getStatus(request,
+            result = ragReference(RagIndexRpcService.class, url).getStatus(request,
                     envelope(RagOperation.GET_STATUS, requestId, RagCanonicalHash.requestHash(request), "rag-service", false));
         } else {
             RagReplayRequest request = new RagReplayRequest(1, requestId, space, eventId, documentId);
-            result = reference(RagSpaceAdminRpcService.class, url).replay(request,
+            result = ragReference(RagSpaceAdminRpcService.class, url).replay(request,
                     envelope(RagOperation.REPLAY, requestId, RagCanonicalHash.requestHash(request), "rag-service", true), credentials);
         }
         require("ADMIN".equals(currentPrincipal().roleCode()), RagErrorCode.FORBIDDEN);
@@ -473,8 +482,12 @@ final class RagRuntimeProbe implements AutoCloseable {
         return result;
     }
     private static String directUrl(String value) {
-        // Registry-free references lack provider serialization preferences; callers cannot override this parameter.
-        return endpoint(value, Set.of("dubbo"), true) + "?serialization=fastjson2";
+        return directUrl(value, "fastjson2");
+    }
+    private static String directUrl(String value, String serialization) {
+        // Registry-free references lack provider serialization metadata, so pin each interface contract explicitly.
+        require(Set.of("fastjson2", "fastjson2ctor").contains(serialization), RagErrorCode.INVALID_ARGUMENT);
+        return endpoint(value, Set.of("dubbo"), true) + "?serialization=" + serialization;
     }
     private static String httpUrl(String value) {
         return endpoint(value, Set.of("http", "https"), false);

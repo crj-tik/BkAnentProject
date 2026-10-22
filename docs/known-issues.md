@@ -799,6 +799,8 @@
 
 **2026-10-15续记（b32cd0e+8bc352b闭合）**：检索验证暴露同根第三缺陷——Dubbo内建fastjson2 FieldBased JSONB经安全Handler解码record列表字段必崩（2.0.52-2.0.59，TYPED_ANY），hessian2路线hessian-lite 3.2.13在Java17无模块开放下静态崩溃（add-opens被规则禁止），consumer侧参数不达channel URL。终局修复：common新增**fastjson2ctor**序列化SPI（无WriteClassName/FieldBased构造器JSON、声明类型解码、无多态面、contentTypeId=27、无ReferenceDetection），RAG三provider+双侧协议级serialization参数接线，真实正命中贯通（HYBRID_RERANK/双路/治理版本/failedStages干净）。全仓970项0失败。
 
+**2026-10-22运行探针回归（本提交）**：RAG 运行探针曾对 registry-free RAG 引用固定使用 Dubbo 内建 `fastjson2`，而 RAG provider 已固定 `fastjson2ctor`；只读 `INSPECT` 返回含列表字段的 `RagSpaceInspection` 时因此在探针端触发 JSONB 解码失败。探针现对 RAG admin/index 引用显式使用与 provider 相同的 `fastjson2ctor`，Auth RPC 保持原有序列化。修复后 ADMIN 鉴权与只读 RPC 均成功，空间检查返回 keyword/vector `SPACE_NOT_READY`、rerank `DEPENDENCY_UNAVAILABLE`；没有执行空间写入。物理空间待就绪属于 OpenSpec 11.2 验收项。
+
 ## KI-112 [OPEN·P2] 整栈同时重启时auth-service可能抢跑Nacos就绪回退内嵌H2，需人工重启恢复
 
 **确认日期**：2026-10-15。
