@@ -87,8 +87,9 @@
 - [x] 10.4 保持artifact.created在成果保存成功后及既有tool/workflow完成时序，回归KI-24部分成功/回放；Studio生成与人工修订来源不混写，不把KI-114其他领域动作纳入本变更实现。
 - [x] 10.5 回归正式SSE入口的parent/child关联、task过滤、visibility、eventId/sequence和Last-Event-ID去重；仅对本链路确认的过滤/可见性缺口做显式增量修复并记录KI，不进行全仓SSE重构。
 - [x] 10.6 故障注入memory延迟2秒/不可用、索引迟到及撤回，验证逐delta/progress新增memory读写/embedding/总结调用为0，前端链不等待回取；单独观测delta限流/审计降级，不伪装成记忆性能问题。
-- [ ] 10.7 扫查测试fixture和实际prompt/checkpoint/SSE/日志/导出确认无用户凭据、专用认证信标、脱敏映射及私有内部材料；所有secret来自ENV/密钥服务，SQL外部输入参数绑定。
-  验证边界：已扫查仓库代码、配置、测试fixture与本机环境变量键名（不读取或输出密钥值），并修复硬编码票据密钥；本轮在 `bk-anent-dev` 原位重建 `memory-service`，readiness 为 `UP`。近20分钟服务日志中 bearer token、凭据赋值和经验 fixture 字符串扫描均为0；单测已确认经验正文不进入 Graph checkpoint。未启动 full profile 的 `agent-service` 及其附属依赖，因此 Supervisor 实际运行时 prompt、checkpoint、SSE 和应用日志仍须在最小联机验收组合可用后扫描。
+- [x] 10.7 扫查测试fixture和实际prompt/checkpoint/SSE/日志/导出确认无用户凭据、专用认证信标、脱敏映射及私有内部材料；所有secret来自ENV/密钥服务，SQL外部输入参数绑定。
+  验收记录（2026-10-22）：已跟踪配置扫描覆盖57个YAML/properties/env示例文件，未发现字面量敏感凭据赋值；敏感配置使用ENV引用或空占位。本机 `.env` 受Git忽略，本次未读取或输出其值。102项定向回归全部通过：`A2aMemoryAgentHookTest` 捕获真实 ReactAgent prompt 并断言认证信标/凭据不入prompt；`SupervisorMemoryIntegrationTest` 执行持久Graph checkpoint并验证私有经验/传输凭据不落checkpoint；A2A输出metadata及SSE审计/回放、凭据lease、偏好worker、RAG安全投影和共享导出脱敏均有覆盖。Memory SQL动态查询的外部值通过JDBC参数绑定；动态表列仅来自内部固定调用点，分页占位符数量不含用户值。
+  最近24小时只读扫描现有 agent、memory、rag、auth 四个容器日志（共3473行），未命中Bearer值、凭据键值赋值或 `authBeacon` 字段值；少量 `RagCredentialContext` 仅为类型名。当前没有实际启用的领域业务流量，故以上是运行代码路径/日志回归证据，不代表生产流量验收。完成后停止本轮启动的Auth、Redis、RAG、Elasticsearch、Milvus及其etcd/MinIO依赖；仅Memory、MySQL、Nacos保持运行。
 
 ## 11. 分阶段启用、回滚与交付验收
 
