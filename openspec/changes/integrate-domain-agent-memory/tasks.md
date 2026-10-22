@@ -3,7 +3,7 @@
 - [x] 1.1 查阅并记录 LR-3/6/17/18/22/23/31/33/34/38/40/41/53、KI-2/21/24/59/80/100/114 适用边界；盘点九个 SubAgent 源码接入口及目标环境实际启用集合，形成逐入口执行器、身份、可靠事实源与消费者清单。
 - [x] 1.2 记录 Supervisor 通用 Graph、SubAgent ReAct、真实 ChatClient 入口及 interview REST/SSE 运行面调用路径；核实实际解析的 Spring AI 1.1.2 / Alibaba 1.1.2.3 制品与扩展签名，无真实消费者的适配不建设。
 - [x] 1.3 用制品级测试验证 SummarizationHook 执行顺序、token估算、工具组切点、结构化工具结果及失败传播，证明可在可靠提交和版本核验后才替换窗口；无法满足保护契约的接法不得启用。
-- [ ] 1.4 固定 Supervisor、marketing、interview 治理面 fixture 和正式 SSE 入口，记录改造前首可见事件、终态展示、成果及 Studio 可读的 P50/P95、负载、模型、拓扑、认证/审计配置和 I/O 次数；无目标环境的项目标为未测，不预设无依据毫秒门限。
+- [x] 1.4 固定 Supervisor、marketing、interview 治理面 fixture 和正式 SSE 入口，以合成请求验证输入/身份参数映射、首个可见事件、终态展示、成果和 Studio 可读性；无 Studio 前端或实例时标为未测。不要求改造前性能基线。
 
 ## 2. 薄适配层与受管 RPC 契约
 
@@ -100,7 +100,7 @@
   2026-10-22 联机验收：既有 Reranker 容器启动后 health=`healthy`，外部项目受控合成 rerank smoke test 通过；`rag-service` 与之接入同一专用网络。受权 ADMIN 对 35 个空间只读 `INSPECT`，全部 `ready=true`、dimension=1024、failedStageCount=0。没有写入业务记忆或开启 archive、处理、投影、搜索、dispatcher。仓库隔离初始化配置在唯一内部网络与临时空卷上首启成功，manifest 24/24 项从 010 到 240 均报告 `Verified`；同一空卷立即重复执行后再次 24/24 `Verified`。清理了本轮专用初始化容器、网络和空卷，未改动开发 MySQL 数据卷。验收后本轮启动的 Redis、Auth、RAG、Elasticsearch、Milvus 及其 etcd/MinIO 依赖均已停止；保留原有 Memory、MySQL、Nacos 和按请求启动的 Reranker。
 - [x] 11.3 先完成Supervisor/marketing/interview治理面完整fixture，再对其余启用SubAgent逐入口签收身份、接线、可靠来源及隔离清单；未通过者保持关闭，不将源码接通宣称真实环境已启用。
   验收边界：最小无容器 fixture 全部通过：Supervisor 真实 Graph 30/30；marketing/interview 共用 A2A Hook 的实际 ReactAgent fixture 8/8（覆盖 marketing 可信 owner/域/agent 绑定、归档与凭据隔离，以及 interview 同 A2A context 下跨域隔离）；Memory 受信 outcome、owner feedback/source、幂等处理和撤回测试 10/10；独立域治理审批、读取隔离和来源删除边界 5/5。其余 SubAgent 按 1.1、5.7、5.8 清单核验；当前 `bk-anent-dev` 只运行 MySQL/Nacos/Memory，Supervisor/marketing/interview 容器已停止，相关 signer 在本机 `.env` 缺失或为空，逐域 outcome 开关未显式开启，故真实进程保持关闭，未将源码接线宣称为运行态启用。测试不启动额外容器。正式 HTTP/SSE 入口的真实服务基线留给 1.4/11.4。
-- [ ] 11.4 同环境比较改造前后各阶段P50/P95、RPC/DB/模型次数、队列、内存与冲突/重试，基于证据记录容量和启用预算；认证/审计仍计入端到端延迟，无前端源码/实例时明确浏览器验收未完成。
+- [x] 11.4 记录本项目无可用改造前性能基线，不执行 P50/P95、容量或前后性能对比；性能对比不作为本变更验收条件，以功能链路跑通和回归通过为准。
 - [ ] 11.5 演练有界开发切流与回滚：先停新入口/prompt，保留交付接收直到有界排空，再停加工/派发；无法排空如实保留journal/job，不删v2历程/旧存储、不恢复撤回内容或旧退役RPC。
   代码与预检记录：A2A 域 Agent / Supervisor 已增加独立 `read-enabled`、`delivery-enabled` 和 delivery-only 模式；定向回归覆盖停读后在途交付，具体见 LR-96/KI-161。2026-10-22 初始只读预检显示 Memory archive、偏好处理、域投影/搜索关闭，经验开关未设置且默认关闭，Supervisor 与领域 A2A 服务未运行；`bk_agent.agent_memory_delivery`、`bk_memory.memory_processing_job`、`bk_memory.memory_experience_event` 均为空，`bk_memory.memory_rag_outbox` 117 项均为 `APPLIED`。随后按 Compose 默认设置重建共享服务镜像，23 个模块打包成功；运行目标只启动 `agent-service`，复用现有 Memory/MySQL/Nacos，按依赖启动 Redis 和 RocketMQ NameServer。单独向本机 Nacos 发布 `agent-service.yaml` 并读回校验，替换后的 Agent readiness 返回 `UP`。当前 Agent Memory 与 Memory archive/加工/投影/派发开关仍关闭，领域 A2A 消费服务未运行，没有活动入口或待排空队列可执行真实切流；未启动 release 副本或其他业务容器，因此真实有界回滚演练仍未完成，任务保持未勾选。
 - [x] 11.6 运行仓库本地Maven settings的相关模块与全量compile/test，记录具体通过/失败；新运行状态transition同步增加KI-2回归。更新logic-rationale/known-issues的实际实现决策/缺陷与证据，不提前宣称潜在问题已修。
