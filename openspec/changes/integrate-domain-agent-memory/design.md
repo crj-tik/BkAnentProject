@@ -154,7 +154,7 @@ SubAgent许可结果
 
 错误分类：AUTHENTICATION_FAILED、FORBIDDEN、VERSION_CONFLICT、MEMORY_UNAVAILABLE、CONTEXT_BUDGET_EXCEEDED及后台INVALID_EXTRACTION/RETRY_EXHAUSTED；job失败与会话业务成功分别观测，指标不暴露正文/token。
 
-验收分别记录：首个可见SSE、A2A终态展示、成果已持久、记忆export可读、RAG可检索、Studio修订可读。固定模型桩/故障环境验证memory阻塞2秒或不可用期间delta回调新增memoryI/O次数为0、接收不等待该故障；2秒只是故障夹具参数。真实环境在相同模型、拓扑、负载与安全配置下比较改造前后P50/P95、RPC/DB次数与队列，据基线和容量证据记录启用预算，不预设无依据固定毫秒门限。认证/审计开销可单独归因但仍计入用户端到端延迟，不移除安全复验或扩大超时虚报通过。
+验收使用固定的 Supervisor、marketing、interview 治理面 fixture，以合成请求分别验证输入/身份参数映射、首个可见 SSE、A2A 终态展示、成果持久、记忆 export 可读、RAG 可检索及 Studio 修订可读；Studio 前端正在设计、当前无可执行实例时将浏览器验收标记为未测，待前端落地后补验。固定模型桩/故障环境验证 memory 阻塞 2 秒或不可用期间 delta 回调新增 memory I/O 次数为 0、接收不等待该故障；2 秒只是故障夹具参数。本变更没有可用的改造前性能基线，不采集 P50/P95、容量或前后性能对比，验收以功能链路跑通和回归通过为准。认证/审计开销仍计入用户端到端链路，不移除安全复验或扩大超时虚报通过。
 
 ## Risks / Trade-offs
 
