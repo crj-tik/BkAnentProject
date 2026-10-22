@@ -431,11 +431,11 @@
 
 ## KI-57 [OPEN·P1] 现有 RAG HTTP 目标与本次出站地址安全约束冲突
 
-**确认依据**：checked-in 模板及客户端调用静态核对，未发请求、未修改容器或配置中心。
+**确认依据**：checked-in 模板、受保护 HTTP transport 与本仓客户端联机合成请求核对；未发送业务数据、未修改配置中心。
 
 **现象与根因**：`nacos/agent-service.yaml` 的本机重排 `host.docker.internal:18119` 和房源私网/Compose ES HTTP 目标不能满足本次要求的 host/DNS 校验及拒绝 localhost、环回、私有、保留地址。现有重排客户端只校验 endpoint 非空；Nacos/env 来源可信不构成地址豁免。
 
-**处置（实施中）**：已在原 HC5/HC4 transport 实现每次新连接的地址校验、全 DNS 答案检查与地址绑定，禁止重定向及代理；不发真实后端请求的 transport 测试 81 项已通过，全仓非外部联调回归通过。重排目标已由外部 Reranker-BGE-V2-M3 项目交付专用合规目标：仅经 external Docker 网络 `bkanent-rerank-dev`（10.253.240.0/24）以 `http://bkanent-reranker-dev:18111/api/v1/rerank` 访问，本仓模板/Compose 已登记该 host 的精确 CIDR map 并以治理协议加 revision/artifact_digest/scoring_version 钉扎（见 LR-43），不再引用旧 `host.docker.internal:18119`。2026-10-22 联机复核启动了既有 Reranker 容器，health 为 `healthy`；外部项目受控 smoke test 的真实治理接口合成推理通过；本仓 `rag-service` 已连接同一专用 internal 网络，受权 ADMIN 对已登记的 35 个 Memory v2 逻辑空间执行只读能力检查，全部 `ready=true`、dimension=1024、failedStageCount=0。记录见 `docs/memory-v2-operations.md` 和该 change 的 11.2 验收说明。仍需验证由本仓 `rag-service` 客户端发起的实际候选重排请求及其评分身份核对；ES 合规目标仍未提供，KI-57 保持 OPEN。
+**处置（实施中）**：已在原 HC5/HC4 transport 实现每次新连接的地址校验、全 DNS 答案检查与地址绑定，禁止重定向及代理；不发真实后端请求的 transport 测试 81 项已通过，全仓非外部联调回归通过。重排目标已由外部 Reranker-BGE-V2-M3 项目交付专用合规目标：仅经 external Docker 网络 `bkanent-rerank-dev`（10.253.240.0/24）以 `http://bkanent-reranker-dev:18111/api/v1/rerank` 访问，本仓模板/Compose 已登记该 host 的精确 CIDR map 并以治理协议加 revision/artifact_digest/scoring_version 钉扎（见 LR-43），不再引用旧 `host.docker.internal:18119`。2026-10-22 联机复核启动了既有 Reranker 容器，health 为 `healthy`；外部项目受控 smoke test 的真实治理接口合成推理通过；本仓 `rag-service` 已连接同一专用 internal 网络，受权 ADMIN 对已登记的 35 个 Memory v2 逻辑空间执行只读能力检查，全部 `ready=true`、dimension=1024、failedStageCount=0。随后本仓实际 `BgeRerankService` 使用生产受保护 transport，通过一次性有界探针向同一治理接口提交两个合成候选，模型 revision/artifact digest/scoring version、LOGIT 语义、归一化分数和 Paris 优先排序均通过；探针运行器自动删除，未启动 RAG/ES/Milvus 等服务容器。记录见 `docs/memory-v2-operations.md` 和该 change 的 11.2 验收说明。ES 合规目标仍未提供，因此完整 RAG 目标与 KI-57 保持 OPEN。
 
 **实施前置核对**：本机项目依赖树确认 Spring AI 1.1.2 的 OpenAI embedding 经同步 Spring Web 6.2.7 RestClient / HttpClient5 5.4.4；ES 8.18.1 经 HttpAsyncClient 4.1.5 / HttpClient 4.5.14，须使用不同代的连接池 DNS 扩展。现有 BGE 自建 RestClient，不会自动消费受保护 Bean。连接层必须校验全部解析地址并绑定连接、禁重定向及代理；启动前一次解析不能覆盖换址。Milvus SDK 2.5.8 的 gRPC 不应被宣称由这些 HTTP 扩展保护。此核对不是实现或真实检索验收，合规 ES/重排目标仍未提供。
 
