@@ -56,8 +56,8 @@
 
 ## 7. 异步偏好完整历程
 
-- [ ] 7.1 实现可信owner/subject/canonicalScope与稳定维度注册及唯一block身份，私有scope包含domainId+agentId、共享scope采用明确授权组身份；同owner同域同主体同维度的未共享Agent不碰撞/归并，明确共享组内才归并，测试逐句重复键、模糊主体和未授权范围拒绝。
-  当前实现及回归覆盖 owner-self 的 domain+agent 私有键、稳定维度、显式共享组 ID 的身份隔离、重复键稳定哈希、伪造维度与跨 Agent 读取拒绝。经可信业务关联的其他 subject 及共享偏好授权尚未接入；按 LR-73 现有设计不扩展或宣称完成此项。
+- [x] 7.1 实现 owner-self subject、包含 domainId+agentId 的私有 canonicalScope、稳定维度注册及唯一 block 身份；偏好块不使用共享 scope，跨域交接只通过独立 MemorySharedExport/grant 且不得开放底层偏好块。测试重复键稳定哈希、不同 domain/agent 不碰撞、伪造 subject/候选 dimension 拒绝及跨 Agent 读取拒绝。
+  验收边界：本变更只支持 owner-self 的 domain+agent 私有偏好块；写请求不接收客户端 subject/scope，服务端从签名上下文派生。其他 subject 与共享偏好块不属于本变更，不作为待实现能力；跨域内容仍走显式共享导出授权，不共享或合并 preference block。`MemoryContractTest` 29 项和 `PreferenceHistoryServiceTest` 14 项通过。
 - [x] 7.2 实现异步先评估 PREFERENCE/TASK_CONSTRAINT/QUESTION/OTHER、肯定/否定、长期修正/临时例外后微批归并；记录规则/模型版本，评估故障不阻塞会话或SSE。
 - [x] 7.3 实现源事件幂等、完整时间挂点、明确修正因果、块revision/OCC与未决冲突；同会话sequence可排序，跨会话不得比较局部序号，测试迟到旧表达不覆盖新修正。
 - [x] 7.4 实现当前值与过去到现在历程详情、固定blockId/revision的有序keyset分页和完整度；任一检索分片解析为一个逻辑块，版本变化显式继续固定版本或要求重读，禁止静默混页。

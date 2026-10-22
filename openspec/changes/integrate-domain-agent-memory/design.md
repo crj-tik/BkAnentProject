@@ -15,7 +15,7 @@
 
 **Goals:**
 - 用框架已有生命周期管理 Agent 热工作集，memory 做持久真源、版本和授权检索，减少重复远程装配。
-- 为压缩、偏好时间历程、历史补忆、经验选择与跨域共享给出可执行的数据/失败/并发契约。
+- 为压缩、偏好时间历程、历史补忆、经验选择与显式跨域导出共享给出可执行的数据/失败/并发契约。
 - 多 Agent 在同 owner 下仍默认域私有；授权共享内容可经 A2A 直接交付，也能由参与 Agent 后续在 memory 读取。
 - 本次覆盖所有已注册 SubAgent 的统一原生 A2A 接入口；Supervisor、marketing 和 interview 治理面进行代表性完整运行验收，其余 Agent 接线/隔离契约逐项验收。
 
@@ -37,7 +37,7 @@
 - 框架扩展点按实际调用路径接入：ReactAgent 的 AgentHook 加载，ModelHook/SummarizationHook 在安全边界压缩，Interceptor装配授权投影；Supervisor 使用 PrepareContext/Observe 及相同策略服务。真正的 ChatClient 入口用 ChatMemoryRepository/Advisor 对接本地窗口，不把远程全历史直接绑定 saveAll，不在 Graph 累计消息之上重复注入。
 - 原生 SummarizationHook 显式注册，保留 token 触发与消息替换语义；外围适配补工具数据序列化、安全切点、摘要校验、失败不替换与持久确认。禁止覆盖框架缓存或修改 .m2。
 
-### D2. 可信身份、域私有与共享授权
+### D2. 可信身份、域私有与显式导出授权
 
 定义 MemoryContextKey = (ownerId, domainId, agentId, conversationId)。定义 MatterId、runId、A2A taskId、domainSessionRef 为独立关联，不能相互当身份。domain/agent 由可信部署能力映射与经过验证的调用服务决定，模型只提出语义需求，不可指定他人的 owner/域来扩权。
 
@@ -45,7 +45,7 @@ memory v2 内部调用采用原生 Dubbo RPC（显式 dubbo consumer/provider、
 
 可靠交付与用户读取分开：输入接受前通过当前认证取得 memory 服务端可持久核验的精确事件接收许可，绑定来源服务/owner/domain/agent/context、eventId、内容哈希和用途；调用接受时记录 invocationId 的受限结果交付许可。结果只有已接受调用的可核验完成事实可提交，模型参数不构成证明。延迟投递通过 SERVICE认证和该许可核验，仅能交付/核对这些事件，不能兑换用户搜索权或变更内容；许可不是 bearer token，不含用户凭据，不进入 prompt/SSE/普通metadata。用户租约失效不抹去既已授权的接收事实；服务重启后仍可补交付，但当前删除/撤回策略可阻止加工及可读发布。没有有效许可或可恢复事实源时不得承诺已接受可靠记忆记录。可选记忆增强不可用时允许原执行链按当前认证与政策继续，但明确本次消息未进入新档案且禁止压缩移除，不能用未记录降级宣称可靠归档已成功；该降级也不降低既有业务结果持久化要求。
 
-范围枚举：DOMAIN_PRIVATE、TASK_SHARED、SESSION_SHARED；长期跨域偏好仅在用户明确授予具体范围时共享，缺省域私有。共享 grant 绑定 owner、事项/会话、来源、接收 agent/domain 集、purpose、版本与有效期；域内多个 Agent 亦只共享明确授权的组。所有入口（详情、搜索、导出、回放、后台处理）执行当前授权交集，ADMIN不得跨个人owner。
+记忆共享范围枚举：DOMAIN_PRIVATE、TASK_SHARED、SESSION_SHARED；偏好块在本变更中固定为 owner-self 的 DOMAIN_PRIVATE，scope 包含可信 domainId+agentId。偏好块不使用 TASK_SHARED/SESSION_SHARED，不允许跨 Agent 或跨域合并；其他主体偏好也不属于本变更验收范围。需要跨域交接的已选内容仍走独立 MemorySharedExport/grant，授权绑定 owner、事项/会话、来源、接收 agent/domain 集、purpose、版本与有效期；该授权只覆盖导出的内容，不授予底层偏好块或完整历程读取权。所有入口（详情、搜索、导出、回放、后台处理）执行各自当前授权交集，ADMIN不得跨个人owner。
 
 共享引用读取将经签名的接收方 contextKey 与来源 exportRef 分开；grant 的接收者同时绑定 domain、agent 和具体 conversation，TASK_SHARED 另绑定 matter，SESSION_SHARED 绑定独立 sharedScopeId。请求中的 scope/引用只用于核对服务端持久 grant，不授予权限；仅持展示或当前协作许可不能读取 durable export 正文。元数据授权通过后才读取正文，输出前重新检查当前用户及 grant/export 状态，远程 Auth 调用不占 SQL 锁。
 
@@ -109,7 +109,7 @@ memory 入站事务将真源变化、处理job与索引outbox原子记录；远�
 
 ### D7. 异步偏好评估与单维度完整历程
 
-PreferenceBlockKey=(ownerId, verifiedSubjectRef, canonicalScopeId, dimensionId)。私有canonicalScopeId包含domainId+agentId，不能只按domain归并；显式共享使用稳定授权组/共享范围身份，只有同一有效共享scope内才能归并。同owner、同域、同主体和维度的两个未共享Agent逻辑键不得碰撞。用户自身是默认主体；客户等其他主体仅在已有可信业务关联和读取授权时适用，模型不能猜subject。稳定维度注册（如commute_time/budget/floor/copy_length），不能“所有偏好”一个无限大blob，也不能每句话新键。
+PreferenceBlockKey=(ownerId, ownerId, DOMAIN_PRIVATE(domainId, agentId), dimensionId)。服务端从签名上下文确定 owner/domain/agent，从注册表确定维度；模型不能选择 subject 或 scope。跨域导出仍由独立 MemorySharedExport/grant 流程授权，既不改变块身份，也不让接收方读取偏好历程。本变更不接受其他主体或共享偏好块。同一逻辑键的多次表达维护同一历程；不同 owner、domain、agent 或 dimension 必须得到不同键。稳定维度注册（如 commute_time/budget/floor/copy_length），不能“所有偏好”一个无限大 blob，也不能每句话新键。
 
 journal事件到memory后，异步先评估 PREFERENCE / TASK_CONSTRAINT / QUESTION / OTHER，附肯定/否定、长期修正/临时例外、证据引用与提取模型/规则版本。按同subject/scope/dimension微批次归并，处理游标和sourceEventId去重，assistant复述、摘要、检索命中不增加观察数。
 

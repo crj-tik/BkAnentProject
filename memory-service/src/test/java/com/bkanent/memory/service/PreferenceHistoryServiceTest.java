@@ -217,11 +217,17 @@ class PreferenceHistoryServiceTest {
         }
     }
 
-    @Test void anotherAgentCannotReadBlockAndForgedDimensionsOrAssistantEvidenceAreRejected() throws Exception {
+    @Test void agentsCannotMergeOrReadEachOthersBlocksAndForgedSubjectOrDimensionsAreRejected() throws Exception {
         var f = new Preferences(); var source = message(1,"fact"); f.append(List.of(source));
         var first = f.submit(0,f.candidate(source,"100",PreferenceTransition.Change.OBSERVATION,List.of()));
         assertEquals("42", f.jdbc.queryForObject("SELECT subject_ref FROM memory_preference_block WHERE block_id=?", String.class, first.blockId()));
         f.caller.setAllowedAgentsByDomain(Map.of("marketing",Set.of("copy-agent","other-agent")));
+        var otherContext = new MemoryContextKey("42","marketing","other-agent","other-agent-conversation");
+        var otherSource = otherMessage(otherContext,"other-agent-budget","independent fact");
+        f.appendOther(otherSource);
+        var otherAgentBlock = f.submit(0,f.candidate(otherSource,"200",PreferenceTransition.Change.OBSERVATION,List.of()));
+        assertNotEquals(first.blockId(),otherAgentBlock.blockId(),"different private agents must never merge preference history");
+        assertEquals(2,f.count("memory_preference_block"));
         var guarded=org.mockito.Mockito.spy(f.store);
         f.preferences=new PreferenceHistoryService(guarded,f.security,f.sources,new MemoryPreferenceProperties(),f.transactions);
         Instant asOf=Instant.now();
@@ -230,6 +236,12 @@ class PreferenceHistoryServiceTest {
         code(MemoryErrorCode.FORBIDDEN, () -> f.preferences.read(request,f.sign(request)));
         org.mockito.Mockito.verify(guarded,org.mockito.Mockito.never()).decode(org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.eq(PreferenceBlock.class));
         org.mockito.Mockito.verify(guarded,org.mockito.Mockito.never()).decode(org.mockito.ArgumentMatchers.anyString(),org.mockito.ArgumentMatchers.eq(PreferenceTransition.class));
+        var forgedSubject = f.request(MemoryV2Contract.OPERATION_SEARCH_PREFERENCES,e ->
+                new MemoryPreferenceQueryRequest(e,CONTEXT,"another-user","budget",null,10));
+        code(MemoryErrorCode.FORBIDDEN, () -> f.preferences.search(forgedSubject,f.sign(forgedSubject)));
+        var reverseRequest = f.request(MemoryV2Contract.OPERATION_PREFERENCE_DETAIL,e -> new MemoryPreferenceDetailRequest(e,
+                CONTEXT,otherAgentBlock.blockId(),null,10,asOf,null));
+        code(MemoryErrorCode.FORBIDDEN, () -> f.preferences.read(reverseRequest,f.sign(reverseRequest)));
         var bad = new MemoryPreferenceAssessment("new-key-from-each-sentence",PreferenceTransition.Assessment.PREFERENCE,PreferenceTransition.Change.OBSERVATION,
                 PreferenceTransition.Polarity.AFFIRMATIVE,MemoryJsonValue.string("x"),null,null,null,null,List.of(),.8,"extract-v1",new MemorySourceDependency(source.source(),null));
         code(MemoryErrorCode.INVALID_EXTRACTION, () -> f.submit(1,bad));

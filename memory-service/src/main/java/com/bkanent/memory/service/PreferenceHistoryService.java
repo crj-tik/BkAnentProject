@@ -271,9 +271,9 @@ public class PreferenceHistoryService {
     public MemoryPreferenceQueryResponse search(MemoryPreferenceQueryRequest request, MemoryRequestProof proof) {
         long owner = security.authorize(request, proof, MemoryV2Contract.OPERATION_SEARCH_PREFERENCES);
         require(owner > 0 && Long.toString(owner).equals(request.contextKey().ownerId()), MemoryErrorCode.FORBIDDEN);
-        require(ragSearch != null && ragSearch.isDomainSearchEnabled(), MemoryErrorCode.MEMORY_UNAVAILABLE);
         String subject = request.verifiedSubjectRef() == null ? request.contextKey().ownerId() : request.verifiedSubjectRef();
         require(subject.equals(request.contextKey().ownerId()), MemoryErrorCode.FORBIDDEN);
+        require(ragSearch != null && ragSearch.isDomainSearchEnabled(), MemoryErrorCode.MEMORY_UNAVAILABLE);
         if (request.dimensionId() != null) require(properties.getDimensions().contains(request.dimensionId()), MemoryErrorCode.INVALID_ARGUMENT);
         String query = request.dimensionId() == null ? "preference history" : request.dimensionId();
         Set<String> candidateIds = ragSearch.searchDomainCandidates(request.contextKey(), MemoryRagRecordType.PREFERENCE_HISTORY,

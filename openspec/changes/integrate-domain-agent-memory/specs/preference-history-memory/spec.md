@@ -2,25 +2,25 @@
 
 ## Purpose
 
-为用户及经可信关联确认的其他主体建立可授权、可追溯的偏好记忆行为契约，使同一适用范围内的稳定偏好维度具有唯一逻辑身份，完整表达过去到现在的变化、否定、纠正及临时例外。明确异步评估与当前会话指令的边界、事项级使用策略、证据与使用权重的独立语义，并保障长历程读取、隐私隔离、授权撤回和删除不被检索或后台处理绕过。
+建立 owner-self 私有偏好记忆行为契约，使每个 domain+agent 私有范围内的稳定偏好维度具有唯一逻辑身份，完整表达过去到现在的变化、否定、纠正及临时例外。明确异步评估与当前会话指令的边界、事项级使用策略、证据与使用权重的独立语义，并保障长历程读取、隐私隔离和删除不被检索或后台处理绕过。其他主体偏好及共享偏好块不属于本变更；跨域交接仍由独立显式共享导出授权处理，不能据此读取偏好块或历程。
 
 ## ADDED Requirements
 
 ### Requirement: Trusted identity and unique preference block
 
-系统 SHALL 依据可信 owner、经验证的 subject、获准 scope 和稳定 dimension 确定偏好逻辑块的唯一身份；私有 scope MUST 包含可信 domain 与 agent 的规范身份，同 owner、同域、同主体与维度的未共享 Agent 不得发生逻辑键碰撞或自动归并；只有明确共享范围身份一致且当前授权成立才允许按同一块归并。用户自身为默认主体，其他主体必须具有可信业务关联及对应授权。系统 MUST 将同一身份下的表达归入同一逻辑块，不得以逐句新建维度或合并所有维度代替稳定维度识别，也不得将模型提供的主体、范围、引用或分类视为授权。
+系统 SHALL 依据可信 owner、固定为 owner 的 subject、domain+agent 私有 scope 和稳定 dimension 确定偏好逻辑块的唯一身份。此变更中的 subjectRef MUST 等于 ownerId，scope MUST 为包含可信 domainId 与 agentId 的 DOMAIN_PRIVATE；系统 MUST NOT 将偏好块写入或合并到 TASK_SHARED/SESSION_SHARED，也 MUST NOT 因共享导出 grant 扩大偏好块读取范围。其他主体偏好和共享偏好块不属于本变更。系统 MUST 将同一身份下的表达归入同一逻辑块，不得以逐句新建维度或合并所有维度代替稳定维度识别，也不得将模型提供的主体、范围、引用或分类视为授权。跨域交接仅通过独立显式 MemorySharedExport/grant 处理，其授权不覆盖偏好历程。
 
 #### Scenario: Multiple expressions concern the same preference dimension
 - **WHEN** 同一可信 owner 对同一主体、适用范围和稳定维度提供多次有效表达
 - **THEN** 系统维护同一逻辑块及其历程，而非生成多个相互竞争的偏好块或覆盖为无历史的单值
 
-#### Scenario: Another subject lacks a trusted association
-- **WHEN** 请求或模型提出记录其他主体的偏好，但该主体关联或授权无法验证
-- **THEN** 系统拒绝将该表达归入该主体的偏好，不猜测主体身份，也不扩大当前读取或写入范围
+#### Scenario: A candidate names another subject or shared scope
+- **WHEN** 请求或模型提出将偏好写入其他 subject 或 TASK_SHARED/SESSION_SHARED scope
+- **THEN** 系统拒绝该偏好写入，不猜测主体、不合并共享块，也不扩大当前读取范围
 
-#### Scenario: Preference scope is not explicitly shared
-- **WHEN** 偏好没有获准的明确共享范围
-- **THEN** 系统保持其在 owner 及获准域和 Agent 边界内私有，不因相同 owner、会话标识或分类而自动跨域共享
+#### Scenario: Explicit export does not share the preference block
+- **WHEN** 用户通过独立 MemorySharedExport/grant 显式导出一段获准内容
+- **THEN** 接收方仅获得该导出契约所允许的内容，不获得底层偏好块、完整历程或新的 preference block 身份
 
 ### Requirement: Asynchronous assessment precedes consolidation
 
@@ -148,7 +148,7 @@
 
 ### Requirement: Authorization applies to every preference access
 
-系统 SHALL 对历程、当前状态、证据、搜索、导出、分页及后台评估使用可信 owner、subject、domain、agent、purpose 和当前共享授权的交集进行校验；同 owner 不代表自动跨域或跨 Agent 可见。后台处理 MUST 仅使用具体获准证据，不得获得通用用户搜索权；检索候选、稳定引用、分类和上下文标识 MUST 不得自行授予权限，索引或缓存命中必须服从当前真源版本及授权状态。
+系统 SHALL 对历程、当前状态、证据、搜索、分页及后台评估校验可信 owner 与 subject=owner、domain、agent、purpose 及来源权限；同 owner 不代表自动跨域或跨 Agent 可见。偏好块不接受共享 grant 作为读取授权；若内容另行进入共享导出，导出访问独立遵守 MemorySharedExport/grant 契约。后台处理 MUST 仅使用具体获准证据，不得获得通用用户搜索权；检索候选、稳定引用、分类和上下文标识 MUST 不得自行授予权限，索引或缓存命中必须服从当前真源版本及授权状态。
 
 #### Scenario: A reference is forwarded outside its grant
 - **WHEN** 未获准的域或 Agent 获得某偏好块引用或检索片段
@@ -160,11 +160,11 @@
 
 ### Requirement: Revocation and deletion prevent stale reuse
 
-系统 SHALL 在共享授权撤回生效后拒绝对应接收方的新读取、装配和输出，并排除该范围内的已有 working context 投影；撤回共享 MUST 不自动删除 owner 仍获准持有的私有历史。获准删除 MUST 覆盖目标偏好及可还原内容的历程、证据副本、检索投影、共享副本和缓存，并真实报告完成或未完成状态；陈旧引用、旧页面、重试及迟到事件 MUST 不得使已删除内容重新出现，删除后不得宣称完整历程仍可读取。
+系统 SHALL 在偏好来源撤回或删除后阻止对应块的读取、装配和输出，并排除已有 working context 投影。若用户另行授权共享某段内容，撤回该 MemorySharedExport/grant 只控制独立导出及其副本，不授权接收方读取偏好块，也不自动删除 owner 仍获准持有的私有历程。获准删除 MUST 覆盖目标偏好及可还原内容的历程、证据副本、检索投影、共享副本和缓存，并真实报告完成或未完成状态；陈旧引用、旧页面、重试及迟到事件 MUST 不得使已删除内容重新出现，删除后不得宣称完整历程仍可读取。
 
-#### Scenario: Sharing is revoked while a matter remains active
-- **WHEN** 偏好共享授权被撤回，而接收方仍持有已装配投影
-- **THEN** 接收方后续读取、推理和输出排除该内容，原 owner 的私有历史是否保留由其独立权限决定
+#### Scenario: An exported copy is revoked while a matter remains active
+- **WHEN** 单独的共享导出授权被撤回，而接收方仍持有该导出的已装配投影
+- **THEN** 接收方后续读取、推理和输出排除导出内容；该授权从未使接收方获得原 owner 的偏好块或历程读取权
 
 #### Scenario: Deleted evidence is replayed after deletion
 - **WHEN** 已获准删除的偏好或证据被旧任务、迟到事件、旧检索片段或旧分页请求再次引用

@@ -937,3 +937,13 @@
 **根因**：单一开关同时控制模型读取与终态归档，直接关闭会让仍在执行的任务跳过结果交付；保持总开关开启又会让新任务继续读取历史。分开读取/交付并记录任务级交付接受状态，才能先停止新增 prompt 依赖，再有界完成已接受事件。
 
 **代码位置**：`common-a2a/A2aMemoryProperties`、`A2aMemoryInvocation`、`A2aMemoryAgentHook`；`agent-service/SupervisorMemoryProperties`、`SupervisorMemoryLifecycle`、`ToolLoopState`；相关域 Nacos 配置与 `docs/memory-v2-operations.md`。回归 `A2aMemoryAgentHookTest.readDisabledDeliveryOnlyTurnDrainsAfterDeliverySwitchIsClosed`、`SupervisorMemoryIntegrationTest.deliveryOnlyModeSkipsPromptReadsAndFinishesAnAcceptedDeliveryAfterCutoff`、`SupervisorMemoryPropertiesTest.promptReadsAndAcceptedDeliveriesHaveIndependentSwitches`；关联 change 11.5。
+
+## LR-97 偏好块固定本人私有，跨域交接使用独立共享导出
+
+**结论**：本变更中的 preference block 固定以 `(ownerId, subjectRef=ownerId, DOMAIN_PRIVATE(domainId, agentId), registeredDimension)` 为唯一键。用户自身拥有该块的读取和管理权限；domain 或 agent 变化产生不同逻辑块。其他 subject 与 TASK_SHARED/SESSION_SHARED 偏好块不属于本变更。需要跨域交接的内容继续经独立 `MemorySharedExport` 与当前 grant 显式授权；导出授权只覆盖导出内容，不改变 preference block 身份，也不授予接收方偏好历程读取权。
+
+**根因**：共享导出有独立的不可变来源、内容白名单、接收方授权及撤回状态；把它与偏好块身份合并会让一次内容交接扩大为长期偏好历程读取，并引入目前没有落地和验收的共享偏好归并。固定私有块身份可沿用已实现的服务端 owner/domain/agent 校验，同时保留显式导出作为受限跨域交接机制。
+
+**代码位置**：`PreferenceHistoryService.append/searchAt/assemble` 从签名上下文派生 owner-self 与 domain+agent 私有键，校验维度注册，并在检索时复算 blockId；偏好搜索先拒绝非 owner subject；`PreferenceBlockKey` 和 `MemoryScope.privateScope` 提供稳定逻辑身份；跨域内容仍走 `MemorySharingWriteService`、`MemorySharedExport` 与 grant。回归为 `MemoryContractTest.privatePreferenceScopeCannotCollideAcrossDomainsAgentsOrEscapedSegments` 与 `PreferenceHistoryServiceTest.agentsCannotMergeOrReadEachOthersBlocksAndForgedSubjectOrDimensionsAreRejected`。
+
+**关联**：LR-59、LR-70、LR-73；KI-142；change 7.1、10.1/10.2。

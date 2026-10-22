@@ -84,14 +84,16 @@ class MemoryContractTest {
         assertThat(new MemoryConversationVersion(0, 0, "policy-v2").lastSequence()).isZero();
     }
 
-    @Test void privatePreferenceScopeCannotCollideAcrossAgentsOrEscapedSegments() throws Exception {
+    @Test void privatePreferenceScopeCannotCollideAcrossDomainsAgentsOrEscapedSegments() throws Exception {
         MemoryScope one = MemoryScope.privateScope("marketing", "copy-agent");
         MemoryScope two = MemoryScope.privateScope("marketing", "other-agent");
+        MemoryScope otherDomain = MemoryScope.privateScope("listing", "copy-agent");
         PreferenceBlockKey first = new PreferenceBlockKey("owner-1", "owner-1", one, "copy_length");
         assertThat(first).isEqualTo(new PreferenceBlockKey("owner-1", "owner-1", one, "copy_length"));
         assertThat(first.identityHash()).isEqualTo(new PreferenceBlockKey("owner-1", "owner-1", one, "copy_length").identityHash())
                 .matches("[a-f0-9]{64}");
         assertThat(first.identityHash()).isNotEqualTo(new PreferenceBlockKey("owner-1", "owner-1", two, "copy_length").identityHash());
+        assertThat(first.identityHash()).isNotEqualTo(new PreferenceBlockKey("owner-1", "owner-1", otherDomain, "copy_length").identityHash());
         assertThat(first.identityHash()).isNotEqualTo(new PreferenceBlockKey("owner-1", "owner-1", one, "style").identityHash());
         assertThat(one.canonicalScopeId()).isNotEqualTo(two.canonicalScopeId());
         assertThat(MemoryScope.privateScope("a:b", "c").canonicalScopeId())
