@@ -10,6 +10,12 @@
 
 ## 待修复（OPEN）
 
+## KI-166 [OPEN·P3·延迟排查] Studio 浏览器前端落地后需补验工作/成果可读链路
+
+**登记日期**：2026-10-23（源自 `integrate-domain-agent-memory` 归档遗留）。任务 1.4/11.3 的浏览器验收因 Studio 前端仍在设计、无可执行实例而标为未测；该备注此前只存在于归档 tasks 中，未进本清单，现登记为唯一权威来源条目。后端 `GET /agent/studio/v1/works` 在混合环境曾持续 503（见 KI-126，疑与 `resolvePrincipal` 超时相关），浏览器补验时需一并确认后端链路已通。
+
+**处置（用户指示：延迟至业务完全落地后）**：触发条件为 Studio 前端可执行实例落地。届时补验：正式 Gateway 登录 → 工作列表/成果读取/修订查看的浏览器端到端；若仍 503，按 KI-126 的 WARN 日志续查。本条不阻塞任何业务交付，不作为当前排期项。关联 KI-126、KI-114（Studio 领域动作主体绑定）。
+
 ## KI-147 [FIXED·28f4594·P2] 记忆 RAG outbox 缺少多实例领取租约
 
 **确认日期**：2026-10-21。**现象**：多个 memory 实例可以同时读取同一条到期 PENDING/WAITING outbox 并并发调用 RAG；较慢实例的迟到回执还可能覆盖已接管实例写入的状态。稳定 eventId 只能帮助下游幂等，不能围栏本地并发回写。
@@ -130,11 +136,13 @@
 
 **确认/修复日期**：2026-10-19，本提交。原 proof 复用通用 id 的 255 字符上限，与 `memory_v2_request_nonce.key_id VARCHAR(64)` 不一致，过长 key 会在消费 nonce 时变成依赖错误。proof 构造器增加 64 字符上限，签名测试覆盖 65 字符拒绝；没有更改已应用 SQL 字节或部署密钥。
 
-## KI-126 [已修源码·P2] Studio 通用 503 异常处理器零日志，降级根因在部署制品中不可诊断
+## KI-126 [已修源码·P2·延迟排查] Studio 通用 503 异常处理器零日志，降级根因在部署制品中不可诊断
 
 **确认日期**：2026-10-18；**源码修复**：2026-10-18（本提交）。基线复测期 `GET /agent/studio/v1/works` 持续 503（绕网关直打应用实证为应用自身返回），响应体 `STUDIO_DEPENDENCY_UNAVAILABLE` 来自通用 Exception 兜底，但处理器不记日志、应用日志零痕迹，无法定位真实异常。本批定位到两层：① auth 侧 `AuthPermissionRpcService.resolvePrincipal` 业务实现实测 1.16–2.07s（ProfilerServerFilter 98% 在 biz impl），超过消费端 1000ms Dubbo 超时——首调用即超时；② 超时后后续请求 61–331ms 快速失败，机制不明（消费端无 RpcException 日志，疑 Dubbo 集群对超时 invoker 的快速失败行为），因零日志无法进一步取证。慢根因候选为 MySQL 冷缓存/负载（同库 REST 登录路径正常，未定案）。运行中 supervisor 为 release 制品（无本修复），Studio 在当前环境保持 503、基线记为未通。
 
 **处置**：`StudioExceptionHandler` 通用兜底补 WARN 级异常日志（含触发异常类名与栈），新增 `StudioExceptionHandlerTest` 以 ListAppender 断言日志与响应码防回归（1 项通过）。遗留：resolvePrincipal 慢根因与快速失败机制待新制品部署后凭日志定位；若为常态负载特征，需评估该接口 Dubbo 超时/缓存策略，不在本条内擅改。关联 KI-124（引擎过载导致本批未能完成运行面复测）。
+
+**2026-10-23 处置决定（用户指示）**：本条标记**延迟排查**——等待业务完全落地、含日志修复的新制品常态化部署后再排查。届时凭 `studio request degraded` WARN 日志定位真实触发异常，再决定是否调整该接口 Dubbo 超时/缓存策略。当前不作为待修项排期。
 
 ## KI-127 [FIXED·P2] Interview A2A beacon consumer 缺少显式 Dubbo 注册配置
 
@@ -156,11 +164,13 @@
 
 **处置**：测试内不再使用任何生产 agent id；SkillRegistry mock 保持既有测试风格。运行该测试需真实 Nacos+MySQL（BK_AGENT_NACOS_SERVER/BK_AGENT_DB_*），fixture 名随机化后与任何运行中 Agent 均不冲突。关联 KI-123（同轮暴露的子调用链路缺陷族）。
 
-## KI-124 [OPEN·P1] 本机 Docker Desktop/WSL 引擎在多 JVM 并发下整体过载，marketing A2A 链路可复现压垮引擎
+## KI-124 [OPEN·P1·延迟排查] 本机 Docker Desktop/WSL 引擎在多 JVM 并发下整体过载，marketing A2A 链路可复现压垮引擎
 
 **确认日期**：2026-10-16。本会话 dev 栈全量恢复后共发生 4 次 Docker Engine API 全面无响应（`docker version` 挂起、Engine API 500、网关 000），均需重启 Docker Desktop + `wsl --shutdown`（25–60 秒恢复）拉回。其中 2 次与 marketing A2A 任务强相关且 2/2 可复现：任务到达 marketing 容器、`marketing-draft` 技能激活后约 10 秒内引擎死亡；涉事容器均非 OOMKilled（RC=1 为引擎重启所致）。致死机制在宿主/WSL2 资源层，约 20 个 JVM 并发 + 多次容器重建加剧。后果：supervisor 基线 marketing fixture 无法测量（任务 1.4 该项未测）、排障中断、Studio 503 无法取日志核实。
 
 **处置**：未执行资源调整（超出授权）。建议后续：给 marketing/media-worker 等容器设 mem_limit、评估 WSL2 VM 资源上限、控制并发 JVM 数量后复测 marketing fixture 与 Studio。多 JVM 并发 start 压垮引擎的现象在本会话第一轮恢复时已出现（8 JVM 同时 start），同根因。证据见 `docs/acceptance/domain-agent-memory-foundation-20261016.md`。
+
+**2026-10-23 处置决定（用户指示）**：本条标记**延迟排查**——等待业务完全落地后再排查。归档 `integrate-domain-agent-memory` 时的重启恢复方案（重启 Desktop + WSL，25–60 秒恢复）作为过渡手段继续使用；不阻塞任何业务交付。排查触发条件：业务落地后出现引擎过载影响真实使用，或计划生产部署前做容量规划时。
 
 **2026-10-20 补充**：恢复现有开发栈后，Docker 内 Maven 冷构建再次伴随 Engine API 500、容器查询挂起。取消构建并恢复现有后端后，本机离线 package 与仅覆盖对应 JAR 的镜像构建成功；只更新 canonical agent/memory 服务，无应用副本。后端资源根因保持 OPEN。
 
