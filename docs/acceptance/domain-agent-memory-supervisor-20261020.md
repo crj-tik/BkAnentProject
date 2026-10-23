@@ -1,5 +1,7 @@
 # Supervisor Memory v2 工作集模块验收记录（2026-10-20）
 
+> 历史验收快照：本记录描述早期可选接入策略。当前规则要求 Supervisor 与所有官方 A2A Agent 必须接入基础 Memory，Memory 预检失败时在模型/工具执行前失败关闭；本记录中的关闭状态不代表当前配置或当前验收结果。
+
 ## 范围
 
 本模块把 `agent-service` Supervisor Graph 接入 Memory v2 工作集、写入 fence、可靠 checkpoint 引用 journal、当前来源复核和安全压缩。仅覆盖 Supervisor。marketing/interview、其他 Agent、v2 RAG、偏好/经验加工、共享 export/grant 和完整物理删除 worker 尚未接入。
@@ -10,7 +12,7 @@
 
 ## 运行边界
 
-- Agent Memory v2 与压缩默认关闭；本地环境未配置专用 `AGENT_MEMORY_V2_SIGNING_SECRET`，因此不能启用该入口。
+- 当时 Agent Memory v2 与压缩默认关闭；本地环境未配置该代际入口使用的专用签名材料，因此不能启用该入口。后续服务身份改为 Ed25519，当前 Memory 请求只使用调用服务身份私钥。
 - Memory archive 开关仍默认关闭，可信 caller/domain/agent allowlist 未声明前 provider 继续拒绝请求。
 - 迁移 140/150 已在既有 `bk-anent-dev-mysql-1` 应用并由 manifest/check 核验；完整 upgrade 清单 040–150 验证通过。真实 MySQL writer fence、无 fence 拒绝及可靠交付回归通过。Agent journal 的真实库结构检查通过，Graph journal 行为由 H2 集成回归覆盖。
 - 本次复用既有 `bk-anent-dev`，只更新其 `agent-service` 与 `memory-service`，没有创建应用副本或测试容器。

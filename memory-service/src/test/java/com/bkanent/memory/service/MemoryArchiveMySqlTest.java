@@ -40,10 +40,10 @@ class MemoryArchiveMySqlTest {
         var association = new MemoryAssociation(null, null, null, null);
         String contextId = MemoryArchiveStore.key(context);
         String keyId = "fixture-" + UUID.randomUUID();
-        String secret = UUID.randomUUID().toString() + UUID.randomUUID();
+
         var properties = new MemoryV2SecurityProperties();
         var caller = new MemoryV2SecurityProperties.TrustedCaller();
-        caller.setKeyId(keyId); caller.setSigningSecret(secret); caller.setServiceDelivery(true);
+        caller.setPublicKeys(Map.of(keyId, MemoryTestIdentity.encodedPublicKey())); caller.setServiceDelivery(true);
         caller.setAllowedAgentsByDomain(Map.of("archive-fixture", Set.of("archive-fixture")));
         properties.setTrustedCallers(Map.of("archive-fixture", caller));
         var security = new MemoryV2RequestSecurity(properties, new MemoryArchiveServiceTest.AuthStub(), new MemoryV2ReplayGuard(jdbc));
@@ -54,7 +54,7 @@ class MemoryArchiveMySqlTest {
         try {
             var writerRequest = request(MemoryV2Contract.OPERATION_WRITER, envelope -> new MemoryWriterRequest(envelope, context,
                     MemoryWriterRequest.Action.ACQUIRE, "run-1", 0));
-            var writer = service.manageWriter(writerRequest, sign(writerRequest, keyId, secret)).authority();
+            var writer = service.manageWriter(writerRequest, sign(writerRequest, keyId, MemoryTestIdentity.PAIR.getPrivate())).authority();
             var source = new MemorySourceRef(MemorySourceRef.Kind.MESSAGE, context, "message-1", "event-1", 1L,
                     new MemoryRevision(1, "0".repeat(64), "message.v2"));
             var draft = new MemoryMessage("message-1", context, 1, association, MemoryMessage.Role.USER, "synthetic MySQL fact", List.of(), List.of(), source);
@@ -63,15 +63,15 @@ class MemoryArchiveMySqlTest {
                             new MemoryRevision(1, MemoryCanonicalHash.messageHash(draft), "message.v2")));
             var permitRequest = request(MemoryV2Contract.OPERATION_RECEIVE_PERMIT, envelope -> new MemoryReceivePermitRequest(envelope, context,
                     List.of(new MemoryReceivePermitRequest.EventSubmission("event-1", message.source().version().contentHash(), "conversation-archive")), List.of(), writer));
-            var permit = service.requestReceivePermit(permitRequest, sign(permitRequest, keyId, secret));
+            var permit = service.requestReceivePermit(permitRequest, sign(permitRequest, keyId, MemoryTestIdentity.PAIR.getPrivate()));
             var legacyPermit = request(MemoryV2Contract.OPERATION_RECEIVE_PERMIT, envelope -> new MemoryReceivePermitRequest(envelope, context,
                     List.of(new MemoryReceivePermitRequest.EventSubmission("event-without-fence", "0".repeat(64), "conversation-archive"))));
             assertEquals(MemoryErrorCode.VERSION_CONFLICT, assertThrows(MemoryException.class,
-                    () -> service.requestReceivePermit(legacyPermit, sign(legacyPermit, keyId, secret))).code());
+                    () -> service.requestReceivePermit(legacyPermit, sign(legacyPermit, keyId, MemoryTestIdentity.PAIR.getPrivate()))).code());
             var delivery = request(MemoryV2Contract.OPERATION_DELIVER_MESSAGES, envelope -> new MemoryDeliveryRequest(envelope, context, association, permit.permitId(), List.of(message)));
             var restarted = new MemoryArchiveService(new MemoryArchiveStore(jdbc, mapper), security, sources, transactions);
-            var one = CompletableFuture.supplyAsync(() -> service.deliverMessages(delivery, serviceSign(delivery, keyId, secret)));
-            var two = CompletableFuture.supplyAsync(() -> restarted.deliverMessages(delivery, serviceSign(delivery, keyId, secret)));
+            var one = CompletableFuture.supplyAsync(() -> service.deliverMessages(delivery, serviceSign(delivery, keyId, MemoryTestIdentity.PAIR.getPrivate())));
+            var two = CompletableFuture.supplyAsync(() -> restarted.deliverMessages(delivery, serviceSign(delivery, keyId, MemoryTestIdentity.PAIR.getPrivate())));
             assertEquals(one.join(), two.join());
             assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM memory_message WHERE context_id=?", Integer.class, contextId));
             assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM memory_processing_job WHERE context_id=?", Integer.class, contextId));
@@ -82,21 +82,21 @@ class MemoryArchiveMySqlTest {
             var summary = new MemorySummary(candidate.summaryId(), context, association, new MemoryRevision(1, MemoryCanonicalHash.summaryHash(candidate), "summary.v2"),
                     1, null, candidate.coveredRange(), List.of(), items, List.of(), dependencies);
             var submit = request(MemoryV2Contract.OPERATION_SUBMIT_SUMMARY, envelope -> new MemorySummaryRequest(envelope, summary, writer));
-            assertTrue(restarted.submitSummary(submit, sign(submit, keyId, secret)).accepted());
+            assertTrue(restarted.submitSummary(submit, sign(submit, keyId, MemoryTestIdentity.PAIR.getPrivate())).accepted());
             var read = request(MemoryV2Contract.OPERATION_WORKING_SET, envelope -> new MemoryWorkingSetRequest(envelope, context));
-            assertEquals(List.of(summary), restarted.readWorkingSet(read, sign(read, keyId, secret)).summaries());
+            assertEquals(List.of(summary), restarted.readWorkingSet(read, sign(read, keyId, MemoryTestIdentity.PAIR.getPrivate())).summaries());
             var plan = jdbc.queryForMap("EXPLAIN SELECT * FROM memory_message WHERE context_id=? AND source_event_id=?", contextId, "event-1");
             assertEquals("uk_memory_message_event", plan.get("key"));
             var deletion = request(MemoryV2Contract.OPERATION_WITHDRAW, envelope -> new MemoryWithdrawalRequest(envelope, context, "event-1", true));
-            assertEquals(MemoryState.DELETION_PENDING, restarted.withdrawSource(deletion, sign(deletion, keyId, secret)).state());
-            assertTrue(restarted.readWorkingSet(read, sign(read, keyId, secret)).messages().isEmpty());
-            assertTrue(restarted.readWorkingSet(read, sign(read, keyId, secret)).summaries().isEmpty());
+            assertEquals(MemoryState.DELETION_PENDING, restarted.withdrawSource(deletion, sign(deletion, keyId, MemoryTestIdentity.PAIR.getPrivate())).state());
+            assertTrue(restarted.readWorkingSet(read, sign(read, keyId, MemoryTestIdentity.PAIR.getPrivate())).messages().isEmpty());
+            assertTrue(restarted.readWorkingSet(read, sign(read, keyId, MemoryTestIdentity.PAIR.getPrivate())).summaries().isEmpty());
             assertEquals(MemoryErrorCode.DELETED, assertThrows(MemoryException.class,
-                    () -> restarted.deliverMessages(delivery, serviceSign(delivery, keyId, secret))).code());
+                    () -> restarted.deliverMessages(delivery, serviceSign(delivery, keyId, MemoryTestIdentity.PAIR.getPrivate()))).code());
             var statusRequest = request(MemoryV2Contract.OPERATION_PRIVACY_STATUS,
                     envelope -> new MemoryPrivacyCleanupStatusRequest(envelope, context, "event-1"));
             assertEquals(MemoryPrivacyCleanupState.PENDING,
-                    restarted.privacyCleanupStatus(statusRequest, sign(statusRequest, keyId, secret)).cleanupState());
+                    restarted.privacyCleanupStatus(statusRequest, sign(statusRequest, keyId, MemoryTestIdentity.PAIR.getPrivate())).cleanupState());
             int otherEligibleJobs = jdbc.queryForObject("SELECT COUNT(*) FROM memory_processing_job j "
                             + "JOIN memory_privacy_deletion d ON d.context_id=j.context_id AND d.source_event_id=j.source_event_id "
                             + "WHERE j.job_kind='PRIVACY_CLEANUP' AND j.context_id<>? "
@@ -106,10 +106,10 @@ class MemoryArchiveMySqlTest {
                     Integer.class, contextId);
             org.junit.jupiter.api.Assumptions.assumeTrue(otherEligibleJobs == 0,
                     "Do not run a shared MySQL worker while unrelated privacy cleanup is eligible");
-            new MemoryPrivacyCleanupWorker(store, transactions, List.of(), true, 8, 8, 60, 1).runOnce();
+            new MemoryPrivacyCleanupWorker(store, transactions, List.of(), 8, 8, 60, 1).runOnce();
             var completedRequest = request(MemoryV2Contract.OPERATION_PRIVACY_STATUS,
                     envelope -> new MemoryPrivacyCleanupStatusRequest(envelope, context, "event-1"));
-            var completed = restarted.privacyCleanupStatus(completedRequest, sign(completedRequest, keyId, secret));
+            var completed = restarted.privacyCleanupStatus(completedRequest, sign(completedRequest, keyId, MemoryTestIdentity.PAIR.getPrivate()));
             assertEquals(MemoryPrivacyCleanupState.COMPLETE, completed.cleanupState());
             assertEquals(MemoryState.DELETED, completed.sourceState());
         } finally {
@@ -134,15 +134,15 @@ class MemoryArchiveMySqlTest {
         return factory.apply(new MemoryRequestEnvelope(operation, "archive-fixture", "memory-service", id, MemoryCanonicalHash.requestBodyHash(draft), 2));
     }
 
-    private static MemoryRequestProof sign(MemoryV2Request request, String key, String secret) {
+    private static MemoryRequestProof sign(MemoryV2Request request, String key, java.security.PrivateKey privateKey) {
         long now = Instant.now().getEpochSecond();
         return MemoryRequestSigner.sign(request, new AuthenticatedPrincipal(42L), key, now, now + 60,
-                UUID.randomUUID().toString().replace("-", ""), secret.getBytes(StandardCharsets.UTF_8));
+                UUID.randomUUID().toString().replace("-", ""), privateKey);
     }
 
-    private static MemoryRequestProof serviceSign(MemoryDeliveryRequest request, String key, String secret) {
+    private static MemoryRequestProof serviceSign(MemoryDeliveryRequest request, String key, java.security.PrivateKey privateKey) {
         long now = Instant.now().getEpochSecond();
         return MemoryRequestSigner.signServiceDelivery(request, key, now, now + 60,
-                UUID.randomUUID().toString().replace("-", ""), secret.getBytes(StandardCharsets.UTF_8));
+                UUID.randomUUID().toString().replace("-", ""), privateKey);
     }
 }

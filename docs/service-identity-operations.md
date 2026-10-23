@@ -22,13 +22,13 @@
 - Memory 只登记现有获准的八个 Memory caller：agent、marketing、interview、listing、business、contract、compare、settlement。每个 caller 的 domain/agent 允许表、service delivery 和 experience publisher 权限仍单独控制。其他服务即使有服务身份，也没有 Memory 权限。
 - 新增服务时只生成一对身份；仅把它的公钥登记到实际 verifier，并在同一变更中审查最小授权。不要为 A2A 与 Memory 各生成一把共享密钥。
 
-## HMAC 迁移兼容
+## Memory 请求签名
 
-迁移期 Auth 与 Memory verifier 可接受显式的 HMAC-v1 旧请求或 Ed25519-v2 新请求。新签发方只发 Ed25519-v2；版本、算法、key ID 和协议域必须匹配，不做跨协议验签或算法降级。`.env.example` 中旧 `*_A2A_SIGNING_SECRET` 与 `*_MEMORY_V2_SIGNING_SECRET` 仅用于仍在运行的旧二进制；部署环境不需要为新二进制生成或新增这些秘密。RAG 的 `*_RAG_RPC_*` HMAC 契约不属于本次迁移，不能因此删除。
+Memory v2 从首个受管版本起只接受 Ed25519 proof，使用调用服务已有的身份私钥和 `BK-ANENT:MEMORY-V2:v1` 协议域；不配置 Memory 请求 HMAC 密钥，也不提供旧请求兼容。Auth/Memory verifier 均只按 key ID 查找公钥，并继续各自执行精确 caller、operation、domain、agent 与用户授权。Memory 的成功验签计数只记录 `protocol=memory-v2`、`algorithm=Ed25519`。
 
-只有采集到足够的运行证据、确认旧 HMAC 请求流量为零后，才能移除 Auth/Memory 的 HMAC verifier 代码和旧秘密配置。当前开发环境没有真实业务流量证明这一点，所以兼容 verifier 保留，不能把迁移实现视为 HMAC 已退役。
+## Auth/A2A 迁移期
 
-Auth 与 Memory 在成功验签后增加 `service.identity.signature.verified` 计数，固定标签只有 `protocol`（`a2a-auth` 或 `memory-v2`）与 `algorithm`（`HMAC-SHA256` 或 `Ed25519`）。通过对应服务的 `/actuator/metrics/service.identity.signature.verified` 查询，再用 `tag=protocol:a2a-auth`、`tag=algorithm:HMAC-SHA256` 或 Memory 对应标签筛选。指标不含 caller、key ID、owner 或请求数据；观察 HMAC 计数在完整观察期内不再增加，才可作为退役证据的一部分。服务重启会重置本机计数，需结合监控后端/部署时间记录并覆盖最长调用周期和回滚窗口。
+Auth/A2A 自身的旧调用端仍处于单独迁移窗口时，`*_A2A_SIGNING_SECRET` 仅供仍运行的旧 Auth/A2A 二进制使用；新调用端使用 Ed25519。该窗口只观察 `protocol=a2a-auth` 的验签计数，并在覆盖最长调用周期及回滚窗口后退役对应 Auth/A2A verifier 与旧密钥配置。不要把 Auth/A2A 迁移策略扩展到 Memory。RAG 的 `*_RAG_RPC_*` 凭据属于其独立 RPC 协议，按 RAG 契约管理。
 
 ## key ID 轮换与撤销
 
@@ -41,7 +41,7 @@ Auth 与 Memory 在成功验签后增加 `service.identity.signature.verified` �
 生成器拒绝覆盖已有目标。随后按以下顺序操作：
 
 1. 将新 `public-key.pem` 的公钥值登记到 Auth 及该服务实际调用的其他 verifier，使用新的 key ID；保持旧公钥和精确授权仍有效。公钥可以进入受管 Nacos 配置，私钥不能。
-2. 将该服务的私钥只读挂载切换到新 key ID 对应的文件，并把调用服务的 `service.identity.key-id` / Memory signer key ID 更新为同一个新 ID。重启该服务后确认验签和 ACL 正常。
+2. 将该服务的私钥只读挂载切换到新 key ID 对应的文件，并把调用服务的 `service.identity.key-id` 更新为同一个新 ID。重启该服务后确认验签和 ACL 正常。
 3. 过渡期结束并确认不再有旧 key ID 请求后，从所有 verifier 删除旧公钥登记。撤销时直接移除对应 key ID 的公钥，后续该身份请求会失败关闭。
 
 Compose 的私钥源路径按服务分别写在 `docker-compose.yml` 的 bind mount 中；轮换时只修改目标服务路径并更新其 key ID。不要把轮换后的新私钥放进旧容器可读目录或通过环境变量传递私钥内容。
@@ -49,5 +49,6 @@ Compose 的私钥源路径按服务分别写在 `docker-compose.yml` 的 bind mo
 ## 故障排查
 
 - 启动时报 `service identity private key is not configured`：确认已运行首次创建脚本、目标服务私钥文件存在，Compose 的只读挂载路径与服务一致。
-- Auth/Memory 返回认证失败：核对请求算法、协议版本、key ID 与 verifier 对应公钥；检查 caller/domain/agent/operation 授权是否登记。不要通过扩大 ACL 或启用 HMAC 回退来绕过不匹配。
+- Memory 返回认证失败：核对 Ed25519 算法、协议版本、key ID 与 verifier 对应公钥；检查 caller/domain/agent/operation 授权是否登记。不要通过扩大 ACL 或改变签名算法来绕过不匹配。
+- Auth/A2A 返回认证失败：核对该协议的签名版本、key ID 与 verifier 对应公钥，并检查 caller/operation 授权。
 - Compose 找不到 `public-keys.env`：先在仓库根目录运行生成脚本；该文件只含公钥，不应手工把私钥粘贴进去。

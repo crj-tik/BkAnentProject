@@ -18,7 +18,6 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Map;
 
@@ -152,30 +151,18 @@ public class MemoryV2RequestSecurity {
             throw new MemoryException(MemoryErrorCode.FORBIDDEN);
         }
         if (service && !caller.isServiceDelivery()) throw new MemoryException(MemoryErrorCode.FORBIDDEN);
-        if (MemoryRequestSigner.isLegacyHmacProof(proof)) {
-            String legacySecret = caller.getSigningSecret();
-            if (caller.getKeyId() == null || legacySecret == null
-                    || legacySecret.getBytes(StandardCharsets.UTF_8).length < 32) {
-                throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
-            }
-            MemoryRequestSigner.verify(request, context, proof, envelope.caller(),
-                    MemoryV2Contract.MEMORY_AUDIENCE, expectedOperation, caller.getKeyId(), Instant.now(),
-                    legacySecret.getBytes(StandardCharsets.UTF_8));
+        if (!MemoryRequestSigner.isEd25519Proof(proof)) {
+            throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
+        }
+        String encodedKey = caller.getPublicKeys().get(proof.keyId());
+        if (encodedKey == null || encodedKey.isBlank()) throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
+        try {
+            MemoryRequestSigner.verifyEd25519(request, context, proof, envelope.caller(),
+                    MemoryV2Contract.MEMORY_AUDIENCE, expectedOperation, proof.keyId(), Instant.now(),
+                    ServiceIdentityCrypto.decodePublicKey(encodedKey));
             meterRegistry.counter("service.identity.signature.verified", "protocol", "memory-v2",
-                    "algorithm", MemoryRequestProof.HMAC_SHA256).increment();
-        } else if (MemoryRequestSigner.isEd25519Proof(proof)) {
-            String encodedKey = caller.getPublicKeys().get(proof.keyId());
-            if (encodedKey == null || encodedKey.isBlank()) throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
-            try {
-                MemoryRequestSigner.verifyEd25519(request, context, proof, envelope.caller(),
-                        MemoryV2Contract.MEMORY_AUDIENCE, expectedOperation, proof.keyId(), Instant.now(),
-                        ServiceIdentityCrypto.decodePublicKey(encodedKey));
-                meterRegistry.counter("service.identity.signature.verified", "protocol", "memory-v2",
-                        "algorithm", ServiceIdentityCrypto.ED25519).increment();
-            } catch (IllegalArgumentException exception) {
-                throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
-            }
-        } else {
+                    "algorithm", ServiceIdentityCrypto.ED25519).increment();
+        } catch (IllegalArgumentException exception) {
             throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
         }
 

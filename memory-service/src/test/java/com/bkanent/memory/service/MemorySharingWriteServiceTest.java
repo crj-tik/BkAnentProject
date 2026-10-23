@@ -34,7 +34,6 @@ class MemorySharingWriteServiceTest {
     private static final MemoryContextKey SOURCE = new MemoryContextKey("42", "interview", "interview-agent", "source-session");
     private static final MemoryContextKey RECIPIENT = new MemoryContextKey("42", "marketing", "marketing-agent", "recipient-session");
     private static final String CALLER = "interview-service";
-    private static final String SECRET = "sharing-write-test-secret-at-least-32-bytes";
     private static final String PURPOSE = "verified-result-followup";
 
     @Test
@@ -337,8 +336,7 @@ class MemorySharingWriteServiceTest {
             ragProjection = new MemoryV2RagProjectionService(base.projection, ragProperties, jdbc);
             MemoryV2SecurityProperties securityProperties = new MemoryV2SecurityProperties();
             var trusted = new MemoryV2SecurityProperties.TrustedCaller();
-            trusted.setKeyId("memory-test-key");
-            trusted.setSigningSecret(SECRET);
+            trusted.setPublicKeys(Map.of("memory-test-key", MemoryTestIdentity.encodedPublicKey()));
             trusted.setAllowedAgentsByDomain(Map.of("interview", Set.of("interview-agent"),
                     "marketing", Set.of("marketing-agent")));
             securityProperties.setTrustedCallers(Map.of(CALLER, trusted));
@@ -428,7 +426,7 @@ class MemorySharingWriteServiceTest {
         MemoryRequestProof sign(MemoryV2Request request) {
             long now = Instant.now().getEpochSecond();
             return MemoryRequestSigner.sign(request, new AuthenticatedPrincipal(42L), "memory-test-key", now,
-                    now + 60, UUID.randomUUID().toString().replace("-", ""), SECRET.getBytes(StandardCharsets.UTF_8));
+                    now + 60, UUID.randomUUID().toString().replace("-", ""), MemoryTestIdentity.PAIR.getPrivate());
         }
 
         void dispatchApplied() {

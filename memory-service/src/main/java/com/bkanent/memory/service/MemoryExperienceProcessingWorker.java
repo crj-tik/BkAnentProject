@@ -3,6 +3,7 @@ package com.bkanent.memory.service;
 import com.bkanent.common.memory.MemoryErrorCode;
 import com.bkanent.common.memory.MemoryException;
 import com.bkanent.memory.config.MemoryExperienceProperties;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -23,7 +24,6 @@ import static com.bkanent.memory.service.MemoryArchiveStore.*;
 /** Lease-fenced worker; failures never block the domain request that submitted the event. */
 @Service
 @ConditionalOnProperty(prefix = "memory.v2.experience", name = {"enabled", "processing-enabled"}, havingValue = "true")
-@ConditionalOnProperty(prefix = "memory.v2", name = "archive-enabled", havingValue = "true")
 public class MemoryExperienceProcessingWorker {
     private final MemoryArchiveStore store;
     private final MemoryExperienceService experiences;
@@ -32,6 +32,7 @@ public class MemoryExperienceProcessingWorker {
     private final TransactionTemplate tx;
     private final AtomicBoolean running = new AtomicBoolean();
 
+    @Autowired
     public MemoryExperienceProcessingWorker(MemoryArchiveStore store, MemoryExperienceService experiences,
             MemoryExperienceProperties properties, PlatformTransactionManager manager) {
         this(store, experiences, properties, manager, Clock.systemUTC());

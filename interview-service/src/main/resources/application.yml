@@ -35,9 +35,6 @@ service:
 
 a2a:
   memory:
-    enabled: ${INTERVIEW_MEMORY_V2_ENABLED:false}
-    read-enabled: true
-    delivery-enabled: true
     compression-enabled: ${INTERVIEW_MEMORY_V2_COMPRESSION_ENABLED:false}
     key-id: ${SERVICE_IDENTITY_KEY_ID:interview-service-current}
     private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}

@@ -6,12 +6,9 @@ import com.bkanent.common.security.ServiceIdentityCrypto;
 import java.nio.file.Path;
 import java.security.PrivateKey;
 
-/** Deployment-owned bounds and opt-in for the domain A2A memory adapter. */
+/** Deployment-owned bounds and required identity for the domain A2A memory adapter. */
 @ConfigurationProperties(prefix = "a2a.memory")
 public class A2aMemoryProperties {
-    private boolean enabled;
-    private boolean readEnabled = true;
-    private boolean deliveryEnabled = true;
     private boolean compressionEnabled;
     private String keyId = "domain-memory-current";
     private String privateKeyFile = "";
@@ -25,13 +22,6 @@ public class A2aMemoryProperties {
     private int summaryTimeoutMs = 5_000;
     private int maxSummaryPromptChars = 64_000;
 
-    public boolean isEnabled() { return enabled; }
-    public void setEnabled(boolean enabled) { this.enabled = enabled; }
-    public boolean isReadEnabled() { return enabled && readEnabled; }
-    public void setReadEnabled(boolean readEnabled) { this.readEnabled = readEnabled; }
-    public boolean isDeliveryEnabled() { return enabled && deliveryEnabled; }
-    public void setDeliveryEnabled(boolean deliveryEnabled) { this.deliveryEnabled = deliveryEnabled; }
-    public boolean isPromptReadEnabled() { return isReadEnabled(); }
     public boolean isCompressionEnabled() { return compressionEnabled; }
     public void setCompressionEnabled(boolean compressionEnabled) { this.compressionEnabled = compressionEnabled; }
     public String getKeyId() { return keyId; }
@@ -71,8 +61,7 @@ public class A2aMemoryProperties {
                 || maxSummaryPromptChars < 1024 || maxSummaryPromptChars > 1_000_000) {
             throw new IllegalArgumentException("invalid A2A memory bounds");
         }
-        if (compressionEnabled && !enabled) throw new IllegalArgumentException("A2A memory compression requires memory to be enabled");
-        if (enabled && (keyId == null || keyId.isBlank() || privateKeyFile == null || privateKeyFile.isBlank())) {
+        if (keyId == null || keyId.isBlank() || privateKeyFile == null || privateKeyFile.isBlank()) {
             throw new IllegalArgumentException("A2A memory requires a service identity key id and private key file");
         }
     }

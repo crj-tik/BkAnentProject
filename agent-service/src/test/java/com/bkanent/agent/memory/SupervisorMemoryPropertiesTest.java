@@ -5,38 +5,21 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class SupervisorMemoryPropertiesTest {
-    @Test void defaultsAreBoundedAndRemainDisabled() {
+    @Test void memoryIdentityIsRequiredWhileCompressionRemainsOptional() {
         var properties = new SupervisorMemoryProperties();
-        assertFalse(properties.isEnabled());
         assertFalse(properties.isCompressionEnabled());
-        assertDoesNotThrow(properties::validate);
-    }
-
-    @Test void enabledModeRequiresServiceIdentityPrivateKeyFile() {
-        var properties = new SupervisorMemoryProperties();
-        properties.setEnabled(true);
         assertThrows(IllegalArgumentException.class, properties::validate);
         properties.setPrivateKeyFile("/run/secrets/service-identity.pem");
         assertDoesNotThrow(properties::validate);
     }
 
-    @Test void compressionCannotBeEnabledOutsideMemoryV2() {
+    @Test void serviceIdentityKeyIdAndPrivateKeyFileAreRequired() {
         var properties = new SupervisorMemoryProperties();
-        properties.setCompressionEnabled(true);
         assertThrows(IllegalArgumentException.class, properties::validate);
-    }
-
-    @Test void promptReadsAndAcceptedDeliveriesHaveIndependentSwitches() {
-        var properties = new SupervisorMemoryProperties();
-        properties.setEnabled(true);
         properties.setPrivateKeyFile("/run/secrets/service-identity.pem");
-        properties.setReadEnabled(false);
-        properties.setDeliveryEnabled(true);
-        assertFalse(properties.isReadEnabled());
-        assertTrue(properties.isDeliveryEnabled());
-        properties.setDeliveryEnabled(false);
-        assertFalse(properties.isDeliveryEnabled());
         assertDoesNotThrow(properties::validate);
+        properties.setKeyId("");
+        assertThrows(IllegalArgumentException.class, properties::validate);
     }
 
     @Test void inconsistentBudgetsAndUnboundedCacheAreRejected() {
@@ -52,6 +35,7 @@ class SupervisorMemoryPropertiesTest {
 
     @Test void resultProjectionAndRecallBoundsAreValidated() {
         var properties = new SupervisorMemoryProperties();
+        properties.setPrivateKeyFile("/run/secrets/service-identity.pem");
         properties.setToolInlineChars(255); assertThrows(IllegalArgumentException.class, properties::validate);
         properties.setToolInlineChars(16385); assertThrows(IllegalArgumentException.class, properties::validate);
         properties.setToolInlineChars(4096); properties.setRecallChars(2047); assertThrows(IllegalArgumentException.class, properties::validate);

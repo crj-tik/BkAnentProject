@@ -4,6 +4,7 @@ import com.bkanent.common.memory.*;
 import com.bkanent.memory.config.*;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.*;
@@ -16,7 +17,7 @@ import static com.bkanent.memory.service.MemoryArchiveStore.*;
 
 /** Exact accepted-event SERVICE consumer. Model calls never hold SQL locks or impersonate a user. */
 @Service
-@ConditionalOnProperty(prefix="memory.v2", name={"archive-enabled", "preference.processing.enabled"}, havingValue="true")
+@ConditionalOnProperty(prefix="memory.v2.preference.processing", name="enabled", havingValue="true")
 public class PreferenceProcessingWorker {
     private final MemoryArchiveStore store;
     private final MemorySourceAuthorizer sources;
@@ -36,6 +37,12 @@ public class PreferenceProcessingWorker {
     @Autowired
     public PreferenceProcessingWorker(MemoryArchiveStore store, MemorySourceAuthorizer sources, PreferenceHistoryService preferences,
             MemoryPreferenceProperties dimensions, MemoryPreferenceProcessingProperties properties, MemoryV2SecurityProperties callers,
+            ObjectProvider<PreferenceEvaluator> evaluator, PlatformTransactionManager manager) {
+        this(store,sources,preferences,dimensions,properties,callers,evaluator.getIfAvailable(),manager,Clock.systemUTC());
+    }
+
+    public PreferenceProcessingWorker(MemoryArchiveStore store, MemorySourceAuthorizer sources, PreferenceHistoryService preferences,
+            MemoryPreferenceProperties dimensions, MemoryPreferenceProcessingProperties properties, MemoryV2SecurityProperties callers,
             PreferenceEvaluator evaluator, PlatformTransactionManager manager) {
         this(store,sources,preferences,dimensions,properties,callers,evaluator,manager,Clock.systemUTC());
     }
@@ -51,7 +58,7 @@ public class PreferenceProcessingWorker {
 
     @Scheduled(fixedDelayString="${memory.v2.preference.processing.poll-ms:5000}", scheduler="memoryPreferenceScheduler")
     public void runOnce() {
-        if (!properties.isEnabled() || !running.compareAndSet(false,true)) return;
+        if (evaluator == null || !properties.isEnabled() || !running.compareAndSet(false,true)) return;
         try {
             for (int i=0; i<properties.getBatchSize(); i++) {
                 Claim claim=transaction(this::claim);
@@ -180,7 +187,7 @@ public class PreferenceProcessingWorker {
         var row=store.one("SELECT message_id,source_caller,source_event_id,sequence_no,content_revision,content_hash,schema_version FROM memory_message WHERE context_id=? AND source_event_id=?",key(context),job.get("source_event_id"));
         require(row!=null,MemoryErrorCode.ARCHIVE_NOT_CONFIRMED);
         String caller=(String)row.get("source_caller"); var trusted=callers.getTrustedCallers().get(caller);
-        require(trusted!=null && trusted.getKeyId()!=null && trusted.getSigningSecret()!=null && trusted.getSigningSecret().length()>=32
+        require(trusted!=null && trusted.getPublicKeys()!=null && !trusted.getPublicKeys().isEmpty()
                 && trusted.allows(context.domainId(),context.agentId()),MemoryErrorCode.FORBIDDEN);
         var dependency=new MemorySourceDependency(new MemorySourceRef(MemorySourceRef.Kind.MESSAGE,context,(String)row.get("message_id"),(String)row.get("source_event_id"),
                 number(row,"sequence_no"),new MemoryRevision(number(row,"content_revision"),(String)row.get("content_hash"),(String)row.get("schema_version"))),null);

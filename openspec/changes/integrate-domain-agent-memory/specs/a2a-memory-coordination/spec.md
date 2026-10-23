@@ -6,11 +6,15 @@
 
 ### Requirement: 实时内容与持久记忆采用双轨交付
 
-A2A SHALL 继续直接交付获准展示的进度、正文及本次结构化结果，Supervisor SHALL 能直接将已收到且获准使用的协作内容纳入当前推理及前端 SSE。长期记忆记录 SHALL 独立持久化；实时事件链 MUST NOT 要求先持久化每个 delta、回取 memory 正文或等待语义索引，MUST NOT 为已具备的本次必要结果重复读取记忆。
+A2A Agent 只有在请求入口完成必需的 Memory 身份、工作集和授权/版本预检后才可执行；预检失败 MUST 在模型或业务工具执行前拒绝该任务，不允许绕过 Memory。预检通过后，A2A SHALL 继续直接交付获准展示的进度、正文及本次结构化结果，Supervisor SHALL 能直接将已收到且获准使用的协作内容纳入当前推理及前端 SSE。长期记忆记录 SHALL 独立持久化；实时事件链 MUST NOT 要求先持久化每个 delta、回取 memory 正文或等待语义索引，MUST NOT 为已具备的本次必要结果重复读取记忆。可选索引或经验加工延迟不得阻塞实时事件链，也不得关闭基础 Memory 生命周期。
 
-#### Scenario: 记忆服务慢但实时结果仍到达
-- **WHEN** SubAgent 持续产生获准显示的文本，记忆加工服务延迟或不可用
-- **THEN** 文本仍由 A2A 进入原 SSE 事件链，该 delta 路径新增记忆读写和模型加工调用次数为零，记忆故障不被当作子任务执行失败
+#### Scenario: Memory preflight failure blocks the Agent
+- **WHEN** 正式 A2A 入口收到任务，但 Memory 工作集、当前身份或授权版本无法核验
+- **THEN** 任务在调用模型或业务工具前失败，且不通过直接调用 ReactAgent 或无记忆路径继续执行
+
+#### Scenario: 可选记忆加工慢但实时结果仍到达
+- **WHEN** Memory 预检已通过、SubAgent 正在产生获准显示的文本，但异步索引或经验加工延迟或不可用
+- **THEN** 文本仍由 A2A 进入原 SSE 事件链，该 delta 路径新增记忆读写和模型加工调用次数为零；附加加工状态独立记录，基础 Memory 生命周期仍保持接入
 
 #### Scenario: 当前协作不需要回取已有正文
 - **WHEN** Supervisor 已收到本次协作所需的结构化结论与必要正文

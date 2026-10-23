@@ -246,7 +246,8 @@ class MemoryV2RpcContractTest {
                 MemoryPrivacyCleanupState.COMPLETE, 2, null, AT, AT.plusSeconds(1));
         assertThat(spi(status, MemoryPrivacyCleanupStatusResponse.class)).isEqualTo(status);
         assertThat(MemoryV2Contract.DUBBO_SERVICE_VERSION).isEqualTo("2.3.0");
-        var proof = new MemoryRequestProof("key", 100, 160, "n".repeat(22), "s".repeat(43), MemoryRequestProof.Actor.SERVICE);
+        var proof = new MemoryRequestProof("key", 100, 160, "n".repeat(22), "A".repeat(86), MemoryRequestProof.Actor.SERVICE,
+                MemoryRequestProof.ED25519_V2, "Ed25519");
         assertThat(spi(proof, MemoryRequestProof.class)).isEqualTo(proof);
     }
 

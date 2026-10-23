@@ -596,11 +596,11 @@
 
 ## LR-60 精确归档接收与迟到结果只授予受限 SERVICE 交付权
 
-**结论**：Memory 先以当前用户断言准入，再持久保存 caller/context/event/hash/purpose 许可，7 天内允许同一可信 caller 用显式启用的 SERVICE 交付能力补交付。actor 本身纳入 HMAC；SERVICE 不能读取、申请新许可、提交摘要或撤回。已知结果事件必须精确 hash 相同；尚未完成调用仅能从已入库 TOOL/ACCEPTED 事实预约一个 callId 的结果身份，首次交付冻结 hash，后续不同内容冲突。ASSISTANT 工具调用提案不等于受理证明。
+**结论**：Memory 先以当前用户断言准入，再持久保存 caller/context/event/hash/purpose 许可，7 天内允许同一可信 caller 用 SERVICE 身份补交付。SERVICE 交付使用 Memory v2 Ed25519 proof 并受精确 ACL 限制；SERVICE 不能读取、申请新许可、提交摘要或撤回。已知结果事件必须精确 hash 相同；尚未完成调用仅能从已入库 TOOL/ACCEPTED 事实预约一个 callId 的结果身份，首次交付冻结 hash，后续不同内容冲突。ASSISTANT 工具调用提案不等于受理证明。
 
 **根因**：用户租约结束不能让已授权入站事件丢失；让 owner 自动换发用户 token 则会把补交付升级为读取权限。服务签名与持久接收事实的交集限定补交付，且不保存 proof、token 或秘密。源事件、消息 ID 和 sequence 均有唯一约束；会话行锁、严格连续 sequence、真源/回执/待加工 job 同事务，丢回执或跨实例重试不增加消息与观察。乱序显式冲突后重投，绝不静默重排调用事实。
 
-**代码位置**：common 的 MemoryRequestProof/Signer、MemoryResultAdmission、MemoryCanonicalHash；memory-service 的 MemoryArchiveService/Store、MemoryV2RequestSecurity；迁移 130。Native provider 固定原 interface/group/version/protocol，增加 withdrawSource，总计十操作，默认 `archive-enabled=false`。
+**代码位置**：common 的 MemoryRequestProof/Signer、MemoryResultAdmission、MemoryCanonicalHash；memory-service 的 MemoryArchiveService/Store、MemoryV2RequestSecurity；迁移 130。Native provider 固定原 interface/group/version/protocol，增加 withdrawSource，总计十操作。基础接收与归档由所有官方 Agent 必须使用，不设可旁路的 archive 开关。
 
 **关联**：LR-33/41/55/58/59、KI-131/132；change 3.3/3.4/4.1/4.4。真实执行器可靠事实构造、journal 选择与 Agent 接线另验收；进程内重建/SQL 并发测试不冒充真实 A2A token 续期或目标 Agent 全链验收。
 
@@ -734,7 +734,7 @@
 
 **根因**：事项标签只能缩小上下文适用范围，不能扩大主体权限或变成业务路由。只按维度相关匹配可能混入不相干偏好；使用模型检索会额外增加未授权语义和调用边界。把选择结果当永久缓存又可能让修正、撤回或事项版本变化后的旧值继续进入 prompt。因此每个选择附 block revision/content hash、authorization revision、matter revision 与有效状态 hash；Memory 先核来源元数据再读正文，Agent 在入模、工具调用和输出前重新核验。复用键覆盖 context、事项 revision、当前输入事件；新输入重新装配，同事项同一输入的工具/模型轮次复用。
 
-**运行边界**：注入内容标记为数据而非指令，当前明确请求、政策和授权优先。无匹配、预算受限、可选记忆不可用分别表达；认证/授权错误不降级。删除/撤回使旧选择失效；当前错误或变更后的偏好只能在下一次可核验装配中替换，不能把后台尚未归并的修正说成已持久更新。当前仅支持 owner-self 的 domain+agent 私有偏好，不支持其他主体、共享组、经验装配或向量语义检索。
+**运行边界**：注入内容标记为数据而非指令，当前明确请求、政策和授权优先。无匹配、预算受限、偏好附加数据未应用分别表达；认证/授权错误不降级。删除/撤回使旧选择失效；当前错误或变更后的偏好只能在下一次可核验装配中替换，不能把后台尚未归并的修正说成已持久更新。当前仅支持 owner-self 的 domain+agent 私有偏好，不支持其他主体、共享组、经验装配或向量语义检索。
 
 **代码位置**：`MemoryPreferenceAssemblyRequest/Response/Match/SelectionRef`、`MemoryV2Contract`、`PreferenceSelectionPolicy`、`MemoryPreferenceProperties`、`PreferenceHistoryService.assemble/selectionsCurrent`、`MemoryArchiveService.checkBoundary`、`SupervisorMemoryLifecycle.assemblePreferences/modelMessages/beforeTools/beforeOutput`；关联 LR-68/69/70/71/72、KI-140/141/142/144；change 7.5/7.6。
 
@@ -744,7 +744,7 @@
 
 **根因**：本地事务无法与外部检索/共享投影原子提交。先撤权可立即关闭旧 checkpoint、工作集和边界读取；无正文 manifest 让异步执行可恢复而不把副本正文保留在任务里；精确 source hash、租约和幂等 cleaner 允许崩溃后至少一次重试，同时避免迟到回执复活来源或虚报删除完成。
 
-**运行边界**：当前开发配置不启用 Memory V2 归档/索引，未注册外部投影 cleaner；因此此版本的完成状态只覆盖本地派生清理和当前注册集合，不能声称清理未接入的外部索引。今后任何 V2 投影在启用前必须提供受管 cleaner，并在写入投影前对账 tombstone。用户明确删除会清除本地正文；撤回只冻结并阻断内容访问，保持其可恢复语义。
+**运行边界**：Supervisor 与官方 A2A Agent 的基础 Memory v2 读取、许可归档为必需接入；RAG 投影/搜索及外部投影 cleaner 独立登记和启停。因此清理完成只覆盖本地派生与当前注册 cleaner，不能声称清理未接入的外部索引。任何新 V2 投影启用前必须提供受管 cleaner，并在写入投影前对账 tombstone。用户明确删除会清除本地正文；撤回只冻结并阻断内容访问，保持其可恢复语义。
 
 **代码位置**：`MemoryPrivacyCleanupStatusRequest/Response`、`MemoryArchiveService.withdrawSource/privacyCleanupStatus`、`MemoryPrivacyCleanupWorker`、`MemoryPrivacyProjectionCleaner`、迁移 190；关联 LR-61/65/68/69/73、KI-145/146；change 3.5/4.7。
 
@@ -764,31 +764,31 @@
 
 **代码位置**：`SupervisorMemoryJournal`、`SupervisorMemoryLifecycle.flush`、`MemoryArchiveService.deliverMessages`、`PreferenceProcessingWorker`、`MemoryRagOutboxDispatcher`；迁移 `20261021_memory_rag_outbox_lease.sql`。回归包括 `SupervisorMemoryIntegrationTest.completedBusinessToolIsNotRerunWhenLostMemoryReceiptIsRecovered`、偏好 worker 跨实例 lease/revocation 用例、`MemoryRagOutboxDispatcherTest.expiredLeaseCanBeTakenOverAndLateWorkerCannotOverwriteNewerState` 和真实 MySQL `MemoryRagOutboxMySqlTest`。RAG RPC 接口未改变，fixture 验证的是租约/回执边界，不代表本轮真实 RAG 服务联机验收。
 
-**关联**：LR-60/61/64/70、KI-147；integrate-domain-agent-memory 4.3/4.5/4.6。开发默认不启用 Memory V2 归档/索引；未确认接收、认证或授权失败仍按既有错误语义失败关闭。
+**关联**：LR-60/61/64/70、KI-147；integrate-domain-agent-memory 4.3/4.5/4.6。基础 Memory 读取与归档必须接入所有官方 Agent；RAG 索引/投影由独立 dispatcher 管理，未确认接收、认证或授权失败仍按既有错误语义失败关闭。
 
 ## LR-77 A2A 记忆仅接入受信任 ReactAgent 完整轮次并按域隔离
 
-**结论**：marketing 与 interview 的实际 ReactAgent 显式注册同一个 common-a2a `AgentHook`：在 `BEFORE_AGENT` 读取当前 owner/domain/agent 的获准工作集，在 `AFTER_AGENT` 归档完整轮次；进度回调不访问记忆。owner 来自当前 A2A task lease 的已认证 actor，caller/domain/agent 固定在各服务装配代码中；A2A `contextId` 先哈希，只用于会话映射，不作为授权。历史摘要及近期消息按记忆版本/来源依赖复核，summary 只接受有证据的结构候选；token 压缩由可靠提交协调器执行，未决、待审批及结果未知的工具调用组留在未覆盖尾部。Memory V2 与压缩在两个服务均默认关闭，部署 secret 默认留空。
+**结论**：marketing 与 interview 的实际 ReactAgent 显式注册同一个 common-a2a `AgentHook`：在 `BEFORE_AGENT` 必须读取当前 owner/domain/agent 的获准工作集，在 `AFTER_AGENT` 许可归档完整轮次；进度回调不访问记忆。owner 来自当前 A2A task lease 的已认证 actor，caller/domain/agent 固定在各服务装配代码中；A2A `contextId` 先哈希，只用于会话映射，不作为授权。历史摘要及近期消息按记忆版本/来源依赖复核，summary 只接受有证据的结构候选；token 压缩由可靠提交协调器执行，未决、待审批及结果未知的工具调用组留在未覆盖尾部。基础 Memory 无开关；压缩仍是可选附加能力。
 
 **根因**：A2A beacon 是 task 身份证明，不是 memory 的调用凭据；必须从有效 lease 派生当前用户身份，并用各服务独立配置的 Memory RPC 签名调用。单独使用 contextId 会让同一用户跨 domain/agent 读到不相关私有上下文。把记忆请求放在工具或 progress interceptor 中会重复执行业务或拖慢 SSE；只有 AgentHook 的完整轮次边界能同时读入授权历史、取得实际工具结果并在单次模型执行后提交消息。压缩前沿不得穿过待审批或结果未知的工具组。
 
-**运行边界**：interview 仅接入治理面原生 A2A ReactAgent；REST/SSE、三段上下文、访谈状态机和领域事实源未迁移，task 完成不会闭合访谈事项。Memory 依赖不可用可按可选功能降级，但 A2A lease 或 Memory RPC 的认证/授权错误失败关闭。开发开关仍关闭，未做联机记忆读取/归档或前端性能基线验收。
+**运行边界**：interview 仅接入治理面原生 A2A ReactAgent；REST/SSE、三段上下文、访谈状态机和领域事实源未迁移，task 完成不会闭合访谈事项。Memory 身份、工作集或授权预检不可用时在模型/工具前失败关闭，无降级旁路；当前运行态切流仍须按 change 11.5 验收，前端性能对比不属于本变更范围。
 
 **代码位置**：`A2aMemoryAgentHook`、`A2aMemoryInvocation`、`A2aMemorySummaryGenerator`、`A2aMemoryHookFactory`、`OfficialA2aAgentExecutor`、`MarketingOfficialA2aAgent`、`InterviewOfficialA2aAgent`、`A2aMemoryAutoConfiguration`、`SupervisorMemoryLifecycle`；回归 `A2aMemoryAgentHookTest`、`SupervisorMemoryWiringTest`、`InterviewControllerTest`、`InterviewSessionStateMachineTest`。关联 LR-33/41/61/76、KI-148/149；change 5.5/5.6。
 
 ## LR-78 listing/trade/contract 记忆只保存有身份边界的会话证据
 
-**结论**：listing、trade、contract 的实际 ReactAgent 复用 common-a2a 完整轮次 Hook，caller、domain、agent 分别固定为 `listing-master-service/listing/listing-agent`、`business-service/trade/trade-agent`、`contract-service/contract/contract-agent`。Hook 只归档经当前租约认证的用户、Agent 和只读业务工具消息；这些消息及其来源哈希说明“本轮看到了什么”，不替代 listing/analytics/contract 的数据库或 RPC 真源，也不产生业务事实。三个服务及 memory-service 都以各自独立密钥、精确 caller/domain/agent 授权和关闭开关交付，启用与压缩仍需部署侧显式配置。
+**结论**：listing、trade、contract 的实际 ReactAgent 复用 common-a2a 必需完整轮次 Hook，caller、domain、agent 分别固定为 `listing-master-service/listing/listing-agent`、`business-service/trade/trade-agent`、`contract-service/contract/contract-agent`。Hook 只归档经当前租约认证的用户、Agent 和只读业务工具消息；这些消息及其来源哈希说明“本轮看到了什么”，不替代 listing/analytics/contract 的数据库或 RPC 真源，也不产生业务事实。各服务使用自己的 Ed25519 身份私钥；核心 Memory 读取、授权核验与归档没有开关，压缩和索引独立治理。
 
-**根因**：三个 Agent 的读取工具已有领域事实边界，长期会话可帮助解释用户目标和既往结果，但将工具返回的历史快照当作当前业务状态会绕过原有权限与新鲜度校验。复用相同 Hook 可保留冷/热工作集、来源可追溯和完整工具调用组，同时把记忆权限收窄到固定 Agent；功能默认关闭避免在密钥、存储能力和运行基线尚未验收时产生隐式记忆读写。
+**根因**：三个 Agent 的读取工具已有领域事实边界，长期会话可帮助解释用户目标和既往结果，但将工具返回的历史快照当作当前业务状态会绕过原有权限与新鲜度校验。复用相同 Hook 可保留冷/热工作集、来源可追溯和完整工具调用组，同时把记忆权限收窄到固定 Agent；身份、存储或授权未就绪时请求必须失败关闭，不能以关闭核心 Memory 开关来绕过预检。
 
 **代码位置**：`ListingOfficialA2aAgent`、`TradeOfficialA2aAgent`、`ContractOfficialA2aAgent`；对应 `a2a.memory` 配置、Compose 环境变量和 `memory-service` trusted caller 白名单；回归 `ExplicitSkillAgentWiringTest` 与 `A2aMemoryAgentHookTest`。关联 LR-77；change 5.7。
 
 ## LR-79 compare/media/notification/settlement 的 A2A 记忆按真源与主体边界分别授权
 
-**结论**：四个实际 ReactAgent 都接入 common-a2a 完整轮次 Hook，caller/domain/agent 固定为 `compare-engine-service/compare/compare-agent`、`media-worker-service/media/media-agent`、`notification-service/notification/notification-agent`、`settlement-service/settlement/settlement-agent`。Compare 与 settlement 在 memory-service 取得精确域授权；所有服务的读取和压缩开关、签名密钥默认关闭/留空。Media 和 notification 虽完成关闭态代码接线及回归，但不登记 memory-service caller：media 任务结果只存于进程内 map，尚无可恢复结果来源；notification 工具的查询 `userId` 尚未绑定当前 A2A 租约主体（KI-117、KI-151）。没有新增业务库。
+**结论**：四个实际 ReactAgent 都接入 common-a2a 必需完整轮次 Hook，caller/domain/agent 固定为 `compare-engine-service/compare/compare-agent`、`media-worker-service/media/media-agent`、`notification-service/notification/notification-agent`、`settlement-service/settlement/settlement-agent`。Compare 与 settlement 在 memory-service 取得精确域授权；所有服务以本服务 Ed25519 身份签署 Memory 请求，核心读取、核验与归档没有开关。压缩仍为可选。Media 和 notification 目前未登记 memory-service caller，故在可信来源问题解决前其官方 A2A 请求会于模型/工具前失败关闭；media 任务结果只存于进程内 map，notification 工具的查询 `userId` 尚未绑定当前 A2A 租约主体（KI-117、KI-151）。没有新增业务库。
 
-**根因**：完整轮次 Hook 只能持久化本轮获准的对话和工具证据，不能替代领域任务结果真源，也不能把模型提供的用户标识当作调用者身份。允许数据写入前必须同时满足来源可恢复、caller/domain/agent 精确匹配和消息主体授权；因此源码接通与运行时启用分开验收。
+**根因**：完整轮次 Hook 只能持久化本轮获准的对话和工具证据，不能替代领域任务结果真源，也不能把模型提供的用户标识当作调用者身份。读写前必须同时满足来源可恢复、caller/domain/agent 精确匹配和消息主体授权；授权缺口作为入口故障处理，不通过关闭 Memory 或回退旧业务路径规避。
 
 **代码位置**：四个 `*OfficialA2aAgent`、各服务 `a2a.memory` 配置、Compose/.env 示例、`memory-service` trusted caller 白名单及四项 `ExplicitSkillAgentWiringTest`。关联 LR-78、KI-117、KI-151；change 5.8。
 
@@ -802,11 +802,11 @@
 
 ## LR-81 历史无匹配与依赖不可用分别提示且当前请求优先
 
-**结论**：A2A 工作集成功返回空历史时标记 `NO_MATCH`，向 Agent 插入不会归档的系统提示；Memory 依赖故障标记 `MEMORY_UNAVAILABLE` 并使用独立降级提示。Supervisor 整体可选记忆未应用时在 Graph system prompt 中明确告知；事项偏好无匹配与偏好 RPC 不可用分别写入当轮 SystemMessage。请求可独立完成时继续，若依赖缺失的历史对象、约定或偏好则向用户澄清且不猜测。新 user event 进入偏好装配复用键，触发局部刷新；当前轮明确修正优先于召回的旧偏好数据。认证/授权失败继续失败关闭。
+**结论**：A2A 工作集成功返回空历史时标记 `NO_MATCH`，向 Agent 插入不会归档的系统提示；Memory 身份、依赖、授权或版本预检故障标记为失败并在模型/工具执行前拒绝，不插入可降级执行提示。Supervisor 基础工作集始终必需；事项偏好这类附加装配无匹配与其专用 RPC 不可用分别写入当轮 SystemMessage。请求可独立完成时可以不使用缺失的附加偏好；若依赖缺失的历史对象、约定或偏好则向用户澄清且不猜测。新 user event 进入偏好装配复用键，触发局部刷新；当前轮明确修正优先于召回的旧偏好数据。认证/授权失败继续失败关闭。
 
-**根因**：将空结果和依赖故障合并会误报服务状态，或让模型把未知历史当成已确认事实；系统提示必须随真实装配状态进入当前模型窗口。A2A 的内部提示需要从后续归档切片中排除，避免实现指令进入用户档案。Supervisor 偏好读取可能单独失败而其余历史仍有效，故须在偏好内容所在模型窗口携带状态；按 user event 刷新可令明确修正即时成为当前输入，但不伪称后台偏好转换已持久化。
+**根因**：将空结果和依赖故障合并会误报服务状态，或让模型把未知历史当成已确认事实；基础 Memory 依赖故障必须停止执行，而空工作集仍是合法结果。A2A 的内部提示需要从后续归档切片中排除，避免实现指令进入用户档案。偏好读取属于附加能力，可单独没有匹配或未应用；按 user event 刷新可令明确修正即时成为当前输入，但不伪称后台偏好转换已持久化。
 
-**代码位置**：`A2aMemoryAgentHook.noMatchUpdate/degradeOrFail`、`A2aMemoryInvocation.currentInputStart`、`SupervisorMemoryLifecycle.assemblePreferences/modelMessages`、`SupervisorToolLoopGraph.prompt`；回归 `A2aMemoryAgentHookTest.noMatchIsReportedSeparatelyAndMissingHistoricalReferentsAreNotGuessed`、`SupervisorMemoryIntegrationTest.explicitCurrentCorrectionOverridesAnOlderRetrievedPreference` 与 `missingAndUnavailableHistoricalPreferencesHaveDistinctPromptStates`；关联 KI-152、LR-73；change 5.10。
+**代码位置**：`A2aMemoryAgentHook.noMatchUpdate/failRequiredMemory`、`A2aMemoryInvocation.currentInputStart`、`SupervisorMemoryLifecycle.prepare/assemblePreferences/modelMessages`、`SupervisorToolLoopGraph.prepare/model`；回归 `A2aMemoryAgentHookTest.noMatchIsReportedSeparatelyAndMissingHistoricalReferentsAreNotGuessed`、`SupervisorMemoryIntegrationTest.memoryUnavailableBlocksModelAndTools`、`explicitCurrentCorrectionOverridesAnOlderRetrievedPreference` 与 `missingAndUnavailableHistoricalPreferencesHaveDistinctPromptStates`；关联 KI-152、LR-73/96；change 5.10/11.5。
 
 ## LR-82 硬规则只由受管配置与授权入口维护，经验不能改变规则
 
@@ -930,13 +930,13 @@
 
 **代码位置**：`scripts/verification/RagRuntimeProbe.MEMORY_V2_DOMAIN_AGENTS`、`MEMORY_V2_SPACE_IDS`；`common/rag/MemoryRagSpaceIds`、`MemoryRagRecordType`；`nacos/rag-service.yaml`；`scripts/verification/README.md` 和 `docs/memory-v2-operations.md`。关联 LR-43/LR-92，change 9.1/11.2。
 
-## LR-96 回滚时将历史读取与已接受交付分阶段关闭
+## LR-96 Memory 核心生命周期不可选，停用从 Agent 入口执行
 
-**结论**：A2A 域 Agent 与 Supervisor 的 Memory v2 总开关下分别控制 prompt 历史读取和结果交付。读取关闭后，新 A2A 任务与 Supervisor run 进入 `DELIVERY_ONLY`，不将历史正文放入模型上下文，但可在执行完成时归档本轮事实。任务开始时已接受的交付许可记录在 invocation 或 workflow checkpoint；随后关闭新交付入口不取消该次交付。Supervisor 只有在工作集初始化成功后才把普通 V2 交付标记为已接受，避免可选 Memory 读取失败时在结束节点误触发新的记忆调用。
+**结论**：Supervisor 与所有官方 A2A Agent 必须在模型/业务工具执行前读取当前 Memory 工作集并复核身份、授权和版本；成功回合通过许可归档。基础接入、读取、复核和归档没有开关或无记忆旁路。Memory 预检失败时在副作用前拒绝本轮；查询成功但无匹配是合法空工作集。压缩、偏好/经验加工及 RAG 投影/搜索可以作为独立附加能力启停，不得控制或替代基础生命周期。停用/回滚先停止新 Agent 入口并处理已受理事实，不能让仍接收请求的 Agent 绕过 Memory。
 
-**根因**：单一开关同时控制模型读取与终态归档，直接关闭会让仍在执行的任务跳过结果交付；保持总开关开启又会让新任务继续读取历史。分开读取/交付并记录任务级交付接受状态，才能先停止新增 prompt 依赖，再有界完成已接受事件。
+**根因**：把基础 Memory 接入做成可选，会让同一业务请求在有历史和无历史的两个路径中静默执行，造成提示上下文、归档事实和授权复核不一致。Memory 是 Agent 的必需依赖；无历史是有效数据状态，服务不可用、缺少接线或授权无法验证则是执行故障，两者必须区分。附加加工可以未就绪，但不能因此关闭基础记忆。
 
-**代码位置**：`common-a2a/A2aMemoryProperties`、`A2aMemoryInvocation`、`A2aMemoryAgentHook`；`agent-service/SupervisorMemoryProperties`、`SupervisorMemoryLifecycle`、`ToolLoopState`；相关域 Nacos 配置与 `docs/memory-v2-operations.md`。回归 `A2aMemoryAgentHookTest.readDisabledDeliveryOnlyTurnDrainsAfterDeliverySwitchIsClosed`、`SupervisorMemoryIntegrationTest.deliveryOnlyModeSkipsPromptReadsAndFinishesAnAcceptedDeliveryAfterCutoff`、`SupervisorMemoryPropertiesTest.promptReadsAndAcceptedDeliveriesHaveIndependentSwitches`；关联 change 11.5。
+**代码位置**：`common-a2a/A2aMemoryAgentHook`、`A2aMemoryHookFactory`、`OfficialA2aAgentExecutor`；`agent-service/SupervisorMemoryLifecycle`、`SupervisorToolLoopGraph`；Agent application/Nacos 配置、`MemoryPreferenceProcessingConfiguration`/`PreferenceProcessingWorker`、`MemoryPrivacyCleanupWorker`/`MemoryExperienceProcessingWorker` 与 `docs/memory-v2-operations.md`。回归覆盖 A2A 实际 ReactAgent 读取/归档和 Memory 不可用前置失败、Supervisor 每次运行读取/归档及 Memory 不可用前置失败、附加偏好评估配置缺失不阻断核心服务、后台 worker 使用生产注入构造器；关联旧策略 KI-161、KI-164/165、change 11.3/11.5/11.6。
 
 ## LR-97 偏好块固定本人私有，跨域交接使用独立共享导出
 
@@ -950,8 +950,8 @@
 
 ## LR-98 服务身份密钥跨协议复用私钥，但按协议域隔离签名
 
-**结论**：每个调用服务只持有一组 Ed25519 身份私钥，可分别签署 A2A/Auth 信标与 Memory v2 请求；签名输入包含显式版本、算法、key ID 和不同的协议域标签（`BK-ANENT:A2A-AUTH:v1`、`BK-ANENT:MEMORY-V2:v1`）。Auth 与 Memory 各自只登记需要验证的公钥，并继续执行各自精确的 caller、operation、domain、agent 和用户授权；Auth 仅授予 `agent-service` `ISSUE_BEACON`，其他已登记 A2A 调用方只授予 `RESOLVE_BEACON`。迁移期 verifier 可分别校验 HMAC-v1 旧请求与 Ed25519-v2 新请求，但新签发方仅生成 Ed25519-v2；只有在覆盖最长调用周期与回滚窗口的观察期内，通过低基数验签指标实测旧流量归零后，才可删除 HMAC 路径。
+**结论**：每个调用服务只持有一组 Ed25519 身份私钥，可分别签署 A2A/Auth 信标与 Memory v2 请求；签名输入包含显式版本、算法、key ID 和不同的协议域标签（`BK-ANENT:A2A-AUTH:v1`、`BK-ANENT:MEMORY-V2:v1`）。Memory v2 请求从首个受管版本起仅接受 Ed25519。Auth 与 Memory 各自只登记需要验证的公钥，并继续执行各自精确的 caller、operation、domain、agent 和用户授权；Auth 仅授予 `agent-service` `ISSUE_BEACON`，其他已登记 A2A 调用方只授予 `RESOLVE_BEACON`。Auth/A2A 的旧调用端迁移窗口仅在 A2A/Auth 协议内管理，不延伸到 Memory。
 
-**根因**：每服务每协议配置共享 HMAC secret 会让调用方与验证方都能伪造请求，且密钥项随服务和协议数增长。每服务一组非对称密钥把签名能力留在调用服务；协议域分离允许复用身份而阻止跨协议重放；verifier 独立公钥登记与原 ACL 保证新增身份不自动扩大权限。未取得旧请求流量归零证据时提前删除 HMAC verifier 会中断仍在运行的旧二进制，因此兼容退役需单独依赖运行态验收。
+**根因**：每服务每协议配置共享签名 secret 会让调用方与验证方都能伪造请求，且密钥项随服务和协议数增长。每服务一组非对称密钥把签名能力留在调用服务；协议域分离允许复用身份而阻止跨协议重放；verifier 独立公钥登记与原 ACL 保证新增身份不自动扩大权限。Auth/A2A 仍在运行的旧调用端只按其协议单独迁移；Memory 不保留旧签名算法路径，也不需要运行态旧请求观察。
 
 **代码位置**：`common/security/ServiceIdentityCrypto`、`common/rag/A2aAuthSignature`、`common/memory/MemoryRequestSigner`、`common-a2a/A2aBeaconAuthentication`、`auth-service/AuthA2aIdentityProperties` 与 `A2aBeaconRpcServiceImpl`、`memory-service/MemoryV2SecurityProperties` 与 `MemoryV2RequestSecurity`；验签计数器 `service.identity.signature.verified`、`docker-compose.yml`、`scripts/security/`、`docs/service-identity-operations.md`。回归覆盖协议域、签名、key ID/公钥匹配、算法降级拒绝、轮换撤销与 verifier ACL；关联 KI-162、change 11.8/11.9。

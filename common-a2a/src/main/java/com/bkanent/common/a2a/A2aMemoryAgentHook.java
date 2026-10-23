@@ -65,11 +65,11 @@ public final class A2aMemoryAgentHook extends AgentHook {
     }
 
     A2aMemoryInvocation invocation(String taskId, String contextId) {
-        return new A2aMemoryInvocation(taskId, contextId, properties.isPromptReadEnabled(), properties.isDeliveryEnabled());
+        return new A2aMemoryInvocation(taskId, contextId);
     }
 
     A2aMemoryInvocation invocation(String taskId, String contextId, DurableMemoryExportDirective exportDirective) {
-        return new A2aMemoryInvocation(taskId, contextId, properties.isPromptReadEnabled(), properties.isDeliveryEnabled(), exportDirective);
+        return new A2aMemoryInvocation(taskId, contextId, exportDirective);
     }
 
     @Override public String getName() { return "a2aMemoryLifecycle"; }
@@ -78,9 +78,7 @@ public final class A2aMemoryAgentHook extends AgentHook {
     @Override
     public CompletableFuture<Map<String, Object>> beforeAgent(OverAllState state, RunnableConfig config) {
         A2aMemoryInvocation invocation = invocation(config);
-        if (invocation == null) return CompletableFuture.completedFuture(Map.of());
-        boolean promptReadEnabled = properties.isPromptReadEnabled();
-        if (!promptReadEnabled && !invocation.deliveryEnabledAtStart()) return CompletableFuture.completedFuture(Map.of());
+        if (invocation == null) return CompletableFuture.failedFuture(new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE));
         try {
             requireThread(invocation, config);
             List<Message> original = messages(state);
@@ -93,12 +91,6 @@ public final class A2aMemoryAgentHook extends AgentHook {
                 MemoryContextKey key = new MemoryContextKey(Long.toString(ownerId), domain, agentId,
                         stableId("a2a-context-", invocation.contextId()));
                 invocation.contextKey(key);
-                if (!promptReadEnabled) {
-                    invocation.memoryStatus("DELIVERY_ONLY");
-                    invocation.archiveStatus("PENDING");
-                    invocation.prepared(true);
-                    return CompletableFuture.completedFuture(Map.of());
-                }
                 MemoryRpcClient client = client(invocation.taskId(), key, lease);
                 String runId = stableId("a2a-run-", invocation.taskId());
                 MemoryWorkingSession session = new MemoryWorkingSession(client, cache, key, runId);
@@ -123,16 +115,12 @@ public final class A2aMemoryAgentHook extends AgentHook {
                 return CompletableFuture.completedFuture(Map.of("messages", ReplaceAllWith.of(merged)));
             }
         } catch (MemoryException exception) {
-            return promptReadEnabled ? degradeOrFail(invocation, state, exception)
-                    : deliveryOnlyFailure(invocation, exception);
+            return failRequiredMemory(invocation, exception);
         } catch (RagException exception) {
             MemoryException mapped = memoryException(exception);
-            return promptReadEnabled ? degradeOrFail(invocation, state, mapped)
-                    : deliveryOnlyFailure(invocation, mapped);
+            return failRequiredMemory(invocation, mapped);
         } catch (RuntimeException exception) {
-            MemoryException unavailable = new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
-            return promptReadEnabled ? degradeOrFail(invocation, state, unavailable)
-                    : deliveryOnlyFailure(invocation, unavailable);
+            return failRequiredMemory(invocation, new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE));
         }
     }
 
@@ -149,19 +137,12 @@ public final class A2aMemoryAgentHook extends AgentHook {
     @Override
     public CompletableFuture<Map<String, Object>> afterAgent(OverAllState state, RunnableConfig config) {
         A2aMemoryInvocation invocation = invocation(config);
-        if (invocation == null || !invocation.deliveryEnabledAtStart() || !invocation.prepared()
-                || (invocation.session() == null && !"DELIVERY_ONLY".equals(invocation.memoryStatus()))) {
-            return CompletableFuture.completedFuture(Map.of());
-        }
+        if (invocation == null || !invocation.prepared())
+            return CompletableFuture.failedFuture(new MemoryException(MemoryErrorCode.ARCHIVE_NOT_CONFIRMED));
         try (var ignored = A2aCredentialContext.openTask(invocation.taskId())) {
             var lease = A2aCredentialContext.required();
             MemoryWorkingSession session = invocation.session();
-            if (session == null && "DELIVERY_ONLY".equals(invocation.memoryStatus())) {
-                session = new MemoryWorkingSession(client(invocation.taskId(), invocation.contextKey(), lease), cache,
-                        invocation.contextKey(), stableId("a2a-run-", invocation.taskId()));
-                invocation.session(session);
-            }
-            if (session == null) return CompletableFuture.completedFuture(Map.of());
+            if (session == null) throw new MemoryException(MemoryErrorCode.ARCHIVE_NOT_CONFIRMED);
             // Any private history used by this Agent must still be current before its result can escape.
             if (invocation.privateMaterialLoaded()) session.check();
             List<Message> all = messages(state);
@@ -184,30 +165,15 @@ public final class A2aMemoryAgentHook extends AgentHook {
             invocation.archiveStatus("RECORDED");
             return CompletableFuture.completedFuture(Map.of());
         } catch (MemoryException exception) {
-            if (exception.code() == MemoryErrorCode.MEMORY_UNAVAILABLE) {
-                invocation.archiveStatus("MEMORY_UNAVAILABLE");
-                if (invocation.privateMaterialLoaded()) return CompletableFuture.failedFuture(exception);
-                return CompletableFuture.completedFuture(Map.of());
-            }
-            if (exception.code() == MemoryErrorCode.AUTHENTICATION_FAILED
-                    || exception.code() == MemoryErrorCode.AUTHENTICATION_EXPIRED
-                    || exception.code() == MemoryErrorCode.FORBIDDEN) return CompletableFuture.failedFuture(exception);
-            invocation.archiveStatus("NOT_RECORDED");
-            return CompletableFuture.completedFuture(Map.of());
+            invocation.archiveStatus(exception.code() == MemoryErrorCode.MEMORY_UNAVAILABLE ? "MEMORY_UNAVAILABLE" : "NOT_RECORDED");
+            return CompletableFuture.failedFuture(exception);
         } catch (RagException exception) {
             MemoryException mapped = memoryException(exception);
-            if (mapped.code() == MemoryErrorCode.AUTHENTICATION_FAILED
-                    || mapped.code() == MemoryErrorCode.AUTHENTICATION_EXPIRED
-                    || mapped.code() == MemoryErrorCode.FORBIDDEN) return CompletableFuture.failedFuture(mapped);
-            invocation.archiveStatus("MEMORY_UNAVAILABLE");
-            if (invocation.privateMaterialLoaded()) return CompletableFuture.failedFuture(mapped);
-            return CompletableFuture.completedFuture(Map.of());
+            invocation.archiveStatus(mapped.code() == MemoryErrorCode.MEMORY_UNAVAILABLE ? "MEMORY_UNAVAILABLE" : "NOT_RECORDED");
+            return CompletableFuture.failedFuture(mapped);
         } catch (RuntimeException exception) {
             invocation.archiveStatus("NOT_RECORDED");
-            if (invocation.privateMaterialLoaded()) {
-                return CompletableFuture.failedFuture(new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE));
-            }
-            return CompletableFuture.completedFuture(Map.of());
+            return CompletableFuture.failedFuture(new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE));
         }
     }
 
@@ -223,7 +189,6 @@ public final class A2aMemoryAgentHook extends AgentHook {
     /** Publishes only an explicit trusted-context directive and only after the current turn was archived. */
     MemoryExportReceipt publishExport(A2aMemoryInvocation invocation, A2aOutput output) {
         if (invocation == null || invocation.durableMemoryExport() == null) return null;
-        if (!properties.isPromptReadEnabled()) return rememberExport(invocation, MemoryExportReceipt.failure("UNAVAILABLE"));
         if (!"RECORDED".equals(invocation.archiveStatus()) || invocation.contextKey() == null
                 || invocation.currentTurnSources().isEmpty()) {
             return rememberExport(invocation, MemoryExportReceipt.failure("NOT_RECORDED"));
@@ -291,31 +256,13 @@ public final class A2aMemoryAgentHook extends AgentHook {
         return java.util.Collections.unmodifiableMap(selected);
     }
 
-    private CompletableFuture<Map<String, Object>> degradeOrFail(A2aMemoryInvocation invocation, OverAllState state,
-                                                                  MemoryException exception) {
+    private CompletableFuture<Map<String, Object>> failRequiredMemory(A2aMemoryInvocation invocation,
+                                                                       MemoryException exception) {
         finish(invocation);
-        if (exception.code() != MemoryErrorCode.MEMORY_UNAVAILABLE) return CompletableFuture.failedFuture(exception);
-        invocation.memoryStatus("MEMORY_UNAVAILABLE");
+        invocation.memoryStatus(exception.code() == MemoryErrorCode.MEMORY_UNAVAILABLE
+                ? "MEMORY_UNAVAILABLE" : "NOT_APPLIED");
         invocation.archiveStatus("NOT_APPLIED");
-        List<Message> original = messages(state);
-        int index = A2aMemoryInvocation.firstNonSystem(original);
-        invocation.insertionIndex(index);
-        invocation.historyCount(1);
-        invocation.currentInputCount(original.size() - index);
-        invocation.prepared(true);
-        List<Message> degraded = new ArrayList<>(original.size() + 1);
-        degraded.addAll(original.subList(0, index));
-        degraded.add(new SystemMessage("当前会话历史记忆不可用。若本轮请求依赖上下文中未提供的既往内容，请先向用户询问补充；不要猜测历史事实。"));
-        degraded.addAll(original.subList(index, original.size()));
-        return CompletableFuture.completedFuture(Map.of("messages", ReplaceAllWith.of(degraded)));
-    }
-
-    private CompletableFuture<Map<String, Object>> deliveryOnlyFailure(A2aMemoryInvocation invocation, MemoryException exception) {
-        finish(invocation);
-        invocation.memoryStatus("DELIVERY_ONLY");
-        if (exception.code() != MemoryErrorCode.MEMORY_UNAVAILABLE) return CompletableFuture.failedFuture(exception);
-        invocation.archiveStatus("MEMORY_UNAVAILABLE");
-        return CompletableFuture.completedFuture(Map.of());
+        return CompletableFuture.failedFuture(exception);
     }
 
     private void maybeCompact(A2aMemoryInvocation invocation, MemoryWorkingSession session, List<Message> current,

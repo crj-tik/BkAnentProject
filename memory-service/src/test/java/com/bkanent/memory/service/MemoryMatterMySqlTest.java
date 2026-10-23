@@ -24,10 +24,10 @@ class MemoryMatterMySqlTest {
         var datasource = new DriverManagerDataSource(MemoryArchiveMySqlTest.mysqlUrl(), System.getenv("MEMORY_ARCHIVE_TEST_MYSQL_USER"), System.getenv("MEMORY_ARCHIVE_TEST_MYSQL_PASSWORD"));
         var jdbc = new JdbcTemplate(datasource); var mapper = JsonMapper.builder().addModule(new JavaTimeModule()).build();
         var manager = new DataSourceTransactionManager(datasource);
-        String fixture = "matter-fixture-" + UUID.randomUUID(), keyId = "fixture-" + UUID.randomUUID(), secret = UUID.randomUUID().toString() + UUID.randomUUID();
+        String fixture = "matter-fixture-" + UUID.randomUUID(), keyId = "fixture-" + UUID.randomUUID();
         var context = new MemoryContextKey("42", "matter-fixture", "matter-fixture", fixture); String contextId = MemoryArchiveStore.key(context);
         var identity = java.security.KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
-        var caller = new MemoryV2SecurityProperties.TrustedCaller(); caller.setKeyId(keyId); caller.setSigningSecret(secret); caller.setPublicKeys(Map.of(keyId, ServiceIdentityCrypto.encodePublicKey(identity.getPublic()))); caller.setServiceDelivery(true); caller.setAllowedAgentsByDomain(Map.of("matter-fixture", Set.of("matter-fixture")));
+        var caller = new MemoryV2SecurityProperties.TrustedCaller(); caller.setPublicKeys(Map.of(keyId, ServiceIdentityCrypto.encodePublicKey(identity.getPublic()))); caller.setServiceDelivery(true); caller.setAllowedAgentsByDomain(Map.of("matter-fixture", Set.of("matter-fixture")));
         var properties = new MemoryV2SecurityProperties(); properties.setTrustedCallers(Map.of("matter-fixture", caller));
         var security = new MemoryV2RequestSecurity(properties, new MemoryArchiveServiceTest.AuthStub(), new MemoryV2ReplayGuard(jdbc));
         var store = new MemoryArchiveStore(jdbc, mapper); var sharing = new MemorySharingStore(jdbc, mapper);
@@ -64,7 +64,7 @@ class MemoryMatterMySqlTest {
             var draft = new MemoryWithdrawalRequest(new MemoryRequestEnvelope(MemoryV2Contract.OPERATION_WITHDRAW, "matter-fixture", "memory-service", requestId, "0".repeat(64), 2), context, start.source().sourceEventId(), true);
             var request = new MemoryWithdrawalRequest(new MemoryRequestEnvelope(MemoryV2Contract.OPERATION_WITHDRAW, "matter-fixture", "memory-service", requestId, MemoryCanonicalHash.requestBodyHash(draft), 2), context, start.source().sourceEventId(), true);
             long now = Instant.now().getEpochSecond();
-            var proof = MemoryRequestSigner.sign(request, new AuthenticatedPrincipal(42L), keyId, now, now+60, UUID.randomUUID().toString(), secret.getBytes(StandardCharsets.UTF_8));
+            var proof = MemoryRequestSigner.sign(request, new AuthenticatedPrincipal(42L), keyId, now, now+60, UUID.randomUUID().toString(), identity.getPrivate());
             archive.withdrawSource(request, proof);
             assertTrue(client.read(context).matters().isEmpty());
             assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM memory_matter_revision WHERE context_id=? AND payload_json IS NOT NULL", Integer.class, contextId));

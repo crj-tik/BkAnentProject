@@ -2,7 +2,7 @@
 
 ## Purpose
 
-定义领域 Agent 在可信身份与当前授权下管理会话热工作集的行为，包括跨模型调用复用、事项起始与继续、局部刷新、并发版本和重启恢复；确保可选记忆增强不改变既有业务路由、审批及执行事实，不以记忆缓存或会话关联代替访问授权。
+定义 Supervisor 与所有官方领域 Agent 在可信身份与当前授权下必须接入并管理会话热工作集的行为，包括跨模型调用复用、事项起始与继续、局部刷新、并发版本和重启恢复。压缩、偏好/经验加工及 RAG 投影是附加能力；它们的开关不能关闭基础记忆读取、授权复核或本轮归档，也不能改变既有业务路由、审批及执行事实。
 
 ## ADDED Requirements
 
@@ -138,13 +138,21 @@
 - **WHEN** 重启前远端任务已被接受且原关联已可靠记录
 - **THEN** 恢复继续使用原任务及调用关联，不因重新装配记忆而新建替代任务或更换执行身份
 
-### Requirement: Optional memory failure differs from authorization failure
+### Requirement: Core memory is mandatory; auxiliary enrichment is isolated
 
-系统 SHALL 区分无匹配、可选记忆依赖不可用、版本冲突、认证失败和授权失败。当前认证与授权已成立且请求不依赖缺失历史时，可选偏好或经验装配不可用 SHALL 允许继续当前明确请求，并明确标记 MEMORY_UNAVAILABLE 或 NOT_APPLIED；无匹配不得伪装为依赖故障，依赖故障不得伪装为已成功装配。认证或授权失败 MUST 拒绝受保护操作，不能降级放行；无法核验当前授权时不得使用缓存私有内容。必需历史不可获取时 MUST 说明缺口，不猜测原对象。
+系统 SHALL 要求 Supervisor 与所有官方 A2A Agent 在调用模型或业务工具前，完成当前 owner/domain/agent/context 绑定、Memory 工作集读取和当前授权/版本核验；成功完成的本轮消息 SHALL 通过受许可的归档交付持久化。缺少 Memory 接线、服务不可用、身份无效、版本冲突或授权无法核验时 MUST 在模型/工具执行前失败关闭，不得由配置开关或旧业务路径绕过。查询成功但无匹配是有效的空工作集，可继续不依赖缺失历史的请求；请求依赖的历史对象不可获取时 MUST 说明缺口并澄清。压缩、偏好/经验加工及 RAG 投影等附加能力不可用时，可在本轮基础记忆仍成功且请求独立的前提下标记未应用并继续；不得把附加能力未就绪解释为整个 Memory 可选。
 
-#### Scenario: Optional personalization failure does not block an independent request
-- **WHEN** 当前身份和授权验证成功，可选个人化依赖不可用，而明确请求无需该历史
-- **THEN** 系统可继续执行获准请求，标记记忆未应用，不声称历史已加载，也不引入未核验的旧内容
+#### Scenario: Core Memory is unavailable before Agent execution
+- **WHEN** Supervisor 或官方 A2A Agent 无法读取当前工作集、验证身份/授权或核验版本
+- **THEN** 系统在任何模型调用和业务工具调用前拒绝本轮执行，不走无记忆旁路，并保留可诊断的失败状态
+
+#### Scenario: Empty working set is not a dependency failure
+- **WHEN** Memory 读取与授权校验成功，但当前 context 没有匹配的历史材料
+- **THEN** 系统按有效空工作集处理；独立请求可以执行，依赖历史对象的请求先向用户澄清，不猜测缺失内容
+
+#### Scenario: Auxiliary enrichment failure does not disable core memory
+- **WHEN** 基础工作集已成功读取和授权，但偏好/经验加工、压缩或 RAG 投影不可用
+- **THEN** 系统保留基础记忆和安全边界，按该附加能力记录未应用状态；不关闭其他基础记忆操作，也不注入未核验内容
 
 #### Scenario: No match remains different from dependency unavailability
 - **WHEN** 记忆查询成功但没有匹配的获准内容
@@ -152,7 +160,7 @@
 
 #### Scenario: Authorization denial cannot become degraded success
 - **WHEN** 记忆入口或其依赖返回认证失败、权限拒绝，或当前私有内容授权无法核验
-- **THEN** 系统拒绝受保护访问，不以可选记忆降级、管理员身份或热缓存继续使用该内容
+- **THEN** 系统拒绝受保护访问，不以无记忆旁路、管理员身份或热缓存继续使用该内容
 
 #### Scenario: Required historical referent is unavailable
 - **WHEN** 用户请求依赖某个历史对象，但该对象的获准证据因缺失或依赖故障不可获取

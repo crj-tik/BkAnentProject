@@ -9,7 +9,6 @@ import org.apache.dubbo.config.RegistryConfig;
 import org.apache.dubbo.config.annotation.DubboService;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
-import org.springframework.core.env.MapPropertySource;
 
 import java.util.List;
 import java.util.Map;
@@ -18,16 +17,27 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class MemoryArchiveProviderTest {
-    @Test void providerIsOffByDefaultAndPinsTheNativeInterfaceWhenExplicitlyEnabled() throws Exception {
+    @Test void providerIsRegisteredByDefaultAndPinsTheNativeInterface() throws Exception {
+        var bootstrapFixture = new MemoryArchiveServiceTest.Fixture();
+        var bootstrapSharing = new MemorySharingAccessService(bootstrapFixture.security, new MemoryAccessPolicy(),
+                bootstrapFixture.sharing, bootstrapFixture.sources, bootstrapFixture.transactions);
+        var bootstrapPreferences = new PreferenceHistoryService(bootstrapFixture.store, bootstrapFixture.security,
+                bootstrapFixture.sources, new com.bkanent.memory.config.MemoryPreferenceProperties(), bootstrapFixture.transactions);
+        var bootstrapMatter = new MemoryMatterService(bootstrapFixture.store, bootstrapFixture.security,
+                bootstrapFixture.sources, bootstrapFixture.transactions);
         try (var context = new AnnotationConfigApplicationContext()) {
+            context.registerBean(MemoryArchiveService.class, () -> bootstrapFixture.service);
+            context.registerBean(MemorySharingAccessService.class, () -> bootstrapSharing);
+            context.registerBean(MemoryV2RequestSecurity.class, () -> bootstrapFixture.security);
+            context.registerBean(MemoryMatterService.class, () -> bootstrapMatter);
+            context.registerBean(PreferenceHistoryService.class, () -> bootstrapPreferences);
             context.register(MemoryV2RpcServiceImpl.class);
             context.refresh();
-            assertFalse(context.containsBeanDefinition("memoryV2RpcServiceImpl"));
+            assertTrue(context.containsBeanDefinition("memoryV2RpcServiceImpl"));
         }
         var f = new MemoryArchiveServiceTest.Fixture();
         var sharing = new MemorySharingAccessService(f.security, new MemoryAccessPolicy(), f.sharing, f.sources, f.transactions);
         try (var context = new AnnotationConfigApplicationContext()) {
-            context.getEnvironment().getPropertySources().addFirst(new MapPropertySource("fixture", Map.of("memory.v2.archive-enabled", "true")));
             context.registerBean(MemoryArchiveService.class, () -> f.service);
             context.registerBean(MemorySharingAccessService.class, () -> sharing);
             context.registerBean(MemoryV2RequestSecurity.class, () -> f.security);

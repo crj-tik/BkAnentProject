@@ -8,9 +8,6 @@ import java.security.PrivateKey;
 
 @ConfigurationProperties("agent.memory-v2")
 public class SupervisorMemoryProperties {
-    private boolean enabled;
-    private boolean readEnabled = true;
-    private boolean deliveryEnabled = true;
     private boolean compressionEnabled;
     private String keyId = "agent-service-current";
     private String privateKeyFile;
@@ -42,16 +39,10 @@ public class SupervisorMemoryProperties {
                 || experienceBudgetTokens < 1 || experienceBudgetTokens > 4096) {
             throw new IllegalArgumentException("invalid agent.memory-v2 bounds");
         }
-        if (enabled && (privateKeyFile == null || privateKeyFile.isBlank())) {
-            throw new IllegalArgumentException("agent.memory-v2 requires a service identity private key file when enabled");
-        }
-        if (compressionEnabled && !enabled) {
-            throw new IllegalArgumentException("agent.memory-v2.compression-enabled requires agent.memory-v2.enabled");
+        if (privateKeyFile == null || privateKeyFile.isBlank()) {
+            throw new IllegalArgumentException("agent.memory-v2 requires a service identity private key file");
         }
     }
-    public boolean isEnabled() { return enabled; } public void setEnabled(boolean v) { enabled = v; }
-    public boolean isReadEnabled() { return enabled && readEnabled; } public void setReadEnabled(boolean v) { readEnabled = v; }
-    public boolean isDeliveryEnabled() { return enabled && deliveryEnabled; } public void setDeliveryEnabled(boolean v) { deliveryEnabled = v; }
     public boolean isCompressionEnabled() { return compressionEnabled; } public void setCompressionEnabled(boolean v) { compressionEnabled = v; }
     public String getKeyId() { return keyId; } public void setKeyId(String v) { keyId = v; }
     public String getPrivateKeyFile() { return privateKeyFile; }

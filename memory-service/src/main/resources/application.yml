@@ -1,6 +1,5 @@
 memory:
   v2:
-    archive-enabled: ${MEMORY_V2_ARCHIVE_ENABLED:false}
     sharing:
       enabled: ${MEMORY_V2_SHARING_ENABLED:false}
       max-export-utf8-bytes: ${MEMORY_V2_SHARING_MAX_EXPORT_UTF8_BYTES:24576}
@@ -8,25 +7,20 @@ memory:
     experience-governance-permission: ${MEMORY_V2_EXPERIENCE_GOVERNANCE_PERMISSION:memory.experience.governance.publish}
     replay-cleanup-ms: ${MEMORY_V2_REPLAY_CLEANUP_MS:60000}
     privacy-cleanup:
-      enabled: ${MEMORY_V2_PRIVACY_CLEANUP_ENABLED:true}
       poll-ms: ${MEMORY_V2_PRIVACY_CLEANUP_POLL_MS:5000}
       batch-size: ${MEMORY_V2_PRIVACY_CLEANUP_BATCH_SIZE:8}
       max-attempts: ${MEMORY_V2_PRIVACY_CLEANUP_MAX_ATTEMPTS:8}
       lease-seconds: ${MEMORY_V2_PRIVACY_CLEANUP_LEASE_SECONDS:60}
       retry-seconds: ${MEMORY_V2_PRIVACY_CLEANUP_RETRY_SECONDS:15}
-    # Exact per-service/domain/agent bindings. HMAC fields are legacy-v1 verification only.
+    # Exact per-service/domain/agent bindings. Each entry contains verifier-only Ed25519 public keys.
     trusted-callers:
       agent-service:
-        key-id: ${AGENT_MEMORY_V2_KEY_ID:agent-memory-current}
-        signing-secret: ${AGENT_MEMORY_V2_SIGNING_SECRET:}
         public-keys:
           agent-service-current: ${AGENT_SERVICE_IDENTITY_PUBLIC_KEY:}
         service-delivery: true
         allowed-agents-by-domain:
           supervisor: [supervisor-agent]
       marketing-content-service:
-        key-id: ${MARKETING_MEMORY_V2_KEY_ID:marketing-memory-current}
-        signing-secret: ${MARKETING_MEMORY_V2_SIGNING_SECRET:}
         public-keys:
           marketing-content-service-current: ${MARKETING_CONTENT_SERVICE_IDENTITY_PUBLIC_KEY:}
         service-delivery: true
@@ -35,8 +29,6 @@ memory:
         allowed-agents-by-domain:
           marketing: [marketing-agent]
       interview-service:
-        key-id: ${INTERVIEW_MEMORY_V2_KEY_ID:interview-memory-current}
-        signing-secret: ${INTERVIEW_MEMORY_V2_SIGNING_SECRET:}
         public-keys:
           interview-service-current: ${INTERVIEW_SERVICE_IDENTITY_PUBLIC_KEY:}
         service-delivery: true
@@ -45,8 +37,6 @@ memory:
         allowed-agents-by-domain:
           interview: [interview-agent]
       listing-master-service:
-        key-id: ${LISTING_MEMORY_V2_KEY_ID:listing-memory-current}
-        signing-secret: ${LISTING_MEMORY_V2_SIGNING_SECRET:}
         public-keys:
           listing-master-service-current: ${LISTING_MASTER_SERVICE_IDENTITY_PUBLIC_KEY:}
         service-delivery: true
@@ -55,8 +45,6 @@ memory:
         allowed-agents-by-domain:
           listing: [listing-agent]
       business-service:
-        key-id: ${BUSINESS_MEMORY_V2_KEY_ID:business-memory-current}
-        signing-secret: ${BUSINESS_MEMORY_V2_SIGNING_SECRET:}
         public-keys:
           business-service-current: ${BUSINESS_SERVICE_IDENTITY_PUBLIC_KEY:}
         service-delivery: true
@@ -65,8 +53,6 @@ memory:
         allowed-agents-by-domain:
           trade: [trade-agent]
       contract-service:
-        key-id: ${CONTRACT_MEMORY_V2_KEY_ID:contract-memory-current}
-        signing-secret: ${CONTRACT_MEMORY_V2_SIGNING_SECRET:}
         public-keys:
           contract-service-current: ${CONTRACT_SERVICE_IDENTITY_PUBLIC_KEY:}
         service-delivery: true
@@ -75,8 +61,6 @@ memory:
         allowed-agents-by-domain:
           contract: [contract-agent]
       compare-engine-service:
-        key-id: ${COMPARE_MEMORY_V2_KEY_ID:compare-memory-current}
-        signing-secret: ${COMPARE_MEMORY_V2_SIGNING_SECRET:}
         public-keys:
           compare-engine-service-current: ${COMPARE_ENGINE_SERVICE_IDENTITY_PUBLIC_KEY:}
         service-delivery: true
@@ -85,8 +69,6 @@ memory:
         allowed-agents-by-domain:
           compare: [compare-agent]
       settlement-service:
-        key-id: ${SETTLEMENT_MEMORY_V2_KEY_ID:settlement-memory-current}
-        signing-secret: ${SETTLEMENT_MEMORY_V2_SIGNING_SECRET:}
         public-keys:
           settlement-service-current: ${SETTLEMENT_SERVICE_IDENTITY_PUBLIC_KEY:}
         service-delivery: true
@@ -94,6 +76,18 @@ memory:
         experience-governance-publisher: ${SETTLEMENT_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
         allowed-agents-by-domain:
           settlement: [settlement-agent]
+      notification-service:
+        public-keys:
+          notification-service-current: ${NOTIFICATION_SERVICE_IDENTITY_PUBLIC_KEY:}
+        service-delivery: true
+        allowed-agents-by-domain:
+          notification: [notification-agent]
+      media-worker-service:
+        public-keys:
+          media-worker-service-current: ${MEDIA_WORKER_SERVICE_IDENTITY_PUBLIC_KEY:}
+        service-delivery: true
+        allowed-agents-by-domain:
+          media: [media-agent]
     preference:
       processing:
         enabled: ${MEMORY_V2_PREFERENCE_PROCESSING_ENABLED:false}

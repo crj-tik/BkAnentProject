@@ -178,11 +178,9 @@ class MemoryExperienceServiceTest {
         assertEquals(request.envelope().bodyHash(), MemoryCanonicalHash.requestBodyHash(request));
         var serviceProof = assertDoesNotThrow(() -> f.signService(request));
         assertEquals(MemoryRequestProof.Actor.SERVICE, serviceProof.actor());
-        assertTrue(java.security.MessageDigest.isEqual(f.secret.getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                f.caller.getSigningSecret().getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-        assertDoesNotThrow(() -> MemoryRequestSigner.verify(request, request.contextKey(), serviceProof, request.envelope().caller(),
+        assertDoesNotThrow(() -> MemoryRequestSigner.verifyEd25519(request, request.contextKey(), serviceProof, request.envelope().caller(),
                 request.envelope().audience(), request.envelope().operation(), serviceProof.keyId(), Instant.now(),
-                f.secret.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+                f.identityPair.getPublic()));
         code(MemoryErrorCode.FORBIDDEN, () -> f.experiences.submitOutcome(request, serviceProof));
         assertEquals(0, f.count("memory_experience_event"));
 
@@ -195,7 +193,7 @@ class MemoryExperienceServiceTest {
                 new MemorySourceDependency(sourceMessage.source(), null)));
         var userProof = f.sign(feedback);
         var forged = new MemoryRequestProof(userProof.keyId(), userProof.issuedAtEpochSecond(), userProof.expiresAtEpochSecond(),
-                userProof.nonce(), userProof.signature(), MemoryRequestProof.Actor.SERVICE);
+                userProof.nonce(), userProof.signature(), MemoryRequestProof.Actor.SERVICE, userProof.signatureVersion(), userProof.algorithm());
         code(MemoryErrorCode.AUTHENTICATION_FAILED, () -> f.experiences.submitFeedback(feedback, forged));
     }
 
@@ -298,7 +296,7 @@ class MemoryExperienceServiceTest {
     private static MemoryRequestProof signAs(MemoryArchiveServiceTest.Fixture f, MemoryV2Request request, long ownerId) {
         long now = Instant.now().getEpochSecond();
         return MemoryRequestSigner.sign(request, new com.bkanent.common.rpc.AuthenticatedPrincipal(ownerId), "fixture-key",
-                now, now + 60, UUID.randomUUID().toString().replace("-", ""), f.secret.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                now, now + 60, UUID.randomUUID().toString().replace("-", ""), f.identityPair.getPrivate());
     }
 
     private static void code(MemoryErrorCode expected, org.junit.jupiter.api.function.Executable action) {

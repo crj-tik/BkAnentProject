@@ -18,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.util.Map;
 import java.util.Set;
@@ -28,21 +29,21 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class MemoryV2RequestSecurityTest {
     private static final String CALLER = "marketing-service";
     private static final String KEY_ID = "marketing-memory-k1";
-    private static final String SECRET = "local-test-secret-material-min-32-bytes";
     private static final String OWNER = "42";
     private static final MemoryContextKey CONTEXT = new MemoryContextKey(OWNER, "marketing", "marketing-agent", "conversation-1");
 
     private final StubAuth auth = new StubAuth();
     private final RecordingReplayGuard replay = new RecordingReplayGuard();
     private final MemoryV2SecurityProperties properties = new MemoryV2SecurityProperties();
+    private KeyPair identityPair;
     private SimpleMeterRegistry metrics;
     private MemoryV2RequestSecurity security;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
+        identityPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
         MemoryV2SecurityProperties.TrustedCaller caller = new MemoryV2SecurityProperties.TrustedCaller();
-        caller.setKeyId(KEY_ID);
-        caller.setSigningSecret(SECRET);
+        caller.setPublicKeys(Map.of(KEY_ID, ServiceIdentityCrypto.encodePublicKey(identityPair.getPublic())));
         caller.setAllowedAgentsByDomain(Map.of("marketing", Set.of("marketing-agent")));
         properties.setTrustedCallers(Map.of(CALLER, caller));
         metrics = new SimpleMeterRegistry();
@@ -60,7 +61,7 @@ class MemoryV2RequestSecurityTest {
         org.junit.jupiter.api.Assertions.assertEquals(42L, auth.lastUserId);
         org.junit.jupiter.api.Assertions.assertEquals("agent.chat.use", auth.lastPermission);
         org.junit.jupiter.api.Assertions.assertEquals(1, replay.calls);
-        assertEquals(1.0, verified("memory-v2", MemoryRequestProof.HMAC_SHA256));
+        assertEquals(1.0, verified("memory-v2", "Ed25519"));
         org.junit.jupiter.api.Assertions.assertEquals(KEY_ID, replay.lastKeyId);
         org.junit.jupiter.api.Assertions.assertEquals("nonce-abcdefghijklmnop", replay.lastNonce);
         org.junit.jupiter.api.Assertions.assertEquals(proof.expiresAtEpochSecond(), replay.lastExpiry);
@@ -122,7 +123,7 @@ class MemoryV2RequestSecurityTest {
     }
 
     @Test
-    void acceptsRegisteredEd25519IdentityAndRejectsUnknownKeyIdWithoutHmacFallback() throws Exception {
+    void acceptsRegisteredEd25519IdentityAndRejectsUnknownKeyId() throws Exception {
         var pair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
         String keyId = "marketing-service-identity-2026";
         MemoryV2SecurityProperties.TrustedCaller caller = properties.getTrustedCallers().get(CALLER);
@@ -190,10 +191,10 @@ class MemoryV2RequestSecurityTest {
         return new MemoryWorkingSetRequest(envelope, context);
     }
 
-    private static MemoryRequestProof proof(MemoryWorkingSetRequest request, String nonce) {
+    private MemoryRequestProof proof(MemoryWorkingSetRequest request, String nonce) {
         long now = Instant.now().getEpochSecond();
         return MemoryRequestSigner.sign(request, new AuthenticatedPrincipal(Long.parseLong(request.contextKey().ownerId())), KEY_ID, now, now + 45, nonce,
-                SECRET.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                identityPair.getPrivate());
     }
 
     private static final class StubAuth implements AuthPermissionRpcService {

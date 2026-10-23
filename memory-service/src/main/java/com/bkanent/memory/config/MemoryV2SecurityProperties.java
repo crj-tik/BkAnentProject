@@ -26,8 +26,6 @@ public class MemoryV2SecurityProperties {
     }
 
     public static class TrustedCaller {
-        private String keyId;
-        private String signingSecret;
         /** Ed25519 public keys keyed by keyId; this is verifier-only configuration. */
         private Map<String, String> publicKeys = new LinkedHashMap<>();
         private boolean serviceDelivery;
@@ -44,10 +42,6 @@ public class MemoryV2SecurityProperties {
         /** Exact domain-to-agent allowlist; no cross-product expansion is performed. */
         private Map<String, Set<String>> allowedAgentsByDomain = new LinkedHashMap<>();
 
-        public String getKeyId() { return keyId; }
-        public void setKeyId(String keyId) { this.keyId = keyId; }
-        public String getSigningSecret() { return signingSecret; }
-        public void setSigningSecret(String signingSecret) { this.signingSecret = signingSecret; }
         public Map<String, String> getPublicKeys() { return publicKeys; }
         public void setPublicKeys(Map<String, String> publicKeys) {
             this.publicKeys = publicKeys == null ? new LinkedHashMap<>() : new LinkedHashMap<>(publicKeys);

@@ -121,5 +121,3 @@ settlement:
       Return only the JSON object without Markdown fences, internal IDs, reasoning, tool arguments, or extra prose.
 a2a:
   memory:
-    read-enabled: true
-    delivery-enabled: true

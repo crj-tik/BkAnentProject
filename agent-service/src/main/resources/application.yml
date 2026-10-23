@@ -33,9 +33,6 @@ a2a:
 
 agent:
   memory-v2:
-    enabled: ${AGENT_MEMORY_V2_ENABLED:false}
-    read-enabled: true
-    delivery-enabled: true
     compression-enabled: ${AGENT_MEMORY_V2_COMPRESSION_ENABLED:false}
     key-id: ${SERVICE_IDENTITY_KEY_ID:agent-service-current}
     private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}

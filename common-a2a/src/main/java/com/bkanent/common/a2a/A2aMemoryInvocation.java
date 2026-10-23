@@ -14,7 +14,6 @@ public final class A2aMemoryInvocation {
     private final String taskId;
     private final String contextId;
     private final DurableMemoryExportDirective durableMemoryExport;
-    private final boolean deliveryEnabledAtStart;
     private volatile String memoryStatus = "NOT_APPLIED";
     private volatile String archiveStatus = "NOT_APPLIED";
     private volatile String compactionStatus = "NOT_APPLIED";
@@ -28,24 +27,19 @@ public final class A2aMemoryInvocation {
     private volatile List<MemorySourceRef> currentTurnSources = List.of();
     private volatile MemoryExportReceipt exportReceipt;
 
-    A2aMemoryInvocation(String taskId, String contextId, boolean readEnabled, boolean deliveryEnabledAtStart) {
-        this(taskId, contextId, readEnabled, deliveryEnabledAtStart, null);
+    A2aMemoryInvocation(String taskId, String contextId) {
+        this(taskId, contextId, null);
     }
 
-    A2aMemoryInvocation(String taskId, String contextId, boolean readEnabled, boolean deliveryEnabledAtStart,
-                        DurableMemoryExportDirective durableMemoryExport) {
+    A2aMemoryInvocation(String taskId, String contextId, DurableMemoryExportDirective durableMemoryExport) {
         this.taskId = taskId;
         this.contextId = contextId == null ? null : "a2a-input-context-" + com.bkanent.common.memory.MemoryCanonicalHash.contentHash(contextId);
         this.durableMemoryExport = durableMemoryExport;
-        this.deliveryEnabledAtStart = deliveryEnabledAtStart;
-        this.memoryStatus = readEnabled ? "NOT_APPLIED" : deliveryEnabledAtStart ? "DELIVERY_ONLY" : "DISABLED";
-        this.archiveStatus = deliveryEnabledAtStart ? "NOT_APPLIED" : "DISABLED";
     }
 
     public String taskId() { return taskId; }
     public String contextId() { return contextId; }
     DurableMemoryExportDirective durableMemoryExport() { return durableMemoryExport; }
-    boolean deliveryEnabledAtStart() { return deliveryEnabledAtStart; }
     public String memoryStatus() { return memoryStatus; }
     public String archiveStatus() { return archiveStatus; }
     public String compactionStatus() { return compactionStatus; }

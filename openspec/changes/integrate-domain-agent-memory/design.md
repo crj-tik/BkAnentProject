@@ -43,7 +43,7 @@
 
 memory v2 内部调用采用原生 Dubbo RPC（显式 dubbo consumer/provider、interface/group/version，不将 HTTP 服务发现实例适配为 REST，遵守 KI-100），覆盖工作集读取、消息交付、摘要提交、偏好/经验及共享详情/搜索。受管注册中心与可达网络由部署配置固定，模型和请求不可指定 host/URL。用户操作使用当前真实用户认证及专门绑定 memory 操作、caller、audience、requestId、bodyHash 的签名信封；既有 A2A 租约只提供当前身份来源，A2A 精确请求信标不能重放给 memory。新增 MemorySearchRequest/Response 与 MemoryAuthorizationScope，保留受鉴权 v1 REST/MemoryRagRpcService兼容但不以旧 HTTP 客户端接新链。重启后的用户读取必须由原 actor 重新认证。
 
-可靠交付与用户读取分开：输入接受前通过当前认证取得 memory 服务端可持久核验的精确事件接收许可，绑定来源服务/owner/domain/agent/context、eventId、内容哈希和用途；调用接受时记录 invocationId 的受限结果交付许可。结果只有已接受调用的可核验完成事实可提交，模型参数不构成证明。延迟投递通过 SERVICE认证和该许可核验，仅能交付/核对这些事件，不能兑换用户搜索权或变更内容；许可不是 bearer token，不含用户凭据，不进入 prompt/SSE/普通metadata。用户租约失效不抹去既已授权的接收事实；服务重启后仍可补交付，但当前删除/撤回策略可阻止加工及可读发布。没有有效许可或可恢复事实源时不得承诺已接受可靠记忆记录。可选记忆增强不可用时允许原执行链按当前认证与政策继续，但明确本次消息未进入新档案且禁止压缩移除，不能用未记录降级宣称可靠归档已成功；该降级也不降低既有业务结果持久化要求。
+可靠交付与用户读取分开：输入接受前通过当前认证取得 memory 服务端可持久核验的精确事件接收许可，绑定来源服务/owner/domain/agent/context、eventId、内容哈希和用途；调用接受时记录 invocationId 的受限结果交付许可。结果只有已接受调用的可核验完成事实可提交，模型参数不构成证明。延迟投递通过 SERVICE认证和该许可核验，仅能交付/核对这些事件，不能兑换用户搜索权或变更内容；许可不是 bearer token，不含用户凭据，不进入 prompt/SSE/普通metadata。用户租约失效不抹去既已授权的接收事实；服务重启后仍可补交付，但当前删除/撤回策略可阻止加工及可读发布。没有有效许可或可恢复事实源时不得承诺已接受可靠记忆记录。Supervisor 与所有官方 A2A Agent 的核心 Memory 读取和本轮归档都是必需链路：记忆认证、授权、当前版本核验或服务可用性失败时，必须在模型/工具执行前拒绝新任务；归档未确认时不得报告该任务已完整成功。保留可恢复交付事实并重试记忆交付，不重放已完成的业务副作用。偏好/经验学习、压缩、RAG 检索/派发是附加治理能力，其开关只控制对应加工能力，不得关闭基础读取与归档。
 
 记忆共享范围枚举：DOMAIN_PRIVATE、TASK_SHARED、SESSION_SHARED；偏好块在本变更中固定为 owner-self 的 DOMAIN_PRIVATE，scope 包含可信 domainId+agentId。偏好块不使用 TASK_SHARED/SESSION_SHARED，不允许跨 Agent 或跨域合并；其他主体偏好也不属于本变更验收范围。需要跨域交接的已选内容仍走独立 MemorySharedExport/grant，授权绑定 owner、事项/会话、来源、接收 agent/domain 集、purpose、版本与有效期；该授权只覆盖导出的内容，不授予底层偏好块或完整历程读取权。所有入口（详情、搜索、导出、回放、后台处理）执行各自当前授权交集，ADMIN不得跨个人owner。
 
@@ -73,7 +73,7 @@ RAG 新 memory scope 单独版本化，由 memory 签发并由 RAG 按可信调�
 
 memory 入站事务将真源变化、处理job与索引outbox原子记录；远程模型/索引在事务外执行。异步worker使用受管SERVICE凭据，只能处理已授权入站事件的精确ID/owner/domain，不保存用户token、不因用户租约到期自动冒充用户；读取仅限工作证据，撤回/删除检查后才提交结果，不能授予通用用户搜索权。索引dispatcher以短事务加 `FOR UPDATE SKIP LOCKED` 领取到期事件并写入 owner/expiry lease，事务外调用原生 RAG RPC；回写必须匹配仍有效的 lease owner，防止过期 worker 的迟到回执覆盖接管后的状态。失败保持同一稳定事件身份，采用有界重试与安全错误码；归档未确认时保留 checkpoint/journal 和未覆盖窗口，索引未追平也不改变领域业务完成状态。
 
-经验身份以 owner/domain/agent 为私域范围，不以产生证据的单个 conversation 定义逻辑身份；revision 快照不可变，证据把业务发生时间与系统观察时间分开，并以版本化来源定位连接原始事实。显式 retentionUntil 只作为受管保留策略的到期边界，NULL 表示不自动清理；撤回立即排除使用但保留受限历史，删除清空正文与证据细节并保留不含正文的 revision/source hash tombstone，禁止迟到事件复活旧版本。实现阶段新增 operation-bound 可信结果收件、同一私域 USER 消息反馈、幂等事件收件箱与租约评估 worker，以及 SQL 真源上的版本化私有选择。发布 caller 与经验读写开关默认关闭，未经后续人工/领域治理批准的脱敏归纳不得进入共享导出；当前代码实现不代表目标环境已有真实结果发布者或已启用经验检索。
+经验身份以 owner/domain/agent 为私域范围，不以产生证据的单个 conversation 定义逻辑身份；revision 快照不可变，证据把业务发生时间与系统观察时间分开，并以版本化来源定位连接原始事实。显式 retentionUntil 只作为受管保留策略的到期边界，NULL 表示不自动清理；撤回立即排除使用但保留受限历史，删除清空正文与证据细节并保留不含正文的 revision/source hash tombstone，禁止迟到事件复活旧版本。实现阶段新增 operation-bound 可信结果收件、同一私域 USER 消息反馈、幂等事件收件箱与租约评估 worker，以及 SQL 真源上的版本化私有选择。经验结果发布与经验加工仍是独立治理能力，可按 caller/worker 策略关闭；这不关闭基础会话记忆读取与归档。未经后续人工/领域治理批准的脱敏归纳不得进入共享导出。
 
 拒绝“压缩时第一次保存”和“直接把窗口saveAll覆盖完整档案”，它们分别存在崩溃丢历史和截断删除历史风险。
 
@@ -83,7 +83,7 @@ memory 入站事务将真源变化、处理job与索引outbox原子记录；远�
 
 同conversation采用持久租约/乐观版本与单调消息sequence，分布式实例不能并发整体覆盖。一次执行记录采用的摘要与偏好版本；重新接入、对象/范围变化、明确纠正、撤回或授权失效时刷新/丢弃对应投影。变更通知只加速失效，丢通知时下一个事项/用户输入边界核验内容版本；恢复后、每次入模前及输出前必须重新核对当前身份和所有私有/共享来源授权，不能仅查用户token。摘要、锚点和缓存保留sourceVersion/grant依赖；撤回其中一个来源时相关派生内容整体失效或从剩余获准证据重建。checkpoint执行事实不删除，但其中旧正文不能因同owner恢复而自动进入可读工作集。当前授权验证可独立于完整正文装配，不要求每模型轮重新读全窗口。
 
-失败区分：缺失匹配与依赖不可用不同；可选个人化装配失败允许继续当前明确请求但显式标记MEMORY_UNAVAILABLE/NOT_APPLIED，不能用已撤回内容；认证/授权失败始终拒绝。历史指代依赖缺失时说明不可获取，不猜测原对象。message journal失败不虚报已记录；压缩失败或未确认原文持久时不移除消息；触及硬上下文预算返回CONTEXT_BUDGET_EXCEEDED并保留恢复材料，不无限增长。
+失败区分：无匹配是正常空结果；基础 Memory 依赖不可用、版本核验失败、认证或授权失败都必须在模型/工具执行前拒绝，不得以 `NOT_APPLIED` 回退原执行链。偏好/经验没有已验证匹配时按无匹配处理；其专用加工未启用不代表基础记忆未接入。历史指代依赖缺失时说明不可获取，不猜测原对象。message journal失败不虚报已记录；压缩失败或未确认原文持久时不移除消息；触及硬上下文预算返回CONTEXT_BUDGET_EXCEEDED并保留恢复材料，不无限增长。
 
 ### D5. 双触发、安全压缩与事项重开
 
@@ -150,7 +150,7 @@ SubAgent许可结果
 
 ### D10. 兼容、观测与验收门
 
-能力按domain feature flag关闭/影子/启用，所有启用Agent做接线测试；影子模式只记录评估、不改prompt和可见输出。历史owner未知或domain不明记录保持隔离，不按session名/agentId猜公开；旧v1 CRUD/RPC字段与空间保留受鉴权读，v2偏好块独立版本，不能回滚时从完整历程压成有损单值。
+Supervisor 与所有官方 A2A Agent 必须接入 Memory v2；服务身份、Memory provider 或当前授权不可用时在 Agent 执行前失败关闭。基础读取、版本复核与消息归档没有功能开关，也没有旁路路径。影子/启用策略仅适用于偏好/经验加工及 RAG 投影等附加治理能力，影子模式只记录评估、不改 prompt 和可见输出。历史 owner 未知或 domain 不明记录保持隔离，不按 session 名/agentId 猜公开；旧 v1 CRUD/RPC 字段与空间保留受鉴权读，v2偏好块独立版本，不能回滚时从完整历程压成有损单值。
 
 错误分类：AUTHENTICATION_FAILED、FORBIDDEN、VERSION_CONFLICT、MEMORY_UNAVAILABLE、CONTEXT_BUDGET_EXCEEDED及后台INVALID_EXTRACTION/RETRY_EXHAUSTED；job失败与会话业务成功分别观测，指标不暴露正文/token。
 
@@ -158,7 +158,7 @@ SubAgent许可结果
 
 ### D11. 每服务单一非对称签名身份
 
-当前 A2A 到 Auth 的服务信标请求与 Memory v2 域调用证明分别使用 HMAC 共享密钥。每个调用方服务和对应验证方都必须保存同一秘密，新增服务或协议会继续增加密钥项。不能简单把所有调用方改为一把全局 HMAC 密钥：任一持有该密钥的服务都能伪造其他服务，任一验证方也会获得调用方签名能力。
+Memory v2 从首个受管版本开始只接受 Ed25519-v2 proof；代码、配置、模板与验收均不包含 Memory HMAC 格式或兼容路径。Auth/A2A 的旧二进制迁移策略单独维护，不影响 Memory v2。
 
 改用每服务一组 Ed25519 身份密钥：私钥仅存于对应调用方服务的受管秘密文件或密钥管理器；Auth、Memory 等验证方仅保存公钥、`keyId`、算法和该验证方自己的授权规则。私钥不进入 Nacos、Git 或明文 `.env`；开发 Compose 通过仅该服务可读的只读 secret 文件挂载。公钥可进入受管 Nacos 配置或密钥目录，不具备签名能力。
 
@@ -166,7 +166,7 @@ SubAgent许可结果
 
 不采用“每服务共用一把 HMAC”作为减配方案，因为每个验证方也持有可签名的同一对称密钥，扩大了伪造权限与跨协议影响面。也不继续把每种协议的 HMAC 值手工复制到调用方和验证方；这会使配置数量随服务和协议数线性增长。Ed25519 使用 Java 17 JCA，无需引入新的运行时服务。新增服务时生成一组私钥/公钥；仅将公钥登记到需要验证它的服务，并由对应配置显式授予最小 caller/domain/agent/operation 权限。服务发现不能自动授予这些权限。
 
-轮换由 `keyId` 标识：先发布新公钥，再让调用方用新私钥签名；验证方在有界过渡期同时接受新旧公钥，确认旧 key 停用后移除旧公钥。过渡版本明确区分 `HMAC-v1` 与 `Ed25519-v2`；验证方可在逐服务迁移期间接受两者，但调用方一旦切换只发 Ed25519-v2。Auth 与 Memory 在验签成功后增加低基数 `service.identity.signature.verified` 计数，标签只包含协议与算法；Actuator metrics 用于观察 HMAC-v1 是否仍有请求。全部调用方迁移并在覆盖最长调用周期及回滚窗口的观察期内确认 HMAC-v1 计数不再增加后，才删除 HMAC 验证路径和旧秘密配置。Auth 与 Memory 分别维护其公钥信任和业务授权，Memory 仍按 LR-58/LR-79 的精确身份边界验证。
+Memory proof 明确绑定 `Ed25519-v2`、keyId、Memory 协议域、调用身份、用户/context、操作、正文哈希、有效期、nonce 与 actor；verifier 只从精确信任表读取公钥，并继续检查 caller/domain/agent/operation/user ACL 与重放。未知 keyId、算法、签名版本或协议域一律拒绝，不存在其他算法回退。Auth/A2A 的签名计数只用于其自身迁移观察；Memory 只统计成功的 Ed25519 验签，不观察或验收任何 Memory HMAC 流量。Auth 与 Memory 分别维护公钥信任和业务授权，Memory 仍按 LR-58/LR-79 的精确身份边界验证。
 
 ## Risks / Trade-offs
 

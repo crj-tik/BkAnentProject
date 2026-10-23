@@ -1288,9 +1288,9 @@
 
 **现象**：A2A Hook 的 lease 缺失或过期会抛 `RagException`；若由通用运行时异常分支捕获，就会被记为 `MEMORY_UNAVAILABLE` 并继续调用 Agent。
 
-**根因**：Hook 最初只对 `MemoryException` 做认证/授权分类，将 A2A 凭据上下文错误混同于可选记忆 RPC 故障。
+**根因**：Hook 最初只对 `MemoryException` 做认证/授权分类，将 A2A 凭据上下文错误混同于基础 Memory 故障。
 
-**修复与防回归**：`beforeAgent`/`afterAgent` 显式映射 A2A `RagException`，认证失败、过期和拒绝均失败关闭；只有真正记忆依赖不可用才可降级。`A2aMemoryAgentHookTest.missingA2aLeaseFailsClosedBeforeTheAgentCanUseMemory` 覆盖缺少 lease 的边界。
+**修复与防回归**：`beforeAgent`/`afterAgent` 显式映射 A2A `RagException`，认证失败、过期、拒绝和基础 Memory 不可用均失败关闭。`A2aMemoryAgentHookTest.missingA2aLeaseFailsClosedBeforeTheAgentCanUseMemory` 覆盖缺少 lease 的边界。
 
 ## KI-150 [FIXED·94fd089] A2A 工具结果中的空文本阻断记忆归档
 
@@ -1304,15 +1304,15 @@
 
 **确认日期**：2026-10-21。源码核对发现 `NotificationTools.listUserMessages` 与 `countUnreadMessages` 将模型提供的 `userId` 直接传给查询服务；`NotificationManagementServiceImpl` 和 `NotificationRecordDomainServiceImpl` 仅按该值过滤记录，未与 `A2aCredentialContext` 当前租约 actor 对比。当前尚未确认 actorId 与通知 recipientUserId 的受管映射，因此不能安全地把查询结果持久化到调用者的长期记忆。
 
-**处置**：notification 的 ReactAgent 已接入记忆 Hook，但读取/压缩默认关闭，memory-service 不登记 `notification-service` trusted caller；即使误开客户端开关，服务端仍因无精确 caller 授权而拒绝。修复前须在受信认证边界建立并回归调用者与 recipient 的授权映射；不以 agent prompt、Supervisor metadata 或字段同名代替主体校验。当前为源码审查结论，未运行真实接口探测。
+**处置**：notification 的 ReactAgent 已接入必需 Memory Hook；memory-service 暂不登记 `notification-service` trusted caller，所以其官方 A2A 请求会在模型/工具执行前因无精确 caller 授权而失败关闭。修复前须在受信认证边界建立并回归调用者与 recipient 的授权映射；不以 agent prompt、Supervisor metadata 或字段同名代替主体校验。当前为源码审查结论，未运行真实接口探测。
 
 **关联**：LR-79、KI-114、KI-117；change 5.8。
 
-## KI-152 [FIXED·f1b3a7f] 历史无匹配与可选记忆不可用未提示模型澄清
+## KI-152 [FIXED·f1b3a7f] 空历史与基础 Memory 故障未向 Agent 明确表达
 
-**现象**：A2A 工作集成功返回空结果时只暴露 `NO_MATCH` 状态，没有提示 Agent 对缺失的既往对象或决定先澄清；Supervisor 初次可选 Memory 故障只记录 `NOT_APPLIED`，未告知模型历史不可用。事项偏好装配虽区分 `NO_MATCH` 和 `MEMORY_UNAVAILABLE`，状态却未进入当次模型消息。依赖历史的请求可能被当成独立请求猜答。
+**现象**：A2A 工作集成功返回空结果时只暴露 `NO_MATCH` 状态，没有提示 Agent 对缺失的既往对象或决定先澄清；早期 Supervisor 可选 Memory 路径只记录 `NOT_APPLIED`，可能让依赖历史的请求被当成独立请求猜答。事项偏好装配虽区分 `NO_MATCH` 和 `MEMORY_UNAVAILABLE`，状态却未进入当次模型消息。
 
-**修复与防回归**：A2A 对无匹配与依赖故障分别插入提示，并从归档切片排除内部系统提示；Supervisor 将整体记忆降级写入 Graph system prompt，将偏好查找两种状态写入当轮 SystemMessage。明确用户修正仍优先于旧偏好，新 user event 触发局部重查。认证/授权错误仍失败关闭。定向回归覆盖 A2A 无匹配提示和归档切片、整体 Memory 不可用、偏好无匹配/依赖不可用及本轮偏好修正。修复提交为 `f1b3a7f`。
+**修复与防回归**：A2A 对无匹配插入不归档的澄清提示，Memory 预检依赖故障在 Agent 执行前失败关闭；Supervisor 基础 Memory 故障同样拒绝执行，偏好查找状态写入当轮 SystemMessage。明确用户修正仍优先于旧偏好，新 user event 触发局部重查。认证/授权错误失败关闭。当前回归还覆盖必需接入与依赖失败前置拒绝；早期可选 Memory 行为仅为历史背景。修复提交为 `f1b3a7f`，强制接入决策关联 change 11.5。
 
 **关联**：LR-73、LR-81；change 5.10。
 
@@ -1386,21 +1386,21 @@
 
 **关联**：LR-92；change 11.2。
 
-## KI-161 [FIXED·160ffe7·P1] Memory v2 单一消费开关不能安全完成分阶段回滚
+## KI-161 [SUPERSEDED·change 11.5·P1] Memory v2 双消费开关不符合必需接入策略
 
-**发现日期**：2026-10-22。A2A 域 Agent 与 Supervisor 使用同一 `enabled` 开关控制历史 prompt 读取和本轮结果交付；关闭新读取会同时令仍在执行的任务跳过最终交付，而保持开关开启又会让新任务继续加载历史。
+**发现日期**：2026-10-22。早期回滚方案曾为 A2A 域 Agent 与 Supervisor 增加独立读取/交付开关及 delivery-only 模式，以处理分阶段停用。
 
-**修复与防回归（160ffe7）**：新增独立 `read-enabled` / `delivery-enabled` 开关及 `DELIVERY_ONLY` 新任务模式。任务开始时已接受的交付在关闭新交付开关后仍完成；Supervisor 将接受状态写入 workflow checkpoint，普通 V2 任务只有在工作集初始化成功后才认领交付。Nacos 配置逐服务登记这两个开关。`A2aMemoryAgentHookTest.readDisabledDeliveryOnlyTurnDrainsAfterDeliverySwitchIsClosed`、`SupervisorMemoryIntegrationTest.deliveryOnlyModeSkipsPromptReadsAndFinishesAnAcceptedDeliveryAfterCutoff` 与属性测试覆盖切换及队列交付。
+**当前处置**：该策略已由“基础 Memory 必需接入”决策取代。Supervisor 与所有官方 A2A Agent 必须在模型/业务工具执行前读取并核验 Memory；基础读取和归档没有开关，也无无记忆旁路。停用从 Agent 入口开始，附加加工与索引可分别治理。回归覆盖 Memory 不可用时 Supervisor 与官方 A2A Agent 在模型/工具执行前失败。
 
-**验收边界**：本机现有 Memory archive、领域消费者和 Supervisor 均未启用；只读预检确认 Agent 交付、Memory 加工 job、经验事件队列为空，RAG outbox 117 项均已 `APPLIED`。因此代码与配置回归通过，但没有真实流量可执行切流/回滚演练，change 11.5 保持未完成。
+**验收边界**：旧快照中 Memory 与 Agent 入口未启用，只能证明当时无活动流量。本变更的实际入口故障关闭和回滚演练见 change 11.5；该项未验收前不宣称运行态切流通过。
 
 **关联**：LR-96；change 11.5。
 
-## KI-162 [OPEN·P1] 旧 HMAC verifier 退役依赖运行态零流量证据
+## KI-162 [OPEN·P1] Auth/A2A 旧调用端迁移需独立运行态观察
 
-**发现日期**：2026-10-23。A2A/Auth 与 Memory v2 已有 Ed25519-v2 新签发实现，同时保留 HMAC-v1 verifier 以兼容迁移期旧二进制。Auth/Memory 已加入 `service.identity.signature.verified` 低基数验签计数，区分协议与算法；当前本机开发服务没有真实业务调用流量，尚无覆盖完整观察期的 HMAC-v1 运行计数证据，静态配置或单测不能证明旧请求已归零。若现在删除 HMAC verifier，仍未更新的调用方会被拒绝。
+**发现日期**：2026-10-23。Auth/A2A 仍有旧调用端迁移窗口，不能仅凭静态配置或单测判断是否还有旧版 A2A/Auth 请求。当前本机开发服务没有真实业务调用流量，尚无覆盖完整观察期的 Auth/A2A 旧算法运行计数证据；若在旧调用端更新前删除 Auth/A2A 兼容 verifier，仍运行旧二进制的调用方会被拒绝。Memory v2 请求从首个受管版本起仅使用 Ed25519，不属于该迁移项。
 
-**处置边界**：继续只签发 Ed25519-v2；Auth 与 Memory 仅在迁移窗口中保留各自的 HMAC-v1 验签配置/路径。待切流验收通过对应 Actuator 指标提供可审计的旧 HMAC 请求计数为零、覆盖最长调用周期及回滚窗口后，再另行移除对应 verifier 与 `*_A2A_SIGNING_SECRET` / `*_MEMORY_V2_SIGNING_SECRET` 配置。RAG 的 HMAC RPC 合约不在此项范围内。运行态切流与零流量证明尚未完成，关联 change 11.5/11.9。
+**处置边界**：新 Auth/A2A 请求使用 Ed25519；仅在 Auth/A2A 自身迁移窗口内观察其旧请求计数。覆盖最长调用周期及回滚窗口并确认旧请求归零后，另行移除 Auth/A2A 旧 verifier 与 `*_A2A_SIGNING_SECRET` 配置。RAG RPC 继续使用其独立协议。运行态切流与零流量证明尚未完成，关联 change 11.5/11.9。
 
 **关联**：LR-98；change 11.5、11.8、11.9。
 
@@ -1411,6 +1411,22 @@
 **修复**：生成器改为以完整服务 ID 作为环境名前缀，仅追加一次 `_IDENTITY_PUBLIC_KEY`；已用本机已有密钥对重新生成忽略文件，并核对 12 个名字与所有受管配置占位完全一致。私钥未轮换或回显。同步更新 A2A 运行探针，使用 agent-service 私钥只读挂载，并从公钥环境文件读取 Auth 响应公钥。
 
 **关联**：LR-98；change 11.8；`scripts/security/ServiceIdentityKeygen.java`。
+
+## KI-164 [OPEN·P2] 可选偏好模型配置缺失不能阻断 Memory 核心服务
+
+**发现日期**：2026-10-23。全量回归发现当偏好加工开关打开、但模型名或模型凭据未配置时，`PreferenceEvaluator` bean 创建异常会让 `memory-service` 整体启动失败；这使一个可选附加能力错误地阻断所有 Agent 必需的基础记忆读写。
+
+**修复与防回归**：只在偏好模型名和有效凭据均存在时创建 `PreferenceEvaluator`；未配置时后台 worker 不领取加工任务，Memory 核心服务与读写 RPC 保持可用。全量 `MemoryPreferenceProcessingConfigurationTest` 覆盖关闭、开关误开但缺配置、配置齐全三个情形；`PreferenceProcessingWorkerTest` 回归 worker 行为。基础 Memory 故障仍必须让 Agent 在模型/业务工具前失败关闭。
+
+**关联**：LR-96；change 11.6。
+
+## KI-165 [OPEN·P1] Memory 后台 Worker 多构造器未指定 Spring 注入路径导致服务启动失败
+
+**发现日期**：2026-10-23。将当前 Memory 镜像部署到本机开发栈后，`memory-service` 因 `MemoryPrivacyCleanupWorker` 同时存在生产构造器与测试时钟构造器、但未显式标注注入构造器，Spring 尝试查找无参构造器并启动失败；Compose 仅依据容器进程短暂运行错误地报告就绪。该问题阻断必需 Memory RPC。
+
+**修复与防回归**：生产构造器显式标记 `@Autowired`；同样修正仅在开启时注册的 `MemoryExperienceProcessingWorker`。新增 `MemoryWorkerWiringTest` 在 Spring 容器中装配必需清理 worker 与启用的经验 worker。Docker 重新构建后 `MemoryServiceApplication` 启动，Readiness 为 `UP`，Dubbo provider 已发布；需保留当前部署验收证据。
+
+**关联**：LR-96；change 11.6。
 
 ---
 

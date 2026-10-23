@@ -2,8 +2,8 @@ package com.bkanent.memory.service;
 
 import com.bkanent.common.memory.*;
 import org.springframework.dao.DataAccessException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.*;
@@ -21,14 +21,12 @@ import static com.bkanent.memory.service.MemoryArchiveStore.*;
 
 /** At-least-once cleanup of exact source identities; external cleaners must be idempotent. */
 @Service
-@ConditionalOnProperty(prefix = "memory.v2", name = "archive-enabled", havingValue = "true")
 public class MemoryPrivacyCleanupWorker {
     private record Claim(String jobId, String contextId, String sourceEventId, String sourceHash,
                          String leaseOwner, int attempt, MemoryContextKey contextKey, boolean exhausted) { }
 
     private final MemoryArchiveStore store;
     private final List<MemoryPrivacyProjectionCleaner> cleaners;
-    private final boolean enabled;
     private final int batchSize;
     private final int maxAttempts;
     private final int leaseSeconds;
@@ -37,22 +35,21 @@ public class MemoryPrivacyCleanupWorker {
     private final TransactionTemplate tx;
     private final AtomicBoolean running = new AtomicBoolean();
 
+    @Autowired
     public MemoryPrivacyCleanupWorker(MemoryArchiveStore store, PlatformTransactionManager manager,
                                       List<MemoryPrivacyProjectionCleaner> cleaners,
-                                      @Value("${memory.v2.privacy-cleanup.enabled:true}") boolean enabled,
                                       @Value("${memory.v2.privacy-cleanup.batch-size:8}") int batchSize,
                                       @Value("${memory.v2.privacy-cleanup.max-attempts:8}") int maxAttempts,
                                       @Value("${memory.v2.privacy-cleanup.lease-seconds:60}") int leaseSeconds,
                                       @Value("${memory.v2.privacy-cleanup.retry-seconds:15}") int retrySeconds) {
-        this(store, manager, cleaners, enabled, batchSize, maxAttempts, leaseSeconds, retrySeconds, Clock.systemUTC());
+        this(store, manager, cleaners, batchSize, maxAttempts, leaseSeconds, retrySeconds, Clock.systemUTC());
     }
 
     MemoryPrivacyCleanupWorker(MemoryArchiveStore store, PlatformTransactionManager manager,
-                               List<MemoryPrivacyProjectionCleaner> cleaners, boolean enabled,
+                               List<MemoryPrivacyProjectionCleaner> cleaners,
                                int batchSize, int maxAttempts, int leaseSeconds, int retrySeconds, Clock clock) {
         this.store = store;
         this.cleaners = List.copyOf(cleaners);
-        this.enabled = enabled;
         this.batchSize = batchSize;
         this.maxAttempts = maxAttempts;
         this.leaseSeconds = leaseSeconds;
@@ -75,7 +72,7 @@ public class MemoryPrivacyCleanupWorker {
     public void scheduledRun() { runOnce(); }
 
     public void runOnce() {
-        if (!enabled || !running.compareAndSet(false, true)) return;
+        if (!running.compareAndSet(false, true)) return;
         try {
             for (int i = 0; i < batchSize; i++) {
                 Claim claim = transaction(this::claim);

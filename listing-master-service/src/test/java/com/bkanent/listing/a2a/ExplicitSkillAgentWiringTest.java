@@ -49,7 +49,7 @@ class ExplicitSkillAgentWiringTest {
         args[2] = ToolCallbackProvider.class.isAssignableFrom(types[2])
                 ? MethodToolCallbackProvider.builder().toolObjects(mock(Class.forName("com.bkanent.listing.tool.ListingTools"))).build()
                 : mock(types[2]);
-        args[4] = disabledMemoryHookFactory();
+        args[4] = requiredMemoryHookFactory();
         Object component = constructor.newInstance(args);
         var card = (AgentCard) ListingOfficialA2aAgent.class.getMethod("listingPublishedAgentCard",
                 com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerProperties.class, com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerAgentCardProperties.class)
@@ -92,38 +92,70 @@ class ExplicitSkillAgentWiringTest {
         assertThat(turns).hasValue(2);
     }
 
-    private com.bkanent.common.a2a.A2aMemoryHookFactory disabledMemoryHookFactory() {
+    private void assertMemoryHookWiring(Object component, AgentExecutor executor, String caller, String domain, String agentId) {
+        assertThat(executor).isInstanceOf(com.bkanent.common.a2a.OfficialA2aAgentExecutor.class);
+        Object hook = org.springframework.test.util.ReflectionTestUtils.getField(component, "memoryHook");
+        assertThat(hook).isInstanceOf(com.bkanent.common.a2a.A2aMemoryAgentHook.class);
+        assertThat(org.springframework.test.util.ReflectionTestUtils.getField(executor, "memoryHook")).isSameAs(hook);
+        assertThat(org.springframework.test.util.ReflectionTestUtils.getField(hook, "caller")).isEqualTo(caller);
+        assertThat(org.springframework.test.util.ReflectionTestUtils.getField(hook, "domain")).isEqualTo(domain);
+        assertThat(org.springframework.test.util.ReflectionTestUtils.getField(hook, "agentId")).isEqualTo(agentId);
+    }
+
+    private com.bkanent.common.a2a.A2aMemoryHookFactory requiredMemoryHookFactory() throws Exception {
         var properties = new com.bkanent.common.a2a.A2aMemoryProperties();
-        assertThat(properties.isEnabled()).isFalse();
-        return new com.bkanent.common.a2a.A2aMemoryHookFactory(properties,
-                new org.apache.dubbo.config.ReferenceConfig<com.bkanent.common.memory.MemoryV2RpcService>(),
+        properties.setKeyId("wiring-test-current");
+        properties.setPrivateKeyFile(testPrivateKeyFile());
+        var rpc = requiredMemoryRpc();
+        return new com.bkanent.common.a2a.A2aMemoryHookFactory(properties, () -> rpc,
                 new com.bkanent.memory.runtime.MemoryWorkingSetCache(64, 16L * 1024 * 1024, 60_000, java.time.Clock.systemUTC()),
                 new ObjectMapper());
     }
 
-    private void assertMemoryHookWiring(Object component, AgentExecutor executor, String caller, String domain, String agentId) throws Exception {
-        var hookField = component.getClass().getDeclaredField("memoryHook");
-        hookField.setAccessible(true);
-        Object hook = hookField.get(component);
-        assertThat(hook).isInstanceOf(com.bkanent.common.a2a.A2aMemoryAgentHook.class);
-        assertHookIdentity(hook, "caller", caller);
-        assertHookIdentity(hook, "domain", domain);
-        assertHookIdentity(hook, "agentId", agentId);
-        assertThat(((com.bkanent.common.a2a.A2aMemoryAgentHook) hook).getHookPositions())
-                .containsExactly(com.alibaba.cloud.ai.graph.agent.hook.HookPosition.BEFORE_AGENT,
-                        com.alibaba.cloud.ai.graph.agent.hook.HookPosition.AFTER_AGENT);
-        var executorHookField = executor.getClass().getDeclaredField("memoryHook");
-        executorHookField.setAccessible(true);
-        assertThat(executorHookField.get(executor)).isSameAs(hook);
-        var propertiesField = hook.getClass().getDeclaredField("properties");
-        propertiesField.setAccessible(true);
-        assertThat(((com.bkanent.common.a2a.A2aMemoryProperties) propertiesField.get(hook)).isEnabled()).isFalse();
+    private com.bkanent.common.memory.MemoryV2RpcService requiredMemoryRpc() {
+        var rpc = mock(com.bkanent.common.memory.MemoryV2RpcService.class);
+        when(rpc.manageWriter(any(), any())).thenAnswer(invocation -> {
+            var request = (com.bkanent.common.memory.MemoryWriterRequest) invocation.getArgument(0);
+            var version = new com.bkanent.common.memory.MemoryConversationVersion(0, 0, "policy-v1");
+            return new com.bkanent.common.memory.MemoryWriterResponse(
+                    new com.bkanent.common.memory.MemoryWriteAuthority(request.runId(), Math.max(1, request.fence() + 1)),
+                    System.currentTimeMillis() + 60_000, version);
+        });
+        when(rpc.readWorkingSet(any(), any())).thenAnswer(invocation -> {
+            var request = (com.bkanent.common.memory.MemoryWorkingSetRequest) invocation.getArgument(0);
+            return new com.bkanent.common.memory.MemoryWorkingSetResponse(request.contextKey(),
+                    new com.bkanent.common.memory.MemoryConversationVersion(0, 0, "policy-v1"),
+                    java.util.List.of(), java.util.List.of(), java.util.List.of());
+        });
+        when(rpc.checkBoundary(any(), any())).thenAnswer(invocation -> {
+            var request = (com.bkanent.common.memory.MemoryBoundaryRequest) invocation.getArgument(0);
+            return new com.bkanent.common.memory.MemoryBoundaryResponse(request.adoptedVersion(), true);
+        });
+        when(rpc.requestReceivePermit(any(), any())).thenAnswer(invocation -> {
+            var request = (com.bkanent.common.memory.MemoryReceivePermitRequest) invocation.getArgument(0);
+            return new com.bkanent.common.memory.MemoryReceivePermitResponse("permit-wiring-test",
+                    request.events().stream().map(event ->
+                            new com.bkanent.common.memory.MemoryReceivePermitResponse.EventAcceptance(event.eventId(), true, null)).toList());
+        });
+        when(rpc.deliverMessages(any(), any())).thenAnswer(invocation -> {
+            var request = (com.bkanent.common.memory.MemoryDeliveryRequest) invocation.getArgument(0);
+            long last = request.messages().get(request.messages().size() - 1).sequence();
+            var version = new com.bkanent.common.memory.MemoryConversationVersion(1, last, "policy-v1");
+            return new com.bkanent.common.memory.MemoryDeliveryResponse(request.permitId(), version,
+                    request.messages().stream().map(message ->
+                            new com.bkanent.common.memory.MemoryDeliveryResponse.DeliveryResult(message.sequence(), true, null)).toList());
+        });
+        return rpc;
     }
 
-    private void assertHookIdentity(Object hook, String fieldName, String expected) throws Exception {
-        var field = hook.getClass().getDeclaredField(fieldName);
-        field.setAccessible(true);
-        assertThat(field.get(hook)).isEqualTo(expected);
+    private static String testPrivateKeyFile() throws Exception {
+        var pair = java.security.KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        String encoded = java.util.Base64.getMimeEncoder(64, new byte[]{'\n'}).encodeToString(pair.getPrivate().getEncoded());
+        String pem = "-----BEGIN PRIVATE KEY-----\n" + encoded + "\n-----END PRIVATE KEY-----\n";
+        var path = java.nio.file.Files.createTempFile("a2a-required-memory-test-", ".pem");
+        java.nio.file.Files.writeString(path, pem);
+        path.toFile().deleteOnExit();
+        return path.toString();
     }
     private void executeAuthenticated(AgentExecutor executor, RequestContext context, EventQueue queue) throws Exception {
         long expiresAt = java.time.Instant.now().getEpochSecond() + 60;

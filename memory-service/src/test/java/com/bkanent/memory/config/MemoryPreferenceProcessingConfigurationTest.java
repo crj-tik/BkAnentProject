@@ -10,12 +10,12 @@ import static org.junit.jupiter.api.Assertions.*;
 class MemoryPreferenceProcessingConfigurationTest {
     private final ApplicationContextRunner runner=new ApplicationContextRunner().withUserConfiguration(MemoryPreferenceProcessingConfiguration.class)
             .withBean(ObjectMapper.class,ObjectMapper::new);
-    @Test void defaultOffAndArchiveOffNeedNoModelOrCredentials() {
+    @Test void defaultOffAndMissingModelConfigurationNeedNoProvider() {
         runner.run(context -> assertThat(context).doesNotHaveBean(PreferenceEvaluator.class));
         runner.withPropertyValues("memory.v2.preference.processing.enabled=true").run(context -> assertThat(context).doesNotHaveBean(PreferenceEvaluator.class));
     }
     @Test void explicitEnableBuildsOneToolFreeModelWithoutNetworkAtStartup() {
-        runner.withPropertyValues("memory.v2.archive-enabled=true","memory.v2.preference.processing.enabled=true",
+        runner.withPropertyValues("memory.v2.preference.processing.enabled=true",
                 "memory.v2.preference.processing.model=fixture-model","DEEPSEEK_API_KEY=synthetic-fixture-key")
                 .run(context -> { assertThat(context).hasSingleBean(PreferenceEvaluator.class); assertThat(context).hasBean("memoryPreferenceScheduler"); });
     }

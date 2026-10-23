@@ -31,9 +31,6 @@ a2a:
     response-key-id: ${AUTH_SERVICE_IDENTITY_KEY_ID:auth-service-current}
     response-public-key: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
   memory:
-    enabled: ${SETTLEMENT_MEMORY_V2_ENABLED:false}
-    read-enabled: true
-    delivery-enabled: true
     compression-enabled: ${SETTLEMENT_MEMORY_V2_COMPRESSION_ENABLED:false}
     key-id: ${SERVICE_IDENTITY_KEY_ID:settlement-service-current}
     private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}

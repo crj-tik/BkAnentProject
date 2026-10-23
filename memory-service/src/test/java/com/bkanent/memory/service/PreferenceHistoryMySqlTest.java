@@ -23,9 +23,9 @@ class PreferenceHistoryMySqlTest {
         var jdbc=new JdbcTemplate(datasource); var mapper=JsonMapper.builder().addModule(new JavaTimeModule()).build();
         var manager=new DataSourceTransactionManager(datasource); String fixture="pref-"+UUID.randomUUID();
         var context=new MemoryContextKey("42","preference-fixture",fixture,fixture); String contextId=MemoryArchiveStore.key(context);
-        String fixtureKey="fixture-"+UUID.randomUUID(), secret=UUID.randomUUID().toString()+UUID.randomUUID();
+        String fixtureKey="fixture-"+UUID.randomUUID();
         var securityProperties=new MemoryV2SecurityProperties(); var caller=new MemoryV2SecurityProperties.TrustedCaller();
-        caller.setKeyId(fixtureKey); caller.setSigningSecret(secret); caller.setAllowedAgentsByDomain(Map.of(context.domainId(),Set.of(context.agentId())));
+        caller.setPublicKeys(Map.of(fixtureKey, MemoryTestIdentity.encodedPublicKey())); caller.setAllowedAgentsByDomain(Map.of(context.domainId(),Set.of(context.agentId())));
         securityProperties.setTrustedCallers(Map.of("preference-fixture",caller));
         var security=new MemoryV2RequestSecurity(securityProperties,new MemoryArchiveServiceTest.AuthStub(),new MemoryV2ReplayGuard(jdbc));
         var store=new MemoryArchiveStore(jdbc,mapper); var sharing=new MemorySharingStore(jdbc,mapper); var sources=new MemorySourceAuthorizer(store,sharing,new MemoryAccessPolicy());
@@ -35,41 +35,41 @@ class PreferenceHistoryMySqlTest {
         try {
             var original=PreferenceHistoryServiceTest.otherMessage(context,"mysql-pref-event","exclude expensive");
             var permitRequest=request(MemoryV2Contract.OPERATION_RECEIVE_PERMIT,e -> new MemoryReceivePermitRequest(e,context,List.of(new MemoryReceivePermitRequest.EventSubmission(original.source().sourceEventId(),original.source().version().contentHash(),"conversation-archive"))));
-            var permit=archive.requestReceivePermit(permitRequest,sign(permitRequest,fixtureKey,secret));
+            var permit=archive.requestReceivePermit(permitRequest,sign(permitRequest,fixtureKey,MemoryTestIdentity.PAIR.getPrivate()));
             var delivery=request(MemoryV2Contract.OPERATION_DELIVER_MESSAGES,e -> new MemoryDeliveryRequest(e,context,original.association(),permit.permitId(),List.of(original)));
-            archive.deliverMessages(delivery,sign(delivery,fixtureKey,secret));
+            archive.deliverMessages(delivery,sign(delivery,fixtureKey,MemoryTestIdentity.PAIR.getPrivate()));
             var candidate=new MemoryPreferenceAssessment("budget",PreferenceTransition.Assessment.PREFERENCE,PreferenceTransition.Change.OBSERVATION,PreferenceTransition.Polarity.NEGATIVE,
                     MemoryJsonValue.number("100"),null,null,null,null,List.of(),.8,"fixture-v1",new MemorySourceDependency(original.source(),null));
             var write=request(MemoryV2Contract.OPERATION_PREFERENCE_WRITE,e -> new MemoryPreferenceWriteRequest(e,context,0,candidate));
-            var first=preferences.submit(write,sign(write,fixtureKey,secret)); blockId=first.blockId(); assertEquals(first,preferences.submit(write,sign(write,fixtureKey,secret)));
+            var first=preferences.submit(write,sign(write,fixtureKey,MemoryTestIdentity.PAIR.getPrivate())); blockId=first.blockId(); assertEquals(first,preferences.submit(write,sign(write,fixtureKey,MemoryTestIdentity.PAIR.getPrivate())));
 
             var writerRequest=request(MemoryV2Contract.OPERATION_WRITER,e -> new MemoryWriterRequest(e,context,MemoryWriterRequest.Action.ACQUIRE,"run-1",0));
-            var writer=archive.manageWriter(writerRequest,sign(writerRequest,fixtureKey,secret)).authority();
+            var writer=archive.manageWriter(writerRequest,sign(writerRequest,fixtureKey,MemoryTestIdentity.PAIR.getPrivate())).authority();
             var intent=new MemoryMatterIntent(MemoryMatterIntent.Action.START,null,0,"买房预算");
             var matterMessage=MemoryMatterServiceTest.message(context,2,intent);
             var matterPermitRequest=request(MemoryV2Contract.OPERATION_RECEIVE_PERMIT,e -> new MemoryReceivePermitRequest(e,context,
                     List.of(new MemoryReceivePermitRequest.EventSubmission(matterMessage.source().sourceEventId(),matterMessage.source().version().contentHash(),"conversation-archive")),List.of(),writer));
-            var matterPermit=archive.requestReceivePermit(matterPermitRequest,sign(matterPermitRequest,fixtureKey,secret));
+            var matterPermit=archive.requestReceivePermit(matterPermitRequest,sign(matterPermitRequest,fixtureKey,MemoryTestIdentity.PAIR.getPrivate()));
             var matterDelivery=request(MemoryV2Contract.OPERATION_DELIVER_MESSAGES,e -> new MemoryDeliveryRequest(e,context,matterMessage.association(),matterPermit.permitId(),List.of(matterMessage)));
-            archive.deliverMessages(matterDelivery,sign(matterDelivery,fixtureKey,secret));
+            archive.deliverMessages(matterDelivery,sign(matterDelivery,fixtureKey,MemoryTestIdentity.PAIR.getPrivate()));
             var beforeMatter=request(MemoryV2Contract.OPERATION_WORKING_SET,e -> new MemoryWorkingSetRequest(e,context));
-            long expectedConversationRevision=archive.readWorkingSet(beforeMatter,sign(beforeMatter,fixtureKey,secret)).version().revision();
+            long expectedConversationRevision=archive.readWorkingSet(beforeMatter,sign(beforeMatter,fixtureKey,MemoryTestIdentity.PAIR.getPrivate())).version().revision();
             var matterRequest=request(MemoryV2Contract.OPERATION_MATTER_WRITE,e -> new MemoryMatterWriteRequest(e,context,intent,
                     new MemorySourceDependency(matterMessage.source(),null),expectedConversationRevision,writer));
-            var matter=new MemoryMatterService(store,security,sources,manager).transition(matterRequest,sign(matterRequest,fixtureKey,secret)).matter();
+            var matter=new MemoryMatterService(store,security,sources,manager).transition(matterRequest,sign(matterRequest,fixtureKey,MemoryTestIdentity.PAIR.getPrivate())).matter();
             var assemblyRequest=request(MemoryV2Contract.OPERATION_ASSEMBLE_PREFERENCES,e -> new MemoryPreferenceAssemblyRequest(e,context,matter.matterId(),800));
-            var assembled=preferences.assemble(assemblyRequest,sign(assemblyRequest,fixtureKey,secret));
+            var assembled=preferences.assemble(assemblyRequest,sign(assemblyRequest,fixtureKey,MemoryTestIdentity.PAIR.getPrivate()));
             assertEquals(List.of("budget"),assembled.matches().stream().map(MemoryPreferenceMatch::dimensionId).toList());
             assertEquals("100",assembled.matches().get(0).effectiveState().value().scalar());
             var latestRequest=request(MemoryV2Contract.OPERATION_WORKING_SET,e -> new MemoryWorkingSetRequest(e,context));
-            var latest=archive.readWorkingSet(latestRequest,sign(latestRequest,fixtureKey,secret));
+            var latest=archive.readWorkingSet(latestRequest,sign(latestRequest,fixtureKey,MemoryTestIdentity.PAIR.getPrivate()));
             var boundary=request(MemoryV2Contract.OPERATION_BOUNDARY,e -> new MemoryBoundaryRequest(e,context,latest.version(),List.of(),assembled.selections()));
-            assertTrue(archive.checkBoundary(boundary,sign(boundary,fixtureKey,secret)).unchanged());
+            assertTrue(archive.checkBoundary(boundary,sign(boundary,fixtureKey,MemoryTestIdentity.PAIR.getPrivate())).unchanged());
 
             var accepted=first;
             Instant asOf=Instant.now();
             var read=request(MemoryV2Contract.OPERATION_PREFERENCE_DETAIL,e -> new MemoryPreferenceDetailRequest(e,context,accepted.blockId(),null,1,asOf,null));
-            var view=preferences.read(read,sign(read,fixtureKey,secret)); assertEquals(PreferenceTransition.Polarity.NEGATIVE,view.effectiveState().polarity());
+            var view=preferences.read(read,sign(read,fixtureKey,MemoryTestIdentity.PAIR.getPrivate())); assertEquals(PreferenceTransition.Polarity.NEGATIVE,view.effectiveState().polarity());
             assertEquals(PreferenceHistoryPage.Completeness.COMPLETE,view.history().completeness());
             assertEquals(view.history().transitions().get(0).occurredAt(),MemoryArchiveStore.utcInstant(jdbc.queryForObject(
                     "SELECT accepted_at FROM memory_message_observation WHERE context_id=? AND source_event_id=?",
@@ -81,8 +81,8 @@ class PreferenceHistoryMySqlTest {
             assertFalse(plan.isEmpty());
             assertTrue(plan.stream().anyMatch(row -> row.get("key")!=null));
             var delete=request(MemoryV2Contract.OPERATION_WITHDRAW,e -> new MemoryWithdrawalRequest(e,context,original.source().sourceEventId(),true));
-            archive.withdrawSource(delete,sign(delete,fixtureKey,secret));
-            assertEquals(MemoryErrorCode.DELETED,assertThrows(MemoryException.class,() -> preferences.read(read,sign(read,fixtureKey,secret))).code());
+            archive.withdrawSource(delete,sign(delete,fixtureKey,MemoryTestIdentity.PAIR.getPrivate()));
+            assertEquals(MemoryErrorCode.DELETED,assertThrows(MemoryException.class,() -> preferences.read(read,sign(read,fixtureKey,MemoryTestIdentity.PAIR.getPrivate()))).code());
             assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM memory_preference_transition WHERE block_id=? AND payload_json IS NOT NULL",Integer.class,blockId));
         } finally {
             if(blockId!=null) {
@@ -105,7 +105,7 @@ class PreferenceHistoryMySqlTest {
         String id=UUID.randomUUID().toString(); var draft=factory.apply(new MemoryRequestEnvelope(operation,"preference-fixture","memory-service",id,"0".repeat(64),2));
         return factory.apply(new MemoryRequestEnvelope(operation,"preference-fixture","memory-service",id,MemoryCanonicalHash.requestBodyHash(draft),2));
     }
-    static MemoryRequestProof sign(MemoryV2Request request,String key,String secret) {
-        long now=Instant.now().getEpochSecond(); return MemoryRequestSigner.sign(request,new AuthenticatedPrincipal(42L),key,now,now+60,UUID.randomUUID().toString().replace("-",""),secret.getBytes(StandardCharsets.UTF_8));
+    static MemoryRequestProof sign(MemoryV2Request request,String key,java.security.PrivateKey identityKey) {
+        long now=Instant.now().getEpochSecond(); return MemoryRequestSigner.sign(request,new AuthenticatedPrincipal(42L),key,now,now+60,UUID.randomUUID().toString().replace("-",""),identityKey);
     }
 }

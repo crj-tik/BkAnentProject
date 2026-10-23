@@ -53,7 +53,7 @@ class OfficialA2aAgentExecutorTest {
     @Test
     void explicitSelectionOnOldExecutorFailsBeforeAnyModelInvocation() throws Exception {
         ReactAgent agent = mockAgent("{}");
-        var executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy);
+        var executor = executor(agent, objectMapper, policy);
         EventQueue queue = EventQueue.create();
         executeAuthenticated(executor, context("unsupported", Map.of("supervisor", Map.of("skillSelection",
                 Map.of("name", "find", "mode", "explicit"))), List.of("text")), queue);
@@ -73,7 +73,7 @@ class OfficialA2aAgentExecutorTest {
         when(registry.getByName("find")).thenReturn(com.bkanent.common.skill.SkillDefinition.builder()
                 .name("find").description("find").domain("listing").version("1")
                 .tools(List.of("search")).build());
-        var executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy, registry, "listing", List.of());
+        var executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy, registry, "listing", List.of(), 120_000, memoryHook());
         EventQueue queue = EventQueue.create();
         executeAuthenticated(executor, context("version-mismatch", Map.of("supervisor", Map.of("skillHint", "find",
                 "skillSelection", Map.of("name", "find", "mode", "explicit", "version", "2"))), List.of("text")), queue);
@@ -88,7 +88,7 @@ class OfficialA2aAgentExecutorTest {
     void blockingExecutionEmitsOneStructuredTerminalArtifact() throws Exception {
         ReactAgent agent = mockAgent("{\"decision\":\"SUCCESS\",\"listingCount\":1,"
                 + "\"summary\":\"找到 1 套房源\",\"nextHints\":[]}");
-        OfficialA2aAgentExecutor executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy);
+        OfficialA2aAgentExecutor executor = executor(agent, objectMapper, policy);
         EventQueue queue = EventQueue.create();
 
         executeAuthenticated(executor, context("task-sync", Map.of(), List.of("text", "application/json")), queue);
@@ -212,7 +212,7 @@ class OfficialA2aAgentExecutorTest {
         when(agent.stream(anyString(), any())).thenReturn(Flux.just(
                 new StreamingOutput<>("{\"decision\":\"SUCCESS\",", "llm", "listing-agent", new OverAllState()),
                 new StreamingOutput<>("\"summary\":\"流式完成\"}", "llm", "listing-agent", new OverAllState())));
-        OfficialA2aAgentExecutor executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy);
+        OfficialA2aAgentExecutor executor = executor(agent, objectMapper, policy);
         EventQueue queue = EventQueue.create();
 
         executeAuthenticated(executor, context("task-stream", Map.of("isStreaming", true), List.of("text", "application/json")), queue);
@@ -238,7 +238,7 @@ class OfficialA2aAgentExecutorTest {
     @Test
     void invalidJsonFailsWithoutCompletedResult() throws Exception {
         ReactAgent agent = mockAgent("not-json");
-        OfficialA2aAgentExecutor executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy);
+        OfficialA2aAgentExecutor executor = executor(agent, objectMapper, policy);
         EventQueue queue = EventQueue.create();
 
         executeAuthenticated(executor, context("task-invalid", Map.of(), List.of("text", "application/json")), queue);
@@ -262,7 +262,7 @@ class OfficialA2aAgentExecutorTest {
             return Optional.of(new OverAllState(Map.of("output", new org.springframework.ai.chat.messages.AssistantMessage(
                     "{\"decision\":\"SUCCESS\"}"))));
         }).when(agent).invoke(anyString(), any());
-        OfficialA2aAgentExecutor executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy);
+        OfficialA2aAgentExecutor executor = executor(agent, objectMapper, policy);
         EventQueue queue = EventQueue.create();
         RequestContext context = context("task-cancel", Map.of(), List.of("text", "application/json"));
         ExecutorService worker = Executors.newSingleThreadExecutor();
@@ -290,7 +290,7 @@ class OfficialA2aAgentExecutorTest {
         ReactAgent agent = mockAgent("{}");
         var disposed = new java.util.concurrent.atomic.AtomicBoolean();
         when(agent.stream(anyString(), any())).thenReturn(Flux.<com.alibaba.cloud.ai.graph.NodeOutput>never().doOnCancel(() -> disposed.set(true)));
-        var executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy, null, null, List.of(), 30);
+        var executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy, null, null, List.of(), 30, memoryHook());
         EventQueue queue = EventQueue.create();
         executeAuthenticated(executor, context("stream-timeout", Map.of("isStreaming", true), List.of("text")), queue);
         assertThat(disposed).isTrue();
@@ -327,7 +327,7 @@ class OfficialA2aAgentExecutorTest {
     void missingAuthenticationFailsBeforeModelOrTaskEvents() throws Exception {
         var agent = mockAgent("{}");
         var queue = EventQueue.create();
-        var executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy);
+        var executor = executor(agent, objectMapper, policy);
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> executor.execute(context("no-auth", Map.of(), List.of("text")), queue))
                 .isInstanceOf(com.bkanent.common.rag.RagException.class);
         assertThat(drain(queue)).isEmpty();
@@ -343,7 +343,7 @@ class OfficialA2aAgentExecutorTest {
             valid.set(false);
             return Optional.of(new OverAllState(Map.of("output", new org.springframework.ai.chat.messages.AssistantMessage("{}"))));
         }).when(agent).invoke(anyString(), any());
-        var executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy);
+        var executor = executor(agent, objectMapper, policy);
         var queue = EventQueue.create();
         try (var ignored = A2aCredentialContext.open(testLease("revoked", () -> {
             if (!valid.get()) throw new com.bkanent.common.rag.RagException(com.bkanent.common.rag.RagErrorCode.AUTHENTICATION_FAILED);
@@ -375,7 +375,7 @@ class OfficialA2aAgentExecutorTest {
             valid.set(false);
             return Flux.just(new StreamingOutput<>("private-model-body", "llm", "listing-agent", new OverAllState()));
         }));
-        var executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy);
+        var executor = executor(agent, objectMapper, policy);
         var queue = EventQueue.create();
         try (var ignored = A2aCredentialContext.open(testLease("stream-revoked", () -> {
             if (!valid.get()) throw new com.bkanent.common.rag.RagException(com.bkanent.common.rag.RagErrorCode.AUTHENTICATION_FAILED);
@@ -401,7 +401,7 @@ class OfficialA2aAgentExecutorTest {
     void ordinaryStreamingFailureKeepsExecutionFailureWithoutProviderText() throws Exception {
         var agent = mockAgent("{}");
         when(agent.stream(anyString(), any())).thenReturn(Flux.error(new IllegalStateException("private-provider-body")));
-        var executor = new OfficialA2aAgentExecutor(agent, objectMapper, policy);
+        var executor = executor(agent, objectMapper, policy);
         var queue = EventQueue.create();
         executeAuthenticated(executor, context("stream-provider-error", Map.of("isStreaming", true), List.of("text")), queue);
         var events = drain(queue);
@@ -415,6 +415,17 @@ class OfficialA2aAgentExecutorTest {
                             text -> assertThat(text.getText()).doesNotContain("private-provider-body"));
                 });
         queue.close();
+    }
+
+    private OfficialA2aAgentExecutor executor(ReactAgent agent, ObjectMapper mapper, A2aOutputPolicy outputPolicy) {
+        return new OfficialA2aAgentExecutor(agent, mapper, outputPolicy, null, null, List.of(), 120_000, memoryHook());
+    }
+
+    private A2aMemoryAgentHook memoryHook() {
+        A2aMemoryAgentHook hook = mock(A2aMemoryAgentHook.class);
+        when(hook.invocation(anyString(), anyString(), any())).thenAnswer(call ->
+                new A2aMemoryInvocation(call.getArgument(0), call.getArgument(1), call.getArgument(2)));
+        return hook;
     }
 
     private ReactAgent mockAgent(String output) throws Exception {

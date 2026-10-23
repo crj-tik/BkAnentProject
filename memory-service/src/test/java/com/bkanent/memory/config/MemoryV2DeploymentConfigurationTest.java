@@ -21,25 +21,37 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class MemoryV2DeploymentConfigurationTest {
-    @Test void supervisorMemoryCallerIsExplicitlyScopedInApplicationAndNacosConfiguration() throws Exception {
-        var deploymentValues = Map.<String, Object>of(
-                "AGENT_MEMORY_V2_KEY_ID", "agent-memory-current",
-                "AGENT_MEMORY_V2_SIGNING_SECRET", "");
-        var application = bindCaller(new ClassPathResource("application.yml"), "agent-service", deploymentValues);
-        var nacos = bindCaller(new FileSystemResource(Path.of(System.getProperty("maven.multiModuleProjectDirectory"),
-                "nacos", "memory-service.yaml")), "agent-service", deploymentValues);
+    private static final Map<String, CallerIdentity> OFFICIAL_CALLERS = Map.ofEntries(
+            Map.entry("agent-service", new CallerIdentity("agent-service-current", "AGENT_SERVICE_IDENTITY_PUBLIC_KEY", "supervisor", "supervisor-agent")),
+            Map.entry("marketing-content-service", new CallerIdentity("marketing-content-service-current", "MARKETING_CONTENT_SERVICE_IDENTITY_PUBLIC_KEY", "marketing", "marketing-agent")),
+            Map.entry("interview-service", new CallerIdentity("interview-service-current", "INTERVIEW_SERVICE_IDENTITY_PUBLIC_KEY", "interview", "interview-agent")),
+            Map.entry("listing-master-service", new CallerIdentity("listing-master-service-current", "LISTING_MASTER_SERVICE_IDENTITY_PUBLIC_KEY", "listing", "listing-agent")),
+            Map.entry("business-service", new CallerIdentity("business-service-current", "BUSINESS_SERVICE_IDENTITY_PUBLIC_KEY", "trade", "trade-agent")),
+            Map.entry("contract-service", new CallerIdentity("contract-service-current", "CONTRACT_SERVICE_IDENTITY_PUBLIC_KEY", "contract", "contract-agent")),
+            Map.entry("compare-engine-service", new CallerIdentity("compare-engine-service-current", "COMPARE_ENGINE_SERVICE_IDENTITY_PUBLIC_KEY", "compare", "compare-agent")),
+            Map.entry("settlement-service", new CallerIdentity("settlement-service-current", "SETTLEMENT_SERVICE_IDENTITY_PUBLIC_KEY", "settlement", "settlement-agent")),
+            Map.entry("notification-service", new CallerIdentity("notification-service-current", "NOTIFICATION_SERVICE_IDENTITY_PUBLIC_KEY", "notification", "notification-agent")),
+            Map.entry("media-worker-service", new CallerIdentity("media-worker-service-current", "MEDIA_WORKER_SERVICE_IDENTITY_PUBLIC_KEY", "media", "media-agent")));
 
-        for (var caller : Set.of(application, nacos)) {
-            assertEquals("agent-memory-current", caller.getKeyId());
-            assertEquals("", caller.getSigningSecret());
-            assertTrue(caller.isServiceDelivery());
-            assertEquals(Set.of("supervisor-agent"), caller.getAllowedAgentsByDomain().get("supervisor"));
-            assertFalse(caller.isExperienceOutcomePublisher(), "Supervisor must not assert domain outcomes");
-            assertFalse(caller.isExperienceGovernancePublisher());
+    @Test void allOfficialCallersHaveOneEd25519PublicKeyAndPreciseDomainAgentGrant() throws Exception {
+        var resources = Set.of(new ClassPathResource("application.yml"),
+                new FileSystemResource(Path.of(System.getProperty("maven.multiModuleProjectDirectory"), "nacos", "memory-service.yaml")));
+        var publicKeys = new HashMap<String, Object>();
+        OFFICIAL_CALLERS.values().forEach(identity -> publicKeys.put(identity.environmentKey(), "fixture-public-key"));
+
+        for (Resource resource : resources) {
+            for (var entry : OFFICIAL_CALLERS.entrySet()) {
+                var caller = bindCaller(resource, entry.getKey(), publicKeys);
+                var identity = entry.getValue();
+                assertEquals(Map.of(identity.keyId(), "fixture-public-key"), caller.getPublicKeys(), entry.getKey());
+                assertTrue(caller.isServiceDelivery(), entry.getKey() + " must be allowed to deliver its turn");
+                assertEquals(Set.of(identity.agentId()), caller.getAllowedAgentsByDomain().get(identity.domain()));
+                assertEquals(1, caller.getAllowedAgentsByDomain().size(), "no cross-domain grant for " + entry.getKey());
+            }
         }
     }
 
-    @Test void domainOutcomePublisherFlagsAreIndependentAndDefaultOffInApplicationAndNacosConfiguration() throws Exception {
+    @Test void domainOutcomePublisherFlagsRemainIndependentAndDefaultOff() throws Exception {
         var resources = Set.of(new ClassPathResource("application.yml"),
                 new FileSystemResource(Path.of(System.getProperty("maven.multiModuleProjectDirectory"),
                         "nacos", "memory-service.yaml")));
@@ -53,17 +65,12 @@ class MemoryV2DeploymentConfigurationTest {
                 "settlement-service", "SETTLEMENT_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER");
 
         for (Resource resource : resources) {
-            var values = new HashMap<String, Object>();
-            callerFlags.values().forEach(key -> values.put(key, "false"));
-            for (var entry : callerFlags.entrySet()) {
-                var caller = bindCaller(resource, entry.getKey(), values);
-                assertFalse(caller.isExperienceOutcomePublisher(), entry.getKey() + " should default off");
+            for (String callerName : callerFlags.keySet()) {
+                assertFalse(bindCaller(resource, callerName, Map.of()).isExperienceOutcomePublisher(), callerName);
             }
-            values.put("MARKETING_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER", "true");
-            assertTrue(bindCaller(resource, "marketing-content-service", values).isExperienceOutcomePublisher(),
-                    "one domain must be independently switchable");
-            assertFalse(bindCaller(resource, "agent-service", values).isExperienceOutcomePublisher(),
-                    "Agent model output must not be trusted as a domain result");
+            var values = Map.<String, Object>of("MARKETING_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER", "true");
+            assertTrue(bindCaller(resource, "marketing-content-service", values).isExperienceOutcomePublisher());
+            assertFalse(bindCaller(resource, "agent-service", values).isExperienceOutcomePublisher());
         }
     }
 
@@ -84,4 +91,6 @@ class MemoryV2DeploymentConfigurationTest {
                         Bindable.of(MemoryV2SecurityProperties.TrustedCaller.class))
                 .orElseThrow(IllegalStateException::new);
     }
+
+    private record CallerIdentity(String keyId, String environmentKey, String domain, String agentId) { }
 }

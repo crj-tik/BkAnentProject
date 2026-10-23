@@ -72,31 +72,31 @@ class SupervisorMemoryIntegrationTest {
             assertEquals(matter.matterId(), f.state("start").messages.get(1).matterId());
         }
     }
-    @Test void typedIntentCannotSilentlySucceedWhenMemoryIsOff() throws Exception {
+    @Test void typedIntentFailsBeforeModelOrBusinessExecutionWhenMemoryIsUnavailable() throws Exception {
         try (Fixture f = new Fixture()) {
-            f.properties.setEnabled(false);
+            f.remote.unavailable = true;
             assertEquals("FAILED", f.execute("disabled-intent", "开始事项", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房")).status());
-            assertEquals(0, f.remote.count("transitionMatter")); verifyNoInteractions(f.model);
+            assertEquals(0, f.remote.count("transitionMatter"));
+            assertEquals(0, f.effects.get());
+            verifyNoInteractions(f.model);
         }
     }
-    @Test void deliveryOnlyModeSkipsPromptReadsAndFinishesAnAcceptedDeliveryAfterCutoff() throws Exception {
+    @Test void everySupervisorRunReadsAndArchivesMemory() throws Exception {
         try (Fixture f = new Fixture()) {
-            f.properties.setReadEnabled(false);
             when(f.model.call(anyList(), anyList())).thenAnswer(invocation -> {
                 f.inputs.add(invocation.getArgument(0));
-                assertEquals(0, f.remote.count("readWorkingSet"), "delivery-only mode must not load memory before the prompt");
-                f.properties.setDeliveryEnabled(false); // close new delivery admission after this run was accepted
+                assertEquals(1, f.remote.count("readWorkingSet"), "memory must be loaded before the model runs");
                 return new AssistantMessage("本轮完成");
             });
 
-            var response = f.execute("delivery-only", "独立请求");
+            var response = f.execute("memory-required", "独立请求");
 
             assertEquals("COMPLETED", response.status());
-            assertEquals("DELIVERY_ONLY", f.state("delivery-only").memoryMode);
-            assertTrue(f.state("delivery-only").memoryDeliveryAccepted);
-            assertEquals(1, f.remote.count("readWorkingSet"), "the writer baseline is loaded only when the completed turn is delivered");
-            assertEquals(1, f.remote.count("requestReceivePermit"));
-            assertEquals(1, f.remote.count("deliverMessages"));
+            assertEquals("V2", f.state("memory-required").memoryMode);
+            assertTrue(f.state("memory-required").memoryDeliveryAccepted);
+            assertEquals(1, f.remote.count("readWorkingSet"));
+            assertEquals(2, f.remote.count("requestReceivePermit"), "user input and assistant result are archived at separate lifecycle boundaries");
+            assertEquals(2, f.remote.count("deliverMessages"), "user input and assistant result are archived at separate lifecycle boundaries");
             assertTrue(f.inputs.get(0).toString().contains("独立请求"));
         }
     }
@@ -285,27 +285,25 @@ class SupervisorMemoryIntegrationTest {
         }
     }
 
-    @Test void v2CheckpointCannotFallBackToRawBodyWhenFeatureIsDisabled() throws Exception {
+    @Test void v2CheckpointCannotFallBackToRawBodyWhenMemoryIsUnavailable() throws Exception {
         try (Fixture f = new Fixture()) {
             when(f.model.call(anyList(), anyList())).thenReturn(new AssistantMessage("private old answer"));
             f.execute("run", "input");
-            f.properties.setEnabled(false);
+            f.remote.unavailable = true;
             try (var auth = f.identities.openAuthorization("Bearer transport-only-value")) {
                 assertEquals(MemoryErrorCode.MEMORY_UNAVAILABLE, assertThrows(MemoryException.class, () -> f.runner.current("run", "1")).code());
             }
         }
     }
 
-    @Test void disabledForNewRunKeepsOriginalPathWithZeroMemoryRpc() throws Exception {
+    @Test void memoryUnavailableBlocksNewRunBeforeModelOrBusinessTool() throws Exception {
         try (Fixture f = new Fixture()) {
-            f.properties.setEnabled(false); f.localToolThenAnswer();
-            assertEquals("COMPLETED", f.execute("run", "original request").status());
-            assertEquals(1, f.effects.get());
-            assertTrue(f.remote.calls.isEmpty());
+            f.remote.unavailable = true; f.localToolThenAnswer();
+            assertEquals("FAILED", f.execute("run", "original request").status());
+            assertEquals(0, f.effects.get());
+            assertEquals(0, f.remote.count("readWorkingSet"));
             assertEquals(0, f.jdbc.queryForObject("SELECT COUNT(*) FROM agent_memory_delivery", Integer.class));
-            var tools = org.mockito.ArgumentCaptor.forClass(List.class);
-            verify(f.model, atLeastOnce()).call(anyList(), tools.capture());
-            for (List<?> callbacks : tools.getAllValues()) assertTrue(callbacks.stream().noneMatch(tool -> ((ToolCallback) tool).getToolDefinition().name().equals(SupervisorMemoryResultView.TOOL_NAME)));
+            verifyNoInteractions(f.model);
         }
     }
 
@@ -358,19 +356,12 @@ class SupervisorMemoryIntegrationTest {
         }
     }
 
-    @Test void initialOptionalDependencyFailureDoesNotMasqueradeAsLoadedHistory() throws Exception {
+    @Test void initialMemoryDependencyFailureBlocksAnIndependentRequestBeforeModel() throws Exception {
         try (Fixture f = new Fixture()) {
             f.remote.unavailable = true;
-            when(f.model.call(anyList(), anyList())).thenAnswer(call -> {
-                f.inputs.add(call.getArgument(0));
-                return new AssistantMessage("independent answer");
-            });
             var result = f.execute("run", "independent input");
-            assertEquals("COMPLETED", result.status());
-            assertEquals("MEMORY_UNAVAILABLE", result.governanceMetadata().get("memoryStatus"));
-            assertEquals("NOT_APPLIED", f.state("run").memoryMode);
-            assertTrue(f.inputs.get(0).stream().filter(SystemMessage.class::isInstance).map(Message::getText)
-                    .anyMatch(text -> text.contains("可选历史记忆不可用且未应用") && text.contains("不得猜测历史事实")));
+            assertEquals("FAILED", result.status());
+            verifyNoInteractions(f.model);
             assertEquals(0, f.jdbc.queryForObject("SELECT COUNT(*) FROM agent_memory_delivery", Integer.class));
         }
     }
@@ -651,7 +642,7 @@ class SupervisorMemoryIntegrationTest {
                 ScriptUtils.executeSqlScript(connection, new ByteArrayResource(migration.getBytes(StandardCharsets.UTF_8)));
                 ScriptUtils.executeSqlScript(connection, new ByteArrayResource(migration.getBytes(StandardCharsets.UTF_8)));
             }
-            properties.setEnabled(true); properties.setKeyId("agent-service-current");
+            properties.setKeyId("agent-service-current");
             properties.setPrivateKeyFile(privateKeyFile(remote.identityPair).toString());
             properties.setSoftTokens(10000); properties.setHardTokens(20000);
             var persistence = mock(AgentWorkflowCheckpointMapper.class);

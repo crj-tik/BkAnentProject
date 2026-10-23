@@ -116,8 +116,6 @@ a2a:
 
 agent:
   memory-v2:
-    read-enabled: true
-    delivery-enabled: true
   skills:
     external-dir: ${AGENT_SKILLS_EXTERNAL_DIR:}
     watch-enabled: ${AGENT_SKILLS_WATCH_ENABLED:true}

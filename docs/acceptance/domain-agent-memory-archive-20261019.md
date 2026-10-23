@@ -1,5 +1,7 @@
 # Memory v2 可靠归档模块验收（2026-10-19）
 
+> 历史验收快照：此记录形成于基础 Memory 尚可选的阶段。当前 Supervisor 与所有官方 A2A Agent 必须接入基础 Memory；当时的关闭配置仅描述历史环境，不代表当前运行策略或验收结论。
+
 变更：integrate-domain-agent-memory；分支 dev-fix。按一个完整归档模块交付，不按单个任务停顿。只使用 bk-anent-dev 原开发栈。
 
 ## 已实现边界

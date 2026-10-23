@@ -25,6 +25,7 @@ class SupervisorToolLoopGraphTest {
     private final SkillRegistry skills = mock(SkillRegistry.class);
     private final SupervisorOrchestrationProperties properties = new SupervisorOrchestrationProperties();
     private final AtomicInteger effects = new AtomicInteger();
+    private com.bkanent.agent.memory.SupervisorMemoryLifecycle memory;
     private OrchestrationStore store;
     private SupervisorToolLoopGraph factory;
     private SupervisorToolLoopRunner runner;
@@ -35,8 +36,8 @@ class SupervisorToolLoopGraphTest {
     @BeforeEach
     void setup() throws Exception {
         store = OrchestrationStoreTest.database(mapper);
-        factory = new SupervisorToolLoopGraph(catalog, model, skills, store, mapper, properties,
-                events, new OfficialSupervisorGraphSchema(), mock(DatabaseCheckpointSaverFactory.class));
+        memory = successfulMemory();
+        factory = newFactory(events);
         graph = factory.create(new MemorySaver());
         runner = new SupervisorToolLoopRunner(factory, graph, store, properties, claims);
         when(claims.claim(any())).thenReturn(ApprovalResumeClaimStore.ClaimResult.claimed());
@@ -45,6 +46,30 @@ class SupervisorToolLoopGraphTest {
         when(catalog.snapshot("1", true)).thenReturn(Map.of("local:search", capability("search")));
     }
     @AfterEach void cleanup() { factory.close(); runner.close(); }
+
+    private com.bkanent.agent.memory.SupervisorMemoryLifecycle successfulMemory() {
+        var lifecycle = mock(com.bkanent.agent.memory.SupervisorMemoryLifecycle.class);
+        doAnswer(invocation -> {
+            ToolLoopState state = invocation.getArgument(0);
+            state.memoryMode = "V2";
+            state.memoryDeliveryAccepted = true;
+            state.memoryStatus = "LOADED";
+            return null;
+        }).when(lifecycle).prepare(any());
+        when(lifecycle.applies(any())).thenReturn(true);
+        when(lifecycle.beforeModel(any(), anyString())).thenAnswer(invocation -> {
+            ToolLoopState state = invocation.getArgument(0);
+            return state.messages.stream().map(StoredModelMessage::message).toList();
+        });
+        return lifecycle;
+    }
+
+    private SupervisorToolLoopGraph newFactory(SessionStreamService stream) {
+        var result = new SupervisorToolLoopGraph(catalog, model, skills, store, mapper, properties,
+                stream, new OfficialSupervisorGraphSchema(), mock(DatabaseCheckpointSaverFactory.class));
+        result.setMemory(memory);
+        return result;
+    }
 
     @Test
     void invalidChildSkillIsRejectedBeforeApprovalAndClaimThenModelCanCorrectIt() {
@@ -129,7 +154,8 @@ class SupervisorToolLoopGraphTest {
         when(skills.getByName("find")).thenReturn(definition);
         when(model.call(anyList(), anyList())).thenAnswer(invocation -> {
             List<Message> messages = invocation.getArgument(0);
-            assertThat(messages.get(0).getText()).contains("预算300万", "先理解预算，再搜索，再汇总");
+            String combined = messages.stream().map(Message::getText).filter(Objects::nonNull).reduce("", (left, right) -> left + "\n" + right);
+            assertThat(combined).contains("预算300万", "先理解预算，再搜索，再汇总");
             return new AssistantMessage("需要先确认地区");
         });
         var response = runner.execute(request("explicit", new SkillSelection("find", "1"), null, "预算300万"));
@@ -296,8 +322,7 @@ class SupervisorToolLoopGraphTest {
         SessionStreamService broken = mock(SessionStreamService.class);
         doThrow(new IllegalStateException("events down")).when(broken).publish(any());
         factory.close();
-        factory = new SupervisorToolLoopGraph(catalog, model, skills, store, mapper, properties, broken,
-                new OfficialSupervisorGraphSchema(), mock(DatabaseCheckpointSaverFactory.class));
+        factory = newFactory(broken);
         try { graph = factory.create(new MemorySaver()); } catch (Exception exception) { throw new IllegalStateException(exception); }
         runner.close(); runner = new SupervisorToolLoopRunner(factory, graph, store, properties, claims);
         when(model.call(anyList(), anyList())).thenReturn(calls(call("one", "search", "{}")), new AssistantMessage("done"));
@@ -443,8 +468,7 @@ class SupervisorToolLoopGraphTest {
     void saturatedExecutorAuditsUnsentCallsAndSharedDeadlineBoundsWholeBatch() throws Exception {
         factory.close(); runner.close();
         properties.setMaxConcurrency(1); properties.setMaxQueuedCalls(1); properties.setToolTimeoutMs(200);
-        factory = new SupervisorToolLoopGraph(catalog, model, skills, store, mapper, properties,
-                events, new OfficialSupervisorGraphSchema(), mock(DatabaseCheckpointSaverFactory.class));
+        factory = newFactory(events);
         graph = factory.create(new MemorySaver());
         runner = new SupervisorToolLoopRunner(factory, graph, store, properties, claims);
         var release = new java.util.concurrent.CountDownLatch(1);

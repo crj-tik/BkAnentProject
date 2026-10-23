@@ -53,22 +53,6 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
     private final Map<String, String> capabilities;
     private final A2aMemoryAgentHook memoryHook;
 
-    public OfficialA2aAgentExecutor(ReactAgent agent, ObjectMapper objectMapper, A2aOutputPolicy outputPolicy) {
-        this(agent, objectMapper, outputPolicy, null, null, List.of(), 120_000, null);
-    }
-
-    public OfficialA2aAgentExecutor(ReactAgent agent, ObjectMapper objectMapper, A2aOutputPolicy outputPolicy,
-                                  com.bkanent.common.skill.core.SkillRegistry skillRegistry, String skillOwner,
-                                  List<org.springframework.ai.tool.ToolCallback> tools) {
-        this(agent, objectMapper, outputPolicy, skillRegistry, skillOwner, tools, 120_000, null);
-    }
-
-    public OfficialA2aAgentExecutor(ReactAgent agent, ObjectMapper objectMapper, A2aOutputPolicy outputPolicy,
-                                  com.bkanent.common.skill.core.SkillRegistry skillRegistry, String skillOwner,
-                                  List<org.springframework.ai.tool.ToolCallback> tools, long streamTimeoutMs) {
-        this(agent, objectMapper, outputPolicy, skillRegistry, skillOwner, tools, streamTimeoutMs, null);
-    }
-
     public OfficialA2aAgentExecutor(ReactAgent agent, ObjectMapper objectMapper, A2aOutputPolicy outputPolicy,
                                   com.bkanent.common.skill.core.SkillRegistry skillRegistry, String skillOwner,
                                   List<org.springframework.ai.tool.ToolCallback> tools, long streamTimeoutMs,
@@ -81,7 +65,7 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
         this.outputNormalizer = new A2aOutputNormalizer(objectMapper);
         this.skillRegistry = skillRegistry;
         this.skillOwner = skillOwner;
-        this.memoryHook = memoryHook;
+        this.memoryHook = java.util.Objects.requireNonNull(memoryHook, "A2A Agent requires its Memory lifecycle hook");
         Map<String, String> available = new java.util.LinkedHashMap<>();
         tools.stream().map(tool -> tool.getToolDefinition().name()).filter(name -> !"skill".equals(name))
                 .forEach(name -> available.put(com.bkanent.common.agent.CapabilityId.local(name).value(), name));
@@ -101,8 +85,7 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
         try {
             A2aInput input = inputParser.parse(context, outputPolicy);
             execution.durableMemoryExport = input.durableMemoryExport();
-            if (memoryHook != null) execution.memoryInvocation = memoryHook.invocation(
-                    context.getTaskId(), context.getContextId(), input.durableMemoryExport());
+            execution.memoryInvocation = memoryHook.invocation(context.getTaskId(), context.getContextId(), input.durableMemoryExport());
             var skillExecution = prepareSkillExecution(input);
             execution.skillExecution = skillExecution;
             if (execution.cancelled.get()) {
@@ -133,7 +116,7 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
                     memoryException == null ? "SubAgent execution failed" : "Memory authorization or processing failed");
         }
         finally {
-            if (memoryHook != null) memoryHook.finish(execution.memoryInvocation);
+            memoryHook.finish(execution.memoryInvocation);
             executions.remove(context.getTaskId(), execution);
             A2aCredentialContext.discardTask(context.getTaskId());
         }
@@ -256,9 +239,7 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
             execution.authLease.verify();
             A2aOutput output = outputNormalizer.normalize(rawOutput, outputPolicy, jsonOutput);
             if (execution.durableMemoryExport != null) {
-                MemoryExportReceipt receipt = memoryHook == null
-                        ? MemoryExportReceipt.failure("UNAVAILABLE")
-                        : memoryHook.publishExport(execution.memoryInvocation, output);
+                MemoryExportReceipt receipt = memoryHook.publishExport(execution.memoryInvocation, output);
                 output = output.withMemoryExport(receipt == null
                         ? MemoryExportReceipt.failure("NOT_RECORDED") : receipt);
             }
@@ -280,7 +261,7 @@ public final class OfficialA2aAgentExecutor implements AgentExecutor {
             metadata.put("outputMode", output.outputMode());
             metadata.put("terminal", true);
             metadata.putAll(exportMetadata);
-            if (execution.memoryInvocation != null && !"DISABLED".equals(execution.memoryInvocation.memoryStatus())) {
+            if (execution.memoryInvocation != null) {
                 metadata.put("memoryStatus", execution.memoryInvocation.memoryStatus());
                 metadata.put("memoryArchiveStatus", execution.memoryInvocation.archiveStatus());
                 metadata.put("memoryCompactionStatus", execution.memoryInvocation.compactionStatus());

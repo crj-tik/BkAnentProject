@@ -6,11 +6,9 @@ import com.bkanent.memory.service.MemorySharingAccessService;
 import com.bkanent.memory.service.MemoryV2RequestSecurity;
 import org.apache.dubbo.config.annotation.DubboService;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
-/** Opt-in native Dubbo provider. Unimplemented learning/search capability fails explicitly. */
+/** Required native Dubbo provider. Unimplemented learning/search capability fails explicitly. */
 @DubboService(group = MemoryV2Contract.DUBBO_GROUP, version = MemoryV2Contract.DUBBO_SERVICE_VERSION, protocol = "dubbo")
-@ConditionalOnProperty(name = "memory.v2.archive-enabled", havingValue = "true")
 public class MemoryV2RpcServiceImpl implements MemoryV2RpcService {
     private final MemoryArchiveService archive;
     private final MemorySharingAccessService sharing;

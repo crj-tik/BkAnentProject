@@ -64,7 +64,7 @@ class A2aMemoryAgentHookTest {
         });
         ExecutorService executor = Executors.newSingleThreadExecutor();
         var hook = new A2aMemoryAgentHook("listing-master-service", "listing", "listing-agent", () -> fixture.rpc,
-                new MemoryWorkingSetCache(8, 1024 * 1024, 60_000, Clock.systemUTC()), enabledProperties(),
+                new MemoryWorkingSetCache(8, 1024 * 1024, 60_000, Clock.systemUTC()), requiredMemoryProperties(),
                 mock(ChatModel.class), new ObjectMapper(), executor);
         String taskId = "listing-task-shared-export";
         var directive = exportDirective();
@@ -146,7 +146,7 @@ class A2aMemoryAgentHookTest {
                     request.messages().stream().map(message -> new MemoryDeliveryResponse.DeliveryResult(message.sequence(), true, null)).toList());
         });
 
-        A2aMemoryProperties properties = enabledProperties();
+        A2aMemoryProperties properties = requiredMemoryProperties();
         MemoryWorkingSetCache cache = new MemoryWorkingSetCache(16, 1024 * 1024, 60_000, Clock.systemUTC());
         ExecutorService summaryExecutor = Executors.newSingleThreadExecutor();
         A2aMemoryAgentHook hook = new A2aMemoryAgentHook("marketing-content-service", "marketing", "marketing-agent",
@@ -214,32 +214,34 @@ class A2aMemoryAgentHookTest {
     }
 
     @Test
-    void readDisabledDeliveryOnlyTurnDrainsAfterDeliverySwitchIsClosed() throws Exception {
+    void everyAgentTurnLoadsAndArchivesMemory() throws Exception {
         var fixture = new MemoryFixture(List.of(), new MemoryConversationVersion(1, 1, "policy-v1"));
         doAnswer(call -> {
             MemoryWorkingSetRequest request = call.getArgument(0);
             return new MemoryWorkingSetResponse(request.contextKey(), fixture.version.get(),
                     List.of(oldMessage(request.contextKey())), List.of(), List.of());
         }).when(fixture.rpc).readWorkingSet(any(), any());
-        var properties = enabledProperties();
-        properties.setReadEnabled(false);
+        var properties = requiredMemoryProperties();
         ExecutorService executor = Executors.newSingleThreadExecutor();
         var hook = new A2aMemoryAgentHook("marketing-content-service", "marketing", "marketing-agent", () -> fixture.rpc,
                 new MemoryWorkingSetCache(8, 1024 * 1024, 60_000, Clock.systemUTC()), properties,
                 mock(ChatModel.class), new ObjectMapper(), executor);
-        String taskId = "marketing-task-delivery-only";
-        var invocation = hook.invocation(taskId, "delivery-only-context");
+        String taskId = "marketing-task-memory-required";
+        var invocation = hook.invocation(taskId, "memory-required-context");
         var lease = lease(taskId, "7", "marketing-content-service");
         register(lease);
         var config = config(taskId, invocation);
         try {
             var start = List.<Message>of(new SystemMessage("marketing rules"), new UserMessage("当前请求"));
-            assertThat(hook.beforeAgent(state(start), config).join()).isEmpty();
-            assertThat(invocation.memoryStatus()).isEqualTo("DELIVERY_ONLY");
-            verify(fixture.rpc, never()).readWorkingSet(any(), any());
-            properties.setDeliveryEnabled(false); // close new delivery admission after this task was accepted
-            hook.afterAgent(state(List.of(new SystemMessage("marketing rules"), new UserMessage("当前请求"),
-                    new AssistantMessage("本轮结果"))), config).join();
+            Map<String, Object> beforeUpdate = hook.beforeAgent(state(start), config).join();
+            assertThat(beforeUpdate).containsKey("messages");
+            @SuppressWarnings("unchecked")
+            List<Message> preparedMessages = (List<Message>) ((ReplaceAllWith<?>) beforeUpdate.get("messages")).newValues();
+            assertThat(invocation.memoryStatus()).isEqualTo("APPLIED");
+            verify(fixture.rpc, times(1)).readWorkingSet(any(), any());
+            List<Message> completedTurn = new ArrayList<>(preparedMessages);
+            completedTurn.add(new AssistantMessage("本轮结果"));
+            hook.afterAgent(state(completedTurn), config).join();
 
             assertThat(invocation.archiveStatus()).isEqualTo("RECORDED");
             assertThat(fixture.delivered.get().messages()).extracting(MemoryMessage::role)
@@ -266,7 +268,7 @@ class A2aMemoryAgentHookTest {
         }).when(fixture.rpc).readWorkingSet(any(), any());
         ExecutorService summaryExecutor = Executors.newSingleThreadExecutor();
         var hook = new A2aMemoryAgentHook("listing-master-service", "listing", "listing-agent", () -> fixture.rpc,
-                new MemoryWorkingSetCache(8, 1024 * 1024, 60_000, Clock.systemUTC()), enabledProperties(),
+                new MemoryWorkingSetCache(8, 1024 * 1024, 60_000, Clock.systemUTC()), requiredMemoryProperties(),
                 mock(ChatModel.class), new ObjectMapper(), summaryExecutor);
         String taskId = "listing-task-source-proof";
         var lease = lease(taskId, "7", "listing-master-service");
@@ -321,7 +323,7 @@ class A2aMemoryAgentHookTest {
         var fixture = new MemoryFixture(List.of(), new MemoryConversationVersion(0, 0, "policy-v1"));
         ExecutorService executor = Executors.newSingleThreadExecutor();
         var hook = new A2aMemoryAgentHook("marketing-content-service", "marketing", "marketing-agent", () -> fixture.rpc,
-                new MemoryWorkingSetCache(8, 1024 * 1024, 60_000, Clock.systemUTC()), enabledProperties(),
+                new MemoryWorkingSetCache(8, 1024 * 1024, 60_000, Clock.systemUTC()), requiredMemoryProperties(),
                 mock(ChatModel.class), new ObjectMapper(), executor);
         String taskId = "marketing-task-no-match";
         var lease = lease(taskId, "7", "marketing-content-service");
@@ -352,10 +354,10 @@ class A2aMemoryAgentHookTest {
     }
 
     @Test
-    void memoryUnavailableIsReportedAndAddsNoHistoryWhileAuthorizationDenialFailsClosed() throws Exception {
+    void memoryUnavailableAndAuthorizationDenialBothFailBeforeAgentExecution() throws Exception {
         MemoryV2RpcService unavailable = mock(MemoryV2RpcService.class);
         when(unavailable.manageWriter(any(), any())).thenThrow(new IllegalStateException("fixture unavailable"));
-        var props = enabledProperties();
+        var props = requiredMemoryProperties();
         ExecutorService executor = Executors.newSingleThreadExecutor();
         var hook = new A2aMemoryAgentHook("marketing-content-service", "marketing", "marketing-agent", () -> unavailable,
                 new MemoryWorkingSetCache(8, 1024 * 1024, 60_000, Clock.systemUTC()), props,
@@ -367,12 +369,10 @@ class A2aMemoryAgentHookTest {
         var state = state(List.of(new SystemMessage("system"), new UserMessage("hello")));
         var config = config(taskId, invocation);
         try {
-            Map<String, Object> update = hook.beforeAgent(state, config).join();
-            assertThat(update).containsKey("messages");
+            assertThatThrownBy(() -> hook.beforeAgent(state, config).join())
+                    .hasRootCauseInstanceOf(MemoryException.class);
             assertThat(invocation.memoryStatus()).isEqualTo("MEMORY_UNAVAILABLE");
-            @SuppressWarnings("unchecked") List<Message> degraded = (List<Message>) ((ReplaceAllWith<?>) update.get("messages")).newValues();
-            assertThat(degraded).anySatisfy(message -> assertThat(message.getText())
-                    .contains("历史记忆不可用", "向用户询问补充", "不要猜测历史事实"));
+            verify(unavailable, never()).readWorkingSet(any(), any());
         } finally {
             hook.finish(invocation);
             discard(lease);
@@ -400,7 +400,7 @@ class A2aMemoryAgentHookTest {
 
     @Test
     void missingA2aLeaseFailsClosedBeforeTheAgentCanUseMemory() {
-        var properties = enabledProperties();
+        var properties = requiredMemoryProperties();
         ExecutorService executor = Executors.newSingleThreadExecutor();
         var hook = new A2aMemoryAgentHook("marketing-content-service", "marketing", "marketing-agent",
                 () -> mock(MemoryV2RpcService.class), new MemoryWorkingSetCache(8, 1024 * 1024, 60_000, Clock.systemUTC()),
@@ -454,7 +454,7 @@ class A2aMemoryAgentHookTest {
 
         ExecutorService interviewExecutor = Executors.newSingleThreadExecutor();
         var interviewHook = new A2aMemoryAgentHook("interview-service", "interview", "interview-agent", () -> interviewRpc,
-                new MemoryWorkingSetCache(8, 1024 * 1024, 60_000, Clock.systemUTC()), enabledProperties(),
+                new MemoryWorkingSetCache(8, 1024 * 1024, 60_000, Clock.systemUTC()), requiredMemoryProperties(),
                 mock(ChatModel.class), new ObjectMapper(), interviewExecutor);
         String interviewTask = "interview-task-private";
         var interviewLease = lease(interviewTask, "7", "interview-service");
@@ -499,7 +499,7 @@ class A2aMemoryAgentHookTest {
         });
         ExecutorService marketingExecutor = Executors.newSingleThreadExecutor();
         var marketingHook = new A2aMemoryAgentHook("marketing-content-service", "marketing", "marketing-agent", () -> marketingRpc,
-                new MemoryWorkingSetCache(8, 1024 * 1024, 60_000, Clock.systemUTC()), enabledProperties(),
+                new MemoryWorkingSetCache(8, 1024 * 1024, 60_000, Clock.systemUTC()), requiredMemoryProperties(),
                 mock(ChatModel.class), new ObjectMapper(), marketingExecutor);
         String marketingTask = "marketing-task-private";
         var marketingLease = lease(marketingTask, "7", "marketing-content-service");
@@ -524,7 +524,7 @@ class A2aMemoryAgentHookTest {
     void compressionCommitsOnlyACompletePrefixBeforeOutcomeUnknownToolGroups() throws Exception {
         var initial = protectedHistory();
         MemoryFixture fixture = new MemoryFixture(initial, new MemoryConversationVersion(4, 4, "policy-v1"));
-        var properties = enabledProperties();
+        var properties = requiredMemoryProperties();
         properties.setCompressionEnabled(true);
         properties.setSoftTokens(1);
         properties.setRecentMessages(1);
@@ -645,9 +645,8 @@ class A2aMemoryAgentHookTest {
         }
     }
 
-    private A2aMemoryProperties enabledProperties() {
+    private A2aMemoryProperties requiredMemoryProperties() {
         var properties = new A2aMemoryProperties();
-        properties.setEnabled(true);
         properties.setKeyId("test-domain-memory");
         properties.setPrivateKeyFile(PRIVATE_KEY_FILE);
         properties.validate();

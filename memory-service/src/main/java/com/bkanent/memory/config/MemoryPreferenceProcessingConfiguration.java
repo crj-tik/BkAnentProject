@@ -7,6 +7,7 @@ import org.springframework.ai.deepseek.api.DeepSeekApi;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.*;
+import org.springframework.core.type.AnnotatedTypeMetadata;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.retry.support.RetryTemplate;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
@@ -14,12 +15,14 @@ import org.springframework.web.client.RestClient;
 import java.net.http.HttpClient;
 import java.time.Duration;
 
-/** No provider bean/key validation/network request when the processing feature is disabled. */
+/** No provider bean/key validation/network request when preference assessment is disabled. */
 @Configuration(proxyBeanMethods=false)
-@ConditionalOnProperty(prefix="memory.v2", name={"archive-enabled", "preference.processing.enabled"}, havingValue="true")
+@ConditionalOnProperty(prefix="memory.v2.preference.processing", name="enabled", havingValue="true")
 public class MemoryPreferenceProcessingConfiguration {
-    @Bean PreferenceEvaluator preferenceEvaluator(ObjectMapper mapper,
-            @Value("${memory.v2.preference.processing.model}") String model,
+    @Bean
+    @Conditional(PreferenceModelConfiguredCondition.class)
+    PreferenceEvaluator preferenceEvaluator(ObjectMapper mapper,
+            @Value("${memory.v2.preference.processing.model:}") String model,
             @Value("${DEEPSEEK_API_KEY:${KE_API_KEY:}}") String key,
             @Value("${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}") String baseUrl) {
         if(key.isBlank() || key.equals("local-dev-placeholder") || model.isBlank()) throw new IllegalArgumentException("preference model credentials/configuration missing");
@@ -34,5 +37,14 @@ public class MemoryPreferenceProcessingConfiguration {
     @Bean ThreadPoolTaskScheduler memoryPreferenceScheduler() {
         var scheduler=new ThreadPoolTaskScheduler(); scheduler.setPoolSize(1); scheduler.setThreadNamePrefix("preference-processing-");
         return scheduler;
+    }
+
+    static final class PreferenceModelConfiguredCondition implements Condition {
+        @Override public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
+            String model = context.getEnvironment().getProperty("memory.v2.preference.processing.model", "");
+            String key = context.getEnvironment().getProperty("DEEPSEEK_API_KEY",
+                    context.getEnvironment().getProperty("KE_API_KEY", ""));
+            return !model.isBlank() && !key.isBlank() && !"local-dev-placeholder".equals(key);
+        }
     }
 }

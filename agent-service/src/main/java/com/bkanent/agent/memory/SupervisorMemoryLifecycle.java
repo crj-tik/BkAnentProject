@@ -14,7 +14,7 @@ import jakarta.annotation.PreDestroy;
 import java.util.*;
 import java.util.concurrent.*;
 
-/** Real Supervisor node adapter. No delta/progress callback calls this class. Disabled unless explicitly configured. */
+/** Required Supervisor memory boundary. No delta/progress callback calls this class. */
 @Component
 public class SupervisorMemoryLifecycle {
     private final SupervisorMemoryProperties properties;
@@ -41,36 +41,21 @@ public class SupervisorMemoryLifecycle {
     }
 
     public void prepare(ToolLoopState state) {
-        if (!properties.isEnabled()) { requireNoIntent(state); return; }
-        if (!properties.isReadEnabled()) {
-            requireNoIntent(state);
-            state.memoryDeliveryAccepted |= properties.isDeliveryEnabled();
-            if (state.memoryDeliveryAccepted) {
-                state.memoryMode = "DELIVERY_ONLY";
-                state.memoryStatus = "DELIVERY_ONLY";
-                clearPromptMaterial(state);
-            } else {
-                state.memoryMode = "NOT_APPLIED";
-                state.memoryStatus = "DISABLED";
-            }
-            return;
-        }
         state.memoryMode = "V2";
         try {
             selectMatter(state, session(state).snapshot());
-            state.memoryDeliveryAccepted |= properties.isDeliveryEnabled();
+            state.memoryDeliveryAccepted = true;
             state.memoryStatus = "LOADED";
         }
         catch (MemoryException exception) {
-            if (exception.code() != MemoryErrorCode.MEMORY_UNAVAILABLE) throw exception;
-            state.memoryMode = "NOT_APPLIED"; state.memoryStatus = "MEMORY_UNAVAILABLE";
+            state.memoryMode = "NOT_APPLIED";
+            state.memoryStatus = exception.code() == MemoryErrorCode.MEMORY_UNAVAILABLE
+                    ? "MEMORY_UNAVAILABLE" : "NOT_APPLIED";
             requireNoIntent(state);
+            throw exception;
         }
     }
     public boolean applies(ToolLoopState state) {
-        if ("V2".equals(state.memoryMode) && !properties.isEnabled()) throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
-        if ("DELIVERY_ONLY".equals(state.memoryMode)) { requireNoIntent(state); return false; }
-        if (!properties.isEnabled() || "NOT_APPLIED".equals(state.memoryMode)) { requireNoIntent(state); return false; }
         if (!"V2".equals(state.memoryMode)) throw new MemoryException(MemoryErrorCode.ARCHIVE_NOT_CONFIRMED);
         return true;
     }

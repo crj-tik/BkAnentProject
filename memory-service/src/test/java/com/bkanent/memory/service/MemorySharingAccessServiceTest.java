@@ -269,7 +269,6 @@ class MemorySharingAccessServiceTest {
         private final MemorySharingAccessService service;
         private final MemoryScope scope;
         private final MemoryShareGrant grant;
-        private final String secret = UUID.randomUUID().toString() + UUID.randomUUID();
 
         private Fixture(MemoryScope.Kind kind, UnaryOperator<MemoryShareGrant> transform) throws Exception {
             var datasource = new DriverManagerDataSource("jdbc:h2:mem:sharing-" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
@@ -312,7 +311,7 @@ class MemorySharingAccessServiceTest {
                     "export-1", 1, "invocation-1", "b".repeat(64), MemoryIndexState.INDEX_PENDING.name());
             var properties = new MemoryV2SecurityProperties();
             var caller = new MemoryV2SecurityProperties.TrustedCaller();
-            caller.setKeyId("fixture-memory-key"); caller.setSigningSecret(secret);
+            caller.setPublicKeys(Map.of("fixture-memory-key", MemoryTestIdentity.encodedPublicKey()));
             caller.setAllowedAgentsByDomain(Map.of("marketing", Set.of("marketing-agent")));
             properties.setTrustedCallers(Map.of("marketing-service", caller));
             var security = new MemoryV2RequestSecurity(properties, auth, new MemoryV2ReplayGuard(jdbc));
@@ -350,7 +349,7 @@ class MemorySharingAccessServiceTest {
         private MemoryRequestProof sign(MemoryGrantRequest request) {
             long now = Instant.now().getEpochSecond();
             return MemoryRequestSigner.sign(request, new AuthenticatedPrincipal(42L), "fixture-memory-key", now, now + 60,
-                    UUID.randomUUID().toString().replace("-", ""), secret.getBytes(StandardCharsets.UTF_8));
+                    UUID.randomUUID().toString().replace("-", ""), MemoryTestIdentity.PAIR.getPrivate());
         }
     }
 

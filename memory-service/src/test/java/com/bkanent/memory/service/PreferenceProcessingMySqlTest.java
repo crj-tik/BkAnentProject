@@ -23,9 +23,9 @@ class PreferenceProcessingMySqlTest {
         var jdbc=new JdbcTemplate(datasource); var mapper=JsonMapper.builder().addModule(new JavaTimeModule()).build();
         var manager=new DataSourceTransactionManager(datasource); String fixture="proc-"+UUID.randomUUID();
         var context=new MemoryContextKey("42","preference-fixture",fixture,fixture); String contextId=MemoryArchiveStore.key(context);
-        String fixtureKey="fixture-"+UUID.randomUUID(), secret=UUID.randomUUID().toString()+UUID.randomUUID();
+        String fixtureKey="fixture-"+UUID.randomUUID();
         var securityProperties=new MemoryV2SecurityProperties(); var caller=new MemoryV2SecurityProperties.TrustedCaller();
-        caller.setKeyId(fixtureKey); caller.setSigningSecret(secret); caller.setAllowedAgentsByDomain(Map.of(context.domainId(),Set.of(context.agentId())));
+        caller.setPublicKeys(Map.of(fixtureKey, MemoryTestIdentity.encodedPublicKey())); caller.setAllowedAgentsByDomain(Map.of(context.domainId(),Set.of(context.agentId())));
         securityProperties.setTrustedCallers(Map.of("preference-fixture",caller));
         var security=new MemoryV2RequestSecurity(securityProperties,new MemoryArchiveServiceTest.AuthStub(),new MemoryV2ReplayGuard(jdbc));
         var store=new MemoryArchiveStore(jdbc,mapper); var sharing=new MemorySharingStore(jdbc,mapper); var sources=new MemorySourceAuthorizer(store,sharing,new MemoryAccessPolicy());
@@ -46,9 +46,9 @@ class PreferenceProcessingMySqlTest {
         try {
             var original=PreferenceHistoryServiceTest.otherMessage(context,"mysql-processing-event","不超过100万");
             var permitRequest=PreferenceHistoryMySqlTest.request(MemoryV2Contract.OPERATION_RECEIVE_PERMIT,e -> new MemoryReceivePermitRequest(e,context,List.of(new MemoryReceivePermitRequest.EventSubmission(original.source().sourceEventId(),original.source().version().contentHash(),"conversation-archive"))));
-            var permit=archive.requestReceivePermit(permitRequest,PreferenceHistoryMySqlTest.sign(permitRequest,fixtureKey,secret));
+            var permit=archive.requestReceivePermit(permitRequest,PreferenceHistoryMySqlTest.sign(permitRequest,fixtureKey,MemoryTestIdentity.PAIR.getPrivate()));
             var delivery=PreferenceHistoryMySqlTest.request(MemoryV2Contract.OPERATION_DELIVER_MESSAGES,e -> new MemoryDeliveryRequest(e,context,original.association(),permit.permitId(),List.of(original)));
-            archive.deliverMessages(delivery,PreferenceHistoryMySqlTest.sign(delivery,fixtureKey,secret));
+            archive.deliverMessages(delivery,PreferenceHistoryMySqlTest.sign(delivery,fixtureKey,MemoryTestIdentity.PAIR.getPrivate()));
             var worker=new PreferenceProcessingWorker(store,sources,preferences,new MemoryPreferenceProperties(),processing,securityProperties,evaluator,manager);
             var other=new PreferenceProcessingWorker(store,sources,preferences,new MemoryPreferenceProperties(),processing,securityProperties,evaluator,manager);
             var future=CompletableFuture.runAsync(worker::runOnce);
@@ -63,7 +63,7 @@ class PreferenceProcessingMySqlTest {
             other.runOnce(); assertEquals(1,calls.get());
             assertEquals(1,jdbc.queryForObject("SELECT COUNT(*) FROM memory_preference_transition WHERE block_id=?",Integer.class,blockId));
             var delete=PreferenceHistoryMySqlTest.request(MemoryV2Contract.OPERATION_WITHDRAW,e -> new MemoryWithdrawalRequest(e,context,original.source().sourceEventId(),true));
-            archive.withdrawSource(delete,PreferenceHistoryMySqlTest.sign(delete,fixtureKey,secret));
+            archive.withdrawSource(delete,PreferenceHistoryMySqlTest.sign(delete,fixtureKey,MemoryTestIdentity.PAIR.getPrivate()));
             assertEquals(0,jdbc.queryForObject("SELECT COUNT(*) FROM memory_preference_evaluation e JOIN memory_processing_job j ON j.job_id=e.job_id WHERE j.context_id=? AND e.result_json IS NOT NULL",Integer.class,contextId));
         } finally {
             release.countDown();

@@ -11,7 +11,7 @@ import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.Base64;
 
-/** HMAC scope for v2 memory search; distinct from the legacy RAG scope format. */
+/** HMAC scope inside the separate RAG search protocol; not a Memory v2 RPC proof or compatibility path. */
 public final class MemoryRagScopeSigner {
     private MemoryRagScopeSigner() { }
 

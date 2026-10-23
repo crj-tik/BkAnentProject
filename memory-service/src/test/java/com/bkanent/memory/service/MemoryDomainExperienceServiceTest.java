@@ -203,7 +203,7 @@ class MemoryDomainExperienceServiceTest {
     private static MemoryRequestProof signAs(MemoryArchiveServiceTest.Fixture f, MemoryV2Request request, long owner) {
         long now = Instant.now().getEpochSecond();
         return MemoryRequestSigner.sign(request, new AuthenticatedPrincipal(owner), "fixture-key", now, now + 60,
-                UUID.randomUUID().toString().replace("-", ""), f.secret.getBytes(StandardCharsets.UTF_8));
+                UUID.randomUUID().toString().replace("-", ""), f.identityPair.getPrivate());
     }
 
     private static <T> T stage(String label, java.util.function.Supplier<T> action) {

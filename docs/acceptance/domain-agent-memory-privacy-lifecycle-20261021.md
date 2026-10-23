@@ -1,5 +1,7 @@
 # Domain Agent Memory 隐私生命周期验收
 
+> 历史验收快照：此记录形成于基础 Memory 尚可选的阶段。当前 Supervisor 与所有官方 A2A Agent 必须接入基础 Memory；当时的关闭配置仅描述历史环境，不代表当前运行策略或验收结论。
+
 **日期**：2026-10-21
 **OpenSpec**：`integrate-domain-agent-memory`，`spec-driven`，本模块完成 3.5、4.7；总进度 30/66。
 **Git**：分支 `dev-fix`；实现提交 `b38975a`。

@@ -1,6 +1,12 @@
 # Memory v2 数据与受管空间运维
 
-A2A/Auth 与 Memory v2 的服务签名身份统一按[服务身份密钥运维](service-identity-operations.md)管理：每服务一组 Ed25519 密钥，私钥只读挂载，verifier 按自己的 ACL 登记公钥；迁移期间旧 HMAC 请求只由 verifier 兼容接收。
+A2A/Auth 与 Memory v2 的服务签名身份统一按[服务身份密钥运维](service-identity-operations.md)管理：每服务一组 Ed25519 密钥，私钥只读挂载，verifier 按自己的 ACL 登记公钥。Memory v2 proof 只使用 Ed25519。
+
+## Agent 必需接入
+
+Supervisor 与所有官方 A2A Agent 都必须在模型或业务工具执行前，通过 Memory 完成当前身份绑定、工作集读取与授权/版本复核；成功回合经许可后归档。Memory 接线缺失、服务不可用、认证/授权失败或版本冲突时，入口必须失败关闭，不得以配置开关或原业务路径旁路。成功读取但没有匹配历史是有效空工作集；明确依赖某个历史对象的请求应先澄清。
+
+压缩、偏好/经验加工及 RAG 索引/搜索属于附加能力。其关闭或不可用只能影响对应附加结果，不能关闭基础工作集、当前授权复核或本轮归档。Memory 调用方使用已有服务 Ed25519 私钥；verifier 只配置该服务公钥和精确 ACL，不为 Memory proof 新增共享 secret。
 
 ## 数据库升级
 
@@ -30,20 +36,11 @@ Memory v2 的逻辑空间由 `nacos/rag-service.yaml` 注册，覆盖五类记�
 
 逐项操作使用 [私有 RAG / A2A 运行探针](../scripts/verification/README.md)：先以 `DOMAIN / INSPECT` 查询具体逻辑空间，再按获批的目标清单执行 `DOMAIN / PROVISION`。探针要求真实当前 ADMIN token、Memory RAG 的受信 key、现有项目私有 Docker 网络、已 package 的服务 jar 和本机已存在的 JDK 镜像；它不启动 RAG、ES、Milvus 或新的服务容器。对每次 provision 只能传配置所列 schema version 和维度，不接受物理名称。`ready=false` 需要按失败 stage 排查，不得打开 dispatcher 或把未就绪标为成功。
 
-Provision、索引投影和读取是独立开关。新空间准备不等于开启 memory archive、经验/偏好处理、Supervisor prompt read、RAG dispatcher 或业务消费者；默认关闭值保持关闭，只有相应迁移和治理 fixture 通过后，才按逐域验收单独启用。不得在 Agent 侧绕过 Memory 的授权核验直接搜索私有空间。
+Provision 只准备物理空间。偏好/经验加工、RAG 投影与搜索、dispatcher 可以按治理门禁逐域启停；Supervisor 与官方 Agent 的基础 Memory 读取、授权复核和归档则始终必需，不设消费开关。不得在 Agent 侧绕过 Memory 的授权核验直接搜索私有空间。
 
-## 分阶段停用与回滚
+## 停止入口与回滚
 
-每个 A2A 消费服务使用 `a2a.memory.enabled` 主开关与两个独立运行开关：`a2a.memory.read-enabled` 控制是否把获准历史装入模型上下文，`a2a.memory.delivery-enabled` 控制本轮结果是否交付到 Memory。Supervisor 对应 `agent.memory-v2.enabled`、`agent.memory-v2.read-enabled` 和 `agent.memory-v2.delivery-enabled`。读取与交付开关位于各服务 Nacos 配置中；发布时确认服务已收到配置刷新。主开关在切流前保持开启。
-
-`read-enabled=false, delivery-enabled=true` 是排空模式。新 A2A 任务不加载历史内容，模型结束后才建立写入会话并归档当前结果；Supervisor 新任务使用 `DELIVERY_ONLY`，不向模型添加 Memory 历史，在任务完成时交付执行消息。已接受任务会记录其交付许可，即使随后关闭交付开关也会尝试完成该次交付。排空模式仍需读取 Memory 的当前版本以生成正确序号，但只在结果归档阶段读取，不把历史正文放入模型上下文。
-
-按以下顺序回滚：
-
-1. 先让网关或当前任务入口停止接收新的 Agent 工作，保持服务进程可用；不要直接停止正在处理任务的容器。
-2. 在各实际启用域和 Supervisor 配置中将 `read-enabled` 设为 `false`，保持 `delivery-enabled=true`；保持 Memory archive 接收端、偏好/经验 worker 与 RAG dispatcher 运行。确认配置刷新后，检查新任务没有加载 Memory 历史。
-3. 等待所有已接收 Agent 任务结束，然后将各域 `delivery-enabled` 设为 `false`。这一步之后新任务不会创建记忆交付，已接受任务仍可提交其交付。
-4. 在受控截止时间内检查交付与加工水位：
+Memory 是 Agent 执行的必需依赖。发生故障或准备回滚时，先在网关/任务入口停止接收新 Agent 工作；不要关闭 Memory 后继续无记忆运行。保持已受理任务的执行和归档状态可观察，按受控截止时间检查可靠交付与加工水位：
 
    ```sql
    SELECT state, COUNT(*) FROM bk_agent.agent_memory_delivery GROUP BY state;
@@ -51,11 +48,11 @@ Provision、索引投影和读取是独立开关。新空间准备不等于开�
    SELECT state, COUNT(*) FROM bk_memory.memory_rag_outbox GROUP BY state;
    ```
 
-   `agent_memory_delivery` 的 `PENDING`、处理 job 的 `PENDING/RETRY/PROCESSING`、以及 RAG outbox 的 `PENDING/WAITING` 或未过期租约表示仍有工作。到截止时间仍未排空时，记录准确状态并保留 journal、job、outbox、tombstone 与 v2 真源；不得清空队列、删表、删集合或恢复已撤回正文。
-5. 只有交付与待加工队列清零后，才关闭偏好/经验加工和 RAG dispatcher。之后关闭各领域与 Supervisor 的主开关，并关闭 Memory archive 接收端。Memory 服务的 archive/worker 开关由 Compose 环境变量提供；更改 `.env` 后只在入口已停止且无在途 RPC 时更新现有 Memory 服务。无需创建测试容器。
-6. 切回原业务调用路径前，确认旧路径可用，v2 的当前授权、撤回状态与所有历程仍保留。恢复新链路时按当前版本重新执行配置与水位检查，不回放未知事件，不把完整偏好历程压成旧单值。
+`agent_memory_delivery` 的 `PENDING`、处理 job 的 `PENDING/RETRY/PROCESSING`、以及 RAG outbox 的 `PENDING/WAITING` 或未过期租约表示仍有工作。到截止时间仍未排空时，记录准确状态并保留 journal、job、outbox、tombstone 与 v2 真源；不得清空队列、删表、删集合或恢复已撤回正文。附加偏好/经验加工和 RAG dispatcher 可在其队列按既定规则排空后独立停用；基础 Memory 只能随 Agent 入口一起停用，不能对仍可接收任务的 Agent 关闭。
 
-本机 2026-10-22 回滚预检只读观察到 `bk-anent-dev` 的运行容器为 Memory、Nacos、MySQL；Memory archive、偏好处理、域投影和域搜索均为关闭，经验开关未设置且按默认关闭，Supervisor 与领域 A2A 服务未运行。`agent_memory_delivery`、`memory_processing_job` 和经验事件收件表均为空；RAG outbox 117 项全部为 `APPLIED`。后续最小联机复核按 Compose 默认设置重建共享服务镜像（23 个模块打包成功），但只启动 `agent-service`，复用 Memory、MySQL、Nacos，另启动其依赖 Redis 与 RocketMQ NameServer；将 `agent-service.yaml` 单独发布到本机 Nacos 并读回校验，替换后的 Agent readiness 返回 `UP`。Agent Memory 与 Memory archive、加工、域投影/搜索、RAG dispatcher 仍关闭，领域 A2A 消费者保持停止，没有真实入口或待排空工作，因此不能执行真实切流/排空演练，也不把静态关闭状态记作演练通过。
+恢复时部署相互匹配的 Agent/Memory 版本，核对每个调用服务私钥对应的公钥登记和最小 ACL，再验证空工作集、已存在历史、归档回执及 Memory 不可用时的失败关闭行为后恢复入口。未知事件不得重放，已完成业务副作用不得重复执行，偏好历程不得压成旧单值。
+
+历史运行快照（2026-10-22，早期可选接入策略）：本机只读观察到当时 `bk-anent-dev` 运行容器为 Memory、Nacos、MySQL；Memory archive、偏好处理、域投影和域搜索关闭，Supervisor 与领域 A2A 服务未运行。交付与加工 job 为空，RAG outbox 117 项全部为 `APPLIED`。后续只启动 `agent-service` 并复用现有依赖，readiness 返回 `UP`；当时 Agent Memory 与 archive 仍关闭，所以该快照不能证明当前强制接入行为，也未执行真实切流/排空演练。此记录不构成当前运行配置或当前验收结果。
 
 2026-10-22 旧物理存储只读盘点：ES 共 5 个索引，`rag_memory_constraint_v1` 有 17 文档；`rag_memory_preference_v1`、`rag_listing_knowledge_v1`、`marketing_content`、`listing_info` 均为空，ES alias 列表为空。Milvus 默认库共 3 集合，constraint 有 17 行，preference/listing 各 0 行；三者字段均为 `doc_id`、`content`、`metadata`、1024 维 `embedding`，向量索引为 COSINE，collection alias 为空。Nacos 已声明 35 个 Memory v2 逻辑空间并为每个空间绑定 ES index/Milvus collection，但本次旧物理清单未发现这些目标名；当时尚未执行 PROVISION，也未创建空 schema。该轮使用的身份无 ADMIN 权限，因此没有执行管理 RPC；未读取正文或更改存储。盘点结束后已停止 ES、Milvus、etcd 和 Milvus MinIO，只保留原有 Memory、MySQL、Nacos。
 

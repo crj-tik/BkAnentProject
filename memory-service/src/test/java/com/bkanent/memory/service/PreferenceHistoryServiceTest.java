@@ -275,7 +275,8 @@ class PreferenceHistoryServiceTest {
         var candidate=f.candidate(source,"100",PreferenceTransition.Change.OBSERVATION,List.of());
         var request=f.request(MemoryV2Contract.OPERATION_PREFERENCE_WRITE,e -> new MemoryPreferenceWriteRequest(e,CONTEXT,0,candidate));
         var proof=f.sign(request);
-        var serviceProof=new MemoryRequestProof(proof.keyId(),proof.issuedAtEpochSecond(),proof.expiresAtEpochSecond(),proof.nonce(),proof.signature(),MemoryRequestProof.Actor.SERVICE);
+        var serviceProof=new MemoryRequestProof(proof.keyId(),proof.issuedAtEpochSecond(),proof.expiresAtEpochSecond(),proof.nonce(),proof.signature(),
+                MemoryRequestProof.Actor.SERVICE, proof.signatureVersion(), proof.algorithm());
         code(MemoryErrorCode.AUTHENTICATION_FAILED, () -> f.preferences.submit(request,serviceProof));
         f.jdbc.update("DELETE FROM memory_message_observation");
         code(MemoryErrorCode.MEMORY_UNAVAILABLE, () -> f.submit(0,f.candidate(source,"100",PreferenceTransition.Change.OBSERVATION,List.of())));

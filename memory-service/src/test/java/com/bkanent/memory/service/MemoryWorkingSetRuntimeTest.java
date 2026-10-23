@@ -345,7 +345,8 @@ class MemoryWorkingSetRuntimeTest {
         var request = f.request(MemoryV2Contract.OPERATION_BOUNDARY, e -> new MemoryBoundaryRequest(e, CONTEXT,
                 new MemoryConversationVersion(0, 0, "archive-v2.1"), List.of()));
         var userProof = f.sign(request);
-        var forged = new MemoryRequestProof(userProof.keyId(), userProof.issuedAtEpochSecond(), userProof.expiresAtEpochSecond(), userProof.nonce(), userProof.signature(), MemoryRequestProof.Actor.SERVICE);
+        var forged = new MemoryRequestProof(userProof.keyId(), userProof.issuedAtEpochSecond(), userProof.expiresAtEpochSecond(), userProof.nonce(),
+                userProof.signature(), MemoryRequestProof.Actor.SERVICE, userProof.signatureVersion(), userProof.algorithm());
         code(MemoryErrorCode.AUTHENTICATION_FAILED, () -> f.service.checkBoundary(request, forged));
     }
 }

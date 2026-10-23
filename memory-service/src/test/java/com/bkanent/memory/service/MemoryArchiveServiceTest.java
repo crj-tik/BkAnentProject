@@ -85,7 +85,8 @@ class MemoryArchiveServiceTest {
         Fixture f = new Fixture();
         var request = f.request(MemoryV2Contract.OPERATION_WORKING_SET, envelope -> new MemoryWorkingSetRequest(envelope, CONTEXT));
         var user = f.sign(request);
-        var forged = new MemoryRequestProof(user.keyId(), user.issuedAtEpochSecond(), user.expiresAtEpochSecond(), user.nonce(), user.signature(), MemoryRequestProof.Actor.SERVICE);
+        var forged = new MemoryRequestProof(user.keyId(), user.issuedAtEpochSecond(), user.expiresAtEpochSecond(), user.nonce(),
+                user.signature(), MemoryRequestProof.Actor.SERVICE, user.signatureVersion(), user.algorithm());
         code(MemoryErrorCode.AUTHENTICATION_FAILED, () -> f.service.readWorkingSet(request, forged));
         var permit = f.permitRequest(List.of(message(1, "hi")), List.of(), "p1");
         code(MemoryErrorCode.AUTHENTICATION_FAILED, () -> f.service.requestReceivePermit(permit, forged));
@@ -302,7 +303,7 @@ class MemoryArchiveServiceTest {
                 MemoryCanonicalHash.messageHash(first), "event-1"));
         assertEquals(0, f.jdbc.queryForObject("SELECT COUNT(*) FROM memory_privacy_deletion WHERE source_event_id=? AND "
                 + "(source_hash IS NULL OR action_kind<>'DELETE' OR cleanup_state<>'PENDING')", Integer.class, "event-1"));
-        new MemoryPrivacyCleanupWorker(f.store, f.transactions, List.of(), true, 4, 3, 60, 1, Clock.systemUTC()).runOnce();
+        new MemoryPrivacyCleanupWorker(f.store, f.transactions, List.of(), 4, 3, 60, 1, Clock.systemUTC()).runOnce();
         var completed = f.privacyStatus("event-1");
         assertEquals(MemoryPrivacyCleanupState.COMPLETE, completed.cleanupState());
         assertEquals(MemoryState.DELETED, completed.sourceState());
@@ -335,10 +336,10 @@ class MemoryArchiveServiceTest {
                 if (calls.getAndIncrement() == 0) throw new IllegalStateException("external projection unavailable");
             }
         };
-        new MemoryPrivacyCleanupWorker(f.store, f.transactions, List.of(cleaner), true, 4, 3, 60, 1, clock).runOnce();
+        new MemoryPrivacyCleanupWorker(f.store, f.transactions, List.of(cleaner), 4, 3, 60, 1, clock).runOnce();
         assertEquals(MemoryPrivacyCleanupState.RETRY, f.privacyStatus("event-1").cleanupState());
         assertEquals(MemoryState.DELETION_PENDING, f.privacyStatus("event-1").sourceState());
-        new MemoryPrivacyCleanupWorker(f.store, f.transactions, List.of(cleaner), true, 4, 3, 60, 1,
+        new MemoryPrivacyCleanupWorker(f.store, f.transactions, List.of(cleaner), 4, 3, 60, 1,
                 Clock.fixed(initial.plusSeconds(2), ZoneOffset.UTC)).runOnce();
         assertEquals(MemoryPrivacyCleanupState.COMPLETE, f.privacyStatus("event-1").cleanupState());
         assertEquals(2, calls.get());
@@ -383,8 +384,8 @@ class MemoryArchiveServiceTest {
                 }
             }
         };
-        var first = new MemoryPrivacyCleanupWorker(f.store, f.transactions, List.of(cleaner), true, 4, 3, 60, 1, Clock.systemUTC());
-        var second = new MemoryPrivacyCleanupWorker(f.store, f.transactions, List.of(cleaner), true, 4, 3, 60, 1, Clock.systemUTC());
+        var first = new MemoryPrivacyCleanupWorker(f.store, f.transactions, List.of(cleaner), 4, 3, 60, 1, Clock.systemUTC());
+        var second = new MemoryPrivacyCleanupWorker(f.store, f.transactions, List.of(cleaner), 4, 3, 60, 1, Clock.systemUTC());
         var executor = java.util.concurrent.Executors.newSingleThreadExecutor();
         try {
             var running = executor.submit(first::runOnce);
@@ -408,7 +409,7 @@ class MemoryArchiveServiceTest {
         var withdraw = f.request(MemoryV2Contract.OPERATION_WITHDRAW,
                 envelope -> new MemoryWithdrawalRequest(envelope, CONTEXT, "event-1", false));
         assertEquals(MemoryState.WITHDRAWN, f.service.withdrawSource(withdraw, f.sign(withdraw)).state());
-        new MemoryPrivacyCleanupWorker(f.store, f.transactions, List.of(), true, 4, 3, 60, 1, Clock.systemUTC()).runOnce();
+        new MemoryPrivacyCleanupWorker(f.store, f.transactions, List.of(), 4, 3, 60, 1, Clock.systemUTC()).runOnce();
         assertEquals(MemoryPrivacyCleanupState.COMPLETE, f.privacyStatus("event-1").cleanupState());
         assertNotNull(f.jdbc.queryForObject("SELECT payload_json FROM memory_message WHERE context_id=? AND source_event_id=?", String.class,
                 MemoryArchiveStore.key(CONTEXT), "event-1"));
@@ -417,7 +418,7 @@ class MemoryArchiveServiceTest {
         assertEquals(MemoryState.DELETION_PENDING, f.service.withdrawSource(deletion, f.sign(deletion)).state());
         assertNull(f.jdbc.queryForObject("SELECT payload_json FROM memory_message WHERE context_id=? AND source_event_id=?", String.class,
                 MemoryArchiveStore.key(CONTEXT), "event-1"));
-        new MemoryPrivacyCleanupWorker(f.store, f.transactions, List.of(), true, 4, 3, 60, 1, Clock.systemUTC()).runOnce();
+        new MemoryPrivacyCleanupWorker(f.store, f.transactions, List.of(), 4, 3, 60, 1, Clock.systemUTC()).runOnce();
         var repeated = f.request(MemoryV2Contract.OPERATION_WITHDRAW,
                 envelope -> new MemoryWithdrawalRequest(envelope, CONTEXT, "event-1", false));
         assertEquals(MemoryState.DELETED, f.service.withdrawSource(repeated, f.sign(repeated)).state());
@@ -632,7 +633,6 @@ class MemoryArchiveServiceTest {
         final MemoryV2SecurityProperties.TrustedCaller caller = new MemoryV2SecurityProperties.TrustedCaller();
         final KeyPair identityPair;
         final AuthStub auth = new AuthStub();
-        final String secret = UUID.randomUUID().toString() + UUID.randomUUID();
         MemoryArchiveStore store;
         MemorySharingStore sharing;
         MemorySourceAuthorizer sources;
@@ -660,7 +660,7 @@ class MemoryArchiveServiceTest {
                     ScriptUtils.executeSqlScript(connection, new ByteArrayResource(sql.getBytes(StandardCharsets.UTF_8)));
                 }
             }
-            caller.setKeyId("fixture-key"); caller.setSigningSecret(secret); caller.setServiceDelivery(true); caller.setExperienceOutcomePublisher(true);
+            caller.setServiceDelivery(true); caller.setExperienceOutcomePublisher(true);
             caller.setPublicKeys(Map.of("fixture-key", com.bkanent.common.security.ServiceIdentityCrypto.encodePublicKey(identityPair.getPublic())));
             caller.setExperienceGovernancePublisher(true);
             caller.setAllowedAgentsByDomain(Map.of("marketing", Set.of("copy-agent")));
@@ -721,17 +721,17 @@ class MemoryArchiveServiceTest {
         MemoryRequestProof sign(MemoryV2Request request) {
             long now = Instant.now().getEpochSecond();
             return MemoryRequestSigner.sign(request, new AuthenticatedPrincipal(42L), "fixture-key", now, now + 60,
-                    UUID.randomUUID().toString().replace("-", ""), secret.getBytes(StandardCharsets.UTF_8));
+                    UUID.randomUUID().toString().replace("-", ""), identityPair.getPrivate());
         }
         MemoryRequestProof signService(MemoryDeliveryRequest request) {
             long now = Instant.now().getEpochSecond();
             return MemoryRequestSigner.signServiceDelivery(request, "fixture-key", now, now + 60,
-                    UUID.randomUUID().toString().replace("-", ""), secret.getBytes(StandardCharsets.UTF_8));
+                    UUID.randomUUID().toString().replace("-", ""), identityPair.getPrivate());
         }
         MemoryRequestProof signService(MemoryExperienceOutcomeRequest request) {
             long now = Instant.now().getEpochSecond();
             return MemoryRequestSigner.signServiceExperienceOutcome(request, "fixture-key", now, now + 60,
-                    UUID.randomUUID().toString().replace("-", ""), secret.getBytes(StandardCharsets.UTF_8));
+                    UUID.randomUUID().toString().replace("-", ""), identityPair.getPrivate());
         }
     }
 

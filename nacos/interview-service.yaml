@@ -130,5 +130,3 @@ interview:
     max-retries: 3
 a2a:
   memory:
-    read-enabled: true
-    delivery-enabled: true
