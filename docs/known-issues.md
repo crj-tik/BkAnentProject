@@ -1412,7 +1412,7 @@
 
 **关联**：LR-98；change 11.8；`scripts/security/ServiceIdentityKeygen.java`。
 
-## KI-164 [OPEN·P2] 可选偏好模型配置缺失不能阻断 Memory 核心服务
+## KI-164 [FIXED·e8f64de·P2] 可选偏好模型配置缺失不能阻断 Memory 核心服务
 
 **发现日期**：2026-10-23。全量回归发现当偏好加工开关打开、但模型名或模型凭据未配置时，`PreferenceEvaluator` bean 创建异常会让 `memory-service` 整体启动失败；这使一个可选附加能力错误地阻断所有 Agent 必需的基础记忆读写。
 
@@ -1420,7 +1420,7 @@
 
 **关联**：LR-96；change 11.6。
 
-## KI-165 [OPEN·P1] Memory 后台 Worker 多构造器未指定 Spring 注入路径导致服务启动失败
+## KI-165 [FIXED·e8f64de·P1] Memory 后台 Worker 多构造器未指定 Spring 注入路径导致服务启动失败
 
 **发现日期**：2026-10-23。将当前 Memory 镜像部署到本机开发栈后，`memory-service` 因 `MemoryPrivacyCleanupWorker` 同时存在生产构造器与测试时钟构造器、但未显式标注注入构造器，Spring 尝试查找无参构造器并启动失败；Compose 仅依据容器进程短暂运行错误地报告就绪。该问题阻断必需 Memory RPC。
 
@@ -1430,4 +1430,4 @@
 
 ---
 
-**变更历史**：5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
+**变更历史**：e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
