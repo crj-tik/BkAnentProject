@@ -947,3 +947,11 @@
 **代码位置**：`PreferenceHistoryService.append/searchAt/assemble` 从签名上下文派生 owner-self 与 domain+agent 私有键，校验维度注册，并在检索时复算 blockId；偏好搜索先拒绝非 owner subject；`PreferenceBlockKey` 和 `MemoryScope.privateScope` 提供稳定逻辑身份；跨域内容仍走 `MemorySharingWriteService`、`MemorySharedExport` 与 grant。回归为 `MemoryContractTest.privatePreferenceScopeCannotCollideAcrossDomainsAgentsOrEscapedSegments` 与 `PreferenceHistoryServiceTest.agentsCannotMergeOrReadEachOthersBlocksAndForgedSubjectOrDimensionsAreRejected`。
 
 **关联**：LR-59、LR-70、LR-73；KI-142；change 7.1、10.1/10.2。
+
+## LR-98 服务身份密钥跨协议复用私钥，但按协议域隔离签名
+
+**结论**：每个调用服务只持有一组 Ed25519 身份私钥，可分别签署 A2A/Auth 信标与 Memory v2 请求；签名输入包含显式版本、算法、key ID 和不同的协议域标签（`BK-ANENT:A2A-AUTH:v1`、`BK-ANENT:MEMORY-V2:v1`）。Auth 与 Memory 各自只登记需要验证的公钥，并继续执行各自精确的 caller、operation、domain、agent 和用户授权；Auth 仅授予 `agent-service` `ISSUE_BEACON`，其他已登记 A2A 调用方只授予 `RESOLVE_BEACON`。迁移期 verifier 可分别校验 HMAC-v1 旧请求与 Ed25519-v2 新请求，但新签发方仅生成 Ed25519-v2；只有在覆盖最长调用周期与回滚窗口的观察期内，通过低基数验签指标实测旧流量归零后，才可删除 HMAC 路径。
+
+**根因**：每服务每协议配置共享 HMAC secret 会让调用方与验证方都能伪造请求，且密钥项随服务和协议数增长。每服务一组非对称密钥把签名能力留在调用服务；协议域分离允许复用身份而阻止跨协议重放；verifier 独立公钥登记与原 ACL 保证新增身份不自动扩大权限。未取得旧请求流量归零证据时提前删除 HMAC verifier 会中断仍在运行的旧二进制，因此兼容退役需单独依赖运行态验收。
+
+**代码位置**：`common/security/ServiceIdentityCrypto`、`common/rag/A2aAuthSignature`、`common/memory/MemoryRequestSigner`、`common-a2a/A2aBeaconAuthentication`、`auth-service/AuthA2aIdentityProperties` 与 `A2aBeaconRpcServiceImpl`、`memory-service/MemoryV2SecurityProperties` 与 `MemoryV2RequestSecurity`；验签计数器 `service.identity.signature.verified`、`docker-compose.yml`、`scripts/security/`、`docs/service-identity-operations.md`。回归覆盖协议域、签名、key ID/公钥匹配、算法降级拒绝、轮换撤销与 verifier ACL；关联 KI-162、change 11.8/11.9。

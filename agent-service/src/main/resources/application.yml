@@ -21,12 +21,15 @@ spring:
         namespace: ${bk.nacos.namespace}
         file-extension: yaml
 
+service:
+  identity:
+    key-id: ${SERVICE_IDENTITY_KEY_ID:agent-service-current}
+    private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
+
 a2a:
   auth:
-    key-id: ${AGENT_A2A_KEY_ID:agent-a2a-current}
-    signing-secret: ${AGENT_A2A_SIGNING_SECRET:}
-    response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}
-    response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
+    response-key-id: ${AUTH_SERVICE_IDENTITY_KEY_ID:auth-service-current}
+    response-public-key: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
 
 agent:
   memory-v2:
@@ -34,8 +37,8 @@ agent:
     read-enabled: true
     delivery-enabled: true
     compression-enabled: ${AGENT_MEMORY_V2_COMPRESSION_ENABLED:false}
-    key-id: ${AGENT_MEMORY_V2_KEY_ID:agent-memory-current}
-    signing-secret: ${AGENT_MEMORY_V2_SIGNING_SECRET:}
+    key-id: ${SERVICE_IDENTITY_KEY_ID:agent-service-current}
+    private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
     cache-entries: ${AGENT_MEMORY_V2_CACHE_ENTRIES:128}
     cache-bytes: ${AGENT_MEMORY_V2_CACHE_BYTES:33554432}
     cache-ttl-ms: ${AGENT_MEMORY_V2_CACHE_TTL_MS:60000}

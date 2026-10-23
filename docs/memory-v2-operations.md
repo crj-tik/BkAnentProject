@@ -1,5 +1,7 @@
 # Memory v2 数据与受管空间运维
 
+A2A/Auth 与 Memory v2 的服务签名身份统一按[服务身份密钥运维](service-identity-operations.md)管理：每服务一组 Ed25519 密钥，私钥只读挂载，verifier 按自己的 ACL 登记公钥；迁移期间旧 HMAC 请求只由 verifier 兼容接收。
+
 ## 数据库升级
 
 Memory v2 的 SQL 升级由 `docker/mysql/init-manifest.tsv` 固定选择，禁止用目录 glob 执行 `sql/migrations/`。清单校验每个 SQL 和 schema check 的 SHA-256；校验按去除 CR 的 LF 文本计算，使 Windows checkout 与 Linux 执行一致。成功后版本、两个 checksum 和应用时间写入各目标库的 `bk_schema_migration`。版本记录已存在时，升级器校验 checksum 并重新运行 schema check；版本记录缺失时只执行该行清单 SQL。

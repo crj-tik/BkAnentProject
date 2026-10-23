@@ -12,13 +12,11 @@ class SupervisorMemoryPropertiesTest {
         assertDoesNotThrow(properties::validate);
     }
 
-    @Test void enabledModeRequiresDedicatedSecretWithMinimumLength() {
+    @Test void enabledModeRequiresServiceIdentityPrivateKeyFile() {
         var properties = new SupervisorMemoryProperties();
         properties.setEnabled(true);
         assertThrows(IllegalArgumentException.class, properties::validate);
-        properties.setSigningSecret("short");
-        assertThrows(IllegalArgumentException.class, properties::validate);
-        properties.setSigningSecret("a".repeat(32));
+        properties.setPrivateKeyFile("/run/secrets/service-identity.pem");
         assertDoesNotThrow(properties::validate);
     }
 
@@ -31,7 +29,7 @@ class SupervisorMemoryPropertiesTest {
     @Test void promptReadsAndAcceptedDeliveriesHaveIndependentSwitches() {
         var properties = new SupervisorMemoryProperties();
         properties.setEnabled(true);
-        properties.setSigningSecret("a".repeat(32));
+        properties.setPrivateKeyFile("/run/secrets/service-identity.pem");
         properties.setReadEnabled(false);
         properties.setDeliveryEnabled(true);
         assertFalse(properties.isReadEnabled());

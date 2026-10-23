@@ -23,6 +23,8 @@ x-app-environment: &app-environment
   MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?Explicit MINIO_ROOT_PASSWORD required}
   MINIO_PUBLIC_BASE_URL: ${MINIO_PUBLIC_BASE_URL:-http://127.0.0.1:19000}
   AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:?Explicit AUTH_TOKEN_SECRET required}
+  SERVICE_IDENTITY_PRIVATE_KEY_FILE: /run/secrets/service-identity.pem
+  AUTH_SERVICE_IDENTITY_KEY_ID: auth-service-current
   # Spring AI validates provider keys during bean creation. The placeholders
   # only keep local containers bootable; real AI calls still require keys.
   DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-${KE_API_KEY:-local-dev-placeholder}}
@@ -42,6 +44,8 @@ x-app-service: &app-service
     context: .
     dockerfile: Dockerfile
   restart: unless-stopped
+  env_file:
+    - ./.secrets/service-identities/public-keys.env
   depends_on:
     config-init:
       condition: service_completed_successfully
@@ -388,6 +392,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - type: bind
+        source: ./.secrets/service-identities/auth-service/private-key.pem
+        target: /run/secrets/service-identity.pem
+        read_only: true
+        bind:
+          create_host_path: false
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: auth-service-1.0.0-SNAPSHOT.jar
@@ -454,6 +465,13 @@ services:
         condition: service_started
       memory-service:
         condition: service_started
+    volumes:
+      - type: bind
+        source: ./.secrets/service-identities/agent-service/private-key.pem
+        target: /run/secrets/service-identity.pem
+        read_only: true
+        bind:
+          create_host_path: false
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: agent-service-1.0.0-SNAPSHOT.jar
@@ -463,8 +481,7 @@ services:
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,redis,rocketmq,memory
       AGENT_MEMORY_V2_ENABLED: ${AGENT_MEMORY_V2_ENABLED:-false}
       AGENT_MEMORY_V2_COMPRESSION_ENABLED: ${AGENT_MEMORY_V2_COMPRESSION_ENABLED:-false}
-      AGENT_MEMORY_V2_KEY_ID: ${AGENT_MEMORY_V2_KEY_ID:-agent-memory-current}
-      AGENT_MEMORY_V2_SIGNING_SECRET: ${AGENT_MEMORY_V2_SIGNING_SECRET:-}
+      SERVICE_IDENTITY_KEY_ID: agent-service-current
       AGENT_MEMORY_V2_CACHE_ENTRIES: ${AGENT_MEMORY_V2_CACHE_ENTRIES:-128}
       AGENT_MEMORY_V2_CACHE_BYTES: ${AGENT_MEMORY_V2_CACHE_BYTES:-33554432}
       AGENT_MEMORY_V2_CACHE_TTL_MS: ${AGENT_MEMORY_V2_CACHE_TTL_MS:-60000}
@@ -478,10 +495,6 @@ services:
       AGENT_MEMORY_V2_TOOL_INLINE_CHARS: ${AGENT_MEMORY_V2_TOOL_INLINE_CHARS:-4096}
       AGENT_MEMORY_V2_RECALL_CHARS: ${AGENT_MEMORY_V2_RECALL_CHARS:-8192}
       AGENT_RAG_RPC_SECRET: ${AGENT_RAG_RPC_SECRET:-}
-      AGENT_A2A_KEY_ID: ${AGENT_A2A_KEY_ID:-agent-a2a-current}
-      AGENT_A2A_SIGNING_SECRET: ${AGENT_A2A_SIGNING_SECRET:-}
-      AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
-      AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
       MEMORY_SERVICE_BASE_URL: http://memory-service:9011
       BUSINESS_MCP_ENDPOINT: http://business-service:9010/mcp
       COMPARE_MCP_ENDPOINT: http://compare-engine-service:9006/mcp
@@ -501,23 +514,31 @@ services:
         condition: service_healthy
       rocketmq-namesrv:
         condition: service_started
+    volumes:
+      - type: bind
+        source: ./.secrets/service-identities/notification-service/private-key.pem
+        target: /run/secrets/service-identity.pem
+        read_only: true
+        bind:
+          create_host_path: false
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: notification-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://notification-service:9003
-      NOTIFICATION_A2A_KEY_ID: ${NOTIFICATION_A2A_KEY_ID:-notification-a2a-current}
-      NOTIFICATION_A2A_SIGNING_SECRET: ${NOTIFICATION_A2A_SIGNING_SECRET:-}
       NOTIFICATION_MEMORY_V2_ENABLED: ${NOTIFICATION_MEMORY_V2_ENABLED:-false}
       NOTIFICATION_MEMORY_V2_COMPRESSION_ENABLED: ${NOTIFICATION_MEMORY_V2_COMPRESSION_ENABLED:-false}
-      NOTIFICATION_MEMORY_V2_KEY_ID: ${NOTIFICATION_MEMORY_V2_KEY_ID:-notification-memory-current}
-      NOTIFICATION_MEMORY_V2_SIGNING_SECRET: ${NOTIFICATION_MEMORY_V2_SIGNING_SECRET:-}
-      AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
-      AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,rocketmq
 
   listing-master-service:
     <<: *app-service
     profiles: [full]
+    volumes:
+      - type: bind
+        source: ./.secrets/service-identities/listing-master-service/private-key.pem
+        target: /run/secrets/service-identity.pem
+        read_only: true
+        bind:
+          create_host_path: false
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: listing-master-service-1.0.0-SNAPSHOT.jar
@@ -527,45 +548,44 @@ services:
       AGENT_RAG_RPC_SECRET: ${AGENT_RAG_RPC_SECRET:-}
       CUSTOMER_LISTING_READ_SECRET: ${CUSTOMER_LISTING_READ_SECRET:-}
       MARKETING_LISTING_READ_SECRET: ${MARKETING_LISTING_READ_SECRET:-}
-      LISTING_A2A_KEY_ID: ${LISTING_A2A_KEY_ID:-listing-a2a-current}
-      LISTING_A2A_SIGNING_SECRET: ${LISTING_A2A_SIGNING_SECRET:-}
-      LISTING_MEMORY_V2_ENABLED: ${LISTING_MEMORY_V2_ENABLED:-false}
-      LISTING_MEMORY_V2_COMPRESSION_ENABLED: ${LISTING_MEMORY_V2_COMPRESSION_ENABLED:-false}
-      LISTING_MEMORY_V2_KEY_ID: ${LISTING_MEMORY_V2_KEY_ID:-listing-memory-current}
-      LISTING_MEMORY_V2_SIGNING_SECRET: ${LISTING_MEMORY_V2_SIGNING_SECRET:-}
       AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
       AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
+      LISTING_MEMORY_V2_ENABLED: ${LISTING_MEMORY_V2_ENABLED:-false}
+      LISTING_MEMORY_V2_COMPRESSION_ENABLED: ${LISTING_MEMORY_V2_COMPRESSION_ENABLED:-false}
 
   customer-service:
     <<: *app-service
     profiles: [full]
+    volumes:
+      - type: bind
+        source: ./.secrets/service-identities/customer-service/private-key.pem
+        target: /run/secrets/service-identity.pem
+        read_only: true
+        bind:
+          create_host_path: false
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: customer-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://customer-service:9005
       CUSTOMER_LISTING_READ_SECRET: ${CUSTOMER_LISTING_READ_SECRET:-}
-      CUSTOMER_A2A_KEY_ID: ${CUSTOMER_A2A_KEY_ID:-customer-a2a-current}
-      CUSTOMER_A2A_SIGNING_SECRET: ${CUSTOMER_A2A_SIGNING_SECRET:-}
-      AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
-      AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
 
   compare-engine-service:
     <<: *app-service
     profiles: [full]
     volumes:
       - compare-report-data:/app/runtime
+      - type: bind
+        source: ./.secrets/service-identities/compare-engine-service/private-key.pem
+        target: /run/secrets/service-identity.pem
+        read_only: true
+        bind:
+          create_host_path: false
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: compare-engine-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://compare-engine-service:9006
-      COMPARE_A2A_KEY_ID: ${COMPARE_A2A_KEY_ID:-compare-a2a-current}
-      COMPARE_A2A_SIGNING_SECRET: ${COMPARE_A2A_SIGNING_SECRET:-}
       COMPARE_MEMORY_V2_ENABLED: ${COMPARE_MEMORY_V2_ENABLED:-false}
       COMPARE_MEMORY_V2_COMPRESSION_ENABLED: ${COMPARE_MEMORY_V2_COMPRESSION_ENABLED:-false}
-      COMPARE_MEMORY_V2_KEY_ID: ${COMPARE_MEMORY_V2_KEY_ID:-compare-memory-current}
-      COMPARE_MEMORY_V2_SIGNING_SECRET: ${COMPARE_MEMORY_V2_SIGNING_SECRET:-}
-      AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
-      AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
       COMPARE_REPORT_STORAGE_DIR: /app/runtime/reports
 
   media-worker-service:
@@ -580,18 +600,19 @@ services:
         condition: service_started
       minio-init:
         condition: service_completed_successfully
+    volumes:
+      - type: bind
+        source: ./.secrets/service-identities/media-worker-service/private-key.pem
+        target: /run/secrets/service-identity.pem
+        read_only: true
+        bind:
+          create_host_path: false
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: media-worker-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://media-worker-service:9007
-      MEDIA_A2A_KEY_ID: ${MEDIA_A2A_KEY_ID:-media-a2a-current}
-      MEDIA_A2A_SIGNING_SECRET: ${MEDIA_A2A_SIGNING_SECRET:-}
       MEDIA_MEMORY_V2_ENABLED: ${MEDIA_MEMORY_V2_ENABLED:-false}
       MEDIA_MEMORY_V2_COMPRESSION_ENABLED: ${MEDIA_MEMORY_V2_COMPRESSION_ENABLED:-false}
-      MEDIA_MEMORY_V2_KEY_ID: ${MEDIA_MEMORY_V2_KEY_ID:-media-memory-current}
-      MEDIA_MEMORY_V2_SIGNING_SECRET: ${MEDIA_MEMORY_V2_SIGNING_SECRET:-}
-      AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
-      AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,rocketmq,minio
 
   marketing-content-service:
@@ -604,20 +625,21 @@ services:
         condition: service_healthy
       elasticsearch-init:
         condition: service_completed_successfully
+    volumes:
+      - type: bind
+        source: ./.secrets/service-identities/marketing-content-service/private-key.pem
+        target: /run/secrets/service-identity.pem
+        read_only: true
+        bind:
+          create_host_path: false
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: marketing-content-service-1.0.0-SNAPSHOT.jar
       MARKETING_ELASTICSEARCH_URIS: ${MARKETING_ELASTICSEARCH_URIS:-http://elasticsearch:9200}
       A2A_PUBLIC_BASE_URL: http://marketing-content-service:9008
       MARKETING_LISTING_READ_SECRET: ${MARKETING_LISTING_READ_SECRET:-}
-      MARKETING_A2A_KEY_ID: ${MARKETING_A2A_KEY_ID:-marketing-a2a-current}
-      MARKETING_A2A_SIGNING_SECRET: ${MARKETING_A2A_SIGNING_SECRET:-}
       MARKETING_MEMORY_V2_ENABLED: ${MARKETING_MEMORY_V2_ENABLED:-false}
       MARKETING_MEMORY_V2_COMPRESSION_ENABLED: ${MARKETING_MEMORY_V2_COMPRESSION_ENABLED:-false}
-      MARKETING_MEMORY_V2_KEY_ID: ${MARKETING_MEMORY_V2_KEY_ID:-marketing-memory-current}
-      MARKETING_MEMORY_V2_SIGNING_SECRET: ${MARKETING_MEMORY_V2_SIGNING_SECRET:-}
-      AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
-      AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,elasticsearch
 
   promotion-service:
@@ -638,18 +660,19 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      - type: bind
+        source: ./.secrets/service-identities/business-service/private-key.pem
+        target: /run/secrets/service-identity.pem
+        read_only: true
+        bind:
+          create_host_path: false
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: business-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://business-service:9010
-      BUSINESS_A2A_KEY_ID: ${BUSINESS_A2A_KEY_ID:-business-a2a-current}
-      BUSINESS_A2A_SIGNING_SECRET: ${BUSINESS_A2A_SIGNING_SECRET:-}
       BUSINESS_MEMORY_V2_ENABLED: ${BUSINESS_MEMORY_V2_ENABLED:-false}
       BUSINESS_MEMORY_V2_COMPRESSION_ENABLED: ${BUSINESS_MEMORY_V2_COMPRESSION_ENABLED:-false}
-      BUSINESS_MEMORY_V2_KEY_ID: ${BUSINESS_MEMORY_V2_KEY_ID:-business-memory-current}
-      BUSINESS_MEMORY_V2_SIGNING_SECRET: ${BUSINESS_MEMORY_V2_SIGNING_SECRET:-}
-      AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
-      AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,redis
 
   memory-service:
@@ -721,34 +744,36 @@ services:
   contract-service:
     <<: *app-service
     profiles: [full]
+    volumes:
+      - type: bind
+        source: ./.secrets/service-identities/contract-service/private-key.pem
+        target: /run/secrets/service-identity.pem
+        read_only: true
+        bind:
+          create_host_path: false
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: contract-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://contract-service:9012
-      CONTRACT_A2A_KEY_ID: ${CONTRACT_A2A_KEY_ID:-contract-a2a-current}
-      CONTRACT_A2A_SIGNING_SECRET: ${CONTRACT_A2A_SIGNING_SECRET:-}
       CONTRACT_MEMORY_V2_ENABLED: ${CONTRACT_MEMORY_V2_ENABLED:-false}
       CONTRACT_MEMORY_V2_COMPRESSION_ENABLED: ${CONTRACT_MEMORY_V2_COMPRESSION_ENABLED:-false}
-      CONTRACT_MEMORY_V2_KEY_ID: ${CONTRACT_MEMORY_V2_KEY_ID:-contract-memory-current}
-      CONTRACT_MEMORY_V2_SIGNING_SECRET: ${CONTRACT_MEMORY_V2_SIGNING_SECRET:-}
-      AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
-      AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
 
   settlement-service:
     <<: *app-service
     profiles: [full]
+    volumes:
+      - type: bind
+        source: ./.secrets/service-identities/settlement-service/private-key.pem
+        target: /run/secrets/service-identity.pem
+        read_only: true
+        bind:
+          create_host_path: false
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: settlement-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://settlement-service:9013
-      SETTLEMENT_A2A_KEY_ID: ${SETTLEMENT_A2A_KEY_ID:-settlement-a2a-current}
-      SETTLEMENT_A2A_SIGNING_SECRET: ${SETTLEMENT_A2A_SIGNING_SECRET:-}
       SETTLEMENT_MEMORY_V2_ENABLED: ${SETTLEMENT_MEMORY_V2_ENABLED:-false}
       SETTLEMENT_MEMORY_V2_COMPRESSION_ENABLED: ${SETTLEMENT_MEMORY_V2_COMPRESSION_ENABLED:-false}
-      SETTLEMENT_MEMORY_V2_KEY_ID: ${SETTLEMENT_MEMORY_V2_KEY_ID:-settlement-memory-current}
-      SETTLEMENT_MEMORY_V2_SIGNING_SECRET: ${SETTLEMENT_MEMORY_V2_SIGNING_SECRET:-}
-      AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
-      AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
 
   # Opt-in deployment structure only: no backend is provisioned or authorized by this definition.
   rag-service:
@@ -830,20 +855,21 @@ services:
       args:
         MAVEN_MODULES: interview-service
     profiles: [full]
+    volumes:
+      - type: bind
+        source: ./.secrets/service-identities/interview-service/private-key.pem
+        target: /run/secrets/service-identity.pem
+        read_only: true
+        bind:
+          create_host_path: false
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: interview-service-1.0.0-SNAPSHOT.jar
       DUBBO_REGISTRY_ADDRESS: "nacos://nacos:8848?namespace=${NACOS_NAMESPACE:-BK-AGENT}&group=DEFAULT_GROUP"
       A2A_PUBLIC_BASE_URL: http://interview-service:9014
-      INTERVIEW_A2A_KEY_ID: ${INTERVIEW_A2A_KEY_ID:-interview-a2a-current}
-      INTERVIEW_A2A_SIGNING_SECRET: ${INTERVIEW_A2A_SIGNING_SECRET:-}
       INTERVIEW_TICKET_SECRET: ${INTERVIEW_TICKET_SECRET:?Set INTERVIEW_TICKET_SECRET in .env}
       INTERVIEW_MEMORY_V2_ENABLED: ${INTERVIEW_MEMORY_V2_ENABLED:-false}
       INTERVIEW_MEMORY_V2_COMPRESSION_ENABLED: ${INTERVIEW_MEMORY_V2_COMPRESSION_ENABLED:-false}
-      INTERVIEW_MEMORY_V2_KEY_ID: ${INTERVIEW_MEMORY_V2_KEY_ID:-interview-memory-current}
-      INTERVIEW_MEMORY_V2_SIGNING_SECRET: ${INTERVIEW_MEMORY_V2_SIGNING_SECRET:-}
-      AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
-      AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database
       MYSQL_DB_INTERVIEW: bk_interview
       NACOS_A2A_AGENT_REGISTRY_ENABLED: ${NACOS_A2A_AGENT_REGISTRY_ENABLED:-false}

@@ -17,7 +17,8 @@ public final class RagRequestSigner {
     public static void verify(RagAuthEnvelope envelope, String requestHash, String expectedAudience,
                               RagOperation expectedOperation, String expectedRequestId,
                               RagCredentialContext credentials, RagSigningKey key, Instant now) {
-        RagSignatureSupport.authenticate(envelope != null && key != null && envelope.contractVersion() == RagContract.VERSION);
+        RagSignatureSupport.authenticate(envelope != null && key != null && envelope.contractVersion() == RagContract.VERSION
+                && (envelope.algorithm() == null || RagAuthEnvelope.HMAC_SHA256.equals(envelope.algorithm())));
         RagSignatureSupport.equal(key.keyId(), envelope.keyId());
         RagSignatureSupport.equal(key.callerService(), envelope.callerService());
         RagSignatureSupport.verify(RagCanonicalHash.envelopeBytes(envelope), envelope.signature(), key.secret());

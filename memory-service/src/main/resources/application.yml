@@ -14,17 +14,21 @@ memory:
       max-attempts: ${MEMORY_V2_PRIVACY_CLEANUP_MAX_ATTEMPTS:8}
       lease-seconds: ${MEMORY_V2_PRIVACY_CLEANUP_LEASE_SECONDS:60}
       retry-seconds: ${MEMORY_V2_PRIVACY_CLEANUP_RETRY_SECONDS:15}
-    # Exact per-service/domain/agent bindings. Callers remain unusable until secrets are configured.
+    # Exact per-service/domain/agent bindings. HMAC fields are legacy-v1 verification only.
     trusted-callers:
       agent-service:
         key-id: ${AGENT_MEMORY_V2_KEY_ID:agent-memory-current}
         signing-secret: ${AGENT_MEMORY_V2_SIGNING_SECRET:}
+        public-keys:
+          agent-service-current: ${AGENT_SERVICE_IDENTITY_PUBLIC_KEY:}
         service-delivery: true
         allowed-agents-by-domain:
           supervisor: [supervisor-agent]
       marketing-content-service:
         key-id: ${MARKETING_MEMORY_V2_KEY_ID:marketing-memory-current}
         signing-secret: ${MARKETING_MEMORY_V2_SIGNING_SECRET:}
+        public-keys:
+          marketing-content-service-current: ${MARKETING_CONTENT_SERVICE_IDENTITY_PUBLIC_KEY:}
         service-delivery: true
         experience-outcome-publisher: ${MARKETING_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
         experience-governance-publisher: ${MARKETING_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
@@ -33,6 +37,8 @@ memory:
       interview-service:
         key-id: ${INTERVIEW_MEMORY_V2_KEY_ID:interview-memory-current}
         signing-secret: ${INTERVIEW_MEMORY_V2_SIGNING_SECRET:}
+        public-keys:
+          interview-service-current: ${INTERVIEW_SERVICE_IDENTITY_PUBLIC_KEY:}
         service-delivery: true
         experience-outcome-publisher: ${INTERVIEW_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
         experience-governance-publisher: ${INTERVIEW_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
@@ -41,6 +47,8 @@ memory:
       listing-master-service:
         key-id: ${LISTING_MEMORY_V2_KEY_ID:listing-memory-current}
         signing-secret: ${LISTING_MEMORY_V2_SIGNING_SECRET:}
+        public-keys:
+          listing-master-service-current: ${LISTING_MASTER_SERVICE_IDENTITY_PUBLIC_KEY:}
         service-delivery: true
         experience-outcome-publisher: ${LISTING_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
         experience-governance-publisher: ${LISTING_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
@@ -49,6 +57,8 @@ memory:
       business-service:
         key-id: ${BUSINESS_MEMORY_V2_KEY_ID:business-memory-current}
         signing-secret: ${BUSINESS_MEMORY_V2_SIGNING_SECRET:}
+        public-keys:
+          business-service-current: ${BUSINESS_SERVICE_IDENTITY_PUBLIC_KEY:}
         service-delivery: true
         experience-outcome-publisher: ${BUSINESS_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
         experience-governance-publisher: ${BUSINESS_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
@@ -57,6 +67,8 @@ memory:
       contract-service:
         key-id: ${CONTRACT_MEMORY_V2_KEY_ID:contract-memory-current}
         signing-secret: ${CONTRACT_MEMORY_V2_SIGNING_SECRET:}
+        public-keys:
+          contract-service-current: ${CONTRACT_SERVICE_IDENTITY_PUBLIC_KEY:}
         service-delivery: true
         experience-outcome-publisher: ${CONTRACT_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
         experience-governance-publisher: ${CONTRACT_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
@@ -65,6 +77,8 @@ memory:
       compare-engine-service:
         key-id: ${COMPARE_MEMORY_V2_KEY_ID:compare-memory-current}
         signing-secret: ${COMPARE_MEMORY_V2_SIGNING_SECRET:}
+        public-keys:
+          compare-engine-service-current: ${COMPARE_ENGINE_SERVICE_IDENTITY_PUBLIC_KEY:}
         service-delivery: true
         experience-outcome-publisher: ${COMPARE_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
         experience-governance-publisher: ${COMPARE_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
@@ -73,6 +87,8 @@ memory:
       settlement-service:
         key-id: ${SETTLEMENT_MEMORY_V2_KEY_ID:settlement-memory-current}
         signing-secret: ${SETTLEMENT_MEMORY_V2_SIGNING_SECRET:}
+        public-keys:
+          settlement-service-current: ${SETTLEMENT_SERVICE_IDENTITY_PUBLIC_KEY:}
         service-delivery: true
         experience-outcome-publisher: ${SETTLEMENT_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
         experience-governance-publisher: ${SETTLEMENT_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
@@ -178,3 +194,9 @@ spring:
         server-addr: ${bk.nacos.server-addr}
         namespace: ${bk.nacos.namespace}
         file-extension: yaml
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics

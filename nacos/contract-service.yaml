@@ -136,5 +136,5 @@ a2a:
     read-enabled: true
     delivery-enabled: true
     compression-enabled: ${CONTRACT_MEMORY_V2_COMPRESSION_ENABLED:false}
-    key-id: ${CONTRACT_MEMORY_V2_KEY_ID:contract-memory-current}
-    signing-secret: ${CONTRACT_MEMORY_V2_SIGNING_SECRET:}
+    key-id: ${SERVICE_IDENTITY_KEY_ID:contract-service-current}
+    private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}

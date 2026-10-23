@@ -1,6 +1,10 @@
 package com.bkanent.common.a2a;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import com.bkanent.common.security.ServiceIdentityCrypto;
+
+import java.nio.file.Path;
+import java.security.PrivateKey;
 
 /** Deployment-owned bounds and opt-in for the domain A2A memory adapter. */
 @ConfigurationProperties(prefix = "a2a.memory")
@@ -10,7 +14,8 @@ public class A2aMemoryProperties {
     private boolean deliveryEnabled = true;
     private boolean compressionEnabled;
     private String keyId = "domain-memory-current";
-    private String signingSecret = "";
+    private String privateKeyFile = "";
+    private volatile PrivateKey signingKey;
     private int cacheEntries = 64;
     private long cacheBytes = 16L * 1024 * 1024;
     private long cacheTtlMs = 60_000;
@@ -31,8 +36,17 @@ public class A2aMemoryProperties {
     public void setCompressionEnabled(boolean compressionEnabled) { this.compressionEnabled = compressionEnabled; }
     public String getKeyId() { return keyId; }
     public void setKeyId(String keyId) { this.keyId = keyId; }
-    public String getSigningSecret() { return signingSecret; }
-    public void setSigningSecret(String signingSecret) { this.signingSecret = signingSecret; }
+    public String getPrivateKeyFile() { return privateKeyFile; }
+    public void setPrivateKeyFile(String privateKeyFile) { this.privateKeyFile = privateKeyFile; this.signingKey = null; }
+    public PrivateKey signingKey() {
+        PrivateKey key = signingKey;
+        if (key != null) return key;
+        if (privateKeyFile == null || privateKeyFile.isBlank()) throw new IllegalArgumentException("service identity private key is not configured");
+        synchronized (this) {
+            if (signingKey == null) signingKey = ServiceIdentityCrypto.loadPrivateKey(Path.of(privateKeyFile));
+            return signingKey;
+        }
+    }
     public int getCacheEntries() { return cacheEntries; }
     public void setCacheEntries(int cacheEntries) { this.cacheEntries = cacheEntries; }
     public long getCacheBytes() { return cacheBytes; }
@@ -58,9 +72,8 @@ public class A2aMemoryProperties {
             throw new IllegalArgumentException("invalid A2A memory bounds");
         }
         if (compressionEnabled && !enabled) throw new IllegalArgumentException("A2A memory compression requires memory to be enabled");
-        if (enabled && (keyId == null || keyId.isBlank() || signingSecret == null
-                || signingSecret.getBytes(java.nio.charset.StandardCharsets.UTF_8).length < 32)) {
-            throw new IllegalArgumentException("A2A memory requires a key id and a signing secret of at least 32 bytes");
+        if (enabled && (keyId == null || keyId.isBlank() || privateKeyFile == null || privateKeyFile.isBlank())) {
+            throw new IllegalArgumentException("A2A memory requires a service identity key id and private key file");
         }
     }
 }

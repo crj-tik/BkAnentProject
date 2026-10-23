@@ -20,6 +20,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
 import java.time.Instant;
 import java.time.Clock;
 import java.time.ZoneOffset;
@@ -628,6 +630,7 @@ class MemoryArchiveServiceTest {
         final DataSourceTransactionManager transactions;
         final MemoryV2SecurityProperties properties = new MemoryV2SecurityProperties();
         final MemoryV2SecurityProperties.TrustedCaller caller = new MemoryV2SecurityProperties.TrustedCaller();
+        final KeyPair identityPair;
         final AuthStub auth = new AuthStub();
         final String secret = UUID.randomUUID().toString() + UUID.randomUUID();
         MemoryArchiveStore store;
@@ -639,6 +642,7 @@ class MemoryArchiveServiceTest {
         final MemoryExperienceProperties experienceProperties = new MemoryExperienceProperties();
 
         Fixture() throws Exception {
+            identityPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
             datasource = new DriverManagerDataSource("jdbc:h2:mem:archive-" + UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=10000", "sa", "");
             jdbc = new JdbcTemplate(datasource);
             transactions = new DataSourceTransactionManager(datasource);
@@ -657,6 +661,7 @@ class MemoryArchiveServiceTest {
                 }
             }
             caller.setKeyId("fixture-key"); caller.setSigningSecret(secret); caller.setServiceDelivery(true); caller.setExperienceOutcomePublisher(true);
+            caller.setPublicKeys(Map.of("fixture-key", com.bkanent.common.security.ServiceIdentityCrypto.encodePublicKey(identityPair.getPublic())));
             caller.setExperienceGovernancePublisher(true);
             caller.setAllowedAgentsByDomain(Map.of("marketing", Set.of("copy-agent")));
             properties.setTrustedCallers(Map.of(CALLER, caller, "other-service", caller));

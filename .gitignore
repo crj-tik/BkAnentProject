@@ -7,6 +7,7 @@ target/
 .env
 .env.*
 !.env.example
+.secrets/
 .codex-temp-*
 __pycache__/
 .codex/config.toml

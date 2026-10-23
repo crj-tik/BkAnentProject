@@ -45,7 +45,7 @@ class MemoryWorkingSetRuntimeTest {
                 }
                 catch (InvocationTargetException exception) { throw exception.getCause(); }
             });
-            client = new MemoryRpcClient(proxy, CALLER, "fixture-key", secret.getBytes(StandardCharsets.UTF_8),
+            client = new MemoryRpcClient(proxy, CALLER, "fixture-key", identityPair.getPrivate(),
                     () -> new MemoryRpcClient.Actor(new AuthenticatedPrincipal(42L), Instant.now().getEpochSecond() + 60));
         }
         MemoryWorkingSession open(String run) { return new MemoryWorkingSession(client, cache, CONTEXT, run); }

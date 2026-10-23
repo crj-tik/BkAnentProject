@@ -21,6 +21,12 @@ spring:
         namespace: ${bk.nacos.namespace}
         file-extension: yaml
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
 # RAG-only RPC credentials. Empty secrets fail closed, including in the local profile.
 # Additional trusted-keys entries can be supplied by secret-managed config for rotation.
 auth:
@@ -74,6 +80,54 @@ auth:
           secret: ${INTERVIEW_A2A_SIGNING_SECRET:}
       response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}
       response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
+  a2a:
+    response-key-id: ${AUTH_SERVICE_IDENTITY_KEY_ID:auth-service-current}
+    response-private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
+    trusted-identities:
+      agent-service-current:
+        caller-service: agent-service
+        public-key: ${AGENT_SERVICE_IDENTITY_PUBLIC_KEY:}
+        allowed-operations: [ISSUE_BEACON, RESOLVE_BEACON]
+      listing-master-service-current:
+        caller-service: listing-master-service
+        public-key: ${LISTING_MASTER_SERVICE_IDENTITY_PUBLIC_KEY:}
+        allowed-operations: [RESOLVE_BEACON]
+      customer-service-current:
+        caller-service: customer-service
+        public-key: ${CUSTOMER_SERVICE_IDENTITY_PUBLIC_KEY:}
+        allowed-operations: [RESOLVE_BEACON]
+      marketing-content-service-current:
+        caller-service: marketing-content-service
+        public-key: ${MARKETING_CONTENT_SERVICE_IDENTITY_PUBLIC_KEY:}
+        allowed-operations: [RESOLVE_BEACON]
+      business-service-current:
+        caller-service: business-service
+        public-key: ${BUSINESS_SERVICE_IDENTITY_PUBLIC_KEY:}
+        allowed-operations: [RESOLVE_BEACON]
+      compare-engine-service-current:
+        caller-service: compare-engine-service
+        public-key: ${COMPARE_ENGINE_SERVICE_IDENTITY_PUBLIC_KEY:}
+        allowed-operations: [RESOLVE_BEACON]
+      contract-service-current:
+        caller-service: contract-service
+        public-key: ${CONTRACT_SERVICE_IDENTITY_PUBLIC_KEY:}
+        allowed-operations: [RESOLVE_BEACON]
+      settlement-service-current:
+        caller-service: settlement-service
+        public-key: ${SETTLEMENT_SERVICE_IDENTITY_PUBLIC_KEY:}
+        allowed-operations: [RESOLVE_BEACON]
+      notification-service-current:
+        caller-service: notification-service
+        public-key: ${NOTIFICATION_SERVICE_IDENTITY_PUBLIC_KEY:}
+        allowed-operations: [RESOLVE_BEACON]
+      media-worker-service-current:
+        caller-service: media-worker-service
+        public-key: ${MEDIA_WORKER_SERVICE_IDENTITY_PUBLIC_KEY:}
+        allowed-operations: [RESOLVE_BEACON]
+      interview-service-current:
+        caller-service: interview-service
+        public-key: ${INTERVIEW_SERVICE_IDENTITY_PUBLIC_KEY:}
+        allowed-operations: [RESOLVE_BEACON]
 
 dubbo:
   application:

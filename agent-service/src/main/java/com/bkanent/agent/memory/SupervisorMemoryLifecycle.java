@@ -11,7 +11,6 @@ import org.springframework.stereotype.Component;
 import org.springframework.ai.chat.messages.*;
 import jakarta.annotation.PreDestroy;
 
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -381,8 +380,9 @@ public class SupervisorMemoryLifecycle {
     }
 
     private MemoryRpcClient client(ToolLoopState state) {
-        if (properties.getSigningSecret() == null || properties.getSigningSecret().getBytes(StandardCharsets.UTF_8).length < 32)
-            throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
+        final java.security.PrivateKey signingKey;
+        try { signingKey = properties.signingKey(); }
+        catch (RuntimeException exception) { throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED); }
         final MemoryV2RpcService rpc;
         try {
             rpc = reference.get();
@@ -390,7 +390,7 @@ public class SupervisorMemoryLifecycle {
         } catch (RuntimeException exception) {
             throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
         }
-        return new MemoryRpcClient(rpc, "agent-service", properties.getKeyId(), properties.getSigningSecret().getBytes(StandardCharsets.UTF_8), () -> {
+        return new MemoryRpcClient(rpc, "agent-service", properties.getKeyId(), signingKey, () -> {
             try {
                 try {
                     var actor = identities.verifiedIdentity(state.userId);

@@ -85,7 +85,7 @@ class MemoryArchiveProviderTest {
                     new MemoryPreferenceAssessment("budget", PreferenceTransition.Assessment.PREFERENCE, PreferenceTransition.Change.OBSERVATION,
                             PreferenceTransition.Polarity.NEGATIVE, MemoryJsonValue.number("100"), null, null, null, null, List.of(), .8,
                             "extract-v1", new MemorySourceDependency(message.source(), null))));
-            var client = new com.bkanent.memory.runtime.MemoryRpcClient(rpc, MemoryArchiveServiceTest.CALLER, "fixture-key", f.secret.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+            var client = new com.bkanent.memory.runtime.MemoryRpcClient(rpc, MemoryArchiveServiceTest.CALLER, "fixture-key", f.identityPair.getPrivate(),
                     () -> new com.bkanent.memory.runtime.MemoryRpcClient.Actor(new com.bkanent.common.rpc.AuthenticatedPrincipal(42L), java.time.Instant.now().getEpochSecond()+60));
             var accepted = client.submitPreference(MemoryArchiveServiceTest.CONTEXT, 0, write.candidate());
             var asOf = java.time.Instant.now();

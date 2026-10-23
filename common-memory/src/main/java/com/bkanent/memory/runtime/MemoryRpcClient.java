@@ -5,6 +5,7 @@ import com.bkanent.common.rpc.AuthenticatedPrincipal;
 
 import java.time.Instant;
 import java.nio.charset.StandardCharsets;
+import java.security.PrivateKey;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.BiFunction;
@@ -17,11 +18,12 @@ public final class MemoryRpcClient {
     private final MemoryV2RpcService rpc;
     private final String caller;
     private final String keyId;
-    private final byte[] secret;
+    private final PrivateKey signingKey;
     private final Supplier<Actor> currentActor;
 
-    public MemoryRpcClient(MemoryV2RpcService rpc, String caller, String keyId, byte[] secret, Supplier<Actor> currentActor) {
-        this.rpc = rpc; this.caller = caller; this.keyId = keyId; this.secret = secret.clone(); this.currentActor = currentActor;
+    public MemoryRpcClient(MemoryV2RpcService rpc, String caller, String keyId, PrivateKey signingKey, Supplier<Actor> currentActor) {
+        this.rpc = rpc; this.caller = caller; this.keyId = keyId; this.signingKey = java.util.Objects.requireNonNull(signingKey);
+        this.currentActor = currentActor;
     }
 
     public MemoryWorkingSetResponse read(MemoryContextKey context) {
@@ -113,7 +115,7 @@ public final class MemoryRpcClient {
     public MemoryDeliveryResponse deliver(MemoryContextKey context, MemoryAssociation association, String permit, java.util.List<MemoryMessage> messages) {
         var request = request(MemoryV2Contract.OPERATION_DELIVER_MESSAGES, e -> new MemoryDeliveryRequest(e, context, association, permit, messages));
         long now = Instant.now().getEpochSecond();
-        var proof = MemoryRequestSigner.signServiceDelivery(request, keyId, now, now + 60, nonce(), secret);
+        var proof = MemoryRequestSigner.signServiceDelivery(request, keyId, now, now + 60, nonce(), signingKey);
         return transport(() -> rpc.deliverMessages(request, proof));
     }
 
@@ -132,7 +134,8 @@ public final class MemoryRpcClient {
         long now = Instant.now().getEpochSecond();
         if (actor == null || actor.expiresAtEpochSecond() <= now) throw new MemoryException(MemoryErrorCode.AUTHENTICATION_EXPIRED);
         T request = request(operation, requestId, factory);
-        var proof = MemoryRequestSigner.sign(request, actor.principal(), keyId, now, Math.min(now + 60, actor.expiresAtEpochSecond()), nonce(), secret);
+        var proof = MemoryRequestSigner.sign(request, actor.principal(), keyId, now,
+                Math.min(now + 60, actor.expiresAtEpochSecond()), nonce(), signingKey);
         return transport(() -> call.apply(request, proof));
     }
 

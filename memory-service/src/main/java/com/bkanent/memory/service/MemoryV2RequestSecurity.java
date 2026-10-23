@@ -7,11 +7,15 @@ import com.bkanent.common.memory.MemoryRequestProof;
 import com.bkanent.common.memory.MemoryRequestSigner;
 import com.bkanent.common.memory.MemoryV2Contract;
 import com.bkanent.common.memory.MemoryV2Request;
+import com.bkanent.common.security.ServiceIdentityCrypto;
 import com.bkanent.common.memory.MemoryDeliveryRequest;
 import com.bkanent.common.memory.MemoryExperienceOutcomeRequest;
 import com.bkanent.common.memory.MemoryDomainExperienceManagementRequest;
 import com.bkanent.common.rpc.AuthPermissionRpcService;
 import com.bkanent.memory.config.MemoryV2SecurityProperties;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -24,13 +28,25 @@ public class MemoryV2RequestSecurity {
     private final MemoryV2SecurityProperties properties;
     private final AuthPermissionRpcService authPermissionRpcService;
     private final MemoryV2ReplayGuard replayGuard;
+    private final MeterRegistry meterRegistry;
 
+    /** Spring-injected constructor; the registry records accepted signatures by protocol and algorithm. */
+    @Autowired
     public MemoryV2RequestSecurity(MemoryV2SecurityProperties properties,
                                    AuthPermissionRpcService authPermissionRpcService,
-                                   MemoryV2ReplayGuard replayGuard) {
+                                   MemoryV2ReplayGuard replayGuard,
+                                   MeterRegistry meterRegistry) {
         this.properties = properties;
         this.authPermissionRpcService = authPermissionRpcService;
         this.replayGuard = replayGuard;
+        this.meterRegistry = meterRegistry;
+    }
+
+    /** Direct-construction convenience for isolated service tests. */
+    public MemoryV2RequestSecurity(MemoryV2SecurityProperties properties,
+                                   AuthPermissionRpcService authPermissionRpcService,
+                                   MemoryV2ReplayGuard replayGuard) {
+        this(properties, authPermissionRpcService, replayGuard, new SimpleMeterRegistry());
     }
 
     /**
@@ -127,8 +143,7 @@ public class MemoryV2RequestSecurity {
         var envelope = request.envelope();
         Map<String, MemoryV2SecurityProperties.TrustedCaller> callers = properties.getTrustedCallers();
         MemoryV2SecurityProperties.TrustedCaller caller = callers == null ? null : callers.get(envelope.caller());
-        if (caller == null || caller.getKeyId() == null || caller.getSigningSecret() == null
-                || caller.getSigningSecret().getBytes(StandardCharsets.UTF_8).length < 32) {
+        if (caller == null || proof == null) {
             throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
         }
 
@@ -137,9 +152,32 @@ public class MemoryV2RequestSecurity {
             throw new MemoryException(MemoryErrorCode.FORBIDDEN);
         }
         if (service && !caller.isServiceDelivery()) throw new MemoryException(MemoryErrorCode.FORBIDDEN);
-        byte[] secret = caller.getSigningSecret().getBytes(StandardCharsets.UTF_8);
-        MemoryRequestSigner.verify(request, context, proof, envelope.caller(),
-                MemoryV2Contract.MEMORY_AUDIENCE, expectedOperation, caller.getKeyId(), Instant.now(), secret);
+        if (MemoryRequestSigner.isLegacyHmacProof(proof)) {
+            String legacySecret = caller.getSigningSecret();
+            if (caller.getKeyId() == null || legacySecret == null
+                    || legacySecret.getBytes(StandardCharsets.UTF_8).length < 32) {
+                throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
+            }
+            MemoryRequestSigner.verify(request, context, proof, envelope.caller(),
+                    MemoryV2Contract.MEMORY_AUDIENCE, expectedOperation, caller.getKeyId(), Instant.now(),
+                    legacySecret.getBytes(StandardCharsets.UTF_8));
+            meterRegistry.counter("service.identity.signature.verified", "protocol", "memory-v2",
+                    "algorithm", MemoryRequestProof.HMAC_SHA256).increment();
+        } else if (MemoryRequestSigner.isEd25519Proof(proof)) {
+            String encodedKey = caller.getPublicKeys().get(proof.keyId());
+            if (encodedKey == null || encodedKey.isBlank()) throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
+            try {
+                MemoryRequestSigner.verifyEd25519(request, context, proof, envelope.caller(),
+                        MemoryV2Contract.MEMORY_AUDIENCE, expectedOperation, proof.keyId(), Instant.now(),
+                        ServiceIdentityCrypto.decodePublicKey(encodedKey));
+                meterRegistry.counter("service.identity.signature.verified", "protocol", "memory-v2",
+                        "algorithm", ServiceIdentityCrypto.ED25519).increment();
+            } catch (IllegalArgumentException exception) {
+                throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
+            }
+        } else {
+            throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
+        }
 
         long ownerId;
         try {

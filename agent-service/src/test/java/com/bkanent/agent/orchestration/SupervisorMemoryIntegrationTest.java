@@ -593,6 +593,21 @@ class SupervisorMemoryIntegrationTest {
         return AssistantMessage.builder().content("").toolCalls(List.of(new AssistantMessage.ToolCall(id, "function", tool, args))).build();
     }
 
+    private static java.security.KeyPair generateIdentityPair() {
+        try { return java.security.KeyPairGenerator.getInstance("Ed25519").generateKeyPair(); }
+        catch (java.security.GeneralSecurityException exception) { throw new IllegalStateException(exception); }
+    }
+
+    private static Path privateKeyFile(java.security.KeyPair pair) throws Exception {
+        Path file = Files.createTempFile("supervisor-memory-identity-", ".pem");
+        file.toFile().deleteOnExit();
+        String pem = "-----BEGIN PRIVATE KEY-----\n"
+                + Base64.getMimeEncoder(64, new byte[]{'\n'}).encodeToString(pair.getPrivate().getEncoded())
+                + "\n-----END PRIVATE KEY-----\n";
+        Files.writeString(file, pem, StandardCharsets.US_ASCII);
+        return file;
+    }
+
     static int occurrences(String text, String needle) { return (text.length() - text.replace(needle, "").length()) / needle.length(); }
     static int indexContaining(List<String> values, String needle) {
         for (int i = 0; i < values.size(); i++) if (values.get(i).contains(needle)) return i;
@@ -636,7 +651,8 @@ class SupervisorMemoryIntegrationTest {
                 ScriptUtils.executeSqlScript(connection, new ByteArrayResource(migration.getBytes(StandardCharsets.UTF_8)));
                 ScriptUtils.executeSqlScript(connection, new ByteArrayResource(migration.getBytes(StandardCharsets.UTF_8)));
             }
-            properties.setEnabled(true); properties.setSigningSecret(remote.secret); properties.setKeyId("agent-current");
+            properties.setEnabled(true); properties.setKeyId("agent-service-current");
+            properties.setPrivateKeyFile(privateKeyFile(remote.identityPair).toString());
             properties.setSoftTokens(10000); properties.setHardTokens(20000);
             var persistence = mock(AgentWorkflowCheckpointMapper.class);
             TableInfoHelper.initTableInfo(new MapperBuilderAssistant(new MybatisConfiguration(), "memory-fixture"), AgentWorkflowCheckpointEntity.class);
@@ -696,7 +712,7 @@ class SupervisorMemoryIntegrationTest {
     }
 
     static class Remote {
-        final String secret = UUID.randomUUID().toString() + UUID.randomUUID();
+        final java.security.KeyPair identityPair = generateIdentityPair();
         final Map<String,Integer> calls = new HashMap<>();
         final Map<String,List<MemoryReceivePermitRequest.EventSubmission>> permits = new HashMap<>();
         MemoryWorkingSetResponse snapshot = new MemoryWorkingSetResponse(new MemoryContextKey("1", "supervisor", "supervisor-agent", "session"),
@@ -719,8 +735,8 @@ class SupervisorMemoryIntegrationTest {
             if (unavailable) throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
             MemoryV2Request request = (MemoryV2Request) args[0];
             MemoryRequestProof proof = (MemoryRequestProof) args[1];
-            MemoryRequestSigner.verify(request, request.contextKey(), proof, "agent-service", MemoryV2Contract.MEMORY_AUDIENCE,
-                    request.envelope().operation(), "agent-current", Instant.now(), secret.getBytes(StandardCharsets.UTF_8));
+            MemoryRequestSigner.verifyEd25519(request, request.contextKey(), proof, "agent-service", MemoryV2Contract.MEMORY_AUDIENCE,
+                    request.envelope().operation(), "agent-service-current", Instant.now(), identityPair.getPublic());
             if (!name.equals("deliverMessages") && proof.actor() != MemoryRequestProof.Actor.USER) throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
             return switch (name) {
                 case "manageWriter" -> {

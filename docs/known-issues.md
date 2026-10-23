@@ -1396,6 +1396,14 @@
 
 **关联**：LR-96；change 11.5。
 
+## KI-162 [OPEN·P1] 旧 HMAC verifier 退役依赖运行态零流量证据
+
+**发现日期**：2026-10-23。A2A/Auth 与 Memory v2 已有 Ed25519-v2 新签发实现，同时保留 HMAC-v1 verifier 以兼容迁移期旧二进制。Auth/Memory 已加入 `service.identity.signature.verified` 低基数验签计数，区分协议与算法；当前本机开发服务没有真实业务调用流量，尚无覆盖完整观察期的 HMAC-v1 运行计数证据，静态配置或单测不能证明旧请求已归零。若现在删除 HMAC verifier，仍未更新的调用方会被拒绝。
+
+**处置边界**：继续只签发 Ed25519-v2；Auth 与 Memory 仅在迁移窗口中保留各自的 HMAC-v1 验签配置/路径。待切流验收通过对应 Actuator 指标提供可审计的旧 HMAC 请求计数为零、覆盖最长调用周期及回滚窗口后，再另行移除对应 verifier 与 `*_A2A_SIGNING_SECRET` / `*_MEMORY_V2_SIGNING_SECRET` 配置。RAG 的 HMAC RPC 合约不在此项范围内。运行态切流与零流量证明尚未完成，关联 change 11.5/11.9。
+
+**关联**：LR-98；change 11.5、11.8、11.9。
+
 ---
 
 **变更历史**：160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。

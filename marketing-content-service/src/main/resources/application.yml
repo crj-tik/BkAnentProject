@@ -21,19 +21,22 @@ spring:
         namespace: ${bk.nacos.namespace}
         file-extension: yaml
 
+service:
+  identity:
+    key-id: ${SERVICE_IDENTITY_KEY_ID:marketing-content-service-current}
+    private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
+
 a2a:
   memory:
     enabled: ${MARKETING_MEMORY_V2_ENABLED:false}
     read-enabled: true
     delivery-enabled: true
     compression-enabled: ${MARKETING_MEMORY_V2_COMPRESSION_ENABLED:false}
-    key-id: ${MARKETING_MEMORY_V2_KEY_ID:marketing-memory-current}
-    signing-secret: ${MARKETING_MEMORY_V2_SIGNING_SECRET:}
+    key-id: ${SERVICE_IDENTITY_KEY_ID:marketing-content-service-current}
+    private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
   auth:
-    key-id: ${MARKETING_A2A_KEY_ID:marketing-a2a-current}
-    signing-secret: ${MARKETING_A2A_SIGNING_SECRET:}
-    response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}
-    response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
+    response-key-id: ${AUTH_SERVICE_IDENTITY_KEY_ID:auth-service-current}
+    response-public-key: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
 
 dubbo:
   application:

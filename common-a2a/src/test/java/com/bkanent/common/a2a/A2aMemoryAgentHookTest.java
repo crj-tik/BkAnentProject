@@ -20,6 +20,8 @@ import org.springframework.ai.chat.prompt.Prompt;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.nio.file.Files;
+import java.security.KeyPairGenerator;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -31,7 +33,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class A2aMemoryAgentHookTest {
-    private static final String SECRET = "test-memory-signing-secret-at-least-32-bytes";
+    private static final String PRIVATE_KEY_FILE = createPrivateKeyFile();
 
     @Test
     void publishesOnlyTheExplicitSafeFieldsFromTheArchivedFinalAssistantTurn() throws Exception {
@@ -182,7 +184,8 @@ class A2aMemoryAgentHookTest {
             assertThat(invocation.memoryStatus()).isEqualTo("APPLIED");
             assertThat(invocation.archiveStatus()).isEqualTo("RECORDED");
             assertThat(new ObjectMapper().writeValueAsString(delivered.get()))
-                    .doesNotContain(SECRET, "opaque-a2a-test-token", "beacon", "A2aLease", "RagCredentialContext");
+                    .doesNotContain("BEGIN PRIVATE KEY", "privateKey", "signingKey", "opaque-a2a-test-token",
+                            "beacon", "A2aLease", "RagCredentialContext");
             verify(rpc, times(1)).readWorkingSet(any(), any());
             verify(rpc, times(1)).deliverMessages(any(), any());
             hook.finish(invocation);
@@ -646,9 +649,24 @@ class A2aMemoryAgentHookTest {
         var properties = new A2aMemoryProperties();
         properties.setEnabled(true);
         properties.setKeyId("test-domain-memory");
-        properties.setSigningSecret(SECRET);
+        properties.setPrivateKeyFile(PRIVATE_KEY_FILE);
         properties.validate();
         return properties;
+    }
+
+    private static String createPrivateKeyFile() {
+        try {
+            var keyPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+            var pem = "-----BEGIN PRIVATE KEY-----\n"
+                    + Base64.getMimeEncoder(64, new byte[]{'\n'}).encodeToString(keyPair.getPrivate().getEncoded())
+                    + "\n-----END PRIVATE KEY-----\n";
+            var path = Files.createTempFile("a2a-memory-test-identity-", ".pem");
+            Files.writeString(path, pem);
+            path.toFile().deleteOnExit();
+            return path.toString();
+        } catch (Exception exception) {
+            throw new ExceptionInInitializerError(exception);
+        }
     }
 
     private DurableMemoryExportDirective exportDirective() {

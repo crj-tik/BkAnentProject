@@ -2,6 +2,7 @@ package com.bkanent.memory.service;
 
 import com.bkanent.common.memory.*;
 import com.bkanent.common.rpc.AuthenticatedPrincipal;
+import com.bkanent.common.security.ServiceIdentityCrypto;
 import com.bkanent.memory.config.MemoryV2SecurityProperties;
 import com.bkanent.memory.rpc.MemoryV2RpcServiceImpl;
 import com.bkanent.memory.runtime.*;
@@ -19,13 +20,14 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Only the existing development database; exact random fixture cleanup, no DDL or extra container. */
 @EnabledIfEnvironmentVariable(named="MEMORY_ARCHIVE_TEST_MYSQL_URL", matches="jdbc:mysql:.*")
 class MemoryMatterMySqlTest {
-    @Test void actualMysqlMatterRevisionsClosureCompactionColdReopenReplayAndDeletion() {
+    @Test void actualMysqlMatterRevisionsClosureCompactionColdReopenReplayAndDeletion() throws Exception {
         var datasource = new DriverManagerDataSource(MemoryArchiveMySqlTest.mysqlUrl(), System.getenv("MEMORY_ARCHIVE_TEST_MYSQL_USER"), System.getenv("MEMORY_ARCHIVE_TEST_MYSQL_PASSWORD"));
         var jdbc = new JdbcTemplate(datasource); var mapper = JsonMapper.builder().addModule(new JavaTimeModule()).build();
         var manager = new DataSourceTransactionManager(datasource);
         String fixture = "matter-fixture-" + UUID.randomUUID(), keyId = "fixture-" + UUID.randomUUID(), secret = UUID.randomUUID().toString() + UUID.randomUUID();
         var context = new MemoryContextKey("42", "matter-fixture", "matter-fixture", fixture); String contextId = MemoryArchiveStore.key(context);
-        var caller = new MemoryV2SecurityProperties.TrustedCaller(); caller.setKeyId(keyId); caller.setSigningSecret(secret); caller.setServiceDelivery(true); caller.setAllowedAgentsByDomain(Map.of("matter-fixture", Set.of("matter-fixture")));
+        var identity = java.security.KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        var caller = new MemoryV2SecurityProperties.TrustedCaller(); caller.setKeyId(keyId); caller.setSigningSecret(secret); caller.setPublicKeys(Map.of(keyId, ServiceIdentityCrypto.encodePublicKey(identity.getPublic()))); caller.setServiceDelivery(true); caller.setAllowedAgentsByDomain(Map.of("matter-fixture", Set.of("matter-fixture")));
         var properties = new MemoryV2SecurityProperties(); properties.setTrustedCallers(Map.of("matter-fixture", caller));
         var security = new MemoryV2RequestSecurity(properties, new MemoryArchiveServiceTest.AuthStub(), new MemoryV2ReplayGuard(jdbc));
         var store = new MemoryArchiveStore(jdbc, mapper); var sharing = new MemorySharingStore(jdbc, mapper);
@@ -33,7 +35,7 @@ class MemoryMatterMySqlTest {
         var archive = new MemoryArchiveService(store, security, sources, manager);
         var matters = new MemoryMatterService(store, security, sources, manager);
         var rpc = new MemoryV2RpcServiceImpl(archive, new MemorySharingAccessService(security, new MemoryAccessPolicy(), sharing, sources, manager), security, null, matters);
-        var client = new MemoryRpcClient(rpc, "matter-fixture", keyId, secret.getBytes(StandardCharsets.UTF_8), () -> new MemoryRpcClient.Actor(new AuthenticatedPrincipal(42L), Instant.now().getEpochSecond() + 60));
+        var client = new MemoryRpcClient(rpc, "matter-fixture", keyId, identity.getPrivate(), () -> new MemoryRpcClient.Actor(new AuthenticatedPrincipal(42L), Instant.now().getEpochSecond() + 60));
         var start = MemoryMatterServiceTest.message(context, 1, new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房事项"));
         MemoryMessage close;
         try {

@@ -550,8 +550,10 @@ public final class A2aMemoryAgentHook extends AgentHook {
         } catch (RuntimeException exception) {
             throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
         }
-        byte[] secret = properties.getSigningSecret().getBytes(StandardCharsets.UTF_8);
-        return new MemoryRpcClient(rpc, caller, properties.getKeyId(), secret, () -> {
+        final java.security.PrivateKey signingKey;
+        try { signingKey = properties.signingKey(); }
+        catch (RuntimeException exception) { throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED); }
+        return new MemoryRpcClient(rpc, caller, properties.getKeyId(), signingKey, () -> {
             try (var ignored = A2aCredentialContext.openTask(taskId)) {
                 var lease = A2aCredentialContext.required();
                 long ownerId = authenticatedOwner(lease);

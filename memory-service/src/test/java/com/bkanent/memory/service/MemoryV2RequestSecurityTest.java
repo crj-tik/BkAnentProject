@@ -9,13 +9,16 @@ import com.bkanent.common.memory.MemoryRequestProof;
 import com.bkanent.common.memory.MemoryRequestSigner;
 import com.bkanent.common.memory.MemoryV2Contract;
 import com.bkanent.common.memory.MemoryWorkingSetRequest;
+import com.bkanent.common.security.ServiceIdentityCrypto;
 import com.bkanent.common.rpc.AuthPermissionRpcService;
 import com.bkanent.common.rpc.AuthenticatedPrincipal;
 import com.bkanent.memory.config.MemoryV2SecurityProperties;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.security.KeyPairGenerator;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.LongPredicate;
@@ -32,6 +35,7 @@ class MemoryV2RequestSecurityTest {
     private final StubAuth auth = new StubAuth();
     private final RecordingReplayGuard replay = new RecordingReplayGuard();
     private final MemoryV2SecurityProperties properties = new MemoryV2SecurityProperties();
+    private SimpleMeterRegistry metrics;
     private MemoryV2RequestSecurity security;
 
     @BeforeEach
@@ -41,7 +45,8 @@ class MemoryV2RequestSecurityTest {
         caller.setSigningSecret(SECRET);
         caller.setAllowedAgentsByDomain(Map.of("marketing", Set.of("marketing-agent")));
         properties.setTrustedCallers(Map.of(CALLER, caller));
-        security = new MemoryV2RequestSecurity(properties, auth, replay);
+        metrics = new SimpleMeterRegistry();
+        security = new MemoryV2RequestSecurity(properties, auth, replay, metrics);
         auth.allowed = userId -> userId == 42L;
     }
 
@@ -55,6 +60,7 @@ class MemoryV2RequestSecurityTest {
         org.junit.jupiter.api.Assertions.assertEquals(42L, auth.lastUserId);
         org.junit.jupiter.api.Assertions.assertEquals("agent.chat.use", auth.lastPermission);
         org.junit.jupiter.api.Assertions.assertEquals(1, replay.calls);
+        assertEquals(1.0, verified("memory-v2", MemoryRequestProof.HMAC_SHA256));
         org.junit.jupiter.api.Assertions.assertEquals(KEY_ID, replay.lastKeyId);
         org.junit.jupiter.api.Assertions.assertEquals("nonce-abcdefghijklmnop", replay.lastNonce);
         org.junit.jupiter.api.Assertions.assertEquals(proof.expiresAtEpochSecond(), replay.lastExpiry);
@@ -113,6 +119,64 @@ class MemoryV2RequestSecurityTest {
 
         assertEquals(MemoryErrorCode.MEMORY_UNAVAILABLE, unavailable.code());
         org.junit.jupiter.api.Assertions.assertEquals(0, replay.calls);
+    }
+
+    @Test
+    void acceptsRegisteredEd25519IdentityAndRejectsUnknownKeyIdWithoutHmacFallback() throws Exception {
+        var pair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        String keyId = "marketing-service-identity-2026";
+        MemoryV2SecurityProperties.TrustedCaller caller = properties.getTrustedCallers().get(CALLER);
+        caller.setPublicKeys(Map.of(keyId, ServiceIdentityCrypto.encodePublicKey(pair.getPublic())));
+        MemoryWorkingSetRequest request = request(CONTEXT);
+        long now = Instant.now().getEpochSecond();
+        MemoryRequestProof proof = MemoryRequestSigner.sign(request, new AuthenticatedPrincipal(42L), keyId,
+                now, now + 45, "nonce-abcdefghijklmnop", pair.getPrivate());
+
+        assertEquals(42L, security.authorize(request, proof, MemoryV2Contract.OPERATION_WORKING_SET));
+        assertEquals(1, replay.calls);
+        assertEquals(1.0, verified("memory-v2", "Ed25519"));
+
+        MemoryRequestProof unknown = new MemoryRequestProof("unknown-service-key", proof.issuedAtEpochSecond(),
+                proof.expiresAtEpochSecond(), proof.nonce(), proof.signature(), proof.actor(),
+                proof.signatureVersion(), proof.algorithm());
+        MemoryException rejected = assertThrows(MemoryException.class,
+                () -> security.authorize(request, unknown, MemoryV2Contract.OPERATION_WORKING_SET));
+        assertEquals(MemoryErrorCode.AUTHENTICATION_FAILED, rejected.code());
+        assertEquals(1, replay.calls);
+    }
+
+    @Test
+    void acceptsBothRegisteredKeysDuringRotationAndRevokesTheOldKeyByRemovingItsRegistration() throws Exception {
+        var oldPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        var newPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        var caller = properties.getTrustedCallers().get(CALLER);
+        String oldKeyId = "marketing-service-previous";
+        String newKeyId = "marketing-service-rotated";
+        caller.setPublicKeys(Map.of(oldKeyId, ServiceIdentityCrypto.encodePublicKey(oldPair.getPublic()),
+                newKeyId, ServiceIdentityCrypto.encodePublicKey(newPair.getPublic())));
+        MemoryWorkingSetRequest request = request(CONTEXT);
+        long now = Instant.now().getEpochSecond();
+        MemoryRequestProof oldProof = MemoryRequestSigner.sign(request, new AuthenticatedPrincipal(42L), oldKeyId,
+                now, now + 45, "nonce-previous-key-1234", oldPair.getPrivate());
+        MemoryRequestProof newProof = MemoryRequestSigner.sign(request, new AuthenticatedPrincipal(42L), newKeyId,
+                now, now + 45, "nonce-rotated-key-123456", newPair.getPrivate());
+
+        assertEquals(42L, security.authorize(request, oldProof, MemoryV2Contract.OPERATION_WORKING_SET));
+        assertEquals(42L, security.authorize(request, newProof, MemoryV2Contract.OPERATION_WORKING_SET));
+        assertEquals(2, replay.calls);
+        assertEquals(2.0, verified("memory-v2", "Ed25519"));
+
+        caller.setPublicKeys(Map.of(newKeyId, ServiceIdentityCrypto.encodePublicKey(newPair.getPublic())));
+        MemoryException revoked = assertThrows(MemoryException.class,
+                () -> security.authorize(request, oldProof, MemoryV2Contract.OPERATION_WORKING_SET));
+        assertEquals(MemoryErrorCode.AUTHENTICATION_FAILED, revoked.code());
+        assertEquals(2, replay.calls);
+        assertEquals(2.0, verified("memory-v2", "Ed25519"));
+    }
+
+    private double verified(String protocol, String algorithm) {
+        return metrics.get("service.identity.signature.verified").tags("protocol", protocol, "algorithm", algorithm)
+                .counter().count();
     }
 
     private static MemoryWorkingSetRequest request(MemoryContextKey context) {

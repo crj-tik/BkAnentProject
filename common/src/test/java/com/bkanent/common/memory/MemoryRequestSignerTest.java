@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.security.KeyPairGenerator;
 import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -142,6 +143,34 @@ class MemoryRequestSignerTest {
                 user.nonce(), user.signature(), MemoryRequestProof.Actor.SERVICE);
         assertRejected(request, CONTEXT, changed, "marketing-content-service", MemoryV2Contract.MEMORY_AUDIENCE,
                 MemoryV2Contract.OPERATION_WORKING_SET, user.keyId());
+    }
+
+    @Test
+    void ed25519V2BindsMemoryProtocolKeyIdAndRequestAndDoesNotFallbackToHmac() throws Exception {
+        var pair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        MemoryWorkingSetRequest request = request();
+        String keyId = "marketing-service-identity-2026";
+        MemoryRequestProof proof = MemoryRequestSigner.sign(request, new AuthenticatedPrincipal(17L), keyId,
+                NOW.getEpochSecond(), NOW.plusSeconds(60).getEpochSecond(),
+                "2d65e053d5164f8696e9132c0eb7412e", pair.getPrivate());
+
+        assertThat(proof.signatureVersion()).isEqualTo(MemoryRequestProof.ED25519_V2);
+        assertThat(proof.algorithm()).isEqualTo("Ed25519");
+        MemoryRequestSigner.verifyEd25519(request, CONTEXT, proof, "marketing-content-service",
+                MemoryV2Contract.MEMORY_AUDIENCE, MemoryV2Contract.OPERATION_WORKING_SET,
+                keyId, NOW, pair.getPublic());
+        assertThatThrownBy(() -> MemoryRequestSigner.verify(request, CONTEXT, proof,
+                "marketing-content-service", MemoryV2Contract.MEMORY_AUDIENCE,
+                MemoryV2Contract.OPERATION_WORKING_SET, keyId, NOW, SECRET))
+                .isInstanceOf(MemoryException.class).hasMessage("AUTHENTICATION_FAILED");
+
+        MemoryRequestProof unknownKey = new MemoryRequestProof("another-key", proof.issuedAtEpochSecond(),
+                proof.expiresAtEpochSecond(), proof.nonce(), proof.signature(), proof.actor(),
+                proof.signatureVersion(), proof.algorithm());
+        assertThatThrownBy(() -> MemoryRequestSigner.verifyEd25519(request, CONTEXT, unknownKey,
+                "marketing-content-service", MemoryV2Contract.MEMORY_AUDIENCE,
+                MemoryV2Contract.OPERATION_WORKING_SET, "another-key", NOW, pair.getPublic()))
+                .isInstanceOf(MemoryException.class).hasMessage("AUTHENTICATION_FAILED");
     }
 
     private void assertRejected(MemoryWorkingSetRequest request, MemoryContextKey context, MemoryRequestProof proof,

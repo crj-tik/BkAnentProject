@@ -42,7 +42,8 @@ a2a:
   auth:
     key-id: ${CUSTOMER_A2A_KEY_ID:customer-a2a-current}
     signing-secret: ${CUSTOMER_A2A_SIGNING_SECRET:}
-    response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}
+    response-key-id: ${AUTH_SERVICE_IDENTITY_KEY_ID:auth-service-current}
+    response-public-key: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
     response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
 
 customer:

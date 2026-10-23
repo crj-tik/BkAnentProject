@@ -100,7 +100,8 @@ a2a:
   auth:
     key-id: ${MARKETING_A2A_KEY_ID:marketing-a2a-current}
     signing-secret: ${MARKETING_A2A_SIGNING_SECRET:}
-    response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}
+    response-key-id: ${AUTH_SERVICE_IDENTITY_KEY_ID:auth-service-current}
+    response-public-key: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
     response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
   memory:
     read-enabled: true
