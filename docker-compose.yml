@@ -24,7 +24,7 @@ x-app-environment: &app-environment
   MINIO_PUBLIC_BASE_URL: ${MINIO_PUBLIC_BASE_URL:-http://127.0.0.1:19000}
   AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:?Explicit AUTH_TOKEN_SECRET required}
   SERVICE_IDENTITY_PRIVATE_KEY_FILE: /run/secrets/service-identity.pem
-  AUTH_SERVICE_IDENTITY_KEY_ID: auth-service-current
+  AUTH_SERVICE_IDENTITY_KEY_ID: ${AUTH_SERVICE_IDENTITY_KEY_ID:-auth-service-current}
   # Spring AI validates provider keys during bean creation. The placeholders
   # only keep local containers bootable; real AI calls still require keys.
   DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-${KE_API_KEY:-local-dev-placeholder}}

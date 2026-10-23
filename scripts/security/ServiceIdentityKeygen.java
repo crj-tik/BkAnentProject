@@ -46,7 +46,7 @@ public final class ServiceIdentityKeygen {
         for (String service : SERVICES) {
             Path directory = ROOT.resolve(service);
             KeyPair pair = ensurePair(directory);
-            publicEnv.append(envPrefix(service)).append("_SERVICE_IDENTITY_PUBLIC_KEY=")
+            publicEnv.append(envPrefix(service)).append("_IDENTITY_PUBLIC_KEY=")
                     .append(Base64.getEncoder().encodeToString(pair.getPublic().getEncoded())).append('\n');
         }
         Path envFile = ROOT.resolve("public-keys.env");
@@ -132,9 +132,7 @@ public final class ServiceIdentityKeygen {
     }
 
     private static String envPrefix(String service) {
-        String base = service.endsWith("-service")
-                ? service.substring(0, service.length() - "-service".length()) : service;
-        return base.replace('-', '_').toUpperCase(Locale.ROOT) + "_SERVICE_IDENTITY";
+        return service.replace('-', '_').toUpperCase(Locale.ROOT);
     }
 
     private static void writeAtomically(Path file, String content) throws IOException {

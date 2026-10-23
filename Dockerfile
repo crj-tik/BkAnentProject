@@ -20,7 +20,7 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=build /workspace/*/target/*.jar /app/
 
-RUN mkdir -p /app/runtime && chown -R app:app /app/runtime
+RUN mkdir -p /run/secrets /app/runtime && chown -R app:app /app/runtime
 
 USER app
 ENV JAVA_OPTS=""

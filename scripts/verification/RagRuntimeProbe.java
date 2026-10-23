@@ -117,7 +117,8 @@ final class RagRuntimeProbe implements AutoCloseable {
             require(Set.of("SEND", "STREAM", "GET", "RESUBSCRIBE", "CANCEL").contains(operation), RagErrorCode.INVALID_ARGUMENT);
             require(A2A_AUDIENCES.contains(required("RAG_PROBE_A2A_AUDIENCE")), RagErrorCode.FORBIDDEN);
             caller = "agent-service";
-            keyId = required("AGENT_A2A_KEY_ID");
+            // 此 key ID 固定用于探针通过 legacy Auth RAG principal RPC 复核当前用户。
+            keyId = "agent-a2a-current";
             signingSecret = secret("AGENT_A2A_SIGNING_SECRET");
             if (Set.of("SEND", "STREAM", "CANCEL").contains(operation)) mutationsAllowed();
         }
@@ -144,10 +145,12 @@ final class RagRuntimeProbe implements AutoCloseable {
         context = new AnnotationConfigApplicationContext();
         Map<String, Object> settings = new HashMap<>();
         settings.put("spring.application.name", caller);
-        settings.put("a2a.auth.key-id", keyId);
-        settings.put("a2a.auth.signing-secret", new String(signingSecret, StandardCharsets.UTF_8));
-        settings.put("a2a.auth.response-key-id", responseKeyId);
-        settings.put("a2a.auth.response-secret", new String(responseSecret, StandardCharsets.UTF_8));
+        if ("A2A".equals(mode)) {
+            settings.put("service.identity.key-id", "agent-service-current");
+            settings.put("service.identity.private-key-file", "/run/secrets/service-identity.pem");
+            settings.put("a2a.auth.response-key-id", required("AUTH_SERVICE_IDENTITY_KEY_ID"));
+            settings.put("a2a.auth.response-public-key", required("AUTH_SERVICE_IDENTITY_PUBLIC_KEY"));
+        }
         settings.put("dubbo.application.name", "private-rag-runtime-probe");
         settings.put("dubbo.registry.address", "N/A");
         settings.put("dubbo.consumer.check", false);

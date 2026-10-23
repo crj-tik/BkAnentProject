@@ -34,7 +34,7 @@
 
 `RAG_PROBE_MODE=A2A`，`RAG_PROBE_OPERATION=SEND|STREAM|GET|RESUBSCRIBE|CANCEL`。
 
-- `AGENT_A2A_KEY_ID` / `AGENT_A2A_SIGNING_SECRET`：当前 agent-service 已信任请求配置。真实 Spring `@DubboReference` 给生产 `A2aBeaconAuthentication` 接 auth，官方 per-interface P2P override 指定原 auth URL；复用生产 beacon decorator 和官方 patched SDK，JDK transport `Redirect.NEVER`。
+- `AGENT_A2A_SIGNING_SECRET`：仅供探针复核当前用户的 legacy Auth RAG principal RPC；其 key ID 固定为 Auth 已登记的 `agent-a2a-current`。A2A 信标本身用 agent-service 的 Ed25519 私钥签名。探针只读挂载 `.secrets/service-identities/agent-service/private-key.pem`，并从同目录公钥环境文件读取 Auth 公钥。真实 Spring `@DubboReference` 给生产 `A2aBeaconAuthentication` 接 auth，官方 per-interface P2P override 指定原 auth URL；复用生产 beacon decorator 和官方 patched SDK，JDK transport `Redirect.NEVER`。
 - `RAG_PROBE_A2A_AUDIENCE`：九个已支持 service 之一；`RAG_PROBE_A2A_URL`：该 service 原 JSON-RPC endpoint。
 - `RAG_PROBE_TASK_ID` / `RAG_PROBE_CONTEXT_ID`：显式隔离任务/上下文，不打印原值。发送和后续 get/resubscribe/cancel **必须保留同一个原 endpoint/audience/task/context/owner**，不得根据新注册地址猜测原任务所在。
 - SEND/STREAM 还需 `RAG_PROBE_PROMPT`（最大8192字符）与 `RAG_PROBE_ALLOW_MUTATIONS=true`；prompt 可能触发真实模型/业务工具，必须使用授权的隔离资源。SEND 默认非 blocking；`RAG_PROBE_BLOCKING=true` 显式等待。

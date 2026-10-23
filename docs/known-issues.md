@@ -1404,6 +1404,14 @@
 
 **关联**：LR-98；change 11.5、11.8、11.9。
 
+## KI-163 [OPEN·P1] 服务身份生成器公钥环境变量重复协议后缀
+
+**发现日期**：2026-10-23。首次生成本机公钥环境文件时，变量名被写为 `AGENT_SERVICE_IDENTITY_SERVICE_IDENTITY_PUBLIC_KEY` 等重复后缀，而 Auth、Memory 和调用方配置读取 `AGENT_SERVICE_IDENTITY_PUBLIC_KEY` 等名称；因此公钥解析为空，Ed25519 请求会在运行时认证失败。
+
+**修复**：生成器改为以完整服务 ID 作为环境名前缀，仅追加一次 `_IDENTITY_PUBLIC_KEY`；已用本机已有密钥对重新生成忽略文件，并核对 12 个名字与所有受管配置占位完全一致。私钥未轮换或回显。同步更新 A2A 运行探针，使用 agent-service 私钥只读挂载，并从公钥环境文件读取 Auth 响应公钥。
+
+**关联**：LR-98；change 11.8；`scripts/security/ServiceIdentityKeygen.java`。
+
 ---
 
 **变更历史**：160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
