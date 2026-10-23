@@ -26,9 +26,11 @@
 
 Memory v2 从首个受管版本起只接受 Ed25519 proof，使用调用服务已有的身份私钥和 `BK-ANENT:MEMORY-V2:v1` 协议域；不配置 Memory 请求 HMAC 密钥，也不提供旧请求兼容。Auth/Memory verifier 均只按 key ID 查找公钥，并继续各自执行精确 caller、operation、domain、agent 与用户授权。Memory 的成功验签计数只记录 `protocol=memory-v2`、`algorithm=Ed25519`。
 
-## Auth/A2A 迁移期
+## Auth/A2A 旧 verifier 退役记录
 
-Auth/A2A 自身的旧调用端仍处于单独迁移窗口时，`*_A2A_SIGNING_SECRET` 仅供仍运行的旧 Auth/A2A 二进制使用；新调用端使用 Ed25519。该窗口只观察 `protocol=a2a-auth` 的验签计数，并在覆盖最长调用周期及回滚窗口后退役对应 Auth/A2A verifier 与旧密钥配置。不要把 Auth/A2A 迁移策略扩展到 Memory。RAG 的 `*_RAG_RPC_*` 凭据属于其独立 RPC 协议，按 RAG 契约管理。
+本机 `bk-anent-dev` 栈已完成 Auth/A2A 旧 HMAC 观察和退役。Auth 于 `2026-10-23 14:57:48 +08:00` 启动；`protocol=a2a-auth, algorithm=HMAC-SHA256` 在 `15:15:51 +08:00` 的计数为 `0.0`，连续观察 18 分 03 秒，超过 300 秒调用租约加 300 秒回滚窗口。观察期间当前栈内运行的 A2A 调用服务是 Agent 与 Interview；二者实际 Ed25519 请求累计计数为 10。其他领域服务当时未运行，因此这份运行证据仅覆盖本机当前启用入口。
+
+观察通过后已删除 Auth/A2A HMAC verifier、对应 `*_A2A_SIGNING_SECRET` 环境与配置项、旧启动脚本填充逻辑，以及 Auth 对应的 HMAC 计数器。退役后旧 HMAC 指标不存在；这不能解释为新的零值。Auth/A2A 当前只接受 Ed25519，并分别按来源 caller 的 `ISSUE_BEACON` 和 binding audience 的 `RESOLVE_BEACON` 执行公钥与 operation ACL。Memory v2 从首个受管版本起只接受 Ed25519。`*_RAG_RPC_*` HMAC 凭据仍属于独立 RAG RPC 合约，不在本次退役范围。
 
 ## key ID 轮换与撤销
 

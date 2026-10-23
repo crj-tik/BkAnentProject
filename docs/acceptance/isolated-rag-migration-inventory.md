@@ -157,7 +157,7 @@ Docker 代理确认首启九步、fresh 重跑两次各九步、upgrade 六步�
 
 历史仍保留：`bkagent` 登录HTTP200、顶层accessToken未回显；早期rag POST true立即GET404为异步可见性观察，最终通过限定deadline readback retry核对，不以POST true替代读回。后续如配置版本再变化，需按同样限定deadline逐项读回，但不能把这项维护规则说成当前最终版本未验收。
 
-A2A env 保持 `{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response 保持 `AUTH_RAG_RPC_RESPONSE_KEY_ID` / `AUTH_RAG_RPC_RESPONSE_SECRET`，不改新 AUTH 前缀。其他六 app YAML 扩展保留九域真实 guard 能力，不改为全拒；六服务未部署。配置中心读回不代表应用实际加载/生效。只七data ID，不整目录发布、不依赖无人导入mysql-common、不输出secrets。
+当前 A2A 调用方统一使用服务 Ed25519 身份 key ID 与只读私钥挂载；旧 A2A HMAC 配置已按 change 11.9 退役。`AUTH_RAG_RPC_RESPONSE_KEY_ID` / `AUTH_RAG_RPC_RESPONSE_SECRET` 仅属于独立 RAG RPC 响应签名。其他六 app YAML 扩展保留九域真实 guard 能力，不改为全拒；六服务未部署。配置中心读回不代表应用实际加载/生效。只七data ID，不整目录发布、不依赖无人导入mysql-common、不输出secrets。
 
 ### 最终安全运维库存、配置与模型预检
 

@@ -42,7 +42,7 @@
 
 最新实证：**11域key ID/env扩展后，七模板再次认证发布且全部readback SHA-256一致，Nacos未重建**。主会已读取安全 `nacos-publication-verification.json`：namespace=BK-AGENT、group=DEFAULT_GROUP、authenticated_login/readback_equal=true、a2a_domains=11。只七dataID，不整目录；应用实际读取和运行身份仍未验证。
 
-env保留`{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；response为`AUTH_RAG_RPC_RESPONSE_KEY_ID` / `AUTH_RAG_RPC_RESPONSE_SECRET`，不用新的AUTH前缀。其他六app YAML扩展保留九域真实guard能力、非全拒，六服务未部署；模板扩展不等于部署验收。密钥不回显、不写文档。
+当前 A2A 调用方统一使用服务 Ed25519 身份 key ID 与只读私钥挂载；旧 A2A HMAC 配置已按 change 11.9 退役。`AUTH_RAG_RPC_RESPONSE_KEY_ID` / `AUTH_RAG_RPC_RESPONSE_SECRET` 仅属于独立 RAG RPC 响应签名。其他六 app YAML 扩展保留九域真实 guard 能力、非全拒，六服务未部署；模板扩展不等于部署验收。密钥不回显、不写文档。
 
 ### 当前新增验证记录
 

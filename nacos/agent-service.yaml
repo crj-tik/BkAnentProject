@@ -107,12 +107,12 @@ mybatis-plus:
       logic-not-delete-value: 0
 
 a2a:
+  memory:
+    key-id: ${SERVICE_IDENTITY_KEY_ID:agent-service-current}
+    private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
   auth:
-    key-id: ${AGENT_A2A_KEY_ID:agent-a2a-current}
-    signing-secret: ${AGENT_A2A_SIGNING_SECRET:}
     response-key-id: ${AUTH_SERVICE_IDENTITY_KEY_ID:auth-service-current}
     response-public-key: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
-    response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
 
 agent:
   memory-v2:

@@ -23,39 +23,6 @@ auth:
         memory-current:
           caller-service: memory-service
           secret: ${MEMORY_RAG_RPC_SECRET:}
-        agent-a2a-current:
-          caller-service: agent-service
-          secret: ${AGENT_A2A_SIGNING_SECRET:}
-        listing-a2a-current:
-          caller-service: listing-master-service
-          secret: ${LISTING_A2A_SIGNING_SECRET:}
-        customer-a2a-current:
-          caller-service: customer-service
-          secret: ${CUSTOMER_A2A_SIGNING_SECRET:}
-        marketing-a2a-current:
-          caller-service: marketing-content-service
-          secret: ${MARKETING_A2A_SIGNING_SECRET:}
-        business-a2a-current:
-          caller-service: business-service
-          secret: ${BUSINESS_A2A_SIGNING_SECRET:}
-        compare-a2a-current:
-          caller-service: compare-engine-service
-          secret: ${COMPARE_A2A_SIGNING_SECRET:}
-        contract-a2a-current:
-          caller-service: contract-service
-          secret: ${CONTRACT_A2A_SIGNING_SECRET:}
-        settlement-a2a-current:
-          caller-service: settlement-service
-          secret: ${SETTLEMENT_A2A_SIGNING_SECRET:}
-        notification-a2a-current:
-          caller-service: notification-service
-          secret: ${NOTIFICATION_A2A_SIGNING_SECRET:}
-        media-a2a-current:
-          caller-service: media-worker-service
-          secret: ${MEDIA_A2A_SIGNING_SECRET:}
-        interview-a2a-current:
-          caller-service: interview-service
-          secret: ${INTERVIEW_A2A_SIGNING_SECRET:}
       response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}
       response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
   a2a:
@@ -65,7 +32,7 @@ auth:
       agent-service-current:
         caller-service: agent-service
         public-key: ${AGENT_SERVICE_IDENTITY_PUBLIC_KEY:}
-        allowed-operations: [ISSUE_BEACON, RESOLVE_BEACON]
+        allowed-operations: [ISSUE_BEACON]
       listing-master-service-current:
         caller-service: listing-master-service
         public-key: ${LISTING_MASTER_SERVICE_IDENTITY_PUBLIC_KEY:}

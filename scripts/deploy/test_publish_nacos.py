@@ -48,14 +48,15 @@ class FakeOpener:
 
 
 class PublishNacosTest(unittest.TestCase):
-    def run_publish(self, auth_enabled, opener, include_credentials=False):
+    def run_publish(self, auth_enabled, opener, include_credentials=False, data_id="memory-service.yaml"):
         with tempfile.TemporaryDirectory() as temp_dir:
-            Path(temp_dir, "memory-service.yaml").write_text(
-                "spring:\n  application:\n    name: memory-service\n", encoding="utf-8")
+            service_name = data_id.removesuffix(".yaml")
+            content = f"spring:\n  application:\n    name: {service_name}\n"
+            Path(temp_dir, data_id).write_text(content, encoding="utf-8")
             environment = {
                 "NACOS_NAMESPACE": "BK-AGENT",
                 "NACOS_CONFIG_GROUP": "DEFAULT_GROUP",
-                "NACOS_CONFIG_DATA_IDS": "memory-service.yaml",
+                "NACOS_CONFIG_DATA_IDS": data_id,
                 "NACOS_AUTH_ENABLE": auth_enabled,
                 "NACOS_TEMPLATE_DIR": temp_dir,
             }
@@ -79,6 +80,19 @@ class PublishNacosTest(unittest.TestCase):
         self.assertTrue(all(path == "/nacos/v1/cs/configs" for path, *_ in opener.calls))
         self.assertTrue(all("accessToken" not in values for _, _, values, _ in opener.calls))
         self.assertNotIn("fixture-token", output)
+
+    def test_runtime_entry_configs_are_explicitly_allowlisted(self):
+        for data_id in ("interview-service.yaml", "gateway.yaml"):
+            with self.subTest(data_id=data_id):
+                content = f"spring:\n  application:\n    name: {data_id.removesuffix('.yaml')}\n"
+                opener = FakeOpener(content)
+
+                output = self.run_publish("false", opener, data_id=data_id)
+
+                config_calls = [call for call in opener.calls if call[0] == "/nacos/v1/cs/configs"]
+                self.assertEqual(2, len(config_calls))
+                self.assertTrue(all(values.get("dataId") == [data_id] for _, _, values, _ in config_calls))
+                self.assertNotIn("fixture-token", output)
 
     def test_auth_enabled_logs_in_and_sends_token_without_printing_it(self):
         content = "spring:\n  application:\n    name: memory-service\n"

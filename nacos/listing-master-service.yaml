@@ -87,11 +87,8 @@ mybatis-plus:
 
 a2a:
   auth:
-    key-id: ${LISTING_A2A_KEY_ID:listing-a2a-current}
-    signing-secret: ${LISTING_A2A_SIGNING_SECRET:}
     response-key-id: ${AUTH_SERVICE_IDENTITY_KEY_ID:auth-service-current}
     response-public-key: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
-    response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
   memory:
     compression-enabled: ${LISTING_MEMORY_V2_COMPRESSION_ENABLED:false}
     key-id: ${SERVICE_IDENTITY_KEY_ID:listing-master-service-current}

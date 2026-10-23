@@ -74,7 +74,7 @@ Explore全量复核已确认无消费者旧 `AgentRpcService.syncListingKnowledg
 
 保留历史观察：`bkagent`登录HTTP200、顶层accessToken未回显；rag早期POST true立即GET404为异步可见性，用限定deadline readback retry最终核对，不以上传响应替代读回。后续配置如再变更需相同逐项读回，不因此将当前最终版本降为未通过。
 
-A2A env保持 `{DOMAIN}_A2A_KEY_ID` / `{DOMAIN}_A2A_SIGNING_SECRET`；auth response保持 `AUTH_RAG_RPC_RESPONSE_KEY_ID` / `AUTH_RAG_RPC_RESPONSE_SECRET`，不改用新的AUTH前缀。其他六app YAML范围扩展保留九域真实guard能力、不是全拒绝；六服务尚未部署，配置读回不等于运行生效。
+当前 A2A 调用方统一使用服务 Ed25519 身份 key ID 与只读私钥挂载；旧 A2A HMAC 配置已按 change 11.9 退役。`AUTH_RAG_RPC_RESPONSE_KEY_ID` / `AUTH_RAG_RPC_RESPONSE_SECRET` 仅属于独立 RAG RPC 响应签名。其他六 app YAML 范围扩展保留九域真实 guard 能力、不是全拒绝；六服务尚未部署，配置读回不等于运行生效。
 
 ### 旧后端、安全恢复与脚本门禁新增实证
 

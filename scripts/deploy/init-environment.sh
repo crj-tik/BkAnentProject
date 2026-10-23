@@ -141,9 +141,6 @@ if [ "$PROFILE" = rag ] || [ "$PROFILE" = full ]; then
   fill_secret AUTH_RAG_RPC_RESPONSE_SECRET
   fill_secret CUSTOMER_LISTING_READ_SECRET
   fill_secret MARKETING_LISTING_READ_SECRET
-  for domain in AGENT LISTING CUSTOMER MARKETING BUSINESS COMPARE CONTRACT SETTLEMENT NOTIFICATION MEDIA INTERVIEW; do
-    fill_secret "${domain}_A2A_SIGNING_SECRET"
-  done
 fi
 [ "$generated" -gt 0 ] && log_info "共补齐 ${generated} 个缺失配置项" || log_info ".env 密钥项均已配置，无需补齐"
 chmod 600 "$BK_ENV_FILE" 2>/dev/null || log_warn "无法将 .env 权限调整为 600，请手工执行 chmod 600 .env"

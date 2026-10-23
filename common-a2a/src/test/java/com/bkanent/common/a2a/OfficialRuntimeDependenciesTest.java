@@ -2,6 +2,7 @@ package com.bkanent.common.a2a;
 
 import com.bkanent.common.rag.RagErrorCode;
 import com.bkanent.common.rag.RagException;
+import com.bkanent.common.rpc.A2aBeaconRpcService;
 import com.bkanent.common.rpc.AuthenticatedPrincipal;
 import com.bkanent.common.rpc.RagIndexRpcService;
 import com.bkanent.common.rpc.RagPrincipalRpcService;
@@ -109,7 +110,7 @@ class OfficialRuntimeDependenciesTest {
     }
 
     @Test void declaredRagFailuresRegisterExactClassesAndRoundTripThroughOfficialThrowableWire() throws Exception {
-        for (Class<?> contract : List.of(RagPrincipalRpcService.class, RagRetrievalRpcService.class,
+        for (Class<?> contract : List.of(A2aBeaconRpcService.class, RagPrincipalRpcService.class, RagRetrievalRpcService.class,
                 RagIndexRpcService.class, RagSpaceAdminRpcService.class)) {
             for (Method method : contract.getDeclaredMethods()) {
                 check(Arrays.equals(method.getExceptionTypes(), new Class<?>[]{RagException.class}),

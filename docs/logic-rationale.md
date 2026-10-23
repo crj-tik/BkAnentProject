@@ -950,8 +950,8 @@
 
 ## LR-98 服务身份密钥跨协议复用私钥，但按协议域隔离签名
 
-**结论**：每个调用服务只持有一组 Ed25519 身份私钥，可分别签署 A2A/Auth 信标与 Memory v2 请求；签名输入包含显式版本、算法、key ID 和不同的协议域标签（`BK-ANENT:A2A-AUTH:v1`、`BK-ANENT:MEMORY-V2:v1`）。Memory v2 请求从首个受管版本起仅接受 Ed25519。Auth 与 Memory 各自只登记需要验证的公钥，并继续执行各自精确的 caller、operation、domain、agent 和用户授权；Auth 仅授予 `agent-service` `ISSUE_BEACON`，其他已登记 A2A 调用方只授予 `RESOLVE_BEACON`。Auth/A2A 的旧调用端迁移窗口仅在 A2A/Auth 协议内管理，不延伸到 Memory。
+**结论**：每个调用服务只持有一组 Ed25519 身份私钥，可分别签署 A2A/Auth 信标与 Memory v2 请求；签名输入包含显式版本、算法、key ID 和不同的协议域标签（`BK-ANENT:A2A-AUTH:v1`、`BK-ANENT:MEMORY-V2:v1`）。Memory v2 与当前 Auth/A2A verifier 均只接受 Ed25519。Auth 与 Memory 各自只登记需要验证的公钥，并继续执行各自精确的 caller、operation、domain、agent 和用户授权；Auth 仅授予 `agent-service` `ISSUE_BEACON`，其他已登记 A2A 调用方只授予 `RESOLVE_BEACON`。信标签发由 binding 的来源 Agent 签名，信标解析由 binding audience 目标服务签名。
 
-**根因**：每服务每协议配置共享签名 secret 会让调用方与验证方都能伪造请求，且密钥项随服务和协议数增长。每服务一组非对称密钥把签名能力留在调用服务；协议域分离允许复用身份而阻止跨协议重放；verifier 独立公钥登记与原 ACL 保证新增身份不自动扩大权限。Auth/A2A 仍在运行的旧调用端只按其协议单独迁移；Memory 不保留旧签名算法路径，也不需要运行态旧请求观察。
+**根因**：每服务每协议配置共享签名 secret 会让调用方与验证方都能伪造请求，且密钥项随服务和协议数增长。每服务一组非对称密钥把签名能力留在调用服务；协议域分离允许复用身份而阻止跨协议重放；verifier 独立公钥登记与原 ACL 保证新增身份不自动扩大权限。Auth 曾在 A2A/Auth 迁移观察窗内保留旧 verifier；本机开发栈覆盖最长 300 秒信标租约及 300 秒回滚窗后，旧算法计数保持为零，现已删除旧 verifier 与密钥配置。RAG RPC 仍遵循自己的独立协议。
 
-**代码位置**：`common/security/ServiceIdentityCrypto`、`common/rag/A2aAuthSignature`、`common/memory/MemoryRequestSigner`、`common-a2a/A2aBeaconAuthentication`、`auth-service/AuthA2aIdentityProperties` 与 `A2aBeaconRpcServiceImpl`、`memory-service/MemoryV2SecurityProperties` 与 `MemoryV2RequestSecurity`；验签计数器 `service.identity.signature.verified`、`docker-compose.yml`、`scripts/security/`、`docs/service-identity-operations.md`。回归覆盖协议域、签名、key ID/公钥匹配、算法降级拒绝、轮换撤销与 verifier ACL；关联 KI-162、change 11.8/11.9。
+**代码位置**：`common/security/ServiceIdentityCrypto`、`common/rag/A2aAuthSignature`、`common/memory/MemoryRequestSigner`、`common-a2a/A2aBeaconAuthentication`、`auth-service/AuthA2aIdentityProperties` 与 `A2aBeaconRpcServiceImpl`、`memory-service/MemoryV2SecurityProperties` 与 `MemoryV2RequestSecurity`；验签计数器 `service.identity.signature.verified`、`docker-compose.yml`、`scripts/security/`、`docs/service-identity-operations.md`。Auth 只预注册 Ed25519 A2A/Auth 计数器。回归覆盖来源/目标身份边界、operation ACL、协议域、签名、key ID/公钥匹配、错误算法/降级拒绝、轮换撤销与 verifier ACL；旧 HMAC 运行观察和退役记录见 2026-10-23 11.9 验收。关联 KI-162、change 11.8/11.9。

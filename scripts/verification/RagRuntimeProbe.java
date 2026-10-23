@@ -117,9 +117,9 @@ final class RagRuntimeProbe implements AutoCloseable {
             require(Set.of("SEND", "STREAM", "GET", "RESUBSCRIBE", "CANCEL").contains(operation), RagErrorCode.INVALID_ARGUMENT);
             require(A2A_AUDIENCES.contains(required("RAG_PROBE_A2A_AUDIENCE")), RagErrorCode.FORBIDDEN);
             caller = "agent-service";
-            // 此 key ID 固定用于探针通过 legacy Auth RAG principal RPC 复核当前用户。
-            keyId = "agent-a2a-current";
-            signingSecret = secret("AGENT_A2A_SIGNING_SECRET");
+            // RAG principal RPC 属于独立 RAG 合约，使用 agent-service 的 RAG RPC 凭据。
+            keyId = "agent-current";
+            signingSecret = secret("AGENT_RAG_RPC_SECRET");
             if (Set.of("SEND", "STREAM", "CANCEL").contains(operation)) mutationsAllowed();
         }
         bootstrap();
