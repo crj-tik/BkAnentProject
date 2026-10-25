@@ -57,3 +57,15 @@
 #### Scenario: 来源更新影响索引与报告
 - **WHEN** 同一来源房源的有效版本变化
 - **THEN** 相关投影按版本更新，旧报告可识别为过时，来源最终复核不以索引尚未同步为由返回失效事实
+
+### Requirement: 房源公开接口遵循冻结的 v1 来源契约
+
+房源域 SHALL 提供 domain-parallel-v1 的 search、snapshots/batch-read、snapshots/check 三个公开 POST 契约，路径及包络遵循并行总览。快照必须包含稳定来源引用、revision/contentHash、观察时间、模式、dataset及量纲明确的事实；check SHALL 只读返回 CURRENT、STALE、NOT_ACCESSIBLE 或 UNAVAILABLE，不可访问项不返回正文或泄露存在性。未知契约版本必须拒绝。
+
+#### Scenario: 下游消费者尚未交付
+- **WHEN** 当前获准用户在显式模拟来源下请求房源 v1 搜索、快照或当前使用检查，经营及营销消费者尚未部署
+- **THEN** 房源域仍按固定契约处理并保留模拟标记，其功能不要求消费者代码或其它领域新制品先存在
+
+#### Scenario: 请求使用未知契约版本
+- **WHEN** 调用者请求未支持的契约版本
+- **THEN** 系统返回明确不支持错误，不按另一个版本静默解码或回退模拟来源

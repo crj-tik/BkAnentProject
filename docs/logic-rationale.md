@@ -5,6 +5,8 @@
 > **格式**：`LR-N 标题` → 结论 → 根因 → 代码位置 → 关联。编号稳定不复用，引用时写 `LR-N`。
 > **维护规则**：与代码同仓同提交（见 AGENTS.md「项目认知清单」）。修正某条逻辑时更新条目而非删除，注明变更原因。
 
+> **四会话并行编号保留（2026-10-25）**：房源 LR-106–113，知识 LR-114–121，经营 LR-122–129，营销 LR-130–137。其它会话在本批期间从 LR-138 起选择未用编号；保留号不复用，禁止四会话各取同一 max+1。各域优先维护已有 LR-99/100/101/102，完整规则见 [并行总览](business-domain-change-roadmap.md)。
+
 ---
 
 ## LR-1 ticket 签发时机：凭据跟着信任断点走
@@ -964,7 +966,7 @@
 
 **代码位置**：`common/authz/AuthorizationSnapshot`、`AuthzFreshness`、`AuthorizationContext`、`AuthzSignature`、`AuthzDeadlines`、`AuthorizationCache`、`AuthorizationSession`；`auth-service/authorization/AuthorizationRepository`、`EffectivePermissionService`、`RoleAuthorizationManagementService`；新MySQL迁移及Redis `authz/publish.lua`。
 
-**实施边界**：基础批次413项定向回归、隔离MySQL/Redis规则通过。续批按用户确认新增独立同run受限刷新，KI-169已修；新授权RPC/管理API仍默认关闭，实际Gateway run绑定与Graph/业务consumer迁移见KI-170，不能声称全链通知或零重复Auth已上线。续批276项定向及全23模块1519项回归通过（跳过14外部门控），新增发布/本地监控基础。关联LR-33/40/41/63/98/105；change `unify-versioned-permission-context`。
+**实施边界**：基础批次413项定向回归、隔离MySQL/Redis规则通过。续批按用户确认新增独立同run受限刷新，KI-169已修；新授权RPC/管理API仍默认关闭，实际Gateway run绑定与Graph/业务consumer迁移见KI-170，不能声称全链通知或零重复Auth已上线。续批276项定向及全23模块1519项回归通过（跳过14外部门控），新增发布/本地监控基础。关联LR-33/40/41/63/98/106；change `unify-versioned-permission-context`。
 
 ## LR-104 Supervisor请求幂等必须绑定持久会话与归一化输入
 
@@ -1013,7 +1015,7 @@
 
 **关联**：LR-22/23/53/94/96；KI-114、KI-167。
 
-## LR-105 同run刷新只收缩许可，发布新鲜度与业务执行身份分开
+## LR-106 同run刷新只收缩许可，发布新鲜度与业务执行身份分开
 
 **结论**：独立refreshAuthorization使用真实access、原签名context和本次服务proof更新permissionRevision，保持actor/run/session/audience/policy以及原hard deadline；credentialEpoch变更必须新认证续接。同运行许可只收缩，已接受窄scope后旧宽context再授权限也不能恢复该运行许可。签名freshness每30秒以内按真实MySQL读取开始时刻重核，Auth发布outbox/current-version与Redis原子fence，消息只失效不授予；有效本地context检查不逐工具请求Auth。
 
@@ -1022,3 +1024,12 @@
 **代码位置**：AuthAuthorizationRpcServiceImpl.refreshAuthorization、AuthzCanonicalHash.refreshRequestHash、AuthzSignature.verifyRefreshBinding、AuthorizationSession.refresh、AuthTokenService、AuthAccountMutationService、AuthorizationOutboxPublisher、RedisActiveAuthorizationActors和AuthorizationVersionMonitor。pub/sub/对账实现是基础，Gateway/Agent已验字节原型的signed run/session仍null，实际执行标签接入必须补KI-170而不能consumer填入签名或省资源owner检查；header最大256KiB也不等于部署预算已配置。
 
 **关联**：LR-103/104、KI-169/170/171；本轮276项定向、1519项全回归（14跳过）、真实隔离MySQL22+Redis62项检查；签名/故障fixture与真实存储规则证据分开，不代表新协议已部署。
+## LR-105 四个 Change 以固定契约独立验收，合并后再核验真实互通（规划）
+
+**结论**：房源、知识、经营和营销四个 change 从共同基线使用独立 worktree/分支、Maven仓库及测试资源。生产者和消费者遵循 `domain-parallel-v1`；经营/营销持有自己的wire DTO和实际HTTP适配，用自有fixture验证，不依赖其它change新增Java制品。所有本期任务可分别完成，真实服务互通、Auth/Memory在线登记、初始化allowlist和共享环境切换由协调会话在合并后核验。
+
+**根因**：把计划放进四个目录仍可能在完成条件、Java依赖、SNAPSHOT缓存、同一checkout和在线配置上相互等待或覆盖。固定线协议、分配修改范围和独立资源，才能让四会话各自构建验收；真实模式未接线时仍失败关闭，不能通过模拟夹具伪称生产已接通。共享文件允许各分支提交最小语义差异，最终合并由协调核对其并集，而非声称永远无文本冲突。
+
+**代码位置（当前与规划）**：四个change既有proposal/design/specs/tasks及 `docs/business-domain-change-roadmap.md`；规划要求未来实现各自来源/消费适配及隔离测试。本次只修订规划，没有创建四个会话或worktree、实施代码、修改运行配置或执行真实联调。
+
+**关联**：LR-22/23/53/59/94/96/97/99/100/101/102；现有KI状态不因并行规划而改变。

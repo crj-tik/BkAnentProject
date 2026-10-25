@@ -63,4 +63,4 @@ Gateway/Agent原型已通过实际原始body/path/query绑定、三签、单次A
 - 独立代码复核发现并修三个P1：token编码别名绕注销；旧context恢复已收缩scope；账号writer内只核actor失去真实凭据竞争。新增canonical别名、旧宽context回放、真实BCrypt期间注销/到期与零写副作用反例。
 - 编译/fixture失败修正：common WireCodec将既有test-scope Jackson依赖提升compile；Gateway重复Mockito设桩改doAnswer/doThrow；账号typed varargs fixture修正；Publisher UUID nonce改32字节URL编码，合法空审计事件直接CAS完成，网络锁范围缩短；Agent参数重名与默认关闭minimal context配置注册修正。未放宽生产权限。
 - `refresh-acceptance-results.json`：隔离MySQL22、active Lua24、publish16、ACL22，共84检查通过；新增260迁移/check、fresh/upgrade dry-run均0。仅新tmpfs/internal网且无端口，两容器/网/临时秘密已清理，未devDB apply；没有Java跨两存储注销/TLS/部署全链证据。
-- 新授权开关仍默认关闭，没有生产部署、真实业务副作用或对Memory私有范围放宽。LR-105和KI-169/170/171记录真实边界；独立刷新修复不宣称全链完成。
+- 新授权开关仍默认关闭，没有生产部署、真实业务副作用或对Memory私有范围放宽。LR-106和KI-169/170/171记录真实边界；独立刷新修复不宣称全链完成。

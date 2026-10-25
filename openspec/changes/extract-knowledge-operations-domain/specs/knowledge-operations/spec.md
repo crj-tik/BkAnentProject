@@ -65,3 +65,15 @@
 #### Scenario: 运营人员发布一个案例
 - **WHEN** 知识案例审核发布完成
 - **THEN** 系统保留知识发布回执，不自动生成个人偏好或跨用户 Memory 共享经验授权
+
+### Requirement: 已发布知识通过冻结 v1 公开契约消费
+
+知识域 SHALL 提供 domain-parallel-v1 的 published/search、published/batch-read 和 published/check 三个 POST 契约。包络、路径和字段遵循并行总览，知识引用包含 knowledgeId/revision/contentHash，快照保留发布状态、模式、dataset、来源引用及获准派生正文；不得返回私有逐字稿全文。check 只读区分当前、过时、不可访问及不可用，访问整体无效必须拒绝而非空匹配。
+
+#### Scenario: 经营消费者尚未实施
+- **WHEN** 本域已具备获准的模拟访谈来源和知识发布版本，但没有经营或房源的新增实现
+- **THEN** 当前受权用户仍能通过固定知识 v1 契约查询、读取并检查该版本，不要求其它 change 提供新的 Java 类型或服务
+
+#### Scenario: 知识版本撤回后的当前检查
+- **WHEN** 调用者检查一个已撤回或失去当前访问权的知识引用
+- **THEN** 返回 NOT_ACCESSIBLE 且不带正文；来源依赖故障返回 UNAVAILABLE，不能把二者解释成可继续使用

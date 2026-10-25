@@ -22,7 +22,7 @@
 
 ### 2. 模拟经营输入走可替换的数据端口
 
-`StoreBusinessEvidencePort` 提供指定门店、时间窗口和 dataset 下的带看事件、跟进事件、议价状态及维护记录。首期实现固定版本 fixture provider，不从 employeeId、记录 ID 或模型文本随机推算业绩。每条记录包含 `sourceSystem/sourceId/revision/observedAt/eventTime/dataMode/datasetId`。房源读取由 `ListingBusinessReadPort` 消费房源域，知识由 `PublishedKnowledgeReadPort` 消费知识域；不跨域读库或把访谈逐字稿复制进业务库。
+`StoreBusinessEvidencePort` 提供指定门店、时间窗口和 dataset 下的带看事件、跟进事件、议价状态及维护记录。首期实现固定版本 fixture provider，不从 employeeId、记录 ID 或模型文本随机推算业绩。每条记录包含 `sourceSystem/sourceId/revision/observedAt/eventTime/dataMode/datasetId`。房源读取由 `ListingBusinessReadPort`、知识由 `PublishedKnowledgeReadPort` 消费冻结的 `domain-parallel-v1` HTTP契约；本模块拥有 consumer wire DTO/mapper 及 HTTP fixture，不引用另两个 change 新增的 common 类型，不跨域读库或复制逐字稿。
 
 本地证据快照仅保存获准的有界字段和来源定位。模拟与真实记录按 dataset 和来源标记分开，不能通过更新 dataMode 将旧模拟历史“转正”；任何模拟证据参与输出都继承为 SIMULATED 或 MIXED。真实 feed 的后续接入可替换端口实现，数据结构与本期状态机不改变。
 
@@ -52,6 +52,14 @@
 
 公开接口拟为 `/business/reviews`、`/business/reviews/{id}/plans`、`/business/reviews/{id}/actions` 与观察查询，输入不接受自授 owner/store 范围。Auth 范围不可用时拒绝受保护操作。首期提供领域 API、版本化 DTO 和安全 Agent artifact；Studio 前端及已有 P3/P4 由其原 change 对接，完成领域接口不宣称浏览器工作台已经落地。
 
+### 7. 无跨 change 等待的独立验收
+
+本会话只拥有 business 模块和 `common/business/review/**`，工作区/分支、Maven仓库及测试资源按 [并行总览](../../../docs/business-domain-change-roadmap.md) 隔离。房源和知识两个 HTTP consumer adapter 必须实际实现；路径、字段、批量检查和错误语义采用冻结 v1，使用本会话有界 HTTP服务器返回精确模拟来源/版本/撤回夹具，直接运行本域处理器、状态和数据库验证闭环。
+
+Auth、Memory 的当前协议通过测试配置下的精确服务/用户登记替身覆盖，生产配置缺失仍前置拒绝。peerMode 显式选择 fixture/http，HTTP依赖不可用、版本不支持和拒绝不能自动回退。由此本会话可在没有另外三个实现提交时完成所有本期任务，不留下空实现或等待任务，也不把 fixture 结果声称为真实服务已接通。
+
+共享根配置只提交本业务必需的最小差异/SQL与check，Auth/Memory全局登记、初始化runner的bk_business allowlist及真实来源接入由协调合并。合并后的生产者互通、组织范围和浏览器联调单独记录，不纳入本 change 的实施完成前置条件。
+
 ## Risks / Trade-offs
 
 - [模拟样本看起来像真实经营] → dataset、来源模式随 API/结果/导出保留，模拟观察不进入真实增长证明。
@@ -61,8 +69,10 @@
 
 ## Migration Plan
 
+以下为合并后的共享环境计划；独立会话使用自身 fixture/隔离库验证行为并交付可应用步骤，不操作共享栈。
+
 1. 增量增加 review 表及 schema 检查；原 KPI 表、API 和历史数据保持可读，不把历史看板行改写为已执行动作。
-2. 先用受管 fixture 实现输入、确定性指标和事项/动作状态，再接入匹配版本的房源及知识公开契约。
+2. 实现输入、指标和事项/动作状态，以及房源/知识 v1 HTTP适配；独立验收用明确 fixture 运行全链，合并后将显式 HTTP配置指向已实现的生产者核验互通。
 3. 在现有 Agent 身份下发布技能及结果 DTO，验证 Memory 必需接入和写动作确认；不启用外部发送。
 4. 使用固定模拟数据完成带看停滞与房源维护两条功能验收；分别报告功能、效率采样和真实效果未验证状态。
 5. 回退停止创建新复盘事项并撤下新技能，保留已确认动作、回执及观察记录，不清空数据或重放完成动作。

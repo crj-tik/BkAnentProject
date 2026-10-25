@@ -6,6 +6,8 @@
 > **状态**：`OPEN` 待修 ｜ `FIXED` 已修（附 commit）｜ `LIMIT` 设计限制（附暂不修的原因）
 > **维护规则**：与代码同仓同提交（见 AGENTS.md「项目认知清单」）。
 
+> **四会话并行编号保留（2026-10-25）**：房源 KI-170–177，知识 KI-178–185，经营 KI-186–193，营销 KI-194–201。其它会话在本批期间从 KI-202 起选择未用编号；保留号不复用，禁止各自取同一 max+1。KI-115由房源、KI-15由知识、KI-167由营销维护，详见 [并行总览](business-domain-change-roadmap.md)。
+
 ---
 
 ## 待修复（OPEN）
@@ -1446,7 +1448,7 @@
 
 **关联**：LR-96；change 11.6。
 
-## KI-169 [FIXED·本提交·P1] 版本权限上下文缺少同run受限刷新协议
+## KI-169 [FIXED·7ca683c·P1] 版本权限上下文缺少同run受限刷新协议
 
 **确认依据**：`unify-versioned-permission-context` apply基础批次代码复核，非部署或利用测试。入口 `resolveRequestAuthorization` 每次按当前认证时间建立新300秒hard deadline；`validateDelegation` 要求父revision/epoch/hash等于当前真源。权限变化后旧父委托被拒，重新入口取得的期限又超过原run截止，`AuthorizationSession.refresh` 正确拒绝其扩大期限/范围，导致没有合法同run刷新路径。
 
@@ -1454,7 +1456,7 @@
 
 **验证边界**：276项最终定向回归以及全23模块1519项回归失败/错误0、跳过14；跳过为既有外部依赖门控。Auth新协议仍默认关闭；Redis发布和本地监控基础已写，Gateway/Agent实际run关联、Graph/业务域消费和部署未完成，见KI-170，不能把协议修复称为全链上线。
 
-**关联**：LR-103/105；任务4.2/4.5/5.2/6.1。
+**关联**：LR-103/106；任务4.2/4.5/5.2/6.1。
 
 ## KI-168 [FIXED·401c583·P1] Supervisor审计、治理与请求会话边界未统一
 
@@ -1470,13 +1472,13 @@
 
 **处置**：任务4.3/4.4/5.x/6.x保持未完成。需在精确执行入口定义非授权关联标签的签发/消费契约：业务requestId、continueRunId、sessionId只是定位，仍由持久owner和幂等真源验证；缺省、重投和续接须一致，不能简单Gateway随机session覆盖原会话，也不能在consumer重签原Auth证明。header预算/公开规则/直接服务独立认证与该关联一起成组验收后才能启用，不放宽scope/deadline或提供legacy回退。
 
-**关联**：LR-105；change `unify-versioned-permission-context`。当前单次入口验签/真实字节绑定原型和Redis本地监控已通过fixture，不代表完整业务run能运行。
+**关联**：LR-106；change `unify-versioned-permission-context`。当前单次入口验签/真实字节绑定原型和Redis本地监控已通过fixture，不代表完整业务run能运行。
 
-## KI-171 [FIXED·本提交·P1] Token编码别名绕过按原串摘要的注销
+## KI-171 [FIXED·7ca683c·P1] Token编码别名绕过按原串摘要的注销
 
 **确认与修复**：旧verify只解码签名比对，合法填充或非零pad-bit别名可保持签名字节不变却产生不同SQL/Redis撤销摘要。payload与signature现在均要求规范unpadded Base64URL，拒绝别名，不通过改token格式或弱化签名修复。新增parse/revoke/verifyForLogout和logout幂等反例通过；角色/账号新模式仍独立校验。
 
-**关联**：LR-105；AuthTokenServiceTest、AuthAccountMutationServiceTest。本提交同时修复账号写入只保留actor而丢失真实凭据的竞争：密码计算后writer锁内复验实际access/actor/当前管理权限，注销/到期时零账号写与审计副作用。
+**关联**：LR-106；AuthTokenServiceTest、AuthAccountMutationServiceTest。本提交同时修复账号写入只保留actor而丢失真实凭据的竞争：密码计算后writer锁内复验实际access/actor/当前管理权限，注销/到期时零账号写与审计副作用。
 
 ---
 
