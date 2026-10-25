@@ -32,7 +32,7 @@
 - 隔离MySQL初次health因Windows只读bind的option文件被mysql视为world-writable而忽略，只修新容器复制后chmod600；最终成功，不改dev凭据。
 - manifest首dry-run65因closed target不含upgrade:bk_auth，只加这一合法目标后fresh/upgrade为0，保留历史失败。
 
-## 必须暂停的协议问题（KI-167）
+## 必须暂停的协议问题（KI-169）
 
 现两个RPC仅resolveRequestAuthorization(token,binding,proof)与validateDelegation(parent,binding,originProof,receiverProof)。入口每次新建now+300 hard deadline；委托要求parent revision/epoch当前有效。权限变化后旧parent不能委托，重新resolve又增加原run截止/受限child范围，被AuthorizationSession.refresh正确拒绝。consumer不能裁剪Auth签名自救。
 
@@ -42,4 +42,4 @@
 
 acceptance-results.json记录MySQL20、RedisACL23、生产Lua20及临时资源清理；并非新Auth/RPC/签名/广播全链实测。只使用新tmpfs、唯一internal网、无端口，两个临时容器/网均清理、删除卷数0。没有devDB迁移/生产部署/真实数据与外部业务副作用，没有读取.env/.secrets，不回显凭据。
 
-原工件63项目前仅7项完成。LR-99/100与KI-167/168同步说明实际实现和未验边界；其余不提前关闭。待本批验证和中文提交完成后暂停，不归档变更。
+原工件63项目前仅7项完成。LR-103/104与KI-169/168同步说明实际实现和未验边界；其余不提前关闭。基础提交401c583已创建；首次push因远程独立业务规划先推送而拒绝，合并保留双方工件，将远程已发布LR-99至102与KI-167保持不变，本地新条目使用LR-103/104与KI-169。这是编号整合，不修改另四份业务提案范围；之后推送整合提交并暂停，不归档变更。

@@ -10,6 +10,12 @@
 
 ## 待修复（OPEN）
 
+## KI-167 [OPEN·P2] 推广效果同步生成样例统计但未携带明确来源性质
+
+**确认日期**：2026-10-25，业务域规划期间源码核对。`PromotionManagementServiceImpl.syncEffectStat` 按发布记录 ID 计算曝光、点击和线索，并以 `leadCount * 1000 / costAmount` 生成样例 ROI；该方法没有渠道统计读取，现有返回与存储也未明确标记这些值为模拟数据。用户已说明当前业务数据模拟，本条记录其向真实效果统计或经营复盘扩展时的现有限制，不将样例算法解释为真实业绩来源。
+
+**处置（已规划，未修复）**：独立 change `consolidate-marketing-promotion-domain` 将样例算法收口到显式 fixture provider，效果观察携带来源/窗口/版本/数据模式，真实 ROI 要求可归属收入和成本；缺少真实数据返回未知。用重复同步、模拟/真实隔离、缺收入和结果来源测试验收后再更新修复状态。本轮只增加规划文档，未运行效果接口或修改生产代码。关联 LR-102 与 [营销合并方案](../openspec/changes/consolidate-marketing-promotion-domain/proposal.md)。
+
 ## KI-166 [OPEN·P3·延迟排查] Studio 浏览器前端落地后需补验工作/成果可读链路
 
 **登记日期**：2026-10-23（源自 `integrate-domain-agent-memory` 归档遗留）。任务 1.4/11.3 的浏览器验收因 Studio 前端仍在设计、无可执行实例而标为未测；该备注此前只存在于归档 tasks 中，未进本清单，现登记为唯一权威来源条目。后端 `GET /agent/studio/v1/works` 在混合环境曾持续 503（见 KI-126，疑与 `resolvePrincipal` 超时相关），浏览器补验时需一并确认后端链路已通。
@@ -1440,21 +1446,21 @@
 
 **关联**：LR-96；change 11.6。
 
-## KI-167 [OPEN·P1] 版本权限上下文缺少同run受限刷新协议
+## KI-169 [OPEN·P1] 版本权限上下文缺少同run受限刷新协议
 
 **确认依据**：`unify-versioned-permission-context` apply基础批次代码复核，非部署或利用测试。入口 `resolveRequestAuthorization` 每次按当前认证时间建立新300秒hard deadline；`validateDelegation` 要求父revision/epoch/hash等于当前真源。权限变化后旧父委托被拒，重新入口取得的期限又超过原run截止，`AuthorizationSession.refresh` 正确拒绝其扩大期限/范围，导致没有合法同run刷新路径。
 
 **处置**：暂停任务4.2/4.5及其后consumer接线完成认定；需在既有设计目标内明确携原context、真实凭据及来源证明的刷新协议，保持actor/run/session/policy/原截止并只采用新权限交集。不能用放宽本地期限或允许旧parent扩权修补。MySQL权限基础、共享签名、本地缓存与边界守卫已实现，Auth新协议/管理API默认关闭；Redis发布调度、通知和消费接线未完成。
 
-**关联**：LR-99；任务4.2/4.5/5.2/6.1。413项定向回归通过不包含未实现的同run刷新链。
+**关联**：LR-103；任务4.2/4.5/5.2/6.1。413项定向回归通过不包含未实现的同run刷新链。
 
-## KI-168 [FIXED·本提交·P1] Supervisor审计、治理与请求会话边界未统一
+## KI-168 [FIXED·401c583·P1] Supervisor审计、治理与请求会话边界未统一
 
 **确认与修复**：原chat不claim持久session、重复run仅核owner、event-audit可无owner查询全局正文、governance仅要求登录。本批chat和各正式入口核持久归属；run幂等绑定actor/session/归一化输入，冲突返回409；省略session的同requestId重投从持久原请求恢复会话，避免补丁随机UUID误拒。普通audit按可信actor的持久run和Memory session owner前后核验，SQL限定session+run；全量业务诊断要求独立管理许可，治理读写同样独立许可，必要访问审计失败关闭。
 
 **验证边界**：新增MockMvc/H2/请求scope反例及原Graph30回归通过，完整定向413项失败/错误/跳过0；未部署，未修KI-128异步状态查询根因。当前许可仍使用旧Auth精确查询，相关新增read码在未迁移目录时fail-closed，不能声称新版本授权consumer已接通。异步提交到run持久登记之间的并发窗口留任务5.5/5.7验收。
 
-**关联**：LR-100；任务5.5/5.6/5.7；KI-79/80。
+**关联**：LR-104；任务5.5/5.6/5.7；KI-79/80。
 
 ---
 

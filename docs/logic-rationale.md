@@ -956,7 +956,7 @@
 
 **代码位置**：`common/security/ServiceIdentityCrypto`、`common/rag/A2aAuthSignature`、`common/memory/MemoryRequestSigner`、`common-a2a/A2aBeaconAuthentication`、`auth-service/AuthA2aIdentityProperties` 与 `A2aBeaconRpcServiceImpl`、`memory-service/MemoryV2SecurityProperties` 与 `MemoryV2RequestSecurity`；验签计数器 `service.identity.signature.verified`、`docker-compose.yml`、`scripts/security/`、`docs/service-identity-operations.md`。Auth 只预注册 Ed25519 A2A/Auth 计数器。回归覆盖来源/目标身份边界、operation ACL、协议域、签名、key ID/公钥匹配、错误算法/降级拒绝、轮换撤销与 verifier ACL；旧 HMAC 运行观察和退役记录见 2026-10-23 11.9 验收。关联 KI-162、change 11.8/11.9。
 
-## LR-99 版本权限集合、运行委托和新鲜证明分别管理
+## LR-103 版本权限集合、运行委托和新鲜证明分别管理
 
 **结论**：新 `common/authz` 基础契约将用户稳定权限集合、签名运行委托和30秒权威新鲜证明分离。权限内容hash不含滑动签发时间、缓存TTL或签名，集合不可变；运行actor、session、run、原权限上限和hard deadline固定，子委托不得扩大范围或期限。通知只能使本地状态失效，不直接授予权限；新鲜证明只能在同版本、epoch、hash下更新。MySQL写入的授权版本和outbox同事务，角色多对多并集与独立business_admin只授予登记操作，个人Memory归属和业务状态仍独立检查。
 
@@ -964,12 +964,51 @@
 
 **代码位置**：`common/authz/AuthorizationSnapshot`、`AuthzFreshness`、`AuthorizationContext`、`AuthzSignature`、`AuthzDeadlines`、`AuthorizationCache`、`AuthorizationSession`；`auth-service/authorization/AuthorizationRepository`、`EffectivePermissionService`、`RoleAuthorizationManagementService`；新MySQL迁移及Redis `authz/publish.lua`。
 
-**实施边界**：本次仅基础批次，新授权RPC和管理API按 `auth.authorization.enabled` 默认关闭，旧消费者尚未迁移。已有两个RPC缺少保持原run期限/范围的版本刷新协议，见KI-167；不能声称通知、consumer或零重复Auth已经接通。413项定向回归、真实隔离MySQL迁移及Redis ACL/Lua规则通过，但不代表新授权链已上线。关联LR-33/40/41/63/98；change `unify-versioned-permission-context`。
+**实施边界**：本次仅基础批次，新授权RPC和管理API按 `auth.authorization.enabled` 默认关闭，旧消费者尚未迁移。已有两个RPC缺少保持原run期限/范围的版本刷新协议，见KI-169；不能声称通知、consumer或零重复Auth已经接通。413项定向回归、真实隔离MySQL迁移及Redis ACL/Lua规则通过，但不代表新授权链已上线。关联LR-33/40/41/63/98；change `unify-versioned-permission-context`。
 
-## LR-100 Supervisor请求幂等必须绑定持久会话与归一化输入
+## LR-104 Supervisor请求幂等必须绑定持久会话与归一化输入
 
 **结论**：重复run的actor、session和归一化输入/政策必须一致，变更正文或明确跨session返回409；省略session的同requestId合法重投则从可信持久原请求恢复session，不每次生成UUID后误报冲突。chat先claim持久session归属，audit普通查询先核Memory真实owner再按session+run筛SQL；业务诊断及全局治理需要独立管理许可和可靠访问审计。
 
 **根因**：只核owner会串同用户不同会话结果，只有Memory复合key不能保护按session分发的SSE；在principal已随机补session后才核幂等又会误拒合法重投。审计全表查询与治理只检查登录会把普通用户身份当全局数据/写权限。
 
 **代码位置**：`AgentPrincipalContext.bind`、`AgentController.chat`及各Supervisor入口、`OrchestrationStore.assertRequestIdentity/ownedRunScopes`、`SupervisorToolLoopRunner`、`SupervisorEventAuditQueryService`、`SessionEventAuditService.queryOwned`、`SupervisorGovernanceService`。当前管理许可仍走旧Auth接口，审计明确记录 `legacy-rpc-unversioned`，未伪造新版本接线；新目录consumer迁移和异步入队并发门禁仍待实施。关联KI-168、LR-15/22/23、KI-80；新增真实request-scope/MockMvc重投及H2审计反例。
+## LR-99 房源与比较共享领域事实，合并保留历史身份（规划）
+
+**结论**：2026-10-25 独立 change `consolidate-listing-comparison-domain` 规划将比较能力迁入房源域，房源经接口来源接入，对比/报告统一使用当前获准快照。上游事实与本地维护记录分开表达；历史 `compare/compare-agent` Memory 和已接受任务保持原身份，不因服务合并重命名、扩权或换任务重发。
+
+**根因**：当前比较没有独立事实来源，分服务放大了相同数据的授权与缓存边界；直接改 Agent 名或复制历史会把部署重构误作新的记忆授权。统一领域能力，同时保留来源、版本和原执行身份，可避免旧报告泄露和未知调用重复执行。
+
+**代码位置（当前与规划）**：当前 `listing-master-service`、`compare-engine-service`、`common/model/ListingComparisonFacts` 与 `agent-service/studio`；方案见 `openspec/changes/consolidate-listing-comparison-domain/`。本条是尚未实施的设计约束，不代表服务已合并或数据已迁移。
+
+**关联**：LR-22/23/54/79/96/97；KI-115。
+
+## LR-100 知识运营拥有派生资产，逐字稿继续归访谈域（规划）
+
+**结论**：2026-10-25 独立 change `extract-knowledge-operations-domain` 规划新增知识运营域，管理案例/打法的修订、审核、发布、范围与撤回。访谈继续独占会话、运行状态和脱敏逐字稿，知识只通过受权来源接口消费精确快照并记录依赖。知识发布不自动创建 Memory 共享许可或个人偏好。
+
+**根因**：逐字稿事实、运营归纳与个人记忆具有不同的编辑/使用权。复制原稿建第二个真源会破坏来源撤回和证据一致性，把审核发布交给 Memory 又会把知识可见范围误换成私有历史访问权。独立派生资产及来源检查使运营可修订知识，同时保留原访谈事实和共享边界。
+
+**代码位置（当前与规划）**：当前 `interview-service/InterviewCollectionService`、`InterviewReportService`、逐字稿及占位打法/共性实体；拟新增 `knowledge-service` 和窄逐字稿读取契约。方案见 `openspec/changes/extract-knowledge-operations-domain/`；尚未实施，不据此宣称 KI-15 已修或知识服务已上线。
+
+**关联**：LR-3/6/8/59/90/94/96/97；KI-15。
+
+## LR-101 经营复盘分别保存建议、动作与效果，模拟输入贯穿来源（规划）
+
+**结论**：2026-10-25 独立 change `implement-store-business-review` 规划在 business-service 管理经营事项、证据、计划/动作和观察，保留现有 `trade/trade-agent` 技术身份。当前模拟输入通过有版本的数据端口接入，房源和知识按公开来源契约引用；动作完成、人工反馈和上游确认分别表达，模拟结果不发布为生产 Memory 的经营有效性证据。
+
+**根因**：模型建议、人工勾选和真实成交是不同事实；将它们折成一个完成状态会让模拟增长、建议受理或待办完成冒充业绩结果。保留数据模式、分母口径、来源版本和独立回执，才能先验收模拟业务流程，再以实际证据观察效率与业绩变化。产品职责调整也不需要顺带改写历史私域身份。
+
+**代码位置（当前与规划）**：当前 `business-service/BusinessAnalyticsServiceImpl`、`TradeOfficialA2aAgent` 与 trade 技能；拟新增 review 业务包及经营数据端口。方案见 `openspec/changes/implement-store-business-review/`；尚未实施，不表示 KI-128 或 Studio 浏览器链路已通过。
+
+**关联**：LR-22/23/53/73/75/82/83/94/96/97；KI-114、KI-128、KI-166。
+
+## LR-102 内容推广同域保存发布事实，效果必须标明来源（规划）
+
+**结论**：2026-10-25 独立 change `consolidate-marketing-promotion-domain` 规划将推广迁入营销域，统一内容修订、发布计划和平台尝试。外部发布保留原 attempt 与 UNKNOWN 对账，本地事务只确认本地受理；效果区分真实、模拟和未知来源，真实 ROI 要求可归属收入/成本，不能按线索数乘固定金额生成收入。
+
+**根因**：当前跨服务状态回写无法随本地事务回滚外部发布；样例统计若缺来源标记，又会被经营诊断或效果看板解释成真实增长。让发布状态由同一领域管理并保留外部回执，能避免双写与重复发布；把来源和指标口径保存为事实，可限制模拟样例的使用含义。
+
+**代码位置（当前与规划）**：当前 `MarketingAssetServiceImpl`、`PromotionManagementServiceImpl` 和 provider dispatcher；拟迁入营销 campaign 包，保留媒体 Worker 和原数据库迁移映射。方案见 `openspec/changes/consolidate-marketing-promotion-domain/`；尚未实施，KI-167 仍为 OPEN。
+
+**关联**：LR-22/23/53/94/96；KI-114、KI-167。
