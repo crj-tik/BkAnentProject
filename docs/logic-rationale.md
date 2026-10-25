@@ -975,3 +975,13 @@
 **代码位置（当前与规划）**：当前 `interview-service/InterviewCollectionService`、`InterviewReportService`、逐字稿及占位打法/共性实体；拟新增 `knowledge-service` 和窄逐字稿读取契约。方案见 `openspec/changes/extract-knowledge-operations-domain/`；尚未实施，不据此宣称 KI-15 已修或知识服务已上线。
 
 **关联**：LR-3/6/8/59/90/94/96/97；KI-15。
+
+## LR-101 经营复盘分别保存建议、动作与效果，模拟输入贯穿来源（规划）
+
+**结论**：2026-10-25 独立 change `implement-store-business-review` 规划在 business-service 管理经营事项、证据、计划/动作和观察，保留现有 `trade/trade-agent` 技术身份。当前模拟输入通过有版本的数据端口接入，房源和知识按公开来源契约引用；动作完成、人工反馈和上游确认分别表达，模拟结果不发布为生产 Memory 的经营有效性证据。
+
+**根因**：模型建议、人工勾选和真实成交是不同事实；将它们折成一个完成状态会让模拟增长、建议受理或待办完成冒充业绩结果。保留数据模式、分母口径、来源版本和独立回执，才能先验收模拟业务流程，再以实际证据观察效率与业绩变化。产品职责调整也不需要顺带改写历史私域身份。
+
+**代码位置（当前与规划）**：当前 `business-service/BusinessAnalyticsServiceImpl`、`TradeOfficialA2aAgent` 与 trade 技能；拟新增 review 业务包及经营数据端口。方案见 `openspec/changes/implement-store-business-review/`；尚未实施，不表示 KI-128 或 Studio 浏览器链路已通过。
+
+**关联**：LR-22/23/53/73/75/82/83/94/96/97；KI-114、KI-128、KI-166。
