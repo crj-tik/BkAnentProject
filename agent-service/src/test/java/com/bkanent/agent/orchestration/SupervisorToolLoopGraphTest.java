@@ -221,7 +221,8 @@ class SupervisorToolLoopGraphTest {
                 com.bkanent.common.agent.ApprovalStatus.REJECTED, "1", null, "trace", deniedPending.subjectVersion()));
         assertThat(denied.status()).isEqualTo("CANCELED");
         assertThat(effects).hasValue(1);
-        assertThat(runner.execute(request("denial", null, null, "find")).status()).isEqualTo("CANCELED");
+        assertThat(runner.execute(new SupervisorTaskRequest("session", "1", "denial", "trace", "find",
+                Map.of("requireApproval", true), "api", false)).status()).isEqualTo("CANCELED");
     }
 
     @Test
@@ -603,6 +604,50 @@ class SupervisorToolLoopGraphTest {
         assertThat(store.json(store.originalRequest("async-read"))).doesNotContain("transport-only-value");
         try (var lease = leases.openLease("async-read", "1")) { assertThatThrownBy(() -> leases.credentials("1")).hasMessage("AUTHENTICATION_REQUIRED"); }
         assertThat(effects).hasValue(1);
+    }
+
+    @Test
+    void completedRunRejectsCrossSessionChangedBodyAndPolicyBeforeAnyFurtherEffect() {
+        when(model.call(anyList(), anyList())).thenReturn(calls(call("original", "search", "{}")), new AssistantMessage("done"));
+        var original = request("identity", null, null, "find");
+        var completed = runner.execute(original);
+        clearInvocations(model, events, catalog, memory);
+        for (var conflicting : List.of(
+                new SupervisorTaskRequest("other-session", "1", "identity", "trace", "find", Map.of(), "api", false),
+                request("identity", null, null, "changed"),
+                new SupervisorTaskRequest("session", "1", "identity", "trace", "find", Map.of("requireApproval", true), "api", false))) {
+            assertThatThrownBy(() -> runner.execute(conflicting)).hasMessage("RUN_REQUEST_ID_CONFLICT");
+        }
+        verifyNoInteractions(model, events, catalog, memory);
+        assertThat(effects).hasValue(1);
+        assertThat(runner.execute(original)).isEqualTo(completed);
+    }
+
+    @Test
+    void unknownRunRejectsChangedInputWithoutResendingItsOriginalCall() {
+        ToolCallback failing = new ToolCallback() {
+            public ToolDefinition getToolDefinition() { return capability("search").callback().getToolDefinition(); }
+            public String call(String input) { effects.incrementAndGet(); throw new IllegalStateException("unknown remote effect"); }
+        };
+        when(catalog.snapshot("1", true)).thenReturn(Map.of("local:search", new SupervisorCapability("local:search", "local", "search", "1", failing)));
+        when(model.call(anyList(), anyList())).thenReturn(calls(call("original-unknown", "search", "{}")));
+        runner.execute(request("unknown-identity", null, null, "find"));
+        assertThatThrownBy(() -> runner.execute(request("unknown-identity", null, null, "different"))).hasMessage("RUN_REQUEST_ID_CONFLICT");
+        assertThat(store.find("unknown-identity", "original-unknown").status()).isEqualTo("OUTCOME_UNKNOWN");
+        assertThat(effects).hasValue(1);
+        verify(model, times(1)).call(anyList(), anyList());
+    }
+
+    @Test
+    void chatContinuationSessionIsTakenFromOriginalOwnerNotSuppliedModelIdentity() {
+        store.register("chat-run", request("chat-run", null, null, "find"));
+        assertThat(runner.sessionIdForChat("chat-run", null, null, "1")).isEqualTo("session");
+        assertThatThrownBy(() -> runner.sessionIdForChat("chat-run", null, "another", "1")).hasMessage("CONTINUATION_SESSION_MISMATCH");
+        assertThatThrownBy(() -> runner.sessionIdForChat("chat-run", null, null, "2")).hasMessage("CONTINUATION_OWNER_MISMATCH");
+        assertThat(runner.sessionIdForChat(null, null, null, "1")).isNotBlank();
+        assertThat(runner.sessionIdForChat(null, "chat-run", null, "1")).isEqualTo("session");
+        assertThatThrownBy(() -> runner.sessionIdForChat(null, "chat-run", "other", "1")).hasMessage("RUN_REQUEST_ID_CONFLICT");
+        verifyNoInteractions(model, events);
     }
 
     private ToolLoopState state(String id) { return factory.stateOf(graph.lastStateOf(com.alibaba.cloud.ai.graph.RunnableConfig.builder().threadId(id).build()).orElseThrow().state()); }

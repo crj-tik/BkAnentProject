@@ -44,13 +44,40 @@ public class SupervisorToolLoopRunner {
     }
     public boolean hasRun(String runId) { return snapshot(runId) != null; }
 
+    public String sessionIdForChat(String continueRunId, String requestId, String sessionId, String actorId) {
+        if (!StringUtils.hasText(continueRunId)) {
+            String originalSessionId = StringUtils.hasText(requestId) ? store.existingSession(requestId, actorId) : null;
+            if (originalSessionId == null) return text(sessionId, UUID.randomUUID().toString());
+            if (StringUtils.hasText(sessionId) && !originalSessionId.equals(sessionId)) throw new IllegalStateException("RUN_REQUEST_ID_CONFLICT");
+            return originalSessionId;
+        }
+        store.assertOwner(continueRunId, actorId);
+        String originalSessionId = store.originalRequest(continueRunId).sessionId();
+        if (StringUtils.hasText(sessionId) && !originalSessionId.equals(sessionId))
+            throw new IllegalArgumentException("CONTINUATION_SESSION_MISMATCH");
+        return originalSessionId;
+    }
+
+    /** Read-only admission check so conflicts cannot claim a new session or consume rate-limit budget. */
+    public void assertRequestIdentity(SupervisorTaskRequest request) {
+        if (StringUtils.hasText(request.continueRunId())) {
+            store.assertOwner(request.continueRunId(), request.userId());
+            var existing = snapshot(request.continueRunId());
+            if (existing == null) throw new IllegalArgumentException("CONTINUATION_NOT_FOUND");
+            validateContinuation(factory.stateOf(existing.state()), request);
+        } else if (StringUtils.hasText(request.requestId()) && store.existingSession(request.requestId(), request.userId()) != null) {
+            store.assertOriginalRequest(request.requestId(), request);
+        }
+    }
+
     public SupervisorTaskResponse execute(SupervisorTaskRequest request) {
         if (request == null || !StringUtils.hasText(request.userMessage()) || !StringUtils.hasText(request.userId()))
             throw new IllegalArgumentException("userMessage and authenticated user required");
         com.bkanent.agent.security.AgentRagContextPolicy.normalize(request.context());
         if (StringUtils.hasText(request.continueRunId())) return continueRun(request);
         String runId = text(request.requestId(), UUID.randomUUID().toString());
-        String sessionId = text(request.sessionId(), UUID.randomUUID().toString());
+        String persistedSessionId = store.existingSession(runId, request.userId());
+        String sessionId = text(request.sessionId(), text(persistedSessionId, UUID.randomUUID().toString()));
         String traceId = text(request.traceId(), runId);
         var normalized = new SupervisorTaskRequest(sessionId, request.userId(), runId, traceId, request.userMessage(),
                 com.bkanent.agent.security.AgentRagContextPolicy.normalize(request.context()), request.channel(), request.stream(), request.skill(), null, request.allowMcp(), request.matterIntent());
@@ -62,7 +89,7 @@ public class SupervisorToolLoopRunner {
             if (existing != null) {
                 var state = factory.stateOf(existing.state());
                 if (!state.userId.equals(request.userId())) throw new IllegalStateException("CONTINUATION_OWNER_MISMATCH");
-                if (!java.util.Objects.equals(state.request.matterIntent(), request.matterIntent())) throw new IllegalArgumentException("CONTINUATION_INPUT_CHANGED");
+                store.assertSameRequest(state.request, normalized);
                 if ("FAILED".equals(state.status) && state.errorCode != null && state.errorCode.startsWith("MEMORY_")
                         && state.memoryResumeNode != null) {
                     validateContinuation(state, request);

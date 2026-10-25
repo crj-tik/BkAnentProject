@@ -1,0 +1,42 @@
+# Synthetic-only acceptance; no development networks, data, or published ports.
+name: bk-anent-authz-check-20261023
+services:
+  mysql:
+    image: sha256:85b9bf2e29cf836ecb8c2a15a935d4ba0c606631dff1dd79531a11983c638f2a
+    pull_policy: never
+    restart: "no"
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/root.txt
+      TZ: UTC
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--skip-log-bin"]
+    tmpfs:
+      - /var/lib/mysql:rw,size=512m
+    volumes:
+      - D:/tmp/bk-anent-authz-check-20261023-secrets/root.txt:/run/secrets/root.txt:ro
+      - D:/tmp/bk-anent-authz-check-20261023-secrets/root.cnf:/run/secrets/root.cnf:ro
+      - D:/tmp/bk-anent-authz-check-20261023-secrets/migration.cnf:/run/secrets/migration.cnf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "cp /run/secrets/root.cnf /tmp/health.cnf && chmod 600 /tmp/health.cnf && mysql --defaults-extra-file=/tmp/health.cnf --silent -e 'SELECT 1' >/dev/null"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 15s
+    mem_limit: 768m
+    cpus: "1"
+    networks: [isolated]
+  redis:
+    image: sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+    pull_policy: never
+    restart: "no"
+    command: ["redis-server", "/run/secrets/redis.conf"]
+    tmpfs:
+      - /data:rw,size=64m
+    volumes:
+      - D:/tmp/bk-anent-authz-check-20261023-secrets/redis.acl:/run/secrets/redis.acl:ro
+      - D:/tmp/bk-anent-authz-check-20261023-secrets/redis.conf:/run/secrets/redis.conf:ro
+    mem_limit: 128m
+    cpus: "0.5"
+    networks: [isolated]
+networks:
+  isolated:
+    internal: true

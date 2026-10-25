@@ -1440,6 +1440,22 @@
 
 **关联**：LR-96；change 11.6。
 
+## KI-167 [OPEN·P1] 版本权限上下文缺少同run受限刷新协议
+
+**确认依据**：`unify-versioned-permission-context` apply基础批次代码复核，非部署或利用测试。入口 `resolveRequestAuthorization` 每次按当前认证时间建立新300秒hard deadline；`validateDelegation` 要求父revision/epoch/hash等于当前真源。权限变化后旧父委托被拒，重新入口取得的期限又超过原run截止，`AuthorizationSession.refresh` 正确拒绝其扩大期限/范围，导致没有合法同run刷新路径。
+
+**处置**：暂停任务4.2/4.5及其后consumer接线完成认定；需在既有设计目标内明确携原context、真实凭据及来源证明的刷新协议，保持actor/run/session/policy/原截止并只采用新权限交集。不能用放宽本地期限或允许旧parent扩权修补。MySQL权限基础、共享签名、本地缓存与边界守卫已实现，Auth新协议/管理API默认关闭；Redis发布调度、通知和消费接线未完成。
+
+**关联**：LR-99；任务4.2/4.5/5.2/6.1。413项定向回归通过不包含未实现的同run刷新链。
+
+## KI-168 [FIXED·本提交·P1] Supervisor审计、治理与请求会话边界未统一
+
+**确认与修复**：原chat不claim持久session、重复run仅核owner、event-audit可无owner查询全局正文、governance仅要求登录。本批chat和各正式入口核持久归属；run幂等绑定actor/session/归一化输入，冲突返回409；省略session的同requestId重投从持久原请求恢复会话，避免补丁随机UUID误拒。普通audit按可信actor的持久run和Memory session owner前后核验，SQL限定session+run；全量业务诊断要求独立管理许可，治理读写同样独立许可，必要访问审计失败关闭。
+
+**验证边界**：新增MockMvc/H2/请求scope反例及原Graph30回归通过，完整定向413项失败/错误/跳过0；未部署，未修KI-128异步状态查询根因。当前许可仍使用旧Auth精确查询，相关新增read码在未迁移目录时fail-closed，不能声称新版本授权consumer已接通。异步提交到run持久登记之间的并发窗口留任务5.5/5.7验收。
+
+**关联**：LR-100；任务5.5/5.6/5.7；KI-79/80。
+
 ---
 
 **变更历史**：e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。

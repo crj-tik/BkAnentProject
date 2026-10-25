@@ -26,8 +26,57 @@ public class OrchestrationStore {
     public void register(String runId, SupervisorTaskRequest request) {
         try { jdbc.update("INSERT INTO agent_orchestration_run(run_id,user_id,request_json,lease_until_ms) VALUES (?,?,?,0)",
                 runId, request.userId(), json(request)); }
-        catch (DuplicateKeyException exception) { assertOwner(runId, request.userId()); }
+        catch (DuplicateKeyException exception) { assertOriginalRequest(runId, request); }
     }
+
+    public void assertOriginalRequest(String runId, SupervisorTaskRequest request) {
+        assertOwner(runId, request.userId());
+        assertSameRequest(originalRequest(runId), request);
+    }
+
+    public void assertSameRequest(SupervisorTaskRequest original, SupervisorTaskRequest supplied) {
+        if (original == null || supplied == null
+                || !java.util.Objects.equals(original.sessionId(), supplied.sessionId())
+                || !requestHash(original).equals(requestHash(supplied))) {
+            throw new IllegalStateException("RUN_REQUEST_ID_CONFLICT");
+        }
+    }
+
+    /** Trace and delivery mode are transport details; input and original policy are immutable. */
+    private String requestHash(SupervisorTaskRequest request) {
+        ObjectNode value = mapper.valueToTree(request);
+        value.remove(java.util.List.of("traceId", "stream"));
+        Map<String, Object> context = new java.util.LinkedHashMap<>(
+                com.bkanent.agent.security.AgentRagContextPolicy.normalize(request.context()) == null
+                        ? Map.of() : com.bkanent.agent.security.AgentRagContextPolicy.normalize(request.context()));
+        context.remove("userId"); // The persistent user_id, not ordinary context, is the identity source.
+        value.set("context", mapper.valueToTree(context));
+        value.put("allowMcp", request.allowMcp() == null || request.allowMcp());
+        return hash(json(value));
+    }
+
+    /** Only persistent run rows establish candidate audit scopes; Memory verifies the session owner. */
+    public java.util.List<RunScope> ownedRunScopes(String actorId) {
+        return jdbc.query("SELECT run_id,request_json FROM agent_orchestration_run WHERE user_id=?",
+                (result, row) -> {
+                    try {
+                        SupervisorTaskRequest request = read(result.getString("request_json"), SupervisorTaskRequest.class);
+                        if (!actorId.equals(request.userId()) || request.sessionId() == null || request.sessionId().isBlank()) return null;
+                        return new RunScope(result.getString("run_id"), request.sessionId());
+                    } catch (RuntimeException invalidLegacyRequest) { return null; }
+                }, actorId).stream().filter(java.util.Objects::nonNull).toList();
+    }
+
+    public record RunScope(String runId, String sessionId) { }
+
+    public String existingSession(String runId, String actorId) {
+        var rows = jdbc.queryForList("SELECT user_id,request_json FROM agent_orchestration_run WHERE run_id=?", runId);
+        if (rows.isEmpty()) return null;
+        var row = rows.get(0);
+        if (actorId == null || !actorId.equals(row.get("user_id"))) throw new IllegalStateException("CONTINUATION_OWNER_MISMATCH");
+        return read(String.valueOf(row.get("request_json")), SupervisorTaskRequest.class).sessionId();
+    }
+
     public void assertOwner(String runId, String owner) {
         String actual = jdbc.queryForObject("SELECT user_id FROM agent_orchestration_run WHERE run_id=?", String.class, runId);
         if (owner == null || !owner.equals(actual)) throw new IllegalStateException("CONTINUATION_OWNER_MISMATCH");

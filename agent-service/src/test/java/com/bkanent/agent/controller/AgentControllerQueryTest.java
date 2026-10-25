@@ -33,16 +33,67 @@ class AgentControllerQueryTest {
     private final SupervisorSessionOwnershipService ownership = mock(SupervisorSessionOwnershipService.class);
     private final com.bkanent.agent.milvus.memory.AgentMemoryMilvusService rag = mock(com.bkanent.agent.milvus.memory.AgentMemoryMilvusService.class);
     private final com.bkanent.agent.milvus.listing.ListingMilvusService listing = mock(com.bkanent.agent.milvus.listing.ListingMilvusService.class);
+    private final com.bkanent.agent.service.AgentOrchestratorService orchestrator = mock(com.bkanent.agent.service.AgentOrchestratorService.class);
+    private final com.bkanent.agent.orchestration.SupervisorToolLoopRunner runner = mock(com.bkanent.agent.orchestration.SupervisorToolLoopRunner.class);
+    private final com.bkanent.agent.service.SupervisorEventAuditQueryService eventAudit = mock(com.bkanent.agent.service.SupervisorEventAuditQueryService.class);
+    private final com.bkanent.agent.service.SupervisorGovernanceService governance = mock(com.bkanent.agent.service.SupervisorGovernanceService.class);
     private MockMvc mvc;
 
     @BeforeEach
     void setUp() {
-        AgentController controller = new AgentController(rag, listing, null, null, null, null, null,
-                null, null, null, null, queryService, approvalTodoService, null, null, null, streamService,
-                permissionService, null, null, principal, ownership);
+        AgentController controller = new AgentController(rag, listing, orchestrator, null, null, null, null,
+                null, null, null, null, queryService, approvalTodoService, null, null, eventAudit, streamService,
+                permissionService, governance, null, principal, ownership);
+        controller.setToolLoopRunner(runner);
+        when(principal.bind(org.mockito.ArgumentMatchers.any(com.bkanent.agent.model.chat.AgentChatRequest.class)))
+                .thenAnswer(call -> call.getArgument(0));
         mvc = MockMvcBuilders.standaloneSetup(controller).build();
         when(principal.resolveUserId("2")).thenReturn("2");
         when(principal.userId()).thenReturn("2");
+    }
+
+    @Test
+    void chatClaimsResolvedOriginalSessionBeforeExecutingAndRejectsForeignOwner() throws Exception {
+        when(runner.sessionIdForChat(null, null, "session", "2")).thenReturn("session");
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/agent/chat")
+                        .contentType("application/json").content("{\"userId\":\"2\",\"message\":\"hello\",\"sessionId\":\"session\"}"))
+                .andExpect(jsonPath("$.success").value(true));
+        var order = org.mockito.Mockito.inOrder(ownership, orchestrator);
+        order.verify(ownership).claim("session", "2");
+        order.verify(orchestrator).chat(org.mockito.ArgumentMatchers.any());
+        org.mockito.Mockito.clearInvocations(orchestrator);
+        org.mockito.Mockito.doThrow(new com.bkanent.agent.security.AgentPrincipalException("foreign owner"))
+                .when(ownership).claim("session", "2");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> mvc.perform(
+                org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/agent/chat")
+                        .contentType("application/json").content("{\"userId\":\"2\",\"message\":\"hello\",\"sessionId\":\"session\"}")))
+                .hasRootCauseInstanceOf(com.bkanent.agent.security.AgentPrincipalException.class);
+        org.mockito.Mockito.verifyNoInteractions(orchestrator);
+    }
+
+    @Test
+    void chatContinuationWithoutSessionClaimsOriginalAndRequestConflictIs409() throws Exception {
+        when(runner.sessionIdForChat("original-run", null, null, "2")).thenReturn("original-session");
+        org.mockito.Mockito.doThrow(new IllegalStateException("RUN_REQUEST_ID_CONFLICT")).when(orchestrator).chat(org.mockito.ArgumentMatchers.any());
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/agent/chat")
+                        .contentType("application/json").content("{\"userId\":\"2\",\"message\":\"hello\",\"continueRunId\":\"original-run\"}"))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("RUN_REQUEST_ID_CONFLICT"));
+        verify(ownership).claim("original-session", "2");
+    }
+
+    @Test
+    void actualGovernanceAndAuditRoutesUseProtectedServicesAndStructuredDenials() throws Exception {
+        org.mockito.Mockito.doThrow(new IllegalStateException("permission denied")).when(governance).viewGovernance();
+        org.mockito.Mockito.doThrow(new IllegalStateException("permission denied")).when(governance).overrideRateLimit(org.mockito.ArgumentMatchers.any());
+        mvc.perform(get("/agent/supervisor/governance")).andExpect(jsonPath("$.success").value(false));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/agent/supervisor/governance/rate-limit")
+                        .contentType("application/json").content("{\"entryType\":\"supervisor.tasks\",\"perWindow\":1,\"userId\":\"999\"}"))
+                .andExpect(jsonPath("$.success").value(false));
+        when(eventAudit.query(null, null, null, null, null, null, null, null, null)).thenReturn(List.of());
+        mvc.perform(get("/agent/supervisor/event-audit")).andExpect(jsonPath("$.data").isArray());
+        org.mockito.Mockito.doThrow(new IllegalStateException("permission denied")).when(eventAudit)
+                .queryBusinessDiagnostics(null, null, null, null, null, null, null, null, null);
+        mvc.perform(get("/agent/supervisor/event-audit/business")).andExpect(jsonPath("$.success").value(false));
     }
 
     @Test

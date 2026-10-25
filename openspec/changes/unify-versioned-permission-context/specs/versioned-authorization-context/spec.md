@@ -1,0 +1,113 @@
+## Purpose
+
+定义平台用户操作权限、可信运行上下文和跨服务委托的统一行为，使授权集合能够由中心服务维护、在运行内安全复用并在变更后有界失效，同时不把缓存、模型参数或业务管理员身份变成个人资源访问的旁路。
+
+## ADDED Requirements
+
+### Requirement: Registered permissions and role-derived user grants
+
+系统 SHALL 使用已登记且唯一的权限码作为操作授权契约。普通用户的有效权限 SHALL 来自其有效角色的权限并集，用户与角色支持多对多关联及有效期。业务管理员 SHALL 不依赖角色取得全部当前登记权限；不存在、停用或未登记权限仍 MUST 被拒绝。业务管理员全权限 MUST NOT 绕过资源范围、个人 Memory owner 规则、业务状态、参数校验、审批或幂等。授权管理操作 MUST 经过独立管理权限及审计，普通用户不得自行变更管理员身份或角色授权。
+
+#### Scenario: User holds two role bundles
+- **WHEN** 普通用户持有两个有效角色，其中部分权限重复且一项角色授予已经到期
+- **THEN** 系统返回当前有效权限的去重并集，不返回到期授予，不赋予业务管理员范围
+
+#### Scenario: Administrator requests an unknown operation
+- **WHEN** 业务管理员请求未登记或停用的权限码
+- **THEN** 系统拒绝该操作，不根据权限名后缀或通配身份放行
+
+#### Scenario: Administrative privilege does not expose personal memory
+- **WHEN** 业务管理员具有所有操作权限但请求另一用户的个人 Agent 工作集或偏好
+- **THEN** 领域拒绝访问，不将全权限解释为跨 owner 授权
+
+### Requirement: Shared versioned authorization and isolated execution identity
+
+系统 SHALL 为经认证用户提供完整、有界、不可变的有效操作权限快照及单调授权版本；多个同用户同版本运行 SHALL 复用该快照，不按每个运行复制分布式权限副本。运行身份 MUST 绑定真实 actor、认证有效期、原 session/run 和请求政策；身份与权限 MUST 只经专用服务端上下文传播，不从 LLM、普通 metadata、userId 或 checkpoint 恢复凭据。授权版本变化 SHALL 不改变原 actor；角色增加也不得突破原请求政策、已绑定审批或服务委托范围。
+
+#### Scenario: Parallel sessions use one user permission version
+- **WHEN** 同一用户在不同 session 中并行运行，且授权版本相同
+- **THEN** 操作权限快照可共享，消息、任务、凭据有效性和数据访问范围仍按各自身份关联隔离
+
+#### Scenario: Model claims another actor or administrator
+- **WHEN** 模型工具参数声明其他 userId、管理员标记或权限集合
+- **THEN** 系统拒绝其身份或授权含义；合法业务目标参数仅经过对应领域资源授权后使用
+
+#### Scenario: Restart has identifiers but no valid credential
+- **WHEN** 重启恢复仅取得 actor/session/run 和旧版本号
+- **THEN** 系统要求原用户重新认证，不把这些定位字段解释为当前可用授权或自动签发新凭据
+
+### Requirement: Ordered authorization publication and bounded invalidation
+
+授权真源 MUST 持久可审计。用户角色、角色权限、管理员身份、账号资格、权限目录或授予期限变化 SHALL 产生单调版本和可恢复发布事实。中心授权服务 SHALL 先发布完整新快照及当前版本，再通知消费者；重复或乱序发布 MUST NOT 回退版本。消费者 SHALL 处理主动失效通知、重规划版本核对和活跃用户去重后的有界对账。第一阶段 SHALL 允许自权限变更提交至消费者得知变更前最多30秒的兼容窗口，且不得越过凭据或快照硬到期；已经得知撤回后 MUST 禁止启动被撤回或尚无法核清的操作。
+
+#### Scenario: Database commit succeeds while publication is unavailable
+- **WHEN** 授权真源已提交但分布式快照或通知暂时不可用
+- **THEN** 系统保留待发布事件并有界重试，管理响应如实标记发布未确认，不宣称所有消费者已经生效
+
+#### Scenario: Notification is duplicated or out of order
+- **WHEN** 消费者先获知新版本，后收到旧版本或重复通知
+- **THEN** 消费者不恢复旧授权，也不重复刷新相同版本
+
+#### Scenario: Notification is lost during a long execution
+- **WHEN** 活跃运行没有返回规划阶段且丢失了权限变更通知
+- **THEN** 有界对账在兼容窗口内发现新版本；无法维持规定新鲜度时停止新受保护动作，不无限沿用旧快照
+
+#### Scenario: A stale authority check is published late
+- **WHEN** 一个旧版本权威核验在授权变更后迟到发布
+- **THEN** 证明绑定原版本、状态、权限hash和真实核验时刻，不能覆盖新版本或把兼容期限从晚发布时刻重新计算
+
+#### Scenario: Same version is rebuilt after cache eviction
+- **WHEN** 相同授权版本的缓存内容被回收后重建
+- **THEN** 稳定权限内容和hash不变，新鲜证明可重新签发但不延长原run或父委托截止
+
+#### Scenario: Permission grant expires without another write
+- **WHEN** 角色授予到达有效截止时刻而没有新的用户请求或管理写入
+- **THEN** 中心服务发布失效版本并通知，消费者同时受快照有效期限约束，不能等待未来访问才发现永久陈旧授权
+
+### Requirement: Boundary validation and planning version checks
+
+每个新外部请求 SHALL 在可信入口完成一次认证及完整授权获取，首次规划不重复获取。Supervisor 重新进入业务 Model 规划时 SHALL 核对当前授权和认证状态版本，同版且有效时不重复计算或下载权限。每个新 A2A、MCP 或业务执行边界 SHALL 独立向中心服务验证受限委托一次；同一次执行内部节点、工具、模型和流事件 SHALL 使用本地有效上下文判断，不逐节点、逐工具或逐事件远程复验。目标、参数、服务身份和请求重放检查仍 MUST 在相应执行入口进行。
+
+#### Scenario: A tool result triggers replanning without authorization change
+- **WHEN** Supervisor 获取工具结果后重新进入规划且权限和认证版本未变
+- **THEN** 只进行轻量版本核对，复用原有效集合，不重复全量 Auth 获取
+
+#### Scenario: Several tools execute within one accepted domain invocation
+- **WHEN** 子 Agent 已完成入口验证并在同一次执行内多次调用工具
+- **THEN** 工具本地核对许可和领域资源条件，新增远程用户认证次数为零；新的外部子调用仍有自己的边界验证
+
+#### Scenario: Unauthenticated direct service call
+- **WHEN** 调用者绕过 Supervisor 直接提交普通 userId 或不可信身份头
+- **THEN** 目标业务入口拒绝访问，不将调用来自内网或服务名作为用户授权证明
+
+### Requirement: Request-bound service delegation cannot expand authority
+
+跨服务授权 SHALL 同时约束真实用户、受信调用服务、接收服务、操作、请求内容、任务关联和有效期，并防止篡改和重放。业务域 SHALL 独立验证后只接受其获准权限子集；子上下文截止 MUST 不超过父上下文、原run固定截止和当前授予期限，同版刷新或重新签发不得重置原run截止。普通服务身份 MUST NOT 自动取得所有用户权限；缺用户上下文不得自动转换为 SERVICE 模式。后台 SERVICE SHALL 只使用已接受精确任务、许可或域治理职责，不获得通用个人读取权限。授权材料 MUST NOT 出现在模型消息、工具业务参数、URL、SSE、业务结果、长期记忆或日志中。
+
+#### Scenario: Caller changes a target or tool argument after delegation
+- **WHEN** 有效授权引用被用于不同目标、请求正文或 task
+- **THEN** 接收方在执行前拒绝，不因用户确实拥有该权限而放行被篡改请求
+
+#### Scenario: Approved caller exceeds the user's permission set
+- **WHEN** 已登记服务请求超出用户权限、本次请求政策或受限委托的操作
+- **THEN** 中心和执行边界拒绝，不以服务公钥已登记为全业务放行依据
+
+#### Scenario: A consumer attempts to publish authorization notifications
+- **WHEN** 业务消费者使用自己的分布式缓存账号修改权限key、延长TTL或发布通知channel
+- **THEN** 权限拒绝，只有Auth可写与发布；消费者只读精确namespace并订阅指定channel
+
+#### Scenario: Background delivery after user credential expiry
+- **WHEN** 已可靠接受的精确结果事件待补交付但用户凭据已到期
+- **THEN** 受限 SERVICE 可按原许可补交付，不换发用户读取凭据，删除和来源撤回仍生效
+
+### Requirement: Explicit failure and safe compatibility
+
+首次认证、首次域验证、未知版本、已知撤回或超出新鲜度/硬有效期无法核验时 MUST 失败关闭，且区分401身份无效、403无权限、409版本或上下文冲突、503授权依赖不可用。暂时依赖故障时仅已验证且未收到失效的上下文 SHALL 在规定兼容窗口内继续。授权失败 MUST NOT 自动换用户、提权、切匿名或重试未知副作用；未执行的无权限工具可作为结构化结果返回模型选择其他获准动作。旧协议兼容 MUST 同等受资源与期限约束，且新旧验证路径不会形成较弱回退。
+
+#### Scenario: Local snapshot exists during a brief cache outage
+- **WHEN** 有效上下文已建立、没有已知失效且最近成功核对仍在30秒内，分布式缓存短暂不可用
+- **THEN** 在原有效期和许可范围内继续；超过该窗口暂停新受保护动作并返回明确依赖错误
+
+#### Scenario: Model selects a forbidden tool
+- **WHEN** 模型选择未获准工具且动作尚未开始
+- **THEN** 返回可关联的权限拒绝结果，不产生副作用、不提升权限，允许在剩余获准能力内重新规划

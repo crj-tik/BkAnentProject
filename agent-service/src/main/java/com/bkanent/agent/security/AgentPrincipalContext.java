@@ -101,6 +101,11 @@ public class AgentPrincipalContext {
             if (StringUtils.hasText(request.sessionId()) && !originalSession.equals(request.sessionId()))
                 throw new AgentPrincipalException("continuation session does not match original run");
             sessionId = originalSession;
+        } else if (!StringUtils.hasText(request.sessionId()) && StringUtils.hasText(request.requestId())
+                && orchestrationStore != null
+                && orchestrationStore.existingSession(request.requestId(), userId) != null) {
+            orchestrationStore.assertOwner(request.requestId(), userId);
+            sessionId = orchestrationStore.originalRequest(request.requestId()).sessionId();
         }
         return new SupervisorTaskRequest(sessionId, userId, request.requestId(), request.traceId(),
                 request.userMessage(), Collections.unmodifiableMap(context), request.channel(), request.stream(),

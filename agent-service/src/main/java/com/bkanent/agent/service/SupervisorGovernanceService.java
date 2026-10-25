@@ -34,19 +34,25 @@ public class SupervisorGovernanceService {
     private final AgentGovernanceOverrideMapper governanceOverrideMapper;
     private final com.bkanent.agent.catalog.DomainCatalog domainCatalog;
     private final ObjectMapper objectMapper;
+    private final AgentPermissionService permissions;
+    private final com.bkanent.agent.security.AgentPrincipalContext principal;
 
     public SupervisorGovernanceService(DistributedAgentProperties distributedAgentProperties,
                                        SupervisorRateLimiter supervisorRateLimiter,
                                        SessionEventAuditService sessionEventAuditService,
                                        AgentGovernanceOverrideMapper governanceOverrideMapper,
                                        com.bkanent.agent.catalog.DomainCatalog domainCatalog,
-                                       ObjectMapper objectMapper) {
+                                       ObjectMapper objectMapper,
+                                       AgentPermissionService permissions,
+                                       com.bkanent.agent.security.AgentPrincipalContext principal) {
         this.distributedAgentProperties = distributedAgentProperties;
         this.supervisorRateLimiter = supervisorRateLimiter;
         this.sessionEventAuditService = sessionEventAuditService;
         this.governanceOverrideMapper = governanceOverrideMapper;
         this.domainCatalog = domainCatalog;
         this.objectMapper = objectMapper;
+        this.permissions = permissions;
+        this.principal = principal;
     }
 
     public void assertRateLimit(String entryType, SupervisorTaskRequest request) {
@@ -118,6 +124,12 @@ public class SupervisorGovernanceService {
     }
 
     public SupervisorGovernanceView viewGovernance() {
+        permissions.assertCanReadGovernance(principal.userId());
+        auditAccess("READ", "global");
+        return governanceView();
+    }
+
+    private SupervisorGovernanceView governanceView() {
         DistributedAgentProperties.GrayReleaseProperties gray = distributedAgentProperties.getGrayRelease();
         PersistentGrayOverride override = loadGrayOverride();
         Map<String, Integer> rateLimitOverrides = loadRateLimitOverrides();
@@ -155,6 +167,8 @@ public class SupervisorGovernanceService {
     }
 
     public SupervisorGovernanceView overrideRateLimit(GovernanceRateLimitOverrideRequest request) {
+        permissions.assertCanManageGovernance(principal.userId());
+        auditAccess("RATE_LIMIT_OVERRIDE", request == null ? "global" : request.entryType());
         if (request != null && StringUtils.hasText(request.entryType()) && request.perWindow() != null && request.perWindow() > 0) {
             AgentGovernanceOverrideEntity entity = findOverride(OVERRIDE_TYPE_RATE_LIMIT, request.entryType());
             if (entity == null) {
@@ -166,20 +180,24 @@ public class SupervisorGovernanceService {
             entity.setActive(1);
             saveOverride(entity);
         }
-        return viewGovernance();
+        return governanceView();
     }
 
     public SupervisorGovernanceView clearRateLimitOverride(String entryType) {
+        permissions.assertCanManageGovernance(principal.userId());
+        auditAccess("RATE_LIMIT_CLEAR", entryType);
         if (StringUtils.hasText(entryType)) {
             deleteOverride(OVERRIDE_TYPE_RATE_LIMIT, entryType);
         } else {
             governanceOverrideMapper.delete(new LambdaQueryWrapper<AgentGovernanceOverrideEntity>()
                     .eq(AgentGovernanceOverrideEntity::getOverrideType, OVERRIDE_TYPE_RATE_LIMIT));
         }
-        return viewGovernance();
+        return governanceView();
     }
 
     public SupervisorGovernanceView overrideGrayRelease(GovernanceGrayReleaseOverrideRequest request) {
+        permissions.assertCanManageGovernance(principal.userId());
+        auditAccess("GRAY_RELEASE_OVERRIDE", "global");
         if (request != null) {
             AgentGovernanceOverrideEntity entity = findOverride(OVERRIDE_TYPE_GRAY_RELEASE, OVERRIDE_KEY_GRAY_GLOBAL);
             if (entity == null) {
@@ -201,12 +219,25 @@ public class SupervisorGovernanceService {
             entity.setActive(1);
             saveOverride(entity);
         }
-        return viewGovernance();
+        return governanceView();
     }
 
     public SupervisorGovernanceView clearGrayReleaseOverride() {
+        permissions.assertCanManageGovernance(principal.userId());
+        auditAccess("GRAY_RELEASE_CLEAR", "global");
         deleteOverride(OVERRIDE_TYPE_GRAY_RELEASE, OVERRIDE_KEY_GRAY_GLOBAL);
-        return viewGovernance();
+        return governanceView();
+    }
+
+    private void auditAccess(String action, String scope) {
+        // This boundary patch still uses legacy Auth. No invented permission revision is recorded.
+        sessionEventAuditService.recordRequired(new com.bkanent.common.agent.SessionStreamEvent(
+                "", null, distributedAgentProperties.getSupervisorAgentId(), "governance.access",
+                "Governance " + action,
+                Map.of("actorId", principal.userId(), "action", action,
+                        "scope", StringUtils.hasText(scope) ? scope : "global",
+                        "authorizationVersion", "legacy-rpc-unversioned"),
+                null, System.currentTimeMillis()));
     }
 
     private boolean isGrayMatched(DistributedAgentProperties.GrayReleaseProperties gray,

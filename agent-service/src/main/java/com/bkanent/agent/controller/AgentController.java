@@ -85,7 +85,7 @@ public class AgentController {
     public void setToolLoopRunner(com.bkanent.agent.orchestration.SupervisorToolLoopRunner runner) { this.toolLoopRunner = runner; }
 
     @PostMapping("/supervisor/runs/cancel")
-    public ApiResponse<SupervisorTaskResponse> cancelRun(@RequestParam String runId, @RequestParam(required = false) String userId) {
+    public ApiResponse<SupervisorTaskResponse> cancelRun(@RequestParam String runId, @RequestParam(name = "userId", required = false) String userId) {
         return guarded(() -> {
             String actor = authenticatedPrincipal.resolveUserId(userId);
             if (supervisorWorkflowQueryService.findWorkflow(runId, actor).isEmpty()) return ApiResponse.fail("RUN_NOT_FOUND", "run not found");
@@ -94,7 +94,7 @@ public class AgentController {
     }
 
     @PostMapping("/supervisor/runs/reconcile")
-    public ApiResponse<SupervisorTaskResponse> reconcileRun(@RequestParam String runId, @RequestParam(required = false) String userId) {
+    public ApiResponse<SupervisorTaskResponse> reconcileRun(@RequestParam String runId, @RequestParam(name = "userId", required = false) String userId) {
         return guarded(() -> {
             String actor = authenticatedPrincipal.resolveUserId(userId);
             if (supervisorWorkflowQueryService.findWorkflow(runId, actor).isEmpty()) return ApiResponse.fail("RUN_NOT_FOUND", "run not found");
@@ -381,7 +381,13 @@ public class AgentController {
             if (Boolean.TRUE.equals(authenticatedRequest.allowMcp())) {
                 agentPermissionService.assertPermission(authenticatedRequest.userId(), "agent.mcp.chat.use", "agent chat with mcp");
             }
-            return ApiResponse.ok(agentOrchestratorService.chat(authenticatedRequest));
+            String sessionId = toolLoopRunner.sessionIdForChat(authenticatedRequest.continueRunId(), authenticatedRequest.requestId(),
+                    authenticatedRequest.sessionId(), authenticatedRequest.userId());
+            supervisorSessionOwnershipService.claim(sessionId, authenticatedRequest.userId());
+            return ApiResponse.ok(agentOrchestratorService.chat(new AgentChatRequest(
+                    authenticatedRequest.userId(), authenticatedRequest.message(), authenticatedRequest.collectionName(),
+                    authenticatedRequest.topK(), authenticatedRequest.allowMcp(), authenticatedRequest.skill(),
+                    authenticatedRequest.continueRunId(), sessionId, authenticatedRequest.requestId())));
         });
     }
 
@@ -392,12 +398,14 @@ public class AgentController {
     public ApiResponse<SupervisorTaskResponse> submitSupervisorTask(@RequestBody SupervisorTaskRequest request) {
         SupervisorTaskRequest authenticatedRequest = authenticatedPrincipal.bind(request);
         return guarded(() -> {
-            supervisorGovernanceService.assertRateLimit("supervisor.tasks", authenticatedRequest);
             if (authenticatedRequest.userMessage() == null || authenticatedRequest.userMessage().isBlank()) {
                 return ApiResponse.fail("SUPERVISOR_INVALID_REQUEST", "userMessage must not be blank");
             }
-            supervisorSessionOwnershipService.claim(authenticatedRequest.sessionId(), authenticatedRequest.userId());
-            return ApiResponse.ok(supervisorTaskService.submitTask(supervisorGovernanceService.applyGrayContext(authenticatedRequest)));
+            SupervisorTaskRequest governedRequest = supervisorGovernanceService.applyGrayContext(authenticatedRequest);
+            toolLoopRunner.assertRequestIdentity(governedRequest);
+            supervisorSessionOwnershipService.claim(governedRequest.sessionId(), governedRequest.userId());
+            supervisorGovernanceService.assertRateLimit("supervisor.tasks", governedRequest);
+            return ApiResponse.ok(supervisorTaskService.submitTask(governedRequest));
         });
     }
 
@@ -405,12 +413,14 @@ public class AgentController {
     public ApiResponse<SupervisorAsyncTaskCreateResponse> submitSupervisorTaskAsync(@RequestBody SupervisorTaskRequest request) {
         SupervisorTaskRequest authenticatedRequest = authenticatedPrincipal.bind(request);
         return guarded(() -> {
-            supervisorGovernanceService.assertRateLimit("supervisor.tasks.async", authenticatedRequest);
             if (authenticatedRequest.userMessage() == null || authenticatedRequest.userMessage().isBlank()) {
                 return ApiResponse.fail("SUPERVISOR_INVALID_REQUEST", "userMessage must not be blank");
             }
-            supervisorSessionOwnershipService.claim(authenticatedRequest.sessionId(), authenticatedRequest.userId());
-            return ApiResponse.ok(supervisorAsyncTaskService.submitTask(supervisorGovernanceService.applyGrayContext(authenticatedRequest)));
+            SupervisorTaskRequest governedRequest = supervisorGovernanceService.applyGrayContext(authenticatedRequest);
+            toolLoopRunner.assertRequestIdentity(governedRequest);
+            supervisorSessionOwnershipService.claim(governedRequest.sessionId(), governedRequest.userId());
+            supervisorGovernanceService.assertRateLimit("supervisor.tasks.async", governedRequest);
+            return ApiResponse.ok(supervisorAsyncTaskService.submitTask(governedRequest));
         });
     }
 
@@ -441,12 +451,14 @@ public class AgentController {
     public ApiResponse<SupervisorTaskResponse> startSupervisorWorkflow(@RequestBody SupervisorTaskRequest request) {
         SupervisorTaskRequest authenticatedRequest = authenticatedPrincipal.bind(request);
         return guarded(() -> {
-            supervisorGovernanceService.assertRateLimit("supervisor.workflows", authenticatedRequest);
             if (authenticatedRequest.userMessage() == null || authenticatedRequest.userMessage().isBlank()) {
                 return ApiResponse.fail("SUPERVISOR_INVALID_REQUEST", "userMessage must not be blank");
             }
-            supervisorSessionOwnershipService.claim(authenticatedRequest.sessionId(), authenticatedRequest.userId());
-            return ApiResponse.ok(supervisorWorkflowService.startWorkflow(supervisorGovernanceService.applyGrayContext(authenticatedRequest)));
+            SupervisorTaskRequest governedRequest = supervisorGovernanceService.applyGrayContext(authenticatedRequest);
+            toolLoopRunner.assertRequestIdentity(governedRequest);
+            supervisorSessionOwnershipService.claim(governedRequest.sessionId(), governedRequest.userId());
+            supervisorGovernanceService.assertRateLimit("supervisor.workflows", governedRequest);
+            return ApiResponse.ok(supervisorWorkflowService.startWorkflow(governedRequest));
         });
     }
 
@@ -454,12 +466,14 @@ public class AgentController {
     public ApiResponse<SupervisorAsyncWorkflowCreateResponse> startSupervisorWorkflowAsync(@RequestBody SupervisorTaskRequest request) {
         SupervisorTaskRequest authenticatedRequest = authenticatedPrincipal.bind(request);
         return guarded(() -> {
-            supervisorGovernanceService.assertRateLimit("supervisor.workflows.async", authenticatedRequest);
             if (authenticatedRequest.userMessage() == null || authenticatedRequest.userMessage().isBlank()) {
                 return ApiResponse.fail("SUPERVISOR_INVALID_REQUEST", "userMessage must not be blank");
             }
-            supervisorSessionOwnershipService.claim(authenticatedRequest.sessionId(), authenticatedRequest.userId());
-            return ApiResponse.ok(supervisorAsyncWorkflowService.submitWorkflow(supervisorGovernanceService.applyGrayContext(authenticatedRequest)));
+            SupervisorTaskRequest governedRequest = supervisorGovernanceService.applyGrayContext(authenticatedRequest);
+            toolLoopRunner.assertRequestIdentity(governedRequest);
+            supervisorSessionOwnershipService.claim(governedRequest.sessionId(), governedRequest.userId());
+            supervisorGovernanceService.assertRateLimit("supervisor.workflows.async", governedRequest);
+            return ApiResponse.ok(supervisorAsyncWorkflowService.submitWorkflow(governedRequest));
         });
     }
 
@@ -477,7 +491,7 @@ public class AgentController {
     @GetMapping("/supervisor/workflows/async/stream")
     public SseEmitter streamSupervisorAsyncWorkflow(@RequestParam String asyncWorkflowId,
                                                     @RequestParam String userId,
-                                                    @RequestParam(required = false) String afterEventId,
+                                                    @RequestParam(name = "afterEventId", required = false) String afterEventId,
                                                     @RequestParam(required = false) Long afterSequence,
                                                     @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId) {
         String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
@@ -561,13 +575,13 @@ public class AgentController {
 
     @GetMapping("/supervisor/diagnostics")
     public ApiResponse<SupervisorDiagnosticsView> diagnostics(@RequestParam String userId,
-                                                              @RequestParam(required = false) String taskId,
-                                                              @RequestParam(required = false) String traceId,
-                                                              @RequestParam(required = false) String approvalId,
-                                                              @RequestParam(required = false) String artifactId,
-                                                              @RequestParam(required = false) String asyncTaskId,
-                                                              @RequestParam(required = false) String asyncWorkflowId,
-                                                              @RequestParam(required = false) String grayStrategyVersion) {
+                                                              @RequestParam(name = "taskId", required = false) String taskId,
+                                                              @RequestParam(name = "traceId", required = false) String traceId,
+                                                              @RequestParam(name = "approvalId", required = false) String approvalId,
+                                                              @RequestParam(name = "artifactId", required = false) String artifactId,
+                                                              @RequestParam(name = "asyncTaskId", required = false) String asyncTaskId,
+                                                              @RequestParam(name = "asyncWorkflowId", required = false) String asyncWorkflowId,
+                                                              @RequestParam(name = "grayStrategyVersion", required = false) String grayStrategyVersion) {
         String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return guarded(() -> ApiResponse.ok(supervisorDiagnosticsService.diagnose(
                 authenticatedUserId, taskId, traceId, approvalId, artifactId, asyncTaskId, asyncWorkflowId, grayStrategyVersion
@@ -580,43 +594,54 @@ public class AgentController {
     }
 
     @GetMapping("/supervisor/event-audit")
-    public ApiResponse<List<SessionEventAuditView>> eventAudit(@RequestParam(required = false) String taskId,
-                                                               @RequestParam(required = false) String traceId,
-                                                               @RequestParam(required = false) String approvalId,
-                                                               @RequestParam(required = false) String artifactId,
-                                                               @RequestParam(required = false) String asyncTaskId,
-                                                               @RequestParam(required = false) String grayStrategyVersion,
-                                                               @RequestParam(required = false) String asyncWorkflowId,
-                                                               @RequestParam(required = false) Boolean includeArchived,
-                                                               @RequestParam(required = false) Integer limit) {
-        return ApiResponse.ok(supervisorEventAuditQueryService.query(
+    public ApiResponse<List<SessionEventAuditView>> eventAudit(@RequestParam(name = "taskId", required = false) String taskId,
+                                                               @RequestParam(name = "traceId", required = false) String traceId,
+                                                               @RequestParam(name = "approvalId", required = false) String approvalId,
+                                                               @RequestParam(name = "artifactId", required = false) String artifactId,
+                                                               @RequestParam(name = "asyncTaskId", required = false) String asyncTaskId,
+                                                               @RequestParam(name = "grayStrategyVersion", required = false) String grayStrategyVersion,
+                                                               @RequestParam(name = "asyncWorkflowId", required = false) String asyncWorkflowId,
+                                                               @RequestParam(name = "includeArchived", required = false) Boolean includeArchived,
+                                                               @RequestParam(name = "limit", required = false) Integer limit) {
+        return guarded(() -> ApiResponse.ok(supervisorEventAuditQueryService.query(
                 taskId, traceId, approvalId, artifactId, asyncTaskId, grayStrategyVersion, asyncWorkflowId, includeArchived, limit
-        ));
+        )));
+    }
+
+    @GetMapping("/supervisor/event-audit/business")
+    public ApiResponse<List<SessionEventAuditView>> businessEventAudit(
+            @RequestParam(name = "taskId", required = false) String taskId, @RequestParam(name = "traceId", required = false) String traceId,
+            @RequestParam(name = "approvalId", required = false) String approvalId, @RequestParam(name = "artifactId", required = false) String artifactId,
+            @RequestParam(name = "asyncTaskId", required = false) String asyncTaskId, @RequestParam(name = "grayStrategyVersion", required = false) String grayStrategyVersion,
+            @RequestParam(name = "asyncWorkflowId", required = false) String asyncWorkflowId, @RequestParam(name = "includeArchived", required = false) Boolean includeArchived,
+            @RequestParam(name = "limit", required = false) Integer limit) {
+        return guarded(() -> ApiResponse.ok(supervisorEventAuditQueryService.queryBusinessDiagnostics(
+                taskId, traceId, approvalId, artifactId, asyncTaskId, grayStrategyVersion, asyncWorkflowId, includeArchived, limit)));
     }
 
     @GetMapping("/supervisor/governance")
     public ApiResponse<SupervisorGovernanceView> governance() {
-        return ApiResponse.ok(supervisorGovernanceService.viewGovernance());
+        return guarded(() -> ApiResponse.ok(supervisorGovernanceService.viewGovernance()));
     }
 
     @PostMapping("/supervisor/governance/rate-limit")
     public ApiResponse<SupervisorGovernanceView> overrideRateLimit(@RequestBody GovernanceRateLimitOverrideRequest request) {
-        return ApiResponse.ok(supervisorGovernanceService.overrideRateLimit(request));
+        return guarded(() -> ApiResponse.ok(supervisorGovernanceService.overrideRateLimit(request)));
     }
 
     @PostMapping("/supervisor/governance/rate-limit/clear")
-    public ApiResponse<SupervisorGovernanceView> clearRateLimitOverride(@RequestParam(required = false) String entryType) {
-        return ApiResponse.ok(supervisorGovernanceService.clearRateLimitOverride(entryType));
+    public ApiResponse<SupervisorGovernanceView> clearRateLimitOverride(@RequestParam(name = "entryType", required = false) String entryType) {
+        return guarded(() -> ApiResponse.ok(supervisorGovernanceService.clearRateLimitOverride(entryType)));
     }
 
     @PostMapping("/supervisor/governance/gray-release")
     public ApiResponse<SupervisorGovernanceView> overrideGrayRelease(@RequestBody GovernanceGrayReleaseOverrideRequest request) {
-        return ApiResponse.ok(supervisorGovernanceService.overrideGrayRelease(request));
+        return guarded(() -> ApiResponse.ok(supervisorGovernanceService.overrideGrayRelease(request)));
     }
 
     @PostMapping("/supervisor/governance/gray-release/clear")
     public ApiResponse<SupervisorGovernanceView> clearGrayReleaseOverride() {
-        return ApiResponse.ok(supervisorGovernanceService.clearGrayReleaseOverride());
+        return guarded(() -> ApiResponse.ok(supervisorGovernanceService.clearGrayReleaseOverride()));
     }
 
     private <T> ApiResponse<T> guarded(java.util.function.Supplier<ApiResponse<T>> supplier) {
@@ -629,6 +654,12 @@ public class AgentController {
         } catch (IllegalArgumentException exception) {
             return ApiResponse.fail("INVALID_ARGUMENT", "INVALID_ARGUMENT");
         } catch (IllegalStateException exception) {
+            if ("RUN_REQUEST_ID_CONFLICT".equals(exception.getMessage())) {
+                org.springframework.web.context.request.RequestAttributes attributes = org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+                if (attributes instanceof org.springframework.web.context.request.ServletRequestAttributes servlet
+                        && servlet.getResponse() != null) servlet.getResponse().setStatus(409);
+                return ApiResponse.fail("RUN_REQUEST_ID_CONFLICT", "requestId is already bound to another session or input");
+            }
             if (exception.getMessage() != null && exception.getMessage().contains("rate limit exceeded")) {
                 return ApiResponse.fail(GovernanceErrorCodes.RATE_LIMITED, exception.getMessage());
             }

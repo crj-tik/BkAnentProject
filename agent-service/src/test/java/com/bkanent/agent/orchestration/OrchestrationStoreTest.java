@@ -16,6 +16,27 @@ import static org.assertj.core.api.Assertions.*;
 
 class OrchestrationStoreTest {
     @Test
+    void runRequestIdentityChecksSessionNormalizedBodyAndPolicyNotJustOwner() throws Exception {
+        var store = database(new ObjectMapper());
+        var original = new SupervisorTaskRequest("session", "1", "id", "trace", "find",
+                Map.of("b", 2, "a", 1), "api", false);
+        store.register("id", original);
+        store.register("id", new SupervisorTaskRequest("session", "1", "id", "another-trace", "find",
+                Map.of("a", 1, "b", 2, "userId", "model-cannot-change-owner"), "api", true, null, null, true));
+        assertThat(store.originalRequest("id")).isEqualTo(original);
+        assertThatThrownBy(() -> store.register("id", new SupervisorTaskRequest("other", "1", "id", "trace", "find",
+                Map.of("a", 1, "b", 2), "api", false))).hasMessage("RUN_REQUEST_ID_CONFLICT");
+        assertThatThrownBy(() -> store.register("id", new SupervisorTaskRequest("session", "1", "id", "trace", "changed",
+                Map.of("a", 1, "b", 2), "api", false))).hasMessage("RUN_REQUEST_ID_CONFLICT");
+        assertThatThrownBy(() -> store.register("id", new SupervisorTaskRequest("session", "1", "id", "trace", "find",
+                Map.of("a", 3, "b", 2), "api", false))).hasMessage("RUN_REQUEST_ID_CONFLICT");
+        assertThatThrownBy(() -> store.register("id", new SupervisorTaskRequest("session", "2", "id", "trace", "find",
+                Map.of(), "api", false))).hasMessage("CONTINUATION_OWNER_MISMATCH");
+        assertThat(store.ownedRunScopes("1")).containsExactly(new OrchestrationStore.RunScope("id", "session"));
+        assertThat(store.ownedRunScopes("2")).isEmpty();
+    }
+
+    @Test
     void rejectedCallCannotBeClaimedAndExecutingCallCannotBeRejected() throws Exception {
         var store = database(new ObjectMapper());
         store.register("run", new SupervisorTaskRequest("session", "1", "run", "trace", "request", Map.of(), "api", false));

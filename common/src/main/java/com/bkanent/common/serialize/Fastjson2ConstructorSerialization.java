@@ -69,6 +69,10 @@ public final class Fastjson2ConstructorSerialization implements Serialization {
             // default readThrowable() expects a real Throwable from an untyped read. Only the
             // project's own safe failure contract is carried; no foreign exception class can be
             // named or instantiated through this path.
+            if (failure instanceof com.bkanent.common.authz.AuthzException authorization) {
+                writeObject(java.util.Map.of("@throwable", "AuthzException", "code", authorization.code().name()));
+                return;
+            }
             String code = null;
             String field = null;
             for (Class<?> type = failure.getClass(); type != null; type = type.getSuperclass()) {
@@ -121,6 +125,15 @@ public final class Fastjson2ConstructorSerialization implements Serialization {
         @Override public byte[] readBytes() throws IOException { return read(byte[].class); }
         @Override public Object readObject() throws IOException {
             Object value = read(Object.class);
+            if (value instanceof java.util.Map<?, ?> authorization
+                    && "AuthzException".equals(authorization.get("@throwable"))) {
+                try {
+                    return new com.bkanent.common.authz.AuthzException(
+                            com.bkanent.common.authz.AuthzErrorCode.valueOf(String.valueOf(authorization.get("code"))));
+                } catch (IllegalArgumentException failure) {
+                    throw new IOException("invalid authorization throwable envelope");
+                }
+            }
             if (value instanceof java.util.Map<?, ?> map
                     && "RagException".equals(map.get("@throwable"))) {
                 // Rebuild the safe failure contract from the envelope; code/field stay the only

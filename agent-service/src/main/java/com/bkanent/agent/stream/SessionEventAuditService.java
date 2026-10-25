@@ -48,6 +48,11 @@ public class SessionEventAuditService {
         recordAndEnrich(event);
     }
 
+    /** Management access must have a durable audit; unlike live delivery, it cannot fall back locally. */
+    public void recordRequired(SessionStreamEvent event) {
+        persistAndEnrich(event);
+    }
+
     /**
      * Persists an event before live delivery and returns its stable stream envelope.
      * The existing audit table id is used as the monotonic sequence within a
@@ -142,7 +147,26 @@ public class SessionEventAuditService {
         );
     }
 
-    public List<SessionEventAuditView> query(String taskId,
+    public List<SessionEventAuditView> queryOwned(java.util.List<com.bkanent.agent.orchestration.OrchestrationStore.RunScope> scopes,
+                                                 String taskId, String traceId, String approvalId, String artifactId,
+                                                 String asyncTaskId, String grayStrategyVersion, String asyncWorkflowId,
+                                                 Boolean includeArchived, Integer limit) {
+        if (scopes == null || scopes.isEmpty()) return List.of();
+        return query(scopes, taskId, traceId, approvalId, artifactId, asyncTaskId,
+                grayStrategyVersion, asyncWorkflowId, includeArchived, limit);
+    }
+
+    /** Only the separately authorized business diagnostic service calls this unscoped data query. */
+    public List<SessionEventAuditView> queryBusinessDiagnostics(String taskId, String traceId, String approvalId,
+                                                                String artifactId, String asyncTaskId,
+                                                                String grayStrategyVersion, String asyncWorkflowId,
+                                                                Boolean includeArchived, Integer limit) {
+        return query(null, taskId, traceId, approvalId, artifactId, asyncTaskId,
+                grayStrategyVersion, asyncWorkflowId, includeArchived, limit);
+    }
+
+    private List<SessionEventAuditView> query(java.util.List<com.bkanent.agent.orchestration.OrchestrationStore.RunScope> scopes,
+                                             String taskId,
                                              String traceId,
                                              String approvalId,
                                              String artifactId,
@@ -156,6 +180,16 @@ public class SessionEventAuditService {
         LambdaQueryWrapper<AgentEventAuditEntity> wrapper = new LambdaQueryWrapper<AgentEventAuditEntity>()
                 .orderByDesc(AgentEventAuditEntity::getEventTimestamp)
                 .last("limit " + size);
+        if (scopes != null) {
+            wrapper.and(owned -> {
+                for (int i = 0; i < scopes.size(); i++) {
+                    var scope = scopes.get(i);
+                    if (i > 0) owned.or();
+                    owned.nested(run -> run.eq(AgentEventAuditEntity::getSessionId, scope.sessionId())
+                            .eq(AgentEventAuditEntity::getTaskId, scope.runId()));
+                }
+            });
+        }
         if (StringUtils.hasText(taskId)) {
             wrapper.eq(AgentEventAuditEntity::getTaskId, taskId);
         }

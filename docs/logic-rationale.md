@@ -955,3 +955,21 @@
 **根因**：每服务每协议配置共享签名 secret 会让调用方与验证方都能伪造请求，且密钥项随服务和协议数增长。每服务一组非对称密钥把签名能力留在调用服务；协议域分离允许复用身份而阻止跨协议重放；verifier 独立公钥登记与原 ACL 保证新增身份不自动扩大权限。Auth 曾在 A2A/Auth 迁移观察窗内保留旧 verifier；本机开发栈覆盖最长 300 秒信标租约及 300 秒回滚窗后，旧算法计数保持为零，现已删除旧 verifier 与密钥配置。RAG RPC 仍遵循自己的独立协议。
 
 **代码位置**：`common/security/ServiceIdentityCrypto`、`common/rag/A2aAuthSignature`、`common/memory/MemoryRequestSigner`、`common-a2a/A2aBeaconAuthentication`、`auth-service/AuthA2aIdentityProperties` 与 `A2aBeaconRpcServiceImpl`、`memory-service/MemoryV2SecurityProperties` 与 `MemoryV2RequestSecurity`；验签计数器 `service.identity.signature.verified`、`docker-compose.yml`、`scripts/security/`、`docs/service-identity-operations.md`。Auth 只预注册 Ed25519 A2A/Auth 计数器。回归覆盖来源/目标身份边界、operation ACL、协议域、签名、key ID/公钥匹配、错误算法/降级拒绝、轮换撤销与 verifier ACL；旧 HMAC 运行观察和退役记录见 2026-10-23 11.9 验收。关联 KI-162、change 11.8/11.9。
+
+## LR-99 版本权限集合、运行委托和新鲜证明分别管理
+
+**结论**：新 `common/authz` 基础契约将用户稳定权限集合、签名运行委托和30秒权威新鲜证明分离。权限内容hash不含滑动签发时间、缓存TTL或签名，集合不可变；运行actor、session、run、原权限上限和hard deadline固定，子委托不得扩大范围或期限。通知只能使本地状态失效，不直接授予权限；新鲜证明只能在同版本、epoch、hash下更新。MySQL写入的授权版本和outbox同事务，角色多对多并集与独立business_admin只授予登记操作，个人Memory归属和业务状态仍独立检查。
+
+**根因**：按run复制权限副本会产生发布竞争，按版本签含滑动TTL内容会使同版本重建hash变化；用用户ID或旧checkpoint重建授权则绕过持有凭据。新协议采用 `bkanent-authz-v1` 的类型分域Ed25519，并独立验证来源和接收方证明、nonce、正文和目标，不影响已有RAG签名协议。
+
+**代码位置**：`common/authz/AuthorizationSnapshot`、`AuthzFreshness`、`AuthorizationContext`、`AuthzSignature`、`AuthzDeadlines`、`AuthorizationCache`、`AuthorizationSession`；`auth-service/authorization/AuthorizationRepository`、`EffectivePermissionService`、`RoleAuthorizationManagementService`；新MySQL迁移及Redis `authz/publish.lua`。
+
+**实施边界**：本次仅基础批次，新授权RPC和管理API按 `auth.authorization.enabled` 默认关闭，旧消费者尚未迁移。已有两个RPC缺少保持原run期限/范围的版本刷新协议，见KI-167；不能声称通知、consumer或零重复Auth已经接通。413项定向回归、真实隔离MySQL迁移及Redis ACL/Lua规则通过，但不代表新授权链已上线。关联LR-33/40/41/63/98；change `unify-versioned-permission-context`。
+
+## LR-100 Supervisor请求幂等必须绑定持久会话与归一化输入
+
+**结论**：重复run的actor、session和归一化输入/政策必须一致，变更正文或明确跨session返回409；省略session的同requestId合法重投则从可信持久原请求恢复session，不每次生成UUID后误报冲突。chat先claim持久session归属，audit普通查询先核Memory真实owner再按session+run筛SQL；业务诊断及全局治理需要独立管理许可和可靠访问审计。
+
+**根因**：只核owner会串同用户不同会话结果，只有Memory复合key不能保护按session分发的SSE；在principal已随机补session后才核幂等又会误拒合法重投。审计全表查询与治理只检查登录会把普通用户身份当全局数据/写权限。
+
+**代码位置**：`AgentPrincipalContext.bind`、`AgentController.chat`及各Supervisor入口、`OrchestrationStore.assertRequestIdentity/ownedRunScopes`、`SupervisorToolLoopRunner`、`SupervisorEventAuditQueryService`、`SessionEventAuditService.queryOwned`、`SupervisorGovernanceService`。当前管理许可仍走旧Auth接口，审计明确记录 `legacy-rpc-unversioned`，未伪造新版本接线；新目录consumer迁移和异步入队并发门禁仍待实施。关联KI-168、LR-15/22/23、KI-80；新增真实request-scope/MockMvc重投及H2审计反例。

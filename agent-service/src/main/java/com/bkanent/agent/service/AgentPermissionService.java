@@ -22,6 +22,23 @@ public class AgentPermissionService {
         this.permissionAuditService = permissionAuditService;
     }
 
+    public void assertCanReadEventAudit(String actorId) {
+        assertPermission(actorId, "agent.audit.read", "owned event audit query");
+    }
+
+    public void assertCanReadBusinessEventAudit(String actorId) {
+        assertPermission(actorId, "agent.audit.read", "business event audit query");
+        assertPermission(actorId, "agent.audit.manage", "business event audit scope");
+    }
+
+    public void assertCanReadGovernance(String actorId) {
+        assertPermission(actorId, "agent.governance.read", "governance query");
+    }
+
+    public void assertCanManageGovernance(String actorId) {
+        assertPermission(actorId, "agent.governance.manage", "governance change");
+    }
+
     public void assertCanReadTaskArtifacts(String userId) {
         Long parsedUserId = parseUserId(userId);
         if (parsedUserId == null || !authPermissionRpcService.hasPermission(parsedUserId, ARTIFACT_READ_PERMISSION)) {

@@ -173,6 +173,94 @@ class SessionEventAuditServiceTest {
         assertThat(lambda.getParamNameValuePairs().values()).contains("session-1", "event-from-another-session");
     }
 
+    @Test
+    void actualH2OwnerPredicatesHideCrossSessionWrongRunLegacyAndMaliciousFilters() throws Exception {
+        var datasource = new org.springframework.jdbc.datasource.DriverManagerDataSource(
+                "jdbc:h2:mem:" + java.util.UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
+        var jdbc = new org.springframework.jdbc.core.JdbcTemplate(datasource);
+        java.nio.file.Path root = java.nio.file.Path.of("").toAbsolutePath();
+        while (!java.nio.file.Files.exists(root.resolve("sql/mysql-init.sql"))) root = root.getParent();
+        var ddl = java.util.regex.Pattern.compile("(?s)CREATE TABLE IF NOT EXISTS agent_event_audit \\(.*?;")
+                .matcher(java.nio.file.Files.readString(root.resolve("sql/mysql-init.sql")));
+        assertThat(ddl.find()).isTrue();
+        jdbc.execute(ddl.group()); // Real checked-in audit schema, not hand-copied table columns.
+        var bean = new com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean();
+        bean.setDataSource(datasource);
+        bean.setConfiguration(new MybatisConfiguration());
+        var global = new com.baomidou.mybatisplus.core.config.GlobalConfig();
+        global.setMetaObjectHandler(new com.baomidou.mybatisplus.core.handlers.MetaObjectHandler() {
+            public void insertFill(org.apache.ibatis.reflection.MetaObject object) {
+                strictInsertFill(object, "createdAt", java.time.LocalDateTime.class, java.time.LocalDateTime.now());
+                strictInsertFill(object, "updatedAt", java.time.LocalDateTime.class, java.time.LocalDateTime.now());
+            }
+            public void updateFill(org.apache.ibatis.reflection.MetaObject object) {
+                strictUpdateFill(object, "updatedAt", java.time.LocalDateTime.class, java.time.LocalDateTime.now());
+            }
+        });
+        bean.setGlobalConfig(global);
+        var sqlFactory = bean.getObject();
+        sqlFactory.getConfiguration().addMapper(AgentEventAuditMapper.class);
+        var sqlSession = new org.mybatis.spring.SqlSessionTemplate(sqlFactory);
+        var audit = new SessionEventAuditService(new DistributedAgentProperties(),
+                sqlSession.getMapper(AgentEventAuditMapper.class), new ObjectMapper());
+        long now = System.currentTimeMillis();
+        for (String[] row : java.util.List.of(
+                new String[]{"owned-session", "owned-run", "owned"},
+                new String[]{"another-session", "owned-run", "wrong-session"},
+                new String[]{"owned-session", "foreign-run", "wrong-run"},
+                new String[]{"foreign-session", "foreign-run", "foreign"},
+                new String[]{"owned-session", null, "legacy"})) {
+            jdbc.update("INSERT INTO agent_event_audit(session_id,task_id,agent_id,event_type,content,metadata_json,event_timestamp) VALUES (?,?,?,?,?,?,?)",
+                    row[0], row[1], "agent", "agent.completed", row[2], "{\"userId\":\"2\"}", now);
+        }
+        var scopes = java.util.List.of(new com.bkanent.agent.orchestration.OrchestrationStore.RunScope("owned-run", "owned-session"));
+        assertThat(audit.queryOwned(scopes, null, null, null, null, null, null, null, true, 200))
+                .extracting(com.bkanent.agent.model.distributed.SessionEventAuditView::content).containsExactly("owned");
+        assertThat(audit.queryOwned(scopes, "foreign-run", null, null, null, null, null, null, true, 200)).isEmpty();
+        assertThat(audit.queryOwned(scopes, "owned-run' OR 1=1 --", null, null, null, null, null, null, true, 200)).isEmpty();
+        assertThat(audit.queryOwned(java.util.List.of(), null, null, null, null, null, null, null, true, 200)).isEmpty();
+
+        var auth = mock(com.bkanent.common.rpc.AuthPermissionRpcService.class);
+        when(auth.resolvePrincipal("actual-token")).thenReturn(new com.bkanent.common.rpc.AuthenticatedPrincipal(2L));
+        when(auth.hasPermission(2L, "agent.audit.read")).thenReturn(true);
+        var request = new org.springframework.mock.web.MockHttpServletRequest();
+        request.addHeader(com.bkanent.common.rpc.AuthPrincipalContext.MARKER_HEADER, com.bkanent.common.rpc.AuthPrincipalContext.MARKER_VALUE);
+        request.addHeader(com.bkanent.common.rpc.AuthPrincipalContext.USER_ID_HEADER, "2");
+        request.addHeader("Authorization", "Bearer actual-token");
+        var principal = new com.bkanent.agent.security.AgentPrincipalContext(request, auth);
+        var store = mock(com.bkanent.agent.orchestration.OrchestrationStore.class);
+        when(store.ownedRunScopes("2")).thenReturn(scopes);
+        var ownership = mock(com.bkanent.agent.service.SupervisorSessionOwnershipService.class);
+        var permissions = new com.bkanent.agent.service.AgentPermissionService(auth, mock(com.bkanent.agent.service.PermissionAuditService.class));
+        var query = new com.bkanent.agent.service.SupervisorEventAuditQueryService(audit, principal, permissions, store, ownership);
+        assertThat(query.query(null, null, null, null, null, null, null, true, 200))
+                .extracting(com.bkanent.agent.model.distributed.SessionEventAuditView::content).containsExactly("owned");
+        verify(ownership, org.mockito.Mockito.times(2)).assertOwned("owned-session", "2");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> query.queryBusinessDiagnostics(null, null, null, null, null, null, null, true, 200))
+                .hasMessageContaining("permission denied");
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM agent_event_audit", Integer.class)).isEqualTo(5);
+        when(auth.hasPermission(2L, "agent.audit.manage")).thenReturn(true);
+        assertThat(query.queryBusinessDiagnostics(null, null, null, null, null, null, null, true, 200))
+                .extracting(com.bkanent.agent.model.distributed.SessionEventAuditView::content)
+                .contains("owned", "foreign", "wrong-session", "wrong-run", "legacy", "Business event audit query");
+        assertThat(jdbc.queryForObject("SELECT metadata_json FROM agent_event_audit WHERE event_type='security.audit_access'", String.class))
+                .contains("actorId", "2", "legacy-rpc-unversioned");
+        org.mockito.Mockito.doThrow(new com.bkanent.agent.security.AgentPrincipalException("foreign owner"))
+                .when(ownership).assertOwned("owned-session", "2");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> query.query(null, null, null, null, null, null, null, true, 200))
+                .isInstanceOf(com.bkanent.agent.security.AgentPrincipalException.class);
+    }
+
+    @Test
+    void requiredManagementAuditNeverFallsBackOnPersistenceFailure() {
+        var mapper = mock(AgentEventAuditMapper.class);
+        when(mapper.selectCount(any())).thenReturn(0L);
+        org.mockito.Mockito.doThrow(new IllegalStateException("audit database down")).when(mapper).insert(any(AgentEventAuditEntity.class));
+        var service = new SessionEventAuditService(new DistributedAgentProperties(), mapper, new ObjectMapper());
+        var event = new SessionStreamEvent("business-audit", null, "supervisor", "security.audit_access", "access", Map.of(), null, System.currentTimeMillis());
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.recordRequired(event)).hasMessage("audit database down");
+    }
+
     private AgentEventAuditEntity persisted(String sessionId, String taskId, long sequence, String metadata) {
         AgentEventAuditEntity entity = new AgentEventAuditEntity();
         entity.setId(sequence);
