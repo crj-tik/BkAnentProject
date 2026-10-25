@@ -28,7 +28,7 @@
 - [ ] 4.3 Gateway对实际转发原始body计算有界hash，绑定method/original-target path/query/audience/requestId与授权签名，下游解析前复算；覆盖路径rewrite/重复query/空body/MCP实际JSON篡改，拒超限或不支持流式body；清除伪造头，精确公开path+method及POST refresh回归。
 - [ ] 4.4 Agent filter/principal消费有效入口证明，移除同请求四次resolve重复；直接业务HTTP无可信入口证明时独立认证，不信固定marker。
 - [x] 4.5 分离稳定权限snapshot与新鲜证明/签发context，300秒runHardDeadline固定不被同版重建/刷新重置，子context≤父期限/run截止/授予期限、请求证明≤60秒；覆盖同版缓存回收、子委托和到期反例，重启原owner重认证。
-- [ ] 4.6 login/refresh/me与UserManagement迁移可信businessAdmin+多角色集合，旧roleCode只兼容展示；无角色管理员正常认证/管理，logout仅提交token吊销+全用户旧run重认证（非全设备退出），覆盖其他有效token重入和重复注销幂等。
+- [x] 4.6 login/refresh/me与UserManagement迁移可信businessAdmin+多角色集合，旧roleCode只兼容展示；无角色管理员正常认证/管理，logout仅提交token吊销+全用户旧run重认证（非全设备退出），覆盖其他有效token重入和重复注销幂等。
 
 ## 5. Supervisor本地权限与资源守卫
 

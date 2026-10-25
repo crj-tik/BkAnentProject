@@ -26,7 +26,14 @@ public final class AuthUserManagementModels {
 
     public record UserItem(Long userId, String username, String displayName,
                            String roleCode, String roleName, String tenantCode,
-                           String accountStatus, LocalDateTime createdAt) {
+                           String accountStatus, LocalDateTime createdAt,
+                           boolean businessAdmin, List<String> roles, long permissionRevision, long credentialEpoch) {
+        public UserItem { roles = List.copyOf(roles); }
+        public UserItem(Long userId, String username, String displayName, String roleCode,
+                        String roleName, String tenantCode, String accountStatus, LocalDateTime createdAt) {
+            this(userId, username, displayName, roleCode, roleName, tenantCode, accountStatus, createdAt,
+                    false, List.of(), 0, 0);
+        }
     }
 
     public record PageResult<T>(List<T> records, long total, long page, long pageSize) {

@@ -47,10 +47,24 @@ public class AuthAccountMutationService {
     }
 
     public List<String> roles(long userId) {
+        return authorizationInfo(userId).roles();
+    }
+
+    public AuthorizationInfo authorizationInfo(long userId) {
         Instant now = Instant.now();
-        return repository.loadFacts(userId, now).map(f -> f.grants().stream()
+        var facts = repository.loadFacts(userId, now).orElseThrow(() -> error(HttpStatus.UNAUTHORIZED,
+                "AUTH_UNAUTHORIZED", "账号授权状态缺失"));
+        var snapshot = new EffectivePermissionService().calculate(facts, now);
+        var roles = facts.grants().stream()
+                .filter(g -> g.grantActive() && g.roleActive() && !g.roleDeleted())
                 .filter(g -> g.validFrom() == null || !g.validFrom().isAfter(now))
-                .map(AuthorizationFacts.RoleGrant::roleCode).distinct().sorted().toList()).orElse(List.of());
+                .filter(g -> g.validUntil() == null || now.isBefore(g.validUntil()))
+                .map(AuthorizationFacts.RoleGrant::roleCode).distinct().sorted().toList();
+        return new AuthorizationInfo(snapshot, roles);
+    }
+
+    public record AuthorizationInfo(EffectivePermissionService.Snapshot snapshot, List<String> roles) {
+        public AuthorizationInfo { roles = List.copyOf(roles); }
     }
 
     public UserAccountEntity create(long actorId, CreateUserRequest request) {

@@ -64,3 +64,13 @@ Gateway/Agent原型已通过实际原始body/path/query绑定、三签、单次A
 - 编译/fixture失败修正：common WireCodec将既有test-scope Jackson依赖提升compile；Gateway重复Mockito设桩改doAnswer/doThrow；账号typed varargs fixture修正；Publisher UUID nonce改32字节URL编码，合法空审计事件直接CAS完成，网络锁范围缩短；Agent参数重名与默认关闭minimal context配置注册修正。未放宽生产权限。
 - `refresh-acceptance-results.json`：隔离MySQL22、active Lua24、publish16、ACL22，共84检查通过；新增260迁移/check、fresh/upgrade dry-run均0。仅新tmpfs/internal网且无端口，两容器/网/临时秘密已清理，未devDB apply；没有Java跨两存储注销/TLS/部署全链证据。
 - 新授权开关仍默认关闭，没有生产部署、真实业务副作用或对Memory私有范围放宽。LR-106和KI-169/170/171记录真实边界；独立刷新修复不宣称全链完成。
+
+## 多角色响应兼容续批
+
+本轮在不改变token payload、执行关联或任何授权签名的前提下完成4.6剩余响应信息：AuthTokenDTO追加businessAdmin/roles/permissionRevision/credentialEpoch并保留旧7参数构造，UserItem保留旧8参数构造，CurrentUser旧6参数构造不变。legacy构造默认false/空集合/0，不由roleCode推新授权；tokenDTO日志不回显凭据。
+
+login/refresh/me和管理列表/写入结果从同一次AuthorizationFacts读取提取有效角色及权限版本/epoch，排除停用/删除/未来/过期授予；角色字段仅展示，真实admin来自SQL。新版用户筛选以有效关联EXISTS在分页前限制，count/page共用相同now与谓词，次角色能命中且多角色不重复行；无角色管理员仍可列管，停用账号可管理但不能登录。旧模式仍走原mapper行为，不强制新schema上线。
+
+AuthorizationUserInfoTest新增5项真实H2/MyBatis谓词与DTO/JSON兼容回归；与现Auth测试共35项通过。全量settings test 23模块成功、1524项、失败/错误0、跳过14项既有外部依赖门控；该总数按包含WARNING摘要和Surefire XML核对，不与先前1519重复相加。只读复核未确认严重问题。
+
+当前15/63完成，KI-170依然阻塞实际Gateway→Supervisor run/session签名绑定、Model与新子域消费。不得用新增响应字段当认证证明，也未启用新模式、未修改生产Nacos或执行真实业务动作。

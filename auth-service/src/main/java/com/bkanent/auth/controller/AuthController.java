@@ -73,6 +73,10 @@ public class AuthController {
                 || !passwordEncoder.matches(request.password(), account.getPasswordHash())) {
             return ApiResponse.fail("AUTH_401", "invalid username or password");
         }
+        if (userManagementService.isVersionedAuthorization()) {
+            return ApiResponse.ok(userManagementService.tokenResponse(account,
+                    authTokenService.issueAccessToken(account), authTokenService.issueRefreshToken(account)));
+        }
         return ApiResponse.ok(new AuthTokenDTO(
                 authTokenService.issueAccessToken(account),
                 authTokenService.issueRefreshToken(account),
@@ -108,6 +112,10 @@ public class AuthController {
         String newRefreshToken = authTokenService.issueRefreshToken(account);
         if (!request.refreshToken().equals(newRefreshToken)) {
             authTokenService.revoke(request.refreshToken());
+        }
+        if (userManagementService.isVersionedAuthorization()) {
+            return ApiResponse.ok(userManagementService.tokenResponse(account,
+                    authTokenService.issueAccessToken(account), newRefreshToken));
         }
         return ApiResponse.ok(new AuthTokenDTO(
                 authTokenService.issueAccessToken(account),

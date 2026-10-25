@@ -1024,6 +1024,8 @@
 **代码位置**：AuthAuthorizationRpcServiceImpl.refreshAuthorization、AuthzCanonicalHash.refreshRequestHash、AuthzSignature.verifyRefreshBinding、AuthorizationSession.refresh、AuthTokenService、AuthAccountMutationService、AuthorizationOutboxPublisher、RedisActiveAuthorizationActors和AuthorizationVersionMonitor。pub/sub/对账实现是基础，Gateway/Agent已验字节原型的signed run/session仍null，实际执行标签接入必须补KI-170而不能consumer填入签名或省资源owner检查；header最大256KiB也不等于部署预算已配置。
 
 **关联**：LR-103/104、KI-169/170/171；本轮276项定向、1519项全回归（14跳过）、真实隔离MySQL22+Redis62项检查；签名/故障fixture与真实存储规则证据分开，不代表新协议已部署。
+
+**多角色响应补齐**：AuthTokenDTO保留旧7参，UserItem/CurrentUser保留旧8/6参；新businessAdmin、roles、revision/epoch来自同一次SQL授权事实读取，legacy默认不从roleCode推新权限。新版用户role筛选在SQL分页前按有效关系EXISTS，count与page使用相同谓词/时刻，次角色可见不重复行。login/refresh/me的授权信息是客户端展示数据，不是可用于委托的签名凭据，token payload仍只有原三字段。新增5项真实H2/MyBatis/序列化回归，全23模块1524项失败/错误0、14跳过；actual run关联仍受KI-170阻塞。
 ## LR-105 四个 Change 以固定契约独立验收，合并后再核验真实互通（规划）
 
 **结论**：房源、知识、经营和营销四个 change 从共同基线使用独立 worktree/分支、Maven仓库及测试资源。生产者和消费者遵循 `domain-parallel-v1`；经营/营销持有自己的wire DTO和实际HTTP适配，用自有fixture验证，不依赖其它change新增Java制品。所有本期任务可分别完成，真实服务互通、Auth/Memory在线登记、初始化allowlist和共享环境切换由协调会话在合并后核验。

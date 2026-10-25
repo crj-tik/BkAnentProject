@@ -66,10 +66,24 @@ public class UserManagementService {
         if (!isVersionedAuthorization()) return new com.bkanent.auth.dto.AuthUserManagementModels.CurrentUser(
                 account.getId(), account.getUsername(), account.getDisplayName(), account.getRoleCode(),
                 getRoleNameForCode(account.getRoleCode()), account.getTenantCode());
-        var snapshot = authorization(account.getId());
+        var info = accountMutations.authorizationInfo(account.getId());
+        var snapshot = info.snapshot();
         return new com.bkanent.auth.dto.AuthUserManagementModels.CurrentUser(account.getId(), account.getUsername(),
                 account.getDisplayName(), account.getRoleCode(), getRoleNameForCode(account.getRoleCode()), account.getTenantCode(),
-                snapshot.businessAdmin(), accountMutations.roles(account.getId()), snapshot.permissionRevision(), snapshot.credentialEpoch());
+                snapshot.businessAdmin(), info.roles(), snapshot.permissionRevision(), snapshot.credentialEpoch());
+    }
+
+    public com.bkanent.common.model.AuthTokenDTO tokenResponse(UserAccountEntity account, String access, String refresh) {
+        if (!isVersionedAuthorization()) return new com.bkanent.common.model.AuthTokenDTO(access, refresh,
+                account.getId(), account.getRoleCode(), account.getDisplayName(), getRoleNameForCode(account.getRoleCode()),
+                account.getTenantCode());
+        var info = accountMutations.authorizationInfo(account.getId());
+        var snapshot = info.snapshot();
+        if (!"ACTIVE".equals(snapshot.status())) throw new UserManagementException(HttpStatus.UNAUTHORIZED,
+                "AUTH_UNAUTHORIZED", "账号授权状态失效");
+        return new com.bkanent.common.model.AuthTokenDTO(access, refresh, account.getId(), account.getRoleCode(),
+                account.getDisplayName(), getRoleNameForCode(account.getRoleCode()), account.getTenantCode(),
+                snapshot.businessAdmin(), info.roles(), snapshot.permissionRevision(), snapshot.credentialEpoch());
     }
 
     public void logout(String token) { accountMutations.logout(token); }
@@ -110,9 +124,18 @@ public class UserManagementService {
         String safeKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
         String safeRoleCode = StringUtils.hasText(roleCode) ? roleCode.trim() : null;
         String safeAccountStatus = StringUtils.hasText(accountStatus) ? accountStatus.trim() : null;
-        long total = userAccountMapper.countManagementUsers(safeKeyword, safeRoleCode, safeAccountStatus);
-        List<UserAccountEntity> accounts = userAccountMapper.selectManagementPage(
-                safeKeyword, safeRoleCode, safeAccountStatus, safePageSize, (safePage - 1) * safePageSize);
+        long total;
+        List<UserAccountEntity> accounts;
+        if (isVersionedAuthorization()) {
+            LocalDateTime now = LocalDateTime.now();
+            total = userAccountMapper.countAuthorizationManagementUsers(safeKeyword, safeRoleCode, safeAccountStatus, now);
+            accounts = userAccountMapper.selectAuthorizationManagementPage(safeKeyword, safeRoleCode, safeAccountStatus,
+                    now, safePageSize, (safePage - 1) * safePageSize);
+        } else {
+            total = userAccountMapper.countManagementUsers(safeKeyword, safeRoleCode, safeAccountStatus);
+            accounts = userAccountMapper.selectManagementPage(safeKeyword, safeRoleCode, safeAccountStatus,
+                    safePageSize, (safePage - 1) * safePageSize);
+        }
         Map<String, String> roleNames = authRoleMapper.selectList(new LambdaQueryWrapper<AuthRoleEntity>()
                         .eq(AuthRoleEntity::getActive, 1))
                 .stream()
@@ -262,6 +285,14 @@ public class UserManagementService {
     }
 
     private UserItem toUserItem(UserAccountEntity account, Map<String, String> roleNames) {
+        if (isVersionedAuthorization()) {
+            var info = accountMutations.authorizationInfo(account.getId());
+            var snapshot = info.snapshot();
+            return new UserItem(account.getId(), account.getUsername(), account.getDisplayName(),
+                    account.getRoleCode(), roleNames.getOrDefault(account.getRoleCode(), account.getRoleCode()),
+                    account.getTenantCode(), account.getAccountStatus(), account.getCreatedAt(),
+                    snapshot.businessAdmin(), info.roles(), snapshot.permissionRevision(), snapshot.credentialEpoch());
+        }
         return new UserItem(account.getId(), account.getUsername(), account.getDisplayName(),
                 account.getRoleCode(), roleNames.getOrDefault(account.getRoleCode(), account.getRoleCode()),
                 account.getTenantCode(), account.getAccountStatus(), account.getCreatedAt());
