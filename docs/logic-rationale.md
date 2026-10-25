@@ -955,3 +955,13 @@
 **根因**：每服务每协议配置共享签名 secret 会让调用方与验证方都能伪造请求，且密钥项随服务和协议数增长。每服务一组非对称密钥把签名能力留在调用服务；协议域分离允许复用身份而阻止跨协议重放；verifier 独立公钥登记与原 ACL 保证新增身份不自动扩大权限。Auth 曾在 A2A/Auth 迁移观察窗内保留旧 verifier；本机开发栈覆盖最长 300 秒信标租约及 300 秒回滚窗后，旧算法计数保持为零，现已删除旧 verifier 与密钥配置。RAG RPC 仍遵循自己的独立协议。
 
 **代码位置**：`common/security/ServiceIdentityCrypto`、`common/rag/A2aAuthSignature`、`common/memory/MemoryRequestSigner`、`common-a2a/A2aBeaconAuthentication`、`auth-service/AuthA2aIdentityProperties` 与 `A2aBeaconRpcServiceImpl`、`memory-service/MemoryV2SecurityProperties` 与 `MemoryV2RequestSecurity`；验签计数器 `service.identity.signature.verified`、`docker-compose.yml`、`scripts/security/`、`docs/service-identity-operations.md`。Auth 只预注册 Ed25519 A2A/Auth 计数器。回归覆盖来源/目标身份边界、operation ACL、协议域、签名、key ID/公钥匹配、错误算法/降级拒绝、轮换撤销与 verifier ACL；旧 HMAC 运行观察和退役记录见 2026-10-23 11.9 验收。关联 KI-162、change 11.8/11.9。
+
+## LR-99 房源与比较共享领域事实，合并保留历史身份（规划）
+
+**结论**：2026-10-25 独立 change `consolidate-listing-comparison-domain` 规划将比较能力迁入房源域，房源经接口来源接入，对比/报告统一使用当前获准快照。上游事实与本地维护记录分开表达；历史 `compare/compare-agent` Memory 和已接受任务保持原身份，不因服务合并重命名、扩权或换任务重发。
+
+**根因**：当前比较没有独立事实来源，分服务放大了相同数据的授权与缓存边界；直接改 Agent 名或复制历史会把部署重构误作新的记忆授权。统一领域能力，同时保留来源、版本和原执行身份，可避免旧报告泄露和未知调用重复执行。
+
+**代码位置（当前与规划）**：当前 `listing-master-service`、`compare-engine-service`、`common/model/ListingComparisonFacts` 与 `agent-service/studio`；方案见 `openspec/changes/consolidate-listing-comparison-domain/`。本条是尚未实施的设计约束，不代表服务已合并或数据已迁移。
+
+**关联**：LR-22/23/54/79/96/97；KI-115。
