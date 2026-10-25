@@ -34,12 +34,26 @@ public class AuthTokenFilter implements GlobalFilter, Ordered {
 
     private final GatewayAccessProperties gatewayAccessProperties;
 
+    private final GatewayAuthorizationFilter authorizationFilter;
+
     public AuthTokenFilter(GatewayAccessProperties gatewayAccessProperties) {
         this.gatewayAccessProperties = gatewayAccessProperties;
+        this.authorizationFilter = null;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AuthTokenFilter(GatewayAccessProperties gatewayAccessProperties,
+                           org.springframework.beans.factory.ObjectProvider<GatewayAuthorizationFilter> authorization) {
+        this.gatewayAccessProperties = gatewayAccessProperties;
+        this.authorizationFilter = authorization.getIfAvailable();
     }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        if (authorizationFilter != null) return authorizationFilter.filter(exchange, chain);
+        if (gatewayAccessProperties.isAuthorizationEnabled()) {
+            return writeJsonResponse(exchange, HttpStatus.SERVICE_UNAVAILABLE, "授权配置尚未就绪");
+        }
         ServerHttpRequest request = stripClientPrincipalHeaders(exchange.getRequest());
         ServerWebExchange sanitizedExchange = exchange.mutate().request(request).build();
         String path = request.getURI().getPath();

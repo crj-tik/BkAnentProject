@@ -16,6 +16,20 @@ public final class AuthAuthorizationRedisProperties {
     private int maxActiveActors = 1000;
     private int renewalBatch = 100;
     private long snapshotTtlSeconds = 600;
+    private String host = "";
+    private int port = 6379;
+    private String username = "";
+    private String password = "";
+    private boolean tls = true;
+
+    public void validateTransport(boolean distributed) {
+        validateEnabled();
+        if (host == null || host.isBlank() || host.contains("://") || port < 1 || port > 65535
+                || username == null || username.isBlank() || "default".equals(username)
+                || password == null || password.isBlank() || (distributed && !tls)) {
+            throw new IllegalStateException("Dedicated authorization Redis authentication/TLS is required");
+        }
+    }
 
     public void validateEnabled() {
         if (!enabled || !protectedWriterConfigured || !namespace.matches("[a-zA-Z0-9_-]{1,40}")
@@ -50,4 +64,15 @@ public final class AuthAuthorizationRedisProperties {
     public void setRenewalBatch(int value) { renewalBatch = value; }
     public long getSnapshotTtlSeconds() { return snapshotTtlSeconds; }
     public void setSnapshotTtlSeconds(long value) { snapshotTtlSeconds = value; }
+    public String getHost() { return host; }
+    public void setHost(String value) { host = value; }
+    public int getPort() { return port; }
+    public void setPort(int value) { port = value; }
+    public String getUsername() { return username; }
+    public void setUsername(String value) { username = value; }
+    public String getPassword() { return password; }
+    public void setPassword(String value) { password = value; }
+    public boolean isTls() { return tls; }
+    public void setTls(boolean value) { tls = value; }
+    @Override public String toString() { return "AuthAuthorizationRedisProperties[REDACTED]"; }
 }

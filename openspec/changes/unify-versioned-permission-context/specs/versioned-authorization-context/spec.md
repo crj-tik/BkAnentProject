@@ -100,6 +100,30 @@
 - **WHEN** 已可靠接受的精确结果事件待补交付但用户凭据已到期
 - **THEN** 受限 SERVICE 可按原许可补交付，不换发用户读取凭据，删除和来源撤回仍生效
 
+### Requirement: Same-run refresh is independent and cannot renew authority boundaries
+
+系统 SHALL 提供独立同运行刷新操作，验证真实有效access凭据、原Auth签名context和受权调用服务证明；可以接受旧permissionRevision以更新授权，但原credentialEpoch必须当前有效，原context和run硬期限不得已到期。新请求必须绑定原actor/run/session/audience/policy以及本次requestId/nonce/body；返回当前完整snapshot及原许可与当前权限的交集，不增加范围或延长任何原截止。刷新成功的签名响应 SHALL 可被原本地运行接受；子域仅持委托或userId时不能自行换发，必须经原可信用户入口处理。注销等epoch失效必须要求新的认证续接，不以版本刷新绕过。首次授权、委托和刷新证明不得跨操作或请求复用。
+
+#### Scenario: Permission revision changes within a running request
+- **WHEN** T0建立运行后T0+10权限版本变化，原context未到期且真实access和credentialEpoch仍有效
+- **THEN** 独立刷新返回最新版本并可被原运行接受，hard截止仍为原T0+300或更早期限，不产生新run或副作用
+
+#### Scenario: Refresh must not restore a larger permission scope
+- **WHEN** 用户原范围部分撤回并增加其他权限，或普通用户后来成为管理员
+- **THEN** 刷新scope只包含原签名范围与当前权限交集，不自动恢复未授予的动作或绕过原审批
+
+#### Scenario: A credential invalidation is not a permission refresh
+- **WHEN** 原credentialEpoch因注销或账号级撤销变化，或access/context硬期限到达
+- **THEN** 刷新被拒，要求原用户新的认证续接，不凭旧context/userId延长运行
+
+#### Scenario: Refresh changes the original execution identity
+- **WHEN** 刷新请求更换actor、run、session、audience、policy或伪造原context签名
+- **THEN** 在签发新context前拒绝，原状态和领域副作用不变化
+
+#### Scenario: Refresh proof is replayed or reused from another RPC operation
+- **WHEN** 调用者重放同nonce或用首次授权/委托的证明发起刷新
+- **THEN** 独立协议类型、操作ACL及持久防重放拒绝，不重新授权
+
 ### Requirement: Explicit failure and safe compatibility
 
 首次认证、首次域验证、未知版本、已知撤回或超出新鲜度/硬有效期无法核验时 MUST 失败关闭，且区分401身份无效、403无权限、409版本或上下文冲突、503授权依赖不可用。暂时依赖故障时仅已验证且未收到失效的上下文 SHALL 在规定兼容窗口内继续。授权失败 MUST NOT 自动换用户、提权、切匿名或重试未知副作用；未执行的无权限工具可作为结构化结果返回模型选择其他获准动作。旧协议兼容 MUST 同等受资源与期限约束，且新旧验证路径不会形成较弱回退。

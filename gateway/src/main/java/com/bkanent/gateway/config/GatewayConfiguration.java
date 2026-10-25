@@ -14,7 +14,8 @@ import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 @EnableConfigurationProperties({
         GatewayAccessProperties.class,
         GatewayCorsProperties.class,
-        GatewayRateLimitProperties.class
+        GatewayRateLimitProperties.class,
+        GatewayAuthorizationProperties.class
 })
 public class GatewayConfiguration {
 

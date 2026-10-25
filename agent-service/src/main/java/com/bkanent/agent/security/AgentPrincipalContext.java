@@ -24,13 +24,24 @@ import java.util.Collections;
 public class AgentPrincipalContext {
 
     private final String userId;
+    private com.bkanent.agent.authorization.AgentAuthorizationScope.Entry verifiedAuthorization;
     private com.bkanent.agent.orchestration.OrchestrationStore orchestrationStore;
 
     @org.springframework.beans.factory.annotation.Autowired
     public void setOrchestrationStore(com.bkanent.agent.orchestration.OrchestrationStore store) { orchestrationStore = store; }
 
-    @org.springframework.beans.factory.annotation.Autowired
     public AgentPrincipalContext(HttpServletRequest request, com.bkanent.common.rpc.AuthPermissionRpcService auth) {
+        this(request, auth, new com.bkanent.agent.config.AgentAuthorizationProperties());
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AgentPrincipalContext(HttpServletRequest request, com.bkanent.common.rpc.AuthPermissionRpcService auth,
+                                 com.bkanent.agent.config.AgentAuthorizationProperties authorizationProperties) {
+        if (authorizationProperties.isEnabled()) {
+            this.verifiedAuthorization = com.bkanent.agent.authorization.AgentAuthorizationScope.fromRequest(request);
+            this.userId = verifiedAuthorization.requireActor(null);
+            return;
+        }
         String marker = request.getHeader(AuthPrincipalContext.MARKER_HEADER);
         String authenticatedUserId = request.getHeader(AuthPrincipalContext.USER_ID_HEADER);
         if (!AuthPrincipalContext.MARKER_VALUE.equals(marker) || !StringUtils.hasText(authenticatedUserId)) {
@@ -66,6 +77,7 @@ public class AgentPrincipalContext {
 
     public AgentChatRequest bind(AgentChatRequest request) {
         requireRequest(request);
+        if (verifiedAuthorization != null) verifiedAuthorization.requireRunAssociation();
         resolveUserId(request.userId());
         return new AgentChatRequest(userId, request.message(), request.collectionName(),
                 request.topK(), request.allowMcp(), request.skill(), request.continueRunId(), request.sessionId(), request.requestId());
@@ -89,12 +101,20 @@ public class AgentPrincipalContext {
         if (request == null) {
             throw new AgentPrincipalException("supervisor request is required");
         }
+        if (verifiedAuthorization != null) {
+            verifiedAuthorization.requireRunAssociation();
+            var signed = verifiedAuthorization.session().context();
+            if (StringUtils.hasText(request.sessionId()) && !signed.sessionId().equals(request.sessionId())
+                    || StringUtils.hasText(request.continueRunId()) && !signed.runId().equals(request.continueRunId())) {
+                throw new com.bkanent.common.authz.AuthzException(com.bkanent.common.authz.AuthzErrorCode.CONTEXT_CONFLICT);
+            }
+        }
         resolveUserId(request.userId());
         Map<String, Object> context = new LinkedHashMap<>(request.context() == null ? Map.of() : request.context());
         context = new LinkedHashMap<>(AgentRagContextPolicy.normalize(context));
         context.put("userId", userId);
-        String sessionId = StringUtils.hasText(request.sessionId())
-                ? request.sessionId().trim() : UUID.randomUUID().toString();
+        String sessionId = verifiedAuthorization != null ? verifiedAuthorization.session().context().sessionId()
+                : StringUtils.hasText(request.sessionId()) ? request.sessionId().trim() : UUID.randomUUID().toString();
         if (StringUtils.hasText(request.continueRunId()) && orchestrationStore != null) {
             orchestrationStore.assertOwner(request.continueRunId(), userId);
             String originalSession = orchestrationStore.originalRequest(request.continueRunId()).sessionId();

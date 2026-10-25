@@ -131,16 +131,10 @@ public final class AuthorizationRepository {
                 if (existing.isEmpty()) {
                     throw new IllegalArgumentException("Affected user does not exist: " + userId);
                 }
-                jdbc.update("""
-                        INSERT INTO auth_user_authorization_state
-                            (user_id, permission_revision, credential_epoch, status)
-                        SELECT id, 1, 1, CASE WHEN deleted <> 0 THEN 'DELETED'
-                            WHEN account_status = 'ACTIVE' THEN 'ACTIVE' ELSE 'DISABLED' END
-                        FROM user_account WHERE id = ? AND NOT EXISTS
-                            (SELECT 1 FROM auth_user_authorization_state WHERE user_id = ?)
-                        """, userId, userId);
-                jdbc.queryForList("SELECT user_id FROM auth_user_authorization_state WHERE user_id = ? FOR UPDATE",
-                        Long.class, userId);
+                if (jdbc.queryForList("SELECT user_id FROM auth_user_authorization_state WHERE user_id = ? FOR UPDATE",
+                        Long.class, userId).size() != 1) {
+                    throw new IllegalStateException("Authorization state missing; migration required");
+                }
             }
             mutation.accept(jdbc);
             List<UserVersion> versions = new ArrayList<>();
@@ -167,6 +161,118 @@ public final class AuthorizationRepository {
                     """, eventId, users.toString(), versionsJson(versions), reason);
             return new MutationResult(eventId, versions);
         });
+    }
+
+    /** New accounts must be inserted explicitly; never repair missing migrated state on a write. */
+    public MutationResult createAccount(Consumer<JdbcTemplate> insert, Supplier<Long> insertedId) {
+        return withWriterLock(() -> {
+            insert.accept(jdbc);
+            long id = insertedId.get();
+            jdbc.update("INSERT INTO auth_user_authorization_state(user_id,status) VALUES (?,'ACTIVE')", id);
+            return mutateUsers(List.of(id), "ACCOUNT_CREATED", false, ignored -> { });
+        });
+    }
+
+    public void replaceAccountRole(long userId, long roleId, Instant now) {
+        jdbc.update("DELETE FROM auth_user_role WHERE user_id=?", userId);
+        jdbc.update("INSERT INTO auth_user_role(user_id,role_id,active) VALUES (?,?,1)", userId, roleId);
+        resetGrantBoundaries(userId, now);
+    }
+
+    /** SQL acceptance precedes external revocation: pending events already deny token re-entry. */
+    public LogoutEvent recordLogout(long userId, String tokenDigest, Instant expiresAt) {
+        requireTokenDigest(tokenDigest);
+        return withWriterLock(() -> {
+            Optional<LogoutEvent> existing = logoutEvent(tokenDigest);
+            if (existing.isPresent()) {
+                if (existing.get().userId() != userId) throw new IllegalStateException("Logout actor mismatch");
+                return existing.get();
+            }
+            MutationResult result = mutateUsers(List.of(userId), "LOGOUT", true, ignored -> { });
+            jdbc.update("""
+                    INSERT INTO auth_account_logout_event(token_digest,user_id,event_id,expires_at,state)
+                    VALUES (?,?,?,?,'PENDING')
+                    """, tokenDigest, userId, result.eventId(), timestamp(expiresAt));
+            return new LogoutEvent(userId, result.eventId(), "PENDING");
+        });
+    }
+
+    public boolean isLogoutRecorded(String tokenDigest) {
+        return logoutEvent(tokenDigest).isPresent();
+    }
+
+    public Optional<LogoutEvent> logoutEvent(String tokenDigest) {
+        requireTokenDigest(tokenDigest);
+        return jdbc.query("SELECT user_id,event_id,state FROM auth_account_logout_event WHERE token_digest=?",
+                (rs, row) -> new LogoutEvent(rs.getLong(1), rs.getString(2), rs.getString(3)), tokenDigest)
+                .stream().findFirst();
+    }
+
+    public void completeLogout(String tokenDigest, String eventId) {
+        if (jdbc.update("""
+                UPDATE auth_account_logout_event SET state='REVOKED',updated_at=CURRENT_TIMESTAMP
+                WHERE token_digest=? AND event_id=? AND state IN ('PENDING','REVOKED')
+                """, tokenDigest, eventId) != 1) throw new IllegalStateException("Logout completion missing");
+    }
+
+    public void validateAccountEventSchema() {
+        withWriterLock(() -> {
+            jdbc.queryForList("SELECT token_digest,user_id,event_id,state,expires_at FROM auth_account_logout_event WHERE 1=0");
+            jdbc.queryForList("SELECT permission_revision,credential_epoch,status FROM auth_user_authorization_state WHERE 1=0");
+            jdbc.queryForList("SELECT business_admin FROM user_account WHERE 1=0");
+            jdbc.queryForList("SELECT event_id,lease_epoch,status FROM auth_authorization_outbox WHERE 1=0");
+            jdbc.queryForList("SELECT role_id,valid_from,valid_until,active FROM auth_user_role WHERE 1=0");
+            return null;
+        });
+    }
+
+    private static void requireTokenDigest(String digest) {
+        if (digest == null || !digest.matches("[a-f0-9]{64}")) throw new IllegalArgumentException("Invalid token digest");
+    }
+
+    public record LogoutEvent(long userId, String eventId, String state) { }
+
+    public boolean outboxLeaseValid(String eventId, long leaseEpoch, Instant now) {
+        return jdbc.queryForObject("""
+                SELECT COUNT(*) FROM auth_authorization_outbox
+                WHERE event_id=? AND lease_epoch=? AND status='CLAIMED' AND lease_until>?
+                """, Integer.class, eventId, leaseEpoch, timestamp(now)) == 1;
+    }
+
+    public boolean failOutbox(String eventId, long leaseEpoch, Instant now) {
+        return jdbc.update("""
+                UPDATE auth_authorization_outbox SET status='FAILED',lease_until=NULL
+                WHERE event_id=? AND lease_epoch=? AND status='CLAIMED' AND lease_until>?
+                """, eventId, leaseEpoch, timestamp(now)) == 1;
+    }
+
+    /** Exact JSON array member matching; user 1 never matches user 11. FAILED blocks renewal. */
+    public boolean pendingUserEvents(long userId) {
+        return jdbc.queryForObject("""
+                SELECT COUNT(*) FROM auth_authorization_outbox WHERE status IN ('PENDING','CLAIMED','FAILED')
+                AND CONCAT(',',REPLACE(REPLACE(REPLACE(affected_users,' ',''),'[',''),']',''),',') LIKE ?
+                """, Integer.class, "%," + userId + ",%") > 0;
+    }
+
+    public boolean publicationCurrent(long userId, long revision, long credentialEpoch, String accountStatus,
+                                      String eventId, long leaseEpoch, Instant now) {
+        return withWriterLock(() -> {
+            processUserGrantBoundaries(userId, now);
+            return versionMatches(userId, revision, credentialEpoch, accountStatus)
+                    && outboxLeaseValid(eventId, leaseEpoch, now);
+        });
+    }
+
+    public boolean renewalCurrent(long userId, long revision, long credentialEpoch, String accountStatus, Instant now) {
+        return withWriterLock(() -> {
+            processUserGrantBoundaries(userId, now);
+            return versionMatches(userId, revision, credentialEpoch, accountStatus) && !pendingUserEvents(userId);
+        });
+    }
+
+    private boolean versionMatches(long userId, long revision, long epoch, String status) {
+        return currentVersion(userId).map(v -> v.permissionRevision()==revision && v.credentialEpoch()==epoch
+                && v.status().equals(status)).orElse(false);
     }
 
     public Optional<UserVersion> currentVersion(long userId) {

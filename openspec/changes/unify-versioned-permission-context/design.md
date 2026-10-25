@@ -86,6 +86,20 @@ Pub/Sub只加速，不作为唯一可靠交付。Auth每5秒对活跃缓存head�
 
 Memory独立外部RPC是执行边界，首次验证得到短期域context；后续同context本地验Auth证明与本请求Memory服务签名/nonce，然后做当前资源check。重复内部Memory调用不重新去Auth，不能移除Memory的源/permit/fence检查。其余RAG保持现有签名协议，通过适配消费新身份，未迁移链不开放弱fallback。
 
+### D7a. 独立的同运行授权刷新接口（用户已确认）
+
+新增原生Dubbo `refreshAuthorization(accessToken, originalContext, requestBinding, callerProof)`，RPC操作为 `REFRESH_AUTHORIZATION`。它不同于首次 `resolveRequestAuthorization` 和跨域 `validateDelegation`：只更新尚未硬到期运行的授权版本，不创建新run、不向其他audience转移身份、不延长期限。普通重规划同版仍只核Redis head；版本变化时才由持有有效真实用户凭据的服务调用本接口。受限子Agent没有用户凭据时不得凭parent或userId刷新，需将失效交回Supervisor；Supervisor刷新后为子调用取得新的受限委托，不扩大原执行或审批。
+
+刷新请求hash使用独立类型标签，覆盖accessToken的digest、完整原已签context（含algorithm/kid/signature）与新的RequestBinding。新binding.callerService及audience均须等于originalContext.audience，runId/sessionId/policyDigest必须等于原值；requestId和nonce为本次刷新新值，method/path/query/bodyHash覆盖实际刷新请求而非复用旧请求签名。callerProof签给auth-service、声明REFRESH_AUTHORIZATION、覆盖该hash/本次requestId/nonce；Auth核服务公钥、独立操作ACL和audience准入。不能把RESOLVE或VALIDATE证明跨类型复用。
+
+Auth先验证原context签名及真实actor/audience/期限，不要求原permissionRevision仍为最新，也不要求旧30秒freshness仍有效——否则无法修复收到版本通知后的DIRTY状态。但原context.expiresAt与runHardDeadline必须尚未到期；解析真实accessToken且actor一致，再读取当前MySQL授权、处理授予时间边界并核最新revision/status。旧credentialEpoch必须等于当前epoch：logout/密码或账号级失效不得靠原运行刷新跨越，需新外部认证续接；停用/删除用户直接拒绝。权限revision不能倒退，当前账号与操作仍须有效。
+
+返回新的完整稳定snapshot与freshness，签名context范围严格取 `originalContext.allowedOperations ∩ currentSnapshot.permissions`；管理员身份变化不能扩该范围。`runHardDeadline`原值保留，`expiresAt=min(originalContext.expiresAt, originalContext.runHardDeadline, currentAccessExpiresAt, currentGrantDeadline, refreshedAt+300秒)`，更早的原截止不被新增权限或更长token延长。actor/run/session/audience/policyDigest保持原值，新context的requestId/requestHash/nonce关联本次刷新；freshness从真实权威读取起算不超过30秒。
+
+签发前复核MySQL当前revision/epoch/status，竞争变更则返回409，不签已知陈旧结果；成功准入消费caller/key/nonce持久唯一记录，重复证明返回REPLAY_DETECTED。签发期间的通知竞争仍按原30秒有界失效语义处理。消费者 `AuthorizationSession.refresh` 继续验证三签、响应关联、单调版本、原身份、原范围及不延长期限，不因新增接口放宽本地守卫。没有剩余许可可返回有效空scope，后续受保护动作明确拒绝；原审批、已完成调用和未知副作用事实不变。
+
+验收必须执行真实provider→签名response→AuthorizationSession.refresh闭环：T0建立300秒run，T0+10改变permissionRevision后刷新成功但hardDeadline仍T0+300；原子域委托拒旧版本且接受刷新后的受限版本。增加撤权/再授予不扩scope、错actor/audience/run/session/policy、伪造原签名、错操作proof、nonce重放、epoch变化、access/context硬到期、签发并发版本变化和依赖失败反例。该接口不自动标记4.2/4.5完成，须实现与测试后更新KI-169。
+
 ### D8. MCP第一阶段只开放可验证服务
 
 InterviewMcpTools当前6个普通@Tool无真实provider bean，先完成明确ToolCallbackProvider/官方注册及专用HTTP鉴权过滤（或服务器支持的标准鉴权扩展）。MCP客户端在模型不可见的headers/transport上下文附binding；接收服务在新call执行入口调用Auth验证一次，同一调用内代码不逐步认证。外部MCP不支持用户委托时只允许清单标记的无私有数据能力，不把userId业务参数当身份。Supervisor动态连接管理仍需独立管理权限与地址防护。

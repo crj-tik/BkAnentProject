@@ -38,6 +38,42 @@ public class UserManagementService {
         this.passwordEncoder = passwordEncoder;
     }
 
+    private com.bkanent.auth.authorization.AuthAccountMutationService accountMutations;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void configureAuthorization(org.springframework.beans.factory.ObjectProvider<com.bkanent.auth.authorization.AuthAccountMutationService> mutations,
+                                       @org.springframework.beans.factory.annotation.Value("${auth.authorization.enabled:false}") boolean enabled) {
+        if (enabled) {
+            accountMutations = mutations.getIfAvailable();
+            if (accountMutations == null) throw new IllegalStateException("Account authorization writer required");
+        }
+    }
+
+    public boolean isVersionedAuthorization() { return accountMutations != null; }
+
+    public boolean isAuthorizedAccount(UserAccountEntity account) {
+        return account != null && Integer.valueOf(0).equals(account.getDeleted())
+                && "ACTIVE".equalsIgnoreCase(account.getAccountStatus())
+                && (isVersionedAuthorization() ? accountMutations.active(account.getId())
+                : isSupportedRole(account.getRoleCode()) && isActiveRole(account.getRoleCode()));
+    }
+
+    public com.bkanent.auth.authorization.EffectivePermissionService.Snapshot authorization(long userId) {
+        return accountMutations.snapshot(userId);
+    }
+
+    public com.bkanent.auth.dto.AuthUserManagementModels.CurrentUser currentUser(UserAccountEntity account) {
+        if (!isVersionedAuthorization()) return new com.bkanent.auth.dto.AuthUserManagementModels.CurrentUser(
+                account.getId(), account.getUsername(), account.getDisplayName(), account.getRoleCode(),
+                getRoleNameForCode(account.getRoleCode()), account.getTenantCode());
+        var snapshot = authorization(account.getId());
+        return new com.bkanent.auth.dto.AuthUserManagementModels.CurrentUser(account.getId(), account.getUsername(),
+                account.getDisplayName(), account.getRoleCode(), getRoleNameForCode(account.getRoleCode()), account.getTenantCode(),
+                snapshot.businessAdmin(), accountMutations.roles(account.getId()), snapshot.permissionRevision(), snapshot.credentialEpoch());
+    }
+
+    public void logout(String token) { accountMutations.logout(token); }
+
     public static boolean isSupportedRole(String roleCode) {
         return "ADMIN".equals(roleCode) || "BROKER".equals(roleCode);
     }
@@ -62,7 +98,7 @@ public class UserManagementService {
                         .eq(AuthRoleEntity::getAssignable, 1)
                         .orderByAsc(AuthRoleEntity::getId))
                 .stream()
-                .filter(role -> isSupportedRole(role.getRoleCode()))
+                .filter(role -> isVersionedAuthorization() || isSupportedRole(role.getRoleCode()))
                 .map(role -> new RoleOption(role.getRoleCode(), role.getRoleName(), role.getDescription()))
                 .toList();
     }
@@ -89,6 +125,20 @@ public class UserManagementService {
 
     @Transactional
     public UserItem createUser(CreateUserRequest request) {
+        return createUser(0, request);
+    }
+
+    public UserItem createUser(long actorId, CreateUserRequest request) {
+        return createUser(null, actorId, request);
+    }
+
+    public UserItem createUser(String accessToken, long actorId, CreateUserRequest request) {
+        if (isVersionedAuthorization()) {
+            try {
+                var account = accountMutations.create(accessToken, actorId, request);
+                return toUserItem(account, Map.of(account.getRoleCode(), roleName(account.getRoleCode())));
+            } catch (DuplicateKeyException duplicate) { throw conflict("账号已存在"); }
+        }
         String roleCode = request.roleCode().trim().toUpperCase(Locale.ROOT);
         if (userAccountMapper.selectCount(new LambdaQueryWrapper<UserAccountEntity>()
                 .eq(UserAccountEntity::getUsername, request.username())) > 0) {
@@ -116,6 +166,14 @@ public class UserManagementService {
 
     @Transactional
     public UserItem updateUser(long actorId, long userId, UpdateUserRequest request) {
+        return updateUser(null, actorId, userId, request);
+    }
+
+    public UserItem updateUser(String accessToken, long actorId, long userId, UpdateUserRequest request) {
+        if (isVersionedAuthorization()) {
+            var updated = accountMutations.update(accessToken, actorId, userId, request);
+            return toUserItem(updated, Map.of(updated.getRoleCode(), roleName(updated.getRoleCode())));
+        }
         UserAccountEntity account = requireUser(userId);
         String roleCode = request.roleCode().trim().toUpperCase(Locale.ROOT);
         findActiveRole(roleCode, true);
@@ -138,7 +196,12 @@ public class UserManagementService {
     }
 
     @Transactional
-    public void resetPassword(long userId, String password) {
+    public void resetPassword(long userId, String password) { resetPassword(0, userId, password); }
+
+    public void resetPassword(long actorId, long userId, String password) { resetPassword(null, actorId, userId, password); }
+
+    public void resetPassword(String accessToken, long actorId, long userId, String password) {
+        if (isVersionedAuthorization()) { accountMutations.resetPassword(accessToken, actorId, userId, password); return; }
         UserAccountEntity account = requireUser(userId);
         account.setPasswordHash(passwordEncoder.encode(password));
         account.setUpdatedAt(LocalDateTime.now());
@@ -146,7 +209,10 @@ public class UserManagementService {
     }
 
     @Transactional
-    public void deleteUser(long actorId, long userId) {
+    public void deleteUser(long actorId, long userId) { deleteUser(null, actorId, userId); }
+
+    public void deleteUser(String accessToken, long actorId, long userId) {
+        if (isVersionedAuthorization()) { accountMutations.delete(accessToken, actorId, userId); return; }
         UserAccountEntity account = requireUser(userId);
         if (account.getId().equals(actorId)) {
             throw forbidden("不能删除当前登录账号");

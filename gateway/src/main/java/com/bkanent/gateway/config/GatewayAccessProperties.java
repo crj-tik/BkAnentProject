@@ -11,6 +11,23 @@ import java.util.List;
 @ConfigurationProperties(prefix = "gateway.access")
 public class GatewayAccessProperties {
 
+    private GatewayAuthorizationProperties authorization;
+
+    public GatewayAccessProperties() { }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setAuthorization(GatewayAuthorizationProperties authorization) {
+        this.authorization = authorization;
+    }
+
+    public boolean isAuthorizationEnabled() { return authorization != null && authorization.isEnabled(); }
+
+    public boolean isWhitelisted(String path, String method) {
+        if (!isAuthorizationEnabled()) return isWhitelisted(path);
+        return authorization.getPublicRoutes().stream().anyMatch(rule -> rule.path().equals(path)
+                && rule.method().equals(method));
+    }
+
     private List<String> whitelistPrefixes = new ArrayList<>(List.of(
             "/auth/login",
             "/auth/logout",
@@ -28,6 +45,7 @@ public class GatewayAccessProperties {
     }
 
     public boolean isWhitelisted(String path) {
-        return whitelistPrefixes.stream().anyMatch(path::startsWith);
+        // A path-only call cannot establish a public rule in authorization mode.
+        return !isAuthorizationEnabled() && whitelistPrefixes.stream().anyMatch(path::startsWith);
     }
 }

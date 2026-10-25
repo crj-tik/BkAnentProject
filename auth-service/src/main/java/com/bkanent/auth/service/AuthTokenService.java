@@ -59,6 +59,32 @@ public class AuthTokenService {
         return issue(account, "refresh", properties.getRefreshTtlSeconds());
     }
 
+    private com.bkanent.auth.authorization.AuthorizationRepository authorizationRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void configureAuthorization(org.springframework.beans.factory.ObjectProvider<com.bkanent.auth.authorization.AuthorizationRepository> repositories,
+                                       @org.springframework.beans.factory.annotation.Value("${auth.authorization.enabled:false}") boolean enabled) {
+        if (enabled) {
+            authorizationRepository = repositories.getIfAvailable();
+            if (authorizationRepository == null) throw new IllegalStateException("Authorization repository required");
+        }
+    }
+
+    /** Only logout may recover a signed, unexpired access token already revoked by a previous attempt. */
+    public TokenPrincipal verifyForLogout(String token) {
+        TokenPrincipal principal = verify(token);
+        return principal != null && "access".equals(principal.tokenType()) ? principal : null;
+    }
+
+    public static String logoutDigest(String token) {
+        try {
+            return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(token.getBytes(StandardCharsets.UTF_8)));
+        } catch (java.security.NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("Token digest unavailable", exception);
+        }
+    }
+
     public boolean isValidAccessToken(String token) {
         TokenPrincipal principal = parse(token);
         return principal != null && "access".equals(principal.tokenType());
@@ -76,7 +102,9 @@ public class AuthTokenService {
 
     public TokenPrincipal parse(String token) {
         TokenPrincipal principal = verify(token);
-        if (principal == null || tokenRevocationStore.isRevoked(digest(token))) {
+        if (principal == null || authorizationRepository != null
+                && authorizationRepository.isLogoutRecorded(logoutDigest(token))
+                || tokenRevocationStore.isRevoked(digest(token))) {
             return null;
         }
         return principal;
@@ -101,7 +129,8 @@ public class AuthTokenService {
             return null;
         }
         String[] parts = token.split("\\.", -1);
-        if (parts.length != 3 || !TOKEN_VERSION.equals(parts[0])) {
+        if (parts.length != 3 || !TOKEN_VERSION.equals(parts[0])
+                || !isCanonicalSegment(parts[1]) || !isCanonicalSegment(parts[2])) {
             return null;
         }
         String payload = parts[0] + "." + parts[1];
@@ -151,6 +180,14 @@ public class AuthTokenService {
         } catch (Exception exception) {
             throw new IllegalStateException("unable to sign authentication token", exception);
         }
+    }
+
+    /** One token has one byte representation and therefore one revocation/logout digest. */
+    private static boolean isCanonicalSegment(String encoded) {
+        if (encoded.isEmpty() || !encoded.matches("[A-Za-z0-9_-]+")) return false;
+        try {
+            return ENCODER.encodeToString(DECODER.decode(encoded)).equals(encoded);
+        } catch (IllegalArgumentException invalid) { return false; }
     }
 
     private String decode(String encoded) {

@@ -153,8 +153,10 @@ public final class AuthorizationSession {
                 && next.credentialEpoch() >= context.credentialEpoch()
                 && next.permissionRevision() >= highestRevision && next.credentialEpoch() >= highestEpoch,
                 AuthzErrorCode.CONTEXT_CONFLICT);
-        // A wider signed context could otherwise escape through a subsequent delegation accessor.
-        AuthzContract.check(originalPolicyOperations.containsAll(next.allowedOperations()), AuthzErrorCode.PERMISSION_DENIED);
+        // A still-valid older context must not restore scope removed by an accepted refresh.
+        // Reject before replacing context so delegation accessors cannot expose regranted operations.
+        AuthzContract.check(originalPolicyOperations.containsAll(next.allowedOperations())
+                && allowedOperations.containsAll(next.allowedOperations()), AuthzErrorCode.PERMISSION_DENIED);
         AuthzContract.check(response.freshness().checkedAtEpochSecond() >= freshness.checkedAtEpochSecond()
                 && (response.freshness().checkedAtEpochSecond() != freshness.checkedAtEpochSecond()
                 || response.freshness().notAfterEpochSecond() <= freshness.notAfterEpochSecond()),
@@ -219,6 +221,7 @@ public final class AuthorizationSession {
     /** Dedicated server-side use only. These accessors must not be forwarded to logs/models. */
     public synchronized AuthorizationSnapshot snapshot() { return snapshot; }
     public synchronized AuthorizationContext context() { return context; }
+    public synchronized AuthzFreshness freshness() { return freshness; }
     public synchronized List<String> allowedOperations() { return allowedOperations; }
     public synchronized AuthorizationKey key() { return AuthorizationKey.of(snapshot); }
     public synchronized long effectiveDeadlineEpochSecond() {

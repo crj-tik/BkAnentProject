@@ -69,8 +69,7 @@ public class AuthController {
         UserAccountEntity account = userAccountService.findByUsername(request.username());
         if (account == null || !Integer.valueOf(0).equals(account.getDeleted())
                 || !"ACTIVE".equalsIgnoreCase(account.getAccountStatus())
-                || !UserManagementService.isSupportedRole(account.getRoleCode())
-                || !userManagementService.isActiveRole(account.getRoleCode())
+                || !hasAccountAuthorization(account)
                 || !passwordEncoder.matches(request.password(), account.getPasswordHash())) {
             return ApiResponse.fail("AUTH_401", "invalid username or password");
         }
@@ -101,8 +100,7 @@ public class AuthController {
         UserAccountEntity account = userAccountService.getById(principal.userId());
         if (account == null || !Integer.valueOf(0).equals(account.getDeleted())
                 || !"ACTIVE".equalsIgnoreCase(account.getAccountStatus())
-                || !UserManagementService.isSupportedRole(account.getRoleCode())
-                || !userManagementService.isActiveRole(account.getRoleCode())) {
+                || !hasAccountAuthorization(account)) {
             return ApiResponse.fail("AUTH_401", "账号已停用或权限已失效");
         }
         // 一次性轮换：旧 refresh token 用后即废。token 无 nonce、秒级时间戳，
@@ -128,7 +126,8 @@ public class AuthController {
             String token = authorization.regionMatches(true, 0, "Bearer ", 0, 7)
                     ? authorization.substring(7).trim()
                     : authorization.trim();
-            authTokenService.revoke(token);
+            if (userManagementService.isVersionedAuthorization()) userManagementService.logout(token);
+            else authTokenService.revoke(token);
         }
         return ApiResponse.ok(null);
     }
@@ -137,9 +136,7 @@ public class AuthController {
     public ApiResponse<CurrentUser> currentUser(
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
         UserAccountEntity account = requireAuthenticatedAccount(authorization);
-        return ApiResponse.ok(new CurrentUser(account.getId(), account.getUsername(), account.getDisplayName(),
-                account.getRoleCode(), userManagementService.getRoleNameForCode(account.getRoleCode()),
-                account.getTenantCode()));
+        return ApiResponse.ok(userManagementService.currentUser(account));
     }
 
     @GetMapping("/roles")
@@ -165,9 +162,10 @@ public class AuthController {
     public ResponseEntity<ApiResponse<UserItem>> createUser(
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
             @Valid @RequestBody CreateUserRequest request) {
-        requireAdmin(authorization);
+        UserAccountEntity actor = requireAdmin(authorization);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.ok(userManagementService.createUser(request)));
+                .body(ApiResponse.ok(userManagementService.isVersionedAuthorization()
+                        ? userManagementService.createUser(accessToken(authorization), actor.getId(), request) : userManagementService.createUser(request)));
     }
 
     @PutMapping("/users/{userId}")
@@ -176,7 +174,9 @@ public class AuthController {
             @PathVariable("userId") long userId,
             @Valid @RequestBody UpdateUserRequest request) {
         UserAccountEntity actor = requireAdmin(authorization);
-        return ApiResponse.ok(userManagementService.updateUser(actor.getId(), userId, request));
+        return ApiResponse.ok(userManagementService.isVersionedAuthorization()
+                ? userManagementService.updateUser(accessToken(authorization), actor.getId(), userId, request)
+                : userManagementService.updateUser(actor.getId(), userId, request));
     }
 
     @PutMapping("/users/{userId}/password")
@@ -184,8 +184,9 @@ public class AuthController {
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
             @PathVariable("userId") long userId,
             @Valid @RequestBody ResetPasswordRequest request) {
-        requireAdmin(authorization);
-        userManagementService.resetPassword(userId, request.password());
+        UserAccountEntity actor = requireAdmin(authorization);
+        if (userManagementService.isVersionedAuthorization()) userManagementService.resetPassword(accessToken(authorization), actor.getId(), userId, request.password());
+        else userManagementService.resetPassword(userId, request.password());
         return ApiResponse.ok(null);
     }
 
@@ -194,7 +195,8 @@ public class AuthController {
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
             @PathVariable("userId") long userId) {
         UserAccountEntity actor = requireAdmin(authorization);
-        userManagementService.deleteUser(actor.getId(), userId);
+        if (userManagementService.isVersionedAuthorization()) userManagementService.deleteUser(accessToken(authorization), actor.getId(), userId);
+        else userManagementService.deleteUser(actor.getId(), userId);
         return ApiResponse.ok(null);
     }
 
@@ -205,16 +207,31 @@ public class AuthController {
 
     private UserAccountEntity requireAdmin(String authorization) {
         UserAccountEntity account = requireAuthenticatedAccount(authorization);
-        if (!"ADMIN".equals(account.getRoleCode())) {
+        boolean permitted;
+        if (userManagementService.isVersionedAuthorization()) {
+            var snapshot = userManagementService.authorization(account.getId());
+            permitted = snapshot.businessAdmin() && snapshot.hasPermission("auth.users.manage", java.time.Instant.now());
+        } else permitted = "ADMIN".equals(account.getRoleCode());
+        if (!permitted) {
             throw new UserManagementException(HttpStatus.FORBIDDEN, "AUTH_FORBIDDEN", "需要管理员权限");
         }
         return account;
     }
 
-    private UserAccountEntity requireAuthenticatedAccount(String authorization) {
-        String token = authorization != null && authorization.regionMatches(true, 0, "Bearer ", 0, 7)
+    private boolean hasAccountAuthorization(UserAccountEntity account) {
+        return userManagementService.isVersionedAuthorization() ? userManagementService.isAuthorizedAccount(account)
+                : UserManagementService.isSupportedRole(account.getRoleCode())
+                  && userManagementService.isActiveRole(account.getRoleCode());
+    }
+
+    private static String accessToken(String authorization) {
+        return authorization != null && authorization.regionMatches(true, 0, "Bearer ", 0, 7)
                 ? authorization.substring(7).trim()
                 : authorization == null ? null : authorization.trim();
+    }
+
+    private UserAccountEntity requireAuthenticatedAccount(String authorization) {
+        String token = accessToken(authorization);
         AuthTokenService.TokenPrincipal principal = authTokenService.parse(token);
         if (principal == null || !"access".equals(principal.tokenType())) {
             throw new UserManagementException(HttpStatus.UNAUTHORIZED, "AUTH_UNAUTHORIZED", "登录状态已失效");
@@ -222,8 +239,7 @@ public class AuthController {
         UserAccountEntity account = userAccountService.getById(principal.userId());
         if (account == null || !Integer.valueOf(0).equals(account.getDeleted())
                 || !"ACTIVE".equalsIgnoreCase(account.getAccountStatus())
-                || !UserManagementService.isSupportedRole(account.getRoleCode())
-                || !userManagementService.isActiveRole(account.getRoleCode())) {
+                || !hasAccountAuthorization(account)) {
             throw new UserManagementException(HttpStatus.UNAUTHORIZED, "AUTH_UNAUTHORIZED", "账号已停用或权限已失效");
         }
         return account;

@@ -1446,13 +1446,15 @@
 
 **关联**：LR-96；change 11.6。
 
-## KI-169 [OPEN·P1] 版本权限上下文缺少同run受限刷新协议
+## KI-169 [FIXED·本提交·P1] 版本权限上下文缺少同run受限刷新协议
 
 **确认依据**：`unify-versioned-permission-context` apply基础批次代码复核，非部署或利用测试。入口 `resolveRequestAuthorization` 每次按当前认证时间建立新300秒hard deadline；`validateDelegation` 要求父revision/epoch/hash等于当前真源。权限变化后旧父委托被拒，重新入口取得的期限又超过原run截止，`AuthorizationSession.refresh` 正确拒绝其扩大期限/范围，导致没有合法同run刷新路径。
 
-**处置**：暂停任务4.2/4.5及其后consumer接线完成认定；需在既有设计目标内明确携原context、真实凭据及来源证明的刷新协议，保持actor/run/session/policy/原截止并只采用新权限交集。不能用放宽本地期限或允许旧parent扩权修补。MySQL权限基础、共享签名、本地缓存与边界守卫已实现，Auth新协议/管理API默认关闭；Redis发布调度、通知和消费接线未完成。
+**修复**：用户确认独立 `refreshAuthorization(accessToken, originalContext, requestBinding, callerProof)`。新操作/规范hash与原证明分域，验证真实凭据actor、原签名scope、audience、run/session/policy、当前credentialEpoch及原硬截止，允许旧permissionRevision刷新但不扩大权限或期限。响应绑定本次request/hash/nonce；本地Session同时限制原政策与当前已收缩scope，旧宽context不得恢复已撤回的运行许可。provider→Session.refresh闭环、错身份/期限/nonce/epoch、版本竞争和撤权再授反例通过。
 
-**关联**：LR-103；任务4.2/4.5/5.2/6.1。413项定向回归通过不包含未实现的同run刷新链。
+**验证边界**：276项最终定向回归以及全23模块1519项回归失败/错误0、跳过14；跳过为既有外部依赖门控。Auth新协议仍默认关闭；Redis发布和本地监控基础已写，Gateway/Agent实际run关联、Graph/业务域消费和部署未完成，见KI-170，不能把协议修复称为全链上线。
+
+**关联**：LR-103/105；任务4.2/4.5/5.2/6.1。
 
 ## KI-168 [FIXED·401c583·P1] Supervisor审计、治理与请求会话边界未统一
 
@@ -1461,6 +1463,20 @@
 **验证边界**：新增MockMvc/H2/请求scope反例及原Graph30回归通过，完整定向413项失败/错误/跳过0；未部署，未修KI-128异步状态查询根因。当前许可仍使用旧Auth精确查询，相关新增read码在未迁移目录时fail-closed，不能声称新版本授权consumer已接通。异步提交到run持久登记之间的并发窗口留任务5.5/5.7验收。
 
 **关联**：LR-104；任务5.5/5.6/5.7；KI-79/80。
+
+## KI-170 [OPEN·P1] 新Gateway授权上下文尚未绑定Supervisor实际运行关联
+
+**确认依据**：本轮版本化入口实现复核，Gateway签实际body/path/query/audience，但context.runId/sessionId目前null。Supervisor从业务requestId/session生成实际执行身份；新委托/刷新协议明确要求原signed run/session不变，因此不能把null入口证明直接用于实际run。Agent在chat/supervisor bind/capture显式409，不把普通metadata填入签名上下文；新开关默认关闭。
+
+**处置**：任务4.3/4.4/5.x/6.x保持未完成。需在精确执行入口定义非授权关联标签的签发/消费契约：业务requestId、continueRunId、sessionId只是定位，仍由持久owner和幂等真源验证；缺省、重投和续接须一致，不能简单Gateway随机session覆盖原会话，也不能在consumer重签原Auth证明。header预算/公开规则/直接服务独立认证与该关联一起成组验收后才能启用，不放宽scope/deadline或提供legacy回退。
+
+**关联**：LR-105；change `unify-versioned-permission-context`。当前单次入口验签/真实字节绑定原型和Redis本地监控已通过fixture，不代表完整业务run能运行。
+
+## KI-171 [FIXED·本提交·P1] Token编码别名绕过按原串摘要的注销
+
+**确认与修复**：旧verify只解码签名比对，合法填充或非零pad-bit别名可保持签名字节不变却产生不同SQL/Redis撤销摘要。payload与signature现在均要求规范unpadded Base64URL，拒绝别名，不通过改token格式或弱化签名修复。新增parse/revoke/verifyForLogout和logout幂等反例通过；角色/账号新模式仍独立校验。
+
+**关联**：LR-105；AuthTokenServiceTest、AuthAccountMutationServiceTest。本提交同时修复账号写入只保留actor而丢失真实凭据的竞争：密码计算后writer锁内复验实际access/actor/当前管理权限，注销/到期时零账号写与审计副作用。
 
 ---
 

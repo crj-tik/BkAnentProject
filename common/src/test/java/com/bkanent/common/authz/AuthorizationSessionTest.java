@@ -118,6 +118,41 @@ class AuthorizationSessionTest {
     }
 
     @Test
+    void refreshCannotRestoreScopeRemovedByPreviouslyAcceptedRefresh() throws Exception {
+        var key = keyPair();
+        var clock = new MutableClock(NOW);
+        var c1 = response(key, 7, 0, PERMISSIONS, "run-1", "session-1", NOW, NOW + 300, NOW + 300);
+        var session = session(c1, key, clock, cache());
+        clock.set(NOW + 10);
+        session.onNotification("123", 8, 0);
+        var c2 = response(key, 8, 0, List.of("interview.read"), "run-1", "session-1", NOW + 10, NOW + 300, NOW + 300);
+        session.refresh(c2, correlation(c2));
+        assertEquals(List.of("interview.read"), session.allowedOperations());
+        clock.set(NOW + 20);
+        session.onNotification("123", 9, 0);
+        // C3 has newer authority and valid signatures, but was refreshed from wider, still-valid C1.
+        var c3 = response(key, 9, 0, PERMISSIONS, "run-1", "session-1", NOW + 20, NOW + 300, NOW + 300);
+        assertCode(AuthzErrorCode.PERMISSION_DENIED, () -> session.refresh(c3, correlation(c3)));
+        assertSame(c2.context(), session.context());
+        assertSame(c2.snapshot(), session.snapshot());
+        assertSame(c2.freshness(), session.freshness());
+        assertEquals(List.of("interview.read"), session.allowedOperations());
+        assertEquals(AuthorizationLocalState.DIRTY, session.state());
+        var limited = response(key, 9, 0, List.of("interview.read"), "run-1", "session-1", NOW + 20, NOW + 300, NOW + 300);
+        session.refresh(limited, correlation(limited));
+        assertEquals(AuthorizationLocalState.VALID, session.state());
+        assertCode(AuthzErrorCode.PERMISSION_DENIED, () -> session.requirePermission("memory.read"));
+        clock.set(NOW + 21);
+        var empty = response(key, 10, 0, List.of(), "run-1", "session-1", NOW + 21, NOW + 300, NOW + 300);
+        session.refresh(empty, correlation(empty));
+        clock.set(NOW + 22);
+        var restoresAfterEmpty = response(key, 11, 0, List.of("interview.read"), "run-1", "session-1", NOW + 22, NOW + 300, NOW + 300);
+        assertCode(AuthzErrorCode.PERMISSION_DENIED, () -> session.refresh(restoresAfterEmpty, correlation(restoresAfterEmpty)));
+        assertSame(empty.context(), session.context());
+        assertEquals(List.of(), session.allowedOperations());
+    }
+
+    @Test
     void refreshCannotReplaceActorRunSessionPolicyAudienceOrFixedDeadlines() throws Exception {
         var key = keyPair();
         var clock = new MutableClock(NOW + 1);

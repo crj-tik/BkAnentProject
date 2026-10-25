@@ -9,25 +9,25 @@
 - [x] 2.1 增量创建权限目录、role_permission、user_role有效期和business_admin字段迁移；ADMIN/BROKER受控映射，fresh/upgrade/repeat不删除用户或未知角色数据。
 - [x] 2.2 实现显式权限计算：多角色去重并集、有效期、停用/删除、管理员所有登记有效权限、未知码拒绝；增加任意前后缀及自提权反例。
 - [x] 2.3 实现受鉴权的角色组合/用户授予/管理员维护与审计API，普通用户拒绝管理写；真实操作目录只通过受管登记维护。
-- [ ] 2.4 为用户加入permission_revision/credential_epoch与授权outbox；账号停用、角色关联/权限/管理员/目录变化同事务递增版本并写待发布事件。
-- [ ] 2.5 实现授予到期扫描与版本发布；logout按现有token撤销并产生用户credential_epoch失效事件，不宣称精准设备会话撤销。
+- [x] 2.4 为用户加入permission_revision/credential_epoch与授权outbox；账号停用、角色关联/权限/管理员/目录变化同事务递增版本并写待发布事件。
+- [x] 2.5 实现授予到期扫描与版本发布；logout按现有token撤销并产生用户credential_epoch失效事件，不宣称精准设备会话撤销。
 
 ## 3. Redis快照、发布与通知
 
-- [ ] 3.1 实现Auth唯一writer的用户级不可变snapshot与head结构，签名hash、有效期、同用户hash-slot及Lua单调CAS；消费者不得按run复制集合或从旧内存回写。
-- [ ] 3.2 实现outbox有界领取epoch、事务外最新版本装配、snapshot先写/head后切/通知最后发的顺序和失败恢复；乱序、重复、缺snapshot、迟到事件均不能回退版本。
+- [x] 3.1 实现Auth唯一writer的用户级不可变snapshot与head结构，签名hash、有效期、同用户hash-slot及Lua单调CAS；消费者不得按run复制集合或从旧内存回写。
+- [x] 3.2 实现outbox有界领取epoch、事务外最新版本装配、snapshot先写/head后切/通知最后发的顺序和失败恢复；乱序、重复、缺snapshot、迟到事件均不能回退版本。
 - [ ] 3.3 实现Redis权限namespace与channel ACL及受保护连接：Auth可写并发布指定channel，消费者只读精确key并订阅指定channel；写管理员/权限/TTL、PUBLISH/SPUBLISH及跨channel均拒绝，覆盖订阅成功和非法发布反例，缺配置不得启用。
-- [ ] 3.4 实现Auth每5秒MySQL/outbox核验及独立签名FreshnessAttestation，绑定user/revision/epoch/status/hash/真实checkedAt/notAfter；发布前重核MySQL和head CAS，迟到核验/更新竞争不能以完成时刻续窗，缓存GET不能续期。
+- [x] 3.4 实现Auth每5秒MySQL/outbox核验及独立签名FreshnessAttestation，绑定user/revision/epoch/status/hash/真实checkedAt/notAfter；发布前重核MySQL和head CAS，迟到核验/更新竞争不能以完成时刻续窗，缓存GET不能续期。
 - [ ] 3.5 接入权限版本Pub/Sub通知和消费者去重失效，消息不含token/正文/权限全集；单飞刷新和版本比较拒绝旧通知覆盖新状态。
 - [ ] 3.6 实现活跃用户10秒批量对账、30秒权威新鲜度上限和硬到期；验证通知丢失、Redis失联、Auth发布阻塞时旧权限不会无限延长。
 
 ## 4. 共享可信授权协议与入口
 
 - [x] 4.1 在common定义框架无关snapshot/context/delegation/status/error DTO、规范hash和协议域Ed25519签名；上下文包含actor/version/credential epoch/受众/请求政策与期限，序列化无框架凭据泄漏。
-- [ ] 4.2 新增原生Dubbo resolveRequestAuthorization与validateDelegation接口/实现，注册独立caller-operation ACL；覆盖nonce/bodyHash/目标/task/父范围/原actor/期限及响应关联，未知key或算法拒绝。
+- [x] 4.2 新增原生Dubbo resolveRequestAuthorization、validateDelegation和独立refreshAuthorization接口/实现，注册各自caller-operation ACL；刷新携真实access和原context，保持actor/run/session/audience/policy/原scope及hard期限、当前credentialEpoch，覆盖跨操作proof、nonce/body/身份篡改/版本竞争及provider→本地refresh闭环，未知key/算法拒绝。
 - [ ] 4.3 Gateway对实际转发原始body计算有界hash，绑定method/original-target path/query/audience/requestId与授权签名，下游解析前复算；覆盖路径rewrite/重复query/空body/MCP实际JSON篡改，拒超限或不支持流式body；清除伪造头，精确公开path+method及POST refresh回归。
 - [ ] 4.4 Agent filter/principal消费有效入口证明，移除同请求四次resolve重复；直接业务HTTP无可信入口证明时独立认证，不信固定marker。
-- [ ] 4.5 分离稳定权限snapshot与新鲜证明/签发context，300秒runHardDeadline固定不被同版重建/刷新重置，子context≤父期限/run截止/授予期限、请求证明≤60秒；覆盖同版缓存回收、子委托和到期反例，重启原owner重认证。
+- [x] 4.5 分离稳定权限snapshot与新鲜证明/签发context，300秒runHardDeadline固定不被同版重建/刷新重置，子context≤父期限/run截止/授予期限、请求证明≤60秒；覆盖同版缓存回收、子委托和到期反例，重启原owner重认证。
 - [ ] 4.6 login/refresh/me与UserManagement迁移可信businessAdmin+多角色集合，旧roleCode只兼容展示；无角色管理员正常认证/管理，logout仅提交token吊销+全用户旧run重认证（非全设备退出），覆盖其他有效token重入和重复注销幂等。
 
 ## 5. Supervisor本地权限与资源守卫

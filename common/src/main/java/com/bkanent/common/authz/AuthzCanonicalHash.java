@@ -47,6 +47,15 @@ public final class AuthzCanonicalHash {
         return digest(encode("resolve-request", List.of(credentialDigest, requestFields(binding))));
     }
 
+    /** Independent refresh type binds real token possession, the complete signed original and new request. */
+    public static String refreshRequestHash(String token, AuthorizationContext original, RequestBinding binding) {
+        AuthzContract.text(token, 16384);
+        AuthzContract.require(original != null && original.signature() != null && binding != null);
+        String credentialDigest = digest(encode("credential", List.of(token)));
+        return digest(encode("refresh-request", Arrays.asList(credentialDigest, contextFields(original),
+                original.algorithm(), original.keyId(), original.signature(), requestFields(binding))));
+    }
+
     /** The actual signed parent is covered, not just its globally shared snapshot hash. */
     public static String delegationRequestHash(AuthorizationContext parent, DelegationBinding binding) {
         AuthzContract.require(parent != null && binding != null && parent.signature() != null);

@@ -8,12 +8,15 @@ import com.bkanent.common.authz.*;
 import com.bkanent.common.security.ServiceIdentityCrypto;
 import org.apache.dubbo.config.annotation.DubboService;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.time.Clock;
 import java.time.Instant;
+import java.util.Objects;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -29,9 +32,24 @@ public class AuthAuthorizationRpcServiceImpl implements AuthAuthorizationRpcServ
     private final AuthAuthorizationProperties properties;
     private final PrivateKey signingKey;
     private final Map<String, PublicKey> authorityKeys;
+    private final Clock clock;
+    private org.springframework.beans.factory.ObjectProvider<com.bkanent.auth.authorization.redis.AuthorizationOutboxPublisher> publisher;
 
+    @Autowired
+    public void setPublisher(org.springframework.beans.factory.ObjectProvider<com.bkanent.auth.authorization.redis.AuthorizationOutboxPublisher> publisher) {
+        this.publisher = publisher;
+    }
+
+    @Autowired
     public AuthAuthorizationRpcServiceImpl(AuthTokenService tokens, AuthorizationRepository repository,
                                            AuthAuthorizationProperties properties) {
+        this(tokens, repository, properties, Clock.systemUTC());
+    }
+
+    /** Clock injection keeps deadline and authority-race tests deterministic. */
+    public AuthAuthorizationRpcServiceImpl(AuthTokenService tokens, AuthorizationRepository repository,
+                                           AuthAuthorizationProperties properties, Clock clock) {
+        this.clock = Objects.requireNonNull(clock);
         this.tokens = tokens;
         this.repository = repository;
         this.properties = properties;
@@ -43,7 +61,7 @@ public class AuthAuthorizationRpcServiceImpl implements AuthAuthorizationRpcServ
     @Override
     public AuthzResponse resolveRequestAuthorization(String token, RequestBinding binding, CallerProof proof) {
         try {
-            Instant checkedAt = Instant.now();
+            Instant checkedAt = clock.instant();
             require(binding != null && proof != null, AuthzErrorCode.AUTHENTICATION_REQUIRED);
             require(binding.issuedAtEpochSecond() <= checkedAt.getEpochSecond()
                     && binding.expiresAtEpochSecond() > checkedAt.getEpochSecond(), AuthzErrorCode.EXPIRED);
@@ -52,16 +70,62 @@ public class AuthAuthorizationRpcServiceImpl implements AuthAuthorizationRpcServ
                     AUTH_AUDIENCE, AuthzRpcOperation.RESOLVE_REQUEST_AUTHORIZATION, binding.requestId(),
                     requestHash, binding.nonce(), checkedAt);
             require(caller.getAudiences().contains(binding.audience()), AuthzErrorCode.PERMISSION_DENIED);
-            AuthTokenService.TokenPrincipal principal = tokens.parse(token);
-            require(principal != null && "access".equals(principal.tokenType()), AuthzErrorCode.AUTHENTICATION_FAILED);
+            AuthTokenService.TokenPrincipal principal = accessPrincipal(token, checkedAt);
             var facts = load(principal.userId(), checkedAt);
             long hardDeadline = AuthzDeadlines.entryRunHardDeadline(checkedAt.getEpochSecond(),
                     principal.expiresAt(), deadline(facts));
             requireCurrent(facts);
             consume(proof, checkedAt);
-            return response(facts, facts.permissions(), binding.audience(), binding.requestId(), binding.runId(),
+            return registerActive(response(facts, facts.permissions(), binding.audience(), binding.requestId(), binding.runId(),
                     binding.sessionId(), binding.policyDigest(), requestHash, binding.nonce(), checkedAt,
-                    hardDeadline, hardDeadline);
+                    hardDeadline, hardDeadline));
+        } catch (AuthzException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new AuthzException(AuthzErrorCode.AUTHORIZATION_UNAVAILABLE);
+        }
+    }
+
+    @Override
+    public AuthzResponse refreshAuthorization(String token, AuthorizationContext original,
+                                              RequestBinding binding, CallerProof proof) {
+        try {
+            Instant checkedAt = clock.instant();
+            require(original != null && binding != null && proof != null, AuthzErrorCode.AUTHENTICATION_REQUIRED);
+            AuthzSignature.verifyRefreshBinding(original, binding, authorityKeys, checkedAt);
+            String requestHash = AuthzCanonicalHash.refreshRequestHash(token, original, binding);
+            var caller = verifyProof(proof, binding.callerService(), AUTH_AUDIENCE,
+                    AuthzRpcOperation.REFRESH_AUTHORIZATION, binding.requestId(), requestHash,
+                    binding.nonce(), checkedAt);
+            require(caller.getAudiences().contains(original.audience()), AuthzErrorCode.PERMISSION_DENIED);
+            var principal = accessPrincipal(token, checkedAt);
+            require(Long.toString(principal.userId()).equals(original.actorId()), AuthzErrorCode.CONTEXT_CONFLICT);
+            // Start the freshness window before the authoritative read, not at response completion.
+            checkedAt = clock.instant();
+            var facts = load(principal.userId(), checkedAt);
+            require(facts.credentialEpoch() == original.credentialEpoch()
+                    && facts.permissionRevision() >= original.permissionRevision(), AuthzErrorCode.CONTEXT_CONFLICT);
+            require(facts.permissionRevision() != original.permissionRevision()
+                    || AuthzCanonicalHash.snapshotHash(snapshot(facts)).equals(original.permissionHash()),
+                    AuthzErrorCode.CONTEXT_CONFLICT);
+            List<String> operations = original.allowedOperations().stream().filter(facts.permissions()::contains).toList();
+            long expiry = Math.min(principal.expiresAt(), AuthzDeadlines.contextExpiresAt(checkedAt.getEpochSecond(),
+                    original.expiresAtEpochSecond(), original.runHardDeadlineEpochSecond(), deadline(facts)));
+            require(expiry > checkedAt.getEpochSecond(), AuthzErrorCode.EXPIRED);
+            requireCurrent(facts);
+            // Validate all deadlines before consuming the durable proof. No business work occurs here.
+            AuthzResponse response = response(facts, operations, original.audience(), binding.requestId(),
+                    original.runId(), original.sessionId(), original.policyDigest(), requestHash, binding.nonce(),
+                    checkedAt, expiry, original.runHardDeadlineEpochSecond());
+            requireCurrent(facts);
+            Instant admittedAt = clock.instant();
+            AuthzSignature.verifyRefreshBinding(original, binding, authorityKeys, admittedAt);
+            verifyProof(proof, binding.callerService(), AUTH_AUDIENCE, AuthzRpcOperation.REFRESH_AUTHORIZATION,
+                    binding.requestId(), requestHash, binding.nonce(), admittedAt);
+            AuthzSignature.verifyResponse(response, original.audience(), binding.requestId(), requestHash,
+                    binding.nonce(), authorityKeys, admittedAt);
+            consume(proof, admittedAt);
+            return registerActive(response);
         } catch (AuthzException exception) {
             throw exception;
         } catch (RuntimeException exception) {
@@ -73,7 +137,7 @@ public class AuthAuthorizationRpcServiceImpl implements AuthAuthorizationRpcServ
     public AuthzResponse validateDelegation(AuthorizationContext parent, DelegationBinding binding,
                                            CallerProof originProof, CallerProof receiverProof) {
         try {
-            Instant checkedAt = Instant.now();
+            Instant checkedAt = clock.instant();
             require(parent != null && binding != null, AuthzErrorCode.AUTHENTICATION_REQUIRED);
             AuthzSignature.verifyDelegationBinding(parent, binding, binding, authorityKeys, checkedAt);
             String requestHash = AuthzCanonicalHash.delegationRequestHash(parent, binding);
@@ -109,6 +173,18 @@ public class AuthAuthorizationRpcServiceImpl implements AuthAuthorizationRpcServ
         }
     }
 
+    private AuthzResponse registerActive(AuthzResponse response) {
+        if (publisher != null) {
+            var service = publisher.getIfAvailable();
+            if (service != null) {
+                var context = response.context();
+                service.registerActive(Long.parseLong(context.actorId()), Instant.ofEpochSecond(
+                        Math.min(context.expiresAtEpochSecond(), context.runHardDeadlineEpochSecond())));
+            }
+        }
+        return response;
+    }
+
     private AuthAuthorizationProperties.TrustedCaller verifyProof(CallerProof proof, String callerService,
                                                                   String audience, AuthzRpcOperation operation,
                                                                   String requestId, String requestHash,
@@ -122,6 +198,14 @@ public class AuthAuthorizationRpcServiceImpl implements AuthAuthorizationRpcServ
         AuthzSignature.verifyCallerProof(proof, callerService, audience, operation, requestId, requestHash,
                 nonce, operations, Map.of(proof.keyId(), key), now);
         return caller;
+    }
+
+    private AuthTokenService.TokenPrincipal accessPrincipal(String token, Instant now) {
+        require(!repository.isLogoutRecorded(sha256Utf8(token)), AuthzErrorCode.AUTHENTICATION_FAILED);
+        var principal = tokens.parse(token);
+        require(principal != null && "access".equals(principal.tokenType()), AuthzErrorCode.AUTHENTICATION_FAILED);
+        require(principal.expiresAt() > now.getEpochSecond(), AuthzErrorCode.EXPIRED);
+        return principal;
     }
 
     private EffectivePermissionService.Snapshot load(long userId, Instant now) {
@@ -155,7 +239,7 @@ public class AuthAuthorizationRpcServiceImpl implements AuthAuthorizationRpcServ
                 facts.permissionRevision(), facts.credentialEpoch(), AuthorizationStatus.ACTIVE, hash, now,
                 AuthzDeadlines.freshnessNotAfter(now), nonce, AuthzContract.ALGORITHM,
                 properties.getResponseKeyId(), null), signingKey);
-        require(Instant.now().getEpochSecond() < freshness.notAfterEpochSecond(), AuthzErrorCode.EXPIRED);
+        require(clock.instant().getEpochSecond() < Math.min(expiry, freshness.notAfterEpochSecond()), AuthzErrorCode.EXPIRED);
         return new AuthzResponse(snapshot, context, freshness);
     }
 
@@ -170,14 +254,15 @@ public class AuthAuthorizationRpcServiceImpl implements AuthAuthorizationRpcServ
     }
 
     private void consume(CallerProof proof, Instant now) {
-        require(repository.consumeNonce(proof.callerService(), proof.keyId(), nonceHash(proof.nonce()), now,
+        require(repository.consumeNonce(proof.callerService(), proof.keyId(), sha256Utf8(proof.nonce()), now,
                 Instant.ofEpochSecond(proof.expiresAtEpochSecond())), AuthzErrorCode.REPLAY_DETECTED);
     }
 
-    private static String nonceHash(String nonce) {
+    /** Raw SHA-256 UTF-8 storage digest; not the framed canonical credential/proof hash. */
+    private static String sha256Utf8(String value) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
-                    .digest(nonce.getBytes(StandardCharsets.UTF_8)));
+                    .digest(value.getBytes(StandardCharsets.UTF_8)));
         } catch (java.security.NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 unavailable");
         }

@@ -1,3 +1,9 @@
+# Opt-in only. Enabled mode also requires managed signing keys and exact audience mappings.
+gateway:
+  authorization:
+    enabled: false
+    max-body-bytes: 1048576
+
 server:
   port: 5010
 

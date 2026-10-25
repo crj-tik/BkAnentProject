@@ -50,6 +50,11 @@ public class AuthPermissionRpcServiceImpl implements AuthPermissionRpcService {
         if (userId == null || !StringUtils.hasText(permissionCode)) {
             return false;
         }
+        if (userManagementService.isVersionedAuthorization()) {
+            try {
+                return userManagementService.authorization(userId).hasPermission(permissionCode, java.time.Instant.now());
+            } catch (com.bkanent.auth.service.UserManagementException missing) { return false; }
+        }
         UserAccountEntity account = userAccountService.getById(userId);
         if (!isActive(account)) return false;
         if (java.util.Set.of("agent.rag.manage", "agent.vector-store.manage", "agent.mcp.vector-store.manage",
@@ -68,6 +73,7 @@ public class AuthPermissionRpcServiceImpl implements AuthPermissionRpcService {
     }
 
     private boolean isActive(UserAccountEntity account) {
+        if (userManagementService.isVersionedAuthorization()) return userManagementService.isAuthorizedAccount(account);
         return account != null && Integer.valueOf(0).equals(account.getDeleted())
                 && "ACTIVE".equalsIgnoreCase(account.getAccountStatus())
                 && UserManagementService.isSupportedRole(account.getRoleCode())

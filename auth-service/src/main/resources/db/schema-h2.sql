@@ -6,6 +6,7 @@ CREATE TABLE user_account (
     role_code VARCHAR(32) NOT NULL,
     tenant_code VARCHAR(64) NOT NULL,
     account_status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    business_admin INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted INT NOT NULL DEFAULT 0
@@ -22,3 +23,33 @@ CREATE TABLE auth_role (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted INT NOT NULL DEFAULT 0
 );
+
+CREATE TABLE auth_permission (
+    permission_code VARCHAR(160) PRIMARY KEY, domain VARCHAR(64) NOT NULL,
+    operation VARCHAR(96) NOT NULL, active INT NOT NULL DEFAULT 1, version BIGINT NOT NULL DEFAULT 1
+);
+CREATE TABLE auth_role_permission (role_id BIGINT NOT NULL, permission_code VARCHAR(160) NOT NULL,
+    PRIMARY KEY(role_id,permission_code));
+CREATE TABLE auth_user_role (user_id BIGINT NOT NULL, role_id BIGINT NOT NULL,
+    valid_from TIMESTAMP, valid_until TIMESTAMP, active INT NOT NULL DEFAULT 1,
+    PRIMARY KEY(user_id,role_id));
+CREATE TABLE auth_user_authorization_state (user_id BIGINT PRIMARY KEY,
+    permission_revision BIGINT NOT NULL DEFAULT 1, credential_epoch BIGINT NOT NULL DEFAULT 1,
+    status VARCHAR(16) NOT NULL, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE auth_authorization_outbox (event_id VARCHAR(64) PRIMARY KEY,
+    affected_users CLOB NOT NULL, revisions CLOB NOT NULL, reason VARCHAR(96) NOT NULL,
+    committed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, status VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    attempts INT NOT NULL DEFAULT 0, lease_epoch BIGINT NOT NULL DEFAULT 0, lease_until TIMESTAMP,
+    next_attempt_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE auth_authorization_nonce (caller VARCHAR(64), key_id VARCHAR(64), nonce_hash CHAR(64),
+    expires_at TIMESTAMP NOT NULL, PRIMARY KEY(caller,key_id,nonce_hash));
+CREATE TABLE auth_authorization_grant_boundary (user_id BIGINT,role_id BIGINT,boundary_kind VARCHAR(8),
+    boundary_at TIMESTAMP,processed_at TIMESTAMP NOT NULL,PRIMARY KEY(user_id,role_id,boundary_kind,boundary_at));
+CREATE TABLE auth_authorization_audit (audit_id VARCHAR(64) PRIMARY KEY,actor_id BIGINT NOT NULL,
+    actor_revision BIGINT NOT NULL,action VARCHAR(48) NOT NULL,target_type VARCHAR(16) NOT NULL,
+    target_id BIGINT NOT NULL,event_id VARCHAR(64),created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE auth_authorization_writer_lock(lock_id INT PRIMARY KEY);
+INSERT INTO auth_authorization_writer_lock VALUES(1);
+CREATE TABLE auth_account_logout_event(token_digest CHAR(64) PRIMARY KEY,user_id BIGINT NOT NULL,
+    event_id VARCHAR(64) NOT NULL,expires_at TIMESTAMP NOT NULL,state VARCHAR(16) NOT NULL DEFAULT 'PENDING',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP);

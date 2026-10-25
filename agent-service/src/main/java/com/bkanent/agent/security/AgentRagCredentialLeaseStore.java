@@ -26,6 +26,18 @@ public class AgentRagCredentialLeaseStore {
     public AgentRagCredentialLeaseStore(AgentRagConsumerProperties properties, ObjectProvider<AuthPermissionRpcService> auth, Clock clock) {
         this.properties = properties; this.auth = auth; this.clock = clock;
     }
+    public AutoCloseable openVerifiedAuthorization(String token,
+            com.bkanent.agent.authorization.AgentAuthorizationScope.Entry entry) {
+        if (entry == null || entry != com.bkanent.agent.authorization.AgentAuthorizationScope.current())
+            throw new com.bkanent.common.authz.AuthzException(com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
+        String actor = entry.requireActor(null);
+        Lease previous = CURRENT.get();
+        long expires = Math.min(clock.millis() + Math.min(300, Math.max(1, properties.getCredentialLeaseSeconds())) * 1000,
+                entry.session().context().expiresAtEpochSecond() * 1000);
+        CURRENT.set(new Lease(actor, new RagCredentialContext(token), expires, entry));
+        return () -> { if (previous == null) CURRENT.remove(); else CURRENT.set(previous); };
+    }
+
     public AutoCloseable openAuthorization(String header) {
         Lease previous = CURRENT.get();
         CURRENT.remove();
@@ -43,23 +55,41 @@ public class AgentRagCredentialLeaseStore {
     public synchronized void capture(String key, String originalUserId) {
         Lease current = CURRENT.get();
         if (current == null) return; // Metadata/userId alone must never mint credentials.
+        if (current.authorization != null) {
+            current.authorization.requireActor(originalUserId);
+            current.authorization.requireRunAssociation();
+            // Existing business key maps to this verified session; never edit signed context.runId.
+        }
         if (originalUserId == null || current.owner != null && !current.owner.equals(originalUserId)) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
         Lease existing = leases.get(key);
         if (existing != null && !originalUserId.equals(existing.owner)) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+        if (existing != null && existing.authorization != null && current.authorization != null
+                && (!java.util.Objects.equals(existing.authorization.session().context().runId(), current.authorization.session().context().runId())
+                || !java.util.Objects.equals(existing.authorization.session().context().sessionId(), current.authorization.session().context().sessionId()))) {
+            throw new com.bkanent.common.authz.AuthzException(com.bkanent.common.authz.AuthzErrorCode.CONTEXT_CONFLICT);
+        }
         leases.entrySet().removeIf(entry -> entry.getValue().expiresAt <= clock.millis());
         if (!leases.containsKey(key) && leases.size() >= Math.min(10000, Math.max(1, properties.getMaxCredentialLeases())))
             throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
-        leases.put(key, new Lease(originalUserId, current.credentials, current.expiresAt));
+        leases.put(key, new Lease(originalUserId, current.credentials, current.expiresAt, current.authorization));
     }
     public synchronized AutoCloseable openLease(String key, String originalUserId) {
         Lease previous = CURRENT.get();
         Lease lease = leases.get(key);
         CURRENT.remove();
         if (lease != null) {
-            if (!originalUserId.equals(lease.owner)) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+            if (!originalUserId.equals(lease.owner)) {
+                if (previous != null) CURRENT.set(previous);
+                throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+            }
             CURRENT.set(lease);
         }
-        return () -> { if (previous == null) CURRENT.remove(); else CURRENT.set(previous); };
+        var authorizationScope = com.bkanent.agent.authorization.AgentAuthorizationScope.open(
+                lease == null ? null : lease.authorization);
+        return () -> {
+            try { authorizationScope.close(); }
+            finally { if (previous == null) CURRENT.remove(); else CURRENT.set(previous); }
+        };
     }
     public RagCredentialContext credentials(String originalUserId) {
         Lease lease = CURRENT.get();
@@ -76,6 +106,11 @@ public class AgentRagCredentialLeaseStore {
     private com.bkanent.common.rpc.AuthenticatedPrincipal verify(Lease lease, String originalUserId) {
         if (lease.expiresAt <= clock.millis()) throw new RagException(RagErrorCode.AUTHENTICATION_EXPIRED);
         if (lease.owner != null && !lease.owner.equals(originalUserId)) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+        if (lease.authorization != null) {
+            String actor = lease.authorization.requireActor(originalUserId);
+            try { return new com.bkanent.common.rpc.AuthenticatedPrincipal(Long.parseLong(actor)); }
+            catch (NumberFormatException failure) { throw new RagException(RagErrorCode.AUTHENTICATION_FAILED); }
+        }
         try {
             var provider = auth.getIfAvailable();
             if (provider == null) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
@@ -95,12 +130,22 @@ public class AgentRagCredentialLeaseStore {
         return () -> {
             Lease previous = CURRENT.get();
             if (captured == null) CURRENT.remove(); else CURRENT.set(captured);
-            return () -> { if (previous == null) CURRENT.remove(); else CURRENT.set(previous); };
+            var authorizationScope = com.bkanent.agent.authorization.AgentAuthorizationScope.open(
+                    captured == null ? null : captured.authorization);
+            return () -> {
+                try { authorizationScope.close(); }
+                finally { if (previous == null) CURRENT.remove(); else CURRENT.set(previous); }
+            };
         };
     }
     public String currentUserId() {
         Lease lease = CURRENT.get();
         if (lease == null) throw new AgentRagAuthenticationException("AUTHENTICATION_REQUIRED");
+        if (lease.authorization != null) {
+            String actor = lease.authorization.requireActor(null);
+            verify(lease, actor);
+            return actor;
+        }
         try {
             var principal = auth.getObject().resolvePrincipal(lease.credentials.accessToken());
             if (principal == null) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
@@ -113,8 +158,14 @@ public class AgentRagCredentialLeaseStore {
         private final String owner;
         private final RagCredentialContext credentials;
         private final long expiresAt;
+        private final com.bkanent.agent.authorization.AgentAuthorizationScope.Entry authorization;
         private Lease(String owner, RagCredentialContext credentials, long expiresAt) {
+            this(owner, credentials, expiresAt, null);
+        }
+        private Lease(String owner, RagCredentialContext credentials, long expiresAt,
+                      com.bkanent.agent.authorization.AgentAuthorizationScope.Entry authorization) {
             this.owner = owner; this.credentials = credentials; this.expiresAt = expiresAt;
+            this.authorization = authorization;
         }
     }
 }

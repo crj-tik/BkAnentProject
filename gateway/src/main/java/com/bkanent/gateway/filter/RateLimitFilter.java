@@ -44,7 +44,7 @@ public class RateLimitFilter implements GlobalFilter, Ordered {
 
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getURI().getPath();
-        if (gatewayAccessProperties.isWhitelisted(path)) {
+        if (gatewayAccessProperties.isWhitelisted(path, request.getMethod().name())) {
             return chain.filter(exchange);
         }
 
@@ -90,6 +90,12 @@ public class RateLimitFilter implements GlobalFilter, Ordered {
 
     private String resolveIdentity(ServerHttpRequest request) {
         String userId = request.getHeaders().getFirst(AuthPrincipalContext.USER_ID_HEADER);
+        if (gatewayAccessProperties.isAuthorizationEnabled()) {
+            // Auth filter removed client principal headers; never turn body/query identifiers into actor.
+            String encoded = request.getHeaders().getFirst(com.bkanent.common.authz.AuthzTransportHeaders.RESPONSE_HEADER);
+            if (encoded != null) userId = com.bkanent.common.authz.AuthzWireCodec.decodeResponse(encoded).context().actorId();
+            return userId == null ? "ip:" + resolveClientIp(request) : "user:" + userId;
+        }
         if (userId == null || userId.isBlank()) {
             userId = request.getQueryParams().getFirst("userId");
         }

@@ -13,7 +13,12 @@ public final class AuthUserManagementModels {
     }
 
     public record CurrentUser(Long userId, String username, String displayName,
-                              String roleCode, String roleName, String tenantCode) {
+                              String roleCode, String roleName, String tenantCode,
+                              boolean businessAdmin, List<String> roles, long permissionRevision, long credentialEpoch) {
+        public CurrentUser { roles = List.copyOf(roles); }
+        public CurrentUser(Long userId, String username, String displayName, String roleCode, String roleName, String tenantCode) {
+            this(userId, username, displayName, roleCode, roleName, tenantCode, false, List.of(), 0, 0);
+        }
     }
 
     public record RoleOption(String roleCode, String roleName, String description) {

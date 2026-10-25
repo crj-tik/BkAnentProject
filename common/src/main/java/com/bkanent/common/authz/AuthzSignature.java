@@ -54,10 +54,18 @@ public final class AuthzSignature {
     }
 
     public static void verifyFreshness(AuthzFreshness value, Map<String, PublicKey> keys, Instant now) {
+        verifyFreshnessAttestation(value, keys, now);
+        authenticate(value.status() == AuthorizationStatus.ACTIVE);
+    }
+
+    /**
+     * Verifies authority evidence, including inactive heads, without granting user authorization.
+     * Consumers must deny inactive status; entry/response admission still uses verifyFreshness.
+     */
+    public static void verifyFreshnessAttestation(AuthzFreshness value, Map<String, PublicKey> keys, Instant now) {
         authenticate(value != null);
         verifyBytes(AuthzCanonicalHash.freshnessBytes(value), value.algorithm(), value.keyId(), value.signature(), keys);
         time(value.checkedAtEpochSecond(), value.notAfterEpochSecond(), now);
-        authenticate(value.status() == AuthorizationStatus.ACTIVE);
     }
 
     public static void verifyContext(AuthorizationContext value, String expectedAudience,
@@ -101,6 +109,24 @@ public final class AuthzSignature {
         verifyBytes(AuthzCanonicalHash.callerBytes(value), value.algorithm(), value.keyId(), value.signature(), callerKeys);
         time(value.issuedAtEpochSecond(), value.expiresAtEpochSecond(), now);
         AuthzContract.check(callerAcl != null && callerAcl.contains(value.operation()), AuthzErrorCode.PERMISSION_DENIED);
+    }
+
+    /** Refresh validates the original signature/time, not its obsolete permission version or freshness. */
+    public static void verifyRefreshBinding(AuthorizationContext original, RequestBinding binding,
+                                            Map<String, PublicKey> authorityKeys, Instant now) {
+        authenticate(original != null && binding != null);
+        verifyContext(original, binding.callerService(), authorityKeys, now);
+        time(binding.issuedAtEpochSecond(), binding.expiresAtEpochSecond(), now);
+        AuthzContract.check(original.audience().equals(binding.audience())
+                && Objects.equals(original.runId(), binding.runId())
+                && Objects.equals(original.sessionId(), binding.sessionId())
+                && original.policyDigest().equals(binding.policyDigest())
+                && !original.requestId().equals(binding.requestId())
+                && !original.nonce().equals(binding.nonce())
+                && binding.issuedAtEpochSecond() >= original.issuedAtEpochSecond()
+                && binding.expiresAtEpochSecond() <= original.expiresAtEpochSecond()
+                && binding.expiresAtEpochSecond() <= original.runHardDeadlineEpochSecond(),
+                AuthzErrorCode.CONTEXT_CONFLICT);
     }
 
     /** Local precondition only, not the full 4.2 authoritative RPC/replay implementation. */

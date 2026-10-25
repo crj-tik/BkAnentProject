@@ -964,7 +964,7 @@
 
 **代码位置**：`common/authz/AuthorizationSnapshot`、`AuthzFreshness`、`AuthorizationContext`、`AuthzSignature`、`AuthzDeadlines`、`AuthorizationCache`、`AuthorizationSession`；`auth-service/authorization/AuthorizationRepository`、`EffectivePermissionService`、`RoleAuthorizationManagementService`；新MySQL迁移及Redis `authz/publish.lua`。
 
-**实施边界**：本次仅基础批次，新授权RPC和管理API按 `auth.authorization.enabled` 默认关闭，旧消费者尚未迁移。已有两个RPC缺少保持原run期限/范围的版本刷新协议，见KI-169；不能声称通知、consumer或零重复Auth已经接通。413项定向回归、真实隔离MySQL迁移及Redis ACL/Lua规则通过，但不代表新授权链已上线。关联LR-33/40/41/63/98；change `unify-versioned-permission-context`。
+**实施边界**：基础批次413项定向回归、隔离MySQL/Redis规则通过。续批按用户确认新增独立同run受限刷新，KI-169已修；新授权RPC/管理API仍默认关闭，实际Gateway run绑定与Graph/业务consumer迁移见KI-170，不能声称全链通知或零重复Auth已上线。续批276项定向及全23模块1519项回归通过（跳过14外部门控），新增发布/本地监控基础。关联LR-33/40/41/63/98/105；change `unify-versioned-permission-context`。
 
 ## LR-104 Supervisor请求幂等必须绑定持久会话与归一化输入
 
@@ -1012,3 +1012,13 @@
 **代码位置（当前与规划）**：当前 `MarketingAssetServiceImpl`、`PromotionManagementServiceImpl` 和 provider dispatcher；拟迁入营销 campaign 包，保留媒体 Worker 和原数据库迁移映射。方案见 `openspec/changes/consolidate-marketing-promotion-domain/`；尚未实施，KI-167 仍为 OPEN。
 
 **关联**：LR-22/23/53/94/96；KI-114、KI-167。
+
+## LR-105 同run刷新只收缩许可，发布新鲜度与业务执行身份分开
+
+**结论**：独立refreshAuthorization使用真实access、原签名context和本次服务proof更新permissionRevision，保持actor/run/session/audience/policy以及原hard deadline；credentialEpoch变更必须新认证续接。同运行许可只收缩，已接受窄scope后旧宽context再授权限也不能恢复该运行许可。签名freshness每30秒以内按真实MySQL读取开始时刻重核，Auth发布outbox/current-version与Redis原子fence，消息只失效不授予；有效本地context检查不逐工具请求Auth。
+
+**根因**：重新入口授权会重置截止，旧context回放会扩大已经收缩的范围，单纯修改Redis副本又无法更新消费者本地状态。分离稳定snapshot、当前运行scope和签名新鲜证明，并保持单调版本/epoch及不可延长时限，能在容许传播窗内复用且拒绝陈旧放行。MySQL注销PENDING摘要先阻重入，Redis外部revoke失败可按同摘要重试，不加第二次epoch；canonical token编码防原串别名绕撤销。账号写入不能只带actorId，密码计算后的锁内仍需实际凭据复验。
+
+**代码位置**：AuthAuthorizationRpcServiceImpl.refreshAuthorization、AuthzCanonicalHash.refreshRequestHash、AuthzSignature.verifyRefreshBinding、AuthorizationSession.refresh、AuthTokenService、AuthAccountMutationService、AuthorizationOutboxPublisher、RedisActiveAuthorizationActors和AuthorizationVersionMonitor。pub/sub/对账实现是基础，Gateway/Agent已验字节原型的signed run/session仍null，实际执行标签接入必须补KI-170而不能consumer填入签名或省资源owner检查；header最大256KiB也不等于部署预算已配置。
+
+**关联**：LR-103/104、KI-169/170/171；本轮276项定向、1519项全回归（14跳过）、真实隔离MySQL22+Redis62项检查；签名/故障fixture与真实存储规则证据分开，不代表新协议已部署。

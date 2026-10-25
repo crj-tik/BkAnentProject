@@ -10,6 +10,13 @@ public interface AuthAuthorizationRpcService {
             throws AuthzException;
 
     /**
+     * Refreshes a still-valid run with real access credentials, never a new audience, scope or deadline.
+     * Caller signs REFRESH_AUTHORIZATION over refreshRequestHash(token, originalContext, binding).
+     */
+    AuthzResponse refreshAuthorization(String token, AuthorizationContext originalContext,
+                                       RequestBinding requestBinding, CallerProof callerProof) throws AuthzException;
+
+    /**
      * Origin signs for the target audience; the receiver independently signs its request to Auth.
      * Both cover delegationRequestHash(context, binding), with separately consumed proof nonces.
      */

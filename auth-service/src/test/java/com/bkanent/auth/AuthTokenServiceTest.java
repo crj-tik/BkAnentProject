@@ -103,6 +103,36 @@ class AuthTokenServiceTest {
     }
 
     @Test
+    void nonCanonicalAliasesCannotBypassRevocationOrLogoutVerification() throws Exception {
+        String token = authTokenService.issueAccessToken(account);
+        String[] parts = token.split("\\.");
+        String paddedSignature = token + "=";
+        String alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        int finalIndex = alphabet.indexOf(parts[2].charAt(parts[2].length() - 1));
+        String nonZeroPadBits = token.substring(0, token.length()-1) + alphabet.charAt(finalIndex + 1);
+        assertTrue(java.util.Arrays.equals(java.util.Base64.getUrlDecoder().decode(parts[2]),
+                java.util.Base64.getUrlDecoder().decode(nonZeroPadBits.substring(nonZeroPadBits.lastIndexOf('.')+1))));
+        // Even an authentic HMAC over a padded payload is not an issued/canonical token.
+        String paddedPayload = parts[0] + "." + parts[1] + "=".repeat((4-parts[1].length()%4)%4);
+        if (paddedPayload.equals(parts[0]+"."+parts[1])) paddedPayload += "=";
+        javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+        mac.init(new javax.crypto.spec.SecretKeySpec("unit-test-auth-secret".getBytes(java.nio.charset.StandardCharsets.UTF_8), "HmacSHA256"));
+        String authenticPaddedPayload = paddedPayload + "." + java.util.Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(mac.doFinal(paddedPayload.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        for (String alias : java.util.List.of(paddedSignature, nonZeroPadBits, authenticPaddedPayload)) {
+            assertNull(authTokenService.parse(alias));
+            assertNull(authTokenService.verifyForLogout(alias));
+            authTokenService.revoke(alias);
+            assertNotNull(authTokenService.parse(token), "rejecting aliases must not revoke another canonical credential");
+        }
+        authTokenService.revoke(token);
+        assertNull(authTokenService.parse(token));
+        assertNull(authTokenService.parse(paddedSignature));
+        assertNull(authTokenService.parse(nonZeroPadBits));
+        assertNotNull(authTokenService.verifyForLogout(token), "exact revoked access may complete idempotent logout only");
+    }
+
+    @Test
     void unavailableRevocationStoreDoesNotReturnPrincipal() {
         TokenRevocationStore unavailableStore = mock(TokenRevocationStore.class);
         when(unavailableStore.isRevoked(anyString())).thenThrow(new IllegalStateException("store unavailable"));

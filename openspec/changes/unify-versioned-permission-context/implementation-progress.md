@@ -32,7 +32,7 @@
 - 隔离MySQL初次health因Windows只读bind的option文件被mysql视为world-writable而忽略，只修新容器复制后chmod600；最终成功，不改dev凭据。
 - manifest首dry-run65因closed target不含upgrade:bk_auth，只加这一合法目标后fresh/upgrade为0，保留历史失败。
 
-## 必须暂停的协议问题（KI-169）
+## 基础批次历史暂停原因（KI-169，续批已修）
 
 现两个RPC仅resolveRequestAuthorization(token,binding,proof)与validateDelegation(parent,binding,originProof,receiverProof)。入口每次新建now+300 hard deadline；委托要求parent revision/epoch当前有效。权限变化后旧parent不能委托，重新resolve又增加原run截止/受限child范围，被AuthorizationSession.refresh正确拒绝。consumer不能裁剪Auth签名自救。
 
@@ -42,4 +42,25 @@
 
 acceptance-results.json记录MySQL20、RedisACL23、生产Lua20及临时资源清理；并非新Auth/RPC/签名/广播全链实测。只使用新tmpfs、唯一internal网、无端口，两个临时容器/网均清理、删除卷数0。没有devDB迁移/生产部署/真实数据与外部业务副作用，没有读取.env/.secrets，不回显凭据。
 
-原工件63项目前仅7项完成。LR-103/104与KI-169/168同步说明实际实现和未验边界；其余不提前关闭。基础提交401c583已创建；首次push因远程独立业务规划先推送而拒绝，合并保留双方工件，将远程已发布LR-99至102与KI-167保持不变，本地新条目使用LR-103/104与KI-169。这是编号整合，不修改另四份业务提案范围；之后推送整合提交并暂停，不归档变更。
+基础批次原工件63项仅7项完成；续批状态见下，不将历史记录当当前进度。LR-103/104与KI-169/168同步说明实际实现和未验边界；其余不提前关闭。基础提交401c583已创建；首次push因远程独立业务规划先推送而拒绝，合并保留双方工件，将远程已发布LR-99至102与KI-167保持不变，本地新条目使用LR-103/104与KI-169。这是编号整合，不修改另四份业务提案范围；整合提交fa763e4已推送，不归档变更。
+
+## 独立刷新续批（用户已确认）
+
+用户确认独立接口后，design D7a、proposal、版本授权spec及任务4.2同步修订。实现 `refreshAuthorization` 和独立REFRESH_AUTHORIZATION签名类型，验证真实access、原context、调用服务、当前credentialEpoch、请求关联与持久nonce；允许旧权限revision刷新但固定actor/run/session/audience/policy及原期限。返回原scope与当前权限交集，原本地Session可接受；已接受窄scope后回放旧宽context取得签名结果也不能恢复运行许可。KI-169协议问题已修，实际消费链准入仍待KI-170。
+
+本批新增完成2.4、2.5、3.1、3.2、3.4、4.2、4.5，共14/63。任务3.3/3.5/3.6以及4.3/4.4/4.6/5.x和领域接入保留未完成：有安全配置/通知/监控基础不等于生产ACL、完整角色响应、实际Graph与业务域执行链已启用。
+
+账号创建、状态/角色修改、密码重置及删除现在通过同事务版本/outbox/审计；注销先持久摘要PENDING阻止所有token解析重入，再在事务外Redis吊销，失败返回待重试，同摘要不重复增加epoch。旧token格式保留，payload和signature要求canonical unpadded Base64URL，拒绝等签名字节别名绕撤销。所有新版账号写在密码计算后writer锁内复验实际access、actor及当前管理资格，旧actor-only入口拒绝，legacy模式兼容。
+
+Auth新增有界outbox dispatcher、单调CAS发布、FAILED事件阻断旧head续鲜、真实读取起点30秒证明、共享有界active ZSET及5秒权威核验，成功认证/刷新登记活跃actor；Redis网络不占SQL事务或active map锁。共同VersionMonitor和Agent只读Redis监控基础处理通知与10秒对账，头必须完整验签，通知不授予权限；默认不启用。
+
+Gateway/Agent原型已通过实际原始body/path/query绑定、三签、单次Auth和本地actor消费测试。当前Gateway仍签null run/session，无法等同Supervisor的持久执行身份；Agent在启动/capture处409失败关闭，不consumer填入或重签原证明。route rewrite、header预算、直接服务独立认证和实际Model/子域刷新接线未验；这是KI-170执行关联契约阻塞，不能用原型开启生产链。需精确确定新建/省略session重投/continueRunId/审批恢复的非授权关联标签怎样绑定，并保留持久owner/幂等资源核查。
+
+## 续批验证与已修失败
+
+- 最终定向：common55、Gateway17、Auth121、Agent83，共276，失败/错误/跳过均0。
+- 全量仓库settings compile：23模块成功；全量test：23模块成功、1519项、失败/错误0、14项既有外部依赖门控跳过。通过日志的WARNING级含跳过摘要与实际Surefire XML总数一致，不把只统计INFO的929误报总量。
+- 独立代码复核发现并修三个P1：token编码别名绕注销；旧context恢复已收缩scope；账号writer内只核actor失去真实凭据竞争。新增canonical别名、旧宽context回放、真实BCrypt期间注销/到期与零写副作用反例。
+- 编译/fixture失败修正：common WireCodec将既有test-scope Jackson依赖提升compile；Gateway重复Mockito设桩改doAnswer/doThrow；账号typed varargs fixture修正；Publisher UUID nonce改32字节URL编码，合法空审计事件直接CAS完成，网络锁范围缩短；Agent参数重名与默认关闭minimal context配置注册修正。未放宽生产权限。
+- `refresh-acceptance-results.json`：隔离MySQL22、active Lua24、publish16、ACL22，共84检查通过；新增260迁移/check、fresh/upgrade dry-run均0。仅新tmpfs/internal网且无端口，两容器/网/临时秘密已清理，未devDB apply；没有Java跨两存储注销/TLS/部署全链证据。
+- 新授权开关仍默认关闭，没有生产部署、真实业务副作用或对Memory私有范围放宽。LR-105和KI-169/170/171记录真实边界；独立刷新修复不宣称全链完成。

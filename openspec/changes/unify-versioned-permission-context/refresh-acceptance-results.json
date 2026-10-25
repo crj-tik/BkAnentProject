@@ -1,0 +1,464 @@
+{
+  "scope": "synthetic SQL and production Lua on isolated real stores only",
+  "project": "bk-anent-authz-check-refresh",
+  "frozen_hashes_lf": {
+    "sql/migrations/20261023_versioned_authorization.sql": "4091926bb170cc718b8f1bb168f951edfc9c9b7867a152ed9cd5709a90c358c2",
+    "sql/migrations/20261025_authorization_account_events.sql": "0631f398541db2efbde1bc89782f7901e0b90f79471aa30481db5bcf9f85dcd2",
+    "auth-service/src/main/resources/authz/active-actors.lua": "764895fcc5cbf09dc9c0b3a9c6d7a9a1c171c49a0af67b100460764dee652ff0",
+    "auth-service/src/main/resources/authz/publish.lua": "4e9036dc874918123f5622e85b793808e711eccff61989be6fdd3d5ab8594e2e",
+    "docker/mysql/checks/auth-account-events.sql": "cd8a8df37f4693c477a82ffc02e8141e6f11dd9962ed01824a105847c31163c1",
+    "docker/mysql/checks/auth-authorization.sql": "639a671f2523a7d8d0a0344fdc09734d1a200b1c989c7b416002c096ce3fd0bd",
+    "scripts/deploy/run-init-manifest.sh": "1ce657ecdd2925679a2c6aed67b840d9395bce2c85c563b36af9bfe04c09d3ac"
+  },
+  "failures": [],
+  "mysql": {
+    "checks": {
+      "fresh_schema_250": {
+        "pass": true,
+        "exit": 0
+      },
+      "fresh_schema_260": {
+        "pass": true,
+        "exit": 0
+      },
+      "fresh_no_business_users": {
+        "pass": true,
+        "exit": 0
+      },
+      "fresh_repeat_schema_260": {
+        "pass": true,
+        "exit": 0
+      },
+      "fresh_repeat_single_marker": {
+        "pass": true,
+        "exit": 0
+      },
+      "fresh_pending_committed": {
+        "pass": true,
+        "exit": 0
+      },
+      "fresh_pending_before_epoch": {
+        "pass": true,
+        "exit": 0
+      },
+      "fresh_digest_unique_reject": {
+        "pass": true,
+        "exit": 1,
+        "error_code": 1062
+      },
+      "fresh_epoch_outbox_once": {
+        "pass": true,
+        "exit": 0
+      },
+      "fresh_repeat_logout_no_epoch_outbox_duplicate": {
+        "pass": true,
+        "exit": 0
+      },
+      "fresh_migration_preserves_logout": {
+        "pass": true,
+        "exit": 0
+      },
+      "upgrade_schema_250": {
+        "pass": true,
+        "exit": 0
+      },
+      "upgrade_schema_260": {
+        "pass": true,
+        "exit": 0
+      },
+      "upgrade_preserves_unknown_role": {
+        "pass": true,
+        "exit": 0
+      },
+      "upgrade_repeat_schema_260": {
+        "pass": true,
+        "exit": 0
+      },
+      "upgrade_repeat_single_marker": {
+        "pass": true,
+        "exit": 0
+      },
+      "upgrade_pending_committed": {
+        "pass": true,
+        "exit": 0
+      },
+      "upgrade_pending_before_epoch": {
+        "pass": true,
+        "exit": 0
+      },
+      "upgrade_digest_unique_reject": {
+        "pass": true,
+        "exit": 1,
+        "error_code": 1062
+      },
+      "upgrade_epoch_outbox_once": {
+        "pass": true,
+        "exit": 0
+      },
+      "upgrade_repeat_logout_no_epoch_outbox_duplicate": {
+        "pass": true,
+        "exit": 0
+      },
+      "upgrade_migration_preserves_logout": {
+        "pass": true,
+        "exit": 0
+      }
+    },
+    "runs": [
+      {
+        "scenario": "fresh",
+        "exit": 0,
+        "frozen_hashes_unchanged": true
+      },
+      {
+        "scenario": "fresh_repeat",
+        "exit": 0,
+        "frozen_hashes_unchanged": true
+      },
+      {
+        "scenario": "fresh_repeat_after_logout",
+        "exit": 0,
+        "frozen_hashes_unchanged": true
+      },
+      {
+        "scenario": "upgrade",
+        "exit": 0,
+        "frozen_hashes_unchanged": true
+      },
+      {
+        "scenario": "upgrade_repeat",
+        "exit": 0,
+        "frozen_hashes_unchanged": true
+      },
+      {
+        "scenario": "upgrade_repeat_after_logout",
+        "exit": 0,
+        "frozen_hashes_unchanged": true
+      }
+    ],
+    "version": "8.4.11",
+    "logout_test_kind": "direct synthetic SQL schema/transaction logic, not production Java ordering or two-store integration"
+  },
+  "redis": {
+    "active_actor_checks": {
+      "register_first": {
+        "pass": true,
+        "return_code": 1
+      },
+      "cross_auth_register_same_key": {
+        "pass": true,
+        "return_code": 1
+      },
+      "capacity_reject_no_eviction": {
+        "pass": true,
+        "return_code": 0
+      },
+      "capacity_keeps_both_actors": {
+        "pass": true,
+        "actor_count": 2
+      },
+      "existing_smaller_expiry_accepted_without_shorten": {
+        "pass": true,
+        "return_code": 1
+      },
+      "existing_expiry_not_shortened": {
+        "pass": true
+      },
+      "existing_larger_expiry_updates_at_capacity": {
+        "pass": true,
+        "return_code": 1
+      },
+      "existing_expiry_extended_only": {
+        "pass": true
+      },
+      "expiry_equal_now": {
+        "pass": true,
+        "return_code": 0
+      },
+      "expiry_past": {
+        "pass": true,
+        "return_code": 0
+      },
+      "expiry_over_300": {
+        "pass": true,
+        "return_code": 0
+      },
+      "expiry_300_boundary": {
+        "pass": true,
+        "return_code": 1
+      },
+      "expired_prune_on_register": {
+        "pass": true,
+        "return_code": 1
+      },
+      "expired_actor_removed_no_live_eviction": {
+        "pass": true,
+        "actor_count": 2
+      },
+      "page_prunes_expiry_equal_now": {
+        "pass": true,
+        "actor_count": 1
+      },
+      "more_than_100_registered": {
+        "pass": true,
+        "registered_count": 125
+      },
+      "bounded_paging_100_then_25": {
+        "pass": true,
+        "page_counts": [
+          100,
+          25
+        ]
+      },
+      "paging_end_empty": {
+        "pass": true
+      },
+      "capacity_zero": {
+        "pass": true,
+        "error": "invalid capacity"
+      },
+      "capacity_over_limit": {
+        "pass": true,
+        "error": "invalid capacity"
+      },
+      "page_over_100": {
+        "pass": true,
+        "error": "invalid page"
+      },
+      "page_negative": {
+        "pass": true,
+        "error": "invalid page"
+      },
+      "page_offset_at_capacity": {
+        "pass": true,
+        "error": "invalid page"
+      },
+      "invalid_actor_rejected": {
+        "pass": true,
+        "return_code": 0
+      }
+    },
+    "publish_checks": {
+      "initial_publish": {
+        "pass": true,
+        "return_code": 1
+      },
+      "same_second_idempotent": {
+        "pass": true,
+        "return_code": 2
+      },
+      "snapshot_ttl_not_renewed": {
+        "pass": true
+      },
+      "old_revision_rejected": {
+        "pass": true,
+        "return_code": -1
+      },
+      "same_revision_hash_conflict": {
+        "pass": true,
+        "return_code": -2
+      },
+      "same_revision_epoch_conflict": {
+        "pass": true,
+        "return_code": -2
+      },
+      "old_checked_at": {
+        "pass": true,
+        "return_code": -3
+      },
+      "expired_window": {
+        "pass": true,
+        "return_code": -4
+      },
+      "future_check": {
+        "pass": true,
+        "return_code": -4
+      },
+      "over_30_window": {
+        "pass": true,
+        "return_code": -4
+      },
+      "renew_wrong_revision": {
+        "pass": true,
+        "return_code": -5
+      },
+      "old_after_head_loss_fence": {
+        "pass": true,
+        "return_code": -1
+      },
+      "renew_missing_snapshot": {
+        "pass": true,
+        "return_code": -5
+      },
+      "same_version_rebuild": {
+        "pass": true,
+        "return_code": 1
+      },
+      "invalid_fence": {
+        "pass": true,
+        "return_code": -6
+      },
+      "exact_30_window": {
+        "pass": true,
+        "return_code": 1
+      }
+    },
+    "acl_checks": {
+      "consumer_get_head": {
+        "pass": true
+      },
+      "consumer_mget_head_snapshot": {
+        "pass": true
+      },
+      "set_admin_denied": {
+        "pass": true,
+        "error": "NOPERM"
+      },
+      "hset_permission_denied": {
+        "pass": true,
+        "error": "NOPERM"
+      },
+      "delete_denied": {
+        "pass": true,
+        "error": "NOPERM"
+      },
+      "expire_denied": {
+        "pass": true,
+        "error": "NOPERM"
+      },
+      "pexpire_denied": {
+        "pass": true,
+        "error": "NOPERM"
+      },
+      "persist_denied": {
+        "pass": true,
+        "error": "NOPERM"
+      },
+      "active_register_eval_denied": {
+        "pass": true,
+        "error": "NOPERM"
+      },
+      "active_zadd_denied": {
+        "pass": true,
+        "error": "NOPERM"
+      },
+      "active_read_denied": {
+        "pass": true,
+        "error": "NOPERM"
+      },
+      "fence_read_denied": {
+        "pass": true,
+        "error": "NOPERM"
+      },
+      "cross_namespace_get_denied": {
+        "pass": true,
+        "error": "NOPERM"
+      },
+      "publish_denied": {
+        "pass": true,
+        "error": "NOPERM"
+      },
+      "spublish_denied": {
+        "pass": true,
+        "error": "NOPERM"
+      },
+      "cross_channel_subscribe_denied": {
+        "pass": true,
+        "error": "NOPERM"
+      },
+      "cross_channel_publish_denied": {
+        "pass": true,
+        "error": "NOPERM"
+      },
+      "auth_cross_channel_publish_denied": {
+        "pass": true,
+        "error": "NOPERM"
+      },
+      "auth_publish_channel": {
+        "pass": true
+      },
+      "auth_spublish_channel": {
+        "pass": true
+      },
+      "default_noauth": {
+        "pass": true,
+        "error": "NOAUTH"
+      },
+      "consumer_subscribe_and_receives": {
+        "pass": true,
+        "subscribers_count": 1
+      }
+    },
+    "cryptographic_signatures_verified": false,
+    "version": "7.4.11",
+    "production_lua_files_used": true,
+    "publication_envelopes": "unsigned synthetic fixtures; script rules only"
+  },
+  "limitations": {
+    "java_mysql_redis_logout_chain_tested": false,
+    "freshness_cryptography_tested": false,
+    "tls_tested": false,
+    "application_deployment_tested": false,
+    "dev_database_applied": false,
+    "http_called": false,
+    "images_built_pulled_or_pushed": false
+  },
+  "cleanup": {
+    "pre_cleanup_ownership_verified": true,
+    "stop_exit": 0,
+    "container_remove_exit": 0,
+    "network_remove_exit": 0,
+    "remaining_project_containers_count": 0,
+    "remaining_project_networks_count": 0,
+    "volumes_removed_count": 0,
+    "existing_resources_modified": false,
+    "temporary_secrets_removed": true
+  },
+  "isolation": {
+    "ownership_verified": true,
+    "only_new_internal_network": true,
+    "published_ports_count": 0,
+    "data_tmpfs_only": true,
+    "dev_networks_or_volumes_used": false,
+    "existing_env_or_data_read": false,
+    "temporary_credentials_outside_repository": true,
+    "images_reused_from_previous_acceptance": true
+  },
+  "startup_stable": true,
+  "manifest": {
+    "historical_rows_unchanged": true,
+    "entry_260_present": true,
+    "runner_unchanged": true,
+    "dev_apply": false,
+    "dry_run": {
+      "fresh": {
+        "exit": 0,
+        "entry_260_in_plan": true
+      },
+      "upgrade": {
+        "exit": 0,
+        "entry_260_in_plan": true
+      }
+    },
+    "final_manifest_hash_lf": "8794c75acef59e8c058197be5075ae4d964d19a687080b8effc58294f9cbb135"
+  },
+  "final_hashes_unchanged": true,
+  "counts": {
+    "mysql": {
+      "passed": 22,
+      "total": 22
+    },
+    "active_actors": {
+      "passed": 24,
+      "total": 24
+    },
+    "publish": {
+      "passed": 16,
+      "total": 16
+    },
+    "acl": {
+      "passed": 22,
+      "total": 22
+    }
+  }
+}
