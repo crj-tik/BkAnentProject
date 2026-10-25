@@ -10,6 +10,12 @@
 
 ## 待修复（OPEN）
 
+## KI-167 [OPEN·P2] 推广效果同步生成样例统计但未携带明确来源性质
+
+**确认日期**：2026-10-25，业务域规划期间源码核对。`PromotionManagementServiceImpl.syncEffectStat` 按发布记录 ID 计算曝光、点击和线索，并以 `leadCount * 1000 / costAmount` 生成样例 ROI；该方法没有渠道统计读取，现有返回与存储也未明确标记这些值为模拟数据。用户已说明当前业务数据模拟，本条记录其向真实效果统计或经营复盘扩展时的现有限制，不将样例算法解释为真实业绩来源。
+
+**处置（已规划，未修复）**：独立 change `consolidate-marketing-promotion-domain` 将样例算法收口到显式 fixture provider，效果观察携带来源/窗口/版本/数据模式，真实 ROI 要求可归属收入和成本；缺少真实数据返回未知。用重复同步、模拟/真实隔离、缺收入和结果来源测试验收后再更新修复状态。本轮只增加规划文档，未运行效果接口或修改生产代码。关联 LR-102 与 [营销合并方案](../openspec/changes/consolidate-marketing-promotion-domain/proposal.md)。
+
 ## KI-166 [OPEN·P3·延迟排查] Studio 浏览器前端落地后需补验工作/成果可读链路
 
 **登记日期**：2026-10-23（源自 `integrate-domain-agent-memory` 归档遗留）。任务 1.4/11.3 的浏览器验收因 Studio 前端仍在设计、无可执行实例而标为未测；该备注此前只存在于归档 tasks 中，未进本清单，现登记为唯一权威来源条目。后端 `GET /agent/studio/v1/works` 在混合环境曾持续 503（见 KI-126，疑与 `resolvePrincipal` 超时相关），浏览器补验时需一并确认后端链路已通。

@@ -1,0 +1,62 @@
+# 内容营销域合并设计
+
+## Context
+
+动机见 proposal.md。`PromotionManagementServiceImpl.publishContent` 在本地事务内调用外部发布，再通过 `MarketingContentRpcService.updatePublishStatus` 回写内容，事务不覆盖外部调用或远端数据库。`syncEffectStat` 当前按发布记录 ID 构造曝光/点击/线索，并用 `leadCount * 1000 / cost` 得出样例 ROI，没有真实渠道来源。用户确认当前数据模拟。
+
+`marketing-content-service` 已有内容、变体、素材、搜索和 `marketing-agent`；promotion 持有发布记录、效果和品牌素材。电子渠道 provider 仍有未实现路径。媒体 Worker 的异步计算与对象存储职责不随本业务合并迁移。
+
+## Goals / Non-Goals
+
+**Goals:** 以内容 revision 和发布计划串起审核、确认、平台尝试、对账与效果来源，消除内容状态跨服务回写。
+
+**Non-Goals:** 不采购或伪造真实平台接入，不搬迁媒体 Worker/通知服务，不接管 Studio work/command/文件能力，不重构房源和知识域。
+
+## Decisions
+
+### 1. 保留 marketing-content-service，推广成为 campaign 包
+
+将品牌素材、发布计划、平台尝试和效果记录迁入营销模块；`marketing-agent` 保留，推广能力通过同域工具/技能提供。相比重命名整个服务，该选择减少现有身份、Memory 和客户端配置调整；相比继续跨库双写，同域事务可以绑定计划、内容修订和本地回执。
+
+数据迁入 `bk_marketing` 的独立表/命名段，建立 `legacySource/legacyId` 映射和唯一约束。原 `bk_promotion` 库/表先只读保留，ID 不能直接混用。营销搜索索引仍是原独立职责，本 change 不引入新的通用 RAG 执行链。
+
+### 2. 内容、计划和尝试使用不同版本身份
+
+ContentRevision 不可变；PublishPlan 固定 contentRevision、素材版本、目标平台和受权账号、规则版本及 argumentsHash。审核通过表示该内容/范围获准，店长/操作人确认计划才受理对应平台尝试；修改任一绑定必须创建新计划并重新确认。
+
+请求幂等键绑定 owner、planId、requestId 和 bodyHash；相同请求找回原回执，不同内容冲突。一次多目标发布拥有每目标稳定 attemptId，部分成功可以单独核对失败目标，不能重发已成功目标。客户端或模型声明的账号名不授予发布权限。
+
+### 3. 本地受理与外部成功分别保存
+
+事务先保存本地 ACCEPTED/待执行尝试及可靠派发记录，外部 provider 调用在事务外完成；回执通过同一 attemptId 条件更新。provider 支持幂等时使用稳定外部键；不支持或超时结果不明时标记 OUTCOME_UNKNOWN，按原 ID 查询/人工核对，不自动重发。
+
+内容的发布摘要从本域尝试记录生成，不再远程回写第二个真源。没有真实 provider 时在副作用前返回 PROVIDER_NOT_CONFIGURED；fixture 只在显式模拟模式使用，结果标记 SIMULATED，不能标成真实平台成功。外部授权和凭据沿受管配置注入，不进入模型或普通日志。
+
+### 4. 效果来源与收益证据独立
+
+按日期和渠道回执幂等接收曝光/点击/线索，附来源系统、原事件 ID/revision、观察窗口与数据模式。将现有确定性样例算法移到 fixture provider。重复同步不能重复累计，迟到修正按来源版本更新对应观察而不覆盖历史。
+
+模式由受管 provider 确认；历史性质不明为 UNKNOWN，不从旧 publishStatus 推断真实。全部来源确认真实才聚合为 REAL，存在未知为 UNKNOWN，真实/模拟混合为 MIXED；具体指标是否可计算单独表达。
+
+真实渠道缺字段时返回未知，不用 fixture 补足；只有实际可归属收入和成本数据时才提供标明定义版本的 ROI。线索数量可以形成线索成本等明确指标，不能乘固定金额生成收入。模拟结果与真实结果分别查询、聚合和导出。
+
+### 5. 独立交付并约束旧入口
+
+原 `/promotions/**` 可在营销服务内保留受权适配入口，不能继续保留独立写库和远程状态回写。`implement-studio-v2` 继续拥有发布命令/审批门面，本 change 提供领域 prepare/read/confirm/receipt 契约；Studio task 4.1/4.2/4.4 不在这里勾选或复制。
+
+房源仅通过公开来源引用读取，不新增 listing 私有表访问。Auth 由另一会话实现，当前发布动作须消费其账号/组织授权并校验实际计划范围。外部协议变更或不同微服务合并不要求把个人 Memory 改成组织知识。
+
+## Risks / Trade-offs
+
+- [外部发布已发生但响应丢失] → 保留原 attempt、稳定外部 ID 和 UNKNOWN 对账，不用重新发布恢复。
+- [旧数据 ID 冲突或被认为都是模拟可丢弃] → 来源命名空间、迁移清单、计数/hash 核对和旧库备份；未验证前保留旧表。
+- [模拟指标进入经营结论] → 来源模式贯穿效果 API/聚合/导出，真实效果不由样例算法补齐。
+- [部署期两个 writer 并行] → 停旧新接收并围栏写入后迁移，验证消费者切换后退役旧服务。
+
+## Migration Plan
+
+1. 盘点 promotion HTTP/RPC/MCP 调用方、原库数据、在途尝试及 provider 能力；生成稳定来源映射，备份原数据。
+2. 在营销库增加内容修订、计划、尝试、效果来源和回执表；迁移时保持原外部 ID/状态与来源，重复执行迁移不得复制记录。
+3. 上线营销域 prepare/read/confirm/receipt 及旧路径适配，切换调用方；旧服务停止接收新发布，在途结果按原尝试核对。
+4. 确认单 writer、回执可查询、历史记录一致后，退役 promotion 模块、Compose 服务及配置导入入口；原库/回滚制品保留。
+5. 回退恢复匹配路由和消费版本，保持写围栏及原 attemptId，不把已成功发布再次执行，也不把模拟效果转换为真实。

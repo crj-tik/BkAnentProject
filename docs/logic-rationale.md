@@ -985,3 +985,13 @@
 **代码位置（当前与规划）**：当前 `business-service/BusinessAnalyticsServiceImpl`、`TradeOfficialA2aAgent` 与 trade 技能；拟新增 review 业务包及经营数据端口。方案见 `openspec/changes/implement-store-business-review/`；尚未实施，不表示 KI-128 或 Studio 浏览器链路已通过。
 
 **关联**：LR-22/23/53/73/75/82/83/94/96/97；KI-114、KI-128、KI-166。
+
+## LR-102 内容推广同域保存发布事实，效果必须标明来源（规划）
+
+**结论**：2026-10-25 独立 change `consolidate-marketing-promotion-domain` 规划将推广迁入营销域，统一内容修订、发布计划和平台尝试。外部发布保留原 attempt 与 UNKNOWN 对账，本地事务只确认本地受理；效果区分真实、模拟和未知来源，真实 ROI 要求可归属收入/成本，不能按线索数乘固定金额生成收入。
+
+**根因**：当前跨服务状态回写无法随本地事务回滚外部发布；样例统计若缺来源标记，又会被经营诊断或效果看板解释成真实增长。让发布状态由同一领域管理并保留外部回执，能避免双写与重复发布；把来源和指标口径保存为事实，可限制模拟样例的使用含义。
+
+**代码位置（当前与规划）**：当前 `MarketingAssetServiceImpl`、`PromotionManagementServiceImpl` 和 provider dispatcher；拟迁入营销 campaign 包，保留媒体 Worker 和原数据库迁移映射。方案见 `openspec/changes/consolidate-marketing-promotion-domain/`；尚未实施，KI-167 仍为 OPEN。
+
+**关联**：LR-22/23/53/94/96；KI-114、KI-167。
