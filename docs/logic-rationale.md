@@ -965,3 +965,13 @@
 **代码位置（当前与规划）**：当前 `listing-master-service`、`compare-engine-service`、`common/model/ListingComparisonFacts` 与 `agent-service/studio`；方案见 `openspec/changes/consolidate-listing-comparison-domain/`。本条是尚未实施的设计约束，不代表服务已合并或数据已迁移。
 
 **关联**：LR-22/23/54/79/96/97；KI-115。
+
+## LR-100 知识运营拥有派生资产，逐字稿继续归访谈域（规划）
+
+**结论**：2026-10-25 独立 change `extract-knowledge-operations-domain` 规划新增知识运营域，管理案例/打法的修订、审核、发布、范围与撤回。访谈继续独占会话、运行状态和脱敏逐字稿，知识只通过受权来源接口消费精确快照并记录依赖。知识发布不自动创建 Memory 共享许可或个人偏好。
+
+**根因**：逐字稿事实、运营归纳与个人记忆具有不同的编辑/使用权。复制原稿建第二个真源会破坏来源撤回和证据一致性，把审核发布交给 Memory 又会把知识可见范围误换成私有历史访问权。独立派生资产及来源检查使运营可修订知识，同时保留原访谈事实和共享边界。
+
+**代码位置（当前与规划）**：当前 `interview-service/InterviewCollectionService`、`InterviewReportService`、逐字稿及占位打法/共性实体；拟新增 `knowledge-service` 和窄逐字稿读取契约。方案见 `openspec/changes/extract-knowledge-operations-domain/`；尚未实施，不据此宣称 KI-15 已修或知识服务已上线。
+
+**关联**：LR-3/6/8/59/90/94/96/97；KI-15。
