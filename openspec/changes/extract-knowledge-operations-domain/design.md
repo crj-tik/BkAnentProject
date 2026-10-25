@@ -48,7 +48,15 @@
 
 登记 `knowledge-service / knowledge / knowledge-agent` 的精确服务身份、公钥与 Memory caller 范围，使用 common-a2a/common-skill 及必需 Memory。新增案例提炼、打法审核准备、知识检索技能；审核与发布仍是带当前权限和参数版本的领域动作，不通过纯文字结论推进状态。Supervisor 只动态发现能力，不新增固定领域执行分支。
 
-身份生成器、受管 registry/allowlist 和验证探针随新服务增加精确登记；不复用 interview 私钥或借用其 Memory 范围。Auth 的协议/角色实现由另一会话交付，本 change 只实现消费适配并验证拒绝场景。
+新服务独立身份的受信登记以本域配置片段和测试登记交付；全局密钥生成器服务表、Auth/Memory/RAG registry 与探针并集由协调合并，不在共享环境发布。不得复用 interview 私钥或借用其 Memory 范围。Auth 协议/角色由另一会话维护，本 change 实现消费适配和精确测试替身，验证缺少真实授权时拒绝，无需等待对方新提交。
+
+### 6. 并行会话与知识 v1 契约
+
+本会话拥有 knowledge 模块、访谈窄读取适配、`common/knowledge/**` 和 `common/interview/transcript/**`；不修改房源、经营、营销的模块和类型。向下游提供 `domain-parallel-v1` 的 published/search、batch-read、check 三个 POST 接口，路径、数据模式和错误语义见 [并行总览](../../../docs/business-domain-change-roadmap.md)。经营消费者可以独立用其自有 HTTP fixture，不要求本会话先发布 Java 制品。
+
+本域生成/审核/发布和持久回执都是真实实现；本会话控制的访谈来源夹具/injvm provider、Auth范围和 Memory RPC测试登记只替代远程依赖。应在共同基线上完成全生命周期及拒绝/撤回/版本测试，不拉取其它三个 change。真实模式不使用这些测试替身，缺接线前置失败；真实组织范围和下游互通在合并后核验。
+
+工作区、分支、Maven仓库和数据库按总览独立。新增知识 SQL/check 和唯一版本在自己的隔离库验收；当前初始化 runner 有固定数据库 allowlist，交付新增 bk_knowledge 所需的 manifest/allowlist 差异，由协调合并且不修改已应用 hash。本 change 可以独立完成，不以该共享环境变更已执行为完成条件。
 
 ## Risks / Trade-offs
 
@@ -58,6 +66,8 @@
 - [拆分重复生成旧报告] → 新资产与旧 report/source 引用分开，原任务与已完成结果不重放。
 
 ## Migration Plan
+
+以下为合并后的共享部署计划。独立会话交付代码、配置片段、SQL/check、隔离验证和步骤，不直接迁移原开发库或等待 Auth/其它 change 上线。
 
 1. 添加新模块、配置、增量 schema 与初始化清单，保留访谈表和当前 API；核对旧占位表与报告存量，只产出映射清单。
 2. 上线窄逐字稿 provider 和知识 source adapter，验证授权/撤回/hash/模拟模式后，接通单案例草稿及审核发布。

@@ -12,6 +12,7 @@
 - 比较结果和 PDF 绑定当前授权房源版本；来源更新、撤权或不可达时按明确策略返回过时或不可用，不能以缓存冒充当前事实。
 - 保留旧报告及 `compare/compare-agent` 的历史 Memory 身份；不重写历史 owner/domain/agent，不将未决调用转投新 Agent。
 - 本 change 只处理房源与比较合并；知识运营、门店复盘和营销合并由各自 change 交付。
+- 按 `domain-parallel-v1` 实现房源生产者契约，在独立 worktree/分支以自有来源、Auth/Memory 测试夹具完成本域验收；不要求经营或营销消费者先交付。
 
 ## Capabilities
 
@@ -28,4 +29,4 @@
 
 主要影响 `listing-master-service`、`compare-engine-service`、`common`、比较调用方、Maven/Compose/Nacos/网关部署清单和相关技能。沿用 LR-22/23/54/79/96/97，处理 KI-115 的读取及分享边界；不会据规划关闭该问题。Auth 由其他会话完善，本 change 通过其最终可信身份与资源范围契约接入，不另建认证协议。与 `implement-studio-v2` 保持只读比较契约兼容，不接管其余任务。
 
-实施优先级：首期基础能力，可与知识运营拆分独立推进；门店复盘消费本 change 的公开契约。当前仅提交方案，具体上游 endpoint、字段映射和授权参数仍是部署接入信息，未声称真实接口已验证。
+执行方式：四会话之一，可在共同基线上独立完成全部本期实施任务，发布冻结的房源 v1 HTTP契约和本域验证证据。共享配置只提交自身最小差异；真实环境切流/排空由合并后的协调门禁核验，不作为本会话等待条件。具体上游 endpoint、字段映射和授权参数仍是部署接入信息，真实接口未验证时如实报告。并行边界见 `docs/business-domain-change-roadmap.md`。

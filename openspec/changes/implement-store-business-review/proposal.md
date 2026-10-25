@@ -13,6 +13,7 @@
 - 店长确认后形成有负责人、期限和版本的推进动作，幂等保存原请求回执；首期记录执行反馈和上游回执，不自动发送消息、调价、改房源状态或触发付款。
 - 保留现有 `trade/trade-agent` 技术身份并新增经营复盘技能，避免将产品命名调整变成 Memory 历史重归属。
 - 本 change 不包含新人带教，不合并其他服务，也不承接 `implement-studio-v2` 中尚未完成的发布、结算和文件操作。
+- 按 `domain-parallel-v1` 实现房源/知识 HTTP consumer adapter 与自有 fixture；消费方 wire DTO 留在本模块，不依赖另外三个 change 新增的 Java 制品。
 
 ## Capabilities
 
@@ -28,4 +29,4 @@
 
 主要影响 `business-service`/`bk_business`、`common` 的公开经营契约和新的经营复盘技能，以及只消费公开接口的 Agent 结果投影。客户、合同、结算服务维持当前边界；初期模拟带看/跟进输入由明确的数据端口提供，不直接读取其他域的表。Auth 身份和门店范围对接其他会话的实现，用户输入的 storeId/employeeId 不充当权限。
 
-实施优先级：首期业务落点。开发可先用契约夹具，集成验收依赖 `consolidate-listing-comparison-domain` 和 `extract-knowledge-operations-domain` 的公开读取契约及可用 Auth 范围适配；不得代实施这些 change。首期功能验收允许全部业务样本为模拟数据，真实业绩增长验证属于后续运营验证。
+执行方式：四会话之一，在共同基线上以真实本域处理器/持久记录、固定 v1 HTTP fixture 和精确 Auth/Memory 测试登记完成全部本期验收。房源、知识和 Auth 其它会话的交付均不是实施完成前置条件；仍需完成真实 HTTP adapter、拒绝/版本/撤回反例，不能以空接口代替。实际服务互通与真实增长验证在合并后的门禁分别报告，不能把模拟通过写成已联机。范围与隔离要求见 `docs/business-domain-change-roadmap.md`。

@@ -13,6 +13,7 @@
 - 增加知识运营技能与官方 Agent 接入，沿用必需 Memory、现有 Supervisor 调用治理及真实身份边界。
 - 将 `playbook_card`、`commonality_report` 的后续业务归属迁到知识域；现有占位表和历史报告保留，迁移先盘点，不假设为空。
 - 本 change 不实施门店复盘、不改访谈运行面状态机，也不执行其他模块合并。
+- 按 `domain-parallel-v1` 发布知识读取/当前使用检查，通过本会话访谈来源与精确身份夹具独立验收，不等待房源、门店复盘或 Auth 会话的新提交。
 
 ## Capabilities
 
@@ -27,6 +28,6 @@
 
 ## Impact
 
-新增 `knowledge-service`/`bk_knowledge`，扩展 `common` 的受权逐字稿读取与知识读取契约；在 `interview-service` 增加窄读取适配，并登记部署、网关、Agent、Memory caller 和受管技能。沿用 LR-3/6/8/59/90/94/96/97，承接 KI-15 中打法卡与共性提炼的规划责任；本次规划不改变 KI 状态。Auth 实现由其他会话负责，发布范围及身份校验通过可信契约对接，缺少范围能力时拒绝发布或读取。
+新增 `knowledge-service`/`bk_knowledge`，在自身 `common/knowledge` 和 `common/interview/transcript` 命名空间定义契约；在 `interview-service` 增加窄读取适配，交付部署、网关和精确 caller 的最小配置差异/片段。沿用 LR-3/6/8/59/90/94/96/97，承接 KI-15 中打法卡与共性提炼的规划责任；本次规划不改变 KI 状态。Auth/Memory 全局协议与在线登记由对应会话/协调门禁维护，本会话实现消费适配及测试登记，缺少真实范围能力时拒绝发布或读取。
 
-实施优先级：首期，可独立于房源合并交付。门店复盘依赖本 change 的已发布知识读取契约；营销合并不依赖本 change。模拟逐字稿须在来源和派生资产中保留模拟标记，不能成为真实经营效果证据。
+执行方式：四会话之一，可在共同基线上独立完成本期实施。未来消费者按冻结 HTTP契约接入，不成为本 change 的构建或完成条件；真实组织/服务登记与消费者互通在合并后另验。模拟逐字稿保留来源标记，不能作为真实经营效果证据。并行范围与隔离要求见 `docs/business-domain-change-roadmap.md`。
