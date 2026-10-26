@@ -1,6 +1,9 @@
 package com.bkanent.settlement.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.bkanent.common.a2a.VerifiedDomainAuthorization;
+import com.bkanent.common.authz.AuthzErrorCode;
+import com.bkanent.common.authz.AuthzException;
 import com.bkanent.common.model.ContractSettlementDTO;
 import com.bkanent.common.model.KpiSummaryDTO;
 import com.bkanent.common.rpc.BusinessRpcService;
@@ -92,6 +95,8 @@ public class SettlementManagementServiceImpl implements SettlementManagementServ
 
     @Override
     public SettlementRuleResponse saveRule(SettlementRuleUpsertRequest request) {
+        VerifiedDomainAuthorization.requireOperation("settlement.rule.write.all");
+        VerifiedDomainAuthorization.requirePermission("settlement.rule.read.all");
         SettlementRuleEntity entity = new SettlementRuleEntity();
         entity.setRuleCode(request.ruleCode());
         entity.setRuleName(request.ruleName());
@@ -110,6 +115,7 @@ public class SettlementManagementServiceImpl implements SettlementManagementServ
 
     @Override
     public List<SettlementRuleResponse> listRules(String contractType) {
+        VerifiedDomainAuthorization.requireOperation("settlement.rule.read.all");
         return settlementRuleService.list().stream()
                 .filter(rule -> !StringUtils.hasText(contractType) || contractType.equals(rule.getContractType()))
                 .map(this::toRuleResponse)
@@ -118,6 +124,10 @@ public class SettlementManagementServiceImpl implements SettlementManagementServ
 
     @Override
     public SettlementDetailResponse calculateSettlement(SettlementCalculateRequest request) {
+        VerifiedDomainAuthorization.requireOperation("settlement.calculate.all");
+        VerifiedDomainAuthorization.requirePermission("settlement.record.create.all");
+        VerifiedDomainAuthorization.requirePermission("settlement.split.calculate.all");
+        denyUnverifiedSettlementMutation();
         SettlementRuleEntity rule = settlementRuleService.matchRule(request.ruleCode(), request.contractType(), request.dealAmount());
         SettlementRuleTierEntity tierRule = rule == null ? null : settlementRuleTierService.matchTier(rule.getId(), request.dealAmount());
         BigDecimal commissionRate = request.commissionRate() != null ? request.commissionRate()
@@ -139,6 +149,8 @@ public class SettlementManagementServiceImpl implements SettlementManagementServ
 
     @Override
     public SettlementAutoGenerateResponse autoGenerateByContracts(String month) {
+        VerifiedDomainAuthorization.requireOperation("settlement.generate.all");
+        denyUnverifiedSettlementMutation();
         if (contractRpcService == null) {
             throw new IllegalStateException("合同服务未就绪，无法自动生成结算");
         }
@@ -176,6 +188,8 @@ public class SettlementManagementServiceImpl implements SettlementManagementServ
 
     @Override
     public SettlementDetailResponse getSettlementDetail(Long settlementId) {
+        VerifiedDomainAuthorization.requireOperation("settlement.record.read.all");
+        VerifiedDomainAuthorization.requirePermission("settlement.split.read.all");
         SettlementRecordEntity entity = settlementDomainService.getById(settlementId);
         if (entity == null) {
             return null;
@@ -185,6 +199,8 @@ public class SettlementManagementServiceImpl implements SettlementManagementServ
 
     @Override
     public List<SettlementDetailResponse> listSettlementByMonth(String month) {
+        VerifiedDomainAuthorization.requireOperation("settlement.record.read.all");
+        VerifiedDomainAuthorization.requirePermission("settlement.split.read.all");
         return settlementDomainService.listByMonth(month).stream()
                 .map(entity -> toDetailResponse(entity, settlementSplitRecordService.listBySettlementId(entity.getId())))
                 .toList();
@@ -192,6 +208,8 @@ public class SettlementManagementServiceImpl implements SettlementManagementServ
 
     @Override
     public SettlementDetailResponse updatePayoutStatus(Long settlementId, SettlementPayoutUpdateRequest request) {
+        VerifiedDomainAuthorization.requireOperation("settlement.payout-status.update.all");
+        denyUnverifiedSettlementMutation();
         SettlementRecordEntity entity = requireSettlement(settlementId);
         entity.setPayoutStatus(request.payoutStatus());
         entity.setRemark(request.remark());
@@ -205,6 +223,8 @@ public class SettlementManagementServiceImpl implements SettlementManagementServ
 
     @Override
     public List<SettlementMonthlySummaryResponse> summarizeMonthlyCommission(String month, String summaryScope) {
+        VerifiedDomainAuthorization.requireOperation("settlement.summary.read.all");
+        VerifiedDomainAuthorization.requirePermission("settlement.summary.rebuild.all");
         rebuildMonthlySummary(month);
         return settlementMonthlySummaryService.listByMonth(month, summaryScope).stream()
                 .map(this::toSummaryResponse)
@@ -213,6 +233,8 @@ public class SettlementManagementServiceImpl implements SettlementManagementServ
 
     @Override
     public SettlementPayoutBatchResponse createPayoutBatch(String month) {
+        VerifiedDomainAuthorization.requireOperation("settlement.batch.create.all");
+        denyUnverifiedSettlementMutation();
         List<SettlementRecordEntity> pendingRecords = settlementDomainService.listByMonth(month).stream()
                 .filter(record -> "PENDING".equalsIgnoreCase(record.getPayoutStatus()))
                 .toList();
@@ -250,6 +272,8 @@ public class SettlementManagementServiceImpl implements SettlementManagementServ
 
     @Override
     public SettlementPayoutBatchResponse markBatchPaid(Long batchId) {
+        VerifiedDomainAuthorization.requireOperation("settlement.payment.confirm.all");
+        denyUnverifiedSettlementMutation();
         SettlementPayoutBatchEntity batch = requireBatch(batchId);
         batch.setBatchStatus("PAID");
         batch.setPaidTime(nowText());
@@ -271,6 +295,7 @@ public class SettlementManagementServiceImpl implements SettlementManagementServ
 
     @Override
     public SettlementPayoutBatchResponse handleBankCallback(SettlementBankCallbackRequest request) {
+        denyUnverifiedSettlementMutation();
         SettlementPayoutBatchEntity batch = settlementPayoutBatchService.getOne(new LambdaQueryWrapper<SettlementPayoutBatchEntity>()
                 .eq(SettlementPayoutBatchEntity::getBatchNo, request.batchNo())
                 .last("limit 1"));
@@ -583,6 +608,10 @@ public class SettlementManagementServiceImpl implements SettlementManagementServ
             throw new IllegalArgumentException("结算记录不存在: " + settlementId);
         }
         return entity;
+    }
+
+    private static void denyUnverifiedSettlementMutation() {
+        throw new AuthzException(AuthzErrorCode.PERMISSION_DENIED);
     }
 
     private SettlementPayoutBatchEntity requireBatch(Long batchId) {

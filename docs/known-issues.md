@@ -1536,6 +1536,16 @@
 
 **关联**：LR-1/89/145；KI-166；change `unify-versioned-permission-context`任务8.2–8.4。
 
+## KI-204 [OPEN·P1] Business/Settlement缺少员工、合同与收款主体的可信关系
+
+**发现日期与依据**：2026-10-26，实施`unify-versioned-permission-context`任务10.2时核对`BusinessAnalyticsServiceImpl`、Settlement REST/RPC/Tool/MCP及定时入口。Business数据按employee/store标识聚合，Auth当前只保存userId→brokerId；Settlement记录另使用employeeId、contractId、payeeEmployeeId。现有合同自动生成直接调Contract与Business Dubbo RPC，未附请求绑定委托；`markBatchPaid`会生成`BANK-{id}`流水并写PAID，银行callback也未验签。
+
+**当前处置**：新增精确Business/Settlement操作码与本地REST/MCP/A2A请求scope检查，直连无用户上下文的RPC在读取前拒绝。Settlement计算、自动生成、批次准备、状态变更和模拟付款保持失败关闭；自动任务默认关闭。新REST过滤器默认关闭、MCP操作映射为空，未部署Auth密钥，不能据本地测试宣称新链已启用。
+
+**后续验收**：需要可信userId→employee/store/payee映射及审计维护、Contract调用请求证明、Settlement有效状态转换、真实支付渠道签名callback，再补REST/RPC/A2A/MCP跨协议与版本刷新测试。未完成之前不得开放需要这些关系的Settlement副作用；Business宽域数据仅按Auth明确授予的精确`.all`操作访问。
+
+**关联**：LR-147；KI-55；change `unify-versioned-permission-context`任务10.2/10.6。
+
 ---
 
 **变更历史**：本提交补齐 Interview 权限/凭据存量核查与浏览器验收边界（KI-202/203），并持久化A2A请求防重放与任务归属（KI-172）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。

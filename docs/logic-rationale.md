@@ -1131,3 +1131,13 @@
 **代码位置**：`common/authz/AuthzContract`、`AuthorizationSnapshot`、`AuthorizationContext`、`AuthzRequestScope`、`AuthzCanonicalHash`；`common/rag/RagAuthorizedListingReadRequest`；`auth-service/AuthorizationRepository`、`RoleAuthorizationManagementService`、`AuthAuthorizationRpcServiceImpl`；`listing-master-service/ListingAuthorizationIngressFilter`、`ListingManagementServiceImpl`、`ListingRagIdentity`、`ListingMasterRpcServiceImpl`；`customer-service/CustomerAuthorizationIngressFilter`、`CustomerManagementServiceImpl`、`ListingReadClient`；`rag-service/RagAccessControl`。
 
 **关联**：LR-31/145；KI-55；change `unify-versioned-permission-context`任务4.6、10.1。Listing/Customer新入口开关默认关闭；跨服务RPC调用、Gateway与各环境公钥配置、业务映射回填及运行栈验收完成前不得启用。
+
+## LR-147 Business与Settlement使用精确域操作，未映射财务主体保持关闭
+
+**结论**：Business分析方法在REST、Dubbo、A2A与MCP共享服务入口检查各自的精确`business.*.all`操作；宽域分析只有当前签名授权显式包含对应操作时才执行。Settlement读取、规则维护、结算计算、分账、汇总读取/重建、批次和状态动作分别登记操作码。Auth上下文在REST、MCP与A2A请求线程本地复用，不逐工具访问Auth；不具备可信上下文的Dubbo/RPC及后台任务不切为SERVICE全权。尚无userId→employee/store/payee映射或签名Contract调用时，结算计算、合同自动生成、批次、状态确认及未经签名的银行回调均在读写数据或跨服务调用前拒绝；旧“已付款”模拟不会继续写PAID。
+
+**根因**：Auth目前仅维护显式userId→brokerId映射；Business数据使用员工/门店标识，Settlement还依赖合同和收款员工标识，不能把brokerId、userId或LLM字段互相转换。即使权限码允许某项业务动作，它仍不能证明目标员工和合同的关系；SERVICE也不能因定时任务/内网RPC身份获得任意用户数据。将已实现操作独立授权、未知关联和真实支付硬拒绝，可以在不增加逐节点远程Auth调用的前提下保留入口级授权，并明确剩余数据关系。
+
+**代码位置**：`common-a2a/VerifiedDomainAuthorization`、`A2aCredentialContext`、`common/mcp/authz/McpAuthorizationScope`；`business-service/BusinessAuthorizationIngressFilter`、`BusinessAnalyticsServiceImpl`；`settlement-service/SettlementAuthorizationIngressFilter`、`SettlementManagementServiceImpl`、`SettlementRpcServiceImpl`、`SettlementController`、`SettlementAutoGenerateJob`；迁移`20261026_business_settlement_authorization.sql`。
+
+**关联**：LR-138/139/140/145/146；KI-204；change `unify-versioned-permission-context`任务10.2。REST ingress、A2A版本化委托及MCP工具映射保持默认关闭/空配置；定向fixture回归不代表员工关系、跨域RPC proof、真实支付或部署启用已验收。

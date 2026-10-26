@@ -23,7 +23,28 @@ INSERT INTO auth_permission(permission_code,domain,operation) VALUES
 ('auth.users.manage','auth','users.manage'),('auth.roles.manage','auth','roles.manage'),
 ('auth.business-identity.manage','auth','business-identity.manage'),
 ('interview.read','interview','read'),('interview.respond','interview','respond'),
-('listing.read','listing','read'),('memory.read','memory','read');
+('listing.read','listing','read'),('memory.read','memory','read'),
+('business.kpi.read.all','business','kpi.read.all'),
+('business.workload.read.all','business','workload.read.all'),
+('business.assessment.calculate.all','business','assessment.calculate.all'),
+('business.ranking.read.all','business','ranking.read.all'),
+('business.ranking.rebuild.all','business','ranking.rebuild.all'),
+('business.turnover.read.all','business','turnover.read.all'),
+('business.store-dashboard.read.all','business','store-dashboard.read.all'),
+('business.dashboard.read.all','business','dashboard.read.all'),
+('settlement.rule.read.all','settlement','rule.read.all'),
+('settlement.rule.write.all','settlement','rule.write.all'),
+('settlement.calculate.all','settlement','calculate.all'),
+('settlement.record.create.all','settlement','record.create.all'),
+('settlement.split.calculate.all','settlement','split.calculate.all'),
+('settlement.generate.all','settlement','generate.all'),
+('settlement.record.read.all','settlement','record.read.all'),
+('settlement.split.read.all','settlement','split.read.all'),
+('settlement.payout-status.update.all','settlement','payout-status.update.all'),
+('settlement.summary.read.all','settlement','summary.read.all'),
+('settlement.summary.rebuild.all','settlement','summary.rebuild.all'),
+('settlement.batch.create.all','settlement','batch.create.all'),
+('settlement.commission.read.all','settlement','commission.read.all');
 INSERT INTO auth_role_permission(role_id,permission_code)
 SELECT r.id,p.permission_code FROM auth_role r CROSS JOIN auth_permission p
 WHERE r.role_code='BROKER' AND p.permission_code IN

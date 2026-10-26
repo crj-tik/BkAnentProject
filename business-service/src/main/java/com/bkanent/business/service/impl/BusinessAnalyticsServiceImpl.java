@@ -19,6 +19,7 @@ import com.bkanent.business.service.EmployeeDailyWorkloadService;
 import com.bkanent.business.service.KpiStatService;
 import com.bkanent.business.service.ListingTurnoverStatService;
 import com.bkanent.business.service.StoreDashboardSnapshotService;
+import com.bkanent.common.a2a.VerifiedDomainAuthorization;
 import com.bkanent.common.model.KpiSummaryDTO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,6 +76,7 @@ public class BusinessAnalyticsServiceImpl implements BusinessAnalyticsService {
 
     @Override
     public List<KpiSummaryDTO> listMonthlyKpis(String month) {
+        VerifiedDomainAuthorization.requireOperation("business.kpi.read.all");
         return kpiStatService.listByMonth(month).stream()
                 .map(businessConverter::toKpiSummary)
                 .toList();
@@ -82,6 +84,7 @@ public class BusinessAnalyticsServiceImpl implements BusinessAnalyticsService {
 
     @Override
     public List<EmployeeDailyWorkloadResponse> listDailyWorkloads(String statDate) {
+        VerifiedDomainAuthorization.requireOperation("business.workload.read.all");
         return employeeDailyWorkloadService.listByDate(statDate).stream()
                 .map(businessConverter::toDailyWorkload)
                 .toList();
@@ -89,6 +92,7 @@ public class BusinessAnalyticsServiceImpl implements BusinessAnalyticsService {
 
     @Override
     public List<KpiAssessmentResponse> calculateKpiAssessments(String month) {
+        VerifiedDomainAuthorization.requireOperation("business.assessment.calculate.all");
         return kpiStatService.listByMonth(month).stream()
                 .map(this::normalizeAssessment)
                 .map(businessConverter::toAssessment)
@@ -97,6 +101,7 @@ public class BusinessAnalyticsServiceImpl implements BusinessAnalyticsService {
 
     @Override
     public List<RankingItemResponse> listRankings(String month, String scope, int topN) {
+        VerifiedDomainAuthorization.requireOperation("business.ranking.read.all");
         if (!RankingScopeEnum.contains(scope)) {
             throw new IllegalArgumentException("排行榜范围不合法: " + scope);
         }
@@ -109,6 +114,7 @@ public class BusinessAnalyticsServiceImpl implements BusinessAnalyticsService {
 
     @Override
     public List<ListingTurnoverReportResponse> listTurnoverReports(String month) {
+        VerifiedDomainAuthorization.requireOperation("business.turnover.read.all");
         return listingTurnoverStatService.listByMonth(month).stream()
                 .map(businessConverter::toTurnoverReport)
                 .toList();
@@ -116,6 +122,7 @@ public class BusinessAnalyticsServiceImpl implements BusinessAnalyticsService {
 
     @Override
     public StoreDashboardResponse getStoreDashboard(String storeName) {
+        VerifiedDomainAuthorization.requireOperation("business.store-dashboard.read.all");
         return businessConverter.toDashboard(storeDashboardSnapshotService.getLatestByStoreName(storeName));
     }
 
@@ -125,6 +132,10 @@ public class BusinessAnalyticsServiceImpl implements BusinessAnalyticsService {
                                                         String endDate,
                                                         String regionName,
                                                         int topN) {
+        VerifiedDomainAuthorization.requireOperation("business.dashboard.read.all");
+        VerifiedDomainAuthorization.requirePermission("business.store-dashboard.read.all");
+        VerifiedDomainAuthorization.requirePermission("business.ranking.read.all");
+        VerifiedDomainAuthorization.requirePermission("business.turnover.read.all");
         List<StoreDashboardSnapshotEntity> snapshots = storeDashboardSnapshotService.listByDateRange(startDate, endDate, regionName);
         List<DashboardStoreAggregateResponse> storeAggregates = buildStoreAggregates(snapshots, topN);
         List<DashboardRegionAggregateResponse> regionAggregates = buildRegionAggregates(snapshots);
@@ -156,6 +167,7 @@ public class BusinessAnalyticsServiceImpl implements BusinessAnalyticsService {
 
     @Override
     public void rebuildRanking(String month) {
+        VerifiedDomainAuthorization.requireOperation("business.ranking.rebuild.all");
         if (!businessRankingProperties.isUseRedis() || !businessRedisProperties.isEnabled() || stringRedisTemplate.isEmpty()) {
             return;
         }

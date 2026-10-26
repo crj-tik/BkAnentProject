@@ -49,6 +49,13 @@ public final class A2aCredentialContext {
         public boolean versioned() { return authorizationContext != null; }
         public AuthorizationContext authorizationContext() { return authorizationContext; }
         public AuthzFreshness freshness() { return freshness; }
+        public void requireOperation(String operation) {
+            verify();
+            if (!versioned() || operation == null || !authorizationContext.allowedOperations().contains(operation)) {
+                throw new AuthzException(versioned() ? AuthzErrorCode.PERMISSION_DENIED
+                        : AuthzErrorCode.AUTHENTICATION_REQUIRED);
+            }
+        }
         private void releaseReservation() {
             if (reservationRelease == null || !reservationReleased.compareAndSet(false, true)) return;
             try { reservationRelease.run(); }
@@ -80,6 +87,8 @@ public final class A2aCredentialContext {
         Lease lease = required();
         return lease.versioned() ? lease.authorizationContext.actorId() : lease.binding.actorId();
     }
+    /** Local exact-operation check against the Auth-signed, already verified run context. */
+    public static void requireOperation(String operation) { required().requireOperation(operation); }
     /** Reserve before the official handler can read or mutate its task store/queue. */
     public static synchronized void reserveTask(String taskId) {
         Lease lease = required();

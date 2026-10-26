@@ -3,6 +3,7 @@ package com.bkanent.settlement.controller;
 import com.bkanent.common.model.ApiResponse;
 import com.bkanent.common.model.HealthStatusDTO;
 import com.bkanent.common.model.SettlementSummaryDTO;
+import com.bkanent.common.a2a.VerifiedDomainAuthorization;
 import com.bkanent.common.rpc.SettlementRpcService;
 import com.bkanent.settlement.entity.SettlementRecordEntity;
 import com.bkanent.settlement.model.SettlementAutoGenerateResponse;
@@ -113,6 +114,7 @@ public class SettlementController {
 
     @GetMapping("/commission")
     public ApiResponse<SettlementSummaryDTO> commission(@RequestParam Long employeeId, @RequestParam String month) {
+        VerifiedDomainAuthorization.requireOperation("settlement.commission.read.all");
         SettlementRecordEntity entity = settlementDomainService.findByEmployeeAndMonth(employeeId, month);
         String payoutStatus = entity == null ? "NOT_FOUND" : entity.getPayoutStatus();
         return ApiResponse.ok(new SettlementSummaryDTO(

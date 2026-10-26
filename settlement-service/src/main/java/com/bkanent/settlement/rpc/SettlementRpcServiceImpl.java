@@ -1,5 +1,6 @@
 package com.bkanent.settlement.rpc;
 
+import com.bkanent.common.a2a.VerifiedDomainAuthorization;
 import com.bkanent.common.rpc.SettlementRpcService;
 import com.bkanent.settlement.entity.SettlementRecordEntity;
 import com.bkanent.settlement.service.SettlementDomainService;
@@ -21,6 +22,7 @@ public class SettlementRpcServiceImpl implements SettlementRpcService {
 
     @Override
     public BigDecimal queryMonthlyCommission(Long employeeId, String month) {
+        VerifiedDomainAuthorization.requireOperation("settlement.commission.read.all");
         SettlementRecordEntity entity = settlementDomainService.findByEmployeeAndMonth(employeeId, month);
         return entity == null ? BigDecimal.ZERO : entity.getCommissionAmount();
     }

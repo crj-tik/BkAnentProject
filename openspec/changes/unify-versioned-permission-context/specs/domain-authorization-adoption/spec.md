@@ -55,3 +55,15 @@
 #### Scenario: Business data relationship is not yet defined
 - **WHEN** 员工、门店、经纪人或收款主体与平台用户的映射无法核验
 - **THEN** 对应私有查询或副作用不启用，记录缺口，不虚构租户/组织策略或扩大管理员读取为个人Memory旁路
+
+#### Scenario: Business analytics uses one exact operation across every entry
+- **WHEN** REST、Dubbo、A2A或MCP进入Business分析服务
+- **THEN** 服务方法从当前已验签请求上下文检查对应的`business.*.all`操作后才读取数据；RPC缺少签名用户上下文时在数据访问前拒绝，LLM提供的员工、门店和userId不成为actor或归属证明
+
+#### Scenario: Settlement caller supplies an unverified employee or contract identity
+- **WHEN** 结算计算、自动生成、状态变更或批次准备仅取得请求中的employeeId/contractId/payeeEmployeeId，且没有可信关系映射及Contract委托
+- **THEN** 操作在读取或变更结算数据及调用Contract/Business RPC前拒绝；报表读取、规则维护、计算、分账和汇总重建使用彼此独立的精确操作码
+
+#### Scenario: Payment confirmation or callback lacks a real provider proof
+- **WHEN** 请求调用旧“标记已付款”接口或提交未经签名的银行回调
+- **THEN** 无论业务管理员身份或工具声明如何，接口均在数据库写入前拒绝；不得生成虚构银行流水号，也不得以SERVICE身份读取用户结算数据

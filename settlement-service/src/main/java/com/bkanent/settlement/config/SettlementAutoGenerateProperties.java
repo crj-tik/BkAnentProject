@@ -11,7 +11,8 @@ public class SettlementAutoGenerateProperties {
     /**
      * 业务属性：enabled。
      */
-    private boolean enabled = true;
+    // No signed, exact service-task permit exists yet; automation stays off until that boundary is added.
+    private boolean enabled;
     /**
      * 业务属性：cron。
      */

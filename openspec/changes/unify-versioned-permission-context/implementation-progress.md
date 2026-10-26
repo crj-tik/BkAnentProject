@@ -148,3 +148,17 @@ RAG出站URL复核确认本批未新增任意HTTP URL权限回调或新的服务
 凭据领取契约要求认证POST、no-store与专用请求头；SSE由fetch流携带headers，移除query票据入口。浏览器前端不在此仓库，故浏览器领取/流接线、真实ReactAgent归档/artifact链及存量凭据扫描分别保留任务8.3–8.5未完成；KI-202/KI-203记录历史数据扫描与前端验收边界。四项增量迁移及schema checks已登记manifest并完成静态路径/哈希校验，尚未应用到MySQL。
 
 验证：`mvn -gs .mvn-settings.xml -s .mvn-settings.xml -pl interview-service -am test`的7模块reactor成功；Interview 120项通过、失败/错误/跳过均0。可读Surefire报告合计487项，其中1项既有跳过、失败/错误0。OpenSpec严格校验通过。任务进度由33/63更新为46/63；未运行全仓测试、浏览器端到端验收或存量数据库扫描，新授权模式没有生产启用。
+
+## Business/Settlement 操作授权续批（2026-10-26）
+
+按模块完成任务10.2的源码准入与失败关闭。Auth目录新增21个Business/Settlement精确操作码，不向普通角色默认授予；业务管理员只能通过签名授权上下文取得Auth已登记操作。Business报表、评估、排行榜/重建、门店与大盘查询分别在共享服务方法检查操作，因此REST、RPC、A2A与MCP走同一守卫。REST入口过滤器采用默认关闭配置，A2A复用已验签run context，MCP依赖精确工具操作映射且当前仍为空；无上下文RPC在查询前拒绝，不退化成SERVICE全权。
+
+Settlement的规则读取/写入、记录读取/创建、计算、分账读取/计算、汇总读取/重建、自动生成、状态变更、批次和佣金读取拆分操作。当前没有可信userId→employee/store/payee关系或Contract请求委托，所以计算、自动生成、批次、状态确认均在触库或跨服务RPC前拒绝；旧模拟付款和无签名银行callback保持硬拒绝。自动任务默认关闭，Nacos默认值同步设为关闭。Auth迁移`20261026_business_settlement_authorization.sql`与schema check已加入init manifest，尚未应用到数据库。
+
+新增跨协议本地操作检查及拒绝副作用回归共**11项通过**：common-a2a 2、Business 3、Settlement 6，失败/错误/跳过均0；`common-a2a,business-service,settlement-service -am`定向测试构建成功。严格OpenSpec校验待本批结束前复核。10.1映射实现已由Auth、Listing与Customer模块回归验证；新鉴权入口仍未部署启用，不据源码测试声明生产开放。
+
+## Auth经纪人映射与Listing/Customer准入验证（2026-10-26）
+
+按模块复核任务10.1。Auth已有显式且唯一的`userId→brokerId`映射表及受审计管理API；映射改变在事务内递增用户`permissionRevision`、写授权outbox，并进入签名snapshot/context及规范hash。Auth不自动猜测旧工号或同号ID，未回填映射的用户继续无法执行经纪人私有操作。Listing/Customer从验签上下文读取BROKER，不采信模型或请求体替代；房源摘要/RAG仍只暴露未删除ON_SALE跨broker范围，私有详情/写操作核归属并使用独立写权限，Customer档案及跟进/委托/收藏按可信broker关系校验。Customer委托Listing时传原签名响应与请求证明，Listing本地验签并检查精确读取权限。
+
+Auth、common授权DTO/验签、Listing和Customer定向回归共**91项通过**：common 21、Auth 45、Listing 17、Customer 8，失败/错误/跳过均0；9个Maven reactor模块成功。验证涵盖映射唯一性、审计与版本outbox、签名字段及hash、actor/请求体伪造、缺少权限、跨broker私有资源拒绝和Customer→Listing本地验签RPC。映射迁移和schema check已登记但未应用到MySQL；Listing/Customer生产公钥、路由和新入口未验证/未启用。任务10.1及10.2完成后为**48/63**；其余任务仍按真实数据库、浏览器和多实例运行证据分开验收。
