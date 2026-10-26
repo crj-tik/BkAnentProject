@@ -13,6 +13,14 @@ public final class McpAuthorizationScope {
 
     public static McpAuthorizationContract.Verified current() { return CURRENT.get(); }
 
+    /** Returns a verified request after rechecking its local hard deadlines. */
+    public static McpAuthorizationContract.Verified requireCurrent() {
+        McpAuthorizationContract.Verified verified = CURRENT.get();
+        if (verified == null) throw new AuthzException(AuthzErrorCode.AUTHENTICATION_REQUIRED);
+        requireLive(verified);
+        return verified;
+    }
+
     /** Returns only the actor carried by a proof already verified at the MCP request boundary. */
     public static String requireActor() {
         McpAuthorizationContract.Verified verified = CURRENT.get();

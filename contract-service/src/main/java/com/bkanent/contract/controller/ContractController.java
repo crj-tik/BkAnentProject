@@ -3,6 +3,7 @@ package com.bkanent.contract.controller;
 import com.bkanent.common.model.ApiResponse;
 import com.bkanent.common.model.HealthStatusDTO;
 import com.bkanent.common.rpc.ContractRpcService;
+import com.bkanent.common.a2a.VerifiedDomainAuthorization;
 import com.bkanent.contract.model.ContractArchiveRequest;
 import com.bkanent.contract.model.ContractAttachmentOcrRequest;
 import com.bkanent.contract.model.ContractAttachmentResponse;
@@ -105,6 +106,7 @@ public class ContractController {
 
     @GetMapping("/pending-sign/remind")
     public ApiResponse<Integer> remindPendingSign(@RequestParam(defaultValue = "3") int days) {
+        VerifiedDomainAuthorization.requireOperation("contract.reminder.send.all");
         return ApiResponse.ok(contractReminderService.sendPendingSignReminders(days));
     }
 

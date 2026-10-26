@@ -84,6 +84,21 @@ public class ListingMasterRpcServiceImpl implements ListingMasterRpcService {
         }
     }
 
+    @Override
+    public List<ListingDTO> readAuthorizedContext(
+            com.bkanent.common.rag.RagContextAuthorizedListingReadRequest request,
+            com.bkanent.common.rag.RagAuthEnvelope authentication) {
+        if (!authorizationProperties.isEnabled()) {
+            throw new com.bkanent.common.rag.RagException(
+                    com.bkanent.common.rag.RagErrorCode.AUTHENTICATION_FAILED);
+        }
+        var principal = identity.verifyAuthorizedReadContext(request, authentication,
+                authorizationProperties.decodedAuthorityPublicKeys());
+        var listing = domain.getById(request.request().listingId());
+        if (!com.bkanent.listing.rag.ListingRagIdentity.canRead(principal, listing)) return List.of();
+        return List.of(converter.toDto(listing));
+    }
+
     /**
      * 获取指定房源摘要。
      */

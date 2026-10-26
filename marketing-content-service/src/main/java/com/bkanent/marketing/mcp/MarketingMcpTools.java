@@ -4,6 +4,7 @@ import com.bkanent.common.model.MarketingContentDTO;
 import com.bkanent.common.rpc.MediaWorkerRpcService;
 import com.bkanent.common.rpc.PromotionRpcService;
 import com.bkanent.common.tool.McpTool;
+import com.bkanent.common.a2a.VerifiedDomainAuthorization;
 import com.bkanent.marketing.service.MarketingAssetService;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
@@ -33,16 +34,9 @@ public class MarketingMcpTools implements McpTool {
             @ToolParam(description = "Listing ID") Long listingId,
             @ToolParam(description = "Comma-separated platforms, e.g. 'douyin,wechat,xiaohongshu'") String platforms,
             @ToolParam(description = "Marketing copywriting text") String copywriting) {
-        List<String> platformList = parsePlatforms(platforms);
-        List<String> assets = mediaWorkerRpcService == null ? List.of() : mediaWorkerRpcService.generateAssets(listingId, copywriting);
-        List<MarketingContentDTO> contents = platformList.stream()
-                .map(platform -> new MarketingContentDTO(listingId, platform, copywriting, assets, "DRAFT"))
-                .toList();
-        List<MarketingContentDTO> savedContents = marketingAssetService.saveContents(contents);
-        if (promotionRpcService != null) {
-            savedContents.forEach(promotionRpcService::publish);
-        }
-        return "已生成 " + savedContents.size() + " 条内容并提交发布。";
+        VerifiedDomainAuthorization.requireBrokerScope(
+                "marketing.publish.execute.own", "marketing.publish.execute.all");
+        throw new UnsupportedOperationException("真实营销发布渠道尚未接通，当前不执行媒体生成、保存或模拟发布");
     }
 
     private List<String> parsePlatforms(String platforms) {

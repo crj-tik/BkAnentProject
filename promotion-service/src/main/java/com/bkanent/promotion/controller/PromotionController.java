@@ -4,6 +4,7 @@ import com.bkanent.common.model.ApiResponse;
 import com.bkanent.common.model.HealthStatusDTO;
 import com.bkanent.common.model.MarketingContentDTO;
 import com.bkanent.common.model.PublishRequest;
+import com.bkanent.common.authz.AuthzRequestScope;
 import com.bkanent.common.rpc.MarketingContentRpcService;
 import com.bkanent.promotion.model.BrandAssetResponse;
 import com.bkanent.promotion.model.BrandAssetUpsertRequest;
@@ -43,6 +44,7 @@ public class PromotionController {
 
     @PostMapping("/publish")
     public ApiResponse<List<PromotionPublishResultResponse>> publish(@RequestBody PublishRequest request) {
+        AuthzRequestScope.requireOperation("marketing.publish.execute.all");
         List<MarketingContentDTO> contents = request.platforms().stream()
                 .map(platform -> new MarketingContentDTO(request.listingId(), platform, request.prompt(), List.of(), "REVIEWING"))
                 .toList();
@@ -67,27 +69,32 @@ public class PromotionController {
 
     @PostMapping("/effects/sync")
     public ApiResponse<PromotionEffectResponse> syncEffects(@RequestBody PromotionEffectSyncRequest request) {
+        AuthzRequestScope.requireOperation("marketing.promotion.effect.sync.all");
         return ApiResponse.ok(promotionManagementService.syncEffectStat(request));
     }
 
     @GetMapping("/effects")
     public ApiResponse<List<PromotionEffectResponse>> listEffects(@RequestParam Long listingId) {
+        AuthzRequestScope.requireOperation("marketing.promotion.effect.read.all");
         return ApiResponse.ok(promotionManagementService.listEffectStats(listingId));
     }
 
     @GetMapping("/roi-report")
     public ApiResponse<List<PromotionRoiReportResponse>> roiReport() {
+        AuthzRequestScope.requireOperation("marketing.promotion.roi.read.all");
         return ApiResponse.ok(promotionManagementService.buildRoiReport());
     }
 
     @PostMapping("/brand-assets")
     public ApiResponse<BrandAssetResponse> saveBrandAsset(@RequestBody BrandAssetUpsertRequest request) {
+        AuthzRequestScope.requireOperation("marketing.brand-assets.write.all");
         return ApiResponse.ok(promotionManagementService.saveBrandAsset(request));
     }
 
     @GetMapping("/brand-assets")
     public ApiResponse<List<BrandAssetResponse>> listBrandAssets(@RequestParam(required = false) String assetType,
                                                                  @RequestParam(required = false) String keyword) {
+        AuthzRequestScope.requireOperation("marketing.brand-assets.read.all");
         return ApiResponse.ok(promotionManagementService.listBrandAssets(assetType, keyword));
     }
 

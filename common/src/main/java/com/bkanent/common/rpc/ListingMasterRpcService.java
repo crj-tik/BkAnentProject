@@ -22,6 +22,12 @@ public interface ListingMasterRpcService {
                                     com.bkanent.common.authz.AuthzResponse authorization)
             throws com.bkanent.common.rag.RagException;
 
+    /** A2A request-level proof with the Auth-signed run context; no bearer or per-tool Auth call. */
+    List<ListingDTO> readAuthorizedContext(
+            com.bkanent.common.rag.RagContextAuthorizedListingReadRequest request,
+            com.bkanent.common.rag.RagAuthEnvelope authentication)
+            throws com.bkanent.common.rag.RagException;
+
     /**
      * 获取指定房源摘要。
      */

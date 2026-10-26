@@ -38,6 +38,23 @@ public class ContractDomainServiceImpl extends ServiceImpl<ContractMapper, Contr
                 .orderByDesc(ContractEntity::getId));
     }
 
+    @Override
+    public List<ContractEntity> listContractsForBroker(String contractType, String status, Long brokerId) {
+        return list(new LambdaQueryWrapper<ContractEntity>()
+                .eq(StringUtils.hasText(contractType), ContractEntity::getContractType, contractType)
+                .eq(StringUtils.hasText(status), ContractEntity::getStatus, status)
+                .eq(ContractEntity::getBrokerId, brokerId)
+                .orderByDesc(ContractEntity::getUpdatedAt)
+                .orderByDesc(ContractEntity::getId));
+    }
+
+    @Override
+    public ContractEntity getContractForBroker(Long id, Long brokerId) {
+        return getOne(new LambdaQueryWrapper<ContractEntity>()
+                .eq(ContractEntity::getId, id)
+                .eq(ContractEntity::getBrokerId, brokerId));
+    }
+
     private boolean isWithinDays(String expiryDate, LocalDate endDate) {
         if (!StringUtils.hasText(expiryDate)) {
             return false;

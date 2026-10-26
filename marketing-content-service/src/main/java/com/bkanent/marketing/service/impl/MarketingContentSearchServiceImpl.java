@@ -62,21 +62,22 @@ public class MarketingContentSearchServiceImpl implements MarketingContentSearch
     }
 
     @Override
-    public List<MarketingContentEntity> search(MarketingContentSearchRequest request) {
+    public List<MarketingContentEntity> search(MarketingContentSearchRequest request, Long ownerBrokerId) {
         ElasticsearchOperations operations = elasticsearchOperationsProvider.getIfAvailable();
         if (marketingSearchProperties.isUseElasticsearch() && operations != null) {
             try {
-                return searchByElasticsearch(operations, request);
+                return searchByElasticsearch(operations, request, ownerBrokerId);
             } catch (Exception exception) {
                 log.warn("营销内容 Elasticsearch 检索失败，降级使用 MySQL，原因={}", exception.getMessage());
             }
         }
-        return searchByMysql(request);
+        return searchByMysql(request, ownerBrokerId);
     }
 
     private List<MarketingContentEntity> searchByElasticsearch(ElasticsearchOperations operations,
-                                                               MarketingContentSearchRequest request) {
-        String queryJson = buildEsQuery(request);
+                                                               MarketingContentSearchRequest request,
+                                                               Long ownerBrokerId) {
+        String queryJson = buildEsQuery(request, ownerBrokerId);
         List<Long> ids = operations.search(new StringQuery(queryJson), MarketingContentDocument.class,
                         IndexCoordinates.of(marketingSearchProperties.getIndexName()))
                 .stream()
@@ -86,13 +87,17 @@ public class MarketingContentSearchServiceImpl implements MarketingContentSearch
         if (ids.isEmpty()) {
             return List.of();
         }
-        return marketingContentMapper.selectBatchIds(ids).stream()
+        LambdaQueryWrapper<MarketingContentEntity> ownerQuery = new LambdaQueryWrapper<MarketingContentEntity>()
+                .in(MarketingContentEntity::getId, ids)
+                .eq(ownerBrokerId != null, MarketingContentEntity::getOwnerBrokerId, ownerBrokerId);
+        return marketingContentMapper.selectList(ownerQuery).stream()
                 .sorted((left, right) -> ids.indexOf(left.getId()) - ids.indexOf(right.getId()))
                 .toList();
     }
 
-    private List<MarketingContentEntity> searchByMysql(MarketingContentSearchRequest request) {
+    private List<MarketingContentEntity> searchByMysql(MarketingContentSearchRequest request, Long ownerBrokerId) {
         LambdaQueryWrapper<MarketingContentEntity> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(ownerBrokerId != null, MarketingContentEntity::getOwnerBrokerId, ownerBrokerId);
         queryWrapper.eq(request.listingId() != null, MarketingContentEntity::getListingId, request.listingId());
         queryWrapper.eq(StringUtils.hasText(request.platform()), MarketingContentEntity::getPlatform, request.platform());
         queryWrapper.eq(StringUtils.hasText(request.contentType()), MarketingContentEntity::getContentType, request.contentType());
@@ -108,8 +113,11 @@ public class MarketingContentSearchServiceImpl implements MarketingContentSearch
         return marketingContentMapper.selectList(queryWrapper);
     }
 
-    private String buildEsQuery(MarketingContentSearchRequest request) {
+    private String buildEsQuery(MarketingContentSearchRequest request, Long ownerBrokerId) {
         Set<String> mustClauses = new LinkedHashSet<>();
+        if (ownerBrokerId != null) {
+            mustClauses.add("{\"term\":{\"ownerBrokerId\":" + ownerBrokerId + "}}");
+        }
         if (request.listingId() != null) {
             mustClauses.add("{\"term\":{\"listingId\":" + request.listingId() + "}}");
         }

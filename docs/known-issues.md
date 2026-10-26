@@ -1546,6 +1546,16 @@
 
 **关联**：LR-147；KI-55；change `unify-versioned-permission-context`任务10.2/10.6。
 
+## KI-205 [FIXED·本提交·P1] Marketing版本化A2A房源读取仍要求legacy用户凭据
+
+**发现日期与依据**：2026-10-26，完成`unify-versioned-permission-context`任务10.3时验证Marketing→Listing内部读取。版本化`A2aCredentialContext.Lease`只含Auth签名context/freshness，`RagCredentialContext`为空；旧Marketing Listing reader仍调用legacy凭据RPC，因此在A2A Graph内无法读取且会安全失败。
+
+**修复**：增加单房源`readAuthorizedContext` RPC。Marketing以lease中的context/freshness为父身份，对实际请求及证据生成HMAC proof；Listing按原Auth context受众`agent-service`本地验Auth签名，再验Marketing caller proof、actor/授权版本/freshness/硬截止和精确读取操作，按房源真源过滤后只返回`ListingDTO`摘要。没有Bearer fallback、Auth逐节点RPC或伪造Auth snapshot。Listing授权开关默认关闭。
+
+**验证与边界**：Listing RPC与Marketing客户端反例/正例定向回归通过；完整生产密钥、A2A跨服务部署和数据库迁移尚未验证/启用。后续使用真实运行栈验收任务11.4，不能从本地fixture推断生产开放。
+
+**关联**：LR-140/145/146/148；change `unify-versioned-permission-context`任务10.3/11.4。
+
 ---
 
 **变更历史**：本提交补齐 Interview 权限/凭据存量核查与浏览器验收边界（KI-202/203），并持久化A2A请求防重放与任务归属（KI-172）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。

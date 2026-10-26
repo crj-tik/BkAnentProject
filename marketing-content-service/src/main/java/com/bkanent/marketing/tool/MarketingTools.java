@@ -58,7 +58,7 @@ public class MarketingTools {
         }
         return marketingAssetService.createContent(new MarketingContentUpsertRequest(
                 listingId, platform, title, contentType, copywriting, List.of(),
-                coverImageUrl, videoUrl, "DEFAULT", List.of("agent-generated"), "APPROVED", null, source));
+                coverImageUrl, videoUrl, "DEFAULT", List.of("agent-generated"), "DRAFT", null, source));
     }
 
     private String generateCopy(Long listingId, String platform) {

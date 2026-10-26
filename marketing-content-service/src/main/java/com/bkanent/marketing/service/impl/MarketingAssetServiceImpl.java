@@ -15,6 +15,7 @@ import com.bkanent.marketing.model.MarketingContentUpsertRequest;
 import com.bkanent.marketing.model.MarketingPublishStatusUpdateRequest;
 import com.bkanent.marketing.service.MarketingAssetService;
 import com.bkanent.marketing.service.MarketingContentSearchService;
+import com.bkanent.common.a2a.VerifiedDomainAuthorization;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -43,8 +44,15 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
     @Override
     @Transactional(rollbackFor = Exception.class)
     public List<MarketingContentDTO> saveContents(List<MarketingContentDTO> contents) {
+        VerifiedDomainAuthorization.requireOperation("marketing.content.create.own");
+        long ownerBrokerId = VerifiedDomainAuthorization.requireBrokerIdentity();
         List<MarketingContentEntity> entities = contents.stream()
                 .map(marketingContentConverter::toEntity)
+                .peek(entity -> {
+                    entity.setOwnerBrokerId(ownerBrokerId);
+                    entity.setAuditStatus(MarketingAuditStatusEnum.DRAFT.name());
+                    entity.setStatus(MarketingPublishStatusEnum.DRAFT.name());
+                })
                 .toList();
         saveBatch(entities);
         entities.forEach(marketingContentSearchService::indexContent);
@@ -56,8 +64,11 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
 
     @Override
     public List<MarketingContentDTO> listByListingId(Long listingId) {
+        Long ownerBrokerId = VerifiedDomainAuthorization.requireBrokerScope(
+                "marketing.content.read.own", "marketing.content.read.all");
         return list(new LambdaQueryWrapper<MarketingContentEntity>()
                 .eq(MarketingContentEntity::getListingId, listingId)
+                .eq(ownerBrokerId != null, MarketingContentEntity::getOwnerBrokerId, ownerBrokerId)
                 .orderByDesc(MarketingContentEntity::getVersionNo)
                 .orderByDesc(MarketingContentEntity::getUpdatedAt))
                 .stream()
@@ -72,7 +83,8 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
                                     String coverImageUrl,
                                     String videoUrl,
                                     String updateMessage) {
-        MarketingContentEntity entity = requireContent(contentId);
+        MarketingContentEntity entity = requireContent(contentId,
+                "marketing.assets.bind.own", "marketing.assets.bind.all");
         entity.setAssetUrls(marketingContentConverter.joinValues(assetUrls));
         entity.setCoverImageUrl(coverImageUrl);
         entity.setVideoUrl(videoUrl);
@@ -87,9 +99,13 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
     @Override
     @Transactional(rollbackFor = Exception.class)
     public MarketingContentDetailResponse createContent(MarketingContentUpsertRequest request) {
+        VerifiedDomainAuthorization.requireOperation("marketing.content.create.own");
+        long ownerBrokerId = VerifiedDomainAuthorization.requireBrokerIdentity();
         validateUpsertRequest(request);
         MarketingContentEntity entity = new MarketingContentEntity();
         applyUpsert(entity, request);
+        entity.setOwnerBrokerId(ownerBrokerId);
+        entity.setParentContentId(null);
         entity.setVersionNo(1);
         entity.setStatus(MarketingPublishStatusEnum.DRAFT.name());
         save(entity);
@@ -101,10 +117,15 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
     @Override
     @Transactional(rollbackFor = Exception.class)
     public MarketingContentDetailResponse createPlatformVariant(Long sourceContentId, MarketingContentUpsertRequest request) {
-        MarketingContentEntity sourceEntity = requireContent(sourceContentId);
+        Long ownerBrokerId = VerifiedDomainAuthorization.requireBrokerScope(
+                "marketing.content.variant.create.own", "marketing.content.variant.create.all");
+        MarketingContentEntity sourceEntity = requireContent(sourceContentId,
+                "marketing.content.variant.create.own", "marketing.content.variant.create.all", ownerBrokerId);
         validateUpsertRequest(request);
         MarketingContentEntity entity = new MarketingContentEntity();
         applyUpsert(entity, request);
+        entity.setOwnerBrokerId(ownerBrokerId == null
+                ? VerifiedDomainAuthorization.requireBrokerIdentity() : ownerBrokerId);
         entity.setParentContentId(sourceContentId);
         entity.setVersionNo(sourceEntity.getVersionNo() == null ? 1 : sourceEntity.getVersionNo() + 1);
         entity.setStatus(MarketingPublishStatusEnum.DRAFT.name());
@@ -117,10 +138,19 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
     @Override
     @Transactional(rollbackFor = Exception.class)
     public MarketingContentDetailResponse updatePublishStatus(Long contentId, MarketingPublishStatusUpdateRequest request) {
+        Long ownerBrokerId = VerifiedDomainAuthorization.requireBrokerScope(
+                "marketing.publish.status.update.own", "marketing.publish.status.update.all");
         if (!MarketingPublishStatusEnum.contains(request.publishStatus())) {
             throw new IllegalArgumentException("发布状态不合法: " + request.publishStatus());
         }
-        MarketingContentEntity entity = requireContent(contentId);
+        if ("SUCCESS".equalsIgnoreCase(request.publishStatus())) {
+            throw new UnsupportedOperationException("真实发布渠道未接通，不能确认发布成功");
+        }
+        if (StringUtils.hasText(request.externalPublishId()) || request.publishTime() != null) {
+            throw new IllegalArgumentException("发布渠道回执不能由请求字段伪造");
+        }
+        MarketingContentEntity entity = requireContent(contentId,
+                "marketing.publish.status.update.own", "marketing.publish.status.update.all", ownerBrokerId);
         entity.setStatus(request.publishStatus().toUpperCase());
         entity.setPublishMessage(request.publishMessage());
         entity.setExternalPublishId(request.externalPublishId());
@@ -133,7 +163,9 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
 
     @Override
     public List<MarketingContentDetailResponse> searchContents(MarketingContentSearchRequest request) {
-        return marketingContentSearchService.search(request).stream()
+        Long ownerBrokerId = VerifiedDomainAuthorization.requireBrokerScope(
+                "marketing.content.read.own", "marketing.content.read.all");
+        return marketingContentSearchService.search(request, ownerBrokerId).stream()
                 .map(marketingContentConverter::toDetailResponse)
                 .toList();
     }
@@ -148,8 +180,10 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
         if (!MarketingContentTypeEnum.contains(request.contentType())) {
             throw new IllegalArgumentException("内容类型不合法: " + request.contentType());
         }
-        if (StringUtils.hasText(request.auditStatus()) && !MarketingAuditStatusEnum.contains(request.auditStatus())) {
-            throw new IllegalArgumentException("审核状态不合法: " + request.auditStatus());
+        if (StringUtils.hasText(request.auditStatus())
+                && (!MarketingAuditStatusEnum.contains(request.auditStatus())
+                || !MarketingAuditStatusEnum.DRAFT.name().equalsIgnoreCase(request.auditStatus()))) {
+            throw new IllegalArgumentException("新建内容只能进入 DRAFT 审核状态");
         }
     }
 
@@ -164,13 +198,21 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
         entity.setVideoUrl(request.videoUrl());
         entity.setPlatformVariant(StringUtils.hasText(request.platformVariant()) ? request.platformVariant() : "DEFAULT");
         entity.setTags(marketingContentConverter.joinValues(request.tags()));
-        entity.setAuditStatus(StringUtils.hasText(request.auditStatus()) ? request.auditStatus().toUpperCase() : MarketingAuditStatusEnum.DRAFT.name());
-        entity.setParentContentId(request.parentContentId());
+        entity.setAuditStatus(MarketingAuditStatusEnum.DRAFT.name());
         entity.setSource(StringUtils.hasText(request.source()) ? request.source() : "manual");
     }
 
-    private MarketingContentEntity requireContent(Long contentId) {
-        MarketingContentEntity entity = getById(contentId);
+    private MarketingContentEntity requireContent(Long contentId, String ownOperation, String businessWideOperation) {
+        Long ownerBrokerId = VerifiedDomainAuthorization.requireBrokerScope(ownOperation, businessWideOperation);
+        return requireContent(contentId, ownOperation, businessWideOperation, ownerBrokerId);
+    }
+
+    private MarketingContentEntity requireContent(Long contentId, String ownOperation,
+                                                  String businessWideOperation, Long ownerBrokerId) {
+        MarketingContentEntity entity = ownerBrokerId == null ? getById(contentId)
+                : getOne(new LambdaQueryWrapper<MarketingContentEntity>()
+                        .eq(MarketingContentEntity::getId, contentId)
+                        .eq(MarketingContentEntity::getOwnerBrokerId, ownerBrokerId));
         if (entity == null) {
             throw new IllegalArgumentException("营销内容不存在: " + contentId);
         }

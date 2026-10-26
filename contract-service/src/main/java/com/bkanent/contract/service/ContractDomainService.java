@@ -19,4 +19,8 @@ public interface ContractDomainService extends IService<ContractEntity> {
      * 业务方法：listContracts。
      */
     List<ContractEntity> listContracts(String contractType, String status);
+
+    List<ContractEntity> listContractsForBroker(String contractType, String status, Long brokerId);
+
+    ContractEntity getContractForBroker(Long id, Long brokerId);
 }

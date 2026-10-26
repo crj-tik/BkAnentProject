@@ -162,3 +162,11 @@ Settlement的规则读取/写入、记录读取/创建、计算、分账读取/�
 按模块复核任务10.1。Auth已有显式且唯一的`userId→brokerId`映射表及受审计管理API；映射改变在事务内递增用户`permissionRevision`、写授权outbox，并进入签名snapshot/context及规范hash。Auth不自动猜测旧工号或同号ID，未回填映射的用户继续无法执行经纪人私有操作。Listing/Customer从验签上下文读取BROKER，不采信模型或请求体替代；房源摘要/RAG仍只暴露未删除ON_SALE跨broker范围，私有详情/写操作核归属并使用独立写权限，Customer档案及跟进/委托/收藏按可信broker关系校验。Customer委托Listing时传原签名响应与请求证明，Listing本地验签并检查精确读取权限。
 
 Auth、common授权DTO/验签、Listing和Customer定向回归共**91项通过**：common 21、Auth 45、Listing 17、Customer 8，失败/错误/跳过均0；9个Maven reactor模块成功。验证涵盖映射唯一性、审计与版本outbox、签名字段及hash、actor/请求体伪造、缺少权限、跨broker私有资源拒绝和Customer→Listing本地验签RPC。映射迁移和schema check已登记但未应用到MySQL；Listing/Customer生产公钥、路由和新入口未验证/未启用。任务10.1及10.2完成后为**48/63**；其余任务仍按真实数据库、浏览器和多实例运行证据分开验收。
+
+## Contract/Marketing授权边界续批（2026-10-26）
+
+按模块完成任务10.3。Contract使用签名BROKER映射确定合同owner，列表在SQL按broker过滤；附件通过已授权合同父记录读取，状态、OCR、归档、签章及风险动作检查精确操作。Mock电子签章不能写入`SEALED`。Marketing内容新增ownerBrokerId并在列表/搜索/变体/素材回写时按SQL owner限制；新内容固定DRAFT，当前没有独立审核通过入口；真实发布未接通时拒绝`SUCCESS`并拒绝伪造外部回执。原业务状态机继续作为单独约束。
+
+修复KI-205：版本化A2A lease没有legacy RagCredentialContext，Marketing现在将Auth签名context/freshness随单房源摘要RPC传给Listing，并以服务HMAC绑定真实请求。Listing本地验证caller proof、Auth context/freshness、actor、revision/epoch/hash、run/session和截止，执行`listing.read`或显式`listing.read.all`并按SQL状态过滤；不转Bearer、不伪造snapshot、不逐次联系Auth。该RPC受Listing授权开关控制，默认关闭。
+
+Auth权限目录/营销owner增量迁移与schema check已登记init manifest，尚未应用到MySQL。定向回归覆盖common RAG canonical proof、A2A/业务授权helper、Contract、Listing、Marketing与Promotion：**54项通过，失败/错误/跳过均0**；相关10个Maven reactor模块成功，OpenSpec严格校验通过。Listing/Marketing/Auth运行密钥和真实跨服务调用仍未验收，新链未启用。任务10.3完成后进度为**49/63**；3.3 Redis ACL运行验收、8.3–8.5浏览器/存量数据，以及10.4起的其他域与11.x故障交付验收继续保持未完成。

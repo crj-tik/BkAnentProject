@@ -8,6 +8,7 @@ import java.util.List;
 public record MarketingContentDocument(
         Long id,
         Long listingId,
+        Long ownerBrokerId,
         String platform,
         String title,
         String contentType,

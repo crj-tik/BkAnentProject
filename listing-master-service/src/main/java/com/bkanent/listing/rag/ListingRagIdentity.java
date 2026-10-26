@@ -15,6 +15,7 @@ import java.util.UUID;
 @Service
 public class ListingRagIdentity {
     public static final String SERVICE = "listing-master-service";
+    private static final String A2A_PARENT_SERVICE = "agent-service";
     public static final String SPACE = "listing.knowledge";
     private final ListingRagProperties properties;
     private final ObjectProvider<RagPrincipalRpcService> auth;
@@ -167,6 +168,56 @@ public class ListingRagIdentity {
                 scope.close();
                 throw failure;
             }
+        } catch (com.bkanent.common.authz.AuthzException failure) {
+            throw toRagException(failure);
+        }
+    }
+
+    /** Verifies an A2A run context and the exact caller proof for one private RPC read. */
+    public AuthRagPrincipal verifyAuthorizedReadContext(
+            com.bkanent.common.rag.RagContextAuthorizedListingReadRequest request,
+            RagAuthEnvelope envelope, java.util.Map<String, java.security.PublicKey> authorityKeys) {
+        try {
+            if (request == null || envelope == null || authorityKeys == null || authorityKeys.isEmpty()) {
+                throw new com.bkanent.common.authz.AuthzException(
+                        com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
+            }
+            verifyCaller(request, request.request().requestId(), RagOperation.READ, envelope, null);
+            var context = request.authorizationContext();
+            var freshness = request.freshness();
+            long now = Instant.now().getEpochSecond();
+            if (envelope.actorMode() != RagActorMode.USER
+                    || !A2A_PARENT_SERVICE.equals(context.audience())
+                    || !context.actorId().equals(envelope.actorId())
+                    || !context.actorId().equals(freshness.userId())
+                    || context.permissionRevision() != freshness.permissionRevision()
+                    || context.credentialEpoch() != freshness.credentialEpoch()
+                    || !context.permissionHash().equals(freshness.permissionHash())
+                    || context.runId() == null || context.sessionId() == null
+                    || context.issuedAtEpochSecond() < freshness.checkedAtEpochSecond()
+                    || envelope.expiresAtEpochSecond() > context.expiresAtEpochSecond()
+                    || envelope.expiresAtEpochSecond() > context.runHardDeadlineEpochSecond()
+                    || envelope.expiresAtEpochSecond() > freshness.notAfterEpochSecond()) {
+                throw new com.bkanent.common.authz.AuthzException(
+                        com.bkanent.common.authz.AuthzErrorCode.CONTEXT_CONFLICT);
+            }
+            com.bkanent.common.authz.AuthzSignature.verifyContext(context, A2A_PARENT_SERVICE, authorityKeys,
+                    Instant.ofEpochSecond(now));
+            com.bkanent.common.authz.AuthzSignature.verifyFreshness(freshness, authorityKeys,
+                    Instant.ofEpochSecond(now));
+            boolean businessWide = context.allowedOperations().contains("listing.read.all");
+            String operation = businessWide ? "listing.read.all" : "listing.read";
+            if (!context.allowedOperations().contains(operation)) {
+                throw new com.bkanent.common.authz.AuthzException(
+                        com.bkanent.common.authz.AuthzErrorCode.PERMISSION_DENIED);
+            }
+            long expires = Math.min(context.expiresAtEpochSecond(), Math.min(context.runHardDeadlineEpochSecond(),
+                    freshness.notAfterEpochSecond()));
+            return new AuthRagPrincipal(Long.parseLong(context.actorId()), "SIGNED", true, true, expires,
+                    AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION, context.permissionRevision(),
+                    context.credentialEpoch(), businessWide,
+                    businessWide ? java.util.List.of("BUSINESS_ADMIN") : java.util.List.of("USER"),
+                    context.allowedOperations(), null);
         } catch (com.bkanent.common.authz.AuthzException failure) {
             throw toRagException(failure);
         }

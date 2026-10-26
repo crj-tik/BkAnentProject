@@ -1141,3 +1141,13 @@
 **代码位置**：`common-a2a/VerifiedDomainAuthorization`、`A2aCredentialContext`、`common/mcp/authz/McpAuthorizationScope`；`business-service/BusinessAuthorizationIngressFilter`、`BusinessAnalyticsServiceImpl`；`settlement-service/SettlementAuthorizationIngressFilter`、`SettlementManagementServiceImpl`、`SettlementRpcServiceImpl`、`SettlementController`、`SettlementAutoGenerateJob`；迁移`20261026_business_settlement_authorization.sql`。
 
 **关联**：LR-138/139/140/145/146；KI-204；change `unify-versioned-permission-context`任务10.2。REST ingress、A2A版本化委托及MCP工具映射保持默认关闭/空配置；定向fixture回归不代表员工关系、跨域RPC proof、真实支付或部署启用已验收。
+
+## LR-148 Marketing的A2A房源摘要读取复用run context并逐请求证明
+
+**结论**：Marketing在版本化A2A lease中读取房源时，转发Auth签名的`AuthorizationContext`与`AuthzFreshness`，并为实际单房源摘要RPC生成服务HMAC proof；proof绑定完整序列化请求及两项签名证据。Listing按原Auth context受众`agent-service`本地验证context与freshness签名，再验证Marketing caller HMAC、actor/revision/epoch/hash、run/session及硬截止；随后检查精确`listing.read`或显式`listing.read.all`，只按`ListingDTO`公开摘要返回未删除的在售房源，显式全读操作可读取全部状态。此路径不转发用户Bearer、不把LLM字段当actor、不逐次调用Auth，且由Listing授权开关控制并默认关闭。
+
+**根因**：A2A版本化lease没有legacy `RagCredentialContext`，因此Marketing旧的Listing RPC在同一Graph运行内会因为缺少Bearer/beacon而失败关闭。把父context/freshness直接交给Listing验签并用调用方HMAC绑定真实子请求，可以继承不可替换的run身份与原授权上限，同时保留Listing的房源状态真源。不得伪造完整`AuthzResponse`/管理员快照来填补DTO，也不能用模型生成的用户字段或重新查询Auth绕过请求级协议。
+
+**代码位置**：`RagContextAuthorizedListingReadRequest`、`RagCanonicalHash.requestHash`、`ListingMasterRpcService.readAuthorizedContext`、`ListingRagIdentity.verifyAuthorizedReadContext`、`MarketingListingReadClient.getWithVersionedContext`。
+
+**关联**：LR-140/145/146；KI-205；change `unify-versioned-permission-context`任务6.1/10.3。该A2A读取路径仅源码/定向回归验证；Listing/Marketing密钥、生产调用链与数据库迁移尚未部署或启用。

@@ -34,6 +34,9 @@ class ListingReadRpcTest {
     private ListingRagIdentity identity() {
         var p = new ListingRagProperties(); var key = new ListingRagProperties.TrustedCaller();
         key.setCallerService("customer-service"); key.setSecret(SECRET); p.setTrustedCallers(Map.of("consumer-read",key));
+        var marketing = new ListingRagProperties.TrustedCaller();
+        marketing.setCallerService("marketing-content-service"); marketing.setSecret(SECRET);
+        p.getTrustedCallers().put("marketing-read", marketing);
         return new ListingRagIdentity(p,new StaticListableBeanFactory().getBeanProvider(com.bkanent.common.rpc.RagPrincipalRpcService.class));
     }
     @Test void serviceReadAndTamperedOrMissingUserProofAreRejectedBeforeSql() {
@@ -120,6 +123,60 @@ class ListingReadRpcTest {
         verifyNoInteractions(management);
     }
 
+    @Test void a2aExecutionContextAndBodyProofAuthorizeOnlyCurrentListingSummary() throws Exception {
+        var signing = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        var context = executionContext(signing, List.of("listing.read"));
+        var request = new RagContextAuthorizedListingReadRequest(1,
+                new RagListingReadRequest(1, "internal-a2a-read", 11L, null), context.context(), context.freshness());
+        var authorizationProperties = new ListingAuthorizationProperties();
+        authorizationProperties.setEnabled(true);
+        authorizationProperties.setAuthorityPublicKeys(Map.of(AUTH_KEY_ID,
+                ServiceIdentityCrypto.encodePublicKey(signing.getPublic())));
+        var domain = mock(ListingDomainService.class);
+        var listing = new ListingEntity(); listing.setId(11L); listing.setDeleted(0); listing.setStatus("ON_SALE");
+        when(domain.getById(11L)).thenReturn(listing);
+        var rpc = new ListingMasterRpcServiceImpl(mock(ListingManagementService.class), identity(), domain,
+                new ListingConverter(), authorizationProperties);
+
+        var results = rpc.readAuthorizedContext(request, signContextAuthorized(request, "42"));
+        assertEquals(1, results.size());
+        assertEquals(11L, results.get(0).id());
+        verify(domain).getById(11L);
+
+        listing.setStatus("OFFLINE");
+        assertTrue(rpc.readAuthorizedContext(request, signContextAuthorized(request, "42")).isEmpty());
+    }
+
+    @Test void a2aExecutionContextRejectsTamperingAndRequiresExactListingReadBeforeSql() throws Exception {
+        var signing = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        var authorized = executionContext(signing, List.of("listing.read"));
+        var request = new RagContextAuthorizedListingReadRequest(1,
+                new RagListingReadRequest(1, "internal-a2a-read", 11L, null), authorized.context(), authorized.freshness());
+        var authorizationProperties = new ListingAuthorizationProperties();
+        authorizationProperties.setEnabled(true);
+        authorizationProperties.setAuthorityPublicKeys(Map.of(AUTH_KEY_ID,
+                ServiceIdentityCrypto.encodePublicKey(signing.getPublic())));
+        var domain = mock(ListingDomainService.class);
+        var rpc = new ListingMasterRpcServiceImpl(mock(ListingManagementService.class), identity(), domain,
+                new ListingConverter(), authorizationProperties);
+
+        assertThrows(RagException.class, () -> rpc.readAuthorizedContext(request,
+                signContextAuthorized(request, "43")));
+        var alteredTarget = new RagContextAuthorizedListingReadRequest(1,
+                new RagListingReadRequest(1, request.request().requestId(), 12L, null),
+                request.authorizationContext(), request.freshness());
+        var originalProof = signContextAuthorized(request, "42");
+        assertEquals(RagErrorCode.AUTHENTICATION_FAILED, assertThrows(RagException.class,
+                () -> rpc.readAuthorizedContext(alteredTarget, originalProof)).code());
+        var restricted = executionContext(signing, List.of("customer.match.own"));
+        var noListingPermission = new RagContextAuthorizedListingReadRequest(1, request.request(),
+                restricted.context(), restricted.freshness());
+        assertEquals(RagErrorCode.FORBIDDEN, assertThrows(RagException.class,
+                () -> rpc.readAuthorizedContext(noListingPermission,
+                        signContextAuthorized(noListingPermission, "42"))).code());
+        verifyNoInteractions(domain);
+    }
+
     private AuthFixture authorization(KeyPair key, List<String> permissions, List<String> operations) {
         long now = Instant.now().getEpochSecond();
         String nonce = Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]);
@@ -145,5 +202,28 @@ class ListingReadRpcTest {
                 SECRET.getBytes(StandardCharsets.UTF_8));
     }
 
+    private ExecutionFixture executionContext(KeyPair key, List<String> operations) {
+        long now = Instant.now().getEpochSecond();
+        String nonce = Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]);
+        String hash = "d".repeat(64);
+        var context = AuthzSignature.sign(new AuthorizationContext("42", 10, 1, hash, operations,
+                "agent-service", "parent-request", "run-1", "session-1", "e".repeat(64),
+                "f".repeat(64), nonce, now, now + 60, now + 300, Map.of("BROKER", 84L),
+                AuthzContract.ALGORITHM, AUTH_KEY_ID, null), key.getPrivate());
+        var freshness = AuthzSignature.sign(new AuthzFreshness("42", 10, 1, AuthorizationStatus.ACTIVE,
+                hash, now, now + 30, nonce, AuthzContract.ALGORITHM, AUTH_KEY_ID, null), key.getPrivate());
+        return new ExecutionFixture(context, freshness);
+    }
+
+    private RagAuthEnvelope signContextAuthorized(RagContextAuthorizedListingReadRequest request, String actorId) {
+        long now = Instant.now().getEpochSecond();
+        long expiry = Math.min(now + 30, request.freshness().notAfterEpochSecond());
+        return RagRequestSigner.sign(new RagAuthEnvelope(1, "marketing-read", "listing-master-service",
+                "marketing-content-service", RagOperation.READ, request.request().requestId(),
+                RagCanonicalHash.requestHash(request), RagActorMode.USER, actorId, now, expiry, null, null),
+                SECRET.getBytes(StandardCharsets.UTF_8));
+    }
+
     private record AuthFixture(AuthzResponse response) { }
+    private record ExecutionFixture(AuthorizationContext context, AuthzFreshness freshness) { }
 }

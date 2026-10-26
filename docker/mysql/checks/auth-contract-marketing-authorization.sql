@@ -1,0 +1,38 @@
+SELECT (SELECT COUNT(*) FROM bk_auth.auth_permission
+        WHERE permission_code IN (
+            'contract.template.read.all',
+            'contract.template.write.all',
+            'contract.create.own',
+            'contract.read.own',
+            'contract.read.all',
+            'contract.status.update.own',
+            'contract.status.update.all',
+            'contract.attachment.ocr.own',
+            'contract.attachment.ocr.all',
+            'contract.archive.own',
+            'contract.archive.all',
+            'contract.seal.own',
+            'contract.seal.all',
+            'contract.risk.read.own',
+            'contract.risk.read.all',
+            'contract.settlement.read.all',
+            'contract.reminder.send.all',
+            'marketing.content.create.own',
+            'marketing.content.read.own',
+            'marketing.content.read.all',
+            'marketing.content.variant.create.own',
+            'marketing.content.variant.create.all',
+            'marketing.assets.bind.own',
+            'marketing.assets.bind.all',
+            'marketing.publish.status.update.own',
+            'marketing.publish.status.update.all',
+            'marketing.publish.execute.own',
+            'marketing.publish.execute.all',
+            'marketing.promotion.effect.read.all',
+            'marketing.promotion.effect.sync.all',
+            'marketing.promotion.roi.read.all',
+            'marketing.brand-assets.read.all',
+            'marketing.brand-assets.write.all'
+        ) AND active=1 AND permission_code=CONCAT(domain, '.', operation))=33
+   AND (SELECT COUNT(*) FROM bk_auth.auth_authorization_migration
+        WHERE migration_id='20261026_contract_marketing_authorization')=1;

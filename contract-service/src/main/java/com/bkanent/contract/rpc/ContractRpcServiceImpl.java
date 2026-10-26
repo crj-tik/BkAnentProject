@@ -4,6 +4,7 @@ import com.bkanent.common.model.ContractSettlementDTO;
 import com.bkanent.common.rpc.ContractRpcService;
 import com.bkanent.contract.entity.ContractEntity;
 import com.bkanent.contract.service.ContractDomainService;
+import com.bkanent.common.a2a.VerifiedDomainAuthorization;
 import org.apache.dubbo.config.annotation.DubboService;
 import org.springframework.util.StringUtils;
 
@@ -23,7 +24,11 @@ public class ContractRpcServiceImpl implements ContractRpcService {
 
     @Override
     public String checkClauseRisk(Long contractId) {
-        ContractEntity entity = contractDomainService.getById(contractId);
+        Long brokerId = VerifiedDomainAuthorization.requireBrokerScope(
+                "contract.risk.read.own", "contract.risk.read.all");
+        ContractEntity entity = brokerId == null
+                ? contractDomainService.getById(contractId)
+                : contractDomainService.getContractForBroker(contractId, brokerId);
         if (entity == null) {
             return "合同不存在";
         }
@@ -38,6 +43,7 @@ public class ContractRpcServiceImpl implements ContractRpcService {
 
     @Override
     public List<ContractSettlementDTO> listContractsEligibleForSettlement(String month) {
+        VerifiedDomainAuthorization.requireOperation("contract.settlement.read.all");
         return contractDomainService.listContracts(null, null).stream()
                 .filter(this::isEligibleForSettlement)
                 .filter(contract -> matchesMonth(contract.getBothSignedTime(), month))

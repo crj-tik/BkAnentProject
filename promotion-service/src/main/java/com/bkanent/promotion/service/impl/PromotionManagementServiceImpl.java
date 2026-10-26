@@ -2,6 +2,7 @@ package com.bkanent.promotion.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.bkanent.common.model.MarketingContentDTO;
+import com.bkanent.common.authz.AuthzRequestScope;
 import com.bkanent.common.rpc.MarketingContentRpcService;
 import com.bkanent.promotion.client.PromotionPlatformClientDispatcher;
 import com.bkanent.promotion.converter.PromotionConverter;
@@ -68,6 +69,7 @@ public class PromotionManagementServiceImpl implements PromotionManagementServic
     @Override
     @Transactional(rollbackFor = Exception.class)
     public PromotionPublishResultResponse publishContent(MarketingContentDTO content, PromotionPublishRequest request) {
+        AuthzRequestScope.requireOperation("marketing.publish.execute.all");
         validatePublishRequest(request);
         PromotionPublishRecordEntity entity = new PromotionPublishRecordEntity();
         entity.setContentId(content.id() != null ? content.id() : request.contentId());
@@ -101,6 +103,7 @@ public class PromotionManagementServiceImpl implements PromotionManagementServic
     @Override
     @Transactional(rollbackFor = Exception.class)
     public PromotionEffectResponse syncEffectStat(PromotionEffectSyncRequest request) {
+        AuthzRequestScope.requireOperation("marketing.promotion.effect.sync.all");
         PromotionPublishRecordEntity publishRecord = publishRecordDomainService.getById(request.publishRecordId());
         if (publishRecord == null) {
             throw new IllegalArgumentException("发布记录不存在: " + request.publishRecordId());
@@ -144,6 +147,7 @@ public class PromotionManagementServiceImpl implements PromotionManagementServic
 
     @Override
     public List<PromotionEffectResponse> listEffectStats(Long listingId) {
+        AuthzRequestScope.requireOperation("marketing.promotion.effect.read.all");
         return effectStatDomainService.listByListingId(listingId).stream()
                 .map(promotionConverter::toEffectResponse)
                 .toList();
@@ -151,6 +155,7 @@ public class PromotionManagementServiceImpl implements PromotionManagementServic
 
     @Override
     public List<PromotionRoiReportResponse> buildRoiReport() {
+        AuthzRequestScope.requireOperation("marketing.promotion.roi.read.all");
         Map<String, List<PromotionEffectStatEntity>> groupMap = effectStatDomainService.list().stream()
                 .collect(Collectors.groupingBy(PromotionEffectStatEntity::getPlatform));
         return groupMap.entrySet().stream()
@@ -176,6 +181,7 @@ public class PromotionManagementServiceImpl implements PromotionManagementServic
     @Override
     @Transactional(rollbackFor = Exception.class)
     public BrandAssetResponse saveBrandAsset(BrandAssetUpsertRequest request) {
+        AuthzRequestScope.requireOperation("marketing.brand-assets.write.all");
         if (!BrandAssetTypeEnum.contains(request.assetType())) {
             throw new IllegalArgumentException("品牌素材类型不合法: " + request.assetType());
         }
@@ -194,6 +200,7 @@ public class PromotionManagementServiceImpl implements PromotionManagementServic
 
     @Override
     public List<BrandAssetResponse> listBrandAssets(String assetType, String keyword) {
+        AuthzRequestScope.requireOperation("marketing.brand-assets.read.all");
         return brandAssetDomainService.searchAssets(assetType, keyword).stream()
                 .map(promotionConverter::toBrandAssetResponse)
                 .toList();

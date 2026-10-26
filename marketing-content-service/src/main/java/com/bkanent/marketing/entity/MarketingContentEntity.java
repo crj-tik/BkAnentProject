@@ -16,6 +16,8 @@ public class MarketingContentEntity extends BaseEntity {
      * 业务属性：listingId。
      */
     private Long listingId;
+    /** Trusted Auth-derived owner; legacy rows remain null and are inaccessible to broker-scoped callers. */
+    private Long ownerBrokerId;
     /**
      * 业务属性：platform。
      */
@@ -95,6 +97,10 @@ public class MarketingContentEntity extends BaseEntity {
     public void setListingId(Long listingId) {
         this.listingId = listingId;
     }
+
+    public Long getOwnerBrokerId() { return ownerBrokerId; }
+
+    public void setOwnerBrokerId(Long ownerBrokerId) { this.ownerBrokerId = ownerBrokerId; }
 
     public String getPlatform() {
         return platform;

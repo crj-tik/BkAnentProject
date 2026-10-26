@@ -28,6 +28,7 @@ public final class RagCanonicalHash {
     private static final Set<Class<?>> REQUESTS = Set.of(RagSearchRequest.class, RagIndexEvent.class,
             RagStatusRequest.class, RagInspectRequest.class, RagProvisionRequest.class, RagReplayRequest.class,
             RagListingSearchRequest.class, RagListingReadRequest.class, RagAuthorizedListingReadRequest.class,
+            RagContextAuthorizedListingReadRequest.class,
             RagListingIndexRequest.class, MemoryRagSearchRequest.class,
             RagCandidateAuthorizationRequest.class, A2aBeaconBinding.class);
     private static final Set<Class<?>> BUSINESS = Set.of(RagSearchRequest.class, RagRecallOptions.class,
@@ -46,6 +47,13 @@ public final class RagCanonicalHash {
         if (request instanceof RagAuthorizedListingReadRequest authorizedRead) {
             return hash(encode("rag.authorized-listing-read.v1", Arrays.asList(authorizedRead.contractVersion(),
                     authorizedRead.request(), authorizedRead.authorizationEvidenceHash()), false));
+        }
+        if (request instanceof RagContextAuthorizedListingReadRequest authorizedRead) {
+            return hash(encode("rag.context-authorized-listing-read.v1", Arrays.asList(
+                    authorizedRead.contractVersion(), authorizedRead.request(),
+                    com.bkanent.common.authz.AuthzCanonicalHash.signedContextHash(
+                            authorizedRead.authorizationContext()),
+                    com.bkanent.common.authz.AuthzCanonicalHash.signedFreshnessHash(authorizedRead.freshness())), false));
         }
         if (request instanceof MemoryRagSearchRequest memory) {
             request = new MemoryRagSearchRequest(memory.search().normalized(), memory.topK(),

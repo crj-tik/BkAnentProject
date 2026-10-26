@@ -22,6 +22,9 @@ import com.bkanent.contract.service.ContractDomainService;
 import com.bkanent.contract.service.ContractManagementService;
 import com.bkanent.contract.service.ContractTemplateService;
 import com.bkanent.contract.validator.ContractStatusFlowValidator;
+import com.bkanent.common.a2a.VerifiedDomainAuthorization;
+import com.bkanent.common.authz.AuthzErrorCode;
+import com.bkanent.common.authz.AuthzException;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -63,6 +66,7 @@ public class ContractManagementServiceImpl implements ContractManagementService 
 
     @Override
     public ContractTemplateResponse saveTemplate(ContractTemplateUpsertRequest request) {
+        VerifiedDomainAuthorization.requireOperation("contract.template.write.all");
         ContractTemplateEntity entity = new ContractTemplateEntity();
         entity.setTemplateCode(request.templateCode());
         entity.setTemplateName(request.templateName());
@@ -78,6 +82,7 @@ public class ContractManagementServiceImpl implements ContractManagementService 
 
     @Override
     public List<ContractTemplateResponse> listTemplates(String contractType) {
+        VerifiedDomainAuthorization.requireOperation("contract.template.read.all");
         return contractTemplateService.listByContractType(contractType).stream()
                 .map(this::toTemplateResponse)
                 .toList();
@@ -85,6 +90,11 @@ public class ContractManagementServiceImpl implements ContractManagementService 
 
     @Override
     public ContractDetailResponse saveContract(ContractUpsertRequest request) {
+        VerifiedDomainAuthorization.requireOperation("contract.create.own");
+        long brokerId = VerifiedDomainAuthorization.requireBrokerIdentity();
+        if (request.brokerId() != null && request.brokerId() != brokerId) {
+            throw new AuthzException(AuthzErrorCode.PERMISSION_DENIED);
+        }
         ContractEntity entity = new ContractEntity();
         entity.setTemplateId(request.templateId());
         entity.setContractNo(request.contractNo());
@@ -92,7 +102,7 @@ public class ContractManagementServiceImpl implements ContractManagementService 
         entity.setContractType(request.contractType());
         entity.setStatus(defaultIfBlank(request.status(), "PENDING_SIGN"));
         entity.setExpiryDate(request.expiryDate());
-        entity.setBrokerId(request.brokerId());
+        entity.setBrokerId(brokerId);
         entity.setListingId(request.listingId());
         entity.setCustomerName(request.customerName());
         entity.setPartyAName(request.partyAName());
@@ -104,19 +114,28 @@ public class ContractManagementServiceImpl implements ContractManagementService 
         entity.setSignStartTime(nowText());
         entity.setRemark(request.remark());
         contractDomainService.save(entity);
-        return getContractDetail(entity.getId());
+        return toDetailResponse(entity, List.of());
     }
 
     @Override
     public List<ContractDetailResponse> listContracts(String contractType, String status) {
-        return contractDomainService.listContracts(contractType, status).stream()
+        Long brokerId = VerifiedDomainAuthorization.requireBrokerScope(
+                "contract.read.own", "contract.read.all");
+        List<ContractEntity> contracts = brokerId == null
+                ? contractDomainService.listContracts(contractType, status)
+                : contractDomainService.listContractsForBroker(contractType, status, brokerId);
+        return contracts.stream()
                 .map(entity -> toDetailResponse(entity, contractAttachmentService.listByContractId(entity.getId())))
                 .toList();
     }
 
     @Override
     public ContractDetailResponse getContractDetail(Long id) {
-        ContractEntity entity = contractDomainService.getById(id);
+        Long brokerId = VerifiedDomainAuthorization.requireBrokerScope(
+                "contract.read.own", "contract.read.all");
+        ContractEntity entity = brokerId == null
+                ? contractDomainService.getById(id)
+                : contractDomainService.getContractForBroker(id, brokerId);
         if (entity == null) {
             return null;
         }
@@ -125,7 +144,7 @@ public class ContractManagementServiceImpl implements ContractManagementService 
 
     @Override
     public ContractDetailResponse updateStatus(Long id, ContractStatusUpdateRequest request) {
-        ContractEntity entity = requireContract(id);
+        ContractEntity entity = requireContract(id, "contract.status.update.own", "contract.status.update.all");
         contractStatusFlowValidator.validateStatusTransition(entity.getStatus(), request.status());
         entity.setStatus(request.status());
         entity.setRemark(request.remark());
@@ -136,12 +155,12 @@ public class ContractManagementServiceImpl implements ContractManagementService 
             entity.setDisputeTime(nowText());
         }
         contractDomainService.updateById(entity);
-        return getContractDetail(id);
+        return detail(entity);
     }
 
     @Override
     public ContractAttachmentResponse recognizeAttachment(Long contractId, ContractAttachmentOcrRequest request) {
-        requireContract(contractId);
+        ContractEntity contract = requireContract(contractId, "contract.attachment.ocr.own", "contract.attachment.ocr.all");
         ContractOcrExtractResult extractResult = contractOcrExtractorDispatcher.extract(
                 contractIntegrationProperties.getOcrProvider(),
                 request.attachmentType(),
@@ -162,7 +181,6 @@ public class ContractManagementServiceImpl implements ContractManagementService 
         attachment.setRemark(request.remark());
         contractAttachmentService.save(attachment);
 
-        ContractEntity contract = requireContract(contractId);
         contract.setOcrSummary(buildOcrSummary(contractId));
         contractDomainService.updateById(contract);
         return toAttachmentResponse(attachment);
@@ -170,40 +188,59 @@ public class ContractManagementServiceImpl implements ContractManagementService 
 
     @Override
     public ContractDetailResponse archiveContract(Long contractId, ContractArchiveRequest request) {
-        ContractEntity entity = requireContract(contractId);
+        ContractEntity entity = requireContract(contractId, "contract.archive.own", "contract.archive.all");
         contractStatusFlowValidator.validateArchiveAction(entity.getStatus());
         entity.setArchiveStatus("ARCHIVED");
         entity.setArchivedTime(nowText());
         entity.setStatus("ARCHIVED");
         entity.setRemark(request.archiveRemark());
         contractDomainService.updateById(entity);
-        return getContractDetail(contractId);
+        return detail(entity);
     }
 
     @Override
     public ContractDetailResponse sealContract(Long contractId, ContractSealRequest request) {
-        ContractEntity entity = requireContract(contractId);
+        ContractEntity entity = requireContract(contractId, "contract.seal.own", "contract.seal.all");
         contractStatusFlowValidator.validateSealAction(entity.getStatus(), entity.getSealStatus());
+        String provider = defaultIfBlank(request.sealProvider(), contractIntegrationProperties.getEsignProvider());
+        if (isMockEsign(provider)) {
+            throw new UnsupportedOperationException("模拟电子签章不能将合同标记为已用印");
+        }
         ContractEsignResult esignResult = contractEsignClientDispatcher.sealContract(
-                defaultIfBlank(request.sealProvider(), contractIntegrationProperties.getEsignProvider()),
+                provider,
                 entity,
                 request.signedDocumentUrl()
         );
+        if (esignResult == null || isMockEsign(esignResult.provider())) {
+            throw new UnsupportedOperationException("模拟电子签章结果不能将合同标记为已用印");
+        }
         entity.setSealStatus("SEALED");
         entity.setSealProvider(esignResult.provider());
         entity.setSealTime(nowText());
         entity.setSignedDocumentUrl(esignResult.signedDocumentUrl());
         entity.setExternalSealNo(esignResult.externalSealNo());
         contractDomainService.updateById(entity);
-        return getContractDetail(contractId);
+        return detail(entity);
     }
 
-    private ContractEntity requireContract(Long id) {
-        ContractEntity entity = contractDomainService.getById(id);
+    private ContractEntity requireContract(Long id, String ownOperation, String businessWideOperation) {
+        Long brokerId = VerifiedDomainAuthorization.requireBrokerScope(ownOperation, businessWideOperation);
+        ContractEntity entity = brokerId == null
+                ? contractDomainService.getById(id)
+                : contractDomainService.getContractForBroker(id, brokerId);
         if (entity == null) {
             throw new IllegalArgumentException("Contract not found: " + id);
         }
         return entity;
+    }
+
+    private ContractDetailResponse detail(ContractEntity entity) {
+        return toDetailResponse(entity, contractAttachmentService.listByContractId(entity.getId()));
+    }
+
+    private boolean isMockEsign(String provider) {
+        return provider != null && (provider.equalsIgnoreCase(com.bkanent.contract.config.ContractProviderNames.ESIGN_MOCK)
+                || provider.equalsIgnoreCase(com.bkanent.contract.config.ContractProviderNames.ALIAS_MOCK));
     }
 
     private ContractTemplateResponse toTemplateResponse(ContractTemplateEntity entity) {
