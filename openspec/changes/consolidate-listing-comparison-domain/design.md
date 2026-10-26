@@ -44,6 +44,8 @@
 
 Auth 协议由其他会话维护；本域只提供资源引用与操作，使用其最终可信 principal/scope 适配器，缺少授权事实即拒绝。产品字段 brokerId、来源 ID 和报告 hash 均不授予权限。
 
+Supervisor 的 `listing-compare-marketing-draft` 显式技能通过 `a2a:listing-agent` 选择 listing-agent 当前发布的比较技能，不再调用 `mcp:compare-mcp-server:compareListings`。技能说明只提供执行指引，验收必须检查活动能力目录、技能快照和实际调用记录，确认对比没有经旧 MCP/RPC 绕行；若新能力不可用，返回不可用并停止。比较是只读能力，不加入审批能力清单。此技能文件由房源 change 维护；营销发布另用自己的 Supervisor 技能文件，避免并行修改同一文件。
+
 ### 6. 并行会话交付边界
 
 本会话拥有房源/比较模块、`common/listing/**`、原比较契约及必要调用方的最小兼容差异。公开提供 `domain-parallel-v1` 的 search、batch-read、check 三个房源 POST 接口，路径、字段、错误和模式规则固定于 [并行总览](../../../docs/business-domain-change-roadmap.md)。本会话用自有 HTTP夹具/生产者处理器测试这些线协议，不等待经营/营销消费方。

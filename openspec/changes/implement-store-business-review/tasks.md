@@ -29,12 +29,14 @@
 
 ## 4. API 与 Agent 接入
 
-- [ ] 4.1 提供复盘、计划、确认、动作及观察的公开 API/DTO，用 controller/服务契约测试验证授权、幂等回执和分页范围。
-- [ ] 4.2 在现有 trade/trade-agent 身份下增加诊断、方案准备和复盘技能，用装配测试验证 Memory 必需接入、技能范围及写动作审批。
+- [ ] 4.1 提供复盘、计划、确认、动作及观察的公开 API/DTO 和 prepare/confirm MCP wrapper，用 controller/服务契约测试验证授权、幂等回执和分页范围。
+- [ ] 4.2 在现有 trade/trade-agent 身份下增加诊断、方案准备和复盘技能，用装配测试验证 Memory 必需接入、技能范围及领域服务端权限；技能文字不作为写入授权。
 - [ ] 4.3 输出安全的领域 artifact 和引用契约，用结果投影测试验证 owner/来源/dataMode，保留原 Studio work/command 语义且不勾选其未完成任务。
+- [ ] 4.4 新增门店复盘专属 Supervisor 技能和动态目录映射，将只准备计划与确认动作拆成 prepareBusinessReviewPlan、confirmBusinessReviewPlan 两个独立 capability；以目录装配验证确认不藏在 trade-agent A2A 调用内。
+- [ ] 4.5 在隔离 Supervisor profile 将确认工具的实际 capabilityId 加入 approval-capabilities 配置差异，交付共享配置并集说明；覆盖未批准、拒绝、计划过时和当前范围失效均不创建动作。
 
 ## 5. 独立验收与交付
 
-- [ ] 5.1 仅用本会话本地v1 HTTP fixture、Auth/Memory测试登记及真实本域持久处理器，完成模拟带看停滞和维护闭环，验证回执/撤回/重复输入；无需其它三个实现或Auth新提交即可验收完成。
+- [ ] 5.1 仅用本会话本地v1 HTTP fixture、Auth/Memory测试登记及真实本域持久处理器，经 Supervisor 实际技能、目录和审批路径完成模拟带看停滞和维护闭环；验证未批准不创建动作、过时拒绝、回执恢复/撤回/重复输入且无需其它 change 新实现。
 - [ ] 5.2 在共同基线及本change独立运行business及必要消费契约测试/编译，记录自身Maven仓库、功能与模式证据；跨服务联机/真实增长另列未验证，不作为本期等待任务。
 - [ ] 5.3 更新独立部署回退、口径及本域LR引用，严格校验和diff检查后中文commit/push本会话分支，交付head SHA/配置和迁移差异；不推dev-fix、不关闭KI-114/128/166，合并后联调交协调会话。

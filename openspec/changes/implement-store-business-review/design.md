@@ -60,6 +60,12 @@ Auth、Memory 的当前协议通过测试配置下的精确服务/用户登记�
 
 共享根配置只提交本业务必需的最小差异/SQL与check，Auth/Memory全局登记、初始化runner的bk_business allowlist及真实来源接入由协调合并。合并后的生产者互通、组织范围和浏览器联调单独记录，不纳入本 change 的实施完成前置条件。
 
+### 8. Supervisor 计划预览与写动作确认分为两次调用
+
+新增门店复盘专属 Supervisor 技能（agent-service/src/main/resources/skills/supervisor/store-business-review.md），保留 trade-agent 的业务身份与 Memory 范围。通过动态目录分别暴露只准备计划的 prepareBusinessReviewPlan 与写入 confirmBusinessReviewPlan MCP capability：准备结果返回 planId、planVersion、参数 hash、证据/知识版本、负责人和期限，不创建已确认动作；Supervisor 展示该快照后，只能通过 confirm capability 提交相同 planId、expectedPlanVersion、hash 和 requestId。写入 capability 的精确目录 ID 加入隔离验收配置的 agent.supervisor.orchestration.approval-capabilities，用户拒绝或未批准时不得创建 ReviewAction 或 ActionReceipt。
+
+确认端仍在 business-service 复核当前用户、门店范围、证据/知识版本和幂等键；Supervisor 的批准不能代替服务端授权。计划变化须重新准备和展示，拒绝后可用原计划/回执查询恢复，不可用新的 requestId 重复生成已确认动作。领域确认能力不得藏在同一次 trade-agent A2A 调用中。门店 change 只维护自身 Supervisor 技能文件和隔离配置差异，共享审批列表在合并后由协调会话并集更新。独立 fixture 验收经过实际 Supervisor 工具目录/审批路径，不等同真实 Auth、Memory 或跨服务生产联调。
+
 ## Risks / Trade-offs
 
 - [模拟样本看起来像真实经营] → dataset、来源模式随 API/结果/导出保留，模拟观察不进入真实增长证明。

@@ -37,3 +37,12 @@
 - [x] 5.1 在共同基线及本change独立运行营销/推广和必要调用方测试/编译，使用自身Maven仓库并验证无其它change的Java类型/制品依赖，覆盖授权/幂等/未知/模式/历史完整路径。
 - [x] 5.2 用 fixture 平台执行准备、确认、部分成功、UNKNOWN 核对和效果读取闭环，验收记录明确模拟边界及真实渠道尚未接入状态。
 - [x] 5.3 交付部署回退/效果口径/本域LR与KI-167证据，严格校验和diff检查后中文commit/push本会话分支，返回head SHA和共享差异；真实平台/登记联机单列，不能阻塞已约定的本域fixture验收或冒充真实ROI。
+
+## 6. Supervisor、A2A、ReAct 与 MCP 发布闭环
+
+- [ ] 6.1 收紧营销服务内 ReAct copy-generation 技能：允许搜索、创建 DRAFT 和准备计划，不暴露确认发布/通知动作；用工具授权及伪造 PUBLISHED 输出反例验证只有真实 provider receipt 能改变发布状态。
+- [ ] 6.2 新增营销专属 Supervisor 发布技能并接入动态目录，保留 A2A marketing-draft 只读草稿边界；用活动技能快照验证发布流程不会改写房源 change 所有的找房/对比技能文件。
+- [ ] 6.3 将 MCP 草稿返回改为包含 contentId、platform、status 的结构化结果，并补齐 receipt 查询与原 attempt reconcile 工具；用 MCP 契约测试验证 ID 可传给 prepare、未知结果沿原 attempt 查询。
+- [ ] 6.4 在隔离 Supervisor profile 配置实际目录返回的 confirmMarketingCampaign capabilityId 到 agent.supervisor.orchestration.approval-capabilities，交付独立配置差异并标明合并时取并集；用 Supervisor 审批测试验证 prepare 不触发外部副作用、confirm 等待批准且计划参数变更后旧批准失效。
+- [ ] 6.5 通过实际 Supervisor 目录、A2A/ReAct 和 MCP fixture 完成草稿、内容审核、计划预览、确认、receipt 查询及 UNKNOWN 核对闭环；覆盖拒绝/待批准不发布、confirm 后不重发、通知与发布状态必须有真实回执。
+- [ ] 6.6 盘点旧 /promotions/** 调用方并迁移已知客户端到当前 DTO；为旧请求体增加明确的契约不支持响应及契约测试，不将路径级过渡映射描述为旧 DTO 兼容。

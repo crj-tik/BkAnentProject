@@ -44,6 +44,8 @@ ContentRevision 不可变；PublishPlan 固定 contentRevision、素材版本、
 
 原 `/promotions/**` 可在营销服务内保留受权适配入口，不能继续保留独立写库和远程状态回写。`implement-studio-v2` 继续拥有发布命令/审批门面，本 change 提供领域 prepare/read/confirm/receipt 契约；Studio task 4.1/4.2/4.4 不在这里勾选或复制。
 
+保留路径不等于保留旧 wire contract：当前迁移入口使用营销域新的请求/响应 DTO，不兼容旧 `/promotions/**` 负载。方案将这一点标记为 breaking migration，要求清点并迁移已知调用方；旧形状须返回明确的契约不支持错误，不猜测字段或静默套用新语义。若盘点发现必须支持的外部旧调用，需另行定义版本化适配契约。
+
 房源仅通过公开来源引用读取，不新增 listing 私有表访问。Auth 由另一会话实现，当前发布动作须消费其账号/组织授权并校验实际计划范围。外部协议变更或不同微服务合并不要求把个人 Memory 改成组织知识。
 
 ### 6. 并行交付和可替换依赖
@@ -53,6 +55,14 @@ ContentRevision 不可变；PublishPlan 固定 contentRevision、素材版本、
 发布生命周期、回执、持久派发和效果口径是真实实现。外部平台、房源、媒体/通知及 Auth/Memory 依赖由明确测试配置的精确替身隔离，用本会话契约测试完成所有本期验收；真实 mode 未接 provider/授权时拒绝，不暗中转模拟。旧业务数据迁移及单writer切换先在私有夹具/库验证，已运行共享实例由协调合并后处理。
 
 独立 worktree/分支、`.m2repo`、端口/数据库按总览执行，只push自己的分支。根POM和配置只提交promotion/marketing的最小语义变化；新增bk_marketing初始化allowlist/manifest差异交协调合并，不改已应用SQL/hash，不等待另外三个change或Auth新版本才完成本期任务。
+
+### 7. Supervisor、A2A、ReAct 与 MCP 分层治理
+
+A2A 的 marketing-draft 技能只允许读取既有内容并返回未保存的草稿。营销服务内 ReAct 技能可检索、创建 DRAFT 内容并准备发布计划，但不得调用确认发布/通知能力，也不得仅凭模型输出把状态标为 PUBLISHED；只有真实平台 receipt 可证明发布结果。copy-generation 技能的流程在 prepare 后结束，确切确认由 Supervisor 的独立 marketing-campaign-publish 技能（agent-service/src/main/resources/skills/supervisor/marketing-campaign-publish.md）发起。
+
+Supervisor 发布技能通过动态能力目录逐步调用结构化 MCP：草稿创建返回可复用的 contentId，prepare 返回 planId、planVersion、snapshotHash、内容/素材/渠道/账号快照且不产生外部副作用；用户看到完整计划后，confirmMarketingCampaign 以该 planId、expectedPlanVersion 和 expectedSnapshotHash 调用。Supervisor 的 approvalCapabilities 只配置确认工具的精确目录 capabilityId，不把审批放在不透明的整个 marketing-agent A2A 调用上。confirm 结果返回 receiptId 与每目标 attemptId/status；MCP 还须暴露回执读取和原 attempt reconcile，未知结果只核对原 attempt。
+
+营销 change 维护自己的 Supervisor 发布技能文件，不改由房源 change 维护的找房/对比/草稿组合技能。每个实现分支在隔离 profile 用自己的 capabilityId 验收并交付配置差异；共享 agent.supervisor.orchestration.approval-capabilities 在四项合并协调时按能力 ID 并集合并，不由本 change 覆盖。域内 fixture 验收必须经过实际 Supervisor 目录/审批和 MCP 调用路径；它不代表真实平台、Auth/Memory 登记或生产跨服务联通已完成。
 
 ## Risks / Trade-offs
 

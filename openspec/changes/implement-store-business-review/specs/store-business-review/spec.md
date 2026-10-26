@@ -6,6 +6,26 @@
 
 ## ADDED Requirements
 
+### Requirement: Supervisor 先预览复盘计划再获批创建动作
+
+Supervisor SHALL 先调用只准备计划的能力，并向用户展示 planId、planVersion、动作内容、负责人、期限、来源/知识版本及参数 hash；准备本身不得创建已确认的 ReviewAction。确认 MUST 通过单独的动态目录 capability，并在创建动作前等待用户批准。business-service 仍须独立校验当前主体、门店范围、expectedPlanVersion、依赖版本及 requestId。
+
+#### Scenario: 计划已准备但用户尚未批准
+- **WHEN** Supervisor 已展示计划，confirm capability 尚在等待审批
+- **THEN** 系统不创建已确认的 ReviewAction 或 ActionReceipt，也不触发任何外部动作
+
+#### Scenario: 用户拒绝确认
+- **WHEN** 用户拒绝 Supervisor 对 confirmBusinessReviewPlan 的调用
+- **THEN** 计划保持待确认，动作和回执均未生成，拒绝结果可审计
+
+#### Scenario: 批准后计划过时
+- **WHEN** 用户批准计划后，房源、知识、组织范围或 planVersion 在确认前发生变化
+- **THEN** business-service 拒绝旧确认并要求重新准备展示，不创建动作
+
+#### Scenario: 确认后响应丢失再恢复
+- **WHEN** 同一 requestId、planId 与版本的确认请求在回执丢失后重试
+- **THEN** Supervisor 读取原 ActionReceipt 且不重复创建动作；不同内容复用 requestId 仍被拒绝
+
 ### Requirement: 经营输入使用有来源的独立数据集
 
 系统 SHALL 通过明确的数据契约读取带看、跟进、议价和维护事实，包含稳定来源、版本、事件/观察时间、dataset 及数据模式；房源只通过房源域公开接口引用，知识材料保留访谈来源链。模拟数据必须标记 SIMULATED，未知性质标记 UNKNOWN，包含不同性质证据的结果不得整体标为 REAL。

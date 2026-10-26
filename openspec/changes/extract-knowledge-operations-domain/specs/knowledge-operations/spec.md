@@ -6,6 +6,26 @@
 
 ## ADDED Requirements
 
+### Requirement: Supervisor 将知识准备与发布写操作分开
+
+Supervisor 知识技能 SHALL 通过动态目录调用知识提炼、查询和审核准备能力；发布与撤回 MUST 是分别绑定 revision、范围和 expectedVersion 且可单独获用户批准的能力。一次调用审批仅授权该次工具调用，不能替代知识域要求的非提交者人工审核；A2A Agent 不得在未单独获批时内嵌发布或撤回。
+
+#### Scenario: 知识草稿尚未通过审核
+- **WHEN** Supervisor 请求发布未获非提交者审核通过的知识 revision
+- **THEN** 系统拒绝发布且不创建 PUBLISHED revision，即使工具调用已获 Supervisor 批准
+
+#### Scenario: Supervisor 发布调用被拒绝
+- **WHEN** 知识 revision 已审核通过，但 Supervisor 的独立发布能力未获批准或被拒绝
+- **THEN** 不执行发布工具，revision 保持原状态
+
+#### Scenario: Supervisor 撤回调用未获批准
+- **WHEN** Supervisor 的独立撤回能力未获批准或目标 revision/范围/expectedVersion 已变化
+- **THEN** 不执行撤回，知识仍按当前有效 revision 与范围提供服务
+
+#### Scenario: 撤回后检查下游引用
+- **WHEN** Supervisor 对已发布知识调用获批撤回
+- **THEN** 知识域保存撤回回执，下游 check 返回不可继续使用的状态且不再返回正文
+
 ### Requirement: 经营知识拥有独立身份及结构化边界
 
 系统 SHALL 为运营案例和打法分配独立业务身份及不可变 revision，记录经营问题、情境、前提、动作、来源所述结果、适用边界、未核实项和证据引用。来源资产 ID、旧报告 ID 与新知识 ID MUST 保持不同语义。
@@ -24,11 +44,15 @@
 
 ### Requirement: 编辑审核与发布遵循当前权限和版本
 
-知识 SHALL 提供草稿、待审核、已发布和已撤回状态，编辑创建新 revision，提交/审核/发布/撤回均核验当前操作权限和 expectedVersion，并记录实际操作者及决定。审核者分离要求 SHALL 由受管审核策略控制，模型生成完成不得替代人工发布决定。
+知识 SHALL 提供草稿、待审核、已发布和已撤回状态，编辑创建新 revision，提交/审核/发布/撤回均核验当前操作权限和 expectedVersion，并记录实际操作者及决定。审核者 MUST 与提交者不同；组织策略可增加更严格要求，但不得允许自审。模型生成完成或 Supervisor 工具调用批准均不得替代人工发布决定。
 
 #### Scenario: 两人并发修改或审核
 - **WHEN** 一个请求基于旧 revision 提交审核或发布
 - **THEN** 系统返回可辨识版本冲突，保留已接受的新修订和原回执，不覆盖后续内容
+
+#### Scenario: 提交者尝试审核自己的 revision
+- **WHEN** 当前审核请求主体与该 revision 的提交者相同
+- **THEN** 系统拒绝审核或发布，保持待审核状态并记录拒绝原因
 
 ### Requirement: 操作回执和生成任务可可靠找回
 

@@ -32,7 +32,7 @@
 
 ### 3. 单案例运营生命周期与证据质量分开
 
-首期实体包括 KnowledgeCase、Playbook、不可变 KnowledgeRevision、SourceRef、ReviewDecision、OperationReceipt。版本状态为 `DRAFT / REVIEW_PENDING / PUBLISHED / WITHDRAWN`；编辑创建新 revision，提交/审核/撤回使用 expectedVersion、当前操作权限和稳定 requestId，正文、决定与回执同事务。审核要求当前审核权限和明确决定，是否要求编辑与审核由不同人员完成交给受管审核策略；提交者、最后编辑者与审核者均写入审计，不能由模型自行发布。
+首期实体包括 KnowledgeCase、Playbook、不可变 KnowledgeRevision、SourceRef、ReviewDecision、OperationReceipt。版本状态为 `DRAFT / REVIEW_PENDING / PUBLISHED / WITHDRAWN`；编辑创建新 revision，提交/审核/撤回使用 expectedVersion、当前操作权限和稳定 requestId，正文、决定与回执同事务。审核要求当前审核权限、明确决定且审核人与提交者不同；更严格的组织审核策略可继续增加条件，但不能允许自审。提交者、最后编辑者与审核者均写入审计，不能由模型自行发布。
 
 候选至少包含经营问题、情境、前提、行动、来源所述结果、适用边界及未核实项；原声片段由服务器在对应 snapshot 内逐字核验。L2/L3 仅为来源入库质量门，业务结果标记为 `REPORTED / EVIDENCED / UNVERIFIED` 等独立证据状态。多个案例重复出现可形成有来源的候选归纳，样本量不能直接提升为“已验证有效”。
 
@@ -57,6 +57,12 @@
 本域生成/审核/发布和持久回执都是真实实现；本会话控制的访谈来源夹具/injvm provider、Auth范围和 Memory RPC测试登记只替代远程依赖。应在共同基线上完成全生命周期及拒绝/撤回/版本测试，不拉取其它三个 change。真实模式不使用这些测试替身，缺接线前置失败；真实组织范围和下游互通在合并后核验。
 
 工作区、分支、Maven仓库和数据库按总览独立。新增知识 SQL/check 和唯一版本在自己的隔离库验收；当前初始化 runner 有固定数据库 allowlist，交付新增 bk_knowledge 所需的 manifest/allowlist 差异，由协调合并且不修改已应用 hash。本 change 可以独立完成，不以该共享环境变更已执行为完成条件。
+
+### 7. Supervisor 发布与撤回能力单独暴露
+
+知识专属 Supervisor 技能（agent-service/src/main/resources/skills/supervisor/real-estate-knowledge.md）使用动态目录发现知识 Agent 的提炼、查询和审核准备能力；知识内容的 author/review/publish 状态仍由 knowledge-service 持有。实际发布与撤回分别暴露为可独立审批的能力，例如 MCP 的 publishKnowledgeRevision 与 withdrawKnowledgeRevision，入参绑定不可变 revision、当前范围和 expectedVersion。A2A Agent 不得把发布/撤回藏在一个提炼或审核任务内。内容业务审核是发布前置条件，Supervisor 的能力审批是单次工具调用门禁，两者不能相互替代。
+
+各独立分支只维护自己的 Supervisor 技能文件，并在本地验收 profile 登记实际目录 capabilityId；交付发布/撤回 capabilityId 配置差异，不直接覆盖共享 agent.supervisor.orchestration.approval-capabilities。合并后由协调会话把各域的写能力 ID 并入共享集合。知识域独立验收要经过真实 Supervisor 技能装配和本地工具目录 fixture；真实 Auth/Memory 登记及服务间生产联通仍单独核验。
 
 ## Risks / Trade-offs
 

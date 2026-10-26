@@ -14,6 +14,9 @@
 - 原有 `bk_promotion` 数据先盘点、映射、核对再迁移；保留旧 ID 来源和发布幂等身份，不能据当前使用模拟数据推定历史库可删除。
 - 本 change 只处理营销与推广合并，不包含知识运营、经营复盘、房源合并或真实外部平台采购接入。
 - 在独立 worktree/分支验收自身生命周期与迁移；需要房源时按 `domain-parallel-v1` 使用本模块消费适配和本地 fixture，不引入房源合并分支的类型或实现。
+- 明确 A2A 草稿、营销服务内 ReAct Agent 和 Supervisor 发布各自边界：A2A 子技能只返回草稿；ReAct 可创建草稿或准备计划但不得确认发布、发送通知或自行宣称已发布；Supervisor 通过独立发布技能展示确切计划，再经单独可审批的 MCP 确认能力执行。
+- 为 Supervisor 提供可继续完成闭环的结构化 MCP 结果：草稿返回内容 ID，发布确认返回 receipt/attempt 标识，并开放原回执查询与未知结果核对。
+- **BREAKING**：旧 `/promotions/**` 路径仅作受权过渡入口，不承诺旧请求/响应 DTO 兼容；迁移前须盘点并迁移调用方，旧负载必须有明确的契约错误，不能把路径仍可访问描述为完整兼容。
 
 ## Capabilities
 
@@ -26,6 +29,8 @@
 无。沿用调用级审批、必需 Memory、外部 Provider 失败语义和现有媒体能力契约。
 
 ## Impact
+
+除营销服务内 A2A、ReAct Agent、MCP 工具外，本 change 还需要一个独立的 Supervisor 发布技能和实际能力目录/审批配置验收；共享 Supervisor 审批能力集合由合并协调阶段并集更新。
 
 主要影响 `marketing-content-service`、`promotion-service`、`common` 的推广契约、部署与网关清单，以及发布调用方。遵循 LR-22/23/53/96/102；承接 KI-167 的效果来源缺口，规划不标记修复。与 `implement-studio-v2` 的发布计划/确认任务按领域执行契约衔接，不重复实现 Studio 命令与审批门面。Auth 由其他会话交付，本 change 只消费身份及发布账号的受信授权。
 

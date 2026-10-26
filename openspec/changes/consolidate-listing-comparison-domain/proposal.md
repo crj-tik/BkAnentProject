@@ -13,6 +13,7 @@
 - 保留旧报告及 `compare/compare-agent` 的历史 Memory 身份；不重写历史 owner/domain/agent，不将未决调用转投新 Agent。
 - 本 change 只处理房源与比较合并；知识运营、门店复盘和营销合并由各自 change 交付。
 - 按 `domain-parallel-v1` 实现房源生产者契约，在独立 worktree/分支以自有来源、Auth/Memory 测试夹具完成本域验收；不要求经营或营销消费者先交付。
+- Supervisor 的找房对比技能改为经显式技能选择调用 listing-agent 已发布的对比技能，移除旧 compare MCP 能力映射；读取和比较保持只读，不增加审批门禁。
 
 ## Capabilities
 
@@ -26,6 +27,8 @@
 无。复用现有动态能力目录、技能契约和必需 Memory 生命周期，不更改它们的通用要求。
 
 ## Impact
+
+Supervisor 入口也属于本 change 的验收范围：验证动态能力目录、显式技能选择和真实 A2A 调用均落到房源域对比能力，缺少新能力时不得静默回退到旧 MCP/RPC。
 
 主要影响 `listing-master-service`、`compare-engine-service`、`common`、比较调用方、Maven/Compose/Nacos/网关部署清单和相关技能。沿用 LR-22/23/54/79/96/97，处理 KI-115 的读取及分享边界；不会据规划关闭该问题。Auth 由其他会话完善，本 change 通过其最终可信身份与资源范围契约接入，不另建认证协议。与 `implement-studio-v2` 保持只读比较契约兼容，不接管其余任务。
 

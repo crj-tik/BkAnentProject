@@ -6,6 +6,18 @@
 
 ## ADDED Requirements
 
+### Requirement: Supervisor 通过房源域执行对比
+
+Supervisor 的显式对比技能 SHALL 通过 listing-agent 当前发布的对比技能执行房源比较，并通过活动能力目录验证实际调用目标。对比调用 MUST NOT 使用旧 compare MCP 能力或无凭据 RPC；能力缺失时明确停止，不得回退。对比保持只读，无需写操作审批。
+
+#### Scenario: 显式技能通过房源 Agent 比较
+- **WHEN** 用户选择找房对比技能且已取得获准房源
+- **THEN** Supervisor 通过 listing-agent 已发布的比较技能完成调用，记录实际能力 ID 和返回的来源版本，不调用旧 compare MCP/RPC
+
+#### Scenario: 房源比较技能暂不可用
+- **WHEN** 动态目录中没有可用的 listing-agent 比较能力
+- **THEN** Supervisor 明确报告比较能力不可用并停止，不回退到旧 compare MCP、旧 RPC 或无凭据路径
+
 ### Requirement: 对比属于房源域内的获准能力
 
 系统 SHALL 通过房源域提供对比技能及公开契约，接受 2 至 6 套不同的稳定房源引用，使用同次获准来源快照计算事实指标。新请求 MUST 不依赖独立 compare Agent 或无凭据旧房源读取。

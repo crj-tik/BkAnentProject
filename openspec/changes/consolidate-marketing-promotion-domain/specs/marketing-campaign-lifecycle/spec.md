@@ -6,6 +6,50 @@
 
 ## ADDED Requirements
 
+### Requirement: A2A 与 ReAct 营销能力不得绕过发布确认
+
+A2A marketing-draft SHALL 只读取既有内容并返回未保存的草稿。营销服务内 ReAct 能力可以创建 DRAFT 内容和准备发布计划，但 MUST NOT 确认发布、发送通知或仅凭模型结果宣称 PUBLISHED；发布状态必须由本域保存的实际 provider 回执决定。Supervisor 发布技能 SHALL 使用独立的发布路径，不得把写动作藏在普通 marketing-agent A2A 调用中。
+
+#### Scenario: ReAct 创建草稿并准备计划
+- **WHEN** ReAct Agent 生成草稿并为已审核内容准备营销计划
+- **THEN** 草稿保持 DRAFT、准备结果返回确切计划快照且没有外部发布尝试；模型输出的 PUBLISHED 或通知提示不能构成发布事实
+
+#### Scenario: A2A 草稿请求包含发布意图
+- **WHEN** Supervisor 调用 marketing-draft A2A 子技能生成草稿
+- **THEN** 子技能只返回草稿及其待确认事实，不创建发布任务、不调用确认或通知工具
+
+### Requirement: Supervisor 只在确切计划获用户批准后确认发布
+
+Supervisor 的独立营销发布技能 SHALL 先展示内容、revision、素材、平台、账号、planId、planVersion 和 snapshotHash，再通过单独的 confirmMarketingCampaign MCP capability 执行确认；该调用 MUST 在平台动作前等待用户批准。prepare 只准备并返回固定计划，不调用平台或发送通知，确认仍须由领域服务复核当前账号授权、计划版本和 hash。内容人工审核与本次计划确认是两个不同条件。
+
+#### Scenario: 用户尚未批准或拒绝计划
+- **WHEN** Supervisor 已展示计划，但确认能力仍等待批准或用户拒绝
+- **THEN** 不调用 confirmMarketingCampaign、不创建发布 attempt，也不发生平台副作用
+
+#### Scenario: 用户批准后计划已变化
+- **WHEN** 用户批准了计划，但确认时 planVersion 或 snapshotHash 已改变
+- **THEN** 领域服务拒绝旧确认并要求重新准备和展示新计划，不发布旧内容或新账号目标
+
+### Requirement: Supervisor 可取得结构化内容身份和发布回执
+
+MCP 草稿创建 SHALL 返回每条已保存草稿的 contentId、platform 和 DRAFT 状态，不得只返回无法继续使用的自然语言摘要。Supervisor SHALL 可通过 MCP 读取原 receipt 并核对原 attempt；OUTCOME_UNKNOWN 必须沿原 attemptId reconcile，不得重新确认或新建 attempt。
+
+#### Scenario: 创建草稿后准备发布计划
+- **WHEN** MCP 创建一个或多个营销草稿
+- **THEN** 返回稳定的 contentId 列表，Supervisor 可将选中的 ID 传给 prepareMarketingCampaign
+
+#### Scenario: 平台结果未知后续查
+- **WHEN** 原发布 attempt 的结果为 OUTCOME_UNKNOWN
+- **THEN** Supervisor 可读取原 receipt 并调用原 attempt 的核对能力，返回更新后的原 attempt 状态，不产生新 attempt
+
+### Requirement: 旧推广路径不暗示旧 DTO 兼容
+
+受权的 /promotions/** 过渡路径 SHALL 明确使用营销域当前版本的请求/响应契约。旧请求/响应 DTO 不兼容；旧形状必须返回明确的契约不支持错误，并提供迁移指引，不得静默补默认值或伪装成功。
+
+#### Scenario: 旧调用方发送旧请求体
+- **WHEN** 调用方经 /promotions/** 提交旧版促销接口的请求体
+- **THEN** API 返回明确的旧契约不支持结果及迁移指引，不创建计划、receipt 或平台 attempt
+
 ### Requirement: 内容和推广由同一营销责任边界管理
 
 系统 SHALL 在同一营销域维护内容、品牌素材、发布计划、平台尝试及效果来源，对外保留受权适配和稳定来源映射。旧模块退役后 MUST 不再产生两处独立的内容发布状态写入，媒体生成及通知继续按其公开能力消费。
