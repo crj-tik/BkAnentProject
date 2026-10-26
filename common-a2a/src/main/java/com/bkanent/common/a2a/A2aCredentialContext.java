@@ -17,18 +17,21 @@ public final class A2aCredentialContext {
         final Runnable validator;
         final AuthorizationContext authorizationContext;
         final AuthzFreshness freshness;
+        private final Runnable reservationRelease;
+        private final java.util.concurrent.atomic.AtomicBoolean reservationReleased = new java.util.concurrent.atomic.AtomicBoolean();
         private volatile boolean dispatched;
         private boolean forwardFinished;
         private boolean commandFinished;
         public Lease(A2aBeaconBinding binding, RagCredentialContext credentials, long expiresAt, Runnable validator) {
-            this(binding, credentials, expiresAt, validator, null, null);
+            this(binding, credentials, expiresAt, validator, null, null, null);
         }
         private Lease(A2aBeaconBinding binding, RagCredentialContext credentials, long expiresAt, Runnable validator,
-                      AuthorizationContext authorizationContext, AuthzFreshness freshness) {
+                      AuthorizationContext authorizationContext, AuthzFreshness freshness, Runnable reservationRelease) {
             this.binding = binding; this.credentials = credentials; this.expiresAt = expiresAt; this.validator = validator;
             this.authorizationContext = authorizationContext; this.freshness = freshness;
+            this.reservationRelease = reservationRelease;
         }
-        static Lease versioned(DelegatedAuthorizationRequest request, String method) {
+        static Lease versioned(DelegatedAuthorizationRequest request, String method, Runnable reservationRelease) {
             AuthorizationContext context = request.context();
             AuthzFreshness freshness = request.freshness();
             DelegationBinding binding = request.binding();
@@ -37,7 +40,7 @@ public final class A2aCredentialContext {
             A2aBeaconBinding compatibilityBinding = new A2aBeaconBinding(1, binding.requestId(),
                     binding.callerService(), binding.audience(), context.actorId(), method, binding.bodyHash(),
                     binding.taskId(), hardExpiry);
-            return new Lease(compatibilityBinding, null, expiresAt, null, context, freshness);
+            return new Lease(compatibilityBinding, null, expiresAt, null, context, freshness, reservationRelease);
         }
         public void verify() {
             if (expiresAt <= java.time.Instant.now().getEpochSecond()) throw new RagException(RagErrorCode.AUTHENTICATION_EXPIRED);
@@ -46,6 +49,14 @@ public final class A2aCredentialContext {
         public boolean versioned() { return authorizationContext != null; }
         public AuthorizationContext authorizationContext() { return authorizationContext; }
         public AuthzFreshness freshness() { return freshness; }
+        private void releaseReservation() {
+            if (reservationRelease == null || !reservationReleased.compareAndSet(false, true)) return;
+            try { reservationRelease.run(); }
+            catch (RuntimeException failure) {
+                org.slf4j.LoggerFactory.getLogger(A2aCredentialContext.class)
+                        .warn("A2A durable task reservation cleanup failed");
+            }
+        }
         @Override public String toString() { return "A2aLease[REDACTED]"; }
     }
     public static final class Scope implements AutoCloseable {
@@ -91,25 +102,39 @@ public final class A2aCredentialContext {
         lease.dispatched = true;
         return true;
     }
-    static synchronized void releaseUndispatchedTask(String taskId, Lease lease) {
-        lease.forwardFinished = true;
-        if (!lease.dispatched || lease.commandFinished) TASKS.remove(taskId, lease);
+    static void releaseUndispatchedTask(String taskId, Lease lease) {
+        boolean release;
+        synchronized (A2aCredentialContext.class) {
+            lease.forwardFinished = true;
+            release = !lease.dispatched || lease.commandFinished;
+            if (release) TASKS.remove(taskId, lease);
+        }
+        if (release) lease.releaseReservation();
     }
-    static synchronized void releaseDispatchedTask(Lease lease) {
-        lease.commandFinished = true;
-        // A fast producer can finish before DefaultRequestHandler publishes its future
-        // or completes the original forward. Both sides must finish before reuse.
-        if (lease.forwardFinished) TASKS.remove(lease.binding.taskId(), lease);
+    static void releaseDispatchedTask(Lease lease) {
+        boolean release;
+        synchronized (A2aCredentialContext.class) {
+            lease.commandFinished = true;
+            // A fast producer can finish before DefaultRequestHandler publishes its future
+            // or completes the original forward. Both sides must finish before reuse.
+            release = lease.forwardFinished;
+            if (release) TASKS.remove(lease.binding.taskId(), lease);
+        }
+        if (release) lease.releaseReservation();
     }
     public static Scope openTask(String taskId) {
         Lease lease = TASKS.get(taskId);
         if (lease == null) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
         lease.verify(); return open(lease);
     }
-    public static synchronized void discardTask(String taskId) {
+    public static void discardTask(String taskId) {
         Lease lease = CURRENT.get();
-        // SDK command completion closes queues after AgentExecutor returns. Keep the
-        // reservation until then, so a new send cannot race that old queue cleanup.
-        if (lease != null && !lease.dispatched) TASKS.remove(taskId, lease);
+        boolean release = false;
+        synchronized (A2aCredentialContext.class) {
+            // SDK command completion closes queues after AgentExecutor returns. Keep the
+            // reservation until then, so a new send cannot race that old queue cleanup.
+            if (lease != null && !lease.dispatched) release = TASKS.remove(taskId, lease);
+        }
+        if (release) lease.releaseReservation();
     }
 }

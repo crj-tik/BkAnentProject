@@ -43,11 +43,22 @@ public final class A2aAuthenticatedRequestGuard {
             A2aAuthorizationVerifier.VerifiedRequest verified = authorizationVerifier.verify(authzHeaders.get(0), body);
             var facts = verified.facts();
             DelegatedAuthorizationRequest envelope = verified.envelope();
-            A2aCredentialContext.Lease lease = A2aCredentialContext.Lease.versioned(envelope, facts.method());
+            A2aCredentialContext.Lease lease = A2aCredentialContext.Lease.versioned(envelope, facts.method(),
+                    facts.sending() ? () -> authorizationVerifier.releaseTaskReservation(verified) : null);
             stage = "task-owner";
-            bindOwner(facts.taskId(), facts.contextId(), lease.binding, facts.sending());
+            authorizationVerifier.bindOrVerifyTaskOwner(verified);
             try (var ignored = A2aCredentialContext.open(lease)) {
-                if (facts.sending()) A2aCredentialContext.reserveTask(facts.taskId());
+                boolean locallyReserved = false;
+                if (facts.sending()) {
+                    authorizationVerifier.reserveTask(verified);
+                    try {
+                        A2aCredentialContext.reserveTask(facts.taskId());
+                        locallyReserved = true;
+                    } catch (RuntimeException failure) {
+                        authorizationVerifier.releaseTaskReservation(verified);
+                        throw failure;
+                    }
+                }
                 try {
                     stage = "official-handler";
                     Object result = official.get();
@@ -55,7 +66,10 @@ public final class A2aAuthenticatedRequestGuard {
                     lease.verify();
                     return result;
                 } finally {
-                    if (facts.sending()) A2aCredentialContext.releaseUndispatchedTask(facts.taskId(), lease);
+                    if (facts.sending()) {
+                        if (locallyReserved) A2aCredentialContext.releaseUndispatchedTask(facts.taskId(), lease);
+                        else authorizationVerifier.releaseTaskReservation(verified);
+                    }
                 }
             }
         } catch (RagException ex) {

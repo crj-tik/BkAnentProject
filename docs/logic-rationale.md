@@ -1069,3 +1069,13 @@
 **代码位置**：`common/authz/AuthzWireCodec`、`common-a2a/A2aAuthorizationVerifier`、`A2aAuthenticatedRequestGuard`、`BeaconA2aHttpClient`、`A2aCredentialContext`、`agent-service/OfficialA2aAgentClient`、`AgentPermissionService`。新协议开关默认关闭；测试证明本地传输/验签不代表生产密钥登记、跨实例恢复或未迁移 RAG/Memory 已可启用。
 
 **关联**：LR-41/106/138/139；KI-59/170；change `unify-versioned-permission-context`任务6.1–6.3。
+
+## LR-141 A2A任务owner耐久保存，执行lease不耐久恢复
+
+**结论**：版本化A2A的request nonce、task owner tuple和在途预留必须写共享数据库；owner tuple至少绑定taskId、actor、caller、A2A context、Auth run与session。get/cancel/resubscribe只对已存在且完整匹配的owner记录通过，不能凭taskId创建owner或恢复身份。跨实例在途预留按request nonce更新/释放，只有原请求转发和执行命令都结束才释放；崩溃遗留预留不超过签名context/freshness的硬截止。执行lease仍留在进程内存，重启后必须用新鲜可信上下文重新认证；没有SDK任务/队列记录时返回not-found，不合成task。
+
+**根因**：单机Map无法阻止另一实例重放同nonce、抢占同taskId或并发发送。若把整个执行lease序列化到task记录，又会使taskId变成重新取得身份/授权的恢复凭据。只持久化最小owner/replay/预留事实可以跨实例守住归属和互斥，同时让线程scope、Graph lease与SDK队列仍有明确进程边界。当前SDK的TaskStore/QueueManager仍是InMemory实现，因此耐久owner只保证安全拒绝与重认证，不承诺重启恢复任务内容或流队列。
+
+**代码位置**：`common-a2a/A2aTaskAuthorizationStore`、`JdbcA2aTaskAuthorizationStore`、`A2aAuthorizationVerifier`、`A2aAuthenticatedRequestGuard`、`A2aCredentialContext`；schema `sql/migrations/20261026_a2a_task_authorization.sql`。版本化模式启动时要求耐久store及schema，运行开关默认关闭。
+
+**关联**：LR-41/140；KI-170/172；change `unify-versioned-permission-context`任务6.2。

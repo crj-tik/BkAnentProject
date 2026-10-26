@@ -1484,6 +1484,16 @@
 
 **关联**：LR-106；AuthTokenServiceTest、AuthAccountMutationServiceTest。本提交同时修复账号写入只保留actor而丢失真实凭据的竞争：密码计算后writer锁内复验实际access/actor/当前管理权限，注销/到期时零账号写与审计副作用。
 
+## KI-172 [FIXED·本提交·P1] 版本化A2A nonce与任务owner只在单进程内存
+
+**发现日期与依据**：2026-10-26，复核任务6.1实现。`A2aAuthorizationVerifier`已消费的nonce、`A2aAuthenticatedRequestGuard`的task owner及`A2aCredentialContext`的在途reservation均为进程内Map；同一有效proof发往另一实例不会命中已消费nonce，重启后owner也不存在，可能导致请求重放、taskId被重新绑定或重复send。
+
+**修复**：新增共享JDBC授权状态store和增量迁移，以唯一nonce表跨实例拒重放、以taskId主键保存actor/caller/A2A context/run/session原owner、以task+request nonce原子预留。get/cancel/resubscribe只检查既有tuple；转发与执行命令都完成后按nonce条件释放，崩溃遗留预留在已签硬截止后才可回收。版本化模式缺少耐久store或迁移schema时启动失败。LR-141记录owner事实与进程lease分离的原因。
+
+**验证与边界**：H2覆盖新store实例重放、owner错配、并发reservation和旧nonce不能释放新reservation；common-a2a定向19项通过。未做真实MySQL/多实例联调；官方SDK的TaskStore和QueueManager仍为InMemory，重启后task/stream可能not-found，但不会用taskId恢复身份。协议开关仍默认关闭，未部署。
+
+**关联**：LR-41/140/141；任务6.1/6.2；`sql/migrations/20261026_a2a_task_authorization.sql`。
+
 ---
 
-**变更历史**：e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
+**变更历史**：本提交 持久化A2A请求防重放与任务归属（KI-172）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。

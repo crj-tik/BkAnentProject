@@ -9,14 +9,12 @@ import io.a2a.util.Utils;
 import java.nio.charset.StandardCharsets;
 import java.security.PublicKey;
 import java.time.Clock;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
 /** Verifies Agent-signed A2A request bindings locally, before TaskStore/queue access. */
 public final class A2aAuthorizationVerifier {
     public static final String CALLER_SERVICE = "agent-service";
-    private static final int MAX_NONCES = 10_000;
     private static final Set<AuthzRpcOperation> CALLER_ACL = Set.of(AuthzRpcOperation.VALIDATE_DELEGATION);
 
     private final String audience;
@@ -24,9 +22,10 @@ public final class A2aAuthorizationVerifier {
     private final Clock clock;
     private final Map<String, PublicKey> authorityKeys;
     private final Map<String, PublicKey> callerKeys;
-    private final Map<String, Long> consumedNonces = new HashMap<>();
+    private final A2aTaskAuthorizationStore stateStore;
 
-    public A2aAuthorizationVerifier(String audience, A2aAuthorizationProperties properties, Clock clock) {
+    public A2aAuthorizationVerifier(String audience, A2aAuthorizationProperties properties, Clock clock,
+                                    A2aTaskAuthorizationStore stateStore) {
         if (audience == null || !audience.matches("[a-z][a-z0-9-]{0,95}") || properties == null || clock == null) {
             throw new IllegalArgumentException("A2A authorization verifier configuration is required");
         }
@@ -35,6 +34,7 @@ public final class A2aAuthorizationVerifier {
         this.clock = clock;
         this.authorityKeys = properties.isEnabled() ? properties.authorityKeys() : Map.of();
         this.callerKeys = properties.isEnabled() ? properties.trustedCallerKeys() : Map.of();
+        this.stateStore = stateStore;
     }
 
     public boolean enabled() { return properties.isEnabled(); }
@@ -63,6 +63,10 @@ public final class A2aAuthorizationVerifier {
                     || !freshness.permissionHash().equals(context.permissionHash())) {
                 throw new AuthzException(AuthzErrorCode.CONTEXT_CONFLICT);
             }
+            if (context.runId() == null || context.runId().isBlank()
+                    || context.sessionId() == null || context.sessionId().isBlank()) {
+                throw new AuthzException(AuthzErrorCode.CONTEXT_CONFLICT);
+            }
             if (!CALLER_SERVICE.equals(binding.callerService()) || !audience.equals(binding.audience())
                     || !binding.requestId().equals(facts.requestId())
                     || !binding.taskId().equals(facts.taskId())
@@ -76,10 +80,14 @@ public final class A2aAuthorizationVerifier {
             AuthzSignature.verifyCallerProof(proof, CALLER_SERVICE, audience,
                     AuthzRpcOperation.VALIDATE_DELEGATION, binding.requestId(), requestHash, binding.nonce(),
                     CALLER_ACL, callerKeys, now);
-            consume(binding.nonce(), binding.expiresAtEpochSecond(), now.getEpochSecond());
+            if (stateStore == null) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
+            if (!stateStore.consumeNonce(binding.nonce(), binding.expiresAtEpochSecond(), now.getEpochSecond()))
+                throw new AuthzException(AuthzErrorCode.REPLAY_DETECTED);
             return new VerifiedRequest(request, facts, binding.operations().get(0));
         } catch (RagException failure) {
             throw failure;
+        } catch (org.springframework.dao.DataAccessException failure) {
+            throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
         } catch (AuthzException failure) {
             throw map(failure.code());
         } catch (RuntimeException failure) {
@@ -117,11 +125,47 @@ public final class A2aAuthorizationVerifier {
         }
     }
 
-    private synchronized void consume(String nonce, long expiresAt, long now) {
-        consumedNonces.entrySet().removeIf(entry -> entry.getValue() <= now);
-        if (consumedNonces.containsKey(nonce)) throw new AuthzException(AuthzErrorCode.REPLAY_DETECTED);
-        if (consumedNonces.size() >= MAX_NONCES) throw new AuthzException(AuthzErrorCode.AUTHORIZATION_UNAVAILABLE);
-        consumedNonces.put(nonce, expiresAt);
+    public void bindOrVerifyTaskOwner(VerifiedRequest request) {
+        try {
+            if (stateStore == null) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
+            AuthorizationContext context = request.envelope().context();
+            DelegationBinding binding = request.envelope().binding();
+            RequestFacts facts = request.facts();
+            boolean ownerMatches = stateStore.bindOrVerifyTaskOwner(facts.taskId(), context.actorId(),
+                    binding.callerService(), facts.contextId(), context.runId(), context.sessionId(), facts.sending());
+            if (!ownerMatches) throw new RagException(RagErrorCode.FORBIDDEN);
+        } catch (RagException failure) {
+            throw failure;
+        } catch (org.springframework.dao.DataAccessException failure) {
+            throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+    }
+
+    public void reserveTask(VerifiedRequest request) {
+        try {
+            if (stateStore == null) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
+            AuthorizationContext context = request.envelope().context();
+            DelegationBinding binding = request.envelope().binding();
+            long expiresAt = Math.min(context.expiresAtEpochSecond(),
+                    Math.min(context.runHardDeadlineEpochSecond(), request.envelope().freshness().notAfterEpochSecond()));
+            if (!stateStore.reserveTask(request.facts().taskId(), context.actorId(), binding.nonce(),
+                    expiresAt, clock.instant().getEpochSecond())) {
+                throw new RagException(RagErrorCode.FORBIDDEN);
+            }
+        } catch (RagException failure) {
+            throw failure;
+        } catch (org.springframework.dao.DataAccessException failure) {
+            throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
+    }
+
+    public void releaseTaskReservation(VerifiedRequest request) {
+        if (stateStore == null) return;
+        try {
+            stateStore.releaseTaskReservation(request.facts().taskId(), request.envelope().binding().nonce());
+        } catch (org.springframework.dao.DataAccessException failure) {
+            throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
+        }
     }
 
     private static RagException map(AuthzErrorCode code) {

@@ -35,7 +35,7 @@ class A2aAuthorizationVerifierTest {
         var properties = properties(authority, agent);
         var authentication = mock(A2aBeaconAuthentication.class);
         when(authentication.service()).thenReturn("listing-master-service");
-        var verifier = new A2aAuthorizationVerifier("listing-master-service", properties, clock);
+        var verifier = verifier(properties, clock);
         var guard = new A2aAuthenticatedRequestGuard(authentication, verifier);
 
         String send = sendBody("task-local-proof", "999");
@@ -61,8 +61,7 @@ class A2aAuthorizationVerifierTest {
         KeyPair authority = keyPair();
         KeyPair agent = keyPair();
         var properties = properties(authority, agent);
-        var verifier = new A2aAuthorizationVerifier("listing-master-service", properties,
-                Clock.fixed(Instant.ofEpochSecond(now), ZoneOffset.UTC));
+        var verifier = verifier(properties, Clock.fixed(Instant.ofEpochSecond(now), ZoneOffset.UTC));
         var guard = new A2aAuthenticatedRequestGuard(mock(A2aBeaconAuthentication.class), verifier);
         String body = sendBody("task-replay-proof", "7");
         var signed = signedRequest(body, "7", now, authority, agent);
@@ -84,8 +83,7 @@ class A2aAuthorizationVerifierTest {
         KeyPair authority = keyPair();
         KeyPair agent = keyPair();
         var properties = properties(authority, agent);
-        var verifier = new A2aAuthorizationVerifier("listing-master-service", properties,
-                Clock.fixed(Instant.ofEpochSecond(now), ZoneOffset.UTC));
+        var verifier = verifier(properties, Clock.fixed(Instant.ofEpochSecond(now), ZoneOffset.UTC));
         var guard = new A2aAuthenticatedRequestGuard(mock(A2aBeaconAuthentication.class), verifier);
         String body = sendBody("task-owner-proof", "7");
         guard.handle(body, headers(signedRequest(body, "7", now, authority, agent)), () -> "accepted");
@@ -99,12 +97,51 @@ class A2aAuthorizationVerifierTest {
     }
 
     @Test
+    void sharedStoreRejectsCrossInstanceReplayAndKeepsReservationUntilBothBoundariesFinish() throws Exception {
+        long now = Instant.now().getEpochSecond();
+        KeyPair authority = keyPair();
+        KeyPair agent = keyPair();
+        var store = new TestTaskAuthorizationStore();
+        Clock clock = Clock.fixed(Instant.ofEpochSecond(now), ZoneOffset.UTC);
+        var first = new A2aAuthorizationVerifier("listing-master-service", properties(authority, agent), clock, store);
+        var second = new A2aAuthorizationVerifier("listing-master-service", properties(authority, agent), clock, store);
+
+        String body = sendBody("task-shared-state", "999");
+        var firstEnvelope = signedRequest(body, "7", now, authority, agent);
+        String encoded = AuthzWireCodec.encodeDelegatedAuthorizationRequest(firstEnvelope);
+        var verified = first.verify(encoded, body);
+        first.bindOrVerifyTaskOwner(verified);
+        first.reserveTask(verified);
+        var lease = A2aCredentialContext.Lease.versioned(firstEnvelope, "message/send",
+                () -> first.releaseTaskReservation(verified));
+        try (var ignored = A2aCredentialContext.open(lease)) {
+            A2aCredentialContext.reserveTask(verified.facts().taskId());
+            assertThat(A2aCredentialContext.markDispatched(lease)).isTrue();
+        }
+        A2aCredentialContext.releaseUndispatchedTask(verified.facts().taskId(), lease);
+
+        assertThatThrownBy(() -> second.verify(encoded, body)).isInstanceOf(RagException.class);
+        var inFlightRequest = signedRequest(body.replace("rpc-task-shared-state", "rpc-next-1"), "7", now, authority, agent);
+        var inFlight = second.verify(AuthzWireCodec.encodeDelegatedAuthorizationRequest(inFlightRequest),
+                body.replace("rpc-task-shared-state", "rpc-next-1"));
+        second.bindOrVerifyTaskOwner(inFlight);
+        assertThatThrownBy(() -> second.reserveTask(inFlight)).isInstanceOf(RagException.class);
+
+        A2aCredentialContext.releaseDispatchedTask(lease);
+        String nextBody = body.replace("rpc-task-shared-state", "rpc-next-2");
+        var next = signedRequest(nextBody, "7", now, authority, agent);
+        var nextVerified = second.verify(AuthzWireCodec.encodeDelegatedAuthorizationRequest(next), nextBody);
+        second.bindOrVerifyTaskOwner(nextVerified);
+        assertThatCode(() -> second.reserveTask(nextVerified)).doesNotThrowAnyException();
+        second.releaseTaskReservation(nextVerified);
+    }
+
+    @Test
     void rejectsCapabilityOutsideTheAuthSignedParentScopeBeforeHandler() throws Exception {
         long now = Instant.now().getEpochSecond();
         KeyPair authority = keyPair();
         KeyPair agent = keyPair();
-        var verifier = new A2aAuthorizationVerifier("listing-master-service", properties(authority, agent),
-                Clock.fixed(Instant.ofEpochSecond(now), ZoneOffset.UTC));
+        var verifier = verifier(properties(authority, agent), Clock.fixed(Instant.ofEpochSecond(now), ZoneOffset.UTC));
         var guard = new A2aAuthenticatedRequestGuard(mock(A2aBeaconAuthentication.class), verifier);
         String body = sendBody("task-capability-proof", "7");
         var unauthorized = signedRequest(body, "7", now, authority, agent,
@@ -124,6 +161,52 @@ class A2aAuthorizationVerifierTest {
         properties.setTrustedCallerPublicKeys(Map.of(AGENT_KEY, ServiceIdentityCrypto.encodePublicKey(agent.getPublic())));
         return properties;
     }
+
+    private static A2aAuthorizationVerifier verifier(A2aAuthorizationProperties properties, Clock clock) {
+        return new A2aAuthorizationVerifier("listing-master-service", properties, clock,
+                new TestTaskAuthorizationStore());
+    }
+
+    private static final class TestTaskAuthorizationStore implements A2aTaskAuthorizationStore {
+        private final java.util.Set<String> nonces = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        private final Map<String, TestOwner> owners = new java.util.concurrent.ConcurrentHashMap<>();
+        private final Map<String, TestReservation> reservations = new java.util.concurrent.ConcurrentHashMap<>();
+
+        @Override public boolean consumeNonce(String nonce, long expiresAtEpochSecond, long nowEpochSecond) {
+            return nonces.add(nonce);
+        }
+
+        @Override public boolean bindOrVerifyTaskOwner(String taskId, String actorId, String callerService,
+                                                        String a2aContextId, String runId, String sessionId,
+                                                        boolean sending) {
+            TestOwner candidate = new TestOwner(actorId, callerService, a2aContextId, runId, sessionId);
+            if (sending) owners.putIfAbsent(taskId, candidate);
+            TestOwner owner = owners.get(taskId);
+            return owner != null && owner.actorId.equals(actorId) && owner.callerService.equals(callerService)
+                    && (!sending || java.util.Objects.equals(owner.contextId, a2aContextId))
+                    && owner.runId.equals(runId) && owner.sessionId.equals(sessionId);
+        }
+
+        @Override public boolean reserveTask(String taskId, String actorId, String nonce,
+                                             long expiresAtEpochSecond, long nowEpochSecond) {
+            java.util.concurrent.atomic.AtomicBoolean reserved = new java.util.concurrent.atomic.AtomicBoolean();
+            reservations.compute(taskId, (ignored, existing) -> {
+                if (existing == null || existing.expiresAt <= nowEpochSecond) {
+                    reserved.set(true);
+                    return new TestReservation(actorId, nonce, expiresAtEpochSecond);
+                }
+                return existing;
+            });
+            return reserved.get();
+        }
+
+        @Override public void releaseTaskReservation(String taskId, String nonce) {
+            reservations.computeIfPresent(taskId, (ignored, existing) -> existing.nonce.equals(nonce) ? null : existing);
+        }
+    }
+
+    private record TestOwner(String actorId, String callerService, String contextId, String runId, String sessionId) { }
+    private record TestReservation(String actorId, String nonce, long expiresAt) { }
 
     private static ServerRequest.Headers headers(DelegatedAuthorizationRequest request) throws Exception {
         String encoded = AuthzWireCodec.encodeDelegatedAuthorizationRequest(request);

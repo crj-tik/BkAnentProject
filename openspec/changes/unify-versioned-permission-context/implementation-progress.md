@@ -99,6 +99,14 @@ AuthorizationUserInfoTest新增5项真实H2/MyBatis谓词与DTO/JSON兼容回归
 
 运行边界：路由受保护audience与生产头预算尚未在启用环境验证；新授权开关保持关闭。Redis ACL脚本与连接身份配置已提交，但真实Redis ACL/订阅验证没有运行环境证据，任务3.3仍未完成。Supervisor异步重启恢复、业务Graph/Model及A2A/Memory领域consumer仍待5.x/6.x。
 
+## A2A请求鉴权与持久归属续批（2026-10-26）
+
+按模块推进6.1与6.2：Agent对每个真实JSON-RPC body签逐请求proof，接收端本地核父Auth context/freshness、调用方proof、actor/run/session、task、操作与body，不为每次subAgent调用联系Auth；共享JDBC store跨实例消费nonce、持久绑定taskId到actor/caller/A2A context/run/session，并用task+request nonce维护在途互斥。forward与SDK执行命令均结束后才条件释放；数据库未配置或迁移schema缺失时版本化模式不能启动。Auth调用仍只在Supervisor规划刷新边界。
+
+新增MySQL迁移`20261026_a2a_task_authorization.sql`，需分别在提供A2A服务的业务数据库应用。执行lease仍是本地scope；SDK默认TaskStore/QueueManager仍在内存，进程重启后状态查询/重连可能返回not-found，不从taskId恢复身份或重建lease。版本化新链仍默认关闭，尚无真实MySQL/多实例与生产密钥联调。
+
+验证：common-a2a全量127项，失败/错误0、跳过1；Agent全量265项，失败/错误0、跳过6。新增H2跨实例nonce/owner/并发reservation/条件释放回归。严格OpenSpec校验通过。已完成计数28/63；6.3–6.7的Memory、MCP、RAG与网络边界仍未完成。
+
 ## Agent/Supervisor本地授权与异步边界续批（2026-10-26）
 
 按模块完成任务5.1–5.7。`AgentAuthorizationConsumer`在业务Model重规划边界单次核对权限head；同版沿用本run/session上下文，版本变化时只对该run/session刷新签名context并收缩原scope。A2A/MCP/本地工具按稳定`CapabilityId`精确映射操作许可，目录和callback均本地校验；图节点不逐次调用Auth，资源、Memory来源、审批hash、租约/取消及预算守卫保留。治理审计从签名context记录actor及权限版本。

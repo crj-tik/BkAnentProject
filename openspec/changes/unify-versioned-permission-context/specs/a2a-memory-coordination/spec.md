@@ -23,3 +23,11 @@
 #### Scenario: Authorization refresh is required at a planning boundary
 - **WHEN** Agent 的规划版本检查发现 context DIRTY 或 freshness 到期
 - **THEN** 由已绑定的 Supervisor/Auth 刷新边界处理；刷新成功前不产生新的 A2A 请求证明，子 Agent 不自行用 userId 或旧 context 换发授权
+
+#### Scenario: Task owner and replay state survive an A2A instance change
+- **WHEN** 同一 JSON-RPC proof 被另一服务实例重放，或原 owner 在同一 run/session 内重新认证后查询、取消或重连已有 task
+- **THEN** 共享持久状态原子消费 nonce 并核验 taskId 的 actor/caller/context/run/session；未知 task owner 与不匹配的tuple在SDK Store/Queue前拒绝，taskId本身永不恢复身份。本地在途预留只能由创建它的nonce条件释放，并需等待原请求转发与执行命令都结束
+
+#### Scenario: Service restart clears execution lease without recreating task identity
+- **WHEN** 服务重启后本地 Agent lease、TaskStore 或 Queue 不存在，但数据库仍保留 task owner
+- **THEN** 新请求仍须提供当前有效签名上下文并匹配原owner；系统不从taskId或持久owner记录重建lease，SDK缺少task/queue时返回not-found。认证状态库不可用或未迁移时，版本化A2A模式不得启动

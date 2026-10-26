@@ -17,7 +17,8 @@ import org.springframework.context.annotation.Bean;
  * 随之消失，而服务自己的 Card bean 又以它们为参数。此处统一注册，注册器幂等，
  * Starter 自动配置正常执行时不会重复注册。
  */
-@AutoConfiguration(after = com.bkanent.common.skill.config.SkillAutoConfiguration.class,
+@AutoConfiguration(after = {com.bkanent.common.skill.config.SkillAutoConfiguration.class,
+        org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration.class},
         before = com.alibaba.cloud.ai.a2a.autoconfigure.server.A2aServerHandlerAutoConfiguration.class)
 @org.springframework.boot.context.properties.EnableConfigurationProperties({A2aExecutionProperties.class,
         A2aAuthorizationProperties.class,
@@ -35,13 +36,29 @@ public class LiveSkillAgentCardAutoConfiguration {
     A2aBeaconAuthentication a2aBeaconAuthentication(org.springframework.core.env.Environment environment) {
         return new A2aBeaconAuthentication(environment);
     }
+
+    @Bean
+    @ConditionalOnBean(javax.sql.DataSource.class)
+    @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean(A2aTaskAuthorizationStore.class)
+    A2aTaskAuthorizationStore a2aTaskAuthorizationStore(javax.sql.DataSource dataSource) {
+        return new JdbcA2aTaskAuthorizationStore(new org.springframework.jdbc.core.JdbcTemplate(dataSource));
+    }
+
     @Bean
     A2aAuthorizationVerifier a2aAuthorizationVerifier(A2aBeaconAuthentication authentication,
-                                                       A2aAuthorizationProperties properties) {
+                                                       A2aAuthorizationProperties properties,
+                                                       ObjectProvider<A2aTaskAuthorizationStore> stateStores) {
         // The disabled compatibility path has no audience to verify. Avoid requiring application
         // identity until the signed protocol is explicitly enabled.
         String audience = properties.isEnabled() ? authentication.service() : "disabled-service";
-        return new A2aAuthorizationVerifier(audience, properties, java.time.Clock.systemUTC());
+        A2aTaskAuthorizationStore stateStore = stateStores.getIfAvailable();
+        if (properties.isEnabled() && stateStore == null) {
+            throw new IllegalStateException("Enabled A2A authorization requires a durable task authorization store");
+        }
+        if (properties.isEnabled() && stateStore instanceof JdbcA2aTaskAuthorizationStore jdbcStore) {
+            jdbcStore.verifySchema();
+        }
+        return new A2aAuthorizationVerifier(audience, properties, java.time.Clock.systemUTC(), stateStore);
     }
     @Bean
     A2aAuthenticatedRequestGuard a2aAuthenticatedRequestGuard(A2aBeaconAuthentication authentication,
