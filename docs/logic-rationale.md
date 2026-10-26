@@ -1059,3 +1059,13 @@
 **代码位置**：`AgentAuthorizationProperties.capabilityPermissions`、`AgentPermissionService`、`SupervisorCapabilityCatalog`、`SupervisorToolLoopGraph.checkReplanningAuthorization`、`AgentAuthorizationConsumer.checkPlanning`、`AuthorizationVersionMonitor.checkPlanning`、`AuthorizationSession.refreshSingleFlight`、`SupervisorGovernanceService.auditAccess`。版本化模式下治理审计也从当前签名context记录actor、permissionRevision和credentialEpoch；未登记映射隐藏，不从管理员身份或模型生成内容补齐。
 
 **关联**：LR-103/106/138；KI-170；change `unify-versioned-permission-context`任务5.1–5.7。Agent本地consumer、owner边界和治理审计已有源码及定向回归；生产启用和跨实例恢复不由此推定。
+
+## LR-140 A2A 复用 Auth 绑定上下文并由 Agent 逐请求证明
+
+**结论**：Supervisor 的已绑定 Auth 签名 context/freshness 是同一 run 内 Agent 调度的身份和操作上限。Agent 通过稳定 `CapabilityId` 取精确操作码，为每个 A2A JSON-RPC 请求重新生成 `DelegationBinding`，绑定实际序列化 body、caller、audience、actor、run/task、requestId、nonce 与短截止，再以 Agent 服务 key 签署请求 proof。接收端在官方 TaskStore/Queue 前本地验 Auth context/freshness、Agent proof、请求方法/ID/task/body/目标/操作/期限及已有 owner；A2A send/stream/control 与 SSE 不因每个边界向 Auth 远程验证。Graph 规划发现版本 DIRTY 或 freshness 需更新时，才由 Supervisor/Auth 刷新；刷新失败不得签发新请求。用户身份只来自已验证 context，模型生成的 `userId`、role 或 admin 声明不作 actor。
+
+**根因**：Supervisor 已在入口持有经 Auth 签发且绑定真实 run/session 的有限上下文。重新为每次 A2A 派发向 Auth resolve/issue 会把 Graph 调度次数变成认证依赖次数；从 tool 参数或 structuredContext 读取 actor 又允许模型内容覆盖登录身份。逐请求 body proof 保留完整性和调用服务认证，本地验签减少远程依赖；权限刷新仍沿已绑定运行边界进行，不把本地 proof 解释为可扩权 bearer。跨实例/重启任务 owner 与 nonce 持久化独立由 KI-170/任务6.2验收，Memory/RAG 仍需其各自权限与资源迁移。
+
+**代码位置**：`common/authz/AuthzWireCodec`、`common-a2a/A2aAuthorizationVerifier`、`A2aAuthenticatedRequestGuard`、`BeaconA2aHttpClient`、`A2aCredentialContext`、`agent-service/OfficialA2aAgentClient`、`AgentPermissionService`。新协议开关默认关闭；测试证明本地传输/验签不代表生产密钥登记、跨实例恢复或未迁移 RAG/Memory 已可启用。
+
+**关联**：LR-41/106/138/139；KI-59/170；change `unify-versioned-permission-context`任务6.1–6.3。

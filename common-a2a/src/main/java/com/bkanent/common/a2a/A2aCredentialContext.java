@@ -1,6 +1,7 @@
 package com.bkanent.common.a2a;
 
 import com.bkanent.common.rag.*;
+import com.bkanent.common.authz.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 
@@ -14,16 +15,37 @@ public final class A2aCredentialContext {
         final RagCredentialContext credentials;
         final long expiresAt;
         final Runnable validator;
+        final AuthorizationContext authorizationContext;
+        final AuthzFreshness freshness;
         private volatile boolean dispatched;
         private boolean forwardFinished;
         private boolean commandFinished;
         public Lease(A2aBeaconBinding binding, RagCredentialContext credentials, long expiresAt, Runnable validator) {
+            this(binding, credentials, expiresAt, validator, null, null);
+        }
+        private Lease(A2aBeaconBinding binding, RagCredentialContext credentials, long expiresAt, Runnable validator,
+                      AuthorizationContext authorizationContext, AuthzFreshness freshness) {
             this.binding = binding; this.credentials = credentials; this.expiresAt = expiresAt; this.validator = validator;
+            this.authorizationContext = authorizationContext; this.freshness = freshness;
+        }
+        static Lease versioned(DelegatedAuthorizationRequest request, String method) {
+            AuthorizationContext context = request.context();
+            AuthzFreshness freshness = request.freshness();
+            DelegationBinding binding = request.binding();
+            long hardExpiry = Math.min(context.expiresAtEpochSecond(), context.runHardDeadlineEpochSecond());
+            long expiresAt = Math.min(hardExpiry, freshness.notAfterEpochSecond());
+            A2aBeaconBinding compatibilityBinding = new A2aBeaconBinding(1, binding.requestId(),
+                    binding.callerService(), binding.audience(), context.actorId(), method, binding.bodyHash(),
+                    binding.taskId(), hardExpiry);
+            return new Lease(compatibilityBinding, null, expiresAt, null, context, freshness);
         }
         public void verify() {
             if (expiresAt <= java.time.Instant.now().getEpochSecond()) throw new RagException(RagErrorCode.AUTHENTICATION_EXPIRED);
-            validator.run();
+            if (validator != null) validator.run();
         }
+        public boolean versioned() { return authorizationContext != null; }
+        public AuthorizationContext authorizationContext() { return authorizationContext; }
+        public AuthzFreshness freshness() { return freshness; }
         @Override public String toString() { return "A2aLease[REDACTED]"; }
     }
     public static final class Scope implements AutoCloseable {
@@ -38,8 +60,15 @@ public final class A2aCredentialContext {
         if (lease == null) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
         lease.verify(); return lease;
     }
-    public static RagCredentialContext currentCredentials() { return required().credentials; }
-    public static String currentActorId() { return required().binding.actorId(); }
+    public static RagCredentialContext currentCredentials() {
+        RagCredentialContext credentials = required().credentials;
+        if (credentials == null) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+        return credentials;
+    }
+    public static String currentActorId() {
+        Lease lease = required();
+        return lease.versioned() ? lease.authorizationContext.actorId() : lease.binding.actorId();
+    }
     /** Reserve before the official handler can read or mutate its task store/queue. */
     public static synchronized void reserveTask(String taskId) {
         Lease lease = required();

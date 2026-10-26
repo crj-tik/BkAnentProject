@@ -58,6 +58,24 @@ class OfficialA2aMetadataMapperTest {
     }
 
     @Test
+    void versionedAuthorizationRemovesModelSuppliedIdentityClaimsFromToolMetadata() {
+        AgentTaskInvokeRequest request = new AgentTaskInvokeRequest(
+                "session-1", "task-1", "parent-1", "trace-1", "supervisor-agent", "listing-agent",
+                "listing.search", "listing", "查找房源",
+                Map.ofEntries(Map.entry("keyword", "浦东"), Map.entry("userId", "999"),
+                        Map.entry("actor_id", "999"), Map.entry("roles", List.of("ADMIN")),
+                        Map.entry("isAdmin", true), Map.entry("token", "model-token"),
+                        Map.entry("user", Map.of("id", "999"))),
+                List.of(), List.of(), "json", "idem-1", true);
+
+        Map<String, Object> metadata = OfficialA2aMetadataMapper.toMetadata(request, false, true);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> supervisor = (Map<String, Object>) metadata.get(
+                OfficialA2aMetadataMapper.SUPERVISOR_METADATA_KEY);
+        assertThat(supervisor.get("structuredContext")).isEqualTo(Map.of("keyword", "浦东"));
+    }
+
+    @Test
     void skillHintInStructuredContextIsHoistedToSupervisorNamespace() {
         AgentTaskInvokeRequest request = new AgentTaskInvokeRequest(
                 "session-1", "task-1", "parent-1", "trace-1", "supervisor-agent", "contract-agent",

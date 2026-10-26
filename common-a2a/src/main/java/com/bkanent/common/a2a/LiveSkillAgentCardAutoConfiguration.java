@@ -20,6 +20,7 @@ import org.springframework.context.annotation.Bean;
 @AutoConfiguration(after = com.bkanent.common.skill.config.SkillAutoConfiguration.class,
         before = com.alibaba.cloud.ai.a2a.autoconfigure.server.A2aServerHandlerAutoConfiguration.class)
 @org.springframework.boot.context.properties.EnableConfigurationProperties({A2aExecutionProperties.class,
+        A2aAuthorizationProperties.class,
         com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerProperties.class,
         com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerAgentCardProperties.class})
 public class LiveSkillAgentCardAutoConfiguration {
@@ -35,8 +36,17 @@ public class LiveSkillAgentCardAutoConfiguration {
         return new A2aBeaconAuthentication(environment);
     }
     @Bean
-    A2aAuthenticatedRequestGuard a2aAuthenticatedRequestGuard(A2aBeaconAuthentication authentication) {
-        return new A2aAuthenticatedRequestGuard(authentication);
+    A2aAuthorizationVerifier a2aAuthorizationVerifier(A2aBeaconAuthentication authentication,
+                                                       A2aAuthorizationProperties properties) {
+        // The disabled compatibility path has no audience to verify. Avoid requiring application
+        // identity until the signed protocol is explicitly enabled.
+        String audience = properties.isEnabled() ? authentication.service() : "disabled-service";
+        return new A2aAuthorizationVerifier(audience, properties, java.time.Clock.systemUTC());
+    }
+    @Bean
+    A2aAuthenticatedRequestGuard a2aAuthenticatedRequestGuard(A2aBeaconAuthentication authentication,
+                                                               A2aAuthorizationVerifier verifier) {
+        return new A2aAuthenticatedRequestGuard(authentication, verifier);
     }
     @Bean
     A2aContextExecutorProvider a2aContextExecutorProvider() { return new A2aContextExecutorProvider(); }

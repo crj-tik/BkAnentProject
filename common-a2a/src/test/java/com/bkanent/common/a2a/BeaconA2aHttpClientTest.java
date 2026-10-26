@@ -1,6 +1,8 @@
 package com.bkanent.common.a2a;
 
 import com.bkanent.common.rag.*;
+import com.bkanent.common.authz.*;
+import com.bkanent.common.security.ServiceIdentityCrypto;
 import io.a2a.client.A2AClient;
 import io.a2a.http.*;
 import io.a2a.spec.*;
@@ -43,6 +45,59 @@ class BeaconA2aHttpClientTest {
         assertThat(wire.getHeaders).doesNotContainKeys(BeaconA2aHttpClient.BEACON_HEADER, BeaconA2aHttpClient.BINDING_HEADER);
         verify(auth, times(5)).issue(any(), any(), anyLong());
     }
+
+    @Test void versionedTransportSignsEveryPostLocallyWithoutCallingAuth() throws Exception {
+        var auth = mock(A2aBeaconAuthentication.class);
+        var wire = new RecordingTransport();
+        var authority = java.security.KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        var caller = java.security.KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        long now = java.time.Instant.now().getEpochSecond();
+        String permissionHash = "a".repeat(64);
+        String policyDigest = "b".repeat(64);
+        String contextNonce = randomNonce();
+        var unsignedContext = new AuthorizationContext("7", 4, 2, permissionHash,
+                List.of("agent.workflow.invoke.listing"), "agent-service", "ingress-request", "run-1", "session-1",
+                policyDigest, permissionHash, contextNonce, now, now + 30, now + 120,
+                AuthzContract.ALGORITHM, "auth-k1", null);
+        var context = AuthzSignature.sign(unsignedContext, authority.getPrivate());
+        var freshness = AuthzSignature.sign(new AuthzFreshness("7", 4, 2, AuthorizationStatus.ACTIVE,
+                permissionHash, now, now + 30, contextNonce, AuthzContract.ALGORITHM, "auth-k1", null),
+                authority.getPrivate());
+        var identity = BeaconA2aHttpClient.Identity.versioned("listing-master-service", context, freshness,
+                "agent.workflow.invoke.listing", "agent-service", "agent-k1", caller.getPrivate());
+        var transport = new BeaconA2aHttpClient(wire, auth, () -> identity);
+        var client = new A2AClient(transport, "https://listing.example/a2a");
+        var message = new Message.Builder().role(Message.Role.USER).messageId("m").taskId("task").contextId("context")
+                .parts(List.of(new TextPart("query"))).build();
+        var params = new MessageSendParams(message,
+                new MessageSendConfiguration(List.of("text"), null, null, false), new HashMap<>());
+
+        client.sendMessage("send", params);
+        client.sendStreamingMessage("stream", params, ignored -> { }, ignored -> { }, () -> { });
+        client.getTask("get", new TaskQueryParams("task"));
+        client.cancelTask("cancel", new TaskIdParams("task"));
+        client.resubscribeToTask("resume", new TaskIdParams("task"), ignored -> { }, ignored -> { }, () -> { });
+
+        assertThat(wire.posts).extracting(Post::method).containsExactly(
+                "message/send", "message/stream", "tasks/get", "tasks/cancel", "tasks/resubscribe");
+        for (var post : wire.posts) {
+            assertThat(post.headers).containsKey(BeaconA2aHttpClient.AUTHORIZATION_HEADER)
+                    .doesNotContainKeys(BeaconA2aHttpClient.BEACON_HEADER, BeaconA2aHttpClient.BINDING_HEADER);
+            var envelope = AuthzWireCodec.decodeDelegatedAuthorizationRequest(
+                    post.headers.get(BeaconA2aHttpClient.AUTHORIZATION_HEADER));
+            assertThat(envelope.context().actorId()).isEqualTo("7");
+            assertThat(envelope.binding().audience()).isEqualTo("listing-master-service");
+            assertThat(envelope.binding().bodyHash()).isEqualTo(AuthzCanonicalHash.bodyHash(
+                    post.body.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            AuthzSignature.verifyCallerProof(envelope.callerProof(), "agent-service", "listing-master-service",
+                    AuthzRpcOperation.VALIDATE_DELEGATION, envelope.binding().requestId(),
+                    AuthzCanonicalHash.delegationRequestHash(envelope.context(), envelope.binding()),
+                    envelope.binding().nonce(), java.util.Set.of(AuthzRpcOperation.VALIDATE_DELEGATION),
+                    Map.of("agent-k1", caller.getPublic()), java.time.Instant.now());
+        }
+        transport.createGet().url("https://listing.example/.well-known/agent.json").get();
+        verifyNoInteractions(auth);
+    }
     @Test void safeOfficialJdkTransportDoesNotFollow302Or307OrForwardBeacon() throws Exception {
         var targetCalls = new java.util.concurrent.atomic.AtomicInteger();
         var server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
@@ -77,6 +132,11 @@ class BeaconA2aHttpClientTest {
         } finally { server.stop(0); }
     }
     private record Post(String body, String method, Map<String, String> headers) { }
+    private static String randomNonce() {
+        byte[] bytes = new byte[32];
+        new java.security.SecureRandom().nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
     private static final class RecordingTransport implements A2AHttpClient {
         final List<Post> posts = new ArrayList<>();
         final Map<String, String> getHeaders = new HashMap<>();

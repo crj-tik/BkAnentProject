@@ -1,6 +1,10 @@
 package com.bkanent.agent.client;
 
 import com.bkanent.agent.registry.RegisteredAgentDescriptor;
+import com.bkanent.agent.config.AgentAuthorizationProperties;
+import com.bkanent.agent.authorization.AgentAuthorizationScope;
+import com.bkanent.common.authz.AuthzException;
+import com.bkanent.common.authz.AuthzErrorCode;
 import com.bkanent.common.agent.A2aAsyncTaskCreateResponse;
 import com.bkanent.common.agent.A2aAsyncTaskStatusResponse;
 import com.bkanent.common.agent.AgentTaskInvokeRequest;
@@ -67,6 +71,7 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
     private record TaskWatch(Consumer<AcceptedA2aTask> observer, long expiresAt) {}
     private final OfficialA2aResponseNormalizer responseNormalizer;
     private final Function<String, A2AClient> clientFactory;
+    private final AgentAuthorizationProperties authorizationProperties;
 
     private com.bkanent.agent.security.AgentRagCredentialLeaseStore credentials;
     private static final ThreadLocal<com.bkanent.common.a2a.BeaconA2aHttpClient.Identity> TRANSPORT_IDENTITY = new ThreadLocal<>();
@@ -74,20 +79,60 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
     @Autowired
     public OfficialA2aAgentClient(OfficialA2aResponseNormalizer responseNormalizer,
             com.bkanent.agent.security.AgentRagCredentialLeaseStore credentials,
-            com.bkanent.common.a2a.A2aBeaconAuthentication authentication) {
+            com.bkanent.common.a2a.A2aBeaconAuthentication authentication,
+            AgentAuthorizationProperties authorizationProperties) {
         this(responseNormalizer, url -> new A2AClient(new com.bkanent.common.a2a.BeaconA2aHttpClient(
                 new io.a2a.http.JdkA2AHttpClient(java.net.http.HttpClient.Redirect.NEVER), authentication, () -> {
                     var identity = TRANSPORT_IDENTITY.get();
                     if (identity == null) throw new com.bkanent.common.rag.RagException(com.bkanent.common.rag.RagErrorCode.AUTHENTICATION_FAILED);
                     return identity;
-                }), url));
+                }), url), authorizationProperties);
         this.credentials = credentials;
     }
 
+    public OfficialA2aAgentClient(OfficialA2aResponseNormalizer responseNormalizer,
+            com.bkanent.agent.security.AgentRagCredentialLeaseStore credentials,
+            com.bkanent.common.a2a.A2aBeaconAuthentication authentication) {
+        this(responseNormalizer, credentials, authentication, null);
+    }
+
     private TransportScope authenticate(RegisteredAgentDescriptor descriptor, AgentTaskInvokeRequest request) {
+        if (authorizationProperties != null && authorizationProperties.isEnabled()) {
+            AgentAuthorizationScope.Entry entry = AgentAuthorizationScope.current();
+            if (entry == null) throw new AuthzException(AuthzErrorCode.AUTHENTICATION_REQUIRED);
+            entry.requireRunAssociation();
+            if (request != null && request.targetAgentId() != null
+                    && !request.targetAgentId().equals(descriptor.agentId()))
+                throw new AuthzException(AuthzErrorCode.CONTEXT_CONFLICT);
+            String audience = audienceFor(descriptor);
+            String capability;
+            try { capability = com.bkanent.common.agent.CapabilityId.a2a(descriptor.agentId()).value(); }
+            catch (RuntimeException invalid) { throw new AuthzException(AuthzErrorCode.PERMISSION_DENIED); }
+            String operation = authorizationProperties.permissionForCapability(capability);
+            if (operation == null) throw new AuthzException(AuthzErrorCode.PERMISSION_DENIED);
+            entry.session().requirePermission(operation);
+            return new TransportScope(com.bkanent.common.a2a.BeaconA2aHttpClient.Identity.versioned(audience,
+                    entry.session().context(), entry.session().freshness(), operation,
+                    authorizationProperties.getCallerService(), authorizationProperties.getKeyId(),
+                    authorizationProperties.signingKey()));
+        }
         if (credentials == null) return new TransportScope(null); // Test-only injected SDK factory.
         String actor = String.valueOf(request.structuredContext().get("userId"));
-        String audience = switch (descriptor.agentId()) {
+        String audience = audienceFor(descriptor);
+        return new TransportScope(new com.bkanent.common.a2a.BeaconA2aHttpClient.Identity(actor, audience,
+                credentials.credentials(actor), credentials.expiresAtEpochSecond(actor)));
+    }
+    private void verifyCurrent(AgentTaskInvokeRequest request) {
+        if (authorizationProperties != null && authorizationProperties.isEnabled()) {
+            AgentAuthorizationScope.Entry entry = AgentAuthorizationScope.current();
+            if (entry == null) throw new AuthzException(AuthzErrorCode.AUTHENTICATION_REQUIRED);
+            entry.requireRunAssociation();
+            return;
+        }
+        if (credentials != null) credentials.credentials(String.valueOf(request.structuredContext().get("userId")));
+    }
+    private static String audienceFor(RegisteredAgentDescriptor descriptor) {
+        return switch (descriptor.agentId()) {
             case "listing-agent" -> "listing-master-service";
             case "trade-agent" -> "business-service";
             case "marketing-agent" -> "marketing-content-service";
@@ -99,11 +144,6 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
             case "interview-agent" -> "interview-service";
             default -> throw new com.bkanent.common.rag.RagException(com.bkanent.common.rag.RagErrorCode.FORBIDDEN);
         };
-        return new TransportScope(new com.bkanent.common.a2a.BeaconA2aHttpClient.Identity(actor, audience,
-                credentials.credentials(actor), credentials.expiresAtEpochSecond(actor)));
-    }
-    private void verifyCurrent(AgentTaskInvokeRequest request) {
-        if (credentials != null) credentials.credentials(String.valueOf(request.structuredContext().get("userId")));
     }
     private java.util.function.Supplier<AutoCloseable> credentialSnapshot() {
         return credentials == null ? () -> () -> { } : credentials.snapshot();
@@ -118,8 +158,15 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
 
     OfficialA2aAgentClient(OfficialA2aResponseNormalizer responseNormalizer,
                            Function<String, A2AClient> clientFactory) {
+        this(responseNormalizer, clientFactory, null);
+    }
+
+    OfficialA2aAgentClient(OfficialA2aResponseNormalizer responseNormalizer,
+                           Function<String, A2AClient> clientFactory,
+                           AgentAuthorizationProperties authorizationProperties) {
         this.responseNormalizer = responseNormalizer;
         this.clientFactory = clientFactory;
+        this.authorizationProperties = authorizationProperties;
     }
 
     @Override
@@ -554,7 +601,8 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
     }
 
     private MessageSendParams buildMessageSendParams(AgentTaskInvokeRequest request, boolean blocking) {
-        Map<String, Object> metadata = OfficialA2aMetadataMapper.toMetadata(request, !blocking);
+        Map<String, Object> metadata = OfficialA2aMetadataMapper.toMetadata(request, !blocking,
+                authorizationProperties != null && authorizationProperties.isEnabled());
         Message message = new Message(
                 Message.Role.USER,
                 List.of(new TextPart(resolveInstruction(request))),

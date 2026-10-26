@@ -14,7 +14,7 @@
 
 ### Requirement: A2A 认证使用专用可验证信标与真实传输
 
-A2A SHALL 经真实受支持transport携带可验证受限授权，绑定服务、用户、请求正文、操作、audience、任务及期限。每个新外部执行边界独立向Auth验证一次；内部节点、工具、SSE只本地核验许可/期限/已知失效与请求完整性，不逐事件重查Auth。get/cancel/resubscribe等新外部控制请求仍认证并核对原任务归属。凭据不得进入模型metadata、参数、普通structuredContext、URL、日志或checkpoint；重启或硬到期需原owner重认证，不按userId换发。新协议保留算法域隔离及旧RAG签名，不因缺桥/信标转匿名或旧弱策略。
+A2A SHALL 经真实受支持transport携带可验证受限授权，绑定服务、用户、请求正文、操作、audience、任务及期限。已绑定 Agent run 的 send/stream/get/cancel/resubscribe 使用 Auth 签名context及 Agent 每请求签名 proof，由接收端在 Store/Queue 前本地验证；不逐子 Agent/控制请求向 Auth 验证，权限变化仅在已绑定 Supervisor 规划刷新边界联系 Auth。内部节点、工具、SSE只本地核验许可/期限/已知失效与请求完整性，不逐事件重查Auth。控制请求仍核对原任务owner和调用服务。凭据不得进入模型metadata、参数、普通structuredContext、URL、日志或checkpoint；重启或硬到期需原owner重认证，不按userId换发。未迁移的 RAG/Memory 消费者继续使用各自当前受保护签名/资源检查，不因 A2A 本地验证而降低旧RAG授权；新协议保留算法域隔离，不因缺桥转匿名或旧弱策略。
 
 #### Scenario: 真实房源Agent读取RAG
 - **WHEN** 有效用户经Supervisor受限委托房源Agent

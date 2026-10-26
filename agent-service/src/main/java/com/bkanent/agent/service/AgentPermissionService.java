@@ -197,6 +197,12 @@ public class AgentPermissionService {
     }
 
     private Long resolveUserId(AgentTaskInvokeRequest request) {
+        if (versionedAuthorizationEnabled()) {
+            var entry = com.bkanent.agent.authorization.AgentAuthorizationScope.current();
+            if (entry == null) throw new com.bkanent.common.authz.AuthzException(
+                    com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
+            return parseUserId(entry.requireActor(null));
+        }
         if (request == null || request.structuredContext() == null) {
             return null;
         }

@@ -469,13 +469,13 @@
 
 **关联**：LR-31；KI-56；该 change tasks 1.2、4.1、4.2、5.6、8.2。
 
-## KI-59 [OPEN·P1] 当前 A2A SDK 无专用凭据头的受支持注入路径
+## KI-59 [FIXED·本提交·P1] 当前 A2A SDK 无专用凭据头的受支持注入路径
 
-**确认依据**：独立 RAG apply 阶段只读核对本机 `a2a-java-sdk-client 0.2.5.Beta2` sources/JAR，以及 `OfficialA2aAgentClient` 和 `common-a2a/OfficialA2aAgentExecutor`；未发送请求或修改 SDK。
+**确认依据**：`a2a-java-sdk-client 0.2.5.Beta2` 的 AgentCard helper 不保留自定义 transport；直接使用其受支持的 `A2AClient(A2AHttpClient, endpoint)` 构造器可承载专用凭据头，无需反射或修改上游 SDK。
 
-**现象与根因**：现用 `A2AClient` 构造器仅接收 URL 或 AgentCard，任务发送/流式发送/查询/取消没有自定义 headers 或 transport 参数。`getClientFromAgentCardUrl(customHttpClient, ...)` 的自定义客户端仅获取 Card，返回的新 `A2AClient` 未保留该 transport。Starter 的 JSON-RPC 请求处理和异步 executor 也未提供已经验证的专用 token 上下文传播。不能据一般 HttpClient 支持 headers 就宣称实际 A2A 调用能携带凭据。
+**修复与验证**：`OfficialA2aAgentClient` 通过一个专用 transport wrapper 覆盖 `message/send`、`message/stream`、`tasks/get`、`tasks/cancel`、`tasks/resubscribe`；GET Card discovery 不带凭据。版本化路径发送 Auth 签名 context/freshness 和绑定实际 body 的 Agent proof，旧信标路径保留兼容。定向测试覆盖五种 POST、请求体签名、接收端本地验签/重放拒绝、模型身份字段剔除和缺少绑定 context 时拒绝，未调用 Auth 逐请求签发。
 
-**处置**：本次先实现受权 REST/Dubbo 消费与有界进程内凭据租约，缺少真实凭据的 A2A/模型工具路径明确要求重新认证且不发起 RAG 请求；token 不放模型参数、metadata、RunnableConfig、日志或 checkpoint。真实房源 Agent RAG 调用及跨 A2A 凭据生命周期仍未完成，tasks 3.5、6.2 的该部分保持阻塞。SDK 最小修补、升级或协议 transport 替换需要另行确认范围，不通过反射改 final 字段或暗建第三客户端绕过。
+**运行边界**：代码级专用 transport 已闭合；真实多实例 owner/nonce 持久关联、Memory/RAG 消费者迁移和部署联调仍由 tasks 6.2、6.3、6.6 及 change 11.4 验收。版本化 A2A 新模式默认关闭，本修复不宣称完整领域授权链已部署。
 
 **关联**：LR-18、LR-22、LR-31；KI-55；该 change domain-rag-consumption spec。
 
@@ -1474,7 +1474,7 @@
 
 **修复与验证**：Auth独立`BIND_EXECUTION`、Supervisor持久owner与输入幂等核对、Agent绑定后捕获lease已由`6d13117`完成。Gateway有界读取并原样回放body，签入method/path/query/audience/requestId及Auth响应；Agent在JSON解析前复算请求事实和正文hash。新增实际JSON actor/session/admin/permissions伪造字段用例：principal仍来自Auth签名actor，签后篡改正文在执行前拒绝。Gateway定向15项、Agent入口定向5项通过；路径rewrite、重复query、空body、超限、SSE/流式类型、伪造头清除、精确公开method/path及POST refresh均有回归。
 
-**运行边界**：新授权开关仍默认关闭，未部署；此条只确认Gateway入口到Supervisor实际run/session的源码协议闭合和Supervisor 5.x本地consumer源码验收，不代表Redis真实ACL运行验收、异步跨实例重启恢复、生产Graph模型/工具消费、A2A新入口或6.x领域迁移完成。KI-128的原环境历史500也仍待复现。后续未完成项继续由OpenSpec任务跟踪，不据本条称新授权链已生产可用。
+**运行边界**：新授权开关仍默认关闭，未部署；此条确认Gateway入口到Supervisor实际run/session的源码协议闭合和Supervisor 5.x本地consumer源码验收。A2A请求级本地签名传输已完成任务6.1代码与定向回归，但仍不代表Redis真实ACL运行验收、异步跨实例重启恢复、生产Graph模型/工具消费、A2A owner/nonce持久关联或6.x领域迁移完成。KI-128的原环境历史500也仍待复现。后续未完成项继续由OpenSpec任务跟踪，不据本条称新授权链已生产可用。
 
 **关联**：LR-106/138；change `unify-versioned-permission-context`；任务4.3/4.4/5.x/6.x。
 

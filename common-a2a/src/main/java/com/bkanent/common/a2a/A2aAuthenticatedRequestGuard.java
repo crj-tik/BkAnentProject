@@ -1,6 +1,7 @@
 package com.bkanent.common.a2a;
 
 import com.bkanent.common.rag.*;
+import com.bkanent.common.authz.DelegatedAuthorizationRequest;
 import io.a2a.util.Utils;
 import org.springframework.web.servlet.function.ServerRequest;
 import reactor.core.publisher.Flux;
@@ -16,9 +17,61 @@ import java.util.function.Supplier;
 public final class A2aAuthenticatedRequestGuard {
     private static final Logger log = LoggerFactory.getLogger(A2aAuthenticatedRequestGuard.class);
     private final A2aBeaconAuthentication auth;
+    private final A2aAuthorizationVerifier authorizationVerifier;
     private final Map<String, Owner> owners = new HashMap<>();
-    public A2aAuthenticatedRequestGuard(A2aBeaconAuthentication auth) { this.auth = auth; }
+    public A2aAuthenticatedRequestGuard(A2aBeaconAuthentication auth) { this(auth, null); }
+    public A2aAuthenticatedRequestGuard(A2aBeaconAuthentication auth, A2aAuthorizationVerifier authorizationVerifier) {
+        this.auth = auth;
+        this.authorizationVerifier = authorizationVerifier;
+    }
     public Object handle(String body, ServerRequest.Headers headers, Supplier<Object> official) {
+        if (authorizationVerifier != null && authorizationVerifier.enabled())
+            return handleVersioned(body, headers, official);
+        if (!headerValues(headers, BeaconA2aHttpClient.AUTHORIZATION_HEADER).isEmpty())
+            throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+        return handleBeacon(body, headers, official);
+    }
+    private Object handleVersioned(String body, ServerRequest.Headers headers, Supplier<Object> official) {
+        String stage = "versioned-headers";
+        try {
+            var authzHeaders = headerValues(headers, BeaconA2aHttpClient.AUTHORIZATION_HEADER);
+            if (authzHeaders.size() != 1
+                    || !headerValues(headers, BeaconA2aHttpClient.BEACON_HEADER).isEmpty()
+                    || !headerValues(headers, BeaconA2aHttpClient.BINDING_HEADER).isEmpty())
+                throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+            stage = "versioned-proof";
+            A2aAuthorizationVerifier.VerifiedRequest verified = authorizationVerifier.verify(authzHeaders.get(0), body);
+            var facts = verified.facts();
+            DelegatedAuthorizationRequest envelope = verified.envelope();
+            A2aCredentialContext.Lease lease = A2aCredentialContext.Lease.versioned(envelope, facts.method());
+            stage = "task-owner";
+            bindOwner(facts.taskId(), facts.contextId(), lease.binding, facts.sending());
+            try (var ignored = A2aCredentialContext.open(lease)) {
+                if (facts.sending()) A2aCredentialContext.reserveTask(facts.taskId());
+                try {
+                    stage = "official-handler";
+                    Object result = official.get();
+                    if (result instanceof Flux<?> flux) return flux.doOnNext(value -> lease.verify());
+                    lease.verify();
+                    return result;
+                } finally {
+                    if (facts.sending()) A2aCredentialContext.releaseUndispatchedTask(facts.taskId(), lease);
+                }
+            }
+        } catch (RagException ex) {
+            log.warn("A2A authentication guard rejected stage={} code={}", stage, ex.code());
+            throw ex;
+        } catch (Exception ex) {
+            log.warn("A2A authentication guard rejected stage={} code={}", stage, RagErrorCode.AUTHENTICATION_FAILED);
+            throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+        }
+    }
+    private static java.util.List<String> headerValues(ServerRequest.Headers headers, String name) {
+        if (headers == null) return java.util.List.of();
+        java.util.List<String> values = headers.header(name);
+        return values == null ? java.util.List.of() : values;
+    }
+    private Object handleBeacon(String body, ServerRequest.Headers headers, Supplier<Object> official) {
         String stage = "headers";
         try {
             String reference = headers.firstHeader(BeaconA2aHttpClient.BEACON_HEADER);

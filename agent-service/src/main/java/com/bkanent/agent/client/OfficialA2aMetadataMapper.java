@@ -28,6 +28,12 @@ public final class OfficialA2aMetadataMapper {
     }
 
     public static Map<String, Object> toMetadata(AgentTaskInvokeRequest request, boolean streaming) {
+        return toMetadata(request, streaming, false);
+    }
+
+    /** Versioned A2A identity lives only in signed transport headers, never model-visible metadata. */
+    public static Map<String, Object> toMetadata(AgentTaskInvokeRequest request, boolean streaming,
+                                                 boolean stripIdentityClaims) {
         if (request == null) {
             throw new IllegalArgumentException("request must not be null");
         }
@@ -70,7 +76,7 @@ public final class OfficialA2aMetadataMapper {
         if (request.structuredContext() != null && !request.structuredContext().isEmpty()) {
             Map<String, Object> structuredContext = new LinkedHashMap<>();
             request.structuredContext().forEach((key, value) -> {
-                if (key != null && value != null) {
+                if (key != null && value != null && (!stripIdentityClaims || !identityClaim(key))) {
                     structuredContext.put(key, value);
                 }
             });
@@ -88,6 +94,15 @@ public final class OfficialA2aMetadataMapper {
         }
         metadata.put(SUPERVISOR_METADATA_KEY, Map.copyOf(supervisor));
         return Map.copyOf(metadata);
+    }
+
+    private static boolean identityClaim(String key) {
+        String normalized = key.replace("-", "").replace("_", "").toLowerCase(java.util.Locale.ROOT);
+        return java.util.Set.of("user", "userid", "username", "currentuser", "loggedinuser", "actorid",
+                "businessadmin", "isbusinessadmin", "admin", "isadmin",
+                "isadministrator", "role", "roles", "rolecode",
+                "permissions", "permissionrevision", "credentialepoch", "authorization", "authcontext",
+                "accesstoken", "token", "beacon").contains(normalized);
     }
 
     private static void putText(Map<String, Object> target, String key, String value) {

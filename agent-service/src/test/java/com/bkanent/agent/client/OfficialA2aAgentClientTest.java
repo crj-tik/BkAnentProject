@@ -13,6 +13,8 @@ import com.bkanent.common.memory.MemoryIndexState;
 import com.bkanent.common.memory.MemoryRevision;
 import com.bkanent.common.memory.MemoryScope;
 import com.bkanent.common.memory.MemoryShareGrant;
+import com.bkanent.common.authz.AuthzErrorCode;
+import com.bkanent.common.authz.AuthzException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.a2a.client.A2AClient;
 import io.a2a.spec.Artifact;
@@ -32,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -41,6 +44,25 @@ import static org.mockito.Mockito.never;
 import org.mockito.ArgumentCaptor;
 
 class OfficialA2aAgentClientTest {
+
+    @Test
+    void versionedA2aDoesNotUseModelStructuredUserAsAnAuthenticationFallback() {
+        A2AClient remote = mock(A2AClient.class);
+        var properties = new com.bkanent.agent.config.AgentAuthorizationProperties();
+        properties.setEnabled(true);
+        OfficialA2aAgentClient client = new OfficialA2aAgentClient(
+                new OfficialA2aResponseNormalizer(new ObjectMapper()), ignored -> remote, properties);
+        AgentTaskInvokeRequest modelSuppliedIdentity = new AgentTaskInvokeRequest(
+                "session-1", "task-1", "parent-1", "trace-1", "supervisor-agent", "listing-agent",
+                "listing.search", "listing", "find listings", Map.of("userId", "999"),
+                List.of(), List.of(), "json", "idem-1", true);
+
+        assertThatThrownBy(() -> client.invoke(descriptor(), modelSuppliedIdentity))
+                .isInstanceOf(AuthzException.class)
+                .satisfies(failure -> assertThat(((AuthzException) failure).code())
+                        .isEqualTo(AuthzErrorCode.AUTHENTICATION_REQUIRED));
+        org.mockito.Mockito.verifyNoInteractions(remote);
+    }
 
     @Test
     void acceptedTaskObserverReceivesOriginalIdentityAndEndpoint() throws Exception {

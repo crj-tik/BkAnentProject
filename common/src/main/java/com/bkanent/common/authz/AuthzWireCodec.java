@@ -36,6 +36,12 @@ public final class AuthzWireCodec {
     public static AuthzResponse decodeResponse(String encoded) { return decode(encoded, AuthzResponse.class); }
     public static String encodeBinding(RequestBinding binding) { return encode(binding); }
     public static RequestBinding decodeBinding(String encoded) { return decode(encoded, RequestBinding.class); }
+    public static String encodeDelegatedAuthorizationRequest(DelegatedAuthorizationRequest request) {
+        return encode(request);
+    }
+    public static DelegatedAuthorizationRequest decodeDelegatedAuthorizationRequest(String encoded) {
+        return decode(encoded, DelegatedAuthorizationRequest.class);
+    }
 
     /** No RPC/token parsing: verify the three Auth signatures and actual bytes before JSON execution. */
     public static void verifyIngress(AuthzResponse response, RequestBinding binding, String normalizedToken,

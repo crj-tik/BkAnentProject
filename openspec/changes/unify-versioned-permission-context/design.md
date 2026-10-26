@@ -78,11 +78,11 @@ Pub/Sub只加速，不作为唯一可靠交付。Auth每5秒对活跃缓存head�
 
 ### D7. 域入口独立验证与请求完整性
 
-新增版本化原生Dubbo授权RPC `validateDelegation(parentContext, binding, callerProof)`；新A2A/MCP/业务执行由接收服务独立调用一次。binding绑定caller/audience、actor、operation集合、run/childTask、requestId、bodyHash、policyDigest、nonce和期限；调用方和接收方分别用自己的Ed25519身份签署协议标签 `bkanent-authz-v1`，Auth响应签名含原请求nonce/hash。注册公钥与caller-operation/domain ACL分开，业务管理员不扩服务ACL。Auth验证当前MySQL授权版本/状态或已权威核清缓存、新请求防重放、父context/范围，返回域子集context；子集不得超过父已授予范围。版本变化父context不可直接扩权，须Supervisor重新取当前权限并重新规划/审批。
+新增版本化原生Dubbo授权RPC `validateDelegation(parentContext, binding, callerProof)`，供尚未迁移为本地验证的MCP/业务执行边界使用一次。**Agent-to-Agent A2A 采用请求级本地验证**：Supervisor 入口取得并绑定 Auth 签名的 `AuthorizationContext` 与 `AuthzFreshness`；Agent 对每个实际 JSON-RPC 请求构造窄 `DelegationBinding`（单一稳定操作码、caller/audience、actor、run/task、requestId、精确 bodyHash、policyDigest、nonce、期限），再用 Agent 服务 Ed25519 key 对父 context 与 binding 签署 `CallerProof`。接收端在官方 TaskStore/Queue 前本地验证 Auth 的 context/freshness 签名、Agent caller proof、请求方法/ID/task/body/audience、操作范围、nonce 与期限，不调用 Auth；Agent 只在已存在的 Graph 规划刷新边界发现 DIRTY/过期时调用 Auth refresh，之后新的子调用使用更新后的同 run context。每个流事件只检查已建立的本地 lease 与输出/来源条件，不发 Auth 请求。binding 仅可包含父 context 已允许的稳定操作，不从正文 userId/role/admin 字段构造 actor 或权限。MCP/业务 RPC 仍按原 `validateDelegation` 设计验证一次，完成其独立迁移后才能采用相同的本地协议；不得因 A2A 方案放宽 Memory/RAG owner、来源、grant、业务状态、审批或执行租约检查。
 
 登录/login、refresh、me及UserManagement的单role准入同步迁至businessAdmin+有效角色集合；旧roleCode仅兼容展示，不决定新授权，也不继续只准ADMIN/BROKER。RAG版本化principal/scope新增permissionRevision/credentialEpoch/businessAdmin及明确操作集合与受权业务范围，保留独立HMAC但两侧同步DTO/算法域版本。businessWideRead/activeOnly由领域根据新授权事实签发，RAG独立验证事实和空间操作交集，不把某个任意角色名字解释成管理员；legacy ADMIN/BROKER只作受控迁移映射，普通用户房源可读仍默认ON_SALE。管理员无role也可正常管理业务空间，个人Memory仍self-only。旧REST的“ADMIN唯一管理”改为受信businessAdmin管理许可，不根据普通user参数扩大。
 
-现有A2A专用transport可承载新上下文，wire v2并行迁移；guard仍在官方TaskStore/queue前做请求和owner/caller/context检查。send/stream新执行一次验证，工具/流回调仅本地状态和范围。get/cancel/resubscribe每个新控制请求独立验证；不能因为最终工具executor没启动而跳过。Auth不再每次派发签发新USER beacon；受限delegation只能以有效父context与服务签名产生，不能从裸userId兑换。
+现有A2A专用transport承载新上下文，wire v2并行迁移；guard仍在官方TaskStore/queue前做请求和owner/caller/context检查。send/stream/get/cancel/resubscribe 每个请求携带有效父 context 与新的请求证明，由接收端本地验签；请求 proof 绑定实际序列化 body，不能跨请求复用。Agent 不再为每次 A2A 派发向 Auth 签发 beacon，也不向子 Agent 发送用户 bearer；Auth 仅在入口授权和 Graph 规划刷新时调用。nonce 在接收端消费，过期、已知失效或 owner 不匹配仍在 Store/Queue 前拒绝；线程、工具和 SSE 回调只使用已验证的本地 lease。授权材料不进入 A2A body、模型 metadata 或 checkpoint。能力操作从 Agent 可信 CapabilityId 映射取得，actor 始终取自 Auth 签名 context；结构化业务正文中的 userId/admin/role 声明不改变身份。跨实例/重启 owner 与 nonce 持久性由 6.2 单独闭环，未完成前不宣称可部署。
 
 Memory独立外部RPC是执行边界，首次验证得到短期域context；后续同context本地验Auth证明与本请求Memory服务签名/nonce，然后做当前资源check。重复内部Memory调用不重新去Auth，不能移除Memory的源/permit/fence检查。其余RAG保持现有签名协议，通过适配消费新身份，未迁移链不开放弱fallback。
 
@@ -163,7 +163,7 @@ GET monitor/replies和POST turns等用专用x-ticket头+可信context核user/pur
 
 ### D14. 验收与兼容
 
-测试分四级：纯权限计算/版本原子性；真实MySQL+Redis并发与故障；真实Graph/ReactAgent/MCP本地fixture；开发栈真实transport与用户反例。统计I/O次数而非猜测延迟：正常Gateway->Supervisor入口Auth一次；同版重规划只版本读取；新子Agent或MCP入口Auth一次；同执行内部N工具和M流项新增Auth/Redis每节点调用为0。Memory来源RPC是领域资源检查，单独计，不伪装成重复Auth，也不删除以凑0。
+测试分四级：纯权限计算/版本原子性；真实MySQL+Redis并发与故障；真实Graph/ReactAgent/MCP本地fixture；开发栈真实transport与用户反例。统计I/O次数而非猜测延迟：正常Gateway->Supervisor入口Auth一次；同版重规划只版本读取；稳定已绑定run内多次 A2A send/stream/control 与 SSE 事件本地验证，不新增 Auth 调用；权限刷新只出现在 Graph 规划边界。尚未迁移的 MCP/Memory/RAG 新域入口按其既定边界计数，不能套用 A2A 例外或删除资源查询来凑零。跨实例、重启和持久 owner 另按任务6.2验证。
 
 权限格式/错误HTTP状态、票领取、旧公开范围和角色映射都公告。版本v1/v2并存只用于明确已审查消费者，不允许验签失败后退v1或把缺桥认匿名。无有效新协议配置先启动失败/能力关闭；回滚成组保持新资源拒绝规则，不能回到已知审计越权或票据入模实现。Studio当前未就绪浏览器验收标未测，API/fixture不冒充UI完成。
 

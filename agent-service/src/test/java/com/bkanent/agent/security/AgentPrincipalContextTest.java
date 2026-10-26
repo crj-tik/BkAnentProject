@@ -153,6 +153,16 @@ class AgentPrincipalContextTest {
         }
 
         @org.springframework.context.annotation.Bean
+        com.bkanent.agent.authorization.AgentExecutionBindingCoordinator executionBinding() {
+            return org.mockito.Mockito.mock(com.bkanent.agent.authorization.AgentExecutionBindingCoordinator.class);
+        }
+
+        @org.springframework.context.annotation.Bean
+        com.bkanent.agent.config.AgentChatProperties chatProperties() {
+            return new com.bkanent.agent.config.AgentChatProperties();
+        }
+
+        @org.springframework.context.annotation.Bean
         com.bkanent.agent.controller.AgentController controller(AgentPrincipalContext principal,
                                                                com.bkanent.agent.orchestration.OrchestrationStore store) {
             var tasks = org.mockito.Mockito.mock(com.bkanent.agent.service.SupervisorTaskService.class);
