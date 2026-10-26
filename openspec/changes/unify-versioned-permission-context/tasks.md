@@ -16,7 +16,7 @@
 
 - [x] 3.1 实现Auth唯一writer的用户级不可变snapshot与head结构，签名hash、有效期、同用户hash-slot及Lua单调CAS；消费者不得按run复制集合或从旧内存回写。
 - [x] 3.2 实现outbox有界领取epoch、事务外最新版本装配、snapshot先写/head后切/通知最后发的顺序和失败恢复；乱序、重复、缺snapshot、迟到事件均不能回退版本。
-- [ ] 3.3 实现Redis权限namespace与channel ACL及受保护连接：Auth可写并发布指定channel，消费者只读精确key并订阅指定channel；写管理员/权限/TTL、PUBLISH/SPUBLISH及跨channel均拒绝，覆盖订阅成功和非法发布反例，缺配置不得启用。
+- [x] 3.3 实现Redis权限namespace与channel ACL及受保护连接：Auth可写并发布指定channel，消费者只读精确key并订阅指定channel；写管理员/权限/TTL、PUBLISH/SPUBLISH及跨channel均拒绝，覆盖订阅成功和非法发布反例，缺配置不得启用。
 - [x] 3.4 实现Auth每5秒MySQL/outbox核验及独立签名FreshnessAttestation，绑定user/revision/epoch/status/hash/真实checkedAt/notAfter；发布前重核MySQL和head CAS，迟到核验/更新竞争不能以完成时刻续窗，缓存GET不能续期。
 - [x] 3.5 接入权限版本Pub/Sub通知和消费者去重失效，消息不含token/正文/权限全集；同一actor的head读取单飞，通知版本单调比较且旧head/旧通知不能清除DIRTY。签名Auth刷新按原run/session绑定，不跨run共用响应；实际Graph刷新接线在5.2验收。
 - [x] 3.6 实现活跃用户10秒批量对账、30秒权威新鲜度上限和硬到期；验证通知丢失、Redis失联、Auth发布阻塞时旧权限不会无限延长。

@@ -2,7 +2,7 @@
 
 ## 当前实施状态（2026-10-26）
 
-OpenSpec `spec-driven` change `unify-versioned-permission-context` 当前完成 **52/63** 项（以`tasks.md`勾选为准）。任务10.1–10.5按Auth/Listing/Customer、Business/Settlement、Contract/Marketing、Compare/Media、Notification模块完成源码与本地定向回归；任务10.6已补跨域入口、资源真源、恢复事实、测试证据及未开放原因矩阵。新授权入口、数据库迁移和真实跨服务密钥仍未在运行环境启用；3.3、8.3–8.5及11.x真实运行/前端/交付验收保持未完成。
+OpenSpec `spec-driven` change `unify-versioned-permission-context` 当前完成 **53/63** 项（以`tasks.md`勾选为准）。任务10.1–10.5按Auth/Listing/Customer、Business/Settlement、Contract/Marketing、Compare/Media、Notification模块完成源码与本地定向回归；任务10.6已补跨域入口、资源真源、恢复事实、测试证据及未开放原因矩阵。任务3.3的专用Redis ACL/连接配置及隔离ACL正反验收已完成；新授权入口、数据库迁移和真实跨服务密钥仍未在运行环境启用，8.3–8.5及11.x真实运行/前端/交付验收保持未完成。
 
 Notification、Contract、Customer及依赖模块的定向回归 **16项通过，失败/错误/跳过均0**；OpenSpec严格校验将在本批提交前复核。Notification REST/MCP授权入口保持默认关闭，SQL迁移未应用，caller公钥和真实跨服务链未部署验收。Contract/Customer提醒因broker recipient绑定缺失保持关闭（KI-206）。Compare/Media与共享鉴权前批定向回归48项通过；Media任务/结果仍为进程内存（KI-117），新owner与permit协议未宣称具备跨重启恢复。域级具体边界及证据见下方10.6矩阵。
 
@@ -20,7 +20,14 @@ Notification、Contract、Customer及依赖模块的定向回归 **16项通过�
 
 - 已按Auth、Listing、Customer、Business、Settlement、Contract、Marketing、Compare、Media、Notification逐域记录可信入口、资源真源、可证明的owner/恢复事实、本地回归组和仍关闭的节点，详见`implementation-inventory.md`的10.6节。
 - 回归证据按模块批次引用，不将有共享依赖的测试组相加；本地fixture/A2A wiring不被表述为生产准入或全域恢复通过。
-- 仍未完成：Redis ACL/发布失效真实测试（3.3）；Interview浏览器领取、真实ReactAgent归档链及历史凭据扫描（8.3–8.5）；开发栈、多实例和故障交付验收（11.x）。Settlement主体映射、KI-117跨域恢复、KI-206提醒收件绑定继续关闭。
+- 仍未完成：Interview浏览器领取、真实ReactAgent归档链及历史凭据扫描（8.3–8.5）；真实MySQL/Redis发布与撤权失效、Graph/MCP请求计数、部署栈和回滚验收（11.x）。Settlement主体映射、KI-117跨域恢复、KI-206提醒收件绑定继续关闭。
+
+## Auth/Redis权限ACL与专用连接（2026-10-26，任务3.3）
+
+- Auth使用独立`authz-writer`连接，Agent使用独立`agent-authz-reader`连接；两侧启用前均要求明确配置确认、专用用户名与密码，分布式模式强制TLS，连接bean不参与覆盖共享Redis的默认候选。
+- `configure-authorization-redis-acl.sh`与`verify-authorization-redis-acl.sh`按精确命令、key和channel配置权限。既有隔离Redis验收记录包含23项ACL正反检查：Auth仅写授权命名空间并发布指定channel；Agent只读head并订阅指定channel，不能写权限/TTL、发布或访问其他key/channel；实际订阅收到Auth无敏感探针。
+- Auth/Agent配置测试覆盖缺配置、错误ACL用户、分布式无TLS拒绝及安全开关默认关闭。证据见`acceptance-results.json`和两侧`*AuthorizationRedis*Test`；本次只核对已有记录，没有连接或变更当前运行Redis。
+- 该项证明隔离ACL策略和本地连接准入，不证明服务使用生产凭据完成TLS连通或Auth outbox→head→通知全链。应用运行、真实MySQL/Redis并发和撤权窗口仍由11.1/11.4验收；新授权开关保持关闭。
 
 ## 状态
 
@@ -38,7 +45,7 @@ Notification、Contract、Customer及依赖模块的定向回归 **16项通过�
 
 - 2.4仅事务Repository原语、管理路径已接版本；旧账号/UserManagement全路径未接。
 - 2.5授予开始/到期版本+outbox扫描已实现；logout epoch接线未完成。
-- 3.x仅Redis writer/Lua静态基础及真实隔离ACL23/Lua20规则通过；签名writer运行、TLS/生产ACL、outbox dispatcher、authority更新、Pub/Sub消费者和对账未完成，全部不勾。
+- 3.1/3.2/3.4的签名snapshot、CAS、outbox与Freshness实现已完成；3.3专用ACL、隔离Redis正反检查及安全连接配置门禁已完成。真实服务TLS连接、MySQL/Redis并发发布与应用级失效窗口属于后续11.x环境验收，不从ACL脚本结果推定。
 - 4.2仅两RPC初次认证和委托签发/provider测试5项；没有保持原run限期/范围的版本刷新协议，见下。
 - 4.5/5.1仅common硬期限/session/cache基础未接Supervisor。
 - 5.5/5.6/5.7已有chat/session/requestId/audit/governance边界补丁及63项先期回归；完整集又补真实request-scope四入口16次重投/冲突测试，整体部署与新版本许可consumer仍未完成，不勾。

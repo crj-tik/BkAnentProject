@@ -64,7 +64,7 @@ USER域Ed25519+caller/domain/agent/context owner。版本化Memory proof v3携�
 
 | 域 | 实际检查入口与已通过的本地证据 | 资源权威与恢复/owner事实 | 仍关闭的节点及原因 |
 |---|---|---|---|
-| Auth身份映射 | Auth签名`userId→brokerId`映射、审计、permissionRevision/outbox与签名内容；证据组A | Auth关系表是映射真源；授权发布依赖outbox。MySQL/Redis真实发布次序由任务11.1验收 | 授权RPC/新消费链未在生产启用；迁移未应用、Redis ACL和跨实例失效未实测 |
+| Auth身份映射 | Auth签名`userId→brokerId`映射、审计、permissionRevision/outbox与签名内容；专用Redis ACL读写身份及TLS门禁；证据组A/F | Auth关系表是映射真源；授权发布依赖outbox。MySQL/Redis真实发布次序由任务11.1验收 | 授权RPC/新消费链未在生产启用；迁移未应用，应用与生产Redis联合传输、跨实例失效未实测 |
 | Listing | REST域守卫、服务方法和Customer委托的单房源授权RPC；证据组A/C | SQL房源`brokerId/status/revision`决定owner、状态与返回范围；委托请求绑定原签名上下文和实际查询 | REST开关、公钥和路由未部署验收；未应用迁移，不能宣称线上开放 |
 | Customer | REST与profile/match等服务边界从签名actor/BROKER取身份；证据组A | 客户、跟进、委托、收藏关联表决定经纪人归属；Customer→Listing为无持久任务的受限请求 | REST入口与真实服务密钥未验；Contract/Customer提醒因recipient不是Auth userId而保持关闭（KI-206） |
 | Business | REST/TradeTools/RPC/MCP业务方法检查精确`business.*.all`操作；无上下文RPC在数据查询前拒绝；证据组B | KPI、工作量、成交和门店汇总表为数据源；请求员工/门店字段不构成actor或owner | Auth尚无user→employee/store映射；新REST默认关闭、MCP映射为空，真实路由/密钥未验 |
@@ -75,6 +75,6 @@ USER域Ed25519+caller/domain/agent/context owner。版本化Memory proof v3携�
 | Media | 任务permit绑定actor、Listing owner、taskId、request hash与期限；证据组D中的permit签名、单次领取及到期拒绝回归 | permit是worker执行上限；但`MediaTaskStore`为进程内存，重启后无可靠任务/结果恢复（KI-117） | 公开任务入口默认关闭；contentId缺Marketing签名绑定而拒绝；不得宣称跨重启恢复 |
 | Notification | REST本人列表/未读/标读由Auth actor派生并核recipient owner；MCP/A2A不接收本人userId；证据组E | SQL recipient关系约束私有读取；工作流MQ actor须由Supervisor服务端注入 | Dubbo旧发送无proof拒绝；Contract/Customer reminders跳过（KI-206）；caller运行密钥、MQ真实鉴权/重投未验，REST/MCP默认关闭 |
 
-**定向回归证据（各组可能共享依赖测试，不作总数相加）**：A = Auth/common/Listing/Customer 91项；B = common-a2a/Business/Settlement 11项；C = common RAG、A2A/helper、Contract/Listing/Marketing/Promotion 54项；D = Compare/Media及共享鉴权 48项；E = Notification与Contract/Customer reminders 16项。以上均是本地定向回归记录，不替代真实MySQL/Redis、部署密钥、跨实例、浏览器或外部副作用验收。
+**定向回归证据（各组可能共享依赖测试，不作总数相加）**：A = Auth/common/Listing/Customer 91项；B = common-a2a/Business/Settlement 11项；C = common RAG、A2A/helper、Contract/Listing/Marketing/Promotion 54项；D = Compare/Media及共享鉴权 48项；E = Notification与Contract/Customer reminders 16项；F = `acceptance-results.json`记录隔离Redis ACL的23项正反权限检查及真实订阅收发。以上均不替代生产密钥、应用TLS连接、MySQL/Redis并发发布、跨实例、浏览器或外部副作用验收。
 
 1.1/1.2已形成源码节点、actor/操作/真源/未知映射/停用及守卫证据，不改权威LR/KI/tasks。1.3历史回归/局部assert见baseline，完整I/O实测由主会集中实施；本轮不宣称部署或勾完成。
