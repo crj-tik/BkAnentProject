@@ -1171,3 +1171,13 @@
 **代码位置**：`notification-service/NotificationController`、`NotificationManagementServiceImpl`、`NotificationTools`、`NotificationMcpTools`、`NotificationWorkflowEventService`、`NotificationRpcServiceImpl`；`contract-service/ContractReminderServiceImpl`、`customer-service/CustomerReminderServiceImpl`；权限迁移`20261026_notification_authorization.sql`；契约`docs/notification-api-auth-contract.md`。回归覆盖actor查询/目标篡改、消息owner、精确发送操作、服务端事件recipient、旧RPC拒绝与提醒关闭。
 
 **关联**：LR-103/106/143；KI-151/206；change `unify-versioned-permission-context`任务10.5/10.6。HTTP和MCP验证开关默认关闭；SQL权限码登记不授予普通角色，也不证明生产密钥或调用链已启用。
+
+## LR-151 A2A耐久授权状态随provider数据库发布，Auth执行绑定留在Auth库
+
+**结论**：Auth 的 `auth_authorization_execution_binding` 属于 `bk_auth`；A2A nonce、持久 task owner 和在途 reservation 属于实际处理该 A2A 请求的 provider 数据库。相同的 A2A 状态迁移分别登记到有持久 DataSource 的 Interview、Listing、Marketing、Notification、Business、Contract 与 Settlement 数据库。Compare 与 Media 当前没有受管关系型 DataSource，因此版本化 A2A 模式必须保持关闭，直到耐久状态存储被接入和验收。所有授权 schema 迁移只前向应用，应用制品回滚不删除授权事实。
+
+**根因**：`JdbcA2aTaskAuthorizationStore` 使用 provider 自己的 DataSource 来实现 nonce 防重放、task owner 约束与请求 reservation；把这些表集中到 Auth 或 Agent 数据库会新增跨服务存储依赖，并不能证明 provider 本地队列副作用前已经完成同一事务边界。Auth 执行绑定则由 Auth repository 在 `bk_auth` 持久化。按服务数据库重复应用同一幂等 SQL，使同一 provider 的多实例共享授权事实；没有耐久数据库的服务不允许退回进程内 Map。
+
+**代码位置**：`sql/migrations/20261026_authorization_execution_binding.sql`、`sql/migrations/20261026_a2a_task_authorization.sql`；`docker/mysql/init-manifest.tsv`与对应 schema checks；`scripts/deploy/run-init-manifest.sh`；`common-a2a/JdbcA2aTaskAuthorizationStore`；`auth-service/AuthorizationRepository`；`docs/authz-versioned-rollout-rollback.md`。
+
+**关联**：LR-41/141/145；KI-170/172/208；change `unify-versioned-permission-context`任务6.2/11.6/11.7。manifest 静态验证不表示真实数据库迁移、应用回滚或多实例验收已完成。

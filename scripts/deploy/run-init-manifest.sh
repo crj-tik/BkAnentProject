@@ -27,7 +27,13 @@ while IFS=$'\t' read -r order phase version db file checksum check check_checksu
   [[ "$order" =~ ^[0-9]{3}$ && "$version" =~ ^[a-z0-9-]+$ ]] || exit 65
   [ "$((10#$order))" -gt "$last" ] || { printf '%s\n' 'Manifest order must be unique and increasing' >&2; exit 65; }
   last="$((10#$order))"
-  case "$phase:$db" in fresh:bk_auth|fresh:bk_interview|upgrade:bk_auth|upgrade:bk_agent|upgrade:bk_rag|upgrade:bk_listing|upgrade:bk_memory) ;; *) exit 65 ;; esac
+  case "$phase:$db" in
+    fresh:bk_auth|fresh:bk_interview|\
+    upgrade:bk_auth|upgrade:bk_agent|upgrade:bk_rag|upgrade:bk_listing|upgrade:bk_memory|\
+    upgrade:bk_interview|upgrade:bk_marketing|upgrade:bk_notification|upgrade:bk_business|\
+    upgrade:bk_contract|upgrade:bk_settlement) ;;
+    *) exit 65 ;;
+  esac
   [[ "$file" =~ ^sql/[a-zA-Z0-9_./-]+\.sql$ && "$check" =~ ^docker/mysql/checks/[a-zA-Z0-9_-]+\.sql$ ]] || exit 65
   [[ "$file" != *..* && "$check" != *..* && "$checksum" =~ ^[a-f0-9]{64}$ && "$check_checksum" =~ ^[a-f0-9]{64}$ && -z "${extra:-}" ]] || exit 65
   # Canonical LF checksums survive Git's Windows/Linux checkout conversion.
@@ -68,7 +74,9 @@ while IFS=$'\t' read -r order phase version db file checksum check check_checksu
       { printf 'USE `%s`;\n' "$db"; while IFS= read -r line || [ -n "$line" ]; do printf '%s\n' "$line"; done < "$ROOT/$file"; } | mysql_sql >/dev/null
     fi
   fi
-  result="$(mysql_sql < "$ROOT/$check")"
+  # Each mysql_sql call opens a new connection; select the same target database
+  # for schema checks that the migration was applied to.
+  result="$( { printf 'USE `%s`;\n' "$db"; cat "$ROOT/$check"; } | mysql_sql )"
   [ "$result" = 1 ] || { printf 'Schema verification failed: %s\n' "$version" >&2; exit 65; }
   printf "CREATE TABLE IF NOT EXISTS %s.bk_schema_migration (migration_id VARCHAR(128) PRIMARY KEY, file_sha256 CHAR(64) NOT NULL, check_sha256 CHAR(64) NOT NULL, applied_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)); INSERT INTO %s.bk_schema_migration(migration_id,file_sha256,check_sha256) VALUES ('%s','%s','%s') ON DUPLICATE KEY UPDATE migration_id=migration_id;\n" "$db" "$db" "$version" "$checksum" "$check_checksum" | mysql_sql >/dev/null
   unset previous

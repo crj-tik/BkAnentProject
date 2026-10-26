@@ -1580,6 +1580,16 @@
 
 **关联**：`rag-service/RagRuntimeConfigurationTest`；change `unify-versioned-permission-context`任务11.5。
 
+## KI-208 [FIXED·本提交·P1] 版本化鉴权迁移清单存在错误目标白名单与缺失schema版本
+
+**发现日期与依据**：2026-10-27，按任务11.6核验 `docker/mysql/init-manifest.tsv` 和 `scripts/deploy/run-init-manifest.sh`。runner 白名单拒绝清单已使用的 `upgrade:bk_interview`、`upgrade:bk_marketing`；第340项 Marketing schema-check 的登记值不是当前文件的规范 SHA-256；Auth 执行绑定及持久 A2A nonce/task owner/reservation 迁移没有进入受管 manifest。由于 runner 在任何 DDL 前先验证完整清单，这些缺口会使受管升级无法通过；新 A2A 模式在缺 schema 时按设计启动失败。
+
+**修复**：runner 允许当前 manifest 中受控的升级目标，并在独立 MySQL 连接中对 schema check 先选择与迁移相同的目标数据库。修正第340项错误的校验值；新增 Auth 执行绑定迁移/check，并将 A2A durable-state 迁移/check按 provider 数据库登记到 Interview、Listing、Marketing、Notification、Business、Contract、Settlement。Compare 与 Media 无耐久 DataSource，未伪造数据库迁移，仍须保持版本化 A2A 关闭。新增 `scripts/deploy/test_init_manifest.py` 检查目标白名单、迁移覆盖、清单顺序、文件存在性与规范 SHA-256。
+
+**验证与边界**：manifest 静态测试与 fresh/upgrade dry-run 均通过，清单共44项、SQL/schema-check哈希全部匹配；未连接或修改任何数据库，未执行真实 fresh/upgrade/repeat、跨实例运行或制品回滚。若有数据库曾绕过受管 runner 写入错误的第340项 migration history，当前 runner 会拒绝 checksum 不一致，不会自动修正 ledger。实际迁移应用与回滚演练仍由任务11.1/11.4/11.6验收；新授权开关继续默认关闭。
+
+**关联**：LR-42/141/151；KI-160/170/172；change `unify-versioned-permission-context`任务6.2/11.6。
+
 ---
 
-**变更历史**：本提交修复RAG配置绑定问题（KI-207），完成全仓Maven回归并补齐Interview权限/凭据存量核查与浏览器验收边界（KI-202/203），并持久化A2A请求防重放与任务归属（KI-172）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
+**变更历史**：本提交补齐鉴权迁移交付清单与安全回滚边界（KI-208），并修复RAG配置绑定问题（KI-207）、完成全仓Maven回归和Interview凭据边界记录（KI-202/203），持久化A2A请求防重放与任务归属（KI-172）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。

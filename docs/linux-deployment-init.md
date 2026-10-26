@@ -57,15 +57,15 @@ KI-42 的等待/状态成功误报、KI-48 的 Redis readiness 与真实客户�
 
 ## 数据卷：全新 vs 已有
 
-- **全新数据卷**：Compose 挂载 `docker/mysql/001-manifest.sh`，通过同一 runner 执行 `v20261013.1` 清单九步（fresh seeds三步、upgrade六步），明确目标数据库、SQL/schema check 的规范LF SHA-256及 migration history。
-- **已有数据卷**：入口只执行受管清单六个 upgrade 步骤；不重放 fresh 种子，不枚举历史SQL，不支持任意 `--file`：
+- **全新数据卷**：Compose 挂载 `docker/mysql/001-manifest.sh`，通过同一 runner 按顺序执行清单内全部 `fresh` 与 `upgrade` 项；fresh-only 种子只在首次初始化执行。每项都绑定目标数据库、SQL/schema check 的规范 LF SHA-256 与 migration history。
+- **已有数据卷**：入口只执行清单中的 `upgrade` 项，不重放 fresh 种子，不枚举历史 SQL，也不支持任意 `--file`。截至 2026-10-27，清单有 44 项；新增版本只能追加，不能静默改已应用 SQL/check：
 
 ```bash
 ./scripts/deploy/apply-migrations.sh --dry-run
 ./scripts/deploy/apply-migrations.sh --container bk-anent-dev-mysql-1
 ```
 
-先验证完整清单再执行DDL；已应用版本的checksum漂移必须拒绝，不能把报错当成功或直接跳过。后续结构变更需新增版本。本轮原MySQL8.4.11六步升级/重复、独立空卷九步首启及重复实测通过，保留约束17/共享记忆3/用户2/workflow3/checkpoint46；独立恢复副本计数一致。仅补本次RAG与agent当前编排结构，KI-37/38/39涉及的其他历史初始化债务不因此全部关闭。
+先验证完整清单再执行 DDL；已应用版本的 checksum 漂移必须拒绝，不能把报错当成功或直接跳过。历史 MySQL 8.4.11 首启/升级/重复实测仅覆盖当时清单中的版本，不覆盖 2026-10-26 新增的授权迁移。授权迁移与回滚顺序见[版本化鉴权发布与回滚](authz-versioned-rollout-rollback.md)。KI-37/38/39涉及的其他历史初始化债务不因此全部关闭。
 
 ## 启动 / 状态 / 停止
 

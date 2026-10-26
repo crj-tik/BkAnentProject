@@ -1,8 +1,8 @@
 # 基础批次与续批记录
 
-## 当前实施状态（2026-10-26）
+## 当前实施状态（2026-10-27）
 
-OpenSpec `spec-driven` change `unify-versioned-permission-context` 当前完成 **56/63** 项（以`tasks.md`勾选为准）。任务10.1–10.6按Auth/Listing/Customer、Business/Settlement、Contract/Marketing、Compare/Media、Notification模块完成源码与本地定向回归及跨域准入矩阵；任务3.3的专用Redis ACL/连接配置及隔离ACL正反验收已完成；任务11.2的调用计数fixture、11.3跨模块攻击反例和11.5全仓Maven compile/test已完成。新授权入口、数据库迁移和真实跨服务密钥仍未在运行环境启用；8.3–8.5、11.1、11.4、11.6–11.7保持未完成。
+OpenSpec `spec-driven` change `unify-versioned-permission-context` 当前完成 **57/63** 项（以`tasks.md`勾选为准）。任务10.1–10.6按Auth/Listing/Customer、Business/Settlement、Contract/Marketing、Compare/Media、Notification模块完成源码与本地定向回归及跨域准入矩阵；任务3.3的专用Redis ACL/连接配置及隔离ACL正反验收已完成；任务11.2的调用计数fixture、11.3跨模块攻击反例和11.5全仓Maven compile/test已完成。11.7所需LR/KI、协议/部署/回滚文档、严格OpenSpec验证与中文提交推送已完成。新授权入口、数据库迁移和真实跨服务密钥仍未在运行环境启用；8.3–8.5、11.1、11.4及11.6真实迁移/回滚验收保持未完成。
 
 Notification、Contract、Customer及依赖模块的定向回归 **16项通过，失败/错误/跳过均0**；Notification REST/MCP授权入口保持默认关闭，SQL迁移未应用，caller公钥和真实跨服务链未部署验收。Contract/Customer提醒因broker recipient绑定缺失保持关闭（KI-206）。Compare/Media与共享鉴权前批定向回归48项通过；Media任务/结果仍为进程内存（KI-117），新owner与permit协议未宣称具备跨重启恢复。域级具体边界及证据见下方10.6矩阵。
 
@@ -20,7 +20,7 @@ Notification、Contract、Customer及依赖模块的定向回归 **16项通过�
 
 - 已按Auth、Listing、Customer、Business、Settlement、Contract、Marketing、Compare、Media、Notification逐域记录可信入口、资源真源、可证明的owner/恢复事实、本地回归组和仍关闭的节点，详见`implementation-inventory.md`的10.6节。
 - 回归证据按模块批次引用，不将有共享依赖的测试组相加；本地fixture/A2A wiring不被表述为生产准入或全域恢复通过。
-- 仍未完成：Interview浏览器领取、真实ReactAgent归档链及历史凭据扫描（8.3–8.5）；真实MySQL/Redis发布与撤权失效（11.1）、开发栈端到端（11.4）、迁移/回滚（11.6）及最终同步归档（11.7）。任务11.2调用计数fixture、11.3本地攻击反例矩阵与11.5全仓Maven回归已完成；并不代表真实部署联调。Settlement主体映射、KI-117跨域恢复、KI-206提醒收件绑定继续关闭。
+- 仍未完成：Interview浏览器领取、真实ReactAgent归档链及历史凭据扫描（8.3–8.5）；真实MySQL/Redis发布与撤权失效（11.1）、开发栈端到端（11.4）和真实迁移/回滚（11.6）。任务11.7文档同步、严格校验及提交推送已完成，但因11.6及前述运行验收未完成，不归档该change。任务11.2调用计数fixture、11.3本地攻击反例矩阵与11.5全仓Maven回归已完成；并不代表真实部署联调。Settlement主体映射、KI-117跨域恢复、KI-206提醒收件绑定继续关闭。
 
 ## Auth/Redis权限ACL与专用连接（2026-10-26，任务3.3）
 
@@ -219,3 +219,11 @@ MCP transport customizer fixture发出5个不同JSON-RPC `tools/call` body，每
 首轮全量测试发现`RagSecurityProperties`是含兼容构造器的配置record但未标明canonical constructor，Spring配置绑定失败；加`@ConstructorBinding`后Rag运行配置定向7项和完整回归通过（KI-207）。首轮Listing失败由管理员fixture未携Auth目录中的`listing.read.all`导致，fixture已补齐该显式操作，Listing定向6项与完整回归通过；生产授权逻辑未放宽。
 
 14项跳过均为既有可选外部验收：common-a2a/Agent的Docker Nacos、真实MySQL并发/分布式验收或真实模型评估未配置；Memory的真实MySQL测试未提供`MEMORY_ARCHIVE_TEST_MYSQL_URL`，在线模型测试未启用`MEMORY_PREFERENCE_LIVE_MODEL`。未启动Docker、连接外部数据库或使用模型凭据。完整回归通过仅证明当前源码与本地测试，不代表真实开发栈验收、迁移已应用或新授权开关已启用；这些仍由11.1/11.4/11.6验收。任务11.5完成后进度为**56/63**。
+
+## Auth迁移交付与成组回滚边界（2026-10-27，任务11.6/11.7）
+
+核对完整受管清单时发现原 runner 目标白名单不接受清单内的 Interview/Marketing upgrade，第340项 schema-check SHA-256 登记错误，Auth execution binding 与持久 A2A owner/nonce/reservation 尚未接入受管升级清单。修复为44项静态清单：Auth执行绑定登记到 `bk_auth`；同一幂等A2A状态迁移分别登记到有持久DataSource的Interview、Listing、Marketing、Notification、Business、Contract、Settlement数据库。Compare/Media当前无耐久DataSource，不列入迁移并保持版本化A2A关闭。schema check在独立连接中先选择对应目标库。
+
+验证：`python scripts/deploy/test_init_manifest.py`通过，检查44项清单目标、覆盖、顺序、文件与规范SHA-256；受管runner fresh与upgrade dry-run均列出44/41项且未连接数据库；Git Bash `-n`语法检查通过。Auth执行绑定29项、common-a2a持久状态2项、Interview参与票4项定向测试通过；`git diff --check`通过。没有真实MySQL执行/重复、Redis、跨实例运行、服务制品回滚或outbox/permit/任务保留现场演练。
+
+补充`docs/authz-versioned-rollout-rollback.md`定义兼容制品组、forward-only schema、暂停流量顺序和outbox、permit、原task/owner/checkpoint及票据安全保留条件。KI-208记录已修复的清单交付缺口；LR-151记录每个A2A provider使用其自身耐久数据库的原因。任务11.7文档同步、严格验证及中文提交推送完成，进度为**57/63**；11.6仍未勾选，须在授权真实数据库/运行环境完成fresh/upgrade/repeat和同等安全成组回滚后才能关闭。

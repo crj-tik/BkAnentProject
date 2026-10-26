@@ -133,3 +133,9 @@ USER域Ed25519+caller/domain/agent/context owner。版本化Memory proof v3携�
 | **总计** | **1726** | **0/0** | **14** |
 
 14个skip均为显式选择加入的外部验收，不是失败：`LiveSkillAgentCardsDockerTest`需要Docker Nacos；Agent的`ApprovalClaimDatabaseConcurrencyTest`、`NacosRollingUpgradeDockerTest`、`SupervisorDistributedAcceptanceTest`、`SupervisorDockerDatabaseTest`、`SupervisorRealModelEvaluationTest`及`NacosAgentRegistryDockerTest`需真实MySQL/Nacos/模型环境；Memory的7项MySQL/live-model测试受`MEMORY_ARCHIVE_TEST_MYSQL_URL`或`MEMORY_PREFERENCE_LIVE_MODEL=true`条件控制。环境未配置，保持跳过，未启动Docker、外部数据库或真实模型。首轮回归中发现并修复RAG配置构造器绑定问题（KI-207）；Listing管理员测试fixture补入目录中已登记的`listing.read.all`后通过。全量成功不证明真实服务部署、数据库迁移或安全开关已启用。
+
+## 11.6/11.7 迁移交付与回滚准备（2026-10-27）
+
+受管迁移清单现有44项。新增Auth执行绑定`bk_auth`版本和七个有持久A2A provider DataSource的版本（Interview、Listing、Marketing、Notification、Business、Contract、Settlement），使用同一SQL与`DATABASE()`结构检查。Compare/Media没有受管关系型DataSource，不启用其版本化A2A store。runner target whitelist与manifest一致，迁移及schema check通过规范LF SHA-256校验；check执行前在独立连接中选择对应目标库。修复第340项原错误登记的Marketing check hash。`scripts/deploy/test_init_manifest.py`检查所有行、目标、必需迁移、幂等建表及哈希。
+
+Fresh与upgrade dry-run分别列出44项和41项，仅证明清单格式、受控目标及工件哈希，不连数据库。定向回归：`AuthorizationExecutionBindingRepositoryTest` 29项、`JdbcA2aTaskAuthorizationStoreTest` 2项、`InterviewParticipantTicketServiceTest` 4项，均通过；未执行真实数据库migration apply/repeat、跨服务回滚或现场outbox/permit/task保留核对。回滚文档要求兼容制品成组回退、schema前向保留、无安全兼容制品则入口关闭，并保留outbox、permit、原任务/owner/checkpoint与票据事实。故任务11.6仍未完成；Compare/Media未接durable store、真实MySQL/Redis和发布回滚验收仍是门禁。
