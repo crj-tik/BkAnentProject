@@ -58,4 +58,23 @@ USER域Ed25519+caller/domain/agent/context owner。版本化Memory proof v3携�
 | Notification(notification)：`/notifications` station/email/robot/list/read/unread/workflow-events；Agent/MCP本人及目标发送/读取工具；旧RPC三发送 | actor只取已验证Auth context；列表/未读可选`userId`只能断言actor相同，查询仍按actor；标读查询并核SQL recipient owner。`.send.own`只发本人，`.send.all`跨recipient，email/robot/workflow audit各有精确操作。MCP/A2A读取工具不暴露userId；工作流MQ事件仅接受白名单事件及Supervisor服务端注入actor/run。旧Dubbo三发送无request proof并拒绝；Contract/Customer reminder因`brokerId != Auth userId`映射未接通而缺省关闭，即使显式开启也跳过（KI-206）。`nacos/memory-service.yaml`已登记notification caller和agent域，但不授予通知数据权限且runtime keys未验；Auth配置同名caller只允许`RESOLVE_BEACON`。REST/MCP授权filter默认关闭，权限只登记、不推断角色授予。 |
 | Marketing(marketing)：`/marketing/contents` create/variant/publish-status/list/search；Tools创建发布搜索/MCP发布/RPC保存绑素材状态 | 内容记录有Auth映射的`ownerBrokerId`，列表/搜索/变体/素材回写按SQL owner范围过滤；创建只能进DRAFT，当前没有独立审核通过入口。HTTP Listing读转发Auth签名响应；A2A读转发已绑定context/freshness并用HMAC绑定单个实际读取请求，Listing本地验签与`listing.read`/显式`listing.read.all`，仅返回未删除的在售摘要或显式全读范围。发布`SUCCESS`、伪造外部回执与Mock发布成功被拒；新入口默认关闭，迁移未应用。 |
 
+### 10.6 跨域入口、资源与恢复准入矩阵（2026-10-26）
+
+本表记录本地源码与定向回归能证明的边界。A2A/MCP接线或统一DTO只证明传输/本地校验路径，不等于生产入口、真实数据库、跨实例恢复或业务副作用已验收。各项未开放的原因和当前处置如下。
+
+| 域 | 实际检查入口与已通过的本地证据 | 资源权威与恢复/owner事实 | 仍关闭的节点及原因 |
+|---|---|---|---|
+| Auth身份映射 | Auth签名`userId→brokerId`映射、审计、permissionRevision/outbox与签名内容；证据组A | Auth关系表是映射真源；授权发布依赖outbox。MySQL/Redis真实发布次序由任务11.1验收 | 授权RPC/新消费链未在生产启用；迁移未应用、Redis ACL和跨实例失效未实测 |
+| Listing | REST域守卫、服务方法和Customer委托的单房源授权RPC；证据组A/C | SQL房源`brokerId/status/revision`决定owner、状态与返回范围；委托请求绑定原签名上下文和实际查询 | REST开关、公钥和路由未部署验收；未应用迁移，不能宣称线上开放 |
+| Customer | REST与profile/match等服务边界从签名actor/BROKER取身份；证据组A | 客户、跟进、委托、收藏关联表决定经纪人归属；Customer→Listing为无持久任务的受限请求 | REST入口与真实服务密钥未验；Contract/Customer提醒因recipient不是Auth userId而保持关闭（KI-206） |
+| Business | REST/TradeTools/RPC/MCP业务方法检查精确`business.*.all`操作；无上下文RPC在数据查询前拒绝；证据组B | KPI、工作量、成交和门店汇总表为数据源；请求员工/门店字段不构成actor或owner | Auth尚无user→employee/store映射；新REST默认关闭、MCP映射为空，真实路由/密钥未验 |
+| Settlement | 规则、记录、计算、分账、汇总、批次、状态等按独立操作码守卫；拒绝副作用回归见证据组B | Settlement记录/分账/收款主体表及Contract状态是业务真源；当前不接受由模型字段恢复owner | 缺employee/store/payee映射、Contract委托与银行签名回调；计算副作用、批次、自动任务、模拟付款和callback保持关闭（KI-204） |
+| Contract | 合同REST、Tools/MCP和RPC动作使用精确操作并保留状态机；Mock签章写前拒绝；证据组C/E | SQL合同`brokerId`为owner；附件须先通过父合同授权；状态仍由合同域真源约束 | 入口开关/迁移未在真实环境启用；Settlement宽读因缺委托关闭（KI-204），定时提醒因收件映射关闭（KI-206） |
+| Marketing | 内容REST/Tools/MCP按owner执行；A2A单房源读携带Auth context/freshness并由Listing本地验HMAC请求；证据组C | SQL `ownerBrokerId`与内容状态决定范围；新内容仅能进入DRAFT | 发布审批入口和真实外部发布未接通；`SUCCESS`与伪造回执拒绝；A2A调用密钥/路由未实测，开关关闭 |
+| Compare | REST/RPC/MCP报告、分享和PDF校验actor/owner；证据组D；`CompareReportCacheServiceImplTest`覆盖owner隔离和重启后拒绝无owner旧缓存 | 报告owner及Listing来源快照hash决定可读/分享；只有显式发布的快照可公开 | 旧无owner/source-hash结果不恢复；跨域交付journal与官方TaskStore持久性未验（KI-117），REST开关仍关闭 |
+| Media | 任务permit绑定actor、Listing owner、taskId、request hash与期限；证据组D中的permit签名、单次领取及到期拒绝回归 | permit是worker执行上限；但`MediaTaskStore`为进程内存，重启后无可靠任务/结果恢复（KI-117） | 公开任务入口默认关闭；contentId缺Marketing签名绑定而拒绝；不得宣称跨重启恢复 |
+| Notification | REST本人列表/未读/标读由Auth actor派生并核recipient owner；MCP/A2A不接收本人userId；证据组E | SQL recipient关系约束私有读取；工作流MQ actor须由Supervisor服务端注入 | Dubbo旧发送无proof拒绝；Contract/Customer reminders跳过（KI-206）；caller运行密钥、MQ真实鉴权/重投未验，REST/MCP默认关闭 |
+
+**定向回归证据（各组可能共享依赖测试，不作总数相加）**：A = Auth/common/Listing/Customer 91项；B = common-a2a/Business/Settlement 11项；C = common RAG、A2A/helper、Contract/Listing/Marketing/Promotion 54项；D = Compare/Media及共享鉴权 48项；E = Notification与Contract/Customer reminders 16项。以上均是本地定向回归记录，不替代真实MySQL/Redis、部署密钥、跨实例、浏览器或外部副作用验收。
+
 1.1/1.2已形成源码节点、actor/操作/真源/未知映射/停用及守卫证据，不改权威LR/KI/tasks。1.3历史回归/局部assert见baseline，完整I/O实测由主会集中实施；本轮不宣称部署或勾完成。

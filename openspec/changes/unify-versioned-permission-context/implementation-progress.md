@@ -2,9 +2,9 @@
 
 ## 当前实施状态（2026-10-26）
 
-OpenSpec `spec-driven` change `unify-versioned-permission-context` 当前完成 **51/63** 项（以`tasks.md`勾选为准）。Compare/Media模块任务10.4与Notification模块任务10.5已完成源码、契约文档、迁移与定向回归；Notification私有读取改为actor注入，发送按精确recipient操作授权，未证明的旧RPC与定时提醒继续关闭。跨域矩阵10.6和11.x真实运行/回归验收仍未完成。
+OpenSpec `spec-driven` change `unify-versioned-permission-context` 当前完成 **52/63** 项（以`tasks.md`勾选为准）。任务10.1–10.5按Auth/Listing/Customer、Business/Settlement、Contract/Marketing、Compare/Media、Notification模块完成源码与本地定向回归；任务10.6已补跨域入口、资源真源、恢复事实、测试证据及未开放原因矩阵。新授权入口、数据库迁移和真实跨服务密钥仍未在运行环境启用；3.3、8.3–8.5及11.x真实运行/前端/交付验收保持未完成。
 
-Notification、Contract、Customer及依赖模块的定向回归 **16项通过，失败/错误/跳过均0**；OpenSpec严格校验与迁移manifest checksum将在本批提交前复核。Notification REST/MCP授权入口保持默认关闭，SQL迁移未应用，caller公钥和真实跨服务链未部署验收。Contract/Customer提醒因broker recipient绑定缺失保持关闭（KI-206）。Compare/Media与共享鉴权前批定向回归48项通过；Media任务/结果仍为进程内存（KI-117），新owner与permit协议未宣称具备跨重启恢复。
+Notification、Contract、Customer及依赖模块的定向回归 **16项通过，失败/错误/跳过均0**；OpenSpec严格校验将在本批提交前复核。Notification REST/MCP授权入口保持默认关闭，SQL迁移未应用，caller公钥和真实跨服务链未部署验收。Contract/Customer提醒因broker recipient绑定缺失保持关闭（KI-206）。Compare/Media与共享鉴权前批定向回归48项通过；Media任务/结果仍为进程内存（KI-117），新owner与permit协议未宣称具备跨重启恢复。域级具体边界及证据见下方10.6矩阵。
 
 历史章节记录各前序批次当时状态；本节是当前进度权威摘要。
 
@@ -15,6 +15,12 @@ Notification、Contract、Customer及依赖模块的定向回归 **16项通过�
 - 旧Dubbo三发送方法不携带可验证actor/recipient证明，统一返回`AUTHENTICATION_REQUIRED`。Contract/Customer提醒默认关闭；即便显式启用，未接通broker到Auth用户绑定前也跳过且不查询业务记录，KI-206跟踪后续解除条件。
 - 新增Notification API鉴权契约、7项Auth操作码迁移与schema check；权限只登记、不自动授予普通角色。KI-151修正文档中错误的caller未登记描述，并说明源配置登记不等于运行密钥/真实调用已验。LR-150记录actor与recipient边界。
 - 定向命令覆盖Notification MCP/业务服务/RPC以及Contract/Customer提醒模块，**16项通过，失败/错误/跳过均0**。没有应用SQL到真实数据库或启用REST/MCP开关；生产密钥、MQ认证和真实多服务调用仍待主验收。
+
+## 跨域入口、资源与恢复矩阵（2026-10-26，任务10.6）
+
+- 已按Auth、Listing、Customer、Business、Settlement、Contract、Marketing、Compare、Media、Notification逐域记录可信入口、资源真源、可证明的owner/恢复事实、本地回归组和仍关闭的节点，详见`implementation-inventory.md`的10.6节。
+- 回归证据按模块批次引用，不将有共享依赖的测试组相加；本地fixture/A2A wiring不被表述为生产准入或全域恢复通过。
+- 仍未完成：Redis ACL/发布失效真实测试（3.3）；Interview浏览器领取、真实ReactAgent归档链及历史凭据扫描（8.3–8.5）；开发栈、多实例和故障交付验收（11.x）。Settlement主体映射、KI-117跨域恢复、KI-206提醒收件绑定继续关闭。
 
 ## 状态
 

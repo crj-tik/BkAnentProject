@@ -82,7 +82,7 @@
 - [x] 10.3 Contract与Marketing核合同/附件/内容owner及办理/编辑/审批动作；签章与真实发布未接通不授权mock成功，原业务状态不由权限替代。
 - [x] 10.4 Compare迁移已退役无凭据Listing读取，分享/PDF绑定owner/公开范围/源版本；Media绑定task/material owner及精确后台许可，内存ID不当身份。
 - [x] 10.5 Notification本人消息读取由actor注入、发送recipient关系独立授权，修正KI-151及caller已登记的错误兜底说明；角色许可/Memory接线不能放行他人消息。
-- [ ] 10.6 每域记录实际通过的入口/资源/恢复矩阵；任何未完成节点保持关闭并列出原因，不把统一DTO或A2A wiring当全域业务验收。
+- [x] 10.6 每域记录实际通过的入口/资源/恢复矩阵；任何未完成节点保持关闭并列出原因，不把统一DTO或A2A wiring当全域业务验收。
 
 ## 11. 故障、兼容与交付验收
 
