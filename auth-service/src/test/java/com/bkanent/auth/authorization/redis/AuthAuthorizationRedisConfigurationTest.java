@@ -31,7 +31,10 @@ class AuthAuthorizationRedisConfigurationTest {
         settings.setTls(true);
         settings.setUsername("default");
         assertThrows(IllegalStateException.class, () -> settings.validateTransport(true));
+        settings.setUsername("shared-redis-user");
+        assertThrows(IllegalStateException.class, () -> settings.validateTransport(true));
         settings.setUsername("authz-writer");
+        assertDoesNotThrow(() -> settings.validateTransport(true));
         settings.setPassword("");
         assertThrows(IllegalStateException.class, () -> settings.validateTransport(true));
     }

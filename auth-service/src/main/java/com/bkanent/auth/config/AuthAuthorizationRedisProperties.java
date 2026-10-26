@@ -25,9 +25,9 @@ public final class AuthAuthorizationRedisProperties {
     public void validateTransport(boolean distributed) {
         validateEnabled();
         if (host == null || host.isBlank() || host.contains("://") || port < 1 || port > 65535
-                || username == null || username.isBlank() || "default".equals(username)
+                || !"authz-writer".equals(username)
                 || password == null || password.isBlank() || (distributed && !tls)) {
-            throw new IllegalStateException("Dedicated authorization Redis authentication/TLS is required");
+            throw new IllegalStateException("Provisioned authz-writer ACL identity and protected Redis transport are required");
         }
     }
 

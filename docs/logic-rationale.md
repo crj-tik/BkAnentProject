@@ -964,9 +964,11 @@
 
 **根因**：按run复制权限副本会产生发布竞争，按版本签含滑动TTL内容会使同版本重建hash变化；用用户ID或旧checkpoint重建授权则绕过持有凭据。新协议采用 `bkanent-authz-v1` 的类型分域Ed25519，并独立验证来源和接收方证明、nonce、正文和目标，不影响已有RAG签名协议。
 
-**代码位置**：`common/authz/AuthorizationSnapshot`、`AuthzFreshness`、`AuthorizationContext`、`AuthzSignature`、`AuthzDeadlines`、`AuthorizationCache`、`AuthorizationSession`；`auth-service/authorization/AuthorizationRepository`、`EffectivePermissionService`、`RoleAuthorizationManagementService`；新MySQL迁移及Redis `authz/publish.lua`。
+**代码位置**：`common/authz/AuthorizationSnapshot`、`AuthzFreshness`、`AuthorizationContext`、`AuthzSignature`、`AuthzDeadlines`、`AuthorizationCache`、`AuthorizationSession`；`auth-service/authorization/AuthorizationRepository`、`EffectivePermissionService`、`RoleAuthorizationManagementService`；新MySQL迁移、Redis `authz/publish.lua`、`scripts/security/configure-authorization-redis-acl.sh`、`scripts/security/verify-authorization-redis-acl.sh` 与 `docs/authorization-redis-acl.md`。
 
 **实施边界**：基础批次413项定向回归、隔离MySQL/Redis规则通过。续批按用户确认新增独立同run受限刷新，KI-169已修；新授权RPC/管理API仍默认关闭，实际Gateway run绑定与Graph/业务consumer迁移见KI-170，不能声称全链通知或零重复Auth已上线。续批276项定向及全23模块1519项回归通过（跳过14外部门控），新增发布/本地监控基础。关联LR-33/40/41/63/98/106；change `unify-versioned-permission-context`。
+
+**Redis ACL实施补充（2026-10-26）**：授权Redis用独立 `authz-writer` 与 `agent-authz-reader`；writer 只访问 head/snapshot/fence/active 索引和指定通知channel，reader 只读 head 并订阅该channel。ACL脚本只改这两个专用用户，不改共享 `default` 或其他业务账号；Auth/Agent启动还要求各自明确的ACL配置标志、固定身份名与受保护传输。该次代码补齐策略和复核脚本，授权Redis真实实例上的执行记录仍需后续运维/开发栈验收；新授权开关继续关闭，不据脚本存在宣称已部署。关联OpenSpec任务3.3/11.1。
 
 ## LR-104 Supervisor请求幂等必须绑定持久会话与归一化输入
 
@@ -1020,6 +1022,8 @@
 **结论**：独立refreshAuthorization使用真实access、原签名context和本次服务proof更新permissionRevision，保持actor/run/session/audience/policy以及原hard deadline；credentialEpoch变更必须新认证续接。同运行许可只收缩，已接受窄scope后旧宽context再授权限也不能恢复该运行许可。签名freshness每30秒以内按真实MySQL读取开始时刻重核，Auth发布outbox/current-version与Redis原子fence，消息只失效不授予；有效本地context检查不逐工具请求Auth。
 
 **根因**：重新入口授权会重置截止，旧context回放会扩大已经收缩的范围，单纯修改Redis副本又无法更新消费者本地状态。分离稳定snapshot、当前运行scope和签名新鲜证明，并保持单调版本/epoch及不可延长时限，能在容许传播窗内复用且拒绝陈旧放行。MySQL注销PENDING摘要先阻重入，Redis外部revoke失败可按同摘要重试，不加第二次epoch；canonical token编码防原串别名绕撤销。账号写入不能只带actorId，密码计算后的锁内仍需实际凭据复验。
+
+**单飞边界**：不同run可以共享同一actor/revision的稳定snapshot与head读取；签名refresh绑定原context、run/session和本次requestId/nonce/body，只有同一个已绑定执行的并发刷新可以合并，不能把一个run的Auth响应复用于同用户其他session。
 
 **代码位置**：AuthAuthorizationRpcServiceImpl.refreshAuthorization、AuthzCanonicalHash.refreshRequestHash、AuthzSignature.verifyRefreshBinding、AuthorizationSession.refresh、AuthTokenService、AuthAccountMutationService、AuthorizationOutboxPublisher、RedisActiveAuthorizationActors和AuthorizationVersionMonitor。pub/sub/对账实现是基础，Gateway/Agent已验字节原型的signed run/session仍null，实际执行标签接入必须补KI-170而不能consumer填入签名或省资源owner检查；header最大256KiB也不等于部署预算已配置。
 

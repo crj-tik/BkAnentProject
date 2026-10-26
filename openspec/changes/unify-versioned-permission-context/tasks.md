@@ -18,8 +18,8 @@
 - [x] 3.2 实现outbox有界领取epoch、事务外最新版本装配、snapshot先写/head后切/通知最后发的顺序和失败恢复；乱序、重复、缺snapshot、迟到事件均不能回退版本。
 - [ ] 3.3 实现Redis权限namespace与channel ACL及受保护连接：Auth可写并发布指定channel，消费者只读精确key并订阅指定channel；写管理员/权限/TTL、PUBLISH/SPUBLISH及跨channel均拒绝，覆盖订阅成功和非法发布反例，缺配置不得启用。
 - [x] 3.4 实现Auth每5秒MySQL/outbox核验及独立签名FreshnessAttestation，绑定user/revision/epoch/status/hash/真实checkedAt/notAfter；发布前重核MySQL和head CAS，迟到核验/更新竞争不能以完成时刻续窗，缓存GET不能续期。
-- [ ] 3.5 接入权限版本Pub/Sub通知和消费者去重失效，消息不含token/正文/权限全集；单飞刷新和版本比较拒绝旧通知覆盖新状态。
-- [ ] 3.6 实现活跃用户10秒批量对账、30秒权威新鲜度上限和硬到期；验证通知丢失、Redis失联、Auth发布阻塞时旧权限不会无限延长。
+- [x] 3.5 接入权限版本Pub/Sub通知和消费者去重失效，消息不含token/正文/权限全集；同一actor的head读取单飞，通知版本单调比较且旧head/旧通知不能清除DIRTY。签名Auth刷新按原run/session绑定，不跨run共用响应；实际Graph刷新接线在5.2验收。
+- [x] 3.6 实现活跃用户10秒批量对账、30秒权威新鲜度上限和硬到期；验证通知丢失、Redis失联、Auth发布阻塞时旧权限不会无限延长。
 
 ## 4. 共享可信授权协议与入口
 
@@ -33,7 +33,7 @@
 ## 5. Supervisor本地权限与资源守卫
 
 - [ ] 5.1 实现按actor+revision的有界不可变本地cache与run引用/原policy；同用户多会话共享权限但不共享任务/消息，线程异步捕获清理不串actor。
-- [ ] 5.2 业务Model重规划仅查head版本与authorityCheckedAt，同版不下载/计算权限；变更单飞刷新目录，首次Model复用入口结果，不为摘要模型重复获取。
+- [ ] 5.2 业务Model重规划仅查head版本与authorityCheckedAt，同版不下载/计算权限；变更时按原run/session对Auth刷新签名context单飞，不跨run共用request-bound响应并刷新目录；首次Model复用入口结果，不为摘要模型重复获取。
 - [ ] 5.3 替换目录的首domain/generic fallback/统一chat本地工具权限为精确映射；保留AUTO新增能力、技能版本/schema/政策交集，注册未知动作不能放行管理员。
 - [ ] 5.4 Graph节点、worker、tool callback、runner和输出使用本地许可/期限/dirty检查，移除重复Auth用户RPC而保留审批hash、资源、Memory来源、run lease/cancel与预算。
 - [ ] 5.5 统一chat/sync/async/续接/审批/query/cancel/SSE的持久session/run owner校验；修复同名session事件和跨会话requestId不同输入冲突，错误前无副作用。

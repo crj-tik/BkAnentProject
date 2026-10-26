@@ -65,7 +65,11 @@ class AgentAuthorizationRedisConsumerTest {
         assertThat(new AgentAuthorizationProperties().isEnabled()).isFalse();
         var redis = new AgentAuthorizationRedisProperties();
         redis.setHost("redis.internal"); redis.setUsername("agent-authz-reader"); redis.setPassword("test-only");
-        assertThatThrownBy(() -> redis.validateTransport(true)).hasMessageContaining("protected read-only");
+        redis.setTls(true);
+        assertThatThrownBy(() -> redis.validateTransport(true)).hasMessageContaining("ACL identity");
+        redis.setProtectedReaderConfigured(true);
+        redis.setTls(false);
+        assertThatThrownBy(() -> redis.validateTransport(true)).hasMessageContaining("protected Redis transport");
         redis.setTls(true);
         redis.validateTransport(true);
         var connection = new AgentAuthorizationConfiguration.Enabled()
@@ -78,7 +82,9 @@ class AgentAuthorizationRedisConsumerTest {
         var template = new AgentAuthorizationConfiguration.Enabled().agentAuthorizationReadTemplate(connection);
         assertThat(template.getConnectionFactory()).isSameAs(connection);
         redis.setUsername("default");
-        assertThatThrownBy(() -> redis.validateTransport(false)).hasMessageContaining("protected read-only");
+        assertThatThrownBy(() -> redis.validateTransport(false)).hasMessageContaining("ACL identity");
+        redis.setUsername("shared-redis-user");
+        assertThatThrownBy(() -> redis.validateTransport(false)).hasMessageContaining("ACL identity");
         assertThat(redis.toString()).doesNotContain("test-only");
         // No Redis connection is initialized or contacted by these configuration fixtures.
     }

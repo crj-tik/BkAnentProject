@@ -62,7 +62,7 @@ Gateway清除客户端所有可信身份/授权头，通过 `resolveRequestAutho
 
 各消费者通过common授权适配器共享有界cache：`(actorId, permissionRevision)` -> 不可变snapshot，单独保存credentialEpoch/最近权威核验时刻；每run引用snapshot与原政策，不把当前version写到模型。角色新授权可以扩大当前用户集合，但允许执行仍取原请求政策、技能/审批和域委托交集。
 
-首次Model复用入口结果；仅业务Model重新规划读Redis head及权威新鲜度（一次MGET/pipeline，不下载snapshot）。同revision/credentialEpoch、有效期与新鲜度成立则本地继续；version变化/notification dirty时单飞调用Auth刷新签名context。每SubAgent内部model也仅在它自己的重新规划阶段核版本，不在每工具回调重查。摘要/评分/一次性造句调用不是Supervisor规划边界，不为了它们重复取操作权限。
+首次Model复用入口结果；仅业务Model重新规划读Redis head及权威新鲜度（一次MGET/pipeline，不下载snapshot）。同revision/credentialEpoch、有效期与新鲜度成立则本地继续；version变化/notification dirty时按已绑定的原run/session单飞调用Auth刷新签名context。同一用户的不同run不能共用刷新响应，因为每个响应绑定原context、run/session和本次requestId/nonce/body；跨session只可共享不可变snapshot与head读取。每SubAgent内部model也仅在它自己的重新规划阶段核版本，不在每工具回调重查。摘要/评分/一次性造句调用不是Supervisor规划边界，不为了它们重复取操作权限。
 
 本地状态为VALID、DIRTY、EXPIRED、UNVERIFIED。通知到达立即标DIRTY；未完成刷新前不启动受保护新动作，刷新确认仍允许的再继续。每动作仅本地检查到期/dirty/许可，不请求Auth/Redis。模型误选未获准工具返回结构化拒绝；不能已claim副作用后才发现粗权限拒绝。
 

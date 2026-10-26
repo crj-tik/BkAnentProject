@@ -5,6 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 /** Dedicated Redis ACL identity; server ACL grants only namespace GET/MGET and channel SUBSCRIBE. */
 @ConfigurationProperties(prefix = "agent.authorization.redis")
 public class AgentAuthorizationRedisProperties {
+    private boolean protectedReaderConfigured;
     private String host;
     private int port = 6379;
     private String username;
@@ -14,14 +15,16 @@ public class AgentAuthorizationRedisProperties {
     private String channel = "authz:versions";
 
     public void validateTransport(boolean distributed) {
-        if (host == null || host.isBlank() || host.contains("://") || host.contains("/")
-                || port <= 0 || port > 65535 || username == null || username.isBlank()
-                || "default".equalsIgnoreCase(username) || password == null || password.isBlank()
+        if (!protectedReaderConfigured || host == null || host.isBlank() || host.contains("://") || host.contains("/")
+                || port <= 0 || port > 65535 || !"agent-authz-reader".equals(username)
+                || password == null || password.isBlank()
                 || namespace == null || !namespace.matches("[a-zA-Z0-9_-]{1,40}")
                 || channel == null || !channel.matches("[a-zA-Z0-9:_-]{1,96}") || distributed && !tls) {
-            throw new IllegalStateException("Dedicated protected read-only authorization Redis configuration required");
+            throw new IllegalStateException("Provisioned agent-authz-reader ACL identity and protected Redis transport required");
         }
     }
+    public boolean isProtectedReaderConfigured() { return protectedReaderConfigured; }
+    public void setProtectedReaderConfigured(boolean value) { protectedReaderConfigured = value; }
     public String getHost() { return host; }
     public void setHost(String value) { host = value; }
     public int getPort() { return port; }
