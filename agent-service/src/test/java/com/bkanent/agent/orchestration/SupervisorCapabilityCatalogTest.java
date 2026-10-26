@@ -108,6 +108,38 @@ class SupervisorCapabilityCatalogTest {
         assertThat(catalog.snapshot("1", true)).isEmpty();
     }
 
+    @Test
+    void versionedDirectoryUsesExactPerToolPermissionsWithoutServerOrChatFallbacks() {
+        when(agents.listDescriptors()).thenReturn(List.of());
+        when(permissions.versionedAuthorizationEnabled()).thenReturn(true);
+        when(permissions.canUseLocalTool("1", "search")).thenReturn(true);
+        when(permissions.canInvokeMcpTool("1", "one", "search")).thenReturn(true);
+        when(mcp.listTools()).thenReturn(List.of(tool("one"), tool("two")));
+        when(mcp.callTool("one", "search", Map.of("query", "authorized")))
+                .thenReturn(new AgentMcpCallResult("one", "search", "allowed", Map.of()));
+
+        var snapshot = catalog.snapshot("1", true);
+        assertThat(snapshot).containsOnlyKeys("local:search", "mcp:one:search");
+        var context = new ToolContext(Map.of("userId", "1"));
+        assertThat(snapshot.get("local:search").callback().call("{}", context)).isEqualTo("local result");
+        when(permissions.canUseLocalTool("1", "search")).thenReturn(false);
+        assertThatThrownBy(() -> snapshot.get("local:search").callback().call("{}", context))
+                .hasMessage("CAPABILITY_PERMISSION_DENIED");
+        assertThat(effects).hasValue(1);
+        var mcpCapability = snapshot.get("mcp:one:search");
+        assertThat(mcpCapability.callback().call("{\"query\":\"authorized\"}", context))
+                .contains("allowed");
+        when(permissions.canInvokeMcpTool("1", "one", "search")).thenReturn(false);
+        assertThatThrownBy(() -> mcpCapability.callback().call("{\"query\":\"authorized\"}", context))
+                .hasMessage("CAPABILITY_PERMISSION_DENIED");
+        assertThat(catalog.snapshot("1", true)).isEmpty();
+        verify(mcp).callTool("one", "search", Map.of("query", "authorized"));
+        verify(mcp, times(2)).listTools();
+        verify(permissions, never()).canUseMcpTools("1");
+        verify(permissions, never()).canReadMcpServer(anyString(), anyString());
+        verify(permissions, never()).canUseLocalTools("1");
+    }
+
     private AgentMcpToolDescriptor tool(String server) {
         return new AgentMcpToolDescriptor(server, "search", server + " real description", "{\"type\":\"object\"}", null);
     }

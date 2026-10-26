@@ -1048,4 +1048,14 @@
 
 **代码位置**：`common/authz/ExecutionBinding`、`AuthzSignature.verifyExecutionBinding`、`AuthAuthorizationRpcServiceImpl.bindExecution`、`AuthorizationRepository.bindIngressExecution`、`agent-service/AgentExecutionBindingCoordinator`、`AgentRagCredentialFilter`、`OrchestrationStore.executionHash`。入口原始三签保留在请求scope，绑定context不写入模型输入或checkpoint。
 
-**关联**：LR-104/106；KI-170；change `unify-versioned-permission-context`任务4.4。功能开关默认关闭；Gateway路由/预算、A2A和Graph真实consumer、异步跨实例重启恢复仍需独立验收。
+**关联**：LR-104/106；KI-170；change `unify-versioned-permission-context`任务4.4。功能开关默认关闭；Gateway启用环境路由/预算、Graph真实模型与工具执行、A2A及异步跨实例重启恢复仍需独立验收。
+
+## LR-139 Agent能力用稳定映射本地授权，Graph只在重规划刷新
+
+**结论**：Supervisor目录的权限码必须来自可信配置的稳定CapabilityId映射：A2A按agentId、MCP按server+tool、本地工具按tool；不得由Agent Card的domain首项、LLM参数、server级可读权限或统一chat权限推断。缺映射时能力隐藏且执行入口拒绝。映射值仍必须精确存在于当前Auth签名权限集合中，管理员也不获得通配动作。每个业务Model重规划只检查一次签名head；同版复用本run会话，版本变化后才按同run/session签名refresh并刷新能力目录。Graph节点和工具回调仅使用已验证的本地会话，不逐次请求Auth。
+
+**根因**：Agent Card和工具参数表达目标能力，不是授权事实；首domain不能代表多域Agent的唯一操作，server可读也不证明对其中每个MCP工具具有调用权。若改成每个节点或工具都访问Auth，会扩大依赖失败面并把模型规划轮次变成远程身份校验次数。稳定映射加Auth签名操作交集使身份/授权来源确定，head/refresh仅发生在规划边界，同时保留权限变更后的当前授权。
+
+**代码位置**：`AgentAuthorizationProperties.capabilityPermissions`、`AgentPermissionService`、`SupervisorCapabilityCatalog`、`SupervisorToolLoopGraph.checkReplanningAuthorization`、`AgentAuthorizationConsumer.checkPlanning`、`AuthorizationVersionMonitor.checkPlanning`、`AuthorizationSession.refreshSingleFlight`、`SupervisorGovernanceService.auditAccess`。版本化模式下治理审计也从当前签名context记录actor、permissionRevision和credentialEpoch；未登记映射隐藏，不从管理员身份或模型生成内容补齐。
+
+**关联**：LR-103/106/138；KI-170；change `unify-versioned-permission-context`任务5.1–5.7。Agent本地consumer、owner边界和治理审计已有源码及定向回归；生产启用和跨实例恢复不由此推定。

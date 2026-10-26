@@ -122,7 +122,7 @@ InterviewMcpTools当前6个普通@Tool无真实provider bean，先完成明确To
 
 统一chat、sync/async、continuation/approval、SSE、audit、query的持久session owner核查。run幂等注册以actor+session+requestId定位并比较规范化输入/policy hash，重复不同正文/会话返回409。已完成/unknown工具保持原call关联；当前结果读取仍做资源/来源核验，不因先前成功绕过。管理员业务诊断全读走独立管理permission并审计，不允许ordinary audit无筛选查全局，不把诊断权扩至Memory私有正文。
 
-将目录能力->操作许可映射从首domain/generic fallback改成精确contract；本地工具按具体操作而非统一chat.use，MCP按工具权限而非server.read代替下游资源。技能正文版本和scope继续与能力交集，AUTO新发现能力按完整权限可见。审批原call/args hash、run租约/cancel、预算/副作用账本仍实时守卫，新增transition同步KI-2回归。
+将目录能力->操作许可映射改为可信配置中的稳定CapabilityId->Auth已登记精确操作码映射：A2A按agentId，MCP按server+tool，本地工具按tool；不从首domain、Agent Card声明、模型参数、server.read或chat.use推导新授权。缺映射的能力隐藏，直接调用也拒绝；映射操作只有在Auth当前签名集合中才可见，管理员身份不生成通配操作。动态目录每轮从当前发现结果和本地签名集合交集生成，因此新增能力在登记精确映射并获授后自然可见。技能正文版本和scope继续与能力交集。Graph仅在已有run重新进入业务Model时读一次签名head；同版更新本地freshness后复用会话，版本变化时对原run/session签名refresh并在其后刷新目录，节点/工具/子Agent不逐个请求Auth。审批原call/args hash、run租约/cancel、预算/副作用账本仍实时守卫，新增transition同步KI-2回归。
 
 ### D10. 访谈主体关系与操作矩阵
 

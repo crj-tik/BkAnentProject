@@ -52,6 +52,8 @@ public class SupervisorToolLoopGraph {
     private PersistArtifactsNode artifacts;
     private com.bkanent.agent.security.AgentRagCredentialLeaseStore ragCredentials;
     private com.bkanent.agent.config.AgentRagConsumerProperties ragPolicy = new com.bkanent.agent.config.AgentRagConsumerProperties();
+    private com.bkanent.agent.authorization.AgentAuthorizationConsumer authorizationConsumer;
+    private com.bkanent.agent.config.AgentAuthorizationProperties authorizationProperties;
     private com.bkanent.agent.memory.SupervisorMemoryLifecycle memory;
     @org.springframework.beans.factory.annotation.Autowired
     public void setMemory(com.bkanent.agent.memory.SupervisorMemoryLifecycle memory) { this.memory = Objects.requireNonNull(memory); }
@@ -63,6 +65,14 @@ public class SupervisorToolLoopGraph {
     public void setRagCredentials(com.bkanent.agent.security.AgentRagCredentialLeaseStore credentials) { ragCredentials = credentials; }
     @org.springframework.beans.factory.annotation.Autowired
     public void setRagPolicy(com.bkanent.agent.config.AgentRagConsumerProperties policy) { ragPolicy = policy; }
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setAuthorizationConsumer(com.bkanent.agent.authorization.AgentAuthorizationConsumer consumer) {
+        authorizationConsumer = consumer;
+    }
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setAuthorizationProperties(com.bkanent.agent.config.AgentAuthorizationProperties properties) {
+        authorizationProperties = properties;
+    }
 
     @org.springframework.beans.factory.annotation.Autowired
     public void setReconciler(RemoteTaskReconciler reconciler) { this.reconciler = reconciler; }
@@ -150,8 +160,8 @@ public class SupervisorToolLoopGraph {
     private Map<String, Object> prepare(OverAllState raw) {
         ToolLoopState state = stateOf(raw);
         try {
-            var available = available(state);
             if (state.request.skill() != null) {
+                var available = available(state);
                 state.skillSnapshot = new SkillExecutionResolver(skills).resolve(state.request.skill(), "supervisor", names(available), true);
                 store.snapshot(state.runId, state.skillSnapshot);
             }
@@ -166,6 +176,7 @@ public class SupervisorToolLoopGraph {
     private Map<String, Object> model(OverAllState raw) {
         ToolLoopState state = stateOf(raw);
         if (!"RUNNING".equals(state.status)) return updates(state, "Model");
+        if (state.rounds > 0 && !checkReplanningAuthorization(state)) return updates(state, "Model");
         var available = currentOrFail(state);
         if (available == null) return updates(state, "Model");
         state.visibleCapabilityIds = new ArrayList<>(available.keySet());
@@ -227,6 +238,30 @@ public class SupervisorToolLoopGraph {
         }
         if (last != null && "RUNNING".equals(state.status)) fail(state, "MODEL_UNAVAILABLE", "模型服务调用失败");
         return updates(state, "Model");
+    }
+
+    /** One signed head check at a replan boundary; individual nodes and tools stay local. */
+    private boolean checkReplanningAuthorization(ToolLoopState state) {
+        if (authorizationProperties == null || !authorizationProperties.isEnabled()) return true;
+        var entry = com.bkanent.agent.authorization.AgentAuthorizationScope.current();
+        if (entry == null) {
+            fail(state, com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED.name(), "登录状态无效，请重新登录后重试。");
+            return false;
+        }
+        if (authorizationConsumer == null || ragCredentials == null) {
+            fail(state, com.bkanent.common.authz.AuthzErrorCode.AUTHORIZATION_UNAVAILABLE.name(), "当前授权服务暂不可用，请稍后重试。");
+            return false;
+        }
+        try {
+            var credentials = ragCredentials.verifiedIngressCredentials(state.userId, entry);
+            authorizationConsumer.checkPlanning(entry, credentials.accessToken());
+            return true;
+        } catch (com.bkanent.common.authz.AuthzException failure) {
+            fail(state, failure.code().name(), "用户授权状态已变化，请重新提交请求。");
+        } catch (RuntimeException failure) {
+            fail(state, com.bkanent.common.authz.AuthzErrorCode.AUTHORIZATION_UNAVAILABLE.name(), "当前授权服务暂不可用，请稍后重试。");
+        }
+        return false;
     }
 
     private Map<String, Object> dispatch(OverAllState raw) {

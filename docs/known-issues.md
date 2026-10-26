@@ -164,7 +164,7 @@
 
 **确认日期**：2026-10-19。开发环境通过正式 `/agent/supervisor/stream` SSE 入口提交的合成 async task 已有 `COMPLETED` 数据行和 `supervisor.completed` / `supervisor.async.completed` 终态事件；随后两次调用 `GET /agent/supervisor/tasks/async/status` 均返回 500。只核验状态/事件元数据，未读取结果正文；对应数据库行的结果字段非空。排查窗口内未找到能确认根因的匹配应用日志。
 
-**处置**：保持 OPEN，待专项复现 controller→`SupervisorAsyncTaskService.queryStatus` 及 JSON 反序列化分支，添加成功/畸形持久结果回归后修复。完成事件不能替代状态查询成功，当前状态查询基线未通过；Studio 只读工作列表也未测，因为其现有 GET 会同步副作用。
+**处置**：保持 OPEN。Agent侧已为 `SupervisorAsyncTaskService.toStatusResponse` 增加畸形/错配结果保护；查询仍返回owner可见状态、抑制结果且不回显原始JSON。当前Memory来源检查拒绝时也不会回退到持久结果。新增成功、畸形/错配结果和来源撤回回归均通过；但尚未在原开发环境重放这条正式SSE请求并确认历史500根因已消失，因此不关闭问题。Studio只读工作列表仍未测，因为其现有GET会同步副作用。
 
 ## KI-125 [已修测试·P3] 分布式验收测试 fixture Agent 名与生产 Agent 名冲突，Nacos latest 卡覆盖断言
 
@@ -1470,11 +1470,11 @@
 
 **确认依据**：最初版本化入口中Gateway签实际body/path/query/audience，但context.runId/sessionId为空。Supervisor从业务requestId/session生成实际执行身份；新委托/刷新协议明确要求原signed run/session不变，因此不能把空关联入口证明直接用于实际run。Agent在chat/supervisor bind/capture显式拒绝，不把普通metadata填入签名上下文。
 
-**处置**：已按D7b确定独立`BIND_EXECUTION`。Agent先验签入口三签并恢复可信actor；Supervisor用持久run owner、原始请求幂等和session归属校验后，以实际run/session及归一化输入调用Auth绑定。Auth把原入口hash唯一绑定到不可变tuple；仅同tuple新nonce可幂等重取，actor、scope、policy或硬截止不变，不用refresh改写入口证明。绑定成功后才捕获执行lease；一次入口不会在Graph节点或子Agent调用中重复执行`BIND_EXECUTION`。现有业务权限RPC/工具资源守卫尚未全迁移至本地版本上下文，仍由任务5.x/6.x验收。直接访问Agent且无可信入口证明时，由Agent用服务身份和实际HTTP请求事实独立调用Auth resolve；部分/伪造入口头失败关闭，固定marker不作为身份。
+**处置**：已按D7b确定独立`BIND_EXECUTION`。Agent先验签入口三签并恢复可信actor；Supervisor用持久run owner、原始请求幂等和session归属校验后，以实际run/session及归一化输入调用Auth绑定。Auth把原入口hash唯一绑定到不可变tuple；仅同tuple新nonce可幂等重取，actor、scope、policy或硬截止不变，不用refresh改写入口证明。绑定成功后才捕获执行lease；一次入口不会在Graph节点或子Agent调用中重复执行`BIND_EXECUTION`。Supervisor任务5.1–5.7已完成源码接线和定向回归，包括Graph规划边界刷新、本地精确能力许可、异步请求上下文捕获/清理、owner检查及治理审计；直接访问Agent且无可信入口证明时，由Agent用服务身份和实际HTTP请求事实独立调用Auth resolve，部分/伪造入口头失败关闭，固定marker不作为身份。
 
 **修复与验证**：Auth独立`BIND_EXECUTION`、Supervisor持久owner与输入幂等核对、Agent绑定后捕获lease已由`6d13117`完成。Gateway有界读取并原样回放body，签入method/path/query/audience/requestId及Auth响应；Agent在JSON解析前复算请求事实和正文hash。新增实际JSON actor/session/admin/permissions伪造字段用例：principal仍来自Auth签名actor，签后篡改正文在执行前拒绝。Gateway定向15项、Agent入口定向5项通过；路径rewrite、重复query、空body、超限、SSE/流式类型、伪造头清除、精确公开method/path及POST refresh均有回归。
 
-**运行边界**：新授权开关仍默认关闭，未部署；此条只确认Gateway入口到Supervisor实际run/session的源码协议闭合，不代表Redis真实ACL运行验收、async跨实例重启恢复、Graph真实模型/工具消费、A2A新入口或5.x/6.x领域迁移完成。后续未完成项继续由OpenSpec任务跟踪，不据本条称新授权链已生产可用。
+**运行边界**：新授权开关仍默认关闭，未部署；此条只确认Gateway入口到Supervisor实际run/session的源码协议闭合和Supervisor 5.x本地consumer源码验收，不代表Redis真实ACL运行验收、异步跨实例重启恢复、生产Graph模型/工具消费、A2A新入口或6.x领域迁移完成。KI-128的原环境历史500也仍待复现。后续未完成项继续由OpenSpec任务跟踪，不据本条称新授权链已生产可用。
 
 **关联**：LR-106/138；change `unify-versioned-permission-context`；任务4.3/4.4/5.x/6.x。
 

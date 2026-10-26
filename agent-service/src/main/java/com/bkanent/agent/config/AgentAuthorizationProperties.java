@@ -25,6 +25,7 @@ public class AgentAuthorizationProperties {
     private int maxUsers = 1000;
     private int maxSessions = 4000;
     private int maxSessionsPerUser = 32;
+    private Map<String, String> capabilityPermissions = new LinkedHashMap<>();
 
     @PostConstruct
     public void validate() {
@@ -36,6 +37,12 @@ public class AgentAuthorizationProperties {
         }
         authorityKeys();
         signingKey();
+        getCapabilityPermissions().forEach((capability, permission) -> {
+            new com.bkanent.common.agent.CapabilityId(capability);
+            if (permission == null || permission.length() > 128
+                    || !permission.matches("[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)+"))
+                throw new IllegalStateException("Invalid Agent capability permission mapping");
+        });
     }
 
     public java.security.PrivateKey signingKey() {
@@ -97,5 +104,12 @@ public class AgentAuthorizationProperties {
     public void setMaxSessions(int value) { maxSessions = value; }
     public int getMaxSessionsPerUser() { return maxSessionsPerUser; }
     public void setMaxSessionsPerUser(int value) { maxSessionsPerUser = value; }
+    public Map<String, String> getCapabilityPermissions() { return Map.copyOf(capabilityPermissions); }
+    public void setCapabilityPermissions(Map<String, String> value) {
+        capabilityPermissions = value == null ? new LinkedHashMap<>() : new LinkedHashMap<>(value);
+    }
+    public String permissionForCapability(String capabilityId) {
+        return capabilityPermissions.get(capabilityId);
+    }
     @Override public String toString() { return "AgentAuthorizationProperties[REDACTED]"; }
 }

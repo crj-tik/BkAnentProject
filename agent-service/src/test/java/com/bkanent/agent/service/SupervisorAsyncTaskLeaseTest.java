@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.bkanent.agent.client.A2aAgentClient;
 import com.bkanent.agent.config.DistributedAgentProperties;
+import com.bkanent.agent.config.AgentRagConsumerProperties;
 import com.bkanent.agent.entity.AgentAsyncTaskEntity;
 import com.bkanent.agent.entity.AgentAsyncWorkflowEntity;
 import com.bkanent.agent.mapper.AgentAsyncTaskMapper;
@@ -18,15 +19,19 @@ import com.bkanent.agent.registry.AgentRuntimeType;
 import com.bkanent.agent.registry.RegisteredAgentDescriptor;
 import com.bkanent.agent.service.SupervisorWorkflowService;
 import com.bkanent.agent.stream.SessionStreamService;
+import com.bkanent.agent.security.AgentRagCredentialLeaseStore;
 import com.bkanent.common.agent.AgentCard;
 import com.bkanent.common.agent.AgentTaskInvokeRequest;
 import com.bkanent.common.agent.AgentTaskInvokeResponse;
+import com.bkanent.common.rpc.AuthPermissionRpcService;
+import com.bkanent.common.rpc.AuthenticatedPrincipal;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 
 import java.util.List;
 import java.util.Map;
@@ -36,6 +41,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
@@ -94,7 +100,8 @@ class SupervisorAsyncTaskLeaseTest {
         }).when(taskMapper).update(isNull(), any(LambdaUpdateWrapper.class));
 
         SupervisorTaskRequest parentRequest = new SupervisorTaskRequest(
-                "session-1", "user-1", "task-1", "trace-1", "find listings", Map.of(), "web", false);
+                "session-1", "1", "task-1", "trace-1", "find listings", Map.of(), "web", false);
+        AgentRagCredentialLeaseStore ragCredentials = capturedCredentials("task-1", "worker-token-1", "1");
         ObjectMapper objectMapper = new ObjectMapper();
         AgentAsyncTaskEntity pending = new AgentAsyncTaskEntity();
         pending.setId(1L);
@@ -102,7 +109,7 @@ class SupervisorAsyncTaskLeaseTest {
         pending.setSessionId("session-1");
         pending.setTaskId("task-1");
         pending.setTraceId("trace-1");
-        pending.setUserId("user-1");
+        pending.setUserId("1");
         pending.setSelectedAgentId("listing-agent");
         pending.setMode("LOCAL_WORKFLOW");
         pending.setStatus("ACCEPTED");
@@ -116,7 +123,7 @@ class SupervisorAsyncTaskLeaseTest {
             running.setSessionId("session-1");
             running.setTaskId("task-1");
             running.setTraceId("trace-1");
-            running.setUserId("user-1");
+            running.setUserId("1");
             running.setSelectedAgentId("listing-agent");
             running.setMode("LOCAL_WORKFLOW");
             running.setStatus("RUNNING");
@@ -149,6 +156,7 @@ class SupervisorAsyncTaskLeaseTest {
                 a2aAgentClient, streamService, permissionService, properties);
         when(supervisorTaskService.submitTask(any())).thenAnswer(invocation -> {
             try {
+                assertThat(ragCredentials.currentUserId()).isEqualTo("1");
                 assertThat(a2aExecutionService.execute(descriptor, childRequest, "single_agent", Map.of()))
                         .isSameAs(childResponse);
                 return new SupervisorTaskResponse("session-1", "task-1", "COMPLETED", "done",
@@ -166,6 +174,7 @@ class SupervisorAsyncTaskLeaseTest {
                 mock(AgentRegistry.class), a2aExecutionService, supervisorTaskService,
                 streamService, metricsService, governanceService, permissionService,
                 taskMapper, objectMapper, properties, executor);
+        asyncTaskService.setRagCredentials(ragCredentials);
 
         try {
             asyncTaskService.dispatchPendingLocalTasks(1);
@@ -179,6 +188,11 @@ class SupervisorAsyncTaskLeaseTest {
 
             allowSubAgentCallToFinish.countDown();
             assertThat(parentExecutionFinished.await(4, TimeUnit.SECONDS)).isTrue();
+            assertThat(executor.submit(() -> {
+                assertThat(com.bkanent.agent.authorization.AgentAuthorizationScope.current()).isNull();
+                assertThatThrownBy(ragCredentials::currentUserId).hasMessage("AUTHENTICATION_REQUIRED");
+                return true;
+            }).get(4, TimeUnit.SECONDS)).isTrue();
         } finally {
             allowSubAgentCallToFinish.countDown();
         }
@@ -215,7 +229,8 @@ class SupervisorAsyncTaskLeaseTest {
         }).when(workflowMapper).update(isNull(), any(LambdaUpdateWrapper.class));
 
         SupervisorTaskRequest request = new SupervisorTaskRequest(
-                "session-2", "user-2", "workflow-task-2", "trace-2", "find listings", Map.of(), "web", false);
+                "session-2", "2", "workflow-task-2", "trace-2", "find listings", Map.of(), "web", false);
+        AgentRagCredentialLeaseStore ragCredentials = capturedCredentials("workflow-task-2", "worker-token-2", "2");
         ObjectMapper objectMapper = new ObjectMapper();
         AgentAsyncWorkflowEntity pending = new AgentAsyncWorkflowEntity();
         pending.setId(2L);
@@ -223,7 +238,7 @@ class SupervisorAsyncTaskLeaseTest {
         pending.setSessionId("session-2");
         pending.setTaskId("workflow-task-2");
         pending.setTraceId("trace-2");
-        pending.setUserId("user-2");
+        pending.setUserId("2");
         pending.setStatus("ACCEPTED");
         pending.setCancelRequested(0);
         pending.setAttemptCount(0);
@@ -236,7 +251,7 @@ class SupervisorAsyncTaskLeaseTest {
             running.setSessionId("session-2");
             running.setTaskId("workflow-task-2");
             running.setTraceId("trace-2");
-            running.setUserId("user-2");
+            running.setUserId("2");
             running.setStatus("RUNNING");
             running.setCancelRequested(0);
             running.setAttemptCount(1);
@@ -268,6 +283,7 @@ class SupervisorAsyncTaskLeaseTest {
                 a2aAgentClient, streamService, permissionService, properties);
         when(supervisorWorkflowService.startWorkflow(any())).thenAnswer(invocation -> {
             try {
+                assertThat(ragCredentials.currentUserId()).isEqualTo("2");
                 assertThat(a2aExecutionService.execute(descriptor, childRequest, "single_agent", Map.of()))
                         .isSameAs(childResponse);
                 return new SupervisorTaskResponse("session-2", "workflow-task-2", "COMPLETED", "done",
@@ -284,6 +300,7 @@ class SupervisorAsyncTaskLeaseTest {
         SupervisorAsyncWorkflowService asyncWorkflowService = new SupervisorAsyncWorkflowService(
                 supervisorWorkflowService, streamService, metricsService, governanceService,
                 permissionService, workflowMapper, objectMapper, properties, executor);
+        asyncWorkflowService.setRagCredentials(ragCredentials);
 
         try {
             asyncWorkflowService.dispatchPendingWorkflows(1);
@@ -297,6 +314,11 @@ class SupervisorAsyncTaskLeaseTest {
 
             allowSubAgentCallToFinish.countDown();
             assertThat(workflowExecutionFinished.await(4, TimeUnit.SECONDS)).isTrue();
+            assertThat(executor.submit(() -> {
+                assertThat(com.bkanent.agent.authorization.AgentAuthorizationScope.current()).isNull();
+                assertThatThrownBy(ragCredentials::currentUserId).hasMessage("AUTHENTICATION_REQUIRED");
+                return true;
+            }).get(4, TimeUnit.SECONDS)).isTrue();
         } finally {
             allowSubAgentCallToFinish.countDown();
         }
@@ -307,6 +329,21 @@ class SupervisorAsyncTaskLeaseTest {
         while (mapperUpdates.get() < 3 && System.nanoTime() < deadline) {
             Thread.sleep(25L);
         }
+    }
+
+    private AgentRagCredentialLeaseStore capturedCredentials(String runId, String token, String owner) {
+        var auth = mock(AuthPermissionRpcService.class);
+        when(auth.resolvePrincipal(token)).thenReturn(new AuthenticatedPrincipal(Long.parseLong(owner)));
+        var beans = new DefaultListableBeanFactory();
+        beans.registerSingleton("auth", auth);
+        var credentials = new AgentRagCredentialLeaseStore(new AgentRagConsumerProperties(),
+                beans.getBeanProvider(AuthPermissionRpcService.class));
+        try (var ignored = credentials.openAuthorization("Bearer " + token)) {
+            credentials.capture(runId, owner);
+        } catch (Exception failure) {
+            throw new AssertionError(failure);
+        }
+        return credentials;
     }
 
     private RegisteredAgentDescriptor listingAgent() {

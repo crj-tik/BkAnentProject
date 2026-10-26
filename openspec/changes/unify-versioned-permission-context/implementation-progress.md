@@ -1,4 +1,12 @@
-# 基础批次交付与协议阻塞
+# 基础批次与续批记录
+
+## 当前实施状态（2026-10-26）
+
+OpenSpec `spec-driven` change `unify-versioned-permission-context` 当前完成 **26/63** 项。本次按Agent/Supervisor模块完成任务5.1–5.7：运行内本地授权上下文与规划边界版本刷新、精确能力映射和执行守卫、持久owner与治理审计，以及异步状态SSE工作线程上下文恢复/清理和结果不可用保护。
+
+Agent模块定向回归 **86项通过，失败/错误/跳过均0**；涵盖权限刷新、能力目录、审批恢复、未知副作用对账、预算续接、owner边界、治理审计和异步状态。KI-128仍保持OPEN，需在原开发环境复现历史500；异步跨实例/重启恢复仍由任务6.2跟踪。新授权开关仍默认关闭，未部署。
+
+历史章节记录各前序批次当时状态；本节是当前进度权威摘要。
 
 ## 状态
 
@@ -90,3 +98,11 @@ AuthorizationUserInfoTest新增5项真实H2/MyBatis谓词与DTO/JSON兼容回归
 新增Agent实际JSON伪造身份反例：请求正文中的actor/session/admin/permissions不能替代签名actor；Auth签名后修改actor字段，filter以409在业务解析与副作用前拒绝。Gateway filter/wire codec 15项、Agent入口filter 5项通过，`gateway,agent-service -am`定向构建成功。本批OpenSpec任务4.3完成，当前19/63。
 
 运行边界：路由受保护audience与生产头预算尚未在启用环境验证；新授权开关保持关闭。Redis ACL脚本与连接身份配置已提交，但真实Redis ACL/订阅验证没有运行环境证据，任务3.3仍未完成。Supervisor异步重启恢复、业务Graph/Model及A2A/Memory领域consumer仍待5.x/6.x。
+
+## Agent/Supervisor本地授权与异步边界续批（2026-10-26）
+
+按模块完成任务5.1–5.7。`AgentAuthorizationConsumer`在业务Model重规划边界单次核对权限head；同版沿用本run/session上下文，版本变化时只对该run/session刷新签名context并收缩原scope。A2A/MCP/本地工具按稳定`CapabilityId`精确映射操作许可，目录和callback均本地校验；图节点不逐次调用Auth，资源、Memory来源、审批hash、租约/取消及预算守卫保留。治理审计从签名context记录actor及权限版本。
+
+异步SSE状态查询在切换工作线程前捕获当前请求短期授权/RAG上下文，查询结束清理，不写入任务记录、事件或checkpoint。持久结果畸形/错配时保留状态但抑制结果；当前Memory来源拒绝时也不回退到存储结果。owner边界、请求幂等和审批恢复仍在原持久化入口检查。
+
+Agent定向回归13个测试类、86项通过，失败/错误/跳过均0；8个Maven reactor模块成功。KI-128仅完成源码保护和回归，因缺少原环境重放证据继续OPEN。异步跨实例/重启恢复、A2A/Memory和领域consumer由6.x继续验收；新授权开关保持默认关闭，未作生产部署。当前进度26/63。

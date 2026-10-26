@@ -331,8 +331,13 @@ public class SupervisorAsyncWorkflowService {
                 "durationMs", elapsed(entity)
         ), entity.getTraceId());
         try {
-            SupervisorTaskRequest request = readRequest(entity.getOriginalRequestJson());
-            SupervisorTaskResponse result = supervisorWorkflowService.startWorkflow(request);
+            SupervisorTaskResponse result;
+            try (var authorization = ragCredentials == null ? (AutoCloseable) () -> { }
+                    : ragCredentials.openLease(entity.getTaskId(), entity.getUserId())) {
+                if (ragCredentials != null) ragCredentials.credentials(entity.getUserId());
+                SupervisorTaskRequest request = readRequest(entity.getOriginalRequestJson());
+                result = supervisorWorkflowService.startWorkflow(request);
+            }
             entity = findEntity(asyncWorkflowId);
             if (entity == null || Integer.valueOf(1).equals(entity.getCancelRequested())
                     || !leaseOwner.equals(entity.getLeaseOwner())

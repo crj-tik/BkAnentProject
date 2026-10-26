@@ -2,7 +2,7 @@
 
 ### Requirement: 模型获得可实际执行的统一能力目录
 
-系统 SHALL 向模型提供当前已发现、有效且授权可见的 A2A/MCP/本地能力，每项包含稳定身份、无冲突模型名称、description 和输入 schema，并对应真实执行入口。能力所需权限 MUST 来自明确登记映射，不从domain首项、任意权限名前后缀或generic server fallback推断。A2A描述保留发布事实，MCP保留实际schema；目录 SHALL 在单轮一致并在后续规划按当前有效完整权限集合刷新。同版不重复下载或远程逐工具查权限，动态发现的获准能力不得因初始名单冻结而丢失。endpoint更新保留已接受任务关联。
+系统 SHALL 向模型提供当前已发现、有效且授权可见的 A2A/MCP/本地能力，每项包含稳定身份、无冲突模型名称、description 和输入 schema，并对应真实执行入口。能力权限 MUST 由可信部署配置按稳定CapabilityId映射到Auth已登记的精确操作码；A2A身份使用agentId，MCP身份包含server和tool，本地身份包含tool。不得从首domain、Agent Card声明、模型参数、任意权限名前后缀、chat.use或generic server fallback推断映射。缺失映射的能力不可见且执行时拒绝；管理员只具有Auth当前已登记操作，不获得通配动作。A2A描述保留发布事实，MCP保留实际schema；目录 SHALL 在单轮一致并在后续规划按当前有效完整权限集合刷新。同版不重复下载或远程逐工具查权限，新增且已登记映射并获授的动态能力不得因初始名单冻结而丢失。endpoint更新保留已接受任务关联。
 
 #### Scenario: 动态新增领域不需要关键词配置或业务节点
 - **WHEN** 新Agent已发现、真实能力和权限映射有效，当前用户集合包含所需权限
@@ -11,6 +11,10 @@
 #### Scenario: 两个 MCP 服务拥有同名工具
 - **WHEN** 两个连接声明search且当前用户被授予各自登记操作权限
 - **THEN** 两项以独立稳定身份可见并执行，不将server可读视为其任意私有资源授权
+
+#### Scenario: 模型伪造身份或未登记能力操作码
+- **WHEN** 模型在工具参数中提交其他userId、管理员标志、domain权限或未登记CapabilityId
+- **THEN** 用户身份仍来自签名执行上下文；未映射能力不可见且拒绝执行，管理员状态不创建通配权限
 
 #### Scenario: Agent 地址发生变化
 - **WHEN** 同一Agent发布了有效新endpoint
@@ -77,6 +81,14 @@ chat、同步/异步提交、续接、审批、查询、取消、SSE及审计 SH
 #### Scenario: Ordinary user reads event audit
 - **WHEN** 普通用户不带筛选参数查询事件审计
 - **THEN** 只返回其持久session/run拥有范围，其他事件正文/metadata不出现
+
+#### Scenario: Async status SSE restores only the verified request context
+- **WHEN** 已认证的session owner订阅异步任务状态SSE，状态查询转到工作线程执行
+- **THEN** 工作线程仅在本次查询期间恢复已验证的请求授权上下文，结束后清理；凭据和授权证明不得写入异步任务记录、事件或checkpoint
+
+#### Scenario: Unavailable async result does not make status unreadable
+- **WHEN** owner查询的持久结果JSON畸形、任务标识不匹配，或当前Memory来源检查已拒绝结果
+- **THEN** 状态查询仍返回owner可见的任务状态，省略结果并使用稳定的不可用错误，不回显原始JSON，也不绕过来源拒绝回退到持久结果
 
 ### Requirement: Platform governance requires explicit management authority
 

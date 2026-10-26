@@ -32,13 +32,13 @@
 
 ## 5. Supervisor本地权限与资源守卫
 
-- [ ] 5.1 实现按actor+revision的有界不可变本地cache与run引用/原policy；同用户多会话共享权限但不共享任务/消息，线程异步捕获清理不串actor。
-- [ ] 5.2 业务Model重规划仅查head版本与authorityCheckedAt，同版不下载/计算权限；变更时按原run/session对Auth刷新签名context单飞，不跨run共用request-bound响应并刷新目录；首次Model复用入口结果，不为摘要模型重复获取。
-- [ ] 5.3 替换目录的首domain/generic fallback/统一chat本地工具权限为精确映射；保留AUTO新增能力、技能版本/schema/政策交集，注册未知动作不能放行管理员。
-- [ ] 5.4 Graph节点、worker、tool callback、runner和输出使用本地许可/期限/dirty检查，移除重复Auth用户RPC而保留审批hash、资源、Memory来源、run lease/cancel与预算。
-- [ ] 5.5 统一chat/sync/async/续接/审批/query/cancel/SSE的持久session/run owner校验；修复同名session事件和跨会话requestId不同输入冲突，错误前无副作用。
-- [ ] 5.6 审计普通用户owner范围与管理员业务诊断接口分开；治理限流/灰度读写要求独立管理权限并记录actor/version，拒绝普通登录全局修改。
-- [ ] 5.7 验证原审批动作恢复、已完成结果复用、未知副作用对账、权限变化不扩原政策或重置预算；新增transition同步KI-2调用点回归。
+- [x] 5.1 实现按actor+revision的有界不可变本地cache与run引用/原policy；同用户多会话共享权限但不共享任务/消息，线程异步捕获清理不串actor。
+- [x] 5.2 业务Model重规划仅查head版本与authorityCheckedAt，同版不下载/计算权限；变更时按原run/session对Auth刷新签名context单飞，不跨run共用request-bound响应并刷新目录；首次Model复用入口结果，不为摘要模型重复获取。
+- [x] 5.3 替换目录的首domain/generic fallback/统一chat本地工具权限为精确映射；保留AUTO新增能力、技能版本/schema/政策交集，注册未知动作不能放行管理员。
+- [x] 5.4 Graph节点、worker、tool callback、runner和输出使用本地许可/期限/dirty检查，移除重复Auth用户RPC而保留审批hash、资源、Memory来源、run lease/cancel与预算。
+- [x] 5.5 统一chat/sync/async/续接/审批/query/cancel/SSE的持久session/run owner校验；修复同名session事件和跨会话requestId不同输入冲突，错误前无副作用。
+- [x] 5.6 审计普通用户owner范围与管理员业务诊断接口分开；治理限流/灰度读写要求独立管理权限并记录actor/version，拒绝普通登录全局修改。
+- [x] 5.7 验证原审批动作恢复、已完成结果复用、未知副作用对账、权限变化不扩原政策或重置预算；新增transition同步KI-2调用点回归。
 
 ## 6. A2A、MCP与Memory接入
 

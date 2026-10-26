@@ -15,11 +15,17 @@ public class AgentPermissionService {
 
     private final AuthPermissionRpcService authPermissionRpcService;
     private final PermissionAuditService permissionAuditService;
+    private com.bkanent.agent.config.AgentAuthorizationProperties authorizationProperties;
 
     public AgentPermissionService(AuthPermissionRpcService authPermissionRpcService,
                                   PermissionAuditService permissionAuditService) {
         this.authPermissionRpcService = authPermissionRpcService;
         this.permissionAuditService = permissionAuditService;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setAuthorizationProperties(com.bkanent.agent.config.AgentAuthorizationProperties properties) {
+        this.authorizationProperties = properties;
     }
 
     public void assertCanReadEventAudit(String actorId) {
@@ -41,7 +47,7 @@ public class AgentPermissionService {
 
     public void assertCanReadTaskArtifacts(String userId) {
         Long parsedUserId = parseUserId(userId);
-        if (parsedUserId == null || !authPermissionRpcService.hasPermission(parsedUserId, ARTIFACT_READ_PERMISSION)) {
+        if (parsedUserId == null || !hasPermission(parsedUserId, ARTIFACT_READ_PERMISSION)) {
             permissionAuditService.publishDenied(null, null, "workflow artifact query",
                     java.util.Map.of("userId", userId, "permissionCode", ARTIFACT_READ_PERMISSION), null);
             throw new IllegalStateException("permission denied for workflow artifact query");
@@ -64,7 +70,7 @@ public class AgentPermissionService {
         Long requesterId = parseUserId(requesterUserId);
         Long ownerId = parseUserId(ownerUserId);
         if (requesterId == null || ownerId == null || !requesterId.equals(ownerId)
-                || !authPermissionRpcService.hasPermission(requesterId, WORKFLOW_READ_PERMISSION)) {
+                || !hasPermission(requesterId, WORKFLOW_READ_PERMISSION)) {
             permissionAuditService.publishDenied(sessionId, taskId, "workflow query",
                     java.util.Map.of(
                             "userId", requesterUserId == null ? "" : requesterUserId,
@@ -77,7 +83,7 @@ public class AgentPermissionService {
 
     public void assertPermission(String userId, String permissionCode, String action) {
         Long parsedUserId = parseUserId(userId);
-        if (parsedUserId == null || !authPermissionRpcService.hasPermission(parsedUserId, permissionCode)) {
+        if (parsedUserId == null || !hasPermission(parsedUserId, permissionCode)) {
             permissionAuditService.publishDenied(null, null, action,
                     java.util.Map.of("userId", userId, "permissionCode", permissionCode), null);
             throw new IllegalStateException("permission denied for " + action);
@@ -93,7 +99,7 @@ public class AgentPermissionService {
         Long requesterId = parseUserId(requesterUserId);
         Long ownerId = parseUserId(ownerUserId);
         if (requesterId == null || ownerId == null || !requesterId.equals(ownerId)
-                || !authPermissionRpcService.hasPermission(requesterId, WORKFLOW_READ_PERMISSION)) {
+                || !hasPermission(requesterId, WORKFLOW_READ_PERMISSION)) {
             permissionAuditService.publishDenied(sessionId, taskId, action,
                     java.util.Map.of(
                             "userId", requesterUserId == null ? "" : requesterUserId,
@@ -106,40 +112,87 @@ public class AgentPermissionService {
 
     public boolean canReadMcpServer(String userId, String serverName) {
         Long parsedUserId = parseUserId(userId);
-        return parsedUserId != null && authPermissionRpcService.hasPermission(parsedUserId, resolveMcpServerPermission(serverName));
+        if (parsedUserId == null) return false;
+        if (versionedAuthorizationEnabled()) {
+            String capability = capabilityId(() -> com.bkanent.common.agent.CapabilityId.mcp(serverName, "placeholder"));
+            if (capability == null) return false;
+            String prefix = capability.substring(0, capability.lastIndexOf(':') + 1);
+            return authorizationProperties.getCapabilityPermissions().entrySet().stream()
+                    .filter(mapping -> mapping.getKey().startsWith(prefix))
+                    .anyMatch(mapping -> hasPermission(parsedUserId, mapping.getValue()));
+        }
+        String permission = resolveMcpServerPermission(serverName);
+        return permission != null && hasPermission(parsedUserId, permission);
     }
 
     public boolean canInvokeChildAgent(String userId, RegisteredAgentDescriptor descriptor) {
         Long parsedUserId = parseUserId(userId);
-        return parsedUserId != null && authPermissionRpcService.hasPermission(parsedUserId,
-                resolveInvokePermissionCode(descriptor, null));
+        if (parsedUserId == null || descriptor == null) return false;
+        if (versionedAuthorizationEnabled()) {
+            return hasMappedCapabilityPermission(parsedUserId, capabilityId(
+                    () -> com.bkanent.common.agent.CapabilityId.a2a(descriptor.agentId())));
+        }
+        return hasPermission(parsedUserId, resolveInvokePermissionCode(descriptor, null));
     }
 
     public boolean canUseLocalTools(String userId) {
         Long parsedUserId = parseUserId(userId);
-        return parsedUserId != null && authPermissionRpcService.hasPermission(parsedUserId, "agent.chat.use");
+        if (versionedAuthorizationEnabled()) return anyMappedCapabilityPermission(parsedUserId, "local:");
+        return parsedUserId != null && hasPermission(parsedUserId, "agent.chat.use");
     }
     public boolean canUseMcpTools(String userId) {
         Long parsedUserId = parseUserId(userId);
-        return parsedUserId != null && authPermissionRpcService.hasPermission(parsedUserId, "agent.mcp.chat.use");
+        if (versionedAuthorizationEnabled()) return anyMappedCapabilityPermission(parsedUserId, "mcp:");
+        return parsedUserId != null && hasPermission(parsedUserId, "agent.mcp.chat.use");
+    }
+
+    public boolean canUseLocalTool(String userId, String toolName) {
+        Long parsedUserId = parseUserId(userId);
+        if (parsedUserId == null) return false;
+        if (!versionedAuthorizationEnabled()) return hasPermission(parsedUserId, "agent.chat.use");
+        return hasMappedCapabilityPermission(parsedUserId,
+                capabilityId(() -> com.bkanent.common.agent.CapabilityId.local(toolName)));
+    }
+
+    public boolean canInvokeMcpTool(String userId, String serverName, String toolName) {
+        Long parsedUserId = parseUserId(userId);
+        if (parsedUserId == null) return false;
+        if (!versionedAuthorizationEnabled()) {
+            return hasPermission(parsedUserId, "agent.mcp.chat.use")
+                    && canReadMcpServer(userId, serverName);
+        }
+        return hasMappedCapabilityPermission(parsedUserId,
+                capabilityId(() -> com.bkanent.common.agent.CapabilityId.mcp(serverName, toolName)));
+    }
+
+    public boolean versionedAuthorizationEnabled() {
+        return authorizationProperties != null && authorizationProperties.isEnabled();
     }
 
     public void assertCanInvokeChildAgent(RegisteredAgentDescriptor descriptor, AgentTaskInvokeRequest request) {
         Long userId = resolveUserId(request);
-        String permissionCode = resolveInvokePermissionCode(descriptor, request);
-        if (userId == null || !authPermissionRpcService.hasPermission(userId, permissionCode)) {
+        String capabilityId = descriptor == null ? null
+                : capabilityId(() -> com.bkanent.common.agent.CapabilityId.a2a(descriptor.agentId()));
+        String permissionCode = versionedAuthorizationEnabled()
+                ? capabilityId == null ? null : authorizationProperties.permissionForCapability(capabilityId)
+                : descriptor == null ? null : resolveInvokePermissionCode(descriptor, request);
+        boolean permitted = userId != null && descriptor != null && (versionedAuthorizationEnabled()
+                ? canInvokeChildAgent(Long.toString(userId), descriptor)
+                : hasPermission(userId, permissionCode));
+        if (!permitted) {
             permissionAuditService.publishDenied(
                     request == null ? null : request.sessionId(),
                     request == null ? null : request.taskId(),
                     "child agent invocation",
                     java.util.Map.of(
                             "userId", userId == null ? "" : String.valueOf(userId),
-                            "permissionCode", permissionCode,
-                            "targetAgentId", descriptor.agentId()
+                            "permissionCode", permissionCode == null ? "" : permissionCode,
+                            "targetAgentId", descriptor == null ? "" : descriptor.agentId()
                     ),
                     request == null ? null : request.traceId()
             );
-            throw new IllegalStateException("permission denied for child agent invocation: " + descriptor.agentId());
+            throw new IllegalStateException("permission denied for child agent invocation: "
+                    + (descriptor == null ? "unknown" : descriptor.agentId()));
         }
     }
 
@@ -165,6 +218,42 @@ public class AgentPermissionService {
         }
     }
 
+    private boolean hasPermission(Long userId, String permissionCode) {
+        if (permissionCode == null) return false;
+        var entry = com.bkanent.agent.authorization.AgentAuthorizationScope.current();
+        if (versionedAuthorizationEnabled()) {
+            if (entry == null) throw new com.bkanent.common.authz.AuthzException(
+                    com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
+            entry.requireActor(Long.toString(userId));
+            try {
+                entry.session().requirePermission(permissionCode);
+                return true;
+            } catch (com.bkanent.common.authz.AuthzException denied) {
+                if (denied.code() == com.bkanent.common.authz.AuthzErrorCode.PERMISSION_DENIED) return false;
+                throw denied;
+            }
+        }
+        return authPermissionRpcService.hasPermission(userId, permissionCode);
+    }
+
+    private boolean hasMappedCapabilityPermission(Long userId, String capabilityId) {
+        if (userId == null || capabilityId == null || !versionedAuthorizationEnabled()) return false;
+        String permissionCode = authorizationProperties.permissionForCapability(capabilityId);
+        return permissionCode != null && hasPermission(userId, permissionCode);
+    }
+
+    private boolean anyMappedCapabilityPermission(Long userId, String prefix) {
+        return userId != null && versionedAuthorizationEnabled()
+                && authorizationProperties.getCapabilityPermissions().entrySet().stream()
+                .filter(mapping -> mapping.getKey().startsWith(prefix))
+                .anyMatch(mapping -> hasPermission(userId, mapping.getValue()));
+    }
+
+    private String capabilityId(java.util.function.Supplier<com.bkanent.common.agent.CapabilityId> supplier) {
+        try { return supplier.get().value(); }
+        catch (IllegalArgumentException invalidCapability) { return null; }
+    }
+
     private String resolveInvokePermissionCode(RegisteredAgentDescriptor descriptor, AgentTaskInvokeRequest request) {
         String domain = request == null ? null : request.domain();
         if (!StringUtils.hasText(domain) && descriptor.agentCard() != null
@@ -188,6 +277,6 @@ public class AgentPermissionService {
         if (AgentMcpNames.MARKETING_SERVER.equalsIgnoreCase(serverName)) {
             return "agent.mcp.server.marketing.read";
         }
-        return "agent.mcp.server.generic.read";
+        return null;
     }
 }

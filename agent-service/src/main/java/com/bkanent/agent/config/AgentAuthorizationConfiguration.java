@@ -87,8 +87,9 @@ public class AgentAuthorizationConfiguration {
         @Bean
         public AgentAuthorizationConsumer agentAuthorizationConsumer(AgentAuthorizationProperties properties,
                 AuthorizationCache cache, AuthorizationVersionMonitor monitor,
-                @Qualifier("agentAuthorizationClock") Clock clock) {
-            return new AgentAuthorizationConsumer(properties, cache, monitor, clock);
+                @Qualifier("agentAuthorizationClock") Clock clock,
+                @Qualifier("agentExecutionAuthorizationRpc") com.bkanent.common.authz.AuthAuthorizationRpcService auth) {
+            return new AgentAuthorizationConsumer(properties, cache, monitor, clock, auth);
         }
 
         @Bean(defaultCandidate = false)

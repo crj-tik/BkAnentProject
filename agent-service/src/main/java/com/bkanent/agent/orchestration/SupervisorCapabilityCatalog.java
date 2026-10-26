@@ -60,25 +60,41 @@ public class SupervisorCapabilityCatalog {
                     invokeAgent(descriptor.agentId(), arguments, context));
             add(result, new SupervisorCapability(id, "a2a", descriptor.agentId(), card.version(), callback));
         }
-        if (allowMcp && permissions.canUseMcpTools(userId)) for (var tool : mcp.listTools()) {
-            if (!permissions.canReadMcpServer(userId, tool.serverName())) continue;
+        if (allowMcp) for (var tool : mcp.listTools()) {
+            boolean permitted = permissions.versionedAuthorizationEnabled()
+                    ? permissions.canInvokeMcpTool(userId, tool.serverName(), tool.toolName())
+                    : permissions.canUseMcpTools(userId)
+                    && permissions.canReadMcpServer(userId, tool.serverName());
+            if (!permitted) continue;
             String id = CapabilityId.mcp(tool.serverName(), tool.toolName()).value();
             add(result, new SupervisorCapability(id, "mcp", tool.serverName(), tool.inputSchema(),
                     callback(id, tool.description() == null ? tool.toolName() : tool.description(), tool.inputSchema(),
                             (arguments, context) -> {
                                 String actor = required(context, "userId");
-                                if (!permissions.canUseMcpTools(actor) || !permissions.canReadMcpServer(actor, tool.serverName())) throw new IllegalStateException("CAPABILITY_PERMISSION_DENIED");
+                                boolean stillPermitted = permissions.versionedAuthorizationEnabled()
+                                        ? permissions.canInvokeMcpTool(actor, tool.serverName(), tool.toolName())
+                                        : permissions.canUseMcpTools(actor)
+                                        && permissions.canReadMcpServer(actor, tool.serverName());
+                                if (!stillPermitted) throw new IllegalStateException("CAPABILITY_PERMISSION_DENIED");
                                 return json(mcp.callTool(tool.serverName(), tool.toolName(), arguments));
                             })));
         }
-        if (permissions.canUseLocalTools(userId)) for (ToolCallback tool : local.getToolCallbacks()) {
+        for (ToolCallback tool : local.getToolCallbacks()) {
+            boolean permitted = permissions.versionedAuthorizationEnabled()
+                    ? permissions.canUseLocalTool(userId, tool.getToolDefinition().name())
+                    : permissions.canUseLocalTools(userId);
+            if (!permitted) continue;
             String id = CapabilityId.local(tool.getToolDefinition().name()).value();
             ToolCallback aliased = new ToolCallback() {
                 public ToolDefinition getToolDefinition() { return ToolDefinition.builder().name(alias(id))
                         .description(tool.getToolDefinition().description()).inputSchema(tool.getToolDefinition().inputSchema()).build(); }
                 public String call(String input) { throw new IllegalStateException("authenticated tool context required"); }
                 public String call(String input, ToolContext context) {
-                    permissions.assertPermission(required(context.getContext(), "userId"), "agent.chat.use", "local tool invocation");
+                    String actor = required(context.getContext(), "userId");
+                    boolean stillPermitted = permissions.versionedAuthorizationEnabled()
+                            ? permissions.canUseLocalTool(actor, tool.getToolDefinition().name())
+                            : permissions.canUseLocalTools(actor);
+                    if (!stillPermitted) throw new IllegalStateException("CAPABILITY_PERMISSION_DENIED");
                     return tool.call(input, context);
                 }
             };

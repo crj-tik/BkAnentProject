@@ -88,6 +88,11 @@ public class AgentController {
     private com.bkanent.agent.orchestration.SupervisorToolLoopRunner toolLoopRunner;
     @org.springframework.beans.factory.annotation.Autowired
     public void setToolLoopRunner(com.bkanent.agent.orchestration.SupervisorToolLoopRunner runner) { this.toolLoopRunner = runner; }
+    private com.bkanent.agent.security.AgentRagCredentialLeaseStore requestCredentials;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setRagCredentials(com.bkanent.agent.security.AgentRagCredentialLeaseStore credentials) {
+        this.requestCredentials = credentials;
+    }
 
     @PostMapping("/supervisor/runs/cancel")
     public ApiResponse<SupervisorTaskResponse> cancelRun(@RequestParam String runId, @RequestParam(name = "userId", required = false) String userId) {
@@ -246,7 +251,8 @@ public class AgentController {
         return guarded(() -> {
             agentPermissionService.assertPermission(authenticatedUserId, "agent.mcp.tools.read", "mcp tool listing");
             return ApiResponse.ok(agentMcpClient.listTools().stream()
-                    .filter(tool -> agentPermissionService.canReadMcpServer(authenticatedUserId, tool.serverName()))
+                    .filter(tool -> agentPermissionService.canInvokeMcpTool(authenticatedUserId,
+                            tool.serverName(), tool.toolName()))
                     .toList());
         });
     }
@@ -260,7 +266,8 @@ public class AgentController {
         return guarded(() -> {
             agentPermissionService.assertPermission(authenticatedUserId, "agent.mcp.catalog.read", "mcp tool catalog");
             return ApiResponse.ok(agentToolCatalogService.listCatalog().stream()
-                    .filter(item -> agentPermissionService.canReadMcpServer(authenticatedUserId, item.serverName()))
+                    .filter(item -> agentPermissionService.canInvokeMcpTool(authenticatedUserId,
+                            item.serverName(), item.toolName()))
                     .toList());
         });
     }
@@ -274,7 +281,8 @@ public class AgentController {
         return guarded(() -> {
             agentPermissionService.assertPermission(authenticatedUserId, "agent.mcp.debug.read", "mcp discovered tool listing");
             return ApiResponse.ok(mcpDebugService.listDiscoveredTools().stream()
-                    .filter(item -> agentPermissionService.canReadMcpServer(authenticatedUserId, item.serverName()))
+                    .filter(item -> agentPermissionService.canInvokeMcpTool(authenticatedUserId,
+                            item.serverName(), item.toolName()))
                     .toList());
         });
     }
@@ -288,7 +296,8 @@ public class AgentController {
         return guarded(() -> {
             agentPermissionService.assertPermission(authenticatedUserId, "agent.mcp.debug.read", "mcp registered tool listing");
             return ApiResponse.ok(mcpDebugService.listRegisteredTools().stream()
-                    .filter(item -> agentPermissionService.canReadMcpServer(authenticatedUserId, item.serverName()))
+                    .filter(item -> agentPermissionService.canInvokeMcpTool(authenticatedUserId,
+                            item.serverName(), item.toolName()))
                     .toList());
         });
     }
@@ -450,8 +459,21 @@ public class AgentController {
                                                 @RequestParam String userId) {
         String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         SseEmitter emitter = new SseEmitter(0L);
-        CompletableFuture.runAsync(() -> streamSupervisorAsyncTaskStatus(asyncTaskId, authenticatedUserId, emitter));
+        var capturedContext = captureRequestContext();
+        CompletableFuture.runAsync(() -> {
+            try (AutoCloseable ignored = capturedContext.get()) {
+                streamSupervisorAsyncTaskStatus(asyncTaskId, authenticatedUserId, emitter);
+            } catch (Exception failure) {
+                emitter.completeWithError(failure);
+            }
+        });
         return emitter;
+    }
+
+    private java.util.function.Supplier<AutoCloseable> captureRequestContext() {
+        return requestCredentials == null
+                ? com.bkanent.agent.authorization.AgentAuthorizationScope.capture()
+                : requestCredentials.snapshot();
     }
 
     /**
@@ -746,6 +768,8 @@ public class AgentController {
             emitter.completeWithError(exception);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
+            emitter.completeWithError(exception);
+        } catch (RuntimeException exception) {
             emitter.completeWithError(exception);
         }
     }

@@ -14,7 +14,11 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -28,6 +32,8 @@ class AgentControllerQueryTest {
     private final AgentPrincipalContext principal = mock(AgentPrincipalContext.class);
     private final SupervisorWorkflowQueryService queryService = mock(SupervisorWorkflowQueryService.class);
     private final SupervisorApprovalTodoService approvalTodoService = mock(SupervisorApprovalTodoService.class);
+    private final com.bkanent.agent.service.SupervisorAsyncTaskService asyncTaskService =
+            mock(com.bkanent.agent.service.SupervisorAsyncTaskService.class);
     private final AgentPermissionService permissionService = mock(AgentPermissionService.class);
     private final SessionStreamService streamService = mock(SessionStreamService.class);
     private final SupervisorSessionOwnershipService ownership = mock(SupervisorSessionOwnershipService.class);
@@ -37,12 +43,13 @@ class AgentControllerQueryTest {
     private final com.bkanent.agent.orchestration.SupervisorToolLoopRunner runner = mock(com.bkanent.agent.orchestration.SupervisorToolLoopRunner.class);
     private final com.bkanent.agent.service.SupervisorEventAuditQueryService eventAudit = mock(com.bkanent.agent.service.SupervisorEventAuditQueryService.class);
     private final com.bkanent.agent.service.SupervisorGovernanceService governance = mock(com.bkanent.agent.service.SupervisorGovernanceService.class);
+    private AgentController controller;
     private MockMvc mvc;
 
     @BeforeEach
     void setUp() {
-        AgentController controller = new AgentController(rag, listing, orchestrator, null, null, null, null,
-                null, null, null, null, queryService, approvalTodoService, null, null, eventAudit, streamService,
+        controller = new AgentController(rag, listing, orchestrator, null, null, null, null,
+                null, asyncTaskService, null, null, queryService, approvalTodoService, null, null, eventAudit, streamService,
                 permissionService, governance, null, principal, ownership);
         controller.setToolLoopRunner(runner);
         when(principal.bind(org.mockito.ArgumentMatchers.any(com.bkanent.agent.model.chat.AgentChatRequest.class)))
@@ -79,6 +86,40 @@ class AgentControllerQueryTest {
                         .contentType("application/json").content("{\"userId\":\"2\",\"message\":\"hello\",\"continueRunId\":\"original-run\"}"))
                 .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("RUN_REQUEST_ID_CONFLICT"));
         verify(ownership).claim("original-session", "2");
+    }
+
+    @Test
+    void asyncTaskStatusStreamRestoresAndClearsRequestCredentialContextOnWorkerThread() throws Exception {
+        var auth = mock(com.bkanent.common.rpc.AuthPermissionRpcService.class);
+        when(auth.resolvePrincipal("stream-token")).thenReturn(new com.bkanent.common.rpc.AuthenticatedPrincipal(2L));
+        var beans = new org.springframework.beans.factory.support.DefaultListableBeanFactory();
+        beans.registerSingleton("auth", auth);
+        var credentials = new com.bkanent.agent.security.AgentRagCredentialLeaseStore(
+                new com.bkanent.agent.config.AgentRagConsumerProperties(),
+                beans.getBeanProvider(com.bkanent.common.rpc.AuthPermissionRpcService.class));
+        var actorSeen = new AtomicReference<String>();
+        var queried = new CountDownLatch(1);
+        when(asyncTaskService.queryStatus("async-1", "2")).thenAnswer(call -> {
+            try {
+                actorSeen.set(credentials.currentUserId());
+            } catch (RuntimeException failure) {
+                actorSeen.set("ERROR:" + failure.getMessage());
+            } finally {
+                queried.countDown();
+            }
+            return new com.bkanent.agent.model.distributed.SupervisorAsyncTaskStatusResponse(
+                    "session-1", "task-1", "async-1", "COMPLETED", null, null,
+                    "trace-1", "supervisor-agent", "LOCAL_WORKFLOW");
+        });
+        controller.setRagCredentials(credentials);
+
+        try (var ignored = credentials.openAuthorization("Bearer stream-token")) {
+            controller.streamSupervisorAsyncTask("async-1", "2");
+        }
+
+        assertThat(queried.await(3, TimeUnit.SECONDS)).isTrue();
+        assertThat(actorSeen.get()).isEqualTo("2");
+        verify(asyncTaskService).queryStatus("async-1", "2");
     }
 
     @Test

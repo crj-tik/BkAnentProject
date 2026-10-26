@@ -230,13 +230,28 @@ public class SupervisorGovernanceService {
     }
 
     private void auditAccess(String action, String scope) {
-        // This boundary patch still uses legacy Auth. No invented permission revision is recorded.
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("actorId", principal.userId());
+        metadata.put("action", action);
+        metadata.put("scope", StringUtils.hasText(scope) ? scope : "global");
+        metadata.put("authorizationVersion", "legacy-rpc-unversioned");
+        if (permissions.versionedAuthorizationEnabled()) {
+            var entry = com.bkanent.agent.authorization.AgentAuthorizationScope.current();
+            if (entry == null) {
+                throw new com.bkanent.common.authz.AuthzException(
+                        com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
+            }
+            String actor = entry.requireActor(principal.userId());
+            var context = entry.session().context();
+            metadata.put("actorId", actor);
+            metadata.put("authorizationVersion", context.permissionRevision() + ":" + context.credentialEpoch());
+            metadata.put("permissionRevision", context.permissionRevision());
+            metadata.put("credentialEpoch", context.credentialEpoch());
+        }
         sessionEventAuditService.recordRequired(new com.bkanent.common.agent.SessionStreamEvent(
                 "", null, distributedAgentProperties.getSupervisorAgentId(), "governance.access",
                 "Governance " + action,
-                Map.of("actorId", principal.userId(), "action", action,
-                        "scope", StringUtils.hasText(scope) ? scope : "global",
-                        "authorizationVersion", "legacy-rpc-unversioned"),
+                Map.copyOf(metadata),
                 null, System.currentTimeMillis()));
     }
 

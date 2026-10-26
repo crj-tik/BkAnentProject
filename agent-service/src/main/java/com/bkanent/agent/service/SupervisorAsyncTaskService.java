@@ -287,8 +287,13 @@ public class SupervisorAsyncTaskService {
                 "durationMs", elapsed(entity)
         ), entity.getTraceId());
         try {
-            SupervisorTaskRequest request = readRequest(entity.getOriginalRequestJson());
-            SupervisorTaskResponse result = supervisorTaskService.submitTask(request);
+            SupervisorTaskResponse result;
+            try (var authorization = ragCredentials == null ? (AutoCloseable) () -> { }
+                    : ragCredentials.openLease(entity.getTaskId(), entity.getUserId())) {
+                if (ragCredentials != null) ragCredentials.credentials(entity.getUserId());
+                SupervisorTaskRequest request = readRequest(entity.getOriginalRequestJson());
+                result = supervisorTaskService.submitTask(request);
+            }
             entity.setResultJson(writeJson(result));
             entity.setStatus(result.status());
             entity.setFinishedAtMs(System.currentTimeMillis());
@@ -500,17 +505,34 @@ public class SupervisorAsyncTaskService {
     }
 
     private SupervisorAsyncTaskStatusResponse toStatusResponse(AgentAsyncTaskEntity entity) {
+        SupervisorTaskResponse result = null;
+        String errorMessage = entity.getErrorMessage();
         if (toolLoopRunner != null && toolLoopRunner.hasRun(entity.getTaskId())) {
-            var current = toolLoopRunner.current(entity.getTaskId(), entity.getUserId());
-            entity.setStatus(current.status()); entity.setResultJson(writeJson(current));
+            try {
+                var current = toolLoopRunner.current(entity.getTaskId(), entity.getUserId());
+                if (current != null) {
+                    entity.setStatus(current.status());
+                    entity.setResultJson(writeJson(current));
+                    result = current;
+                }
+            } catch (com.bkanent.common.memory.MemoryException resultNoLongerAuthorized) {
+                // Keep task status queryable, but never fall back to a stored result after a
+                // current Memory source check has denied that output.
+                errorMessage = "ASYNC_RESULT_UNAVAILABLE";
+            }
+        } else {
+            result = readResponse(entity.getResultJson(), entity.getTaskId());
+        }
+        if (result == null && StringUtils.hasText(entity.getResultJson()) && !StringUtils.hasText(errorMessage)) {
+            errorMessage = "ASYNC_RESULT_UNAVAILABLE";
         }
         return new SupervisorAsyncTaskStatusResponse(
                 entity.getSessionId(),
                 entity.getTaskId(),
                 entity.getAsyncTaskId(),
                 entity.getStatus(),
-                readResponse(entity.getResultJson()),
-                entity.getErrorMessage(),
+                result,
+                errorMessage,
                 entity.getTraceId(),
                 entity.getSelectedAgentId(),
                 entity.getMode()
@@ -525,14 +547,23 @@ public class SupervisorAsyncTaskService {
         }
     }
 
-    private SupervisorTaskResponse readResponse(String json) {
+    private SupervisorTaskResponse readResponse(String json, String taskId) {
         if (!StringUtils.hasText(json)) {
             return null;
         }
         try {
-            return objectMapper.readValue(json, SupervisorTaskResponse.class);
+            SupervisorTaskResponse response = objectMapper.readValue(json, SupervisorTaskResponse.class);
+            if (response == null || !StringUtils.hasText(response.taskId()) || !StringUtils.hasText(response.status())) {
+                return null;
+            }
+            if (!Objects.equals(taskId, response.taskId())) {
+                return null;
+            }
+            return response;
         } catch (Exception exception) {
-            throw new IllegalStateException("Failed to deserialize async task response", exception);
+            // A damaged legacy/result row must not make the owner lose access to task status.
+            // Never return the untrusted raw JSON as a fallback.
+            return null;
         }
     }
 
