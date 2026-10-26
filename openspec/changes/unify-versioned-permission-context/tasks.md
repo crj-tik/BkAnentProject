@@ -44,8 +44,8 @@
 
 - [x] 6.1 真实A2A transport/guard接版本化请求级context与委托：send/stream/control携带已绑定Auth context、freshness和逐请求Agent proof；接收端在官方Store/Queue前本地核actor/caller/context/operation/body/nonce/期限，无逐A2A Auth RPC；Auth只在Supervisor规划刷新边界调用，内部工具/流回调本地验证，并确认模型userId/role/admin不能替换可信actor。
 - [x] 6.2 任务身份持久关联与本地执行上下文分离，get/cancel/resubscribe重认证原owner，跨实例/重启不凭taskId生成身份；保留原在途预留/条件释放。共享JDBC状态持久消费nonce及actor/caller/context/run/session owner，按原nonce条件释放跨实例预留；重启不恢复内存lease/TaskStore/Queue。
-- [ ] 6.3 Memory新边界验证一次域context，内部请求本地验证签名与nonce；移除hasPermission/resolve重复并保留owner/domain/agent、来源/grant、writer fence、permit和最终结果检查。
-- [ ] 6.4 子Agent模型/工具/输出边界复核当前Memory来源，来源撤回不等待Auth通知；基础Memory预检失败仍零模型/零业务工具，SERVICE只精确补交付。
+- [x] 6.3 Memory新边界验证一次域context，内部请求本地验证签名与nonce；移除hasPermission/resolve重复并保留owner/domain/agent、来源/grant、writer fence、permit和最终结果检查。
+- [x] 6.4 子Agent模型/工具/输出边界复核当前Memory来源，来源撤回不等待Auth通知；基础Memory预检失败仍零模型/零业务工具，SERVICE只精确补交付。
 - [ ] 6.5 MCP补正式工具provider注册和服务端受限委托入口，客户端用模型不可见专用传输；不支持用户委托服务只准入无私有数据能力，MCP admin连接和资源权限分开。
 - [ ] 6.6 RAG principal/scope与真实消费者同步版本迁移businessAdmin、多角色有效操作和显式businessWide/activeOnly，保留独立HMAC；覆盖无角色管理员管理/普通用户ON_SALE/个人Memory拒绝，未知范围/旧弱fallback拒绝。
 - [ ] 6.7 核验本次新增服务端URL请求只允许http/https、请求前精确host检查且拒localhost/环回/私有/保留地址，阻止redirect/DNS换址；权限RPC不得用新增任意URL回调替代。

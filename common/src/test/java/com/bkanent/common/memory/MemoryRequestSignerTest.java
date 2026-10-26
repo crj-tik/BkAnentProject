@@ -2,6 +2,13 @@ package com.bkanent.common.memory;
 
 import com.bkanent.common.serialize.Fastjson2ConstructorSerialization;
 import com.bkanent.common.rpc.AuthenticatedPrincipal;
+import com.bkanent.common.authz.AuthzCanonicalHash;
+import com.bkanent.common.authz.AuthzContract;
+import com.bkanent.common.authz.AuthzFreshness;
+import com.bkanent.common.authz.AuthzSignature;
+import com.bkanent.common.authz.AuthorizationContext;
+import com.bkanent.common.authz.AuthorizationSnapshot;
+import com.bkanent.common.authz.AuthorizationStatus;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -10,6 +17,7 @@ import java.io.ByteArrayOutputStream;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.time.Instant;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -142,6 +150,43 @@ class MemoryRequestSignerTest {
     }
 
     @Test
+    void authzV3BindsTheSignedContextAndFreshnessIntoTheMemoryRequestProof() throws Exception {
+        var request = request();
+        var evidence = authorizationEvidence();
+        var signed = MemoryRequestSigner.sign(request, new AuthenticatedPrincipal(17L), KEY_ID,
+                NOW.getEpochSecond(), NOW.plusSeconds(20).getEpochSecond(),
+                "memory-nonce-1234567890123456", identity.getPrivate(), evidence.context(), evidence.freshness());
+
+        assertThat(signed.signatureVersion()).isEqualTo(MemoryRequestProof.ED25519_AUTHZ_V3);
+        assertThat(signed.authorizationContext()).isEqualTo(evidence.context());
+        assertThat(signed.authorizationFreshness()).isEqualTo(evidence.freshness());
+        verify(request, CONTEXT, signed, "marketing-content-service", MemoryV2Contract.MEMORY_AUDIENCE,
+                MemoryV2Contract.OPERATION_WORKING_SET, KEY_ID, NOW);
+
+        var context = evidence.context();
+        var changedContext = new AuthorizationContext(context.actorId(), context.permissionRevision(),
+                context.credentialEpoch(), context.permissionHash(), context.allowedOperations(), context.audience(),
+                context.requestId(), context.runId(), "another-session", context.policyDigest(), context.requestHash(),
+                context.nonce(), context.issuedAtEpochSecond(), context.expiresAtEpochSecond(),
+                context.runHardDeadlineEpochSecond(), context.algorithm(), context.keyId(), context.signature());
+        var changedProof = new MemoryRequestProof(signed.keyId(), signed.issuedAtEpochSecond(), signed.expiresAtEpochSecond(),
+                signed.nonce(), signed.signature(), signed.actor(), signed.signatureVersion(), signed.algorithm(),
+                changedContext, signed.authorizationFreshness());
+        assertThatThrownBy(() -> verify(request, CONTEXT, changedProof, "marketing-content-service",
+                MemoryV2Contract.MEMORY_AUDIENCE, MemoryV2Contract.OPERATION_WORKING_SET, KEY_ID, NOW))
+                .isInstanceOf(MemoryException.class).hasMessage("AUTHENTICATION_FAILED");
+
+        var serializer = new Fastjson2ConstructorSerialization();
+        var bytes = new ByteArrayOutputStream();
+        var output = serializer.serialize(null, bytes);
+        output.writeObject(signed);
+        output.flushBuffer();
+        var decoded = serializer.deserialize(null, new ByteArrayInputStream(bytes.toByteArray()))
+                .readObject(MemoryRequestProof.class);
+        assertThat(decoded).isEqualTo(signed);
+    }
+
+    @Test
     void actorModeIsCryptographicallyBoundAndCannotBeRelabelled() {
         var request = request();
         var user = proof(request, CONTEXT);
@@ -156,4 +201,23 @@ class MemoryRequestSignerTest {
         assertThatThrownBy(() -> verify(request, context, proof, caller, audience, operation, keyId, NOW))
                 .isInstanceOf(MemoryException.class).hasMessage("AUTHENTICATION_FAILED");
     }
+
+    private AuthzEvidence authorizationEvidence() throws Exception {
+        var authority = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        long now = NOW.getEpochSecond();
+        String keyId = "auth-memory-test";
+        var snapshot = new AuthorizationSnapshot("17", 9, 3, false, List.of("agent.chat.use"), null,
+                AuthzContract.ALGORITHM, keyId, null);
+        String permissionHash = AuthzCanonicalHash.snapshotHash(snapshot);
+        String nonce = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]);
+        var context = AuthzSignature.sign(new AuthorizationContext("17", 9, 4, permissionHash,
+                List.of("agent.chat.use"), "agent-service", "entry-1", "run-1", "session-1",
+                "c".repeat(64), "d".repeat(64), nonce, now, now + 300, now + 300,
+                AuthzContract.ALGORITHM, keyId, null), authority.getPrivate());
+        var freshness = AuthzSignature.sign(new AuthzFreshness("17", 9, 4, AuthorizationStatus.ACTIVE,
+                permissionHash, now, now + 30, nonce, AuthzContract.ALGORITHM, keyId, null), authority.getPrivate());
+        return new AuthzEvidence(context, freshness);
+    }
+
+    private record AuthzEvidence(AuthorizationContext context, AuthzFreshness freshness) { }
 }

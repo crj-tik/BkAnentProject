@@ -379,11 +379,13 @@ public class SupervisorMemoryLifecycle {
             try {
                 try {
                     var actor = identities.verifiedIdentity(state.userId);
-                    return new MemoryRpcClient.Actor(actor.principal(), actor.expiresAtEpochSecond());
+                    return new MemoryRpcClient.Actor(actor.principal(), actor.expiresAtEpochSecond(),
+                            actor.authorizationContext(), actor.authorizationFreshness());
                 } catch (com.bkanent.agent.security.AgentRagAuthenticationException absent) {
                     try (var scope = identities.openLease(state.runId, state.userId)) {
                         var actor = identities.verifiedIdentity(state.userId);
-                        return new MemoryRpcClient.Actor(actor.principal(), actor.expiresAtEpochSecond());
+                        return new MemoryRpcClient.Actor(actor.principal(), actor.expiresAtEpochSecond(),
+                                actor.authorizationContext(), actor.authorizationFreshness());
                     }
                 }
             } catch (com.bkanent.common.rag.RagException exception) {

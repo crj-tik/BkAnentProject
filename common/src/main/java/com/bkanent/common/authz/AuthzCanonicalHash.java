@@ -23,6 +23,20 @@ public final class AuthzCanonicalHash {
         return digest(encode("snapshot-content", snapshotFields(snapshot)));
     }
 
+    /** Digest of every signed context field, including its key identity and signature. */
+    public static String signedContextHash(AuthorizationContext context) {
+        AuthzContract.require(context != null && context.signature() != null);
+        return digest(encode("signed-context", Arrays.asList(contextFields(context), context.algorithm(),
+                context.keyId(), context.signature())));
+    }
+
+    /** Digest of every signed freshness field, including its key identity and signature. */
+    public static String signedFreshnessHash(AuthzFreshness freshness) {
+        AuthzContract.require(freshness != null && freshness.signature() != null);
+        return digest(encode("signed-freshness", Arrays.asList(freshnessFields(freshness), freshness.algorithm(),
+                freshness.keyId(), freshness.signature())));
+    }
+
     /** Hash exact received/forwarded bytes before JSON parsing. Streaming/oversized bodies reject. */
     public static String bodyHash(byte[] body) {
         AuthzContract.require(body != null && body.length <= AuthzContract.MAX_BODY_BYTES);
@@ -109,9 +123,7 @@ public final class AuthzCanonicalHash {
     }
 
     static byte[] freshnessBytes(AuthzFreshness value) {
-        return signed("freshness", Arrays.asList(value.userId(), value.permissionRevision(), value.credentialEpoch(),
-                value.status().name(), value.permissionHash(), value.checkedAtEpochSecond(), value.notAfterEpochSecond(),
-                value.nonce()), value.algorithm(), value.keyId());
+        return signed("freshness", freshnessFields(value), value.algorithm(), value.keyId());
     }
 
     static byte[] contextBytes(AuthorizationContext value) {
@@ -134,6 +146,12 @@ public final class AuthzCanonicalHash {
                 value.allowedOperations(), value.audience(), value.requestId(), value.runId(), value.sessionId(),
                 value.policyDigest(), value.requestHash(), value.nonce(), value.issuedAtEpochSecond(),
                 value.expiresAtEpochSecond(), value.runHardDeadlineEpochSecond());
+    }
+
+    private static List<?> freshnessFields(AuthzFreshness value) {
+        return Arrays.asList(value.userId(), value.permissionRevision(), value.credentialEpoch(),
+                value.status().name(), value.permissionHash(), value.checkedAtEpochSecond(),
+                value.notAfterEpochSecond(), value.nonce());
     }
 
     private static List<?> delegationFields(DelegationBinding value) {

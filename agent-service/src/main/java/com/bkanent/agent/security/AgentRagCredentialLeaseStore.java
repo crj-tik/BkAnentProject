@@ -117,11 +117,20 @@ public class AgentRagCredentialLeaseStore {
         verify(lease, originalUserId);
         return lease.credentials;
     }
-    public record ActorIdentity(com.bkanent.common.rpc.AuthenticatedPrincipal principal, long expiresAtEpochSecond) { }
+    public record ActorIdentity(com.bkanent.common.rpc.AuthenticatedPrincipal principal, long expiresAtEpochSecond,
+                                com.bkanent.common.authz.AuthorizationContext authorizationContext,
+                                com.bkanent.common.authz.AuthzFreshness authorizationFreshness) {
+        public ActorIdentity(com.bkanent.common.rpc.AuthenticatedPrincipal principal, long expiresAtEpochSecond) {
+            this(principal, expiresAtEpochSecond, null, null);
+        }
+    }
     public ActorIdentity verifiedIdentity(String originalUserId) {
         Lease lease = CURRENT.get();
         if (lease == null) throw new AgentRagAuthenticationException("AUTHENTICATION_REQUIRED");
-        return new ActorIdentity(verify(lease, originalUserId), lease.expiresAt / 1000);
+        var principal = verify(lease, originalUserId);
+        if (lease.authorization == null) return new ActorIdentity(principal, lease.expiresAt / 1000);
+        var session = lease.authorization.session();
+        return new ActorIdentity(principal, lease.expiresAt / 1000, session.context(), session.freshness());
     }
     private com.bkanent.common.rpc.AuthenticatedPrincipal verify(Lease lease, String originalUserId) {
         if (lease.expiresAt <= clock.millis()) throw new RagException(RagErrorCode.AUTHENTICATION_EXPIRED);

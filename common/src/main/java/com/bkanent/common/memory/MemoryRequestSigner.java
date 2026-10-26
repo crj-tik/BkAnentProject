@@ -2,6 +2,9 @@ package com.bkanent.common.memory;
 
 import com.bkanent.common.rpc.AuthenticatedPrincipal;
 import com.bkanent.common.security.ServiceIdentityCrypto;
+import com.bkanent.common.authz.AuthzCanonicalHash;
+import com.bkanent.common.authz.AuthzFreshness;
+import com.bkanent.common.authz.AuthorizationContext;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -30,7 +33,32 @@ public final class MemoryRequestSigner {
         authenticate(privateKey != null && principal != null && principal.userId() != null && principal.userId() > 0
                 && Long.toString(principal.userId()).equals(context.ownerId()));
         return signBound(request, keyId, issuedAtEpochSecond, expiresAtEpochSecond, nonce, privateKey,
-                MemoryRequestProof.Actor.USER);
+                MemoryRequestProof.Actor.USER, null, null);
+    }
+
+    /** Authz v3 carries the already-bound Auth context; it never resolves a token or extends its deadline. */
+    public static MemoryRequestProof sign(MemoryV2Request request, AuthenticatedPrincipal principal,
+                                          String keyId, long issuedAtEpochSecond, long expiresAtEpochSecond,
+                                          String nonce, PrivateKey privateKey,
+                                          AuthorizationContext authorizationContext,
+                                          AuthzFreshness authorizationFreshness) {
+        MemoryContextKey context = request == null ? null : request.contextKey();
+        requireRequest(request, context);
+        authenticate(privateKey != null && principal != null && principal.userId() != null && principal.userId() > 0
+                && Long.toString(principal.userId()).equals(context.ownerId())
+                && authorizationContext != null && authorizationFreshness != null
+                && Long.toString(principal.userId()).equals(authorizationContext.actorId())
+                && authorizationFreshness.userId().equals(authorizationContext.actorId())
+                && authorizationFreshness.permissionRevision() == authorizationContext.permissionRevision()
+                && authorizationFreshness.credentialEpoch() == authorizationContext.credentialEpoch()
+                && authorizationFreshness.permissionHash().equals(authorizationContext.permissionHash())
+                && authorizationContext.runId() != null && !authorizationContext.runId().isBlank()
+                && authorizationContext.sessionId() != null && !authorizationContext.sessionId().isBlank()
+                && expiresAtEpochSecond <= authorizationFreshness.notAfterEpochSecond()
+                && expiresAtEpochSecond <= authorizationContext.expiresAtEpochSecond()
+                && expiresAtEpochSecond <= authorizationContext.runHardDeadlineEpochSecond());
+        return signBound(request, keyId, issuedAtEpochSecond, expiresAtEpochSecond, nonce, privateKey,
+                MemoryRequestProof.Actor.USER, authorizationContext, authorizationFreshness);
     }
 
     /** Service credentials grant only delivery; the server must additionally verify its durable permit. */
@@ -38,7 +66,7 @@ public final class MemoryRequestSigner {
                                                          long issued, long expires, String nonce, PrivateKey privateKey) {
         requireRequest(request, request == null ? null : request.contextKey());
         authenticate(privateKey != null);
-        return signBound(request, keyId, issued, expires, nonce, privateKey, MemoryRequestProof.Actor.SERVICE);
+        return signBound(request, keyId, issued, expires, nonce, privateKey, MemoryRequestProof.Actor.SERVICE, null, null);
     }
 
     /** Domain result publishers have a separate operation-bound signature; it grants no read or delivery access. */
@@ -46,21 +74,24 @@ public final class MemoryRequestSigner {
                                                                   long issued, long expires, String nonce, PrivateKey privateKey) {
         requireRequest(request, request == null ? null : request.contextKey());
         authenticate(privateKey != null && MemoryV2Contract.OPERATION_EXPERIENCE_OUTCOME.equals(request.envelope().operation()));
-        return signBound(request, keyId, issued, expires, nonce, privateKey, MemoryRequestProof.Actor.SERVICE);
+        return signBound(request, keyId, issued, expires, nonce, privateKey, MemoryRequestProof.Actor.SERVICE, null, null);
     }
 
     private static MemoryRequestProof signBound(MemoryV2Request request, String keyId, long issuedAtEpochSecond,
                                                 long expiresAtEpochSecond, String nonce, PrivateKey privateKey,
-                                                MemoryRequestProof.Actor actor) {
+                                                MemoryRequestProof.Actor actor, AuthorizationContext authorizationContext,
+                                                AuthzFreshness authorizationFreshness) {
         MemoryRequestEnvelope envelope = request.envelope();
         authenticate(equalHash(envelope.bodyHash(), MemoryCanonicalHash.requestBodyHash(request)));
         byte[] payload = canonical(envelope, request.contextKey(), keyId, issuedAtEpochSecond,
-                expiresAtEpochSecond, nonce, actor);
-        byte[] versioned = canonicalV2(payload);
+                expiresAtEpochSecond, nonce, actor, authorizationContext, authorizationFreshness);
+        int signatureVersion = authorizationContext == null
+                ? MemoryRequestProof.ED25519_V2 : MemoryRequestProof.ED25519_AUTHZ_V3;
+        byte[] versioned = canonicalVersioned(payload, signatureVersion);
         String signature = ServiceIdentityCrypto.encodeSignature(ServiceIdentityCrypto.sign(
                 SIGNATURE_DOMAIN, ServiceIdentityCrypto.ED25519, versioned, privateKey));
         return new MemoryRequestProof(keyId, issuedAtEpochSecond, expiresAtEpochSecond, nonce, signature, actor,
-                MemoryRequestProof.ED25519_V2, ServiceIdentityCrypto.ED25519);
+                signatureVersion, ServiceIdentityCrypto.ED25519, authorizationContext, authorizationFreshness);
     }
 
     public static void verifyEd25519(MemoryV2Request request, MemoryContextKey context, MemoryRequestProof proof,
@@ -74,14 +105,21 @@ public final class MemoryRequestSigner {
         try { supplied = ServiceIdentityCrypto.decodeSignature(proof.signature()); }
         catch (IllegalArgumentException exception) { throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED); }
         byte[] payload = canonical(request.envelope(), context, proof.keyId(), proof.issuedAtEpochSecond(),
-                proof.expiresAtEpochSecond(), proof.nonce(), proof.actor());
+                proof.expiresAtEpochSecond(), proof.nonce(), proof.actor(), proof.authorizationContext(),
+                proof.authorizationFreshness());
         authenticate(ServiceIdentityCrypto.verify(SIGNATURE_DOMAIN, ServiceIdentityCrypto.ED25519,
-                canonicalV2(payload), supplied, publicKey));
+                canonicalVersioned(payload, proof.signatureVersion()), supplied, publicKey));
     }
 
     public static boolean isEd25519Proof(MemoryRequestProof proof) {
-        return proof != null && proof.signatureVersion() == MemoryRequestProof.ED25519_V2
+        return proof != null && (proof.signatureVersion() == MemoryRequestProof.ED25519_V2
+                || proof.signatureVersion() == MemoryRequestProof.ED25519_AUTHZ_V3)
                 && ServiceIdentityCrypto.ED25519.equals(proof.algorithm());
+    }
+
+    public static boolean hasAuthorizationContext(MemoryRequestProof proof) {
+        return proof != null && proof.signatureVersion() == MemoryRequestProof.ED25519_AUTHZ_V3
+                && proof.authorizationContext() != null && proof.authorizationFreshness() != null;
     }
 
     private static void verifyFacts(MemoryV2Request request, MemoryContextKey context, MemoryRequestProof proof,
@@ -107,11 +145,11 @@ public final class MemoryRequestSigner {
         authenticate(request != null && request.envelope() != null && context != null);
     }
 
-    private static byte[] canonicalV2(byte[] canonicalFields) {
+    private static byte[] canonicalVersioned(byte[] canonicalFields, int signatureVersion) {
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream(canonicalFields.length + 32);
             DataOutputStream output = new DataOutputStream(bytes);
-            output.writeInt(MemoryRequestProof.ED25519_V2);
+            output.writeInt(signatureVersion);
             write(output, ServiceIdentityCrypto.ED25519);
             output.writeInt(canonicalFields.length);
             output.write(canonicalFields);
@@ -132,7 +170,9 @@ public final class MemoryRequestSigner {
                                     String keyId,
                                     long issuedAt,
                                     long expiresAt,
-                                    String nonce, MemoryRequestProof.Actor actor) {
+                                    String nonce, MemoryRequestProof.Actor actor,
+                                    AuthorizationContext authorizationContext,
+                                    AuthzFreshness authorizationFreshness) {
         authenticate(keyId != null && !keyId.isBlank() && nonce != null && !nonce.isBlank());
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream(512);
@@ -152,6 +192,12 @@ public final class MemoryRequestSigner {
             output.writeLong(issuedAt);
             output.writeLong(expiresAt);
             write(output, nonce);
+            if (authorizationContext != null || authorizationFreshness != null) {
+                authenticate(authorizationContext != null && authorizationFreshness != null
+                        && actor == MemoryRequestProof.Actor.USER);
+                write(output, AuthzCanonicalHash.signedContextHash(authorizationContext));
+                write(output, AuthzCanonicalHash.signedFreshnessHash(authorizationFreshness));
+            }
             output.flush();
             return bytes.toByteArray();
         } catch (IOException exception) {

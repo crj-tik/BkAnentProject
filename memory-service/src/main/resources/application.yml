@@ -4,6 +4,9 @@ memory:
       enabled: ${MEMORY_V2_SHARING_ENABLED:false}
       max-export-utf8-bytes: ${MEMORY_V2_SHARING_MAX_EXPORT_UTF8_BYTES:24576}
     current-user-permission: ${MEMORY_V2_USER_PERMISSION:agent.chat.use}
+    authorization-context-enabled: ${MEMORY_V2_AUTHORIZATION_CONTEXT_ENABLED:false}
+    authz-authority-public-keys:
+      auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
     experience-governance-permission: ${MEMORY_V2_EXPERIENCE_GOVERNANCE_PERMISSION:memory.experience.governance.publish}
     replay-cleanup-ms: ${MEMORY_V2_REPLAY_CLEANUP_MS:60000}
     privacy-cleanup:

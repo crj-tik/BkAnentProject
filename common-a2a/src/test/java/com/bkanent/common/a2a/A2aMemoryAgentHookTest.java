@@ -3,9 +3,13 @@ package com.bkanent.common.a2a;
 import com.alibaba.cloud.ai.graph.OverAllState;
 import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
+import com.alibaba.cloud.ai.graph.agent.interceptor.ModelRequest;
+import com.alibaba.cloud.ai.graph.agent.interceptor.ModelResponse;
+import com.alibaba.cloud.ai.graph.agent.interceptor.ToolCallRequest;
 import com.alibaba.cloud.ai.graph.state.ReplaceAllWith;
 import com.alibaba.cloud.ai.graph.state.strategy.AppendStrategy;
 import com.bkanent.common.agent.DurableMemoryExportDirective;
+import com.bkanent.common.authz.*;
 import com.bkanent.common.memory.*;
 import com.bkanent.common.rag.A2aBeaconBinding;
 import com.bkanent.common.rag.RagCredentialContext;
@@ -26,6 +30,7 @@ import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -34,6 +39,96 @@ import static org.mockito.Mockito.*;
 
 class A2aMemoryAgentHookTest {
     private static final String PRIVATE_KEY_FILE = createPrivateKeyFile();
+
+    @Test
+    void versionedA2aMemoryCallsReuseTheBoundAuthContextAndSignEachRpcLocally() throws Exception {
+        MemoryV2RpcService rpc = mock(MemoryV2RpcService.class);
+        AtomicReference<MemoryRequestProof> readProof = new AtomicReference<>();
+        when(rpc.manageWriter(any(), any())).thenAnswer(call -> {
+            MemoryWriterRequest request = call.getArgument(0);
+            return new MemoryWriterResponse(new MemoryWriteAuthority(request.runId(), 1),
+                    Instant.now().plusSeconds(60).toEpochMilli(), new MemoryConversationVersion(0, 0, "policy-v1"));
+        });
+        when(rpc.readWorkingSet(any(), any())).thenAnswer(call -> {
+            MemoryWorkingSetRequest request = call.getArgument(0);
+            readProof.set(call.getArgument(1));
+            return new MemoryWorkingSetResponse(request.contextKey(), new MemoryConversationVersion(0, 0, "policy-v1"),
+                    List.of(), List.of(), List.of());
+        });
+        when(rpc.checkBoundary(any(), any())).thenAnswer(call -> {
+            MemoryBoundaryRequest request = call.getArgument(0);
+            return new MemoryBoundaryResponse(request.adoptedVersion(), true);
+        });
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        var hook = new A2aMemoryAgentHook("marketing-content-service", "marketing", "marketing-agent", () -> rpc,
+                new MemoryWorkingSetCache(8, 1024 * 1024, 60_000, Clock.systemUTC()), requiredMemoryProperties(),
+                mock(ChatModel.class), new ObjectMapper(), executor);
+        String taskId = "marketing-task-versioned-memory";
+        var invocation = hook.invocation(taskId, "marketing-context-versioned");
+        var lease = versionedLease(taskId, "7", "marketing-content-service");
+        register(lease);
+        try {
+            hook.beforeAgent(state(List.of(new UserMessage("读取当前会话记忆"))), config(taskId, invocation)).join();
+            assertThat(readProof.get()).isNotNull();
+            assertThat(readProof.get().signatureVersion()).isEqualTo(MemoryRequestProof.ED25519_AUTHZ_V3);
+            assertThat(readProof.get().authorizationContext()).isEqualTo(lease.authorizationContext());
+            assertThat(readProof.get().authorizationFreshness()).isEqualTo(lease.freshness());
+        } finally {
+            hook.finish(invocation);
+            discard(lease);
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void revokedMemorySourceStopsNextModelToolAndFinalOutputBoundaries() throws Exception {
+        var fixture = new MemoryFixture(List.of(), new MemoryConversationVersion(1, 1, "policy-v1"));
+        doAnswer(call -> {
+            MemoryWorkingSetRequest request = call.getArgument(0);
+            return new MemoryWorkingSetResponse(request.contextKey(), fixture.version.get(),
+                    List.of(oldMessage(request.contextKey())), List.of(), List.of());
+        }).when(fixture.rpc).readWorkingSet(any(), any());
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        var hook = new A2aMemoryAgentHook("marketing-content-service", "marketing", "marketing-agent", () -> fixture.rpc,
+                new MemoryWorkingSetCache(8, 1024 * 1024, 60_000, Clock.systemUTC()), requiredMemoryProperties(),
+                mock(ChatModel.class), new ObjectMapper(), executor);
+        String taskId = "marketing-task-source-revoked";
+        var invocation = hook.invocation(taskId, "marketing-context-source-revoked");
+        var lease = lease(taskId, "7", "marketing-content-service");
+        register(lease);
+        var config = config(taskId, invocation);
+        AtomicInteger modelCalls = new AtomicInteger();
+        AtomicInteger toolCalls = new AtomicInteger();
+        try {
+            hook.beforeAgent(state(List.of(new UserMessage("继续之前的处理"))), config).join();
+            assertThat(invocation.privateMaterialLoaded()).isTrue();
+            fixture.boundaryUnchanged = false;
+            var modelRequest = ModelRequest.builder()
+                    .context(Map.of(A2aMemoryAgentHook.INVOCATION_METADATA_KEY, invocation)).build();
+            assertThatThrownBy(() -> hook.getModelInterceptors().get(0).interceptModel(modelRequest, request -> {
+                modelCalls.incrementAndGet();
+                return ModelResponse.of(new AssistantMessage("不应返回模型结果"));
+            })).isInstanceOf(MemoryException.class);
+            assertThatThrownBy(() -> hook.getToolInterceptors().get(0).interceptToolCall(
+                    new ToolCallRequest("listingLookup", "{}", "call-revoked-source",
+                            Map.of(A2aMemoryAgentHook.INVOCATION_METADATA_KEY, invocation)), request -> {
+                        toolCalls.incrementAndGet();
+                        return com.alibaba.cloud.ai.graph.agent.interceptor.ToolCallResponse.of(
+                                request.getToolCallId(), request.getToolName(), "不应执行");
+                    })).isInstanceOf(MemoryException.class);
+            assertThatThrownBy(() -> hook.afterAgent(state(List.of(new UserMessage("继续之前的处理"),
+                    new AssistantMessage("不应交付"))), config).join())
+                    .hasRootCauseInstanceOf(MemoryException.class);
+            assertThat(modelCalls).hasValue(0);
+            assertThat(toolCalls).hasValue(0);
+            verify(fixture.rpc, never()).requestReceivePermit(any(), any());
+            verify(fixture.rpc, never()).deliverMessages(any(), any());
+        } finally {
+            hook.finish(invocation);
+            discard(lease);
+            executor.shutdownNow();
+        }
+    }
 
     @Test
     void publishesOnlyTheExplicitSafeFieldsFromTheArchivedFinalAssistantTurn() throws Exception {
@@ -603,6 +698,7 @@ class A2aMemoryAgentHookTest {
         private final AtomicReference<MemoryConversationVersion> version;
         private final AtomicReference<MemorySummary> summary = new AtomicReference<>();
         private final AtomicReference<MemoryDeliveryRequest> delivered = new AtomicReference<>();
+        private volatile boolean boundaryUnchanged = true;
 
         private MemoryFixture(List<MemoryMessage> messages, MemoryConversationVersion initialVersion) throws Exception {
             version = new AtomicReference<>(initialVersion);
@@ -618,7 +714,7 @@ class A2aMemoryAgentHookTest {
             });
             when(rpc.checkBoundary(any(), any())).thenAnswer(invocation -> {
                 MemoryBoundaryRequest request = invocation.getArgument(0);
-                return new MemoryBoundaryResponse(request.adoptedVersion(), true);
+                return new MemoryBoundaryResponse(request.adoptedVersion(), boundaryUnchanged);
             });
             when(rpc.submitSummary(any(), any())).thenAnswer(invocation -> {
                 MemorySummaryRequest request = invocation.getArgument(0);
@@ -684,6 +780,33 @@ class A2aMemoryAgentHookTest {
                 actorId, "message/send", "0".repeat(64), taskId, expiry);
         return new A2aCredentialContext.Lease(binding,
                 RagCredentialContext.beacon("opaque-a2a-test-token-" + taskId), expiry, () -> { });
+    }
+
+    private A2aCredentialContext.Lease versionedLease(String taskId, String actorId, String audience) throws Exception {
+        long now = Instant.now().getEpochSecond();
+        var authority = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        var callerKey = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        String authorityKeyId = "a2a-memory-auth-current";
+        String nonce = Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]);
+        String permissionHash = "a".repeat(64);
+        var context = AuthzSignature.sign(new AuthorizationContext(actorId, 7, 2, permissionHash,
+                List.of("agent.chat.use"), "agent-service", "entry-request", "run-memory-1", "session-memory-1",
+                "b".repeat(64), "c".repeat(64), nonce, now, now + 120, now + 120,
+                AuthzContract.ALGORITHM, authorityKeyId, null), authority.getPrivate());
+        var freshness = AuthzSignature.sign(new AuthzFreshness(actorId, 7, 2, AuthorizationStatus.ACTIVE,
+                permissionHash, now, now + 30, nonce, AuthzContract.ALGORITHM, authorityKeyId, null),
+                authority.getPrivate());
+        String requestNonce = Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]);
+        String requestId = "request-" + taskId;
+        var binding = new DelegationBinding("agent-service", audience, actorId, List.of("agent.chat.use"),
+                "run-memory-1", taskId, requestId, "d".repeat(64), "c".repeat(64), requestNonce,
+                now, now + 20);
+        var proof = AuthzSignature.sign(new CallerProof("agent-service", audience,
+                AuthzRpcOperation.VALIDATE_DELEGATION, requestId,
+                AuthzCanonicalHash.delegationRequestHash(context, binding), requestNonce, now, now + 20,
+                AuthzContract.ALGORITHM, "agent-service-key", null), callerKey.getPrivate());
+        var request = new DelegatedAuthorizationRequest(context, freshness, binding, proof);
+        return A2aCredentialContext.Lease.versioned(request, "message/send", () -> { });
     }
 
     private void register(A2aCredentialContext.Lease lease) {

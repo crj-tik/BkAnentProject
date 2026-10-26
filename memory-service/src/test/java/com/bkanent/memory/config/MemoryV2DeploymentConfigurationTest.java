@@ -74,6 +74,18 @@ class MemoryV2DeploymentConfigurationTest {
         }
     }
 
+    @Test void signedAuthorizationContextRolloutDefaultsOffAndUsesTheAuthAuthorityKey() throws Exception {
+        var resources = Set.of(new ClassPathResource("application.yml"),
+                new FileSystemResource(Path.of(System.getProperty("maven.multiModuleProjectDirectory"),
+                        "nacos", "memory-service.yaml")));
+        for (Resource resource : resources) {
+            var properties = bindProperties(resource, Map.of("AUTH_SERVICE_IDENTITY_PUBLIC_KEY", "fixture-auth-public-key"));
+            assertFalse(properties.isAuthorizationContextEnabled());
+            assertEquals(Map.of("auth-service-current", "fixture-auth-public-key"),
+                    properties.getAuthzAuthorityPublicKeys());
+        }
+    }
+
     private MemoryV2SecurityProperties.TrustedCaller bindCaller(Resource resource, String callerName,
             Map<String, ?> deploymentValues) throws Exception {
         PropertySource<?> yaml = new YamlPropertySourceLoader().load("memory-v2-test", resource).get(0);
@@ -89,6 +101,19 @@ class MemoryV2DeploymentConfigurationTest {
         return new Binder(sources, placeholders)
                 .bind("memory.v2.trusted-callers." + callerName,
                         Bindable.of(MemoryV2SecurityProperties.TrustedCaller.class))
+                .orElseThrow(IllegalStateException::new);
+    }
+
+    private MemoryV2SecurityProperties bindProperties(Resource resource, Map<String, ?> deploymentValues) throws Exception {
+        PropertySource<?> yaml = new YamlPropertySourceLoader().load("memory-v2-test", resource).get(0);
+        var environment = new StandardEnvironment();
+        environment.getPropertySources().remove(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME);
+        environment.getPropertySources().remove(StandardEnvironment.SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME);
+        environment.getPropertySources().addFirst(yaml);
+        environment.getPropertySources().addFirst(new MapPropertySource("deployment-test", new HashMap<>(deploymentValues)));
+        var sources = ConfigurationPropertySources.get(environment);
+        var placeholders = new PropertySourcesPlaceholdersResolver(environment);
+        return new Binder(sources, placeholders).bind("memory.v2", Bindable.of(MemoryV2SecurityProperties.class))
                 .orElseThrow(IllegalStateException::new);
     }
 

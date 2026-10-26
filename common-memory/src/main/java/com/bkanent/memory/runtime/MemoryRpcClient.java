@@ -2,6 +2,8 @@ package com.bkanent.memory.runtime;
 
 import com.bkanent.common.memory.*;
 import com.bkanent.common.rpc.AuthenticatedPrincipal;
+import com.bkanent.common.authz.AuthzFreshness;
+import com.bkanent.common.authz.AuthorizationContext;
 
 import java.time.Instant;
 import java.nio.charset.StandardCharsets;
@@ -14,7 +16,12 @@ import java.util.function.Supplier;
 
 /** Transport-only client. Current actor is resolved on every protected operation, never from an owner id. */
 public final class MemoryRpcClient {
-    public record Actor(AuthenticatedPrincipal principal, long expiresAtEpochSecond) { }
+    public record Actor(AuthenticatedPrincipal principal, long expiresAtEpochSecond,
+                        AuthorizationContext authorizationContext, AuthzFreshness authorizationFreshness) {
+        public Actor(AuthenticatedPrincipal principal, long expiresAtEpochSecond) {
+            this(principal, expiresAtEpochSecond, null, null);
+        }
+    }
     private final MemoryV2RpcService rpc;
     private final String caller;
     private final String keyId;
@@ -134,8 +141,17 @@ public final class MemoryRpcClient {
         long now = Instant.now().getEpochSecond();
         if (actor == null || actor.expiresAtEpochSecond() <= now) throw new MemoryException(MemoryErrorCode.AUTHENTICATION_EXPIRED);
         T request = request(operation, requestId, factory);
-        var proof = MemoryRequestSigner.sign(request, actor.principal(), keyId, now,
-                Math.min(now + 60, actor.expiresAtEpochSecond()), nonce(), signingKey);
+        long expiresAt = Math.min(now + 60, actor.expiresAtEpochSecond());
+        if (actor.authorizationContext() != null && actor.authorizationFreshness() != null) {
+            expiresAt = Math.min(expiresAt, Math.min(actor.authorizationFreshness().notAfterEpochSecond(),
+                    Math.min(actor.authorizationContext().expiresAtEpochSecond(),
+                            actor.authorizationContext().runHardDeadlineEpochSecond())));
+            if (expiresAt <= now) throw new MemoryException(MemoryErrorCode.AUTHENTICATION_EXPIRED);
+        }
+        var proof = actor.authorizationContext() == null && actor.authorizationFreshness() == null
+                ? MemoryRequestSigner.sign(request, actor.principal(), keyId, now, expiresAt, nonce(), signingKey)
+                : MemoryRequestSigner.sign(request, actor.principal(), keyId, now, expiresAt, nonce(), signingKey,
+                actor.authorizationContext(), actor.authorizationFreshness());
         return transport(() -> call.apply(request, proof));
     }
 

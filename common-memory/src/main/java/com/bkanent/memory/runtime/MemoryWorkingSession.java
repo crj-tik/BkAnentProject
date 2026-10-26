@@ -22,6 +22,17 @@ public final class MemoryWorkingSession implements AutoCloseable {
     }
     public MemoryWorkingSetResponse snapshot() { return snapshot; }
     public MemoryWriteAuthority authority() { return writer; }
+    /** Checks a frozen source set without adopting a refreshed snapshot into an active model turn. */
+    public boolean sourcesCurrent(List<MemorySourceDependency> dependencies) {
+        try {
+            boolean unchanged = client.check(snapshot, dependencies).unchanged();
+            if (!unchanged) cache.remove(context);
+            return unchanged;
+        } catch (RuntimeException exception) {
+            cache.remove(context);
+            throw exception;
+        }
+    }
     public void check() {
         try {
             var current = client.check(snapshot, dependencies(snapshot));

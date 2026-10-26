@@ -1494,6 +1494,16 @@
 
 **关联**：LR-41/140/141；任务6.1/6.2；`sql/migrations/20261026_a2a_task_authorization.sql`。
 
+## KI-173 [FIXED·本提交·P1] A2A活跃轮次可能继续使用已撤回的Memory来源
+
+**发现日期与依据**：2026-10-26，复核任务6.4。Memory历史已注入Agent prompt后，普通`session.check()`发现来源变化会刷新工作集快照；但Graph当前轮的prompt仍保留旧正文。若来源grant撤回时Auth权限版本未变，后续模型、工具或结果仍可能沿用这些已注入内容。
+
+**修复**：prompt载入时冻结该轮实际使用的Memory来源依赖，模型调用/流、工具调用及最终输出边界都核对同一冻结集合。来源失效或无法核验时清除缓存并拒绝继续，不把更新后的快照当成旧prompt的授权。已绑定的Auth context和freshness随Memory v3 proof逐请求本地验证，撤权检查不依赖等待Auth通知。
+
+**验证与边界**：新增回归使撤回后的模型与工具处理器均为零调用，输出许可和消息交付均不发生；Memory/A2A/Agent关联模块完整回归结果见`openspec/changes/unify-versioned-permission-context/implementation-progress.md`。该功能仍由默认关闭的Memory签名上下文开关控制，未部署；未替代SQL owner、grant、source hash/revision、writer fence及permit真源检查。
+
+**关联**：LR-63/89/133/142；任务6.4。
+
 ---
 
 **变更历史**：本提交 持久化A2A请求防重放与任务归属（KI-172）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。

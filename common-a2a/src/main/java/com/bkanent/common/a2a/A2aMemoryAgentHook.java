@@ -5,6 +5,14 @@ import com.alibaba.cloud.ai.graph.OverAllState;
 import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.alibaba.cloud.ai.graph.agent.hook.AgentHook;
 import com.alibaba.cloud.ai.graph.agent.hook.HookPosition;
+import com.alibaba.cloud.ai.graph.agent.interceptor.ModelCallHandler;
+import com.alibaba.cloud.ai.graph.agent.interceptor.ModelInterceptor;
+import com.alibaba.cloud.ai.graph.agent.interceptor.ModelRequest;
+import com.alibaba.cloud.ai.graph.agent.interceptor.ModelResponse;
+import com.alibaba.cloud.ai.graph.agent.interceptor.ToolCallHandler;
+import com.alibaba.cloud.ai.graph.agent.interceptor.ToolCallRequest;
+import com.alibaba.cloud.ai.graph.agent.interceptor.ToolCallResponse;
+import com.alibaba.cloud.ai.graph.agent.interceptor.ToolInterceptor;
 import com.alibaba.cloud.ai.graph.state.ReplaceAllWith;
 import com.bkanent.common.agent.DurableMemoryExportDirective;
 import com.bkanent.common.memory.*;
@@ -20,7 +28,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.dubbo.config.ReferenceConfig;
 import org.springframework.ai.chat.messages.*;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.util.StringUtils;
+import reactor.core.publisher.Flux;
 
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -76,6 +86,48 @@ public final class A2aMemoryAgentHook extends AgentHook {
     @Override public HookPosition[] getHookPositions() { return new HookPosition[]{HookPosition.BEFORE_AGENT, HookPosition.AFTER_AGENT}; }
 
     @Override
+    public List<ModelInterceptor> getModelInterceptors() {
+        return List.of(new ModelInterceptor() {
+            @Override public String getName() { return "a2aMemoryCurrentSource"; }
+
+            @Override
+            public ModelResponse interceptModel(ModelRequest request, ModelCallHandler handler) {
+                requireCurrentSources(invocation(request == null ? null : request.getContext()));
+                ModelResponse response = handler.call(request);
+                if (response != null && response.getMessage() instanceof Flux<?> stream) {
+                    @SuppressWarnings("unchecked") Flux<ChatResponse> typed = (Flux<ChatResponse>) stream;
+                    Flux<ChatResponse> guarded = typed
+                            .doOnSubscribe(ignored -> requireCurrentSources(invocation(request.getContext())))
+                            .map(chunk -> {
+                                requireCurrentSources(invocation(request.getContext()));
+                                return chunk;
+                            })
+                            .doOnComplete(() -> requireCurrentSources(invocation(request.getContext())));
+                    return ModelResponse.of(guarded);
+                }
+                requireCurrentSources(invocation(request == null ? null : request.getContext()));
+                return response;
+            }
+        });
+    }
+
+    @Override
+    public List<ToolInterceptor> getToolInterceptors() {
+        return List.of(new ToolInterceptor() {
+            @Override public String getName() { return "a2aMemoryCurrentSource"; }
+
+            @Override
+            public ToolCallResponse interceptToolCall(ToolCallRequest request, ToolCallHandler handler) {
+                A2aMemoryInvocation invocation = invocation(request == null ? null : request.getContext());
+                requireCurrentSources(invocation);
+                ToolCallResponse response = handler.call(request);
+                requireCurrentSources(invocation);
+                return response;
+            }
+        });
+    }
+
+    @Override
     public CompletableFuture<Map<String, Object>> beforeAgent(OverAllState state, RunnableConfig config) {
         A2aMemoryInvocation invocation = invocation(config);
         if (invocation == null) return CompletableFuture.failedFuture(new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE));
@@ -99,6 +151,7 @@ public final class A2aMemoryAgentHook extends AgentHook {
                 maybeCompact(invocation, session, original, lease);
                 session.check();
                 MemoryWorkingSetResponse snapshot = session.snapshot();
+                invocation.loadedDependencies(MemoryWorkingSession.dependencies(snapshot));
                 List<Message> history = history(snapshot);
                 if (estimate(history, original) > properties.getHardTokens()) {
                     throw new MemoryException(MemoryErrorCode.CONTEXT_BUDGET_EXCEEDED);
@@ -144,7 +197,7 @@ public final class A2aMemoryAgentHook extends AgentHook {
             MemoryWorkingSession session = invocation.session();
             if (session == null) throw new MemoryException(MemoryErrorCode.ARCHIVE_NOT_CONFIRMED);
             // Any private history used by this Agent must still be current before its result can escape.
-            if (invocation.privateMaterialLoaded()) session.check();
+            requireCurrentSources(invocation);
             List<Message> all = messages(state);
             int start = invocation.currentInputStart();
             if (start < 0 || start > all.size() || invocation.currentInputCount() < 0) {
@@ -157,7 +210,7 @@ public final class A2aMemoryAgentHook extends AgentHook {
             }
             String permit = session.permit(archived);
             session.deliver(permit, archived);
-            if (invocation.privateMaterialLoaded()) session.check();
+            requireCurrentSources(invocation);
             MemoryMessage finalAssistant = archived.stream()
                     .filter(message -> message.role() == MemoryMessage.Role.ASSISTANT && StringUtils.hasText(message.text()))
                     .reduce((first, later) -> later).orElse(null);
@@ -509,7 +562,8 @@ public final class A2aMemoryAgentHook extends AgentHook {
                     throw new MemoryException(MemoryErrorCode.FORBIDDEN);
                 }
                 long expiry = Math.min(lease.expiresAt, lease.binding.credentialLeaseExpiresAtEpochSecond());
-                return new MemoryRpcClient.Actor(new AuthenticatedPrincipal(ownerId), expiry);
+                return new MemoryRpcClient.Actor(new AuthenticatedPrincipal(ownerId), expiry,
+                        lease.authorizationContext(), lease.freshness());
             } catch (MemoryException exception) {
                 throw exception;
             } catch (RagException exception) {
@@ -542,8 +596,24 @@ public final class A2aMemoryAgentHook extends AgentHook {
 
     private A2aMemoryInvocation invocation(RunnableConfig config) {
         if (config == null) return null;
-        Object candidate = config.metadata(INVOCATION_METADATA_KEY).orElse(null);
+        return invocation(config.metadata().orElse(null));
+    }
+
+    private A2aMemoryInvocation invocation(Map<String, Object> metadata) {
+        Object candidate = metadata == null ? null : metadata.get(INVOCATION_METADATA_KEY);
         return candidate instanceof A2aMemoryInvocation invocation ? invocation : null;
+    }
+
+    /** A previously injected source set stays frozen for this turn; refresh cannot bless stale prompt material. */
+    private void requireCurrentSources(A2aMemoryInvocation invocation) {
+        if (invocation == null || !invocation.prepared()) {
+            throw new MemoryException(MemoryErrorCode.ARCHIVE_NOT_CONFIRMED);
+        }
+        if (!invocation.privateMaterialLoaded()) return;
+        MemoryWorkingSession session = invocation.session();
+        if (session == null || !session.sourcesCurrent(invocation.loadedDependencies())) {
+            throw new MemoryException(MemoryErrorCode.VERSION_CONFLICT);
+        }
     }
 
     private void requireThread(A2aMemoryInvocation invocation, RunnableConfig config) {

@@ -3,6 +3,7 @@ package com.bkanent.common.a2a;
 import com.bkanent.common.agent.DurableMemoryExportDirective;
 import com.bkanent.common.memory.MemoryContextKey;
 import com.bkanent.common.memory.MemoryExportReceipt;
+import com.bkanent.common.memory.MemorySourceDependency;
 import com.bkanent.common.memory.MemorySourceRef;
 import com.bkanent.memory.runtime.MemoryWorkingSession;
 import org.springframework.ai.chat.messages.Message;
@@ -25,6 +26,7 @@ public final class A2aMemoryInvocation {
     private volatile boolean privateMaterialLoaded;
     private volatile boolean prepared;
     private volatile List<MemorySourceRef> currentTurnSources = List.of();
+    private volatile List<MemorySourceDependency> loadedDependencies = List.of();
     private volatile MemoryExportReceipt exportReceipt;
 
     A2aMemoryInvocation(String taskId, String contextId) {
@@ -64,6 +66,8 @@ public final class A2aMemoryInvocation {
     void compactionStatus(String value) { compactionStatus = value; }
     List<MemorySourceRef> currentTurnSources() { return currentTurnSources; }
     void currentTurnSources(List<MemorySourceRef> value) { currentTurnSources = value == null ? List.of() : List.copyOf(value); }
+    List<MemorySourceDependency> loadedDependencies() { return loadedDependencies; }
+    void loadedDependencies(List<MemorySourceDependency> value) { loadedDependencies = value == null ? List.of() : List.copyOf(value); }
     void exportReceipt(MemoryExportReceipt value) { exportReceipt = value; }
 
     int currentInputStart() { return insertionIndex + historyCount; }

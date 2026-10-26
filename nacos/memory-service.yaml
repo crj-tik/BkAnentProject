@@ -10,6 +10,9 @@ memory:
     sharing:
       enabled: ${MEMORY_V2_SHARING_ENABLED:false}
       max-export-utf8-bytes: ${MEMORY_V2_SHARING_MAX_EXPORT_UTF8_BYTES:24576}
+    authorization-context-enabled: ${MEMORY_V2_AUTHORIZATION_CONTEXT_ENABLED:false}
+    authz-authority-public-keys:
+      auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
     # Exact caller/domain/agent grants. Memory v2 requests use verifier-only Ed25519 public keys.
     trusted-callers:
       agent-service:

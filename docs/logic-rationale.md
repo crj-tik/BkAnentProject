@@ -1079,3 +1079,13 @@
 **代码位置**：`common-a2a/A2aTaskAuthorizationStore`、`JdbcA2aTaskAuthorizationStore`、`A2aAuthorizationVerifier`、`A2aAuthenticatedRequestGuard`、`A2aCredentialContext`；schema `sql/migrations/20261026_a2a_task_authorization.sql`。版本化模式启动时要求耐久store及schema，运行开关默认关闭。
 
 **关联**：LR-41/140；KI-170/172；change `unify-versioned-permission-context`任务6.2。
+
+## LR-142 Memory复用签名身份，但每个执行边界核当前来源
+
+**结论**：Memory v3请求proof携带Auth签发且已绑定run/session的`AuthorizationContext`与`AuthzFreshness`，调用服务对每个Memory RPC的实际body、owner/context、nonce和期限签名；Memory本地验证调用服务proof及Auth签名上下文、actor、版本/credential epoch/hash、ACTIVE状态、`agent.chat.use`和硬截止，启用后不为每个内部请求调用Auth。权限上下文只证明身份和粗操作许可，不能替代owner/domain/agent/context、共享grant、purpose/recipient、来源revision/hash/撤回/删除、writer fence、permit及最终结果真源检查。A2A Agent在prompt载入时冻结来源依赖集；后续模型、工具和最终输出边界重核该集合，不能把刷新后的工作集用于认可已注入旧prompt。
+
+**根因**：为每个Memory操作或子Agent边界重新远程验证Auth会把Graph调度次数变成身份服务依赖次数；只缓存来源授权又会在来源被撤回、而账号权限版本未变时继续使用旧正文。把已绑定的Auth证据放进逐请求body证明，允许服务本地验证而不信LLM提供的userId；把Memory资源依赖和账号权限分开，来源变化仍由领域真源及时否决。旧`session.check()`可刷新当前工作集，但不能改变已注入prompt，因此活跃轮次必须检查原冻结依赖，而不是采用新快照。
+
+**代码位置**：`common/memory/MemoryRequestProof`、`MemoryRequestSigner`、`AuthzCanonicalHash`；`common-memory/MemoryRpcClient`；`memory-service/MemoryV2RequestSecurity`与`MemoryV2SecurityProperties`；`common-a2a/A2aMemoryAgentHook`、`A2aMemoryInvocation`；`common-memory/MemoryWorkingSession.sourcesCurrent`。
+
+**关联**：LR-40/63/89/98/140/141；KI-133/173；change `unify-versioned-permission-context`任务6.3/6.4。Memory签名上下文模式默认关闭；开启前需配置Auth公钥并完成部署验收。

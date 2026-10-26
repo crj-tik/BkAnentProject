@@ -107,6 +107,14 @@ AuthorizationUserInfoTest新增5项真实H2/MyBatis谓词与DTO/JSON兼容回归
 
 验证：common-a2a全量127项，失败/错误0、跳过1；Agent全量265项，失败/错误0、跳过6。新增H2跨实例nonce/owner/并发reservation/条件释放回归。严格OpenSpec校验通过。已完成计数28/63；6.3–6.7的Memory、MCP、RAG与网络边界仍未完成。
 
+## Memory来源授权与在途撤权续批（2026-10-26）
+
+按模块完成任务6.3–6.4。Memory v3请求proof携带Supervisor已绑定的Auth context/freshness，并把context、freshness、实际请求body、actor/owner、operation和nonce一并纳入服务身份签名。Memory在入口和最终结果复验时本地验Auth签名/ACTIVE freshness、actor、permission revision、credential epoch、hash、`agent.chat.use`及run硬截止；授权上下文模式启用后内部Memory请求不调用Auth `hasPermission`，而owner/domain/agent、grant、来源版本与撤回、writer fence、permit及最终结果继续由Memory真源核验。旧v2 Auth调用仅保留在默认关闭的兼容模式，开启版本化模式后拒绝降级。
+
+A2A Memory加载prompt时固定该轮来源依赖；模型/流、工具和最终输出边界都重新检查这组来源，撤回或无法核验时清除工作集缓存并中止，不把刷新后的快照当成旧prompt授权。新增KI-173记录并关闭“活动Graph轮次沿用已撤回来源”的源码缺口，LR-142记录两类权限边界分离原因。
+
+完整回归覆盖`common`、`common-memory`、`common-a2a`、`memory-service`、`agent-service`及其上游模块：8个有测试的Maven模块共**853项通过，失败/错误0，14项既有外部依赖测试跳过**；9个reactor模块构建成功。Memory v3配置仍默认关闭，Auth公钥、真实多实例/数据库与部署启用不在本次源码验收内。严格OpenSpec校验通过后，当前完成进度为**30/63**；下一模块从任务6.5继续。
+
 ## Agent/Supervisor本地授权与异步边界续批（2026-10-26）
 
 按模块完成任务5.1–5.7。`AgentAuthorizationConsumer`在业务Model重规划边界单次核对权限head；同版沿用本run/session上下文，版本变化时只对该run/session刷新签名context并收缩原scope。A2A/MCP/本地工具按稳定`CapabilityId`精确映射操作许可，目录和callback均本地校验；图节点不逐次调用Auth，资源、Memory来源、审批hash、租约/取消及预算守卫保留。治理审计从签名context记录actor及权限版本。

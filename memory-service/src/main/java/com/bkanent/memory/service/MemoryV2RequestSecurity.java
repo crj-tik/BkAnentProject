@@ -7,6 +7,11 @@ import com.bkanent.common.memory.MemoryRequestProof;
 import com.bkanent.common.memory.MemoryRequestSigner;
 import com.bkanent.common.memory.MemoryV2Contract;
 import com.bkanent.common.memory.MemoryV2Request;
+import com.bkanent.common.authz.AuthzErrorCode;
+import com.bkanent.common.authz.AuthzException;
+import com.bkanent.common.authz.AuthzFreshness;
+import com.bkanent.common.authz.AuthzSignature;
+import com.bkanent.common.authz.AuthorizationContext;
 import com.bkanent.common.security.ServiceIdentityCrypto;
 import com.bkanent.common.memory.MemoryDeliveryRequest;
 import com.bkanent.common.memory.MemoryExperienceOutcomeRequest;
@@ -59,7 +64,7 @@ public class MemoryV2RequestSecurity {
         return ownerId;
     }
 
-    /** Output check for an already consumed request; it never admits a new request or skips current Auth. */
+    /** Output check for an already consumed request; signed contexts are rechecked locally. */
     void revalidate(MemoryV2Request request, MemoryRequestProof proof, long expectedOwner, String expectedOperation) {
         if (verifyCurrentUser(request, proof, expectedOperation) != expectedOwner) {
             throw new MemoryException(MemoryErrorCode.FORBIDDEN);
@@ -71,6 +76,18 @@ public class MemoryV2RequestSecurity {
             throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
         }
         long ownerId = verifyCaller(request, proof, expectedOperation, false);
+        if (MemoryRequestSigner.hasAuthorizationContext(proof)) {
+            if (!properties.isAuthorizationContextEnabled()) {
+                throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
+            }
+            verifyAuthorizationContext(proof, ownerId, properties.getCurrentUserPermission());
+            requireUnexpired(proof);
+            return ownerId;
+        }
+        if (properties.isAuthorizationContextEnabled()) {
+            // Once enabled, a caller cannot silently downgrade to the legacy Auth RPC path.
+            throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
+        }
         try {
             if (!authPermissionRpcService.hasPermission(ownerId, properties.getCurrentUserPermission())) {
                 throw new MemoryException(MemoryErrorCode.FORBIDDEN);
@@ -82,6 +99,48 @@ public class MemoryV2RequestSecurity {
         }
         requireUnexpired(proof);
         return ownerId;
+    }
+
+    /** Verifies the Auth-signed actor/scope locally; the per-request Memory proof still supplies nonce and body binding. */
+    private AuthorizationContext verifyAuthorizationContext(MemoryRequestProof proof, long expectedOwner,
+                                                              String requiredPermission) {
+        AuthorizationContext context = proof.authorizationContext();
+        AuthzFreshness freshness = proof.authorizationFreshness();
+        var now = Instant.now();
+        try {
+            var authorityKeys = properties.authorizationAuthorityKeys();
+            AuthzSignature.verifyContext(context, "agent-service", authorityKeys, now);
+            AuthzSignature.verifyFreshness(freshness, authorityKeys, now);
+        } catch (AuthzException failure) {
+            throw mapAuthorizationFailure(failure.code());
+        } catch (RuntimeException failure) {
+            throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
+        }
+        String actor = Long.toString(expectedOwner);
+        if (!actor.equals(context.actorId()) || !actor.equals(freshness.userId())
+                || freshness.permissionRevision() != context.permissionRevision()
+                || freshness.credentialEpoch() != context.credentialEpoch()
+                || !freshness.permissionHash().equals(context.permissionHash())
+                || context.runId() == null || context.runId().isBlank()
+                || context.sessionId() == null || context.sessionId().isBlank()
+                || freshness.notAfterEpochSecond() > context.expiresAtEpochSecond()
+                || proof.expiresAtEpochSecond() > freshness.notAfterEpochSecond()
+                || proof.expiresAtEpochSecond() > context.expiresAtEpochSecond()
+                || proof.expiresAtEpochSecond() > context.runHardDeadlineEpochSecond()) {
+            throw new MemoryException(MemoryErrorCode.AUTHENTICATION_FAILED);
+        }
+        if (requiredPermission == null || !context.allowedOperations().contains(requiredPermission)) {
+            throw new MemoryException(MemoryErrorCode.FORBIDDEN);
+        }
+        return context;
+    }
+
+    private static MemoryException mapAuthorizationFailure(AuthzErrorCode code) {
+        return new MemoryException(switch (code) {
+            case EXPIRED -> MemoryErrorCode.AUTHENTICATION_EXPIRED;
+            case PERMISSION_DENIED -> MemoryErrorCode.FORBIDDEN;
+            default -> MemoryErrorCode.AUTHENTICATION_FAILED;
+        });
     }
 
     /** SERVICE only enters this delivery-specific gate; its identity never becomes a user principal. */
@@ -115,14 +174,20 @@ public class MemoryV2RequestSecurity {
                 || !caller.allows(request.contextKey().domainId(), request.targetAgentId())) {
             throw new MemoryException(MemoryErrorCode.FORBIDDEN);
         }
-        try {
-            if (!authPermissionRpcService.hasPermission(ownerId, properties.getExperienceGovernancePermission())) {
+        if (MemoryRequestSigner.hasAuthorizationContext(proof)) {
+            if (!proof.authorizationContext().allowedOperations().contains(properties.getExperienceGovernancePermission())) {
                 throw new MemoryException(MemoryErrorCode.FORBIDDEN);
             }
-        } catch (MemoryException exception) {
-            throw exception;
-        } catch (RuntimeException exception) {
-            throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+        } else {
+            try {
+                if (!authPermissionRpcService.hasPermission(ownerId, properties.getExperienceGovernancePermission())) {
+                    throw new MemoryException(MemoryErrorCode.FORBIDDEN);
+                }
+            } catch (MemoryException exception) {
+                throw exception;
+            } catch (RuntimeException exception) {
+                throw new MemoryException(MemoryErrorCode.MEMORY_UNAVAILABLE);
+            }
         }
         replayGuard.consume(proof.keyId(), proof.nonce(), proof.expiresAtEpochSecond());
         return ownerId;

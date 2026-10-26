@@ -10,6 +10,13 @@ import com.bkanent.common.memory.MemoryRequestSigner;
 import com.bkanent.common.memory.MemoryV2Contract;
 import com.bkanent.common.memory.MemoryWorkingSetRequest;
 import com.bkanent.common.security.ServiceIdentityCrypto;
+import com.bkanent.common.authz.AuthzCanonicalHash;
+import com.bkanent.common.authz.AuthzContract;
+import com.bkanent.common.authz.AuthzFreshness;
+import com.bkanent.common.authz.AuthzSignature;
+import com.bkanent.common.authz.AuthorizationContext;
+import com.bkanent.common.authz.AuthorizationSnapshot;
+import com.bkanent.common.authz.AuthorizationStatus;
 import com.bkanent.common.rpc.AuthPermissionRpcService;
 import com.bkanent.common.rpc.AuthenticatedPrincipal;
 import com.bkanent.memory.config.MemoryV2SecurityProperties;
@@ -20,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.LongPredicate;
@@ -36,6 +44,7 @@ class MemoryV2RequestSecurityTest {
     private final RecordingReplayGuard replay = new RecordingReplayGuard();
     private final MemoryV2SecurityProperties properties = new MemoryV2SecurityProperties();
     private KeyPair identityPair;
+    private KeyPair authzAuthorityPair;
     private SimpleMeterRegistry metrics;
     private MemoryV2RequestSecurity security;
 
@@ -147,6 +156,47 @@ class MemoryV2RequestSecurityTest {
     }
 
     @Test
+    void signedAuthorizationContextAvoidsAuthRpcForAdmissionAndFinalRevalidation() throws Exception {
+        enableAuthorizationContext();
+        MemoryWorkingSetRequest request = request(CONTEXT);
+        MemoryRequestProof proof = authzProof(request, List.of("agent.chat.use"));
+
+        assertEquals(42L, security.authorize(request, proof, MemoryV2Contract.OPERATION_WORKING_SET));
+        security.revalidate(request, proof, 42L, MemoryV2Contract.OPERATION_WORKING_SET);
+
+        assertEquals(0, auth.calls, "signed context and freshness should be verified locally");
+        assertEquals(1, replay.calls, "only admission consumes the per-request nonce");
+    }
+
+    @Test
+    void signedAuthorizationContextMustIncludeTheMemoryEntryPermission() throws Exception {
+        enableAuthorizationContext();
+        MemoryWorkingSetRequest request = request(CONTEXT);
+        MemoryRequestProof proof = authzProof(request, List.of("unrelated.permission"));
+
+        MemoryException forbidden = assertThrows(MemoryException.class,
+                () -> security.authorize(request, proof, MemoryV2Contract.OPERATION_WORKING_SET));
+
+        assertEquals(MemoryErrorCode.FORBIDDEN, forbidden.code());
+        assertEquals(0, auth.calls);
+        assertEquals(0, replay.calls);
+    }
+
+    @Test
+    void enabledSignedContextModeRejectsLegacyProofInsteadOfDowngradingToAuthRpc() throws Exception {
+        enableAuthorizationContext();
+        MemoryWorkingSetRequest request = request(CONTEXT);
+        MemoryRequestProof proof = proof(request, "nonce-abcdefghijklmnop");
+
+        MemoryException rejected = assertThrows(MemoryException.class,
+                () -> security.authorize(request, proof, MemoryV2Contract.OPERATION_WORKING_SET));
+
+        assertEquals(MemoryErrorCode.AUTHENTICATION_FAILED, rejected.code());
+        assertEquals(0, auth.calls);
+        assertEquals(0, replay.calls);
+    }
+
+    @Test
     void acceptsBothRegisteredKeysDuringRotationAndRevokesTheOldKeyByRemovingItsRegistration() throws Exception {
         var oldPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
         var newPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
@@ -195,6 +245,31 @@ class MemoryV2RequestSecurityTest {
         long now = Instant.now().getEpochSecond();
         return MemoryRequestSigner.sign(request, new AuthenticatedPrincipal(Long.parseLong(request.contextKey().ownerId())), KEY_ID, now, now + 45, nonce,
                 identityPair.getPrivate());
+    }
+
+    private void enableAuthorizationContext() throws Exception {
+        authzAuthorityPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        properties.setAuthorizationContextEnabled(true);
+        properties.setAuthzAuthorityPublicKeys(Map.of("auth-memory-key",
+                ServiceIdentityCrypto.encodePublicKey(authzAuthorityPair.getPublic())));
+    }
+
+    private MemoryRequestProof authzProof(MemoryWorkingSetRequest request, List<String> allowedOperations) {
+        long now = Instant.now().getEpochSecond();
+        String keyId = "auth-memory-key";
+        var snapshot = new AuthorizationSnapshot(OWNER, 7, 2, false, allowedOperations, null,
+                AuthzContract.ALGORITHM, keyId, null);
+        String permissionHash = AuthzCanonicalHash.snapshotHash(snapshot);
+        String authNonce = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]);
+        var context = AuthzSignature.sign(new AuthorizationContext(OWNER, 7, 3, permissionHash,
+                allowedOperations, "agent-service", "entry-request", "run-1", "session-1",
+                "a".repeat(64), "b".repeat(64), authNonce, now, now + 120, now + 240,
+                AuthzContract.ALGORITHM, keyId, null), authzAuthorityPair.getPrivate());
+        var freshness = AuthzSignature.sign(new AuthzFreshness(OWNER, 7, 3, AuthorizationStatus.ACTIVE,
+                permissionHash, now, now + 30, authNonce, AuthzContract.ALGORITHM, keyId, null),
+                authzAuthorityPair.getPrivate());
+        return MemoryRequestSigner.sign(request, new AuthenticatedPrincipal(42L), KEY_ID, now, now + 20,
+                "memory-nonce-authz-1234567890", identityPair.getPrivate(), context, freshness);
     }
 
     private static final class StubAuth implements AuthPermissionRpcService {
