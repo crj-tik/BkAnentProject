@@ -78,3 +78,14 @@ USER域Ed25519+caller/domain/agent/context owner。版本化Memory proof v3携�
 **定向回归证据（各组可能共享依赖测试，不作总数相加）**：A = Auth/common/Listing/Customer 91项；B = common-a2a/Business/Settlement 11项；C = common RAG、A2A/helper、Contract/Listing/Marketing/Promotion 54项；D = Compare/Media及共享鉴权 48项；E = Notification与Contract/Customer reminders 16项；F = `acceptance-results.json`记录隔离Redis ACL的23项正反权限检查及真实订阅收发。以上均不替代生产密钥、应用TLS连接、MySQL/Redis并发发布、跨实例、浏览器或外部副作用验收。
 
 1.1/1.2已形成源码节点、actor/操作/真源/未知映射/停用及守卫证据，不改权威LR/KI/tasks。1.3历史回归/局部assert见baseline，完整I/O实测由主会集中实施；本轮不宣称部署或勾完成。
+
+## 11.2 Graph/A2A/MCP请求计数fixture（2026-10-26）
+
+| 边界 | fixture与计数 | 限定 |
+|---|---|---|
+| Gateway→Supervisor | 有效转发请求一次`resolveRequestAuthorization`；正式Supervisor REST入口一次`bindExecution`。Gateway证明缺失时Agent直接入口一次resolve，再单独一次bind。 | Mock RPC计数，不是实际Auth服务延迟或部署连接。 |
+| Agent Graph | 一个model tool batch执行3个工具，发布4条流事件；同版重规划产生1次head读取，Auth refresh=0。独立Memory输出授权检查=4次。 | LangGraph本地fixture与Memory生命周期mock；head reader计数模拟Redis调用。 |
+| MCP | 5个真实形状`tools/call` JSON-RPC body分别签名/验签，nonce不同；规划后head读取没有增加，Auth RPC=0。 | 生产transport customizer/签名合同fixture，不包含真实MCP服务。 |
+| A2A | Java client对send、stream、get、cancel、resubscribe发5类POST，逐请求本地签名，版本化分支Auth RPC=0。 | 正式SDK client与recording HTTP transport；不代表真实A2A server部署。 |
+
+定向回归：`gateway,agent-service,common-a2a -am`选定入口/Graph/Auth refresh/transport测试，合计60项通过（Agent 46、Gateway 11、common-a2a 3），失败/错误/跳过均0。实际Redis命令数、生产流事件、MySQL/Redis撤权窗口与故障行为仍归11.1/11.4，不由本节fixture推断。

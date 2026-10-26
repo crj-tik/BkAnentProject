@@ -4,15 +4,27 @@ import com.alibaba.cloud.ai.graph.CompiledGraph;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.bkanent.agent.graph.official.*;
 import com.bkanent.agent.model.distributed.SupervisorTaskRequest;
+import com.bkanent.agent.authorization.AgentAuthorizationConsumer;
+import com.bkanent.agent.authorization.AgentAuthorizationScope;
+import com.bkanent.agent.config.AgentAuthorizationProperties;
+import com.bkanent.agent.config.AgentRagConsumerProperties;
+import com.bkanent.agent.security.AgentRagCredentialLeaseStore;
 import com.bkanent.agent.stream.SessionStreamService;
 import com.bkanent.common.agent.SkillSelection;
+import com.bkanent.common.authz.*;
+import com.bkanent.common.rpc.AuthPermissionRpcService;
 import com.bkanent.common.skill.SkillDefinition;
 import com.bkanent.common.skill.core.SkillRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.*;
+import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.ai.chat.messages.*;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
+import java.security.KeyPairGenerator;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.*;
@@ -81,6 +93,90 @@ class SupervisorToolLoopGraphTest {
         assertThat(store.find("child-guard", "invalid")).isNull();
         assertThat(store.find("child-guard", "corrected").status()).isEqualTo("COMPLETED");
         assertThat(effects).hasValue(1);
+    }
+
+    @Test
+    void graphReplansCheckOneAuthorizationHeadAndToolBatchAddsNoPerToolAuthOrRedisReads() throws Exception {
+        long now = 1_800_000_000L;
+        String actor = "1";
+        String token = "verified-test-token";
+        var clock = Clock.fixed(Instant.ofEpochSecond(now), ZoneOffset.UTC);
+        var generator = KeyPairGenerator.getInstance("Ed25519");
+        var authority = generator.generateKeyPair();
+        var caller = generator.generateKeyPair();
+        var authorizationProperties = new AgentAuthorizationProperties();
+        authorizationProperties.setEnabled(true);
+        authorizationProperties.setKeyId("agent-key");
+        authorizationProperties.setPublicKey(Base64.getEncoder().encodeToString(caller.getPublic().getEncoded()));
+        authorizationProperties.setAuthorityPublicKeys(Map.of("auth-key",
+                Base64.getEncoder().encodeToString(authority.getPublic().getEncoded())));
+        var authorizationRpc = mock(AuthAuthorizationRpcService.class);
+        var legacyRpc = mock(AuthPermissionRpcService.class);
+        AtomicInteger headReads = new AtomicInteger();
+
+        byte[] body = "{}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        String nonce = authzNonce((byte) 1);
+        String policyDigest = AuthzCanonicalHash.bodyHash(new byte[0]);
+        var binding = new RequestBinding("gateway", "agent-service", "POST", "/agent/chat", "/agent/chat",
+                List.of(), "run-19", "run-19", "session-19", AuthzCanonicalHash.bodyHash(body),
+                policyDigest, nonce, now - 1, now + 59);
+        var snapshot = AuthzSignature.sign(new AuthorizationSnapshot(actor, 4, 1, false,
+                List.of("agent.chat.use"), null, AuthzContract.ALGORITHM, "auth-key", null), authority.getPrivate());
+        String permissionHash = AuthzCanonicalHash.snapshotHash(snapshot);
+        String requestHash = AuthzCanonicalHash.resolveRequestHash(token, binding);
+        var freshness = AuthzSignature.sign(new AuthzFreshness(actor, 4, 2, AuthorizationStatus.ACTIVE,
+                permissionHash, now - 1, now + 29, authzNonce((byte) 2), AuthzContract.ALGORITHM,
+                "auth-key", null), authority.getPrivate());
+        var context = AuthzSignature.sign(new AuthorizationContext(actor, 4, 2, permissionHash,
+                snapshot.permissions(), "agent-service", binding.requestId(), binding.runId(), binding.sessionId(),
+                policyDigest, requestHash, nonce, now - 1, now + 120, now + 120,
+                AuthzContract.ALGORITHM, "auth-key", null), authority.getPrivate());
+        var monitor = new AuthorizationVersionMonitor(users -> {
+            headReads.incrementAndGet();
+            return Map.of(actor, freshness);
+        }, authorizationProperties.authorityKeys(), clock);
+        var consumer = new AgentAuthorizationConsumer(authorizationProperties,
+                new AuthorizationCache(16, 1_000_000, java.time.Duration.ofMinutes(1), 8), monitor, clock,
+                authorizationRpc);
+        var entry = consumer.verify(new AuthzResponse(snapshot, context, freshness), binding, token,
+                "POST", "/agent/chat", null, body);
+
+        var beans = new DefaultListableBeanFactory();
+        beans.registerSingleton("legacyAuth", legacyRpc);
+        var credentials = new AgentRagCredentialLeaseStore(new AgentRagConsumerProperties(),
+                beans.getBeanProvider(AuthPermissionRpcService.class), clock);
+        AtomicInteger memoryResourceChecks = new AtomicInteger();
+        doAnswer(invocation -> { memoryResourceChecks.incrementAndGet(); return null; })
+                .when(memory).authorizeStoredOutput(any());
+        factory.setAuthorizationConsumer(consumer);
+        factory.setAuthorizationProperties(authorizationProperties);
+        factory.setRagCredentials(credentials);
+        runner.setRagCredentials(credentials);
+        when(model.call(anyList(), anyList())).thenReturn(calls(
+                        call("tool-1", "search", "{}"), call("tool-2", "search", "{}"), call("tool-3", "search", "{}")),
+                new AssistantMessage("done"));
+
+        try (var authorization = AgentAuthorizationScope.open(entry);
+             var verifiedCredentials = credentials.openVerifiedAuthorization(token, entry)) {
+            var response = runner.execute(new SupervisorTaskRequest("session-19", actor, "run-19", "trace-19",
+                    "find", Map.of(), "api", false));
+            assertThat(response.status()).isEqualTo("COMPLETED");
+        } finally {
+            credentials.discard("run-19");
+        }
+
+        assertThat(effects).hasValue(3);
+        assertThat(headReads).hasValue(1);
+        verify(model, times(2)).call(anyList(), anyList());
+        verify(authorizationRpc, never()).refreshAuthorization(anyString(), any(), any(), any());
+        verifyNoInteractions(legacyRpc);
+        verify(memory, times(2)).beforeModel(any(), anyString());
+        assertThat(memoryResourceChecks.get()).isEqualTo(4);
+        var streamEvents = org.mockito.ArgumentCaptor.forClass(com.bkanent.common.agent.SessionStreamEvent.class);
+        verify(events, times(4)).publish(streamEvents.capture());
+        assertThat(streamEvents.getAllValues()).extracting(com.bkanent.common.agent.SessionStreamEvent::eventType)
+                .containsExactlyInAnyOrder("tool.completed", "tool.completed", "tool.completed", "supervisor.completed");
+        assertThat(headReads).hasValue(1);
     }
 
     @Test
@@ -653,6 +749,11 @@ class SupervisorToolLoopGraphTest {
     private ToolLoopState state(String id) { return factory.stateOf(graph.lastStateOf(com.alibaba.cloud.ai.graph.RunnableConfig.builder().threadId(id).build()).orElseThrow().state()); }
     private SupervisorTaskRequest request(String id, SkillSelection skill, String continueId, String message) {
         return new SupervisorTaskRequest("session", "1", id, "trace", message, Map.of(), "api", false, skill, continueId, null);
+    }
+    private static String authzNonce(byte value) {
+        byte[] bytes = new byte[32];
+        Arrays.fill(bytes, value);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
     private SupervisorCapability capability(String name) {
         ToolCallback callback = new ToolCallback() {

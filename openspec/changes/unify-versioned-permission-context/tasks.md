@@ -87,7 +87,7 @@
 ## 11. 故障、兼容与交付验收
 
 - [ ] 11.1 使用真实MySQL/Redis测试原子发布、重建、版本并发、角色批变更、授予到期、重复/乱序/丢通知、dispatcher延迟和权限Redis非法写；超过30秒权威新鲜度必须停新动作。
-- [ ] 11.2 使用Graph/正式ReactAgent/MCP fixture统计：Gateway->Supervisor入口Auth一次；同版Model返回只核版本；新域入口一次；N工具/M流项新增逐节点Auth/Redis为零，Memory资源检查独立计数。
+- [x] 11.2 使用Graph/正式ReactAgent/MCP fixture统计：Gateway->Supervisor入口Auth一次；同版Model返回只核版本；新域入口一次；N工具/M流项新增逐节点Auth/Redis为零，Memory资源检查独立计数。
 - [ ] 11.3 覆盖伪造actor/admin/metadata、错误audience/body/task/nonce、跨用户与多会话、管理员业务全读/个人Memory拒绝、权限新增不越原审批和请求政策。
 - [ ] 11.4 在开发栈做真实send/stream/get/cancel/resubscribe、访谈开台领取答题回执/报告及撤权故障验收；未知/未运行业务域和Studio未就绪浏览器如实标未验，不启动无关真实外部副作用。
 - [ ] 11.5 使用仓库settings运行相关模块及全量compile/test；失败与跳过有具体证据，新增transition均有防回归；发布配置只用受管服务身份，不回显秘密。
