@@ -5,6 +5,9 @@ import com.bkanent.agent.registry.AgentRegistry;
 import com.bkanent.agent.registry.RegisteredAgentDescriptor;
 import com.bkanent.agent.service.A2aExecutionService;
 import com.bkanent.agent.service.AgentPermissionService;
+import com.bkanent.agent.authorization.AgentAuthorizationScope;
+import com.bkanent.agent.mcp.AgentMcpAuthorizationInvocation;
+import com.bkanent.agent.mcp.AgentMcpAuthorizationScope;
 import com.bkanent.common.agent.AgentTaskInvokeRequest;
 import com.bkanent.common.agent.CapabilityId;
 import com.bkanent.common.agent.SkillPublication;
@@ -61,21 +64,46 @@ public class SupervisorCapabilityCatalog {
             add(result, new SupervisorCapability(id, "a2a", descriptor.agentId(), card.version(), callback));
         }
         if (allowMcp) for (var tool : mcp.listTools()) {
+            String id = CapabilityId.mcp(tool.serverName(), tool.toolName()).value();
             boolean permitted = permissions.versionedAuthorizationEnabled()
-                    ? permissions.canInvokeMcpTool(userId, tool.serverName(), tool.toolName())
+                    ? (permissions.canInvokeMcpTool(userId, tool.serverName(), tool.toolName())
+                            && mcp.supportsUserDelegation(tool.serverName())
+                            && permissions.mcpTargetAudience(tool.serverName()) != null)
+                            || publicMcpCapabilityVisible(userId, id)
                     : permissions.canUseMcpTools(userId)
                     && permissions.canReadMcpServer(userId, tool.serverName());
             if (!permitted) continue;
-            String id = CapabilityId.mcp(tool.serverName(), tool.toolName()).value();
             add(result, new SupervisorCapability(id, "mcp", tool.serverName(), tool.inputSchema(),
                     callback(id, tool.description() == null ? tool.toolName() : tool.description(), tool.inputSchema(),
                             (arguments, context) -> {
-                                String actor = required(context, "userId");
-                                boolean stillPermitted = permissions.versionedAuthorizationEnabled()
-                                        ? permissions.canInvokeMcpTool(actor, tool.serverName(), tool.toolName())
-                                        : permissions.canUseMcpTools(actor)
-                                        && permissions.canReadMcpServer(actor, tool.serverName());
-                                if (!stillPermitted) throw new IllegalStateException("CAPABILITY_PERMISSION_DENIED");
+                                String actor = executionActor(context);
+                                if (permissions.versionedAuthorizationEnabled()) {
+                                    var entry = AgentAuthorizationScope.current();
+                                    if (entry == null) throw new com.bkanent.common.authz.AuthzException(
+                                            com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
+                                    entry.requireRunAssociation();
+                                    boolean delegated = permissions.canInvokeMcpTool(actor, tool.serverName(), tool.toolName())
+                                            && mcp.supportsUserDelegation(tool.serverName())
+                                            && permissions.mcpTargetAudience(tool.serverName()) != null;
+                                    boolean publicData = !delegated && permissions.isPublicMcpCapability(id);
+                                    if (!delegated && !publicData) throw new IllegalStateException("CAPABILITY_PERMISSION_DENIED");
+                                    String operation = delegated
+                                            ? permissions.mcpToolPermissionCode(tool.serverName(), tool.toolName()) : null;
+                                    String audience = delegated ? permissions.mcpTargetAudience(tool.serverName()) : null;
+                                    try (AutoCloseable scope = AgentMcpAuthorizationScope.open(
+                                            new AgentMcpAuthorizationInvocation(entry, tool.serverName(), tool.toolName(),
+                                                    delegated, publicData, audience, operation))) {
+                                        return json(mcp.callTool(tool.serverName(), tool.toolName(), arguments));
+                                    } catch (RuntimeException failure) {
+                                        throw failure;
+                                    } catch (Exception failure) {
+                                        throw new IllegalStateException("MCP authorization scope cleanup failed", failure);
+                                    }
+                                }
+                                if (!permissions.canUseMcpTools(actor)
+                                        || !permissions.canReadMcpServer(actor, tool.serverName())) {
+                                    throw new IllegalStateException("CAPABILITY_PERMISSION_DENIED");
+                                }
                                 return json(mcp.callTool(tool.serverName(), tool.toolName(), arguments));
                             })));
         }
@@ -183,6 +211,28 @@ public class SupervisorCapabilityCatalog {
     private String required(Map<String, Object> context, String name) {
         if (!(context.get(name) instanceof String value) || value.isBlank()) throw new IllegalStateException("missing authenticated " + name);
         return value;
+    }
+    private String executionActor(Map<String, Object> context) {
+        if (!permissions.versionedAuthorizationEnabled()) return required(context, "userId");
+        var entry = AgentAuthorizationScope.current();
+        if (entry == null) throw new com.bkanent.common.authz.AuthzException(
+                com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
+        String actor = entry.requireActor(null);
+        Object claimed = context == null ? null : context.get("userId");
+        if (claimed != null && !actor.equals(String.valueOf(claimed))) {
+            throw new com.bkanent.common.authz.AuthzException(
+                    com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_FAILED);
+        }
+        return actor;
+    }
+    private boolean publicMcpCapabilityVisible(String userId, String capabilityId) {
+        if (!permissions.isPublicMcpCapability(capabilityId)) return false;
+        try {
+            var entry = AgentAuthorizationScope.current();
+            return entry != null && entry.requireActor(userId) != null;
+        } catch (RuntimeException denied) {
+            return false;
+        }
     }
     private String json(Object value) {
         try { return mapper.writeValueAsString(value); } catch (Exception exception) { throw new IllegalStateException(exception); }

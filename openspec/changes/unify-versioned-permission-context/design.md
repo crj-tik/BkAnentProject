@@ -114,7 +114,7 @@ Auth先验证原context签名及真实actor/audience/期限，不要求原permis
 
 ### D8. MCP第一阶段只开放可验证服务
 
-InterviewMcpTools当前6个普通@Tool无真实provider bean，先完成明确ToolCallbackProvider/官方注册及专用HTTP鉴权过滤（或服务器支持的标准鉴权扩展）。MCP客户端在模型不可见的headers/transport上下文附binding；接收服务在新call执行入口调用Auth验证一次，同一调用内代码不逐步认证。外部MCP不支持用户委托时只允许清单标记的无私有数据能力，不把userId业务参数当身份。Supervisor动态连接管理仍需独立管理权限与地址防护。
+InterviewMcpTools当前6个普通@Tool无真实provider bean，先完成明确ToolCallbackProvider/官方注册及服务端受限委托入口。**MCP采用请求级签名上下文**：Supervisor从当前有效的已绑定run/session上下文取Auth签名context/freshness；专用客户端transport为每个实际`tools/call`按已登记的server+tool操作码生成新的短期binding和Agent服务proof，精确绑定实际JSON-RPC method/id/body，不让授权材料进入模型可见参数或日志。服务端在工具分发前本地验证Auth签名、Freshness、caller/audience、tool操作、actor/run/body/nonce/期限并做有界一次性重放拦截；同一调用内代码不逐步认证，权限只在Supervisor已有的规划刷新边界联系Auth，工具调用不新增Auth/Redis往返。缺context、映射、签名、服务能力声明或本地验证配置时拒绝用户委托调用。外部MCP不支持该协议时，Supervisor只允许可信清单显式标记为无私有数据的能力，且不向其发送用户身份；绝不从userId业务参数推断actor。MCP admin连接管理权限与用户工具操作/业务资源权限分开。
 
 不新增任意HTTP授权回调URL；权限RPC用受管注册中心，版本广播用Redis。涉及新增服务端URL请求时只允许http/https、请求前校验精确host并拒绝localhost、环回、私有和保留地址，同时防重定向和DNS换址；不扩大已有RAG受管网络策略，本次新增HTTP调用不借已有私网例外。内部MCP验收优先原生适配/服务器入口，不新增绕过地址策略的客户端。
 

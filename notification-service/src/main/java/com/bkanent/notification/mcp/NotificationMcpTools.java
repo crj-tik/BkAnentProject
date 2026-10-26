@@ -1,11 +1,15 @@
 package com.bkanent.notification.mcp;
 
 import com.bkanent.common.tool.McpTool;
+import com.bkanent.common.authz.AuthzErrorCode;
+import com.bkanent.common.authz.AuthzException;
+import com.bkanent.common.mcp.authz.McpAuthorizationScope;
 import com.bkanent.notification.model.NotificationListItemResponse;
 import com.bkanent.notification.model.NotificationMessageRequest;
 import com.bkanent.notification.service.NotificationManagementService;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -14,9 +18,12 @@ import java.util.List;
 public class NotificationMcpTools implements McpTool {
 
     private final NotificationManagementService notificationManagementService;
+    private final boolean versionedMcpAuthorizationEnabled;
 
-    public NotificationMcpTools(NotificationManagementService notificationManagementService) {
+    public NotificationMcpTools(NotificationManagementService notificationManagementService,
+                                @Value("${mcp.authorization.server.enabled:false}") boolean versionedMcpAuthorizationEnabled) {
         this.notificationManagementService = notificationManagementService;
+        this.versionedMcpAuthorizationEnabled = versionedMcpAuthorizationEnabled;
     }
 
     @Tool(description = "Send an in-app station message to a user. Returns the message ID.")
@@ -43,7 +50,7 @@ public class NotificationMcpTools implements McpTool {
             @ToolParam(description = "User ID") Long userId,
             @ToolParam(description = "Channel filter: station, email. Pass empty string to skip.") String channel,
             @ToolParam(description = "Read status filter: READ, UNREAD. Pass empty string to skip.") String readStatus) {
-        return notificationManagementService.listUserMessages(userId,
+        return notificationManagementService.listUserMessages(resolveAuthenticatedUser(userId),
                 channel == null || channel.isBlank() ? null : channel,
                 readStatus == null || readStatus.isBlank() ? null : readStatus);
     }
@@ -51,6 +58,21 @@ public class NotificationMcpTools implements McpTool {
     @Tool(description = "Count unread messages for a user.")
     public Long countUnreadMessages(
             @ToolParam(description = "User ID") Long userId) {
-        return notificationManagementService.countUnreadMessages(userId);
+        return notificationManagementService.countUnreadMessages(resolveAuthenticatedUser(userId));
+    }
+
+    private Long resolveAuthenticatedUser(Long claimedUserId) {
+        if (!versionedMcpAuthorizationEnabled) return claimedUserId;
+        String actor = McpAuthorizationScope.requireActor();
+        final Long actorId;
+        try {
+            actorId = Long.valueOf(actor);
+        } catch (NumberFormatException invalidActor) {
+            throw new AuthzException(AuthzErrorCode.AUTHENTICATION_FAILED);
+        }
+        if (claimedUserId != null && !claimedUserId.equals(actorId)) {
+            throw new AuthzException(AuthzErrorCode.AUTHENTICATION_FAILED);
+        }
+        return actorId;
     }
 }

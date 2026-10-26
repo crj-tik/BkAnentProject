@@ -2,7 +2,10 @@ package com.bkanent.agent.mcp;
 
 import com.bkanent.agent.mcp.model.AgentMcpCallResult;
 import com.bkanent.agent.mcp.model.AgentMcpToolDescriptor;
+import com.bkanent.agent.config.AgentAuthorizationProperties;
 import com.bkanent.common.mcp.DynamicMcpClientManager;
+import com.bkanent.common.authz.AuthzErrorCode;
+import com.bkanent.common.authz.AuthzException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.client.McpSyncClient;
@@ -10,6 +13,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -25,13 +29,30 @@ public class HttpAgentMcpClient implements AgentMcpClient {
     private final Map<String, McpSyncClient> clientsByName;
     private final ObjectMapper objectMapper;
     private final DynamicMcpClientManager dynamicMcpClientManager;
+    private final AgentAuthorizationProperties authorizationProperties;
+    private final AgentMcpAuthorizationSupport authorizationSupport;
 
+    @Autowired
     public HttpAgentMcpClient(@Qualifier("mcpClientsByName") Map<String, McpSyncClient> clientsByName,
                               ObjectMapper objectMapper,
+                              DynamicMcpClientManager dynamicMcpClientManager,
+                              AgentAuthorizationProperties authorizationProperties,
+                              org.springframework.beans.factory.ObjectProvider<AgentMcpAuthorizationSupport> authorizationSupport) {
+        this.clientsByName = clientsByName == null ? Map.of() : clientsByName;
+        this.objectMapper = objectMapper;
+        this.dynamicMcpClientManager = dynamicMcpClientManager;
+        this.authorizationProperties = authorizationProperties;
+        this.authorizationSupport = authorizationSupport == null ? null : authorizationSupport.getIfAvailable();
+        this.dynamicMcpClientManager.reserveNames(this.clientsByName.keySet());
+    }
+
+    public HttpAgentMcpClient(Map<String, McpSyncClient> clientsByName, ObjectMapper objectMapper,
                               DynamicMcpClientManager dynamicMcpClientManager) {
         this.clientsByName = clientsByName == null ? Map.of() : clientsByName;
         this.objectMapper = objectMapper;
         this.dynamicMcpClientManager = dynamicMcpClientManager;
+        this.authorizationProperties = null;
+        this.authorizationSupport = null;
         this.dynamicMcpClientManager.reserveNames(this.clientsByName.keySet());
     }
 
@@ -63,6 +84,24 @@ public class HttpAgentMcpClient implements AgentMcpClient {
 
     @Override
     public AgentMcpCallResult callTool(String serverName, String toolName, Map<String, Object> arguments) {
+        if (authorizationProperties != null && authorizationProperties.isEnabled()) {
+            AgentMcpAuthorizationInvocation invocation = AgentMcpAuthorizationScope.current();
+            if (invocation == null || !serverName.equals(invocation.serverName())
+                    || !toolName.equals(invocation.toolName())) {
+                throw new AuthzException(AuthzErrorCode.AUTHENTICATION_REQUIRED);
+            }
+            invocation.entry().requireRunAssociation();
+            boolean dynamic = dynamicMcpClientManager.dynamicClients().containsKey(serverName);
+            if (invocation.delegated() && (dynamic || !supportsUserDelegation(serverName))) {
+                throw new AuthzException(AuthzErrorCode.AUTHORIZATION_UNAVAILABLE);
+            }
+            if (invocation.publicData()) {
+                String capability = com.bkanent.common.agent.CapabilityId.mcp(serverName, toolName).value();
+                if (!authorizationProperties.isPublicMcpCapability(capability)) {
+                    throw new AuthzException(AuthzErrorCode.PERMISSION_DENIED);
+                }
+            }
+        }
         McpSyncClient client = getRequiredClient(serverName);
         McpSchema.CallToolResult result = client.callTool(new McpSchema.CallToolRequest(toolName, arguments == null ? Map.of() : arguments));
         if (Boolean.TRUE.equals(result.isError())) {
@@ -73,6 +112,13 @@ public class HttpAgentMcpClient implements AgentMcpClient {
                 ? String.valueOf(payload.get("resultText"))
                 : extractText(result);
         return new AgentMcpCallResult(serverName, toolName, text, payload);
+    }
+
+    @Override
+    public boolean supportsUserDelegation(String serverName) {
+        return authorizationProperties != null && authorizationProperties.isEnabled()
+                && clientsByName.containsKey(serverName) && authorizationSupport != null
+                && authorizationSupport.supportsUserDelegation(serverName);
     }
 
     public Map<String, McpSyncClient> allClients() {

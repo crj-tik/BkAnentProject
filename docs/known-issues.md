@@ -1504,6 +1504,16 @@
 
 **关联**：LR-63/89/133/142；任务6.4。
 
+## KI-174 [OPEN·P1] MCP短期nonce防重放只覆盖单个进程
+
+**发现日期与依据**：2026-10-26，实施任务6.5。MCP本地guard把已消费nonce保存在有界进程内Map。相同未过期、精确绑定正文的proof若被重复发送到另一服务副本，或服务重启后再次发送，另一进程没有消费记录，可能再次执行相同MCP副作用。
+
+**当前处置**：MCP授权及Interview provider开关默认关闭，当前没有生产key/操作映射启用。每个proof短期有效并绑定caller、audience、actor、run/session、tool操作、request id和正文；单实例重复会被拒绝，容量耗尽时安全拒绝。启用前必须按部署拓扑确认重复副作用的业务幂等保障；不把权限版本刷新或MCP业务owner校验等价成跨副本nonce消费。
+
+**后续边界**：如需跨副本/重启严格一次性消费，应在MCP域提供有界共享nonce存储或可靠的业务幂等键，并验证并发原子消费；该存储不得回退为逐工具Auth RPC。当前change仅完成本地短期防重放约定，不宣称提供集群级exactly-once。
+
+**关联**：LR-143；change `unify-versioned-permission-context`任务6.5。
+
 ---
 
 **变更历史**：本提交 持久化A2A请求防重放与任务归属（KI-172）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。

@@ -66,7 +66,7 @@
 
 ### Requirement: Boundary validation and planning version checks
 
-每个新外部请求 SHALL 在可信入口完成一次认证及完整授权获取，首次规划不重复获取。Supervisor 重新进入业务 Model 规划时 SHALL 核对当前授权和认证状态版本，同版且有效时不重复计算或下载权限。每个新 MCP 或业务执行边界 SHALL 按已接入协议向中心服务验证受限委托一次；稳定已绑定 Agent run 上的 A2A send/stream/get/cancel/resubscribe 则 SHALL 携带 Auth 签名父 context、当前 freshness 和 Agent 服务逐请求 proof，由接收服务在 Store/Queue 前本地验证精确请求，Auth 仅在 Supervisor 规划刷新边界联系。任何同一次执行内部节点、工具、模型和流事件 SHALL 使用本地有效上下文判断，不逐节点、逐工具或逐事件远程复验。目标、参数、服务身份和请求重放检查仍 MUST 在相应执行入口进行；跨实例 owner/nonce 持久化按 A2A 任务关联要求验收。
+每个新外部请求 SHALL 在可信入口完成一次认证及完整授权获取，首次规划不重复获取。Supervisor 重新进入业务 Model 规划时 SHALL 核对当前授权和认证状态版本，同版且有效时不重复计算或下载权限。稳定已绑定 Agent run 上的 A2A 和已接入 MCP `tools/call` SHALL 携带 Auth 签名父 context、当前 freshness 和 Agent 服务逐请求 proof；请求proof绑定实际序列化JSON-RPC method/id/body及精确操作码，接收服务 SHALL 在任务/工具分发前本地验证身份、签名、权限、目标和期限，并按本地短期重放保护消费nonce。Auth SHALL 仅在Supervisor规划刷新边界联系，MCP逐工具调用 SHALL 不增加Auth/Redis往返。外部MCP不支持用户委托协议时，仅可通过可信清单显式开放无私有数据能力，且不得接收用户身份字段。任何同一次执行内部节点、工具、模型和流事件 SHALL 使用本地有效上下文判断，不逐节点、逐工具或逐事件远程复验。目标、参数、服务身份和请求重放检查仍 MUST 在相应执行入口进行；跨实例owner/nonce持久化由各协议的具体持久任务要求覆盖。
 
 #### Scenario: A tool result triggers replanning without authorization change
 - **WHEN** Supervisor 获取工具结果后重新进入规划且权限和认证版本未变
@@ -79,6 +79,10 @@
 #### Scenario: A2A request reuses a signed run context without an Auth round trip
 - **WHEN** Supervisor 在有效且未 DIRTY 的已绑定 run 中向子 Agent 发送或控制一个 A2A task
 - **THEN** Agent 为实际 JSON-RPC body 生成新的短期绑定和服务 proof，接收端本地验证 Auth context/freshness 签名、caller、audience、操作、request/task/body/nonce 与 owner；该 A2A 请求新增 Auth RPC 为零，模型传入的用户身份字段不参与 actor 选择
+
+#### Scenario: MCP call reuses the signed run context without per-tool Auth checks
+- **WHEN** Supervisor 在有效且未 DIRTY 的已绑定 run 中调用已登记的第一方 MCP 工具
+- **THEN** 专用transport为实际`tools/call`生成模型不可见的短期body绑定proof，MCP服务本地验证Auth context/freshness和精确server+tool操作、caller、actor、run、nonce及期限；该工具调用新增Auth和Redis往返均为零，外部无用户委托能力仅在可信清单明确标记无私有数据时可见
 
 #### Scenario: Unauthenticated direct service call
 - **WHEN** 调用者绕过 Supervisor 直接提交普通 userId 或不可信身份头

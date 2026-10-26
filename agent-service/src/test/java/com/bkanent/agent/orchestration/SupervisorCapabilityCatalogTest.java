@@ -114,6 +114,9 @@ class SupervisorCapabilityCatalogTest {
         when(permissions.versionedAuthorizationEnabled()).thenReturn(true);
         when(permissions.canUseLocalTool("1", "search")).thenReturn(true);
         when(permissions.canInvokeMcpTool("1", "one", "search")).thenReturn(true);
+        when(permissions.mcpToolPermissionCode("one", "search")).thenReturn("interview.asset.read");
+        when(permissions.mcpTargetAudience("one")).thenReturn("interview-service");
+        when(mcp.supportsUserDelegation("one")).thenReturn(true);
         when(mcp.listTools()).thenReturn(List.of(tool("one"), tool("two")));
         when(mcp.callTool("one", "search", Map.of("query", "authorized")))
                 .thenReturn(new AgentMcpCallResult("one", "search", "allowed", Map.of()));
@@ -127,13 +130,22 @@ class SupervisorCapabilityCatalogTest {
                 .hasMessage("CAPABILITY_PERMISSION_DENIED");
         assertThat(effects).hasValue(1);
         var mcpCapability = snapshot.get("mcp:one:search");
-        assertThat(mcpCapability.callback().call("{\"query\":\"authorized\"}", context))
-                .contains("allowed");
+        assertThatThrownBy(() -> mcpCapability.callback().call("{\"query\":\"authorized\"}", context))
+                .isInstanceOf(com.bkanent.common.authz.AuthzException.class)
+                .extracting(failure -> ((com.bkanent.common.authz.AuthzException) failure).code())
+                .isEqualTo(com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
+        assertThatThrownBy(() -> mcpCapability.callback().call("{\"userId\":\"2\"}",
+                new ToolContext(Map.of("userId", "2"))))
+                .isInstanceOf(com.bkanent.common.authz.AuthzException.class)
+                .extracting(failure -> ((com.bkanent.common.authz.AuthzException) failure).code())
+                .isEqualTo(com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
         when(permissions.canInvokeMcpTool("1", "one", "search")).thenReturn(false);
         assertThatThrownBy(() -> mcpCapability.callback().call("{\"query\":\"authorized\"}", context))
-                .hasMessage("CAPABILITY_PERMISSION_DENIED");
+                .isInstanceOf(com.bkanent.common.authz.AuthzException.class)
+                .extracting(failure -> ((com.bkanent.common.authz.AuthzException) failure).code())
+                .isEqualTo(com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
         assertThat(catalog.snapshot("1", true)).isEmpty();
-        verify(mcp).callTool("one", "search", Map.of("query", "authorized"));
+        verify(mcp, never()).callTool(anyString(), anyString(), anyMap());
         verify(mcp, times(2)).listTools();
         verify(permissions, never()).canUseMcpTools("1");
         verify(permissions, never()).canReadMcpServer(anyString(), anyString());

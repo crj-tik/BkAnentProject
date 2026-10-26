@@ -2,9 +2,9 @@
 
 ## 当前实施状态（2026-10-26）
 
-OpenSpec `spec-driven` change `unify-versioned-permission-context` 当前完成 **26/63** 项。本次按Agent/Supervisor模块完成任务5.1–5.7：运行内本地授权上下文与规划边界版本刷新、精确能力映射和执行守卫、持久owner与治理审计，以及异步状态SSE工作线程上下文恢复/清理和结果不可用保护。
+OpenSpec `spec-driven` change `unify-versioned-permission-context` 当前完成 **31/63** 项。本轮按MCP模块完成任务6.5：请求级签名上下文和逐请求body proof、本地服务验签与短期nonce guard、正式Interview tool provider门禁，以及通知本人查询以已验签actor为准。Agent/Supervisor 5.1–5.7、A2A/Memory 6.1–6.4维持此前完成结论。
 
-Agent模块定向回归 **86项通过，失败/错误/跳过均0**；涵盖权限刷新、能力目录、审批恢复、未知副作用对账、预算续接、owner边界、治理审计和异步状态。KI-128仍保持OPEN，需在原开发环境复现历史500；异步跨实例/重启恢复仍由任务6.2跟踪。新授权开关仍默认关闭，未部署。
+MCP定向回归 **16项通过，失败/错误/跳过均0**。全量23模块Maven回归 **1615项，失败/错误0，14项既有外部依赖测试跳过**；严格OpenSpec校验通过。KI-174记录MCP nonce仅进程内防重放；跨实例/重启重复副作用仍待耐久幂等设计。授权开关、服务key与操作映射默认关闭/未配置，未部署。
 
 历史章节记录各前序批次当时状态；本节是当前进度权威摘要。
 
@@ -122,3 +122,11 @@ A2A Memory加载prompt时固定该轮来源依赖；模型/流、工具和最终
 异步SSE状态查询在切换工作线程前捕获当前请求短期授权/RAG上下文，查询结束清理，不写入任务记录、事件或checkpoint。持久结果畸形/错配时保留状态但抑制结果；当前Memory来源拒绝时也不回退到存储结果。owner边界、请求幂等和审批恢复仍在原持久化入口检查。
 
 Agent定向回归13个测试类、86项通过，失败/错误/跳过均0；8个Maven reactor模块成功。KI-128仅完成源码保护和回归，因缺少原环境重放证据继续OPEN。异步跨实例/重启恢复、A2A/Memory和领域consumer由6.x继续验收；新授权开关保持默认关闭，未作生产部署。当前进度26/63。
+
+## MCP请求级鉴权与已验签actor续批（2026-10-26）
+
+按模块完成任务6.5。`common`提供MCP JSON-RPC逐请求proof、严格正文绑定、Auth context/freshness与Agent服务签名的本地验签、受控server filter及有界单实例nonce guard。Agent MCP transport通过SDK隐藏transport context传proof，只接受精确登记的静态第一方endpoint+audience；Supervisor只用当前绑定run actor和精确工具操作，Graph内MCP工具调用不逐次访问Auth/Redis。第三方工具只能以无用户身份的显式public capability接入。
+
+Interview正式`ToolCallbackProvider`仅在服务端本地验签guard启用时注册。Notification MCP本人消息列表和未读数从已验证actor取userId，模型提交其他userId时在服务调用前拒绝；发送通知的recipient userId继续作为目标对象，不混作当前actor。管理员连接管理仍与每个MCP工具操作分离；映射/密钥默认未启用，因此不据源码验收宣称任何MCP生产工具已开放。
+
+新增contract/filter、Supervisor actor mismatch、provider条件和Notification owner查询回归；16项定向用例通过。全量 `mvn test` 覆盖23模块，1615项运行、失败/错误0、14项既有外部依赖测试跳过；OpenSpec严格校验通过。LR-143记录本地签名边界；KI-174保留OPEN：进程内nonce guard无法阻止另一副本或重启后短期内重放同一proof造成重复副作用。

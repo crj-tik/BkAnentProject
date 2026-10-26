@@ -1089,3 +1089,13 @@
 **代码位置**：`common/memory/MemoryRequestProof`、`MemoryRequestSigner`、`AuthzCanonicalHash`；`common-memory/MemoryRpcClient`；`memory-service/MemoryV2RequestSecurity`与`MemoryV2SecurityProperties`；`common-a2a/A2aMemoryAgentHook`、`A2aMemoryInvocation`；`common-memory/MemoryWorkingSession.sourcesCurrent`。
 
 **关联**：LR-40/63/89/98/140/141；KI-133/173；change `unify-versioned-permission-context`任务6.3/6.4。Memory签名上下文模式默认关闭；开启前需配置Auth公钥并完成部署验收。
+
+## LR-143 MCP逐请求proof本地验签，actor来自已绑定run
+
+**结论**：版本化Supervisor只从当前有效的已绑定Auth run/session取得context与freshness；Agent专用MCP transport为每个`tools/call`签发新的短期body绑定和服务proof，覆盖JSON-RPC request id、实际正文、服务audience和已登记tool操作。MCP服务在分发前本地验证Auth签名、Agent签名、caller、actor、run/session、期限与nonce，不逐工具调用Auth/Redis。普通tool参数中的`userId`或admin声明不定义actor；MCP业务adapter仍须使用`McpAuthorizationScope`中的可信actor执行资源/owner检查。外部MCP只有被可信清单明确列为无私有数据的能力才可在无用户委托下调用。进程内nonce防重放仅覆盖单个服务实例，跨实例/重启的重复副作用受KI-174跟踪。
+
+**根因**：Graph一次运行内会多次调度subAgent和MCP tool，重复远程鉴权会把正常编排耦合到Auth/Redis每次可用性；直接复用context而不重新绑定真实JSON-RPC正文又会允许请求重放或改参数。Auth签名父上下文、Agent逐请求proof、接收端本地验签把身份来源和请求完整性固定，同时保留规划刷新边界。权限码只说明允许的操作，不能代替业务资源归属核查。
+
+**代码位置**：`common/mcp/authz/McpAuthorizationContract`、`McpAuthorizationFilter`、`McpAuthorizationScope`、`McpAuthorizationReplayGuard`；`agent-service/AgentMcpAuthorizationTransportCustomizer`、`AgentMcpAuthorizationSupport`、`SupervisorCapabilityCatalog`；`notification-service/NotificationMcpTools`的本人消息查询从可信actor解析，不采纳模型传入的其他userId；Interview MCP provider仅在本地验证guard启用时注册。新开关和操作映射默认关闭，未声明生产MCP部署已启用。
+
+**关联**：LR-106/139/140；KI-174；change `unify-versioned-permission-context`任务6.5。

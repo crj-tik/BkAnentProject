@@ -165,6 +165,22 @@ public class AgentPermissionService {
                 capabilityId(() -> com.bkanent.common.agent.CapabilityId.mcp(serverName, toolName)));
     }
 
+    public String mcpToolPermissionCode(String serverName, String toolName) {
+        if (!versionedAuthorizationEnabled()) return null;
+        String id = capabilityId(() -> com.bkanent.common.agent.CapabilityId.mcp(serverName, toolName));
+        return id == null ? null : authorizationProperties.permissionForCapability(id);
+    }
+
+    public String mcpTargetAudience(String serverName) {
+        if (!versionedAuthorizationEnabled() || authorizationProperties == null) return null;
+        return authorizationProperties.mcpTargetAudience(serverName);
+    }
+
+    public boolean isPublicMcpCapability(String capabilityId) {
+        return versionedAuthorizationEnabled() && authorizationProperties != null
+                && authorizationProperties.isPublicMcpCapability(capabilityId);
+    }
+
     public boolean versionedAuthorizationEnabled() {
         return authorizationProperties != null && authorizationProperties.isEnabled();
     }

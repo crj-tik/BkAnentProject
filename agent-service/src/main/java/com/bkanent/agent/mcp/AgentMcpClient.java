@@ -14,4 +14,7 @@ public interface AgentMcpClient {
     List<AgentMcpToolDescriptor> listTools();
 
     AgentMcpCallResult callTool(String serverName, String toolName, Map<String, Object> arguments);
+
+    /** True only when this named MCP client uses the configured first-party proof transport. */
+    default boolean supportsUserDelegation(String serverName) { return false; }
 }

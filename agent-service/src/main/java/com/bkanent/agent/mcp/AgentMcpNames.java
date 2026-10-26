@@ -5,6 +5,16 @@ package com.bkanent.agent.mcp;
  */
 public final class AgentMcpNames {
 
+    private static final java.util.Map<String, String> FIRST_PARTY_AUDIENCES = java.util.Map.of(
+            "business-mcp-server", "business-service",
+            "compare-mcp-server", "compare-engine-service",
+            "marketing-mcp-server", "marketing-content-service",
+            "contract-mcp-server", "contract-service",
+            "settlement-mcp-server", "settlement-service",
+            "notification-mcp-server", "notification-service",
+            "media-mcp-server", "media-worker-service",
+            "interview-mcp-server", "interview-service");
+
     /**
      * 字段：BUSINESS_SERVER。
      */
@@ -30,6 +40,11 @@ public final class AgentMcpNames {
      * 字段：PUBLISH_MARKETING_CONTENT。
      */
     public static final String PUBLISH_MARKETING_CONTENT = "publishMarketingContent";
+
+    /** Exact service audience for a reviewed first-party HTTP MCP connection. */
+    public static String firstPartyAudience(String serverName) {
+        return FIRST_PARTY_AUDIENCES.get(serverName);
+    }
 
     /**
      * 处理AgentMcpNames。

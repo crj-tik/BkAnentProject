@@ -7,7 +7,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.security.PublicKey;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 
 /** Opt-in signed-ingress consumer and bounded direct-service admission settings. */
 @ConfigurationProperties(prefix = "agent.authorization")
@@ -26,6 +28,10 @@ public class AgentAuthorizationProperties {
     private int maxSessions = 4000;
     private int maxSessionsPerUser = 32;
     private Map<String, String> capabilityPermissions = new LinkedHashMap<>();
+    /** Exact remote MCP services configured to verify user-delegation proofs locally. */
+    private Map<String, String> mcpTargetAudiences = new LinkedHashMap<>();
+    /** External/no-delegation tools explicitly reviewed as carrying no private data. */
+    private Set<String> publicMcpCapabilities = new LinkedHashSet<>();
 
     @PostConstruct
     public void validate() {
@@ -42,6 +48,18 @@ public class AgentAuthorizationProperties {
             if (permission == null || permission.length() > 128
                     || !permission.matches("[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)+"))
                 throw new IllegalStateException("Invalid Agent capability permission mapping");
+        });
+        mcpTargetAudiences.forEach((server, audience) -> {
+            String expected = com.bkanent.agent.mcp.AgentMcpNames.firstPartyAudience(server);
+            if (expected == null || !expected.equals(audience)) {
+                throw new IllegalStateException("Invalid MCP delegated server audience registration");
+            }
+        });
+        publicMcpCapabilities.forEach(capability -> {
+            var id = new com.bkanent.common.agent.CapabilityId(capability);
+            if (!capability.startsWith("mcp:") || capabilityPermissions.containsKey(capability)) {
+                throw new IllegalStateException("Invalid public MCP capability registration");
+            }
         });
     }
 
@@ -111,5 +129,15 @@ public class AgentAuthorizationProperties {
     public String permissionForCapability(String capabilityId) {
         return capabilityPermissions.get(capabilityId);
     }
+    public Map<String, String> getMcpTargetAudiences() { return Map.copyOf(mcpTargetAudiences); }
+    public void setMcpTargetAudiences(Map<String, String> value) {
+        mcpTargetAudiences = value == null ? new LinkedHashMap<>() : new LinkedHashMap<>(value);
+    }
+    public String mcpTargetAudience(String serverName) { return mcpTargetAudiences.get(serverName); }
+    public Set<String> getPublicMcpCapabilities() { return Set.copyOf(publicMcpCapabilities); }
+    public void setPublicMcpCapabilities(Set<String> value) {
+        publicMcpCapabilities = value == null ? new LinkedHashSet<>() : new LinkedHashSet<>(value);
+    }
+    public boolean isPublicMcpCapability(String capabilityId) { return publicMcpCapabilities.contains(capabilityId); }
     @Override public String toString() { return "AgentAuthorizationProperties[REDACTED]"; }
 }
