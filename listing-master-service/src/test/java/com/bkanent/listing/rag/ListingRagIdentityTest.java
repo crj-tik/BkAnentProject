@@ -75,6 +75,46 @@ class ListingRagIdentityTest {
         factory.addBean("auth", (RagPrincipalRpcService) (c, a) -> response(c, a, "ADMIN", true));
         assertEquals(RagErrorCode.FORBIDDEN, assertThrows(RagException.class, () -> identity.requireAdmin(new RagCredentialContext("token"))).code());
     }
+
+    @Test void versionedListingScopeCarriesAuthFactsAndKeepsBusinessAdminSeparateFromRoles() {
+        var p = properties();
+        var grants = new ListingRagGrantService(mock(JdbcTemplate.class), mock(ListingRagIdentity.class),
+                mock(ListingRagOutbox.class), p);
+        var request = RagSearchRequest.defaults("versioned-listing", ListingRagIdentity.SPACE, "q");
+        var principal = versionedPrincipal(false, List.of("SALES", "BROKER"), List.of("listing.read"));
+        var scope = grants.scope(principal, request);
+
+        assertTrue(scope.versionedAuthorization());
+        assertEquals("listing.read", scope.operationCode());
+        assertEquals(17, scope.permissionRevision());
+        assertEquals(4, scope.credentialEpoch());
+        assertFalse(scope.businessAdmin());
+        assertTrue(scope.businessWideRead());
+        assertTrue(scope.activeOnly());
+        assertNull(scope.ownerId());
+        assertEquals(principal, scope.authPrincipal());
+        assertNull(scope.authorizationContext());
+
+        // Administrators can have no role rows; the signed admin fact controls the listing
+        // business-wide state filter, while the operation remains explicitly granted.
+        var administrator = versionedPrincipal(true, List.of(), List.of("listing.read"));
+        var adminScope = grants.scope(administrator, request);
+        assertTrue(adminScope.businessAdmin());
+        assertFalse(adminScope.activeOnly());
+        assertTrue(adminScope.authPrincipal().roles().isEmpty());
+    }
+
+    private static AuthRagPrincipal versionedPrincipal(boolean admin, List<String> roles, List<String> permissions) {
+        long now = Instant.now().getEpochSecond();
+        var facts = new AuthRagPrincipal(7L, null, true, false, now + 300,
+                AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION, 17, 4, admin, roles, permissions, null);
+        var proof = RagRequestSigner.sign(new RagAuthEnvelope(1, "auth-response-current", ListingRagIdentity.SERVICE,
+                "auth-service", RagOperation.RESOLVE_PRINCIPAL_RESPONSE, "principal-evidence",
+                RagCanonicalHash.principalHash(facts), RagActorMode.USER, "7", now, now + 60,
+                "test-credential-digest", null), AUTH.getBytes(StandardCharsets.UTF_8));
+        return facts.withAttestation(proof);
+    }
+
     /** KI-101: real constructor autowiring with both the Dubbo FactoryBean product and its @Bean bridge. */
     @Test void allThreeRpcBridgesCoexistWithReferenceProductsAndUseTheirQualifiedProviders() throws Exception {
         var fixture = new WiringFixture();

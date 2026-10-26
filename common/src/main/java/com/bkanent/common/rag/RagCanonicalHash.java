@@ -68,6 +68,12 @@ public final class RagCanonicalHash {
     /** Auth provider hashes facts before attaching its response attestation, avoiding a signing cycle. */
     public static String principalHash(AuthRagPrincipal principal) {
         RagContract.require(principal != null, "principal");
+        if (principal.authorizationVersion() == AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION) {
+            return hash(encode("rag.principal.v2", Arrays.asList(principal.userId(), principal.roleCode(),
+                    principal.accountActive(), principal.roleActive(), principal.expiresAtEpochSecond(),
+                    principal.authorizationVersion(), principal.permissionRevision(), principal.credentialEpoch(),
+                    principal.businessAdmin(), principal.roles(), principal.permissions()), false));
+        }
         return hash(encode("rag.principal.v1", Arrays.asList(principal.userId(), principal.roleCode(),
                 principal.accountActive(), principal.roleActive(), principal.expiresAtEpochSecond()), false));
     }
@@ -87,10 +93,43 @@ public final class RagCanonicalHash {
     }
 
     static byte[] scopeBytes(RagAuthorizationScope scope) {
+        if (scope.authorizationVersion() == AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION) {
+            return encode("rag.scope.v4", Arrays.asList(scope.contractVersion(), scope.keyId(), scope.issuerService(),
+                    scope.ownerDomain(), scope.spaceId(), scope.actorId(), scope.operation(), scope.requestHash(),
+                    scope.policyVersion(), scope.issuedAtEpochSecond(), scope.expiresAtEpochSecond(), scope.ownerId(),
+                    scope.allowedResourceIds(), scope.activeOnly(), scope.businessWideRead(), scope.authorizationVersion(),
+                    scope.permissionRevision(), scope.credentialEpoch(), scope.businessAdmin(), scope.operationCode(),
+                    authorizationEvidenceHash(scope)), false);
+        }
         return encode("rag.scope.v2", Arrays.asList(scope.contractVersion(), scope.keyId(), scope.issuerService(),
                 scope.ownerDomain(), scope.spaceId(), scope.actorId(), scope.operation(), scope.requestHash(),
                 scope.policyVersion(), scope.issuedAtEpochSecond(), scope.expiresAtEpochSecond(),
                 scope.ownerId(), scope.allowedResourceIds(), scope.activeOnly(), scope.businessWideRead()), false);
+    }
+
+    /** The owner HMAC commits to the exact Auth-issued facts/context used for this request. */
+    private static String authorizationEvidenceHash(RagAuthorizationScope scope) {
+        AuthRagPrincipal principal = scope.authPrincipal();
+        com.bkanent.common.authz.AuthzResponse context = scope.authorizationContext();
+        RagContract.require(!(principal != null && context != null), "authorizationEvidence");
+        if (principal == null && context == null) return null;
+        if (principal != null) {
+            RagContract.require(principal.attestation() != null && principal.attestation().signature() != null,
+                    "authorizationEvidence");
+            RagAuthEnvelope attestation = principal.attestation();
+            String signedAttestation = hash(encode("rag.signed-envelope.v1",
+                    Arrays.asList(hash(envelopeBytes(attestation)), attestation.signature()), false));
+            return hash(encode("rag.auth-principal-evidence.v1",
+                    Arrays.asList(principalHash(principal), signedAttestation), false));
+        }
+        var snapshot = context.snapshot();
+        RagContract.require(snapshot.signature() != null, "authorizationEvidence");
+        String signedSnapshot = hash(encode("rag.signed-authz-snapshot.v1", Arrays.asList(
+                com.bkanent.common.authz.AuthzCanonicalHash.snapshotHash(snapshot), snapshot.algorithm(),
+                snapshot.keyId(), snapshot.signature()), false));
+        return hash(encode("rag.authz-context-evidence.v1", Arrays.asList(signedSnapshot,
+                com.bkanent.common.authz.AuthzCanonicalHash.signedContextHash(context.context()),
+                com.bkanent.common.authz.AuthzCanonicalHash.signedFreshnessHash(context.freshness())), false));
     }
 
     private static byte[] encode(String domain, Object value, boolean ignored) {

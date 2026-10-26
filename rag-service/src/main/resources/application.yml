@@ -72,11 +72,14 @@ rag:
     key-id: ${RAG_MEMORY_CANDIDATE_KEY_ID:rag-memory-candidate-current}
     secret: ${RAG_MEMORY_CANDIDATE_KEY_SECRET:}
   security:
+    versioned-authorization-enabled: false
     trusted-keys: {}
     auth-request-key-id: ${RAG_AUTH_RPC_KEY_ID:rag-current}
     auth-request-secret: ${RAG_AUTH_RPC_SECRET:}
     auth-response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:}
     auth-response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
+    authz-authority-public-keys:
+      auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
   index:
     worker:
       enabled: ${RAG_INDEX_WORKER_ENABLED:false}

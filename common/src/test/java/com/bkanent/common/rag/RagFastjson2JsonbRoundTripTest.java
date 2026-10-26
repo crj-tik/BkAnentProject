@@ -1,10 +1,18 @@
 package com.bkanent.common.rag;
 
 import com.alibaba.fastjson2.JSONB;
+import com.bkanent.common.authz.*;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
 import java.time.Instant;
 import java.util.List;
+import java.util.Base64;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -15,6 +23,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Instant round-trip of the status contract the dispatcher reads back.
  */
 class RagFastjson2JsonbRoundTripTest {
+    private static final byte[] OWNER_SECRET = "owner-signing-secret-at-least-32-bytes".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+
     @Test
     void jsonbRoundTripPreservesRagIndexStatusWithInstant() {
         RagIndexStatus status = new RagIndexStatus(1, "req", "evt", "memory.constraint", "constraint:YQ",
@@ -138,5 +148,70 @@ class RagFastjson2JsonbRoundTripTest {
         try (var input = new java.io.ObjectInputStream(new java.io.ByteArrayInputStream(bytes.toByteArray()))) {
             assertThat(input.readObject()).isEqualTo(request);
         }
+    }
+
+    @Test
+    void requestBoundAuthorizationEvidenceRoundTripsOverJsonbAndJavaSerialization() throws Exception {
+        RagSearchRequest request = RagSearchRequest.defaults("bound-rag", "supervisor.knowledge", "q");
+        long now = Instant.parse("2026-10-26T00:00:00Z").getEpochSecond();
+        String permissionHash;
+        KeyPair authority = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        AuthorizationSnapshot snapshot = AuthzSignature.sign(new AuthorizationSnapshot("7", 17, 1, false,
+                List.of("agent.rag.search"), null, AuthzContract.ALGORITHM, "auth-key", null), authority.getPrivate());
+        permissionHash = AuthzCanonicalHash.snapshotHash(snapshot);
+        AuthorizationContext context = AuthzSignature.sign(new AuthorizationContext("7", 17, 4, permissionHash,
+                List.of("agent.rag.search"), "agent-service", "ingress", "run-7", "session-7",
+                "a".repeat(64), "b".repeat(64), nonce((byte) 1), now, now + 60, now + 300,
+                AuthzContract.ALGORITHM, "auth-key", null), authority.getPrivate());
+        AuthzFreshness freshness = AuthzSignature.sign(new AuthzFreshness("7", 17, 4, AuthorizationStatus.ACTIVE,
+                permissionHash, now, now + 30, nonce((byte) 2), AuthzContract.ALGORITHM,
+                "auth-key", null), authority.getPrivate());
+        AuthzResponse response = new AuthzResponse(snapshot, context, freshness);
+        RagAuthorizationScope scope = RagScopeSigner.sign(new RagAuthorizationScope(1, "agent-key",
+                "agent-service", "agent-service", request.spaceId(), "7", RagOperation.SEARCH,
+                RagCanonicalHash.requestHash(request), "policy-v1", now, now + 30, "7", List.of(),
+                true, false, AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION, 17, 4, false,
+                "agent.rag.search", null, response, null), OWNER_SECRET);
+
+        RagAuthorizationScope jsonb = JSONB.parseObject(JSONB.toBytes(scope), RagAuthorizationScope.class);
+        assertThat(jsonb).isEqualTo(scope);
+        assertThat(jsonb.authorizationContext()).isEqualTo(response);
+
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (ObjectOutputStream output = new ObjectOutputStream(bytes)) { output.writeObject(scope); }
+        RagAuthorizationScope serialized;
+        try (ObjectInputStream input = new ObjectInputStream(new ByteArrayInputStream(bytes.toByteArray()))) {
+            serialized = (RagAuthorizationScope) input.readObject();
+        }
+        assertThat(serialized).isEqualTo(scope);
+        assertThat(serialized.authorizationContext()).isEqualTo(response);
+    }
+
+    @Test
+    void directAuthPrincipalEvidenceRoundTripsWithItsResponseAttestation() {
+        long now = Instant.parse("2026-10-26T00:00:00Z").getEpochSecond();
+        RagAuthEnvelope attestation = RagRequestSigner.sign(new RagAuthEnvelope(1, "auth-key",
+                "listing-master-service", "auth-service", RagOperation.RESOLVE_PRINCIPAL_RESPONSE,
+                "listing-ingress", "c".repeat(64), RagActorMode.USER, "7", now, now + 60,
+                "d".repeat(64), null), OWNER_SECRET);
+        AuthRagPrincipal principal = new AuthRagPrincipal(7L, "BROKER", true, true, now + 120,
+                AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION, 17, 4, false,
+                List.of("BROKER", "SALES"), List.of("listing.read"), attestation);
+        RagSearchRequest request = RagSearchRequest.defaults("listing-rag", "listing.knowledge", "q");
+        RagAuthorizationScope scope = RagScopeSigner.sign(new RagAuthorizationScope(1, "listing-key",
+                "listing-master-service", "listing-master-service", request.spaceId(), "7", RagOperation.SEARCH,
+                RagCanonicalHash.requestHash(request), "listing-v2", now, now + 30, null, List.of(), true,
+                true, AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION, 17, 4, false, "listing.read",
+                principal, null, null), OWNER_SECRET);
+
+        RagAuthorizationScope restored = JSONB.parseObject(JSONB.toBytes(scope), RagAuthorizationScope.class);
+        assertThat(restored).isEqualTo(scope);
+        assertThat(restored.authPrincipal().attestation()).isEqualTo(attestation);
+    }
+
+    private static String nonce(byte fill) {
+        byte[] bytes = new byte[32];
+        java.util.Arrays.fill(bytes, fill);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 }

@@ -1,6 +1,8 @@
 package com.bkanent.auth.rpc;
 
 import com.bkanent.auth.config.AuthRagRpcProperties;
+import com.bkanent.auth.authorization.AuthAccountMutationService;
+import com.bkanent.auth.authorization.EffectivePermissionService;
 import com.bkanent.auth.entity.UserAccountEntity;
 import com.bkanent.auth.service.AuthTokenService;
 import com.bkanent.auth.service.UserAccountService;
@@ -39,6 +41,12 @@ public class RagPrincipalRpcServiceImpl implements RagPrincipalRpcService {
     private com.bkanent.auth.service.A2aBeaconStore beacons;
     @org.springframework.beans.factory.annotation.Autowired
     public void setBeacons(com.bkanent.auth.service.A2aBeaconStore beacons) { this.beacons = beacons; }
+
+    private AuthAccountMutationService versionedAuthorization;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setVersionedAuthorization(org.springframework.beans.factory.ObjectProvider<AuthAccountMutationService> provider) {
+        this.versionedAuthorization = provider.getIfAvailable();
+    }
 
     private final AuthTokenService authTokenService;
     private final UserAccountService userAccountService;
@@ -88,12 +96,13 @@ public class RagPrincipalRpcServiceImpl implements RagPrincipalRpcService {
                     RagOperation.RESOLVE_PRINCIPAL_RESPONSE, authentication.requestId(), RagCanonicalHash.principalHash(principal),
                     RagActorMode.USER, principal.userId().toString(), now.getEpochSecond(),
                     Math.min(principal.expiresAtEpochSecond(), authentication.expiresAtEpochSecond()), credentialDigest, null), responseSecret);
-            return new AuthRagPrincipal(principal.userId(), principal.roleCode(), true, true, principal.expiresAtEpochSecond(), response);
+            return principal.withAttestation(response);
         }
 
         AuthTokenService.TokenPrincipal tokenPrincipal;
         UserAccountEntity account;
         boolean roleActive;
+        AuthRagPrincipal principal;
         try {
             tokenPrincipal = authTokenService.parse(credentials.accessToken());
             if (tokenPrincipal == null && authTokenService.isExpiredAccessToken(credentials.accessToken())) {
@@ -108,13 +117,26 @@ public class RagPrincipalRpcServiceImpl implements RagPrincipalRpcService {
             account = userAccountService.getById(tokenPrincipal.userId());
             if (account == null || !Long.valueOf(tokenPrincipal.userId()).equals(account.getId())
                     || !Integer.valueOf(0).equals(account.getDeleted())
-                    || !"ACTIVE".equalsIgnoreCase(account.getAccountStatus())
-                    || !UserManagementService.isSupportedRole(account.getRoleCode())) {
+                    || !"ACTIVE".equalsIgnoreCase(account.getAccountStatus())) {
                 throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
             }
-            roleActive = userManagementService.isActiveRole(account.getRoleCode());
-            if (!roleActive) {
-                throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+            if (versionedAuthorization != null) {
+                AuthAccountMutationService.AuthorizationInfo info = versionedAuthorization.authorizationInfo(account.getId());
+                EffectivePermissionService.Snapshot snapshot = info.snapshot();
+                if (!"ACTIVE".equals(snapshot.status())) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+                roleActive = snapshot.businessAdmin() || !info.roles().isEmpty();
+                principal = new AuthRagPrincipal(account.getId(), account.getRoleCode(), true, roleActive,
+                        tokenPrincipal.expiresAt(), AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION,
+                        snapshot.permissionRevision(), snapshot.credentialEpoch(), snapshot.businessAdmin(),
+                        info.roles(), snapshot.permissions(), null);
+            } else {
+                if (!UserManagementService.isSupportedRole(account.getRoleCode())) {
+                    throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+                }
+                roleActive = userManagementService.isActiveRole(account.getRoleCode());
+                if (!roleActive) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+                principal = new AuthRagPrincipal(account.getId(), account.getRoleCode(), true, true,
+                        tokenPrincipal.expiresAt());
             }
         } catch (RagException exception) {
             throw exception;
@@ -128,15 +150,12 @@ public class RagPrincipalRpcServiceImpl implements RagPrincipalRpcService {
         if (attestationExpiresAt <= now.getEpochSecond()) {
             throw new RagException(RagErrorCode.AUTHENTICATION_EXPIRED);
         }
-        AuthRagPrincipal principal = new AuthRagPrincipal(account.getId(), account.getRoleCode(), true,
-                roleActive, tokenPrincipal.expiresAt());
         RagAuthEnvelope unsigned = new RagAuthEnvelope(CONTRACT_VERSION, properties.getResponseKeyId(),
                 incomingKey.callerService(),
                 AUTH_SERVICE, RagOperation.RESOLVE_PRINCIPAL_RESPONSE, authentication.requestId(),
                 RagCanonicalHash.principalHash(principal), RagActorMode.USER, Long.toString(principal.userId()),
                 now.getEpochSecond(), attestationExpiresAt, credentialDigest, null);
         RagAuthEnvelope attestation = RagRequestSigner.sign(unsigned, responseSecret);
-        return new AuthRagPrincipal(principal.userId(), principal.roleCode(), principal.accountActive(),
-                principal.roleActive(), principal.expiresAtEpochSecond(), attestation);
+        return principal.withAttestation(attestation);
     }
 }

@@ -135,6 +135,7 @@ agent:
     system-prompt: ${AGENT_CHAT_SYSTEM_PROMPT:${AGENT_DEEPSEEK_SYSTEM_PROMPT:}}
   rag-consumer:
     knowledge-enabled: false
+    versioned-authorization-required: false
     supervisor-owner-confirmed: false
     supervisor-owner-domain: agent-service
     supervisor-policy-version: ""

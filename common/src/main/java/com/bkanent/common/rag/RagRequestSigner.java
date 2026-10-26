@@ -17,6 +17,23 @@ public final class RagRequestSigner {
     public static void verify(RagAuthEnvelope envelope, String requestHash, String expectedAudience,
                               RagOperation expectedOperation, String expectedRequestId,
                               RagCredentialContext credentials, RagSigningKey key, Instant now) {
+        verify(envelope, requestHash, expectedAudience, expectedOperation, expectedRequestId,
+                credentials, RagCanonicalHash.credentialDigest(credentials), null, key, now);
+    }
+
+    /** Auth response attestation verification when the original bearer is intentionally not forwarded. */
+    public static void verifyAttestation(RagAuthEnvelope envelope, String requestHash, String expectedAudience,
+                                         String expectedRequestId, String expectedActor,
+                                         RagSigningKey key, Instant now) {
+        verify(envelope, requestHash, expectedAudience, RagOperation.RESOLVE_PRINCIPAL_RESPONSE,
+                expectedRequestId, null, envelope == null ? null : envelope.credentialDigest(),
+                expectedActor, key, now);
+    }
+
+    private static void verify(RagAuthEnvelope envelope, String requestHash, String expectedAudience,
+                               RagOperation expectedOperation, String expectedRequestId,
+                               RagCredentialContext credentials, String expectedCredentialDigest,
+                               String expectedActor, RagSigningKey key, Instant now) {
         RagSignatureSupport.authenticate(envelope != null && key != null && envelope.contractVersion() == RagContract.VERSION
                 && (envelope.algorithm() == null || RagAuthEnvelope.HMAC_SHA256.equals(envelope.algorithm())));
         RagSignatureSupport.equal(key.keyId(), envelope.keyId());
@@ -25,6 +42,7 @@ public final class RagRequestSigner {
         RagSignatureSupport.equal(expectedAudience, envelope.audience());
         RagSignatureSupport.equal(expectedOperation, envelope.operation());
         RagSignatureSupport.equal(expectedRequestId, envelope.requestId());
+        if (expectedActor != null) RagSignatureSupport.equal(expectedActor, envelope.actorId());
         RagSignatureSupport.hash(requestHash);
         RagSignatureSupport.equal(requestHash, envelope.requestHash());
         RagSignatureSupport.authorize(key.allowedOperations().contains(expectedOperation));
@@ -33,8 +51,9 @@ public final class RagRequestSigner {
         RagSignatureSupport.text(envelope.requestId());
         RagSignatureSupport.authenticate(envelope.actorMode() != null);
         if (envelope.actorMode() == RagActorMode.USER) {
-            RagSignatureSupport.authenticate(credentials != null);
-            RagSignatureSupport.equal(RagCanonicalHash.credentialDigest(credentials), envelope.credentialDigest());
+            // A versioned internal request may bind a null digest and use signed Auth evidence.
+            if (expectedCredentialDigest == null) RagSignatureSupport.authenticate(envelope.credentialDigest() == null);
+            else RagSignatureSupport.equal(expectedCredentialDigest, envelope.credentialDigest());
         } else {
             RagSignatureSupport.equal(key.callerService(), envelope.actorId());
             // A background writer cannot promote itself to user search or user response authority.

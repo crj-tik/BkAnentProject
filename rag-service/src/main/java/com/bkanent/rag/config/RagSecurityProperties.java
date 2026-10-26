@@ -1,16 +1,30 @@
 package com.bkanent.rag.config;
 
 import com.bkanent.common.rag.*;
+import com.bkanent.common.security.ServiceIdentityCrypto;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.PublicKey;
 import java.util.*;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties("rag.security")
 public record RagSecurityProperties(Map<String, TrustedKey> trustedKeys, String authRequestKeyId,
-        String authRequestSecret, String authResponseKeyId, String authResponseSecret) {
+        String authRequestSecret, String authResponseKeyId, String authResponseSecret,
+        boolean versionedAuthorizationEnabled, Map<String, String> authzAuthorityPublicKeys) {
+    public RagSecurityProperties(Map<String, TrustedKey> trustedKeys, String authRequestKeyId,
+            String authRequestSecret, String authResponseKeyId, String authResponseSecret) {
+        this(trustedKeys, authRequestKeyId, authRequestSecret, authResponseKeyId, authResponseSecret, false, Map.of());
+    }
+    public RagSecurityProperties(Map<String, TrustedKey> trustedKeys, String authRequestKeyId,
+            String authRequestSecret, String authResponseKeyId, String authResponseSecret,
+            boolean versionedAuthorizationEnabled) {
+        this(trustedKeys, authRequestKeyId, authRequestSecret, authResponseKeyId, authResponseSecret,
+                versionedAuthorizationEnabled, Map.of());
+    }
     public RagSecurityProperties {
         trustedKeys = trustedKeys == null ? Map.of() : Map.copyOf(trustedKeys);
+        authzAuthorityPublicKeys = authzAuthorityPublicKeys == null ? Map.of() : Map.copyOf(authzAuthorityPublicKeys);
     }
     public record TrustedKey(String callerService, String ownerDomain, Set<RagOperation> allowedOperations, String secret) {
         @Override public String toString() { return "TrustedKey[REDACTED]"; }
@@ -43,6 +57,17 @@ public record RagSecurityProperties(Map<String, TrustedKey> trustedKeys, String 
     public boolean configured() {
         return !trustedKeys.isEmpty() && present(authRequestKeyId) && present(authResponseKeyId)
                 && bytes(authRequestSecret).length >= 32 && bytes(authResponseSecret).length >= 32;
+    }
+    public Map<String, PublicKey> authzVerificationKeys() {
+        Map<String, PublicKey> result = new HashMap<>();
+        authzAuthorityPublicKeys.forEach((keyId, encoded) -> {
+            if (keyId == null || keyId.isBlank()) throw new RagException(RagErrorCode.INVALID_ARGUMENT, "security.authzKeyId");
+            if (encoded != null && !encoded.isBlank()) {
+                try { result.put(keyId, ServiceIdentityCrypto.decodePublicKey(encoded)); }
+                catch (IllegalArgumentException invalid) { throw new RagException(RagErrorCode.INVALID_ARGUMENT, "security.authzPublicKey"); }
+            }
+        });
+        return Map.copyOf(result);
     }
     public static byte[] bytes(String value) { return value == null ? new byte[0] : value.getBytes(StandardCharsets.UTF_8); }
     private static boolean present(String value) { return value != null && !value.isBlank(); }

@@ -130,3 +130,11 @@ Agent定向回归13个测试类、86项通过，失败/错误/跳过均0；8个M
 Interview正式`ToolCallbackProvider`仅在服务端本地验签guard启用时注册。Notification MCP本人消息列表和未读数从已验证actor取userId，模型提交其他userId时在服务调用前拒绝；发送通知的recipient userId继续作为目标对象，不混作当前actor。管理员连接管理仍与每个MCP工具操作分离；映射/密钥默认未启用，因此不据源码验收宣称任何MCP生产工具已开放。
 
 新增contract/filter、Supervisor actor mismatch、provider条件和Notification owner查询回归；16项定向用例通过。全量 `mvn test` 覆盖23模块，1615项运行、失败/错误0、14项既有外部依赖测试跳过；OpenSpec严格校验通过。LR-143记录本地签名边界；KI-174保留OPEN：进程内nonce guard无法阻止另一副本或重启后短期内重放同一proof造成重复副作用。
+
+## RAG签名权限上下文与出站边界续批（2026-10-26）
+
+按模块完成任务6.6–6.7。RAG v2 scope继续使用独立owner-domain HMAC，同时只能携带一种由Auth签名的授权证据：直接领域入口解析得到的`AuthRagPrincipal`，或Supervisor当前已绑定run/session的`AuthzResponse`（snapshot/context/freshness）。Agent按每次实际检索请求签名scope与正文hash，并在RAG版本化模式不转发用户bearer；RAG本地校验两层签名、actor、permission revision/credential epoch、ACTIVE/freshness/硬截止、精确操作和空间范围，不逐次请求Auth。房源的`businessWideRead/activeOnly`由可信businessAdmin与权限证据决定；普通用户房源检索限定ON_SALE；个人Memory始终owner=self，即使businessAdmin也不扩权。未知空间、未登记操作、旧弱scope或缺少版本化证据在新模式拒绝。所有版本化消费开关保持默认关闭。
+
+RAG出站URL复核确认本批未新增任意HTTP URL权限回调或新的服务端URL目标；权限/身份RPC仍用Dubbo。现有RAG受保护HTTP transport继续在连接前按精确host和DNS解析地址校验、拒绝localhost/环回/私有/保留地址、禁用redirect并绑定校验后的目标地址。
+
+验证：common、Agent、Memory、RAG与Listing跨模块定向回归共**69项通过**，失败/错误/跳过均0；RAG HTTP出站与DNS/host策略回归共**175项通过**，失败/错误/跳过均0。测试证明本地序列化、验签、消费端资源策略和受保护transport回归；未验证真实部署的Auth公钥登记、密钥轮换、多实例调用或生产启用。严格OpenSpec校验通过后，当前进度为**33/63**。LR-144记录RAG的双签名和请求级消费边界；KI-57仍OPEN，完整ES合规目标的部署联调不由本批代码测试代替。

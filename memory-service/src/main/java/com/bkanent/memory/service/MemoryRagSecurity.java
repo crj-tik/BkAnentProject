@@ -33,9 +33,13 @@ public class MemoryRagSecurity {
         RagSigningKey key = new RagSigningKey(properties.getAuthKeyId(), "auth-service", null, Set.of(RagOperation.RESOLVE_PRINCIPAL_RESPONSE), secret(properties.getAuthSigningSecret()));
         RagRequestSigner.verify(principal.attestation(), RagCanonicalHash.principalHash(principal), "memory-service", RagOperation.RESOLVE_PRINCIPAL_RESPONSE, id, credentials, key, Instant.now());
         if (principal.userId() <= 0 || principal.attestation().actorMode() != RagActorMode.USER
-                || !principal.accountActive() || !principal.roleActive()
+                || !principal.accountActive() || !principal.versionedAuthorization() && !principal.roleActive()
                 || !principal.userId().toString().equals(principal.attestation().actorId())) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
-        if (!"ADMIN".equals(principal.roleCode()) && !"BROKER".equals(principal.roleCode())) throw new RagException(RagErrorCode.FORBIDDEN);
+        if (properties.isVersionedAuthorizationRequired() && !principal.versionedAuthorization()) {
+            throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+        }
+        if (!principal.versionedAuthorization() && !"ADMIN".equals(principal.roleCode()) && !"BROKER".equals(principal.roleCode()))
+            throw new RagException(RagErrorCode.FORBIDDEN);
         if (principal.expiresAtEpochSecond() <= Instant.now().getEpochSecond()) throw new RagException(RagErrorCode.AUTHENTICATION_EXPIRED);
         return principal;
     }
@@ -52,11 +56,15 @@ public class MemoryRagSecurity {
         return principal;
     }
 
-    private static void requireCurrent(AuthRagPrincipal principal) {
+    private void requireCurrent(AuthRagPrincipal principal) {
         if (principal == null || principal.userId() == null || principal.userId() <= 0
-                || !principal.accountActive() || !principal.roleActive()) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+                || !principal.accountActive() || !principal.versionedAuthorization() && !principal.roleActive())
+            throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
         if (principal.expiresAtEpochSecond() <= Instant.now().getEpochSecond()) throw new RagException(RagErrorCode.AUTHENTICATION_EXPIRED);
-        if (!"ADMIN".equals(principal.roleCode()) && !"BROKER".equals(principal.roleCode())) throw new RagException(RagErrorCode.FORBIDDEN);
+        if (properties.isVersionedAuthorizationRequired() && !principal.versionedAuthorization())
+            throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+        if (!principal.versionedAuthorization() && !"ADMIN".equals(principal.roleCode()) && !"BROKER".equals(principal.roleCode()))
+            throw new RagException(RagErrorCode.FORBIDDEN);
     }
 
     public void requireOwner(AuthRagPrincipal principal, String ownerId) {
@@ -66,21 +74,41 @@ public class MemoryRagSecurity {
 
     public void requireConstraintRead(AuthRagPrincipal principal) {
         requireCurrent(principal);
-        if (!properties.getConstraintReadRoles().contains(principal.roleCode())) throw new RagException(RagErrorCode.FORBIDDEN);
+        if (principal.versionedAuthorization() ? !principal.hasPermission("memory.constraint.read")
+                : !properties.getConstraintReadRoles().contains(principal.roleCode())) throw new RagException(RagErrorCode.FORBIDDEN);
     }
 
     public void requireAdmin(AuthRagPrincipal principal) {
         requireCurrent(principal);
-        if (!"ADMIN".equals(principal.roleCode()) || !properties.getConstraintAdminRoles().contains(principal.roleCode())) throw new RagException(RagErrorCode.FORBIDDEN);
+        if (principal.versionedAuthorization() ? !principal.hasPermission("memory.constraint.manage")
+                : !"ADMIN".equals(principal.roleCode()) || !properties.getConstraintAdminRoles().contains(principal.roleCode()))
+            throw new RagException(RagErrorCode.FORBIDDEN);
     }
 
     public RagAuthorizationScope scope(RagSearchRequest request, AuthRagPrincipal principal) {
         requireCurrent(principal);
         String owner = null;
-        if (MemoryRagProjectionService.PREFERENCE.equals(request.spaceId())) owner = principal.userId().toString();
-        else if (MemoryRagProjectionService.CONSTRAINT.equals(request.spaceId())) requireConstraintRead(principal);
+        String operationCode;
+        if (MemoryRagProjectionService.PREFERENCE.equals(request.spaceId())) {
+            owner = principal.userId().toString();
+            operationCode = "memory.search";
+            if (principal.versionedAuthorization() && !principal.hasPermission(operationCode)) throw new RagException(RagErrorCode.FORBIDDEN);
+        }
+        else if (MemoryRagProjectionService.CONSTRAINT.equals(request.spaceId())) {
+            requireConstraintRead(principal);
+            operationCode = "memory.constraint.read";
+        }
         else throw new RagException(RagErrorCode.FORBIDDEN);
         long now = Instant.now().getEpochSecond();
+        if (principal.versionedAuthorization()) {
+            return RagScopeSigner.sign(new RagAuthorizationScope(1, properties.getKeyId(), "memory-service", "memory-service",
+                    request.spaceId(), principal.userId().toString(), RagOperation.SEARCH, RagCanonicalHash.requestHash(request),
+                    properties.getPolicyVersion(), now, Math.min(now + 60, principal.expiresAtEpochSecond()), owner,
+                    List.of(), true, false, AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION,
+                    principal.permissionRevision(), principal.credentialEpoch(), principal.businessAdmin(), operationCode,
+                    principal, null, null),
+                    secret(properties.getSigningSecret()));
+        }
         return RagScopeSigner.sign(new RagAuthorizationScope(1, properties.getKeyId(), "memory-service", "memory-service", request.spaceId(), principal.userId().toString(), RagOperation.SEARCH, RagCanonicalHash.requestHash(request), properties.getPolicyVersion(), now, Math.min(now + 60, principal.expiresAtEpochSecond()), owner, List.of(), true, null), secret(properties.getSigningSecret()));
     }
 

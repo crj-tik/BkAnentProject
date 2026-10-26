@@ -46,42 +46,47 @@ public class ListingRagIdentity {
                         Set.of(RagOperation.RESOLVE_PRINCIPAL_RESPONSE), bytes(properties.getAuthResponseSecret())), Instant.now());
         if (principal.attestation().actorMode() != RagActorMode.USER
                 || !String.valueOf(principal.userId()).equals(principal.attestation().actorId())
-                || !principal.accountActive() || !principal.roleActive()) {
+                || !principal.accountActive() || !principal.versionedAuthorization() && !principal.roleActive()) {
             throw new RagException(RagErrorCode.FORBIDDEN);
         }
         if (principal.expiresAtEpochSecond() <= Instant.now().getEpochSecond()) {
             throw new RagException(RagErrorCode.AUTHENTICATION_EXPIRED);
+        }
+        if (properties.isVersionedAuthorizationRequired() && !principal.versionedAuthorization()) {
+            throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
         }
         requireCurrent(principal);
         return principal;
     }
     public AuthRagPrincipal requireReader(RagCredentialContext credentials) {
         AuthRagPrincipal p = resolve(credentials);
-        if (!properties.getReadRoleCodes().contains(p.roleCode())) { throw new RagException(RagErrorCode.FORBIDDEN); }
+        if (p.versionedAuthorization() ? !p.hasPermission("listing.read")
+                : !properties.getReadRoleCodes().contains(p.roleCode())) { throw new RagException(RagErrorCode.FORBIDDEN); }
         return p;
     }
     public AuthRagPrincipal requireAdmin(RagCredentialContext credentials) {
         AuthRagPrincipal p = resolve(credentials);
-        if (!"ADMIN".equals(p.roleCode()) || !properties.getAdminRoleCodes().contains(p.roleCode())) {
+        if (p.versionedAuthorization() ? !p.hasPermission("agent.vector-store.manage")
+                : !"ADMIN".equals(p.roleCode()) || !properties.getAdminRoleCodes().contains(p.roleCode())) {
             throw new RagException(RagErrorCode.FORBIDDEN);
         }
         return p;
     }
     public static void requireCurrent(AuthRagPrincipal principal) {
         if (principal == null || principal.userId() == null || principal.userId() <= 0
-                || !principal.accountActive() || !principal.roleActive()) {
+                || !principal.accountActive() || !principal.versionedAuthorization() && !principal.roleActive()) {
             throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
         }
         if (principal.expiresAtEpochSecond() <= Instant.now().getEpochSecond()) {
             throw new RagException(RagErrorCode.AUTHENTICATION_EXPIRED);
         }
-        if (!"ADMIN".equals(principal.roleCode()) && !"BROKER".equals(principal.roleCode())) {
+        if (!principal.versionedAuthorization() && !"ADMIN".equals(principal.roleCode()) && !"BROKER".equals(principal.roleCode())) {
             throw new RagException(RagErrorCode.FORBIDDEN);
         }
     }
     public static boolean activeOnly(AuthRagPrincipal principal) {
         requireCurrent(principal);
-        return !"ADMIN".equals(principal.roleCode());
+        return principal.versionedAuthorization() ? !principal.businessAdmin() : !"ADMIN".equals(principal.roleCode());
     }
     public static boolean canRead(AuthRagPrincipal principal, com.bkanent.listing.entity.ListingEntity entity) {
         return entity != null && Integer.valueOf(0).equals(entity.getDeleted())

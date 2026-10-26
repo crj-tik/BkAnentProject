@@ -1,6 +1,8 @@
 package com.bkanent.rag.security;
 
 import com.bkanent.common.rag.*;
+import com.bkanent.common.authz.*;
+import com.bkanent.common.security.ServiceIdentityCrypto;
 import com.bkanent.common.rpc.RagPrincipalRpcService;
 import com.bkanent.rag.config.*;
 import com.bkanent.rag.rerank.RerankProfile;
@@ -8,13 +10,18 @@ import com.bkanent.rag.storage.*;
 import java.time.*;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
 import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.*;
 
 class RagAccessControlTest {
     private static final Instant NOW = Instant.parse("2026-10-12T00:00:00Z");
     private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
-    private static final String CALLER_SECRET = "C".repeat(32), OWNER_SECRET = "O".repeat(32), AUTH_SECRET = "A".repeat(32), RESPONSE_SECRET = "R".repeat(32);
+    private static final String CALLER_SECRET = "C".repeat(32), OWNER_SECRET = "O".repeat(32), LISTING_SECRET = "L".repeat(32), AUTH_SECRET = "A".repeat(32), RESPONSE_SECRET = "R".repeat(32);
+    private static final KeyPair AUTHZ_KEY_PAIR = authzKeyPair();
+    private static final Map<String, String> AUTHZ_PUBLIC_KEYS = Map.of("auth-service-current",
+            ServiceIdentityCrypto.encodePublicKey(AUTHZ_KEY_PAIR.getPublic()));
     private final RagCredentialContext credentials = new RagCredentialContext("verified-access-token");
     private final AtomicInteger authCalls = new AtomicInteger();
     private String responseAudience = "rag-service";
@@ -51,11 +58,17 @@ class RagAccessControlTest {
         return new RagAccessControl(registry, properties, () -> auth, CLOCK);
     }
     private RagAuthEnvelope envelope(Object request, RagOperation operation, String requestId, RagActorMode actorMode, String key) {
+        return envelope(request, operation, requestId, actorMode, key, credentials);
+    }
+    private RagAuthEnvelope envelope(Object request, RagOperation operation, String requestId, RagActorMode actorMode,
+                                    String key, RagCredentialContext requestCredentials) {
         boolean owner = key.equals("owner-current");
+        boolean listing = key.equals("listing-current");
+        String secret = owner ? OWNER_SECRET : listing ? LISTING_SECRET : CALLER_SECRET;
         return RagRequestSigner.sign(new RagAuthEnvelope(1, key, "rag-service", owner ? "memory-service" : "agent-service", operation,
                 requestId, RagCanonicalHash.requestHash(request), actorMode, actorMode == RagActorMode.USER ? "7" : owner ? "memory-service" : "agent-service",
-                NOW.getEpochSecond(), NOW.plusSeconds(60).getEpochSecond(), actorMode == RagActorMode.USER ? RagCanonicalHash.credentialDigest(credentials) : null, null),
-                RagSecurityProperties.bytes(owner ? OWNER_SECRET : CALLER_SECRET));
+                NOW.getEpochSecond(), NOW.plusSeconds(60).getEpochSecond(), actorMode == RagActorMode.USER ? RagCanonicalHash.credentialDigest(requestCredentials) : null, null),
+                RagSecurityProperties.bytes(secret));
     }
     private RagAuthorizationScope scope(RagSearchRequest request, String owner, List<String> resources, Boolean active, String key) {
         boolean ownerKey = key.equals("owner-current");
@@ -221,6 +234,194 @@ class RagAccessControlTest {
                 request.spaceId(), "7", RagOperation.SEARCH, RagCanonicalHash.requestHash(request), "listing-v2",
                 NOW.getEpochSecond(), NOW.plusSeconds(60).getEpochSecond(), null, List.of(), active, businessWide, null),
                 RagSecurityProperties.bytes(OWNER_SECRET));
+    }
+
+    private RagAccessControl versionedAccess(RagSpaceDefinition definition, String roleCode, boolean admin,
+            List<String> roles, List<String> permissions) {
+        var configured = new RagSecurityProperties(Map.of(
+                "consumer-current", new RagSecurityProperties.TrustedKey("agent-service", "agent-service",
+                        EnumSet.allOf(RagOperation.class), CALLER_SECRET),
+                "owner-current", new RagSecurityProperties.TrustedKey("memory-service", "memory",
+                        EnumSet.allOf(RagOperation.class), OWNER_SECRET),
+                "listing-current", new RagSecurityProperties.TrustedKey("listing-master-service", "listing-master-service",
+                        EnumSet.allOf(RagOperation.class), LISTING_SECRET)),
+                "rag-current", AUTH_SECRET, "auth-response", RESPONSE_SECRET, true, AUTHZ_PUBLIC_KEYS);
+        var registry = new ManagedRagSpaceRegistry(new RagProperties(Map.of(definition.spaceId(), definition)), List::of, CLOCK);
+        RagPrincipalRpcService auth = (credential, request) -> {
+            authCalls.incrementAndGet();
+            String digest = RagCanonicalHash.credentialDigest(credential);
+            RagRequestSigner.verify(request, digest, "auth-service", RagOperation.RESOLVE_PRINCIPAL,
+                    request.requestId(), credential, new RagSigningKey("rag-current", "rag-service", null,
+                            Set.of(RagOperation.RESOLVE_PRINCIPAL), RagSecurityProperties.bytes(AUTH_SECRET)), NOW);
+            var facts = new AuthRagPrincipal(7L, roleCode, true, !roles.isEmpty(), NOW.plusSeconds(300).getEpochSecond(),
+                    AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION, 17, 4, admin, roles, permissions, null);
+            var proof = RagRequestSigner.sign(new RagAuthEnvelope(1, "auth-response", "rag-service", "auth-service",
+                    RagOperation.RESOLVE_PRINCIPAL_RESPONSE, request.requestId(), RagCanonicalHash.principalHash(facts),
+                    RagActorMode.USER, "7", NOW.getEpochSecond(), NOW.plusSeconds(60).getEpochSecond(), digest, null),
+                    RagSecurityProperties.bytes(RESPONSE_SECRET));
+            return facts.withAttestation(proof);
+        };
+        principalResolver = auth;
+        return new RagAccessControl(registry, configured, () -> auth, CLOCK);
+    }
+
+    private RagAuthorizationScope versionedScope(RagSearchRequest request, String keyId, String caller, String ownerDomain,
+            String owner, Boolean activeOnly, boolean businessWide, boolean businessAdmin, String operationCode,
+            String roleCode, List<String> roles, List<String> permissions) {
+        var facts = new AuthRagPrincipal(7L, roleCode, true, !roles.isEmpty(), NOW.plusSeconds(300).getEpochSecond(),
+                AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION, 17, 4, businessAdmin, roles, permissions, null);
+        String attestationAudience = "listing.knowledge".equals(request.spaceId()) ? "listing-master-service" : "memory-service";
+        var attestation = RagRequestSigner.sign(new RagAuthEnvelope(1, "auth-response", attestationAudience,
+                "auth-service", RagOperation.RESOLVE_PRINCIPAL_RESPONSE, "principal-evidence",
+                RagCanonicalHash.principalHash(facts), RagActorMode.USER, "7", NOW.getEpochSecond(),
+                NOW.plusSeconds(60).getEpochSecond(), "test-credential-digest", null), RagSecurityProperties.bytes(RESPONSE_SECRET));
+        facts = facts.withAttestation(attestation);
+        String ownerSecret = "listing-current".equals(keyId) ? LISTING_SECRET : OWNER_SECRET;
+        String policyVersion = "listing.knowledge".equals(request.spaceId()) ? "listing-v2" : "policy-v1";
+        return RagScopeSigner.sign(new RagAuthorizationScope(1, keyId, caller, ownerDomain, request.spaceId(), "7",
+                RagOperation.SEARCH, RagCanonicalHash.requestHash(request), policyVersion, NOW.getEpochSecond(),
+                NOW.plusSeconds(60).getEpochSecond(), owner, List.of(), activeOnly, businessWide,
+                AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION, 17, 4, businessAdmin, operationCode,
+                facts, null, null), RagSecurityProperties.bytes(ownerSecret));
+    }
+
+    private RagAuthorizationScope contextScope(RagSearchRequest request, String actor, boolean admin,
+            String operationCode, AuthzResponse response) {
+        return RagScopeSigner.sign(new RagAuthorizationScope(1, "consumer-current", "agent-service", "agent-service",
+                request.spaceId(), actor, RagOperation.SEARCH, RagCanonicalHash.requestHash(request), "policy-v1",
+                NOW.getEpochSecond(), NOW.plusSeconds(60).getEpochSecond(), actor, List.of(), true, false,
+                AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION, response.context().permissionRevision(),
+                response.context().credentialEpoch(), admin, operationCode, null, response, null),
+                RagSecurityProperties.bytes(CALLER_SECRET));
+    }
+
+    private static AuthzResponse authzResponse(boolean admin, List<String> permissions, List<String> allowedOperations) {
+        var unsignedSnapshot = new AuthorizationSnapshot("7", 17, 1, admin, permissions, null,
+                AuthzContract.ALGORITHM, "auth-service-current", null);
+        var snapshot = AuthzSignature.sign(unsignedSnapshot, AUTHZ_KEY_PAIR.getPrivate());
+        String hash = AuthzCanonicalHash.snapshotHash(snapshot);
+        var context = AuthzSignature.sign(new AuthorizationContext("7", 17, 4, hash, allowedOperations,
+                "agent-service", "ingress-req", "run-1", "session-1", "b".repeat(64), "a".repeat(64),
+                nonce((byte) 0), NOW.getEpochSecond(), NOW.plusSeconds(60).getEpochSecond(),
+                NOW.plusSeconds(300).getEpochSecond(), AuthzContract.ALGORITHM, "auth-service-current", null),
+                AUTHZ_KEY_PAIR.getPrivate());
+        var freshness = AuthzSignature.sign(new AuthzFreshness("7", 17, 4, AuthorizationStatus.ACTIVE,
+                hash, NOW.getEpochSecond(), NOW.plusSeconds(30).getEpochSecond(), nonce((byte) 1),
+                AuthzContract.ALGORITHM, "auth-service-current", null), AUTHZ_KEY_PAIR.getPrivate());
+        return new AuthzResponse(snapshot, context, freshness);
+    }
+
+    private static KeyPair authzKeyPair() {
+        try { return KeyPairGenerator.getInstance("Ed25519").generateKeyPair(); }
+        catch (java.security.GeneralSecurityException error) { throw new ExceptionInInitializerError(error); }
+    }
+
+    private static String nonce(byte value) {
+        byte[] bytes = new byte[32];
+        Arrays.fill(bytes, value);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    @Test void versionedNoRoleAdministratorCanManageWithExactPermission() {
+        var definition = space("memory.preference");
+        var access = versionedAccess(definition, null, true, List.of(), List.of("rag.space.manage"));
+        var request = new RagInspectRequest(1, "req", definition.spaceId());
+        access.admin(request, request.spaceId(), request.requestId(), RagOperation.INSPECT,
+                envelope(request, RagOperation.INSPECT, "req", RagActorMode.USER, "owner-current"), credentials);
+        assertThat(authCalls.get()).isEqualTo(1);
+    }
+
+    @Test void versionedOrdinaryListingRequiresAndReceivesOnSaleScope() {
+        var base = space("listing.knowledge");
+        var listing = new RagSpaceDefinition(base.spaceId(), "listing-master-service", "listing-v2", base.schemaVersion(),
+                base.elasticsearchIndex(), base.vectorSchema(), base.fields(), base.returnFields(), Set.of(), Set.of(),
+                Map.of("agent-service", EnumSet.allOf(RagOperation.class),
+                        "listing-master-service", EnumSet.allOf(RagOperation.class)), base.limits(), base.rerankProfile());
+        var access = versionedAccess(listing, "BROKER", false, List.of("BROKER", "SALES"), List.of("listing.read"));
+        var request = RagSearchRequest.defaults("req", "listing.knowledge", "query");
+        var userScope = versionedScope(request, "listing-current", "listing-master-service", "listing-master-service",
+                null, true, true, false, "listing.read", "BROKER", List.of("BROKER", "SALES"), List.of("listing.read"));
+        assertThat(access.search(request, envelope(request, RagOperation.SEARCH, "req", RagActorMode.USER,
+                "consumer-current", null), null, userScope))
+                .containsExactly(new RagFilter("active", RagFilterOperator.EQ, RagValue.bool(true)));
+        var inactiveListingScope = versionedScope(request, "listing-current", "listing-master-service", "listing-master-service",
+                null, false, true, false, "listing.read", "BROKER", List.of("BROKER", "SALES"), List.of("listing.read"));
+        denied(() -> access.search(request, envelope(request, RagOperation.SEARCH, "req", RagActorMode.USER,
+                "consumer-current", null), null, inactiveListingScope), RagErrorCode.FORBIDDEN);
+    }
+
+    @Test void versionedAdministratorStillCannotSearchAnotherUsersPersonalMemory() {
+        var access = versionedAccess(space("memory.preference"), null, true, List.of(),
+                List.of("memory.search", "rag.space.manage"));
+        var request = RagSearchRequest.defaults("req", "memory.preference", "query");
+        var crossOwner = versionedScope(request, "owner-current", "memory-service", "memory", "8",
+                true, false, true, "memory.search", null, List.of(), List.of("memory.search", "rag.space.manage"));
+        denied(() -> access.search(request, envelope(request, RagOperation.SEARCH, "req", RagActorMode.USER,
+                "consumer-current", null), null, crossOwner), RagErrorCode.FORBIDDEN);
+    }
+
+    @Test void boundRunContextIsLocallyVerifiedWithoutAuthRpcOrBearerForwarding() {
+        var base = space("supervisor.knowledge");
+        var fields = Map.of("ownerId", new RagSpaceDefinition.FilterField(RagValueType.STRING,
+                        Set.of(RagFilterOperator.EQ), true),
+                "active", new RagSpaceDefinition.FilterField(RagValueType.BOOLEAN, Set.of(RagFilterOperator.EQ), true));
+        var definition = new RagSpaceDefinition(base.spaceId(), "agent-service", "policy-v1", base.schemaVersion(),
+                base.elasticsearchIndex(), base.vectorSchema(), fields, Set.of("ownerId", "active"), Set.of(), Set.of(),
+                Map.of("agent-service", EnumSet.allOf(RagOperation.class)), base.limits(), base.rerankProfile());
+        var access = versionedAccess(definition, null, false, List.of(), List.of("agent.rag.search"));
+        var authz = authzResponse(false, List.of("agent.rag.search"), List.of("agent.rag.search"));
+        for (int i = 0; i < 4; i++) {
+            var request = RagSearchRequest.defaults("run-req-" + i, "supervisor.knowledge", "query");
+            var envelope = envelope(request, RagOperation.SEARCH, request.requestId(), RagActorMode.USER,
+                    "consumer-current", null);
+            var scope = contextScope(request, "7", false, "agent.rag.search", authz);
+            assertThat(access.search(request, envelope, null, scope))
+                    .containsExactly(new RagFilter("ownerId", RagFilterOperator.EQ, RagValue.string("7")),
+                            new RagFilter("active", RagFilterOperator.EQ, RagValue.bool(true)));
+        }
+        assertThat(authCalls.get()).isZero();
+    }
+
+    @Test void forgedBusinessAdminInSignedScopeCannotOverrideAuthSnapshot() {
+        var base = space("supervisor.knowledge");
+        var fields = Map.of("ownerId", new RagSpaceDefinition.FilterField(RagValueType.STRING,
+                        Set.of(RagFilterOperator.EQ), true),
+                "active", new RagSpaceDefinition.FilterField(RagValueType.BOOLEAN, Set.of(RagFilterOperator.EQ), true));
+        var definition = new RagSpaceDefinition(base.spaceId(), "agent-service", "policy-v1", base.schemaVersion(),
+                base.elasticsearchIndex(), base.vectorSchema(), fields, Set.of("ownerId", "active"), Set.of(), Set.of(),
+                Map.of("agent-service", EnumSet.allOf(RagOperation.class)), base.limits(), base.rerankProfile());
+        var access = versionedAccess(definition, null, false, List.of(), List.of("agent.rag.search"));
+        var authz = authzResponse(false, List.of("agent.rag.search"), List.of("agent.rag.search"));
+        var request = RagSearchRequest.defaults("forged-admin", "supervisor.knowledge", "query");
+        var envelope = envelope(request, RagOperation.SEARCH, request.requestId(), RagActorMode.USER,
+                "consumer-current", null);
+        var forged = RagScopeSigner.sign(new RagAuthorizationScope(1, "consumer-current", "agent-service", "agent-service",
+                request.spaceId(), "7", RagOperation.SEARCH, RagCanonicalHash.requestHash(request), "policy-v1",
+                NOW.getEpochSecond(), NOW.plusSeconds(60).getEpochSecond(), "7", List.of(), true, false,
+                AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION, 17, 4, true, "agent.rag.search", null, authz, null),
+                RagSecurityProperties.bytes(CALLER_SECRET));
+        denied(() -> access.search(request, envelope, null, forged), RagErrorCode.AUTHENTICATION_FAILED);
+        assertThat(authCalls.get()).isZero();
+    }
+
+    @Test void versionedModeRejectsLegacyScopeAndUnknownOperationSpace() {
+        var request = RagSearchRequest.defaults("req", "memory.preference", "query");
+        var access = versionedAccess(space(request.spaceId()), "BROKER", false, List.of("BROKER"), List.of("memory.search"));
+        denied(() -> access.search(request, envelope(request, RagOperation.SEARCH, "req", RagActorMode.USER,
+                "consumer-current", null), null, scope(request, "7", List.of(), true, "owner-current")),
+                RagErrorCode.FORBIDDEN);
+
+        var unknown = new RagSpaceDefinition("unknown.space", "memory", "policy-v1", "schema-v1", "rag_unknown",
+                space("memory.preference").vectorSchema(), space("memory.preference").fields(), Set.of("userId", "active"),
+                Set.of(), Set.of(), Map.of("agent-service", EnumSet.allOf(RagOperation.class),
+                        "memory-service", EnumSet.allOf(RagOperation.class)),
+                space("memory.preference").limits(), space("memory.preference").rerankProfile());
+        var unknownAccess = versionedAccess(unknown, "BROKER", false, List.of("BROKER"), List.of("memory.search"));
+        var unknownRequest = RagSearchRequest.defaults("unknown-req", "unknown.space", "query");
+        var unknownScope = versionedScope(unknownRequest, "owner-current", "memory-service", "memory", "7",
+                true, false, false, "memory.search", "BROKER", List.of("BROKER"), List.of("memory.search"));
+        denied(() -> unknownAccess.search(unknownRequest, envelope(unknownRequest, RagOperation.SEARCH,
+                "unknown-req", RagActorMode.USER, "consumer-current", null), null, unknownScope), RagErrorCode.FORBIDDEN);
     }
     @Test void administratorBusinessScopeAllowsNonActiveListingsWithoutResourceWildcard() {
         var request = RagSearchRequest.defaults("req", "listing.knowledge", "query");

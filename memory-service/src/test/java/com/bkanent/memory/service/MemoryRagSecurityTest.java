@@ -98,6 +98,49 @@ class MemoryRagSecurityTest {
         assertEquals(RagErrorCode.FORBIDDEN, assertThrows(RagException.class, () -> security.requireAdmin(principal)).code());
     }
 
+    @Test
+    void versionedScopesCarryAuthEvidenceButNeverWidenPersonalMemoryForBusinessAdmins() {
+        var f = new MemoryRagTestSupport();
+        f.properties.setVersionedAuthorizationRequired(true);
+        long now = Instant.now().getEpochSecond();
+        var personalRequest = RagSearchRequest.defaults("versioned-memory", "memory.preference", "q");
+        var personalPrincipal = versionedPrincipal(now, true, List.of(), List.of("memory.search"));
+        var personal = f.security.scope(personalRequest, personalPrincipal);
+
+        assertTrue(personal.versionedAuthorization());
+        assertEquals("memory.search", personal.operationCode());
+        assertEquals(17, personal.permissionRevision());
+        assertEquals(4, personal.credentialEpoch());
+        assertTrue(personal.businessAdmin());
+        assertFalse(personal.businessWideRead());
+        assertTrue(personal.activeOnly());
+        assertEquals("42", personal.ownerId());
+        assertEquals(personalPrincipal, personal.authPrincipal());
+        assertThrows(RagException.class, () -> f.security.scope(personalRequest,
+                versionedPrincipal(now, true, List.of(), List.of("rag.space.manage"))));
+
+        var constraintRequest = RagSearchRequest.defaults("versioned-constraint", "memory.constraint", "q");
+        var constraintPrincipal = versionedPrincipal(now, true, List.of(), List.of("memory.constraint.read"));
+        var constraint = f.security.scope(constraintRequest, constraintPrincipal);
+        assertEquals("memory.constraint.read", constraint.operationCode());
+        assertTrue(constraint.businessAdmin());
+        assertFalse(constraint.businessWideRead());
+        assertTrue(constraint.activeOnly());
+        assertNull(constraint.ownerId());
+        assertEquals(constraintPrincipal, constraint.authPrincipal());
+    }
+
+    private static AuthRagPrincipal versionedPrincipal(long now, boolean admin, List<String> roles,
+                                                        List<String> permissions) {
+        var facts = new AuthRagPrincipal(42L, null, true, false, now + 300,
+                AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION, 17, 4, admin, roles, permissions, null);
+        var proof = RagRequestSigner.sign(new RagAuthEnvelope(1, "auth-response", "memory-service",
+                "auth-service", RagOperation.RESOLVE_PRINCIPAL_RESPONSE, "versioned-principal",
+                RagCanonicalHash.principalHash(facts), RagActorMode.USER, "42", now, now + 60,
+                "test-credential-digest", null), MemoryRagTestSupport.AUTH_SECRET.getBytes(StandardCharsets.UTF_8));
+        return facts.withAttestation(proof);
+    }
+
     private MemoryRagProperties.TrustedCaller caller(MemoryRagTestSupport f) {
         var caller = new MemoryRagProperties.TrustedCaller();
         caller.setCallerService("agent-service");

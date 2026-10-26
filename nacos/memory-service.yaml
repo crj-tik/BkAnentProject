@@ -94,6 +94,7 @@ memory:
       max-token-budget: ${MEMORY_V2_EXPERIENCE_MAX_TOKEN_BUDGET:2048}
       half-life-days: ${MEMORY_V2_EXPERIENCE_HALF_LIFE_DAYS:180}
   rag:
+    versioned-authorization-required: false
     key-id: memory-current
     signing-secret: ${MEMORY_RAG_RPC_SECRET:}
     auth-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}

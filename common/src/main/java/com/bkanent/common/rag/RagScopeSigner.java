@@ -13,7 +13,10 @@ public final class RagScopeSigner {
                 unsigned.ownerDomain(), unsigned.spaceId(), unsigned.actorId(), unsigned.operation(),
                 unsigned.requestHash(), unsigned.policyVersion(), unsigned.issuedAtEpochSecond(),
                 unsigned.expiresAtEpochSecond(), unsigned.ownerId(), unsigned.allowedResourceIds(), unsigned.activeOnly(),
-                unsigned.businessWideRead(), RagSignatureSupport.sign(RagCanonicalHash.scopeBytes(unsigned), secret));
+                unsigned.businessWideRead(), unsigned.authorizationVersion(), unsigned.permissionRevision(),
+                unsigned.credentialEpoch(), unsigned.businessAdmin(), unsigned.operationCode(), unsigned.authPrincipal(),
+                unsigned.authorizationContext(),
+                RagSignatureSupport.sign(RagCanonicalHash.scopeBytes(unsigned), secret));
     }
 
     public static void verify(RagAuthorizationScope scope, RagSigningKey key, String spaceId, String actorId,
@@ -23,6 +26,9 @@ public final class RagScopeSigner {
         RagSignatureSupport.equal(key.keyId(), scope.keyId());
         RagSignatureSupport.equal(key.callerService(), scope.issuerService());
         RagSignatureSupport.verify(RagCanonicalHash.scopeBytes(scope), scope.signature(), key.secret());
+        if (scope.versionedAuthorization()) {
+            RagSignatureSupport.authorize((scope.authPrincipal() == null) != (scope.authorizationContext() == null));
+        }
         // Trust only the registered ownerDomain of the managed key, never a consumer's assertion.
         RagSignatureSupport.authorize(ownerDomain != null && Objects.equals(ownerDomain, key.ownerDomain())
                 && Objects.equals(ownerDomain, scope.ownerDomain()) && key.allowedOperations().contains(operation));
@@ -33,6 +39,11 @@ public final class RagScopeSigner {
         RagSignatureSupport.equal(requestHash, scope.requestHash());
         RagSignatureSupport.equal(policyVersion, scope.policyVersion());
         RagSignatureSupport.time(scope.issuedAtEpochSecond(), scope.expiresAtEpochSecond(), now);
+        if (scope.versionedAuthorization()) {
+            RagSignatureSupport.authorize(scope.activeOnly() != null);
+            RagSignatureSupport.authorize(!scope.businessWideRead() || scope.ownerId() == null
+                    && scope.allowedResourceIds().isEmpty());
+        }
         if (scope.ownerId() != null) RagSignatureSupport.authorize(Objects.equals(actorId, scope.ownerId()));
         RagSignatureSupport.authorize(!scope.businessWideRead()
                 || operation == RagOperation.SEARCH && "listing.knowledge".equals(spaceId)

@@ -18,6 +18,7 @@ public class ListingRagProperties {
     private String schemaVersion = "1";
     private Set<String> readRoleCodes = Set.of();
     private Set<String> adminRoleCodes = Set.of();
+    private boolean versionedAuthorizationRequired;
     private boolean dispatcherEnabled;
     private Map<String, TrustedCaller> trustedCallers = new LinkedHashMap<>();
     public String getKeyId() { return keyId; }
@@ -36,6 +37,8 @@ public class ListingRagProperties {
     public void setReadRoleCodes(Set<String> value) { readRoleCodes = value == null ? Set.of() : Set.copyOf(value); }
     public Set<String> getAdminRoleCodes() { return adminRoleCodes; }
     public void setAdminRoleCodes(Set<String> value) { adminRoleCodes = value == null ? Set.of() : Set.copyOf(value); }
+    public boolean isVersionedAuthorizationRequired() { return versionedAuthorizationRequired; }
+    public void setVersionedAuthorizationRequired(boolean value) { versionedAuthorizationRequired = value; }
     public boolean isDispatcherEnabled() { return dispatcherEnabled; }
     public void setDispatcherEnabled(boolean value) { dispatcherEnabled = value; }
     public Map<String, TrustedCaller> getTrustedCallers() { return trustedCallers; }

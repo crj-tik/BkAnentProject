@@ -46,9 +46,11 @@ public class ListingRagFacade {
             usedBudget += request.recall().keywordCandidates() + request.recall().vectorCandidates();
             if (usedBudget > totalBudget) { break; }
             RagAuthorizationScope scope = grants.scope(principal, request);
+            RagCredentialContext retrievalCredentials = principal.versionedAuthorization() ? null : credentials;
             try {
                 response = provider.search(request, identity.sign("rag-service", RagOperation.SEARCH, request.requestId(),
-                        RagCanonicalHash.requestHash(request), RagActorMode.USER, String.valueOf(principal.userId()), credentials), credentials, scope);
+                        RagCanonicalHash.requestHash(request), RagActorMode.USER, String.valueOf(principal.userId()), retrievalCredentials),
+                        retrievalCredentials, scope);
             } catch (RagException e) { throw e; }
             catch (RuntimeException e) { throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE); }
             if (response == null || !request.requestId().equals(response.requestId()) || !ListingRagIdentity.SPACE.equals(response.spaceId())

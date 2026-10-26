@@ -19,6 +19,18 @@ public class ListingRagGrantService {
 
     public RagAuthorizationScope scope(AuthRagPrincipal principal, RagSearchRequest request) {
         boolean activeOnly = ListingRagIdentity.activeOnly(principal);
+        if (principal.versionedAuthorization()) {
+            if (!principal.hasPermission("listing.read")) throw new RagException(RagErrorCode.FORBIDDEN);
+            long now = Instant.now().getEpochSecond();
+            long expiry = Math.min(now + 60, principal.expiresAtEpochSecond());
+            return RagScopeSigner.sign(new RagAuthorizationScope(1, properties.getKeyId(), ListingRagIdentity.SERVICE,
+                    ListingRagIdentity.SERVICE, ListingRagIdentity.SPACE, String.valueOf(principal.userId()), RagOperation.SEARCH,
+                    RagCanonicalHash.requestHash(request), properties.getPolicyVersion(), now, expiry,
+                    null, List.of(), activeOnly, true, AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION,
+                    principal.permissionRevision(), principal.credentialEpoch(), principal.businessAdmin(), "listing.read",
+                    principal, null, null),
+                    ListingRagIdentity.bytes(properties.getSecret()));
+        }
         long now = Instant.now().getEpochSecond();
         long expiry = Math.min(now + 60, principal.expiresAtEpochSecond());
         return RagScopeSigner.sign(new RagAuthorizationScope(1, properties.getKeyId(), ListingRagIdentity.SERVICE,

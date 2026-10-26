@@ -86,9 +86,11 @@ class RagProtectedRequestFactoryTest {
         scheduler.setRemoveOnCancelPolicy(true);
         try {
             var factory = new RagProtectedRequestFactory(transport, new RagEndpointPolicy(), scheduler);
-            try (var scope = RagHttpDeadline.open(Duration.ofMillis(20))) {
+            // Leave enough setup budget for the real Spring/HC request factory to initialize on a
+            // cold test JVM; the assertion still waits past this absolute deadline below.
+            try (var scope = RagHttpDeadline.open(Duration.ofSeconds(2))) {
                 var guarded = factory.createRequest(URI.create("https://public.example"), HttpMethod.GET).execute();
-                Thread.sleep(30);
+                Thread.sleep(2100);
                 assertEquals(RagErrorCode.TIMEOUT, assertThrows(RagException.class, () -> guarded.getBody().read()).code());
                 guarded.close();
             }

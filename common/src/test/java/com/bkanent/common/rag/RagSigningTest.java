@@ -166,6 +166,37 @@ class RagSigningTest {
     }
 
     @Test
+    void versionedScopeSignatureCommitsToNestedAuthEvidence() {
+        RagAuthEnvelope attestation = RagRequestSigner.sign(new RagAuthEnvelope(1, "auth-key",
+                "listing-master-service", "auth-service", RagOperation.RESOLVE_PRINCIPAL_RESPONSE,
+                "principal-req", "c".repeat(64), RagActorMode.USER, "1", 1000, 1060,
+                "d".repeat(64), null), SECRET);
+        AuthRagPrincipal principal = new AuthRagPrincipal(1L, "BROKER", true, true, 1100,
+                AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION, 17, 4, false,
+                List.of("BROKER", "SALES"), List.of("listing.read"), attestation);
+        RagAuthorizationScope signed = RagScopeSigner.sign(new RagAuthorizationScope(1, "listing-1",
+                "listing-master-service", "listing-master", "listing.knowledge", "1", RagOperation.SEARCH,
+                HASH, "p1", 1000, 1060, null, List.of(), true, true,
+                AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION, 17, 4, false, "listing.read",
+                principal, null, null), SECRET);
+        RagSigningKey key = ownerKey();
+        RagScopeSigner.verify(signed, key, "listing.knowledge", "1", RagOperation.SEARCH,
+                HASH, "listing-master", "p1", NOW);
+
+        AuthRagPrincipal changedPrincipal = new AuthRagPrincipal(1L, "BROKER", true, true, 1100,
+                AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION, 17, 4, false,
+                List.of("BROKER", "SALES"), List.of("listing.read", "listing.write"), attestation);
+        RagAuthorizationScope tampered = new RagAuthorizationScope(signed.contractVersion(), signed.keyId(),
+                signed.issuerService(), signed.ownerDomain(), signed.spaceId(), signed.actorId(), signed.operation(),
+                signed.requestHash(), signed.policyVersion(), signed.issuedAtEpochSecond(), signed.expiresAtEpochSecond(),
+                signed.ownerId(), signed.allowedResourceIds(), signed.activeOnly(), signed.businessWideRead(),
+                signed.authorizationVersion(), signed.permissionRevision(), signed.credentialEpoch(), signed.businessAdmin(),
+                signed.operationCode(), changedPrincipal, null, signed.signature());
+        error(RagErrorCode.AUTHENTICATION_FAILED, () -> RagScopeSigner.verify(tampered, key,
+                "listing.knowledge", "1", RagOperation.SEARCH, HASH, "listing-master", "p1", NOW));
+    }
+
+    @Test
     void credentialKeyAndPayloadToStringsAndFailuresDoNotLeakSecrets() {
         assertThat(CREDENTIALS.toString()).doesNotContain(CREDENTIALS.accessToken());
         assertThat(KEY.toString()).doesNotContain(Arrays.toString(SECRET));

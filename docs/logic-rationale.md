@@ -1099,3 +1099,13 @@
 **代码位置**：`common/mcp/authz/McpAuthorizationContract`、`McpAuthorizationFilter`、`McpAuthorizationScope`、`McpAuthorizationReplayGuard`；`agent-service/AgentMcpAuthorizationTransportCustomizer`、`AgentMcpAuthorizationSupport`、`SupervisorCapabilityCatalog`；`notification-service/NotificationMcpTools`的本人消息查询从可信actor解析，不采纳模型传入的其他userId；Interview MCP provider仅在本地验证guard启用时注册。新开关和操作映射默认关闭，未声明生产MCP部署已启用。
 
 **关联**：LR-106/139/140；KI-174；change `unify-versioned-permission-context`任务6.5。
+
+## LR-144 RAG保留域HMAC并本地消费Auth签名权限上下文
+
+**结论**：版本化RAG scope保留既有独立owner-domain HMAC，并在HMAC覆盖范围内嵌入且只能嵌入一种可信Auth证据：Auth签名的`AuthRagPrincipal`，或当前Supervisor run/session绑定的Authz snapshot/context/freshness。Agent对实际RAG请求签scope/body hash，版本化消费时不传用户bearer；RAG本地核验两层签名、actor、授权版本/credential epoch、ACTIVE与freshness/硬截止、精确操作和空间许可，不对每次召回请求Auth。权限版本或新鲜度需要更新时沿原Supervisor规划刷新边界联系Auth并为后续请求签发新scope。房源scope的`businessWideRead`与`activeOnly`须和可信businessAdmin及显式权限一致；普通用户房源范围仅ON_SALE；个人Memory总是self-only，管理员不扩展owner。RAG操作许可不代替领域资源、owner、删除、grant或来源真源校验。未知范围、过期/缺失证明、签名不匹配和旧弱scope在版本化模式拒绝。
+
+**根因**：Auth证明账号身份和操作集合，不能替代RAG域对owner、空间和资源状态的约束；RAG HMAC证明scope由登记的领域消费者签发，也不能替代Auth的用户授权。嵌套证据并由外层HMAC一起绑定，避免序列化/传输时将两类事实拆开或替换。Graph一次run可能多次检索，逐次远程调用Auth会把编排频次转成身份服务可用性依赖；逐请求正文/范围签名和本地Auth验签保留请求完整性，同时在授权刷新边界更新权限，不信任模型生成的用户身份。出站网络目标仍由已有受保护transport检查，不因鉴权迁移增加任意URL回调。
+
+**代码位置**：`common/rag/AuthRagPrincipal`、`RagAuthorizationScope`、`RagCanonicalHash`、`RagScopeSigner`、`RagRequestSigner`；`agent-service/AgentRagRequestAuthentication`、`AgentMemoryMilvusService`；`auth-service/RagPrincipalRpcServiceImpl`；`listing-master-service/ListingRagIdentity`、`ListingRagGrantService`；`memory-service/MemoryRagSecurity`、`MemoryRagSearchFacade`；`rag-service/RagAccessControl`、`RagSecurityProperties`。
+
+**关联**：LR-98/139/140/142；KI-57；change `unify-versioned-permission-context`任务6.6/6.7。版本化RAG开关默认关闭；本地回归不代表Auth公钥、部署密钥和生产调用链已验收。

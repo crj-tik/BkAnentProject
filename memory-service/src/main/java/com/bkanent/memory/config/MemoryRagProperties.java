@@ -27,6 +27,7 @@ public class MemoryRagProperties {
     private boolean domainProjectionEnabled;
     /** Uses authorized RAG candidates for memory v2 reads. Dependency failures never fall back to SQL scans. */
     private boolean domainSearchEnabled;
+    private boolean versionedAuthorizationRequired;
     private int dispatchBatchSize = 25;
     private int maxAttempts = 5;
     private long retryDelayMs = 1000;
@@ -59,6 +60,8 @@ public class MemoryRagProperties {
     public void setDomainProjectionEnabled(boolean value) { domainProjectionEnabled = value; }
     public boolean isDomainSearchEnabled() { return domainSearchEnabled; }
     public void setDomainSearchEnabled(boolean value) { domainSearchEnabled = value; }
+    public boolean isVersionedAuthorizationRequired() { return versionedAuthorizationRequired; }
+    public void setVersionedAuthorizationRequired(boolean value) { versionedAuthorizationRequired = value; }
     public int getDispatchBatchSize() { return dispatchBatchSize; }
     public void setDispatchBatchSize(int value) { if (value < 1 || value > 100) throw new IllegalArgumentException("dispatchBatchSize"); dispatchBatchSize = value; }
     public int getMaxAttempts() { return maxAttempts; }

@@ -47,7 +47,7 @@ public class AgentMemoryMilvusService {
             var provider = retrieval.getIfAvailable();
             if (provider == null) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
             var response = provider.search(request, authentication.user(request, request.requestId(), "rag-service",
-                    RagOperation.SEARCH, userId, token), token, scope);
+                    RagOperation.SEARCH, userId, token), authentication.downstreamCredentials(token), scope);
             return response.candidates().stream().map(candidate -> AgentRagCompatibility.result(space, candidate, response)).toList();
         } catch (RagException exception) { throw exception; }
         catch (RuntimeException exception) { throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE); }

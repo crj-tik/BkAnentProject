@@ -7,6 +7,7 @@ import java.util.Set;
 @ConfigurationProperties(prefix = "agent.rag-consumer")
 public class AgentRagConsumerProperties {
     private boolean knowledgeEnabled;
+    private boolean versionedAuthorizationRequired;
     private boolean supervisorOwnerConfirmed;
     private String supervisorOwnerDomain;
     private String supervisorPolicyVersion;
@@ -21,6 +22,8 @@ public class AgentRagConsumerProperties {
 
     public boolean isKnowledgeEnabled() { return knowledgeEnabled; }
     public void setKnowledgeEnabled(boolean value) { knowledgeEnabled = value; }
+    public boolean isVersionedAuthorizationRequired() { return versionedAuthorizationRequired; }
+    public void setVersionedAuthorizationRequired(boolean value) { versionedAuthorizationRequired = value; }
     public boolean isSupervisorOwnerConfirmed() { return supervisorOwnerConfirmed; }
     public void setSupervisorOwnerConfirmed(boolean value) { supervisorOwnerConfirmed = value; }
     public String getSupervisorOwnerDomain() { return supervisorOwnerDomain; }

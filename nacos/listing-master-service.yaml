@@ -100,6 +100,7 @@ agent:
     watch-enabled: ${AGENT_SKILLS_WATCH_ENABLED:true}
 listing:
   rag:
+    versioned-authorization-required: false
     space-id: listing.knowledge
     schema-version: "1"
     policy-version: listing-v2

@@ -76,10 +76,14 @@ rag:
     expected-revision: ${RAG_RERANK_EXPECTED_REVISION:324cc40576b08b305b9c65a867c26c173a477ae2}
     expected-artifact-digest: ${RAG_RERANK_EXPECTED_ARTIFACT_DIGEST:76cd4a977b9001bf8e28e41bac6ce53b2d334d0c567f6928a9b88655bafc833f}
   security:
+    versioned-authorization-enabled: false
     auth-request-key-id: rag-current
     auth-request-secret: ${RAG_AUTH_RPC_SECRET:}
     auth-response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}
     auth-response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
+    # Authz context signatures are independently verified; blank key keeps this path closed.
+    authz-authority-public-keys:
+      auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
     trusted-keys:
       listing-current:
         caller-service: listing-master-service

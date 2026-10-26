@@ -128,7 +128,9 @@ public class MemoryRagSearchFacade {
 
     private RagSearchResponse call(RagSearchRequest request, AuthRagPrincipal principal, RagCredentialContext credentials) {
         try {
-            var result = retrieval.search(request, security.searchAuthentication(request, principal, credentials), credentials, security.scope(request, principal));
+            RagCredentialContext retrievalCredentials = principal.versionedAuthorization() ? null : credentials;
+            var result = retrieval.search(request, security.searchAuthentication(request, principal, retrievalCredentials),
+                    retrievalCredentials, security.scope(request, principal));
             if (result == null || !request.requestId().equals(result.requestId()) || !request.spaceId().equals(result.spaceId()) || result.candidates().size() > request.candidateLimit()) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
             return result;
         } catch (RagException ex) { throw ex; }
