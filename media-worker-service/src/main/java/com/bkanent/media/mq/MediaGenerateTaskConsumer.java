@@ -7,6 +7,8 @@ import com.bkanent.media.client.MediaImageGenerationClient;
 import com.bkanent.media.client.MediaObjectStorageClient;
 import com.bkanent.media.config.MediaMinioProperties;
 import com.bkanent.media.model.MediaGenerateTaskMessage;
+import com.bkanent.media.model.MediaTaskContext;
+import com.bkanent.media.service.MediaGenerationTaskService;
 import com.bkanent.media.service.MediaTaskStoreService;
 import org.apache.dubbo.config.annotation.DubboReference;
 import org.apache.rocketmq.spring.annotation.RocketMQMessageListener;
@@ -36,30 +38,37 @@ public class MediaGenerateTaskConsumer implements RocketMQListener<MediaGenerate
     private final MediaImageGenerationClient mediaImageGenerationClient;
     private final MediaObjectStorageClient mediaObjectStorageClient;
     private final MediaTaskStoreService mediaTaskStoreService;
+    private final MediaGenerationTaskService mediaGenerationTaskService;
     private final MediaMinioProperties mediaMinioProperties;
 
     public MediaGenerateTaskConsumer(MediaImageGenerationClient mediaImageGenerationClient,
                                      MediaObjectStorageClient mediaObjectStorageClient,
                                      MediaTaskStoreService mediaTaskStoreService,
+                                     MediaGenerationTaskService mediaGenerationTaskService,
                                      MediaMinioProperties mediaMinioProperties) {
         this.mediaImageGenerationClient = mediaImageGenerationClient;
         this.mediaObjectStorageClient = mediaObjectStorageClient;
         this.mediaTaskStoreService = mediaTaskStoreService;
+        this.mediaGenerationTaskService = mediaGenerationTaskService;
         this.mediaMinioProperties = mediaMinioProperties;
     }
 
     @Override
     public void onMessage(MediaGenerateTaskMessage message) {
-        mediaTaskStoreService.markRunning(message.taskId());
+        boolean claimed = false;
         try {
+            MediaTaskContext task = mediaGenerationTaskService.claimTaskForWorker(message.taskId(), message.permit());
+            if (task == null) return;
+            claimed = true;
+            var request = task.getRequest();
             List<GeneratedMediaFile> files = mediaImageGenerationClient.generateListingImages(
-                    message.request().listingId(),
-                    message.request().prompt(),
-                    message.request().angles()
+                    request.listingId(),
+                    request.prompt(),
+                    request.angles()
             );
             List<String> assetUrls = new ArrayList<>();
             for (GeneratedMediaFile file : files) {
-                String objectPath = message.request().listingId() + "/" + message.taskId() + "/" + file.fileName();
+                String objectPath = request.listingId() + "/" + message.taskId() + "/" + file.fileName();
                 assetUrls.add(mediaObjectStorageClient.upload(objectPath, file.content()));
             }
             String coverImageUrl = assetUrls.isEmpty() ? null : assetUrls.get(0);
@@ -74,7 +83,7 @@ public class MediaGenerateTaskConsumer implements RocketMQListener<MediaGenerate
             log.info("RocketMQ 媒体任务消费完成，taskId={}，assetCount={}，bucket={}",
                     message.taskId(), assetUrls.size(), mediaMinioProperties.getBucket());
         } catch (Exception exception) {
-            mediaTaskStoreService.markFailed(message.taskId(), "媒体素材生成失败: " + exception.getMessage());
+            if (claimed) mediaTaskStoreService.markFailed(message.taskId(), "媒体素材生成失败: " + exception.getMessage());
             log.error("RocketMQ 媒体任务消费失败，taskId={}", message.taskId(), exception);
             throw new IllegalStateException("媒体任务消费失败", exception);
         }

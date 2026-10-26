@@ -37,6 +37,9 @@ class ListingReadRpcTest {
         var marketing = new ListingRagProperties.TrustedCaller();
         marketing.setCallerService("marketing-content-service"); marketing.setSecret(SECRET);
         p.getTrustedCallers().put("marketing-read", marketing);
+        var media = new ListingRagProperties.TrustedCaller();
+        media.setCallerService("media-worker-service"); media.setSecret(SECRET);
+        p.getTrustedCallers().put("media-write", media);
         return new ListingRagIdentity(p,new StaticListableBeanFactory().getBeanProvider(com.bkanent.common.rpc.RagPrincipalRpcService.class));
     }
     @Test void serviceReadAndTamperedOrMissingUserProofAreRejectedBeforeSql() {
@@ -177,11 +180,88 @@ class ListingReadRpcTest {
         verifyNoInteractions(domain);
     }
 
+    @Test void signedAssetWriteRequiresExactOperationAndTrustedBrokerOwnership() throws Exception {
+        var signing = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        var owner = authorization(signing, List.of("listing.assets.bind.own"),
+                List.of("listing.assets.bind.own"), Map.of("BROKER", 41L));
+        var request = new RagAuthorizedListingAssetWriteRequest(1,
+                new RagListingReadRequest(1, "asset-write", 11L, null),
+                AuthzCanonicalHash.signedResponseHash(owner.response()));
+        var authorizationProperties = new ListingAuthorizationProperties();
+        authorizationProperties.setAuthorityPublicKeys(Map.of(AUTH_KEY_ID,
+                ServiceIdentityCrypto.encodePublicKey(signing.getPublic())));
+        var domain = mock(ListingDomainService.class);
+        var listing = new ListingEntity();
+        listing.setId(11L); listing.setDeleted(0); listing.setBrokerId(41L);
+        when(domain.getById(11L)).thenReturn(listing);
+        var rpc = new ListingMasterRpcServiceImpl(mock(ListingManagementService.class), identity(), domain,
+                new ListingConverter(), authorizationProperties);
+
+        assertTrue(rpc.authorizeAssetWrite(request, signAuthorizedAssetWrite(request, "7"), owner.response()));
+        listing.setBrokerId(42L);
+        assertFalse(rpc.authorizeAssetWrite(request, signAuthorizedAssetWrite(request, "7"), owner.response()));
+
+        var missingMapping = authorization(signing, List.of("listing.assets.bind.own"),
+                List.of("listing.assets.bind.own"), Map.of());
+        var missingMappingRequest = new RagAuthorizedListingAssetWriteRequest(1, request.request(),
+                AuthzCanonicalHash.signedResponseHash(missingMapping.response()));
+        assertThrows(AuthzException.class, () -> rpc.authorizeAssetWrite(missingMappingRequest,
+                signAuthorizedAssetWrite(missingMappingRequest, "7"), missingMapping.response()));
+
+        var missingOperation = authorization(signing, List.of("listing.read"), List.of("listing.read"),
+                Map.of("BROKER", 41L));
+        var missingOperationRequest = new RagAuthorizedListingAssetWriteRequest(1, request.request(),
+                AuthzCanonicalHash.signedResponseHash(missingOperation.response()));
+        assertEquals(RagErrorCode.FORBIDDEN, assertThrows(RagException.class,
+                () -> rpc.authorizeAssetWrite(missingOperationRequest,
+                        signAuthorizedAssetWrite(missingOperationRequest, "7"), missingOperation.response())).code());
+        verify(domain, times(2)).getById(11L);
+    }
+
+    @Test void a2aAssetWriteChecksBrokerMappingBeforeLoadingListing() throws Exception {
+        var signing = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        var owner = executionContext(signing, List.of("listing.assets.bind.own"), Map.of("BROKER", 84L));
+        var request = new RagContextAuthorizedListingAssetWriteRequest(1,
+                new RagListingReadRequest(1, "a2a-asset-write", 11L, null), owner.context(), owner.freshness());
+        var authorizationProperties = new ListingAuthorizationProperties();
+        authorizationProperties.setEnabled(true);
+        authorizationProperties.setAuthorityPublicKeys(Map.of(AUTH_KEY_ID,
+                ServiceIdentityCrypto.encodePublicKey(signing.getPublic())));
+        var domain = mock(ListingDomainService.class);
+        var listing = new ListingEntity();
+        listing.setId(11L); listing.setDeleted(0); listing.setBrokerId(84L);
+        when(domain.getById(11L)).thenReturn(listing);
+        var rpc = new ListingMasterRpcServiceImpl(mock(ListingManagementService.class), identity(), domain,
+                new ListingConverter(), authorizationProperties);
+
+        assertTrue(rpc.authorizeAssetWriteContext(request, signContextAuthorizedAssetWrite(request, "42")));
+        listing.setBrokerId(85L);
+        assertFalse(rpc.authorizeAssetWriteContext(request, signContextAuthorizedAssetWrite(request, "42")));
+
+        var noMapping = executionContext(signing, List.of("listing.assets.bind.own"), Map.of());
+        var noMappingRequest = new RagContextAuthorizedListingAssetWriteRequest(1, request.request(),
+                noMapping.context(), noMapping.freshness());
+        assertThrows(AuthzException.class, () -> rpc.authorizeAssetWriteContext(noMappingRequest,
+                signContextAuthorizedAssetWrite(noMappingRequest, "42")));
+
+        var noOperation = executionContext(signing, List.of("listing.read"), Map.of("BROKER", 84L));
+        var noOperationRequest = new RagContextAuthorizedListingAssetWriteRequest(1, request.request(),
+                noOperation.context(), noOperation.freshness());
+        assertEquals(RagErrorCode.FORBIDDEN, assertThrows(RagException.class,
+                () -> rpc.authorizeAssetWriteContext(noOperationRequest,
+                        signContextAuthorizedAssetWrite(noOperationRequest, "42"))).code());
+        verify(domain, times(2)).getById(11L);
+    }
+
     private AuthFixture authorization(KeyPair key, List<String> permissions, List<String> operations) {
+        return authorization(key, permissions, operations, Map.of("BROKER", 41L));
+    }
+
+    private AuthFixture authorization(KeyPair key, List<String> permissions, List<String> operations,
+                                     Map<String, Long> identities) {
         long now = Instant.now().getEpochSecond();
         String nonce = Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]);
         String hash = "a".repeat(64);
-        var identities = Map.of("BROKER", 41L);
         var snapshot = AuthzSignature.sign(new AuthorizationSnapshot("7", 9, 3, false,
                 permissions, null, identities, AuthzContract.ALGORITHM, AUTH_KEY_ID, null), key.getPrivate());
         String permissionHash = AuthzCanonicalHash.snapshotHash(snapshot);
@@ -202,13 +282,26 @@ class ListingReadRpcTest {
                 SECRET.getBytes(StandardCharsets.UTF_8));
     }
 
+    private RagAuthEnvelope signAuthorizedAssetWrite(RagAuthorizedListingAssetWriteRequest request,
+                                                     String actorId) {
+        long now = Instant.now().getEpochSecond();
+        return RagRequestSigner.sign(new RagAuthEnvelope(1, "consumer-read", "listing-master-service",
+                "customer-service", RagOperation.READ, request.request().requestId(),
+                RagCanonicalHash.requestHash(request), RagActorMode.USER, actorId, now, now + 60, null, null),
+                SECRET.getBytes(StandardCharsets.UTF_8));
+    }
+
     private ExecutionFixture executionContext(KeyPair key, List<String> operations) {
+        return executionContext(key, operations, Map.of("BROKER", 84L));
+    }
+
+    private ExecutionFixture executionContext(KeyPair key, List<String> operations, Map<String, Long> identities) {
         long now = Instant.now().getEpochSecond();
         String nonce = Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]);
         String hash = "d".repeat(64);
         var context = AuthzSignature.sign(new AuthorizationContext("42", 10, 1, hash, operations,
                 "agent-service", "parent-request", "run-1", "session-1", "e".repeat(64),
-                "f".repeat(64), nonce, now, now + 60, now + 300, Map.of("BROKER", 84L),
+                "f".repeat(64), nonce, now, now + 60, now + 300, identities,
                 AuthzContract.ALGORITHM, AUTH_KEY_ID, null), key.getPrivate());
         var freshness = AuthzSignature.sign(new AuthzFreshness("42", 10, 1, AuthorizationStatus.ACTIVE,
                 hash, now, now + 30, nonce, AuthzContract.ALGORITHM, AUTH_KEY_ID, null), key.getPrivate());
@@ -220,6 +313,16 @@ class ListingReadRpcTest {
         long expiry = Math.min(now + 30, request.freshness().notAfterEpochSecond());
         return RagRequestSigner.sign(new RagAuthEnvelope(1, "marketing-read", "listing-master-service",
                 "marketing-content-service", RagOperation.READ, request.request().requestId(),
+                RagCanonicalHash.requestHash(request), RagActorMode.USER, actorId, now, expiry, null, null),
+                SECRET.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private RagAuthEnvelope signContextAuthorizedAssetWrite(
+            RagContextAuthorizedListingAssetWriteRequest request, String actorId) {
+        long now = Instant.now().getEpochSecond();
+        long expiry = Math.min(now + 30, request.freshness().notAfterEpochSecond());
+        return RagRequestSigner.sign(new RagAuthEnvelope(1, "media-write", "listing-master-service",
+                "media-worker-service", RagOperation.READ, request.request().requestId(),
                 RagCanonicalHash.requestHash(request), RagActorMode.USER, actorId, now, expiry, null, null),
                 SECRET.getBytes(StandardCharsets.UTF_8));
     }

@@ -13,14 +13,16 @@ public class MediaTaskContext {
 
     private final String taskId;
     private final MediaGenerateTaskRequest request;
+    private final MediaBackgroundPermit permit;
     /**
      * 业务属性：result。
      */
     private volatile MediaTaskResultDTO result;
 
-    public MediaTaskContext(String taskId, MediaGenerateTaskRequest request) {
+    public MediaTaskContext(String taskId, MediaGenerateTaskRequest request, MediaBackgroundPermit permit) {
         this.taskId = taskId;
         this.request = request;
+        this.permit = permit;
         this.result = new MediaTaskResultDTO(
                 taskId,
                 request.listingId(),
@@ -44,6 +46,8 @@ public class MediaTaskContext {
     public MediaGenerateTaskRequest getRequest() {
         return request;
     }
+
+    public MediaBackgroundPermit getPermit() { return permit; }
 
     public MediaTaskResultDTO getResult() {
         return result;

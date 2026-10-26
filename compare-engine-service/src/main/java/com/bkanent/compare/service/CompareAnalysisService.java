@@ -26,6 +26,9 @@ public interface CompareAnalysisService {
      */
     CompareReportResponse getSharedReport(String shareCode);
 
+    /** Explicitly publishes an owned immutable report snapshot for capability-link access. */
+    CompareReportResponse publishReportShare(String shareCode);
+
     /**
      * 业务方法：loadPdfResource。
      */

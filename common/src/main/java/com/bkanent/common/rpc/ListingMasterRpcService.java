@@ -28,6 +28,17 @@ public interface ListingMasterRpcService {
             com.bkanent.common.rag.RagAuthEnvelope authentication)
             throws com.bkanent.common.rag.RagException;
 
+    /** Verifies the signed actor may generate/bind assets for this exact owned Listing. */
+    boolean authorizeAssetWrite(
+            com.bkanent.common.rag.RagAuthorizedListingAssetWriteRequest request,
+            com.bkanent.common.rag.RagAuthEnvelope authentication,
+            com.bkanent.common.authz.AuthzResponse authorization);
+
+    /** A2A/MCP versioned-context form of the exact Listing asset ownership check. */
+    boolean authorizeAssetWriteContext(
+            com.bkanent.common.rag.RagContextAuthorizedListingAssetWriteRequest request,
+            com.bkanent.common.rag.RagAuthEnvelope authentication);
+
     /**
      * 获取指定房源摘要。
      */

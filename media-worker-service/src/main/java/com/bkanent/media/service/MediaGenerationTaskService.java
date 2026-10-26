@@ -2,6 +2,8 @@ package com.bkanent.media.service;
 
 import com.bkanent.common.model.MediaGenerateTaskRequest;
 import com.bkanent.common.model.MediaTaskResultDTO;
+import com.bkanent.media.model.MediaBackgroundPermit;
+import com.bkanent.media.model.MediaTaskContext;
 
 import java.util.List;
 
@@ -24,6 +26,9 @@ public interface MediaGenerationTaskService {
      * 业务方法：getTaskResult。
      */
     MediaTaskResultDTO getTaskResult(String taskId);
+
+    /** Claims one queued task only after its exact background permit and Auth signatures verify. */
+    MediaTaskContext claimTaskForWorker(String taskId, MediaBackgroundPermit permit);
 
     /**
      * 业务方法：consumeQueuedTasks。

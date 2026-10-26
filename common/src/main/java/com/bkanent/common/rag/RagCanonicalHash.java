@@ -28,14 +28,16 @@ public final class RagCanonicalHash {
     private static final Set<Class<?>> REQUESTS = Set.of(RagSearchRequest.class, RagIndexEvent.class,
             RagStatusRequest.class, RagInspectRequest.class, RagProvisionRequest.class, RagReplayRequest.class,
             RagListingSearchRequest.class, RagListingReadRequest.class, RagAuthorizedListingReadRequest.class,
-            RagContextAuthorizedListingReadRequest.class,
+            RagContextAuthorizedListingReadRequest.class, RagAuthorizedListingAssetWriteRequest.class,
+            RagContextAuthorizedListingAssetWriteRequest.class,
             RagListingIndexRequest.class, MemoryRagSearchRequest.class,
             RagCandidateAuthorizationRequest.class, A2aBeaconBinding.class);
     private static final Set<Class<?>> BUSINESS = Set.of(RagSearchRequest.class, RagRecallOptions.class,
             RagFusionOptions.class, RagFilter.class, RagValue.class, RagDocument.class, RagIndexEvent.class,
             RagStatusRequest.class, RagInspectRequest.class, RagProvisionRequest.class, RagReplayRequest.class,
             RagListingSearchRequest.class, RagListingReadRequest.class, RagAuthorizedListingReadRequest.class,
-            RagListingIndexRequest.class, MemoryRagSearchRequest.class,
+            RagContextAuthorizedListingReadRequest.class, RagAuthorizedListingAssetWriteRequest.class,
+            RagContextAuthorizedListingAssetWriteRequest.class, RagListingIndexRequest.class, MemoryRagSearchRequest.class,
             RagCandidateAuthorizationRequest.class, RagCandidateReference.class, A2aBeaconBinding.class);
 
     private RagCanonicalHash() { }
@@ -54,6 +56,18 @@ public final class RagCanonicalHash {
                     com.bkanent.common.authz.AuthzCanonicalHash.signedContextHash(
                             authorizedRead.authorizationContext()),
                     com.bkanent.common.authz.AuthzCanonicalHash.signedFreshnessHash(authorizedRead.freshness())), false));
+        }
+        if (request instanceof RagAuthorizedListingAssetWriteRequest authorizedWrite) {
+            return hash(encode("rag.authorized-listing-asset-write.v1", Arrays.asList(
+                    authorizedWrite.contractVersion(), authorizedWrite.request(),
+                    authorizedWrite.authorizationEvidenceHash()), false));
+        }
+        if (request instanceof RagContextAuthorizedListingAssetWriteRequest authorizedWrite) {
+            return hash(encode("rag.context-authorized-listing-asset-write.v1", Arrays.asList(
+                    authorizedWrite.contractVersion(), authorizedWrite.request(),
+                    com.bkanent.common.authz.AuthzCanonicalHash.signedContextHash(
+                            authorizedWrite.authorizationContext()),
+                    com.bkanent.common.authz.AuthzCanonicalHash.signedFreshnessHash(authorizedWrite.freshness())), false));
         }
         if (request instanceof MemoryRagSearchRequest memory) {
             request = new MemoryRagSearchRequest(memory.search().normalized(), memory.topK(),

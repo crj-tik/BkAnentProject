@@ -19,12 +19,12 @@ public class MediaMcpTools implements McpTool {
         this.mediaGenerationTaskService = mediaGenerationTaskService;
     }
 
-    @Tool(description = "Submit a video generation task for a listing. Returns the media task ID for tracking.")
+    @Tool(description = "Submit an image asset generation task for a listing. Returns the media task ID for tracking.")
     public String submitMediaTask(
             @ToolParam(description = "Listing ID to generate media for") Long listingId,
             @ToolParam(description = "Video generation prompt describing the desired output") String prompt) {
         return mediaGenerationTaskService.submitTask(new MediaGenerateTaskRequest(
-                listingId, null, "media-agent", "VIDEO_GENERATION", prompt,
+                listingId, null, "media-agent", "LISTING_IMAGE", prompt,
                 List.of("cover", "interior", "community", "closing-shot"), 4));
     }
 

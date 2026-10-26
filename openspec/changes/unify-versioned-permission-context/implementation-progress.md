@@ -2,9 +2,9 @@
 
 ## 当前实施状态（2026-10-26）
 
-OpenSpec `spec-driven` change `unify-versioned-permission-context` 当前完成 **31/63** 项。本轮按MCP模块完成任务6.5：请求级签名上下文和逐请求body proof、本地服务验签与短期nonce guard、正式Interview tool provider门禁，以及通知本人查询以已验签actor为准。Agent/Supervisor 5.1–5.7、A2A/Memory 6.1–6.4维持此前完成结论。
+OpenSpec `spec-driven` change `unify-versioned-permission-context` 当前完成 **50/63** 项（以`tasks.md`勾选为准）。本轮完成Compare/Media模块任务10.4：Compare报告按已验签actor隔离，来源快照hash、显式公开分享及PDF读取边界落地；Media以Auth context/freshness和精确后台permit绑定task、请求、房源owner和硬截止，过期排队任务失败终结。Notification 10.5、跨域矩阵10.6和11.x运行/回归验收仍未完成。
 
-MCP定向回归 **16项通过，失败/错误/跳过均0**。全量23模块Maven回归 **1615项，失败/错误0，14项既有外部依赖测试跳过**；严格OpenSpec校验通过。KI-174记录MCP nonce仅进程内防重放；跨实例/重启重复副作用仍待耐久幂等设计。授权开关、服务key与操作映射默认关闭/未配置，未部署。
+Compare/Media与共享鉴权定向回归 **48项通过，失败/错误/跳过均0**；相关模块compile通过。OpenSpec严格校验与迁移manifest checksum将在本批提交前复核。Media任务/结果仍为进程内存（KI-117），新owner与permit协议未宣称具备跨重启恢复。授权入口和操作映射默认关闭/未部署。
 
 历史章节记录各前序批次当时状态；本节是当前进度权威摘要。
 

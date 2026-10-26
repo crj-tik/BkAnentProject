@@ -69,3 +69,9 @@ listing:
       marketing-read-current:
         caller-service: marketing-content-service
         secret: ${MARKETING_LISTING_READ_SECRET:}
+      compare-read-current:
+        caller-service: compare-engine-service
+        secret: ${COMPARE_LISTING_READ_SECRET:}
+      media-listing-current:
+        caller-service: media-worker-service
+        secret: ${MEDIA_LISTING_AUTH_SECRET:}

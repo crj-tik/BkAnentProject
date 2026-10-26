@@ -8,6 +8,12 @@ import java.time.LocalDateTime;
 public record CompareReportCacheEntry(
         /** 业务属性：cacheKey。 */
         String cacheKey,
+        /** Auth-verified user that owns this immutable report snapshot. */
+        String ownerActorId,
+        /** Hash of the exact Listing facts stored in this report. */
+        String sourceVersionHash,
+        /** Public sharing is enabled only by an explicit, separately authorized action. */
+        boolean publicShare,
         /** 业务属性：shareCode。 */
         String shareCode,
         /** 业务属性：pdfFileName。 */
@@ -17,4 +23,9 @@ public record CompareReportCacheEntry(
         /** 业务属性：createdAt。 */
         LocalDateTime createdAt
 ) {
+    /** Old metadata remains private and unowned, so it cannot authorize access after upgrade. */
+    public CompareReportCacheEntry(String cacheKey, String shareCode, String pdfFileName,
+                                   CompareReportResponse report, LocalDateTime createdAt) {
+        this(cacheKey, null, null, false, shareCode, pdfFileName, report, createdAt);
+    }
 }

@@ -99,6 +99,46 @@ public class ListingMasterRpcServiceImpl implements ListingMasterRpcService {
         return List.of(converter.toDto(listing));
     }
 
+    @Override
+    public boolean authorizeAssetWrite(
+            com.bkanent.common.rag.RagAuthorizedListingAssetWriteRequest request,
+            com.bkanent.common.rag.RagAuthEnvelope authentication,
+            com.bkanent.common.authz.AuthzResponse authorization) {
+        var scope = identity.openAuthorizedAssetWriteScope(request, authentication, authorization,
+                authorizationProperties.decodedAuthorityPublicKeys());
+        try (scope) {
+            boolean businessWide = com.bkanent.common.authz.AuthzRequestScope.businessAdmin();
+            long brokerId = businessWide ? 0L
+                    : com.bkanent.common.authz.AuthzRequestScope.requireBrokerIdentity();
+            var listing = domain.getById(request.request().listingId());
+            if (listing == null || !Integer.valueOf(0).equals(listing.getDeleted())) return false;
+            if (businessWide) return true;
+            return listing.getBrokerId() != null && listing.getBrokerId() == brokerId;
+        }
+    }
+
+    @Override
+    public boolean authorizeAssetWriteContext(
+            com.bkanent.common.rag.RagContextAuthorizedListingAssetWriteRequest request,
+            com.bkanent.common.rag.RagAuthEnvelope authentication) {
+        if (!authorizationProperties.isEnabled()) {
+            throw new com.bkanent.common.rag.RagException(
+                    com.bkanent.common.rag.RagErrorCode.AUTHENTICATION_FAILED);
+        }
+        var principal = identity.verifyAuthorizedAssetWriteContext(request, authentication,
+                authorizationProperties.decodedAuthorityPublicKeys());
+        Long brokerId = principal.businessAdmin() ? null
+                : request.authorizationContext().businessIdentities().get("BROKER");
+        if (!principal.businessAdmin() && brokerId == null) {
+            throw new com.bkanent.common.authz.AuthzException(
+                    com.bkanent.common.authz.AuthzErrorCode.PERMISSION_DENIED);
+        }
+        var listing = domain.getById(request.request().listingId());
+        if (listing == null || !Integer.valueOf(0).equals(listing.getDeleted())) return false;
+        if (principal.businessAdmin()) return true;
+        return brokerId != null && listing.getBrokerId() != null && listing.getBrokerId().equals(brokerId);
+    }
+
     /**
      * 获取指定房源摘要。
      */

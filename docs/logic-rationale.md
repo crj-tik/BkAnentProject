@@ -533,7 +533,7 @@
 
 **代码位置**：common/model/ListingComparisonFacts、ListingDTO；agent-service/studio/StudioListingReader、StudioCommandService；compare-engine-service/CompareAnalysisServiceImpl。Listing READ公开接口声明RagException沿LR-48受管序列化；Studio按LR-46精确使用现有桥，不增加重复Dubbo引用。
 
-**关联**：LR-40、LR-46、LR-48；KI-115。旧compare读取/分享权限迁移仍待实施，编译通过不等于真实服务可用。
+**关联**：LR-40、LR-46、LR-48、LR-149；KI-115已修复。Compare请求级读取、报告owner/来源版本和显式公开分享已源码验证；真实服务密钥和入口仍待部署验收。
 
 ## LR-43 治理重排按响应钉扎模型身份，同 alias 漂移失败关闭
 
@@ -1151,3 +1151,13 @@
 **代码位置**：`RagContextAuthorizedListingReadRequest`、`RagCanonicalHash.requestHash`、`ListingMasterRpcService.readAuthorizedContext`、`ListingRagIdentity.verifyAuthorizedReadContext`、`MarketingListingReadClient.getWithVersionedContext`。
 
 **关联**：LR-140/145/146；KI-205；change `unify-versioned-permission-context`任务6.1/10.3。该A2A读取路径仅源码/定向回归验证；Listing/Marketing密钥、生产调用链与数据库迁移尚未部署或启用。
+
+## LR-149 Compare报告与Media后台生成继承签名身份并继续校验资源owner
+
+**结论**：Compare在每次生成时以已验签Auth actor读取当前Listing快照，再按actor+比较指纹复用缓存；来源版本hash对应报告内的不可变Listing DTO快照。分享默认私有，只有精确`compare.report.share.public`动作能发布；私有分享/PDF要求owner与`compare.report.read.own`，公开读取仅对已发布的固定快照开放。缺owner/source hash的旧缓存不恢复。Media任务在提交前要求`media.task.submit.own/all`、`media.generate.background`及Listing `listing.assets.bind.own/all`，Listing本地验Auth context或response、调用方HMAC和broker映射后核实目标行归属。签名后台permit再绑定taskId、精确请求hash、actor/broker/listing、Auth context/freshness、服务key与截止；worker本地验签、原子领取，过期排队任务终结，不逐节点查询Auth。未建立可验证的Marketing素材关联，因此拒绝`contentId`任务。
+
+**根因**：Compare shareCode和Media taskId都是定位符，本身不证明用户；缓存若只按输入ID命中会把其他用户报告或过期来源混给当前请求。后台任务跨越原请求线程后也不能把MQ正文、callerService或任务编号当身份。将用户签名上下文限制到精确资源读取/后台操作，并保留Listing/缓存owner真源，可避免模型字段替换身份且不把每次Graph内部动作变成Auth RPC。公开分享是发布人主动改变范围，必须使用独立许可。
+
+**代码位置**：`compare-engine-service/CompareListingReadClient`、`CompareAnalysisServiceImpl`、`CompareReportCacheServiceImpl`、`CompareAuthorizationIngressFilter`；`common/rag/RagAuthorizedListingAssetWriteRequest`、`RagContextAuthorizedListingAssetWriteRequest`；`listing-master-service/ListingMasterRpcServiceImpl.authorizeAssetWrite*`；`media-worker-service/MediaListingAuthorizationClient`、`MediaBackgroundPermitSigner`、`MediaGenerationTaskServiceImpl`、`MediaTaskStoreServiceImpl`。
+
+**关联**：LR-145/146/148；KI-115/117；change `unify-versioned-permission-context`任务10.4。新操作只登记、无推断角色授予，REST/Listing授权默认关闭；Media任务状态仍为进程内存，重启恢复未验且未实现。

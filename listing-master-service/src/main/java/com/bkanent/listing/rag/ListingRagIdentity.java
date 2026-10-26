@@ -143,25 +143,56 @@ public class ListingRagIdentity {
             com.bkanent.common.rag.RagAuthorizedListingReadRequest request, RagAuthEnvelope envelope,
             com.bkanent.common.authz.AuthzResponse authorization,
             java.util.Map<String, java.security.PublicKey> authorityKeys) {
+        return openAuthorizedOperationScope(request, envelope, authorization, authorityKeys,
+                "listing.read", "listing.read.all");
+    }
+
+    /** Verifies one caller-signed Listing request for its exact user or explicitly-wide operation. */
+    public com.bkanent.common.authz.AuthzRequestScope.Scope openAuthorizedOperationScope(
+            com.bkanent.common.rag.RagAuthorizedListingReadRequest request, RagAuthEnvelope envelope,
+            com.bkanent.common.authz.AuthzResponse authorization,
+            java.util.Map<String, java.security.PublicKey> authorityKeys,
+            String ownOperation, String businessWideOperation) {
+        return openAuthorizedOperationScope(request, request == null ? null : request.request().requestId(),
+                request == null ? null : request.authorizationEvidenceHash(), envelope, authorization,
+                authorityKeys, ownOperation, businessWideOperation);
+    }
+
+    public com.bkanent.common.authz.AuthzRequestScope.Scope openAuthorizedAssetWriteScope(
+            com.bkanent.common.rag.RagAuthorizedListingAssetWriteRequest request, RagAuthEnvelope envelope,
+            com.bkanent.common.authz.AuthzResponse authorization,
+            java.util.Map<String, java.security.PublicKey> authorityKeys) {
+        return openAuthorizedOperationScope(request, request == null ? null : request.request().requestId(),
+                request == null ? null : request.authorizationEvidenceHash(), envelope, authorization,
+                authorityKeys, "listing.assets.bind.own", "listing.assets.bind.all");
+    }
+
+    private com.bkanent.common.authz.AuthzRequestScope.Scope openAuthorizedOperationScope(
+            Object signedRequest, String requestId, String authorizationEvidenceHash, RagAuthEnvelope envelope,
+            com.bkanent.common.authz.AuthzResponse authorization,
+            java.util.Map<String, java.security.PublicKey> authorityKeys,
+            String ownOperation, String businessWideOperation) {
         try {
-            if (request == null || authorization == null || authorityKeys == null || authorityKeys.isEmpty()) {
+            if (signedRequest == null || requestId == null || authorizationEvidenceHash == null
+                    || authorization == null || authorityKeys == null || authorityKeys.isEmpty()) {
                 throw new com.bkanent.common.authz.AuthzException(
                         com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
             }
-            verifyCaller(request, request.request().requestId(), RagOperation.READ, envelope, null);
+            verifyCaller(signedRequest, requestId, RagOperation.READ, envelope, null);
             var context = authorization.context();
             if (envelope.actorMode() != RagActorMode.USER
                     || !context.audience().equals(envelope.callerService())
                     || !context.actorId().equals(envelope.actorId())
-                    || !request.authorizationEvidenceHash().equals(
-                            com.bkanent.common.authz.AuthzCanonicalHash.signedResponseHash(authorization))) {
+                    || !authorizationEvidenceHash.equals(
+                    com.bkanent.common.authz.AuthzCanonicalHash.signedResponseHash(authorization))) {
                 throw new com.bkanent.common.authz.AuthzException(
                         com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_FAILED);
             }
             var scope = com.bkanent.common.authz.AuthzRequestScope.verifyAndOpenForwarded(authorization,
                     envelope.callerService(), authorityKeys, Instant.now());
             try {
-                String operationCode = authorization.snapshot().businessAdmin() ? "listing.read.all" : "listing.read";
+                String operationCode = authorization.snapshot().businessAdmin()
+                        ? businessWideOperation : ownOperation;
                 com.bkanent.common.authz.AuthzRequestScope.requireOperation(operationCode);
                 return scope;
             } catch (RuntimeException failure) {
@@ -177,14 +208,45 @@ public class ListingRagIdentity {
     public AuthRagPrincipal verifyAuthorizedReadContext(
             com.bkanent.common.rag.RagContextAuthorizedListingReadRequest request,
             RagAuthEnvelope envelope, java.util.Map<String, java.security.PublicKey> authorityKeys) {
+        return verifyAuthorizedOperationContext(request, envelope, authorityKeys,
+                "listing.read", "listing.read.all");
+    }
+
+    /** Validates an A2A/MCP signed execution context for a narrower Listing operation. */
+    public AuthRagPrincipal verifyAuthorizedOperationContext(
+            com.bkanent.common.rag.RagContextAuthorizedListingReadRequest request,
+            RagAuthEnvelope envelope, java.util.Map<String, java.security.PublicKey> authorityKeys,
+            String ownOperation, String businessWideOperation) {
+        return verifyAuthorizedOperationContext(request,
+                request == null ? null : request.request().requestId(),
+                request == null ? null : request.authorizationContext(),
+                request == null ? null : request.freshness(), envelope, authorityKeys,
+                ownOperation, businessWideOperation);
+    }
+
+    public AuthRagPrincipal verifyAuthorizedAssetWriteContext(
+            com.bkanent.common.rag.RagContextAuthorizedListingAssetWriteRequest request,
+            RagAuthEnvelope envelope, java.util.Map<String, java.security.PublicKey> authorityKeys) {
+        return verifyAuthorizedOperationContext(request,
+                request == null ? null : request.request().requestId(),
+                request == null ? null : request.authorizationContext(),
+                request == null ? null : request.freshness(), envelope, authorityKeys,
+                "listing.assets.bind.own", "listing.assets.bind.all");
+    }
+
+    private AuthRagPrincipal verifyAuthorizedOperationContext(
+            Object signedRequest, String requestId,
+            com.bkanent.common.authz.AuthorizationContext context,
+            com.bkanent.common.authz.AuthzFreshness freshness,
+            RagAuthEnvelope envelope, java.util.Map<String, java.security.PublicKey> authorityKeys,
+            String ownOperation, String businessWideOperation) {
         try {
-            if (request == null || envelope == null || authorityKeys == null || authorityKeys.isEmpty()) {
+            if (signedRequest == null || requestId == null || context == null || freshness == null
+                    || envelope == null || authorityKeys == null || authorityKeys.isEmpty()) {
                 throw new com.bkanent.common.authz.AuthzException(
                         com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
             }
-            verifyCaller(request, request.request().requestId(), RagOperation.READ, envelope, null);
-            var context = request.authorizationContext();
-            var freshness = request.freshness();
+            verifyCaller(signedRequest, requestId, RagOperation.READ, envelope, null);
             long now = Instant.now().getEpochSecond();
             if (envelope.actorMode() != RagActorMode.USER
                     || !A2A_PARENT_SERVICE.equals(context.audience())
@@ -205,8 +267,8 @@ public class ListingRagIdentity {
                     Instant.ofEpochSecond(now));
             com.bkanent.common.authz.AuthzSignature.verifyFreshness(freshness, authorityKeys,
                     Instant.ofEpochSecond(now));
-            boolean businessWide = context.allowedOperations().contains("listing.read.all");
-            String operation = businessWide ? "listing.read.all" : "listing.read";
+            boolean businessWide = context.allowedOperations().contains(businessWideOperation);
+            String operation = businessWide ? businessWideOperation : ownOperation;
             if (!context.allowedOperations().contains(operation)) {
                 throw new com.bkanent.common.authz.AuthzException(
                         com.bkanent.common.authz.AuthzErrorCode.PERMISSION_DENIED);

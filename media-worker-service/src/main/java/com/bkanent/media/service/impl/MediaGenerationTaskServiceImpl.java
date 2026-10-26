@@ -2,11 +2,18 @@ package com.bkanent.media.service.impl;
 
 import com.bkanent.common.model.MediaGenerateTaskRequest;
 import com.bkanent.common.model.MediaTaskResultDTO;
+import com.bkanent.common.a2a.VerifiedDomainAuthorization;
+import com.bkanent.common.authz.AuthzErrorCode;
+import com.bkanent.common.authz.AuthzException;
 import com.bkanent.media.config.MediaRocketMqProperties;
 import com.bkanent.media.config.MediaTaskProperties;
 import com.bkanent.media.model.MediaGenerateTaskMessage;
+import com.bkanent.media.model.MediaBackgroundPermit;
+import com.bkanent.media.model.MediaTaskContext;
 import com.bkanent.media.model.MediaTaskStatusEnum;
 import com.bkanent.media.service.MediaGenerationTaskService;
+import com.bkanent.media.service.MediaBackgroundPermitSigner;
+import com.bkanent.media.service.MediaListingAuthorizationClient;
 import com.bkanent.media.service.MediaTaskStoreService;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.springframework.stereotype.Service;
@@ -24,15 +31,21 @@ public class MediaGenerationTaskServiceImpl implements MediaGenerationTaskServic
     private final MediaRocketMqProperties mediaRocketMqProperties;
     private final MediaTaskProperties mediaTaskProperties;
     private final MediaTaskStoreService mediaTaskStoreService;
+    private final MediaBackgroundPermitSigner permitSigner;
+    private final MediaListingAuthorizationClient listingAuthorizationClient;
 
     public MediaGenerationTaskServiceImpl(RocketMQTemplate rocketMQTemplate,
                                           MediaRocketMqProperties mediaRocketMqProperties,
                                           MediaTaskProperties mediaTaskProperties,
-                                          MediaTaskStoreService mediaTaskStoreService) {
+                                          MediaTaskStoreService mediaTaskStoreService,
+                                          MediaBackgroundPermitSigner permitSigner,
+                                          MediaListingAuthorizationClient listingAuthorizationClient) {
         this.rocketMQTemplate = rocketMQTemplate;
         this.mediaRocketMqProperties = mediaRocketMqProperties;
         this.mediaTaskProperties = mediaTaskProperties;
         this.mediaTaskStoreService = mediaTaskStoreService;
+        this.permitSigner = permitSigner;
+        this.listingAuthorizationClient = listingAuthorizationClient;
     }
 
     @Override
@@ -64,19 +77,44 @@ public class MediaGenerationTaskServiceImpl implements MediaGenerationTaskServic
     @Override
     public String submitTask(MediaGenerateTaskRequest request) {
         validateRequest(request);
+        VerifiedDomainAuthorization.requireActorScope("media.task.submit.own", "media.task.submit.all");
+        VerifiedDomainAuthorization.requirePermission(MediaBackgroundPermitSigner.BACKGROUND_OPERATION);
+        var verified = VerifiedDomainAuthorization.requireVerifiedContext();
+        listingAuthorizationClient.requireAssetWrite(request.listingId());
         String taskId = UUID.randomUUID().toString().replace("-", "");
         MediaGenerateTaskRequest normalizedRequest = normalizeRequest(request);
-        mediaTaskStoreService.createQueuedTask(taskId, normalizedRequest);
-        rocketMQTemplate.convertAndSend(
-                mediaRocketMqProperties.getGenerateTopic(),
-                new MediaGenerateTaskMessage(taskId, normalizedRequest)
-        );
+        MediaBackgroundPermit permit = permitSigner.create(taskId, normalizedRequest, verified);
+        mediaTaskStoreService.createQueuedTask(taskId, normalizedRequest, permit);
+        try {
+            rocketMQTemplate.convertAndSend(mediaRocketMqProperties.getGenerateTopic(),
+                    new MediaGenerateTaskMessage(taskId, permit));
+        } catch (RuntimeException failure) {
+            mediaTaskStoreService.markFailed(taskId, "媒体任务入队失败");
+            throw new AuthzException(AuthzErrorCode.AUTHORIZATION_UNAVAILABLE);
+        }
         return taskId;
     }
 
     @Override
     public MediaTaskResultDTO getTaskResult(String taskId) {
-        return mediaTaskStoreService.getTaskResult(taskId);
+        String ownerActorId = VerifiedDomainAuthorization.requireActorScope(
+                "media.task.read.own", "media.task.read.all");
+        boolean businessWide = ownerActorId == null;
+        return mediaTaskStoreService.getTaskResult(taskId, ownerActorId, businessWide);
+    }
+
+    @Override
+    public MediaTaskContext claimTaskForWorker(String taskId, MediaBackgroundPermit permit) {
+        MediaTaskContext stored = mediaTaskStoreService.findTaskContext(taskId);
+        if (!stored.getPermit().equals(permit)) throw new AuthzException(AuthzErrorCode.AUTHENTICATION_FAILED);
+        if (permitSigner.isExpired(permit)) return mediaTaskStoreService.claimQueuedTask(taskId, permit);
+        try {
+            permitSigner.verify(permit, taskId, stored.getRequest());
+        } catch (AuthzException failure) {
+            if (permitSigner.isExpired(permit)) return mediaTaskStoreService.claimQueuedTask(taskId, permit);
+            throw failure;
+        }
+        return mediaTaskStoreService.claimQueuedTask(taskId, permit);
     }
 
     @Override
@@ -88,16 +126,18 @@ public class MediaGenerationTaskServiceImpl implements MediaGenerationTaskServic
         List<String> angles = request.angles() == null || request.angles().isEmpty()
                 ? mediaTaskProperties.getDefaultAngles()
                 : request.angles();
+        if (angles == null || angles.isEmpty()) {
+            throw new IllegalArgumentException("媒体生成角度不能为空");
+        }
         Integer expectedAssetCount = request.expectedAssetCount() == null ? angles.size() : request.expectedAssetCount();
-        String callerService = request.callerService() == null || request.callerService().isBlank()
-                ? "unknown-caller" : request.callerService();
-        String taskType = request.taskType() == null || request.taskType().isBlank()
-                ? "LISTING_IMAGE" : request.taskType();
+        if (expectedAssetCount != angles.size()) {
+            throw new IllegalArgumentException("媒体素材数量必须与生成角度一致");
+        }
         return new MediaGenerateTaskRequest(
                 request.listingId(),
-                request.contentId(),
-                callerService,
-                taskType,
+                null,
+                "media-worker-service",
+                "LISTING_IMAGE",
                 request.prompt(),
                 angles,
                 expectedAssetCount
@@ -113,6 +153,19 @@ public class MediaGenerationTaskServiceImpl implements MediaGenerationTaskServic
         }
         if (request.prompt() == null || request.prompt().isBlank()) {
             throw new IllegalArgumentException("生成提示词不能为空");
+        }
+        if (request.listingId() <= 0 || request.contentId() != null
+                || request.taskType() != null && !"LISTING_IMAGE".equals(request.taskType())
+                || request.prompt().length() > 4000) {
+            throw new AuthzException(AuthzErrorCode.PERMISSION_DENIED);
+        }
+        if (request.angles() != null && (request.angles().size() > 8
+                || request.angles().stream().anyMatch(angle -> angle == null || angle.isBlank() || angle.length() > 100))) {
+            throw new IllegalArgumentException("媒体生成角度无效");
+        }
+        if (request.expectedAssetCount() != null && (request.expectedAssetCount() < 1
+                || request.expectedAssetCount() > 8)) {
+            throw new IllegalArgumentException("媒体素材数量无效");
         }
     }
 

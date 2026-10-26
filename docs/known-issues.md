@@ -228,7 +228,7 @@
 
 ## KI-117 [OPEN·P1] 现有 Agent 恢复材料不覆盖完整记忆消息与域内工具交付事实
 
-**确认日期**：2026-10-16。Supervisor 原请求/外层调用/结果账本与 checkpoint 不覆盖每次模型输出成功至 checkpoint 保存前窗口，也不覆盖九 SubAgent 全部域内 tool-call/response 组。共享 OfficialA2aAgentExecutor 当前只在进程内管理执行及有界/规范化 artifact。Compare 有 JSON/PDF 磁盘缓存但未证授权不可变事件身份；Media task/result 为 ConcurrentHashMap，MQ 受理不能证明原 task 完成跨重启可恢复。官方 SDK 实际 TaskStore 耐久性本批未验，不推定其实现。
+**确认日期**：2026-10-16；2026-10-26补充Compare/Media鉴权状态。Supervisor 原请求/外层调用/结果账本与 checkpoint 不覆盖每次模型输出成功至 checkpoint 保存前窗口，也不覆盖九 SubAgent 全部域内 tool-call/response 组。共享 OfficialA2aAgentExecutor 当前只在进程内管理执行及有界/规范化 artifact。Compare已按owner与来源快照hash隔离报告，但尚无跨域交付journal；Media task/result仍为ConcurrentHashMap，MQ受理不能证明原task完成跨重启可恢复。官方SDK实际TaskStore耐久性本批未验，不推定其实现。
 
 **处置**：新压缩与跨域长期共享保持未启用。优先稳定版本引用现有领域真源/完成成果，仅在缺事实处补最小交付 journal；不九域无条件建业务库、不用重跑模型/副作用补结果、不凭短期缓存回执裁剪。具体可靠顺序/事务/权限/保留由 change 第3/4组验收，当前仅确认缺口未修。关联 LR-22/23、LR-55/56、KI-12/24；逐域来源表见 `docs/acceptance/domain-agent-memory-foundation-20261016.md`。
 
@@ -240,11 +240,13 @@
 
 **关联**：LR-53、KI-12。源码/compile与实际部署分别报告；现有直写路径的历史权限缺口不能因新门面受控而标为修复。
 
-## KI-115 [OPEN·P1] 旧比较仍使用已停用房源读取；单位和过时缓存已修源码
+## KI-115 [FIXED·本提交·P1] 旧比较仍使用已停用房源读取；分享和PDF缺少owner边界
 
-**确认日期**：2026-10-15。旧CompareAnalysisServiceImpl.loadListings调用ListingMasterRpcService.getListingById，而该provider在RAG身份迁移后主动拒绝无凭据读取；旧compare REST/RPC正向路径因此不可用。另确认totalPrice为万元而原单价未乘10000，且ID-only缓存无法感知来源更新。
+**确认日期**：2026-10-15；2026-10-26复核完成任务10.4。旧CompareAnalysisServiceImpl.loadListings调用ListingMasterRpcService.getListingById，而该provider在RAG身份迁移后主动拒绝无凭据读取；旧compare REST/RPC正向路径因此不可用。另确认totalPrice为万元而原单价未乘10000，且ID-only缓存无法感知来源更新。
 
-**本次处置**：共享ListingComparisonFacts修正元/㎡并引入compare-yuan-v2来源指纹，旧比较先读来源再查缓存。Studio比较直接使用当前签名READ、严格候选/来源版本和原子成果回执；不放开旧RPC、不使用旧分享绕过授权。单位/缓存源码已修，旧读取及分享授权迁移继续OPEN。当前仅compile，无真实RPC或缓存验收。关联LR-54。
+**修复**：Compare改用Listing签名请求级读取；报告缓存按已验签actor隔离，缓存与报告绑定当前Listing快照hash。显式`compare.report.share.public`操作才能发布公开链接；未发布链接的报告/PDF仅owner并持`compare.report.read.own`可读。旧缓存缺owner或source hash时不恢复。既有单位换算与来源指纹逻辑保持。
+
+**验证与边界**：Compare/Listing定向回归和共享鉴权测试通过；本地源码验证不代表生产公钥/HMAC密钥、HTTP入口开关或迁移已部署。分享是生成时快照，不跟随房源实时变更。关联LR-54/LR-149；change `unify-versioned-permission-context`任务10.4。
 
 ## KI-1 [OPEN·P0] 表单式 prep 阶段凭据真空（鸡生蛋）
 

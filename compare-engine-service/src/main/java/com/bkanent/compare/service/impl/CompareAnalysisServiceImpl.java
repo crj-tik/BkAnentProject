@@ -3,13 +3,17 @@ package com.bkanent.compare.service.impl;
 import com.bkanent.common.model.CompareReportDTO;
 import com.bkanent.common.model.ListingDTO;
 import com.bkanent.common.model.ListingComparisonFacts;
-import com.bkanent.common.rpc.ListingMasterRpcService;
+import com.bkanent.common.a2a.VerifiedDomainAuthorization;
+import com.bkanent.common.authz.AuthzErrorCode;
+import com.bkanent.common.authz.AuthzException;
 import com.bkanent.compare.config.CompareAgentProperties;
+import com.bkanent.compare.model.CompareReportCacheEntry;
 import com.bkanent.compare.model.CompareColumnResponse;
 import com.bkanent.compare.model.CompareMetricResponse;
 import com.bkanent.compare.model.CompareReportResponse;
 import com.bkanent.compare.model.CompareRowResponse;
 import com.bkanent.compare.service.CompareAnalysisService;
+import com.bkanent.compare.service.CompareListingReadClient;
 import com.bkanent.compare.service.CompareReportCacheService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,22 +47,24 @@ public class CompareAnalysisServiceImpl implements CompareAnalysisService {
             """;
 
     private final CompareReportCacheService compareReportCacheService;
-    private final ListingMasterRpcService listingMasterRpcService;
+    private final CompareListingReadClient listingReadClient;
     private final ObjectProvider<ChatModel> chatModelProvider;
     private final CompareAgentProperties properties;
 
     public CompareAnalysisServiceImpl(CompareReportCacheService compareReportCacheService,
-                                      ObjectProvider<ListingMasterRpcService> listingMasterRpcServiceProvider,
+                                      CompareListingReadClient listingReadClient,
                                       ObjectProvider<ChatModel> chatModelProvider,
                                       CompareAgentProperties properties) {
         this.compareReportCacheService = compareReportCacheService;
-        this.listingMasterRpcService = listingMasterRpcServiceProvider.getIfAvailable();
+        this.listingReadClient = listingReadClient;
         this.chatModelProvider = chatModelProvider;
         this.properties = properties;
     }
 
     @Override
     public CompareReportResponse generateCompareReport(List<Long> listingIds, boolean includeAiConclusion) {
+        VerifiedDomainAuthorization.requireOperation("compare.report.create");
+        String ownerActorId = Long.toString(VerifiedDomainAuthorization.requireActorId());
         if (listingIds == null || listingIds.isEmpty()) {
             return new CompareReportResponse(
                     List.of(),
@@ -76,8 +82,10 @@ public class CompareAnalysisServiceImpl implements CompareAnalysisService {
         // Read the current authorized sources before any cache lookup. Old unsigned reads fail closed.
         List<ListingDTO> listings = loadListings(listingIds);
         String cacheKey = ListingComparisonFacts.fingerprint(listings, includeAiConclusion);
-        return compareReportCacheService.findByCacheKey(cacheKey)
-                .orElseGet(() -> compareReportCacheService.save(cacheKey, buildFreshReport(listings, includeAiConclusion)));
+        String sourceVersionHash = ListingComparisonFacts.fingerprint(listings, false);
+        return compareReportCacheService.findByCacheKey(ownerActorId, cacheKey)
+                .orElseGet(() -> compareReportCacheService.save(ownerActorId, cacheKey, sourceVersionHash,
+                        buildFreshReport(listings, includeAiConclusion)));
     }
 
     @Override
@@ -88,12 +96,22 @@ public class CompareAnalysisServiceImpl implements CompareAnalysisService {
 
     @Override
     public CompareReportResponse getSharedReport(String shareCode) {
-        return compareReportCacheService.getByShareCode(shareCode);
+        CompareReportCacheEntry entry = compareReportCacheService.findEntryByShareCode(shareCode);
+        requireReportRead(entry);
+        return entry.report();
     }
 
     @Override
     public Resource loadPdfResource(String shareCode) {
+        requireReportRead(compareReportCacheService.findEntryByShareCode(shareCode));
         return compareReportCacheService.loadPdfResource(shareCode);
+    }
+
+    @Override
+    public CompareReportResponse publishReportShare(String shareCode) {
+        VerifiedDomainAuthorization.requireOperation("compare.report.share.public");
+        String ownerActorId = Long.toString(VerifiedDomainAuthorization.requireActorId());
+        return compareReportCacheService.publishShare(shareCode, ownerActorId).report();
     }
 
     private CompareReportResponse buildFreshReport(List<ListingDTO> listings, boolean includeAiConclusion) {
@@ -114,14 +132,14 @@ public class CompareAnalysisServiceImpl implements CompareAnalysisService {
     }
 
     private List<ListingDTO> loadListings(List<Long> listingIds) {
-        if (listingMasterRpcService == null) {
-            return List.of();
-        }
-        return listingIds.stream()
-                .distinct()
-                .map(listingMasterRpcService::getListingById)
-                .filter(item -> item != null)
-                .toList();
+        return listingReadClient.read(listingIds);
+    }
+
+    private void requireReportRead(CompareReportCacheEntry entry) {
+        if (entry.publicShare()) return;
+        VerifiedDomainAuthorization.requireOperation("compare.report.read.own");
+        String actor = Long.toString(VerifiedDomainAuthorization.requireActorId());
+        if (!actor.equals(entry.ownerActorId())) throw new AuthzException(AuthzErrorCode.PERMISSION_DENIED);
     }
 
     private List<CompareColumnResponse> buildColumns() {

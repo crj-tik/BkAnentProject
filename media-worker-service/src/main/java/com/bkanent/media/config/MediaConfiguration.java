@@ -14,16 +14,20 @@ import org.springframework.util.StringUtils;
 public class MediaConfiguration {
 
     private final MediaIntegrationProperties integrationProperties;
+    private final MediaAuthorizationProperties authorizationProperties;
     private final String imageModel;
 
     public MediaConfiguration(MediaIntegrationProperties integrationProperties,
+                              MediaAuthorizationProperties authorizationProperties,
                               @Value("${media.integration.image-model:doubao-seedream-4.5-gen}") String imageModel) {
         this.integrationProperties = integrationProperties;
+        this.authorizationProperties = authorizationProperties;
         this.imageModel = imageModel;
     }
 
     @jakarta.annotation.PostConstruct
     public void validateIntegrationMode() {
+        authorizationProperties.validateEnabledConfiguration();
         if (integrationProperties.getMode() == null || integrationProperties.getMode().isBlank()
                 || "unconfigured".equalsIgnoreCase(integrationProperties.getMode())) {
             throw new IllegalStateException("media.integration.mode must be explicitly set to local or real");
