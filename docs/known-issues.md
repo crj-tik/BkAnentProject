@@ -12,12 +12,6 @@
 
 ## 待修复（OPEN）
 
-## KI-167 [OPEN·P2] 推广效果同步生成样例统计但未携带明确来源性质
-
-**确认日期**：2026-10-25，业务域规划期间源码核对。`PromotionManagementServiceImpl.syncEffectStat` 按发布记录 ID 计算曝光、点击和线索，并以 `leadCount * 1000 / costAmount` 生成样例 ROI；该方法没有渠道统计读取，现有返回与存储也未明确标记这些值为模拟数据。用户已说明当前业务数据模拟，本条记录其向真实效果统计或经营复盘扩展时的现有限制，不将样例算法解释为真实业绩来源。
-
-**处置（已规划，未修复）**：独立 change `consolidate-marketing-promotion-domain` 将样例算法收口到显式 fixture provider，效果观察携带来源/窗口/版本/数据模式，真实 ROI 要求可归属收入和成本；缺少真实数据返回未知。用重复同步、模拟/真实隔离、缺收入和结果来源测试验收后再更新修复状态。本轮只增加规划文档，未运行效果接口或修改生产代码。关联 LR-102 与 [营销合并方案](../openspec/changes/consolidate-marketing-promotion-domain/proposal.md)。
-
 ## KI-166 [OPEN·P3·延迟排查] Studio 浏览器前端落地后需补验工作/成果可读链路
 
 **登记日期**：2026-10-23（源自 `integrate-domain-agent-memory` 归档遗留）。任务 1.4/11.3 的浏览器验收因 Studio 前端仍在设计、无可执行实例而标为未测；该备注此前只存在于归档 tasks 中，未进本清单，现登记为唯一权威来源条目。后端 `GET /agent/studio/v1/works` 在混合环境曾持续 503（见 KI-126，疑与 `resolvePrincipal` 超时相关），浏览器补验时需一并确认后端链路已通。
@@ -1457,6 +1451,16 @@
 **验证边界**：276项最终定向回归以及全23模块1519项回归失败/错误0、跳过14；跳过为既有外部依赖门控。Auth新协议仍默认关闭；Redis发布和本地监控基础已写，Gateway/Agent实际run关联、Graph/业务域消费和部署未完成，见KI-170，不能把协议修复称为全链上线。
 
 **关联**：LR-103/106；任务4.2/4.5/5.2/6.1。
+
+## KI-167 [FIXED·1c5fc2d·P2] 推广效果同步生成样例统计但未携带明确来源性质
+
+**确认日期**：2026-10-25，业务域规划期间源码核对。旧 `PromotionManagementServiceImpl.syncEffectStat` 按发布记录 ID 计算曝光、点击和线索，并以 `leadCount * 1000 / costAmount` 生成样例 ROI；当时没有渠道统计读取，结果也未明确标记为模拟数据。
+
+**修复（1c5fc2d）**：推广生命周期迁入营销域。效果观察记录来源系统、事件 ID/version、窗口、采集时间、模式和 payload hash；同版本重放不重复累计，更高版本形成修订。模拟 fixture 显式标为 `SIMULATED` 且不生成归属收入；REAL ROI 必须具备可归属收入、成本、同币种和 ROI 定义版本，缺字段时保持未知。旧样例算法已从独立 promotion-service 删除。
+
+**验证边界**：`marketing-content-service` 及上游依赖 reactor 测试通过，营销模块 23 项、0 失败/错误；根工程 22 模块 compile 通过。全量 root test 在 agent-service 的 `AgentPrincipalContextTest.separateHttpRequestScopesReuseOmittedSessionForAllFourSupervisorSubmissionPaths` 因缺少 `AgentExecutionBindingCoordinator` Bean 失败。真实渠道效果 provider 和共享环境登记尚未接入；该修复只证明样例来源隔离与证据门槛，不表示已联机采集真实指标。
+
+**关联**：LR-102、LR-130–134；`openspec/changes/consolidate-marketing-promotion-domain/`。
 
 ## KI-168 [FIXED·401c583·P1] Supervisor审计、治理与请求会话边界未统一
 

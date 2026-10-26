@@ -13,7 +13,7 @@
 ## 范围与隔离依赖
 
 - 负责 `marketing-content-service`、`common/marketing/campaign/**`、旧 promotion 的营销域接收适配、最小 gateway/Compose/reactor/Nacos 差异和新 campaign schema。
-- LR-102 已落实；本 change 使用保留段 LR-130–137，并维护已登记问题 KI-167。KI-194–201 仅为并行预留编号，未发现需要新增登记的问题时不创建空条目。
+- LR-102 已落实；本 change 使用保留段 LR-130–137，并维护已登记问题 KI-167。KI-194–201 仅为并行预留编号，未发现需要新增登记的问题时不创建空条目。实现提交：`1c5fc2da3f064317c597a253d6c233506ea829a2`。
 - 没有修改其它 change 的 Java 类型或依赖其分支制品。营销使用自己的 `CampaignListingSnapshotClient` consumer DTO，测试 fixture 覆盖冻结的 `domain-parallel-v1`。测试中的 Auth RPC 是精确 mock；生产 Auth 缺失或拒绝时 campaign 操作失败关闭。
 - 本期不迁移媒体 Worker、通知服务或 Studio work/command/审批存储；Studio 可以消费营销的 plan snapshot 和 receipt DTO。
 
