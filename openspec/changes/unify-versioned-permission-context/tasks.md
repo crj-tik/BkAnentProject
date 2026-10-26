@@ -25,7 +25,7 @@
 
 - [x] 4.1 在common定义框架无关snapshot/context/delegation/status/error DTO、规范hash和协议域Ed25519签名；上下文包含actor/version/credential epoch/受众/请求政策与期限，序列化无框架凭据泄漏。
 - [x] 4.2 新增原生Dubbo resolveRequestAuthorization、validateDelegation和独立refreshAuthorization接口/实现，注册各自caller-operation ACL；刷新携真实access和原context，保持actor/run/session/audience/policy/原scope及hard期限、当前credentialEpoch，覆盖跨操作proof、nonce/body/身份篡改/版本竞争及provider→本地refresh闭环，未知key/算法拒绝。
-- [ ] 4.3 Gateway对实际转发原始body计算有界hash，绑定method/original-target path/query/audience/requestId与授权签名，下游解析前复算；覆盖路径rewrite/重复query/空body/MCP实际JSON篡改，拒超限或不支持流式body；清除伪造头，精确公开path+method及POST refresh回归。
+- [x] 4.3 Gateway对实际转发原始body计算有界hash，绑定method/original-target path/query/audience/requestId与授权签名，下游解析前复算；覆盖路径rewrite/重复query/空body/MCP实际JSON篡改，拒超限或不支持流式body；清除伪造头，精确公开path+method及POST refresh回归。
 - [x] 4.4 Agent filter/principal消费有效入口证明，Supervisor持久关联核查后调用独立bindExecution绑定真实run/session再捕获lease，原入口唯一绑定和幂等重取不换身份/范围/期限；移除同请求四次resolve重复，直接业务HTTP无可信入口证明时独立认证，不信固定marker。
 - [x] 4.5 分离稳定权限snapshot与新鲜证明/签发context，300秒runHardDeadline固定不被同版重建/刷新重置，子context≤父期限/run截止/授予期限、请求证明≤60秒；覆盖同版缓存回收、子委托和到期反例，重启原owner重认证。
 - [x] 4.6 login/refresh/me与UserManagement迁移可信businessAdmin+多角色集合，旧roleCode只兼容展示；无角色管理员正常认证/管理，logout仅提交token吊销+全用户旧run重认证（非全设备退出），覆盖其他有效token重入和重复注销幂等。

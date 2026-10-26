@@ -1466,15 +1466,17 @@
 
 **关联**：LR-104；任务5.5/5.6/5.7；KI-79/80。
 
-## KI-170 [OPEN·P1] 新Gateway授权上下文尚未绑定Supervisor实际运行关联
+## KI-170 [FIXED·6d13117·P1] Gateway入口授权与Supervisor实际执行关联未闭合（新链路未部署）
 
-**确认依据**：本轮版本化入口实现复核，Gateway签实际body/path/query/audience，但context.runId/sessionId目前null。Supervisor从业务requestId/session生成实际执行身份；新委托/刷新协议明确要求原signed run/session不变，因此不能把null入口证明直接用于实际run。Agent在chat/supervisor bind/capture显式409，不把普通metadata填入签名上下文；新开关默认关闭。
+**确认依据**：最初版本化入口中Gateway签实际body/path/query/audience，但context.runId/sessionId为空。Supervisor从业务requestId/session生成实际执行身份；新委托/刷新协议明确要求原signed run/session不变，因此不能把空关联入口证明直接用于实际run。Agent在chat/supervisor bind/capture显式拒绝，不把普通metadata填入签名上下文。
 
 **处置**：已按D7b确定独立`BIND_EXECUTION`。Agent先验签入口三签并恢复可信actor；Supervisor用持久run owner、原始请求幂等和session归属校验后，以实际run/session及归一化输入调用Auth绑定。Auth把原入口hash唯一绑定到不可变tuple；仅同tuple新nonce可幂等重取，actor、scope、policy或硬截止不变，不用refresh改写入口证明。绑定成功后才捕获执行lease；一次入口不会在Graph节点或子Agent调用中重复执行`BIND_EXECUTION`。现有业务权限RPC/工具资源守卫尚未全迁移至本地版本上下文，仍由任务5.x/6.x验收。直接访问Agent且无可信入口证明时，由Agent用服务身份和实际HTTP请求事实独立调用Auth resolve；部分/伪造入口头失败关闭，固定marker不作为身份。
 
-**验证与未决**：任务4.4的协议、Auth持久幂等、四类Supervisor提交、直接HTTP独立认证和actor替换反例已有定向测试；本次仍不代表Gateway路由/头预算与公开规则、async跨实例重启恢复、Graph真实模型/工具消费或A2A新入口完成。任务4.3、5.x、6.x仍未完成；Gateway/Auth/Agent版本化开关继续默认关闭，未部署。不得据本条称新授权链已生产可用。
+**修复与验证**：Auth独立`BIND_EXECUTION`、Supervisor持久owner与输入幂等核对、Agent绑定后捕获lease已由`6d13117`完成。Gateway有界读取并原样回放body，签入method/path/query/audience/requestId及Auth响应；Agent在JSON解析前复算请求事实和正文hash。新增实际JSON actor/session/admin/permissions伪造字段用例：principal仍来自Auth签名actor，签后篡改正文在执行前拒绝。Gateway定向15项、Agent入口定向5项通过；路径rewrite、重复query、空body、超限、SSE/流式类型、伪造头清除、精确公开method/path及POST refresh均有回归。
 
-**关联**：LR-106/138；change `unify-versioned-permission-context`；任务4.3/5.x/6.x。
+**运行边界**：新授权开关仍默认关闭，未部署；此条只确认Gateway入口到Supervisor实际run/session的源码协议闭合，不代表Redis真实ACL运行验收、async跨实例重启恢复、Graph真实模型/工具消费、A2A新入口或5.x/6.x领域迁移完成。后续未完成项继续由OpenSpec任务跟踪，不据本条称新授权链已生产可用。
+
+**关联**：LR-106/138；change `unify-versioned-permission-context`；任务4.3/4.4/5.x/6.x。
 
 ## KI-171 [FIXED·7ca683c·P1] Token编码别名绕过按原串摘要的注销
 

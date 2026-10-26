@@ -95,6 +95,27 @@ class AgentAuthorizationIngressTest {
         assertThat(AgentAuthorizationScope.current()).isNull();
     }
 
+    @Test void llmJsonIdentityClaimsNeverReplaceSignedActorAndBodyMutationRejects() throws Exception {
+        byte[] body = "{\"actorId\":\"999\",\"sessionId\":\"forged\",\"businessAdmin\":true,\"permissions\":[\"*\"]}"
+                .getBytes(StandardCharsets.UTF_8);
+        var proof = proof(body, "run", "session");
+        var accepted = new MockHttpServletResponse();
+        filter.doFilter(request(body, proof), accepted, (incoming, outgoing) -> {
+            var actual = (jakarta.servlet.http.HttpServletRequest) incoming;
+            assertThat(new AgentPrincipalContext(actual, auth, properties).userId()).isEqualTo("42");
+            assertThat(actual.getInputStream().readAllBytes()).isEqualTo(body);
+        });
+        assertThat(accepted.getStatus()).isEqualTo(200);
+
+        byte[] changed = new String(body, StandardCharsets.UTF_8).replace("\"999\"", "\"998\"")
+                .getBytes(StandardCharsets.UTF_8);
+        var rejected = new MockHttpServletResponse();
+        filter.doFilter(request(changed, proof), rejected, (incoming, outgoing) -> fail("tampered JSON must not execute"));
+        assertThat(rejected.getStatus()).isEqualTo(409);
+        verifyNoInteractions(auth);
+        assertThat(AgentAuthorizationScope.current()).isNull();
+    }
+
     @Test void nullRunProofCanBindActorButCannotCaptureExecutionAndDoesNotResign() throws Exception {
         byte[] body = new byte[0];
         var proof = proof(body, null, null);

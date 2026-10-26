@@ -73,12 +73,20 @@ login/refresh/me和管理列表/写入结果从同一次AuthorizationFacts读取
 
 AuthorizationUserInfoTest新增5项真实H2/MyBatis谓词与DTO/JSON兼容回归；与现Auth测试共35项通过。全量settings test 23模块成功、1524项、失败/错误0、跳过14项既有外部依赖门控；该总数按包含WARNING摘要和Surefire XML核对，不与先前1519重复相加。只读复核未确认严重问题。
 
-多角色响应兼容交付时为15/63。此后任务4.4完成，当前16/63；KI-170仍保持OPEN，因为Gateway实际转发验收（4.3）、Graph/Model与新领域consumer（5.x/6.x）及运行配置未完成。新授权开关仍默认关闭，未修改生产Nacos或执行真实业务动作。
+多角色响应兼容交付时为15/63。此后任务4.4与Redis通知/对账基础完成；Gateway实际转发验收（4.3）、Graph/Model与新领域consumer（5.x/6.x）及运行配置仍待完成。
 
 ## Supervisor独立执行绑定续批（2026-10-26）
 
 按D7b新增`BIND_EXECUTION`：Auth只接受完整签名且尚未绑定的入口context，以原入口requestHash为唯一键保存不可变actor/caller/run/session/policy/scope/executionHash和原deadline；同tuple新nonce幂等重取，重放旧nonce或改变tuple冲突。Agent协调器在Supervisor提交边界先核查已有run owner、session和输入幂等，再绑定实际run/session；绑定后才登记执行与捕获短期credential lease。执行输入hash复用`OrchestrationStore`的规范化算法，refresh不改写入口证明。直接Agent HTTP在两项可信入口头都缺失时，用实际token及method/path/query/body发起一次独立resolve；缺一项、篡改证明或actor替换失败，不读取固定marker。
 
-执行期Graph节点和子Agent工具回调不调用协调器；一次入口绑定只发生在Supervisor执行入口。lease里只在进程内暂存已绑定context，不把Auth response、proof或token写入request/checkpoint。异步任务进程重启后的原owner重新认证/恢复仍未实现，故KI-170和新授权开关保持OPEN/关闭。
+执行期Graph节点和子Agent工具回调不调用协调器；一次入口绑定只发生在Supervisor执行入口。lease里只在进程内暂存已绑定context，不把Auth response、proof或token写入request/checkpoint。异步任务进程重启后的原owner重新认证/恢复仍未实现，故后续运行恢复相关任务保持待办，新授权开关继续关闭。
 
 定向验证：common签名和hard-deadline 4项、Auth provider 10项、Auth MySQL binding repository 29项、Agent ingress filter 4项、Supervisor/direct HTTP MVC 7项，均通过；合计54项，失败/错误/跳过0。验证仅覆盖代码fixture和H2，不代表Gateway路由/头预算、Redis/TLS、真实异步跨实例恢复或部署验收。
+
+## Gateway与Agent授权入口续批（2026-10-26）
+
+任务4.3源码复核确认Gateway在入口过滤时对原始body做有界读取、计算hash并原字节回放；签名绑定method、原始path/query、audience、requestId和nonce。Agent filter在JSON解析前复核Auth签名、实际method/path/query/body；不匹配在进入业务链前拒绝。带rewrite的route、歧义身份query、超限及不支持的SSE/multipart/NDJSON正文失败关闭，伪造的授权与principal头在公开/受保护请求中均清除；公开path按精确method/path匹配，`POST /auth/refresh`保留专门回归。
+
+新增Agent实际JSON伪造身份反例：请求正文中的actor/session/admin/permissions不能替代签名actor；Auth签名后修改actor字段，filter以409在业务解析与副作用前拒绝。Gateway filter/wire codec 15项、Agent入口filter 5项通过，`gateway,agent-service -am`定向构建成功。本批OpenSpec任务4.3完成，当前19/63。
+
+运行边界：路由受保护audience与生产头预算尚未在启用环境验证；新授权开关保持关闭。Redis ACL脚本与连接身份配置已提交，但真实Redis ACL/订阅验证没有运行环境证据，任务3.3仍未完成。Supervisor异步重启恢复、业务Graph/Model及A2A/Memory领域consumer仍待5.x/6.x。
