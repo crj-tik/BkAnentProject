@@ -9,17 +9,15 @@
 
 ---
 
-## LR-1 ticket 签发时机：凭据跟着信任断点走
+## LR-1 访谈票据只绑定用户/场次/用途，登录身份来自签名上下文
 
-**结论**：会话凭据（ticket）的签发时机由「前端第一次直连 interview-service 的时刻」决定，与状态机阶段无关。对话式入口在 `startInterviewSession`（IN_PROGRESS）签发；表单式入口在开台响应（DRAFT）签发。两个签发点不对称是同一原则对两种通道拓扑的投影，不是需要消除的毛刺。
+**结论**：登录用户身份由 Gateway 校验并签署在请求上下文中，Interview 入口本地验签；A2A/MCP 调用使用已绑定的 Auth context 和逐请求 proof，本地校验实际请求，不因 Graph 每次调用 subAgent 而请求 Auth。访谈 ticket 不再证明登录身份，只是在已认证用户与访谈场次/用途间的短期绑定：由认证后的 `POST /interviews/{sessionId}/credentials` 领取，存 256 位随机值的 SHA-256 摘要，最多 15 分钟有效，仅经 `X-Ticket` 头提交。每个领域动作仍校验当前 actor、关系、操作和状态。
 
-**根因**：ticket 是鉴权缺位时代的归属证明（本服务不知道调用者是谁，用持有证明顶上）。对话式 prep 阶段（出题/确认）由 Supervisor 作为可信中间人执行 A2A 工具，前端只聊天不直连，信任链未断，凭据无必要性；且卡片是第一个可靠交付点（让 LLM 在对话里转述长 HMAC 随机串不可靠）。表单式从第一个请求起就是前端直连，信任链即刻断开，凭据必须覆盖会话全生命周期（create-then-hold）。
+**根因**：让模型生成的 userId/角色/管理员声明替换登录身份是不可信的；把每次内部工具调用都变成 Auth RPC 又会扩大依赖失败面。签名上下文固定可信身份，逐请求 proof 固定真实方法/正文，规划刷新边界更新授权；域内关系和状态继续由 Interview 真源判定。短期场次票据只解决浏览器场次用途，不得进入 URL、模型、普通 metadata 或恢复材料。
 
-**推论**：「能做什么」由状态机分层管（DRAFT/QUESTIONS_CONFIRMED 只放行题目操作与 monitor；IN_PROGRESS 加话轮与导演指令；CLOSING_LOCKED 后只读），**不由签发时机管**。ticket 原文只在签发响应出现一次，DB 只存 hash；重签作废上一张，权威签发点 = 各入口的「最后一步响应」。
+**代码位置**：`gateway` ingress签名过滤器；`common/authz/AuthzWireCodec`、`common-a2a/A2aAuthorizationVerifier`、`common/mcp/authz/McpAuthorizationFilter`；`interview-service/security/InterviewAuthorizationFilter`、`InterviewAuthorizationScope`、`InterviewParticipantTicketService` 和 `InterviewController.issueParticipantCredential`。
 
-**代码位置**：`InterviewSessionStateMachine.issueTicket` / `InterviewPrepService.openCase` / `InterviewTools.startInterviewSession`
-
-**关联**：KI-1（表单式 prep 凭据真空，待修）。将来平台网关统一鉴权落地后，ticket 可退化为纯会话定位符，本条争议自然消失。
+**关联**：LR-3/5/6/89/140/143/145；KI-157/170/174/202/203；change `unify-versioned-permission-context`任务6.1/6.5/7–9。运行模式保持默认关闭，源码回归不代表已部署启用。
 
 ## LR-2 卡片是导航，按钮是状态动作
 
@@ -71,13 +69,15 @@
 
 **代码位置**：`runtime/InterviewRuntimeService.consumeDirectorCommand` 及决策点 ⑤'；`tool/InterviewTools.sendDirectorCommand`
 
-## LR-8 MCP 面公开只读
+## LR-8 MCP 公共投影只读，受限委托写操作单独授权
 
-**结论**：MCP 面（`interview-mcp-server`）可见范围限定 L2/L3 已归档逐字稿及其衍生报告；唯一写路径 `submit_transcript`（只新增不改既有资产）；删除/改名/重评级/题目确认/会话干预等管理动作零暴露。
+**结论**：Interview MCP 的四个公共工具只读已显式发布且来源有效的 L2/L3 逐字稿和派生报告；`submit_transcript` 与 `generate_case_report` 是另外两个受 Auth 签名操作限制的委托入口，分别要求 `interview.asset.submit` 和 `interview.report.generate`，仍核验可信 actor、case/asset 关联及域内规则。提交只新建 PRIVATE 资产；生成报告不会自动公开。未授权的删除、修改、重评级、题目确认和会话控制仍不暴露。Provider 仅在服务端 MCP proof guard 开启时注册。
 
-**根因**：系统暂无组织鉴权概念（用户决策），机器可见即平台级公开。将来引入 caller 过滤时在 MCP 层加参数即可，不伤契约。
+**根因**：公开可见范围与已委托的私有业务操作不是同一种能力。把受限写操作说成“公开写”会扩大机器可见面；把它们误记为不存在又会漏掉签名操作和资源关系检查。公开投影始终只读，受限写工具必须由逐请求本地 proof 和稳定操作映射保护。
 
-**代码位置**：`mcp/InterviewMcpTools`（5 工具，implements `common` 的 `McpTool` 标记接口）
+**代码位置**：`interview-service/mcp/InterviewMcpTools`、`config/InterviewMcpConfiguration`、`security/InterviewAuthorizationScope`；`application.yml` 与 `nacos/interview-service.yaml` 的 `tool-operations`/`public-tools`。
+
+**关联**：LR-3/6/143/145；KI-174；change `unify-versioned-permission-context`任务6.5/9.1/9.6。新开关默认关闭，MCP生产接线未据此声明已启用。
 
 ## LR-9 skill_hint 只影响首轮
 
@@ -882,13 +882,15 @@
 
 **代码位置**：`common/agent/AgentOutputSanitizer`、`common/a2a/A2aOutputNormalizer`、`common-a2a/A2aMemoryAgentHook`、`agent-service/client/OfficialA2aResponseNormalizer` 与 `service/A2aExecutionService`、`common/memory/MemorySharedExportPolicy`。回归 `AgentOutputSanitizerTest`、`A2aOutputNormalizerTest`、`MemorySharedExportPolicyTest`、`A2aExecutionServiceTest`；关联 KI-155/KI-156，change 10.3/10.5/10.7。
 
-## LR-89 访谈会话票据签名密钥只从受管环境注入且缺失时拒绝签发
+## LR-89 [SUPERSEDED] 旧 HMAC 会话票据密钥已由数据库摘要票据替代
 
-**结论**：访谈运行面 `INTERVIEW_TICKET_SECRET` 不设源码或 Nacos 明文默认值；服务 Compose 要求显式注入，本地开发值只保留在未跟踪 `.env`。签发票据前要求 UTF-8 密钥至少32字节，缺失或过短立即失败，不退回共享默认密钥。
+**结论**：旧 `INTERVIEW_TICKET_SECRET` HMAC 方案不再是当前票据机制。访谈票据改为 256 位密码学随机值，服务仅持久化 SHA-256 摘要，并通过已登录用户的受鉴权领取接口发放；无需在 Interview 使用共享签名密钥。Gateway 登录签名与 A2A/MCP Auth context 是独立身份凭证，仍按受管密钥配置和本地验签执行。
 
-**根因**：HMAC 密钥硬编码在 Properties 初始值与 Nacos 占位默认值时，仓库内所有实例共享可预知签名权；只删除其中一处仍会被另一层默认回填。环境注入、空默认和最小熵检查必须同时成立，既避免发布源码凭据，也不允许缺配置时继续签发可伪造会话票据。
+**根因**：ticket 已不再承担登录身份或长期会话签名。随机高熵值的摘要比保留第二套长期 HMAC secret 更简单，也避免不同服务共享会话签发密钥；认证用户、场次关系、用途和票据撤销状态分别由签名上下文与域数据库校验。历史 `INTERVIEW_TICKET_SECRET` 配置只属于已关闭的旧机制，不可据此恢复 HMAC fallback。
 
-**代码位置**：`interview-service/config/InterviewRuntimeProperties`、`runtime/InterviewSessionStateMachine`、`nacos/interview-service.yaml`、根 `docker-compose.yml` 与 `.env.example`；回归 `InterviewSessionStateMachineTest.ticketSigningFailsClosedWithoutConfiguredSecret`；关联 KI-157，change 10.7。
+**代码位置**：`interview-service/service/InterviewParticipantTicketService`、`security/InterviewAuthorizationFilter`、`runtime/InterviewController.issueParticipantCredential`；旧行为见 KI-157。
+
+**关联**：LR-1/145；KI-157/202；change `unify-versioned-permission-context`任务8.1/8.2。旧签名票据不应再被新入口接受；历史存量凭据扫描仍待 KI-202。
 
 ## LR-90 域共享经验是无个人来源链接的独立治理归纳
 
@@ -1109,3 +1111,13 @@
 **代码位置**：`common/rag/AuthRagPrincipal`、`RagAuthorizationScope`、`RagCanonicalHash`、`RagScopeSigner`、`RagRequestSigner`；`agent-service/AgentRagRequestAuthentication`、`AgentMemoryMilvusService`；`auth-service/RagPrincipalRpcServiceImpl`；`listing-master-service/ListingRagIdentity`、`ListingRagGrantService`；`memory-service/MemoryRagSecurity`、`MemoryRagSearchFacade`；`rag-service/RagAccessControl`、`RagSecurityProperties`。
 
 **关联**：LR-98/139/140/142；KI-57；change `unify-versioned-permission-context`任务6.6/6.7。版本化RAG开关默认关闭；本地回归不代表Auth公钥、部署密钥和生产调用链已验收。
+
+## LR-145 请求级签名上下文防止模型替换 actor，业务资源仍由接收域校验
+
+**结论**：外部入口由 Gateway 对登录身份与实际 method/path/query/body 签署 Auth 上下文；已绑定 run 内部的 A2A/MCP 请求携带该上下文/freshness，并由调用服务对每个真实 JSON-RPC 正文和 nonce 生成逐请求 proof。接收端本地验签 actor、caller、audience、操作、请求内容和截止，不为每个 subAgent/tool/流项远程请求 Auth；Auth 刷新只发生在 Supervisor 规划边界。模型参数中生成的 userId、role、admin、permissions 均不是身份来源。签名许可仍不能替代接收域对 owner、参与关系、资源来源、业务状态和撤回版本的核查。
+
+**根因**：在 Graph 内逐工具访问 Auth 会把模型编排次数放大成身份服务依赖次数，并让普通下游故障扩大为整条请求失败；仅传递一个已签父上下文而不绑定真实请求又允许调用方篡改 body 或重放。父上下文提供不可替换身份上限，逐请求 proof 提供实际请求完整性，本地验签减少同步 RPC；领域资源检查继续维护各业务的真实授权边界。
+
+**代码位置**：`common/authz/AuthzWireCodec`、`common-a2a/A2aAuthorizationVerifier`、`common/mcp/authz/McpAuthorizationFilter`、`agent-service/SupervisorToolLoopGraph`、`InterviewAuthorizationFilter` 与 `InterviewAuthorizationScope`。
+
+**关联**：LR-1/139/140/142/143/144；KI-170/174/202/203；change `unify-versioned-permission-context`任务5–9。各新消费开关默认关闭；本地验签和模块测试不能替代跨实例nonce、真实浏览器、真实MySQL/Redis或部署启用验收。

@@ -8,6 +8,7 @@ import com.bkanent.interview.entity.InterviewQuestionEntity;
 import com.bkanent.interview.entity.InterviewSessionEntity;
 import com.bkanent.interview.engine.AngleLadder;
 import com.bkanent.interview.engine.OutlineRouter;
+import com.bkanent.interview.engine.Sanitizer;
 import com.bkanent.interview.mapper.InterviewCaseMapper;
 import com.bkanent.interview.mapper.InterviewPrepCardMapper;
 import com.bkanent.interview.mapper.InterviewQuestionMapper;
@@ -16,6 +17,10 @@ import com.bkanent.interview.runtime.InterviewSessionStateMachine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import com.bkanent.common.authz.AuthzErrorCode;
+import com.bkanent.common.authz.AuthzException;
+import com.bkanent.interview.security.InterviewAuthorizationScope;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,6 +39,8 @@ public class InterviewPrepService {
     private final InterviewPrepCardMapper prepCardMapper;
     private final InterviewQuestionMapper questionMapper;
     private final InterviewSessionMapper sessionMapper;
+    private final InterviewParticipantService participantService;
+    private final InterviewAuthorizationService authorizationService;
     private final InterviewRuntimeProperties runtimeProperties;
     private final InterviewSessionStateMachine stateMachine;
 
@@ -41,23 +48,70 @@ public class InterviewPrepService {
                                 InterviewPrepCardMapper prepCardMapper,
                                 InterviewQuestionMapper questionMapper,
                                 InterviewSessionMapper sessionMapper,
+                                InterviewParticipantService participantService,
+                                InterviewAuthorizationService authorizationService,
                                 InterviewRuntimeProperties runtimeProperties,
                                 InterviewSessionStateMachine stateMachine) {
         this.caseMapper = caseMapper;
         this.prepCardMapper = prepCardMapper;
         this.questionMapper = questionMapper;
         this.sessionMapper = sessionMapper;
+        this.participantService = participantService;
+        this.authorizationService = authorizationService;
         this.runtimeProperties = runtimeProperties;
         this.stateMachine = stateMachine;
+    }
+
+    /** Trusted case values used only to remove known identity text before model input/archive projection. */
+    public List<String> knownPrivateTranscriptValues(Long caseId) {
+        InterviewCaseEntity caseEntity = caseId == null ? null : caseMapper.selectById(caseId);
+        if (caseEntity == null) return List.of();
+        return java.util.stream.Stream.of(caseEntity.getRespondentName(), caseEntity.getCreatorWorkNo())
+                .filter(value -> value != null && !value.isBlank()).distinct().toList();
     }
 
     /**
      * 开台：案例 + 提纲路由 + 访前基础卡 + DRAFT 会话。
      */
+    @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> openCase(String scene, String respondentRole, String caseStatus,
                                         String objective, String divisionName, String regionName,
                                         String businessDistrict, Integer referenceMinutes,
                                         String entrySource, String creatorWorkNo) {
+        return openCase(scene, respondentRole, caseStatus, objective, divisionName, regionName,
+                businessDistrict, referenceMinutes, entrySource, creatorWorkNo, null, null);
+    }
+
+    /** New authorization path binds ownership to the verified platform actor, never to workNo. */
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> openCase(String scene, String respondentRole, String caseStatus,
+                                        String objective, String divisionName, String regionName,
+                                        String businessDistrict, Integer referenceMinutes,
+                                        String entrySource, String creatorWorkNo,
+                                        Long createdByUserId, Long respondentUserId) {
+        authorizationService.requireOperation(InterviewAuthorizationService.INITIATE);
+        long authenticatedActor = InterviewAuthorizationScope.requireActorId();
+        if (createdByUserId != null && createdByUserId != authenticatedActor) {
+            throw new AuthzException(AuthzErrorCode.PERMISSION_DENIED);
+        }
+        createdByUserId = authenticatedActor;
+        if (createdByUserId != null && createdByUserId <= 0) {
+            throw new IllegalArgumentException("invalid authenticated creator");
+        }
+        if (respondentUserId != null && respondentUserId <= 0) {
+            throw new IllegalArgumentException("invalid selected respondent");
+        }
+        if (respondentUserId != null && createdByUserId == null) {
+            throw new IllegalArgumentException("respondent selection requires an authenticated creator");
+        }
+        scene = Sanitizer.redactCredentials(scene);
+        respondentRole = Sanitizer.redactCredentials(respondentRole);
+        caseStatus = Sanitizer.redactCredentials(caseStatus);
+        objective = Sanitizer.redactCredentials(objective);
+        divisionName = Sanitizer.redactCredentials(divisionName);
+        regionName = Sanitizer.redactCredentials(regionName);
+        businessDistrict = Sanitizer.redactCredentials(businessDistrict);
+        creatorWorkNo = Sanitizer.redactCredentials(creatorWorkNo);
         OutlineRouter.RouteResult route = OutlineRouter.route(scene, respondentRole, caseStatus);
 
         InterviewCaseEntity caseEntity = new InterviewCaseEntity();
@@ -70,6 +124,7 @@ public class InterviewPrepService {
         caseEntity.setBusinessDistrict(businessDistrict);
         caseEntity.setNoSuccessPreset(route.noSuccessPreset() ? 1 : 0);
         caseEntity.setCreatorWorkNo(creatorWorkNo);
+        caseEntity.setCreatedByUserId(createdByUserId);
         caseMapper.insert(caseEntity);
 
         InterviewPrepCardEntity prepCard = new InterviewPrepCardEntity();
@@ -87,20 +142,18 @@ public class InterviewPrepService {
         session.setEngineType("XIAOZHI");
         session.setEntrySource(entrySource == null ? "A2A" : entrySource);
         session.setCreatorWorkNo(creatorWorkNo);
+        session.setCreatedByUserId(createdByUserId);
         session.setClosingLocked(0);
         sessionMapper.insert(session);
-
-        // 会话凭据开台即签发：ticket 语义是"本场会话持有人证明"，
-        // 生命周期对齐会话而非访谈进度——题目确认阶段（DRAFT/QUESTIONS_CONFIRMED）
-        // 即可用，能做什么由各端点的状态守卫分层管理。
-        // 注意：重签会作废上一张（DB 只存 hash）；A2A 入口在 startInterviewSession
-        // 重签属于权威签发点（开台响应那张无人在持有，被覆盖无副作用）。
-        String ticket = stateMachine.issueTicket(session);
+        if (createdByUserId != null) {
+            participantService.createSessionRelations(session.getId(), createdByUserId, respondentUserId);
+        }
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("caseId", caseEntity.getId());
         result.put("sessionId", session.getId());
-        result.put("ticket", ticket);
+        result.put("entryPath", "/interviews/" + session.getId());
+        result.put("credentialClaimPath", "/interviews/" + session.getId() + "/credentials");
         result.put("outlineRoute", route.outlineRoute());
         result.put("noSuccessPreset", route.noSuccessPreset());
         result.put("mustCollectItems", route.mustCollectItems());
@@ -116,8 +169,10 @@ public class InterviewPrepService {
      * 治理面由模型在磋商中设计题目后落库；表单入口由前端提交草稿。
      * 重复调用追加候选题（同 focus 不去重，由发起人勾选时取舍）。
      */
+    @Transactional(rollbackFor = Exception.class)
     public List<Long> createCandidateQuestions(Long caseId, String outlineRoute,
                                                List<QuestionDraft> drafts) {
+        InterviewSessionEntity session = requireGovernanceCase(caseId, InterviewSessionStateMachine.DRAFT);
         if (drafts == null || drafts.isEmpty()) {
             throw new IllegalArgumentException("drafts must not be empty");
         }
@@ -131,14 +186,15 @@ public class InterviewPrepService {
                 .orElse(0) + 1;
 
         List<Long> ids = new java.util.ArrayList<>(drafts.size());
+        List<String> privateValues = knownPrivateTranscriptValues(caseId);
         for (QuestionDraft draft : drafts) {
             InterviewQuestionEntity q = new InterviewQuestionEntity();
             q.setCaseId(caseId);
             q.setOutlineRoute(outlineRoute == null ? "T1" : outlineRoute);
             q.setSeqNo(nextSeq++);
-            q.setContent(draft.content());
-            q.setFocusLabel(draft.focusLabel());
-            q.setRiskHint(draft.riskHint());
+            q.setContent(Sanitizer.sanitize(draft.content(), privateValues).sanitizedText());
+            q.setFocusLabel(Sanitizer.sanitize(draft.focusLabel(), privateValues).sanitizedText());
+            q.setRiskHint(Sanitizer.sanitize(draft.riskHint(), privateValues).sanitizedText());
             q.setConfirmed(0);
             q.setAnswerStatus("PENDING");
             q.setProbeRounds(0);
@@ -161,16 +217,25 @@ public class InterviewPrepService {
     /**
      * 题目确认制：确认候选题（只有确认题进入访谈，未选题不计未回答）。
      */
+    @Transactional(rollbackFor = Exception.class)
     public int confirmQuestions(Long caseId, List<Long> questionIds) {
+        InterviewSessionEntity session = requireGovernanceCase(caseId,
+                InterviewSessionStateMachine.DRAFT, InterviewSessionStateMachine.QUESTIONS_CONFIRMED);
         if (questionIds == null || questionIds.isEmpty()) {
             throw new IllegalArgumentException("questionIds must not be empty");
         }
         List<InterviewQuestionEntity> questions = questionMapper.selectList(
                 new LambdaQueryWrapper<InterviewQuestionEntity>()
                         .eq(InterviewQuestionEntity::getCaseId, caseId));
+        java.util.Set<Long> selectedIds = new java.util.LinkedHashSet<>(questionIds);
+        if (selectedIds.size() != questionIds.size()
+                || !questions.stream().map(InterviewQuestionEntity::getId).collect(java.util.stream.Collectors.toSet())
+                .containsAll(selectedIds)) {
+            throw new IllegalArgumentException("questionIds must all belong to case " + caseId);
+        }
         int confirmed = 0;
         for (InterviewQuestionEntity q : questions) {
-            boolean shouldConfirm = questionIds.contains(q.getId());
+            boolean shouldConfirm = selectedIds.contains(q.getId());
             InterviewQuestionEntity update = new InterviewQuestionEntity();
             update.setId(q.getId());
             update.setConfirmed(shouldConfirm ? 1 : 0);
@@ -182,17 +247,30 @@ public class InterviewPrepService {
         if (confirmed == 0) {
             throw new IllegalArgumentException("none of the questionIds belong to case " + caseId);
         }
-        InterviewSessionEntity session = sessionMapper.selectOne(
-                new LambdaQueryWrapper<InterviewSessionEntity>()
-                        .eq(InterviewSessionEntity::getCaseId, caseId)
-                        .orderByDesc(InterviewSessionEntity::getId)
-                        .last("LIMIT 1"));
-        if (session != null && InterviewSessionStateMachine.DRAFT.equals(session.getStatus())) {
+        if (InterviewSessionStateMachine.DRAFT.equals(session.getStatus())) {
             // 治理面推进 DRAFT → QUESTIONS_CONFIRMED
             stateMachine.transition(session.getId(), InterviewSessionStateMachine.QUESTIONS_CONFIRMED,
                     InterviewSessionStateMachine.Actor.GOVERNANCE);
         }
         return confirmed;
+    }
+
+    private InterviewSessionEntity requireGovernanceCase(Long caseId, String... allowedStates) {
+        authorizationService.requireOperation(InterviewAuthorizationService.INITIATE);
+        if (caseId == null || caseId <= 0 || caseMapper.selectById(caseId) == null) {
+            throw new IllegalArgumentException("case not found: " + caseId);
+        }
+        InterviewSessionEntity session = sessionMapper.selectOne(new LambdaQueryWrapper<InterviewSessionEntity>()
+                .eq(InterviewSessionEntity::getCaseId, caseId)
+                .orderByDesc(InterviewSessionEntity::getId)
+                .last("LIMIT 1 FOR UPDATE"));
+        if (session == null) throw new IllegalArgumentException("session not found for case: " + caseId);
+        authorizationService.requireInitiator(session.getId(), InterviewAuthorizationService.INITIATE);
+        if (session.getStatus() == null
+                || java.util.Arrays.stream(allowedStates).noneMatch(session.getStatus()::equals)) {
+            throw new IllegalArgumentException("question sheet is locked in state " + session.getStatus());
+        }
+        return session;
     }
 
     /** 当前题（按预算序号的第一个未答确认题）。 */

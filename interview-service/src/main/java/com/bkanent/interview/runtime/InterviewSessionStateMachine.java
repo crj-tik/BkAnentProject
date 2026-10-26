@@ -1,19 +1,13 @@
 package com.bkanent.interview.runtime;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.bkanent.interview.config.InterviewRuntimeProperties;
 import com.bkanent.interview.entity.InterviewSessionEntity;
 import com.bkanent.interview.mapper.InterviewSessionMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.LocalDateTime;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Set;
 
@@ -59,12 +53,9 @@ public class InterviewSessionStateMachine {
     }
 
     private final InterviewSessionMapper sessionMapper;
-    private final InterviewRuntimeProperties properties;
 
-    public InterviewSessionStateMachine(InterviewSessionMapper sessionMapper,
-                                        InterviewRuntimeProperties properties) {
+    public InterviewSessionStateMachine(InterviewSessionMapper sessionMapper) {
         this.sessionMapper = sessionMapper;
-        this.properties = properties;
     }
 
     /**
@@ -81,12 +72,12 @@ public class InterviewSessionStateMachine {
             throw new IllegalTransitionException("session not found: " + sessionId);
         }
         String current = session.getStatus();
-        if (current.equals(target)) {
-            return session;
-        }
         if (!isAllowed(target, actor)) {
             throw new IllegalTransitionException(
                     "actor " + actor + " not allowed to transition session to " + target);
+        }
+        if (current.equals(target)) {
+            return session;
         }
         String expectedPrev = expectedPrevious(target);
         if (expectedPrev != null && !expectedPrev.equals(current)) {
@@ -131,67 +122,7 @@ public class InterviewSessionStateMachine {
 
     /** 权限判定（包级可见以便单测防回归）。 */
     static boolean isAllowed(String target, Actor actor) {
-        return TRANSITIONS.getOrDefault(target, Set.of()).contains(actor.name());
-    }
-
-    // ---------- 会话凭据（功能寻址所需的最小凭据，非鉴权体系） ----------
-
-    /**
-     * 签发会话凭据：HMAC(sessionId:expiresAt)，落库存哈希。
-     */
-    public String issueTicket(InterviewSessionEntity session) {
-        LocalDateTime expiresAt = LocalDateTime.now().plusHours(properties.getTicket().getTtlHours());
-        String payload = session.getId() + ":" + expiresAt;
-        String ticket = hmac(payload);
-        InterviewSessionEntity update = new InterviewSessionEntity();
-        update.setId(session.getId());
-        update.setTicketHash(sha256(ticket));
-        update.setTicketExpiresAt(expiresAt);
-        sessionMapper.updateById(update);
-        return ticket;
-    }
-
-    /**
-     * 校验会话凭据：只放行本场会话。
-     */
-    public boolean validateTicket(Long sessionId, String ticket) {
-        if (sessionId == null || ticket == null || ticket.isBlank()) {
-            return false;
-        }
-        InterviewSessionEntity session = sessionMapper.selectById(sessionId);
-        if (session == null || session.getTicketHash() == null || session.getTicketExpiresAt() == null) {
-            return false;
-        }
-        if (session.getTicketExpiresAt().isBefore(LocalDateTime.now())) {
-            return false;
-        }
-        return MessageDigest.isEqual(
-                session.getTicketHash().getBytes(StandardCharsets.UTF_8),
-                sha256(ticket).getBytes(StandardCharsets.UTF_8));
-    }
-
-    private String hmac(String payload) {
-        String secret = properties.getTicket().getSecret();
-        if (secret == null || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
-            throw new IllegalStateException("INTERVIEW_TICKET_SECRET must contain at least 32 UTF-8 bytes");
-        }
-        try {
-            Mac mac = Mac.getInstance("HmacSHA256");
-            mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8),
-                    "HmacSHA256"));
-            return HexFormat.of().formatHex(mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)));
-        } catch (Exception e) {
-            throw new IllegalStateException("ticket hmac failed", e);
-        }
-    }
-
-    private String sha256(String text) {
-        try {
-            return HexFormat.of().formatHex(
-                    MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8)));
-        } catch (Exception e) {
-            throw new IllegalStateException("sha256 failed", e);
-        }
+        return target != null && actor != null && TRANSITIONS.getOrDefault(target, Set.of()).contains(actor.name());
     }
 
     /** 按创建人列出会话（双入口无差别查询）。 */

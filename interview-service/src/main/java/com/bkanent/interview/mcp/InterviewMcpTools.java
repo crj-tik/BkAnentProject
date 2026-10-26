@@ -1,21 +1,18 @@
 package com.bkanent.interview.mcp;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.bkanent.common.tool.McpTool;
 import com.bkanent.interview.entity.InterviewAssetEntity;
-import com.bkanent.interview.entity.InterviewReportEntity;
 import com.bkanent.interview.entity.InterviewReportTaskEntity;
 import com.bkanent.interview.mapper.InterviewAssetMapper;
-import com.bkanent.interview.mapper.InterviewReportMapper;
 import com.bkanent.interview.mapper.InterviewReportTaskMapper;
-import com.bkanent.interview.service.InterviewCollectionService;
+import com.bkanent.interview.service.InterviewAssetService;
 import com.bkanent.interview.service.InterviewReportService;
+import com.bkanent.interview.engine.Sanitizer;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,108 +20,70 @@ import java.util.Map;
 /**
  * MCP 能力面：公开只读资产工具。
  *
- * <p>隔离边界（用户决策：公开资产只读）：可见范围限定 L2/L3 已归档逐字稿
- * 及其衍生报告；管理动作（删除/改名/重评级/题目确认/会话干预）零暴露；
- * 唯一写路径为 submit_transcript（只新增资产，不改既有资产）。</p>
+ * <p>公开读取限定为已发布的L2/L3逐字稿与有效来源报告；业务管理动作不暴露。
+ * 私有写操作仅包括授权后的逐字稿新增与报告生成，不修改既有资产。</p>
  */
 @Component
 public class InterviewMcpTools implements McpTool {
 
     private final InterviewAssetMapper assetMapper;
-    private final InterviewReportMapper reportMapper;
     private final InterviewReportTaskMapper reportTaskMapper;
     private final InterviewReportService reportService;
+    private final InterviewAssetService assetService;
 
     public InterviewMcpTools(InterviewAssetMapper assetMapper,
-                             InterviewReportMapper reportMapper,
                              InterviewReportTaskMapper reportTaskMapper,
-                             InterviewReportService reportService) {
+                             InterviewReportService reportService,
+                             InterviewAssetService assetService) {
         this.assetMapper = assetMapper;
-        this.reportMapper = reportMapper;
         this.reportTaskMapper = reportTaskMapper;
         this.reportService = reportService;
+        this.assetService = assetService;
     }
 
     @Tool(description = "Search archived interview transcripts (L2/L3 only). Public read-only view; "
             + "L0/L1 assets are never visible via MCP.")
     public List<Map<String, Object>> search_transcripts(
             @ToolParam(description = "Keyword to match in title, blank to list recent") String keyword) {
-        List<InterviewAssetEntity> assets = assetMapper.selectList(
-                new LambdaQueryWrapper<InterviewAssetEntity>()
-                        .in(InterviewAssetEntity::getArchiveGrade, "L2", "L3")
-                        .like(keyword != null && !keyword.isBlank(),
-                                InterviewAssetEntity::getTitle, keyword == null ? "" : keyword)
-                        .orderByDesc(InterviewAssetEntity::getId)
-                        .last("LIMIT 20"));
+        String normalized = keyword == null ? "" : keyword.trim();
+        if (normalized.length() > 200) return List.of();
+        List<InterviewAssetEntity> assets = assetMapper.selectPublicAssets(normalized,
+                Sanitizer.VERSION, 20);
         List<Map<String, Object>> results = new ArrayList<>();
         for (InterviewAssetEntity asset : assets) {
+            if (!assetService.isPubliclyEligible(asset)) continue;
             results.add(assetView(asset, false));
         }
         return results;
     }
 
     @Tool(description = "Get a case card report by report ID or by its source transcript asset ID. "
-            + "Returns the structured report with evidence verification status.")
+            + "Returns only a current report whose source transcript is explicitly published and eligible for public reading.")
     public Map<String, Object> get_case_report(
             @ToolParam(description = "Report ID, or blank when querying by assetId") Long reportId,
             @ToolParam(description = "Source transcript asset ID, used when reportId is blank") Long assetId) {
-        InterviewReportEntity report = reportId != null
-                ? reportMapper.selectById(reportId)
-                : (assetId != null ? reportMapper.selectOne(new LambdaQueryWrapper<InterviewReportEntity>()
-                        .eq(InterviewReportEntity::getAssetId, assetId)
-                        .orderByDesc(InterviewReportEntity::getId)
-                        .last("LIMIT 1")) : null);
-        if (report == null) {
-            return Map.of("error", "report not found");
-        }
-        Map<String, Object> view = new LinkedHashMap<>();
-        view.put("reportId", report.getId());
-        view.put("caseId", report.getCaseId());
-        view.put("assetId", report.getAssetId());
-        view.put("reportType", report.getReportType());
-        view.put("score", report.getScore());
-        view.put("replicabilityLevel", report.getReplicabilityLevel());
-        view.put("report", report.getReportJson());
-        view.put("evidenceVerification", report.getEvidenceVerification());
-        view.put("missingItems", report.getMissingItems());
-        return view;
+        Map<String, Object> report = reportService.getPublicReport(reportId, assetId);
+        return report == null ? Map.of("error", "report not found") : report;
     }
 
     @Tool(description = "Submit an external transcript (markdown/plain text) for archiving. "
             + "Deterministic L0-L3 grading runs automatically (no model). Returns the new asset ID and grade. "
-            + "This is the only write path on the MCP surface; existing assets are never modified.")
+            + "Requires the exact interview.asset.submit permission and an authorized case ID. "
+            + "The new asset remains private until explicitly published; existing assets are never modified.")
     public Map<String, Object> submit_transcript(
             @ToolParam(description = "Transcript title") String title,
             @ToolParam(description = "Transcript full text (markdown or plain)") String content,
-            @ToolParam(description = "Case ID to attach, optional") Long caseId) {
-        String sanitized = content == null ? "" : content;
-        int wordCount = sanitized.replaceAll("\\s+", "").length();
-        int estimatedTurns = countTurns(sanitized);
-        var grade = com.bkanent.interview.engine.ArchiveGrader.grade(wordCount, true,
-                wordCount >= com.bkanent.interview.engine.ArchiveGrader.L2_TOPIC_FOCUS_WORDS,
-                estimatedTurns >= 6, estimatedTurns >= com.bkanent.interview.engine.ArchiveGrader.L2_MIN_TURNS,
-                estimatedTurns, true);
-
-        InterviewAssetEntity asset = new InterviewAssetEntity();
-        asset.setCaseId(caseId == null ? 0L : caseId);
-        asset.setSource("UPLOAD");
-        asset.setTitle(title == null || title.isBlank() ? "外部提交逐字稿" : title);
-        asset.setContent(sanitized);
-        asset.setSnapshotHash(sha256(sanitized));
-        asset.setArchiveGrade(grade.grade());
-        asset.setGradeBasis(com.bkanent.interview.engine.ArchiveGrader.gradeBasisJson(grade));
-        asset.setTurnCount(estimatedTurns);
-        asset.setWordCount(wordCount);
-        assetMapper.insert(asset);
-        return Map.of("assetId", asset.getId(), "grade", grade.grade(),
-                "wordCount", wordCount, "turnCount", estimatedTurns);
+            @ToolParam(description = "Required case ID to attach the new private transcript") Long caseId) {
+        InterviewAssetEntity asset = assetService.submitTranscript(caseId, title, content);
+        return Map.of("assetId", asset.getId(), "grade", asset.getArchiveGrade(),
+                "visibility", asset.getVisibility(), "wordCount", asset.getWordCount(),
+                "turnCount", asset.getTurnCount());
     }
 
-    @Tool(description = "Run deterministic L0-L3 grading on a transcript text without archiving it. "
-            + "Pure rule-based check: body length, subject, topic focus, module closure, evidence, turn count.")
+    @Tool(description = "Preview deterministic transcript quality checks without storing or publishing the text.")
     public Map<String, Object> grade_transcript(
             @ToolParam(description = "Transcript text to grade") String content) {
-        String sanitized = content == null ? "" : content;
+        String sanitized = Sanitizer.sanitize(content == null ? "" : content).sanitizedText();
         int wordCount = sanitized.replaceAll("\\s+", "").length();
         int estimatedTurns = countTurns(sanitized);
         var grade = com.bkanent.interview.engine.ArchiveGrader.grade(wordCount, true,
@@ -142,12 +101,13 @@ public class InterviewMcpTools implements McpTool {
             @ToolParam(description = "Keyword to match in report text, required") String keyword,
             @ToolParam(description = "Page number, 1-based") Integer page,
             @ToolParam(description = "Page size, max 20 on the public surface") Integer pageSize) {
-        return reportService.searchReports(keyword, null,
+        return reportService.searchPublicReports(keyword,
                 page == null ? 1 : page, pageSize == null ? 10 : Math.min(pageSize, 20));
     }
 
-    @Tool(description = "Submit an asynchronous case card report generation task for an L2/L3 transcript. "
-            + "Idempotent: same input reuses the same task. Returns taskId and status for polling via this tool.")
+    @Tool(description = "Submit an authorized report task for a sanitized transcript attached to the same case. "
+            + "Idempotent: the same source snapshot reuses the same task. Returns taskId and status; public report "
+            + "reads still require the source transcript to be explicitly published and eligible.")
     public Map<String, Object> generate_case_report(
             @ToolParam(description = "Interview case ID") Long caseId,
             @ToolParam(description = "Source transcript asset ID (L2/L3 archived)") Long assetId) {
@@ -188,13 +148,4 @@ public class InterviewMcpTools implements McpTool {
         return Math.max(count, content.split("\\n\\s*\\n").length);
     }
 
-    private String sha256(String text) {
-        try {
-            return HexFormat.of().formatHex(java.security.MessageDigest
-                    .getInstance("SHA-256")
-                    .digest(text.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-        } catch (Exception e) {
-            throw new IllegalStateException("sha256 failed", e);
-        }
-    }
 }

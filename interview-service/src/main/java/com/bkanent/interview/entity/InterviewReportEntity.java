@@ -22,6 +22,10 @@ public class InterviewReportEntity extends BaseEntity {
     /** L0-L3 可复制性（成功案例不得直接判 validated） */
     private String replicabilityLevel;
     private String inputSnapshotHash;
+    private String sourceContentHash;
+    private Integer sourceRevision;
+    private String templateVersion;
+    private Long taskId;
 
     public Long getCaseId() { return caseId; }
     public void setCaseId(Long caseId) { this.caseId = caseId; }
@@ -43,4 +47,12 @@ public class InterviewReportEntity extends BaseEntity {
     public void setReplicabilityLevel(String replicabilityLevel) { this.replicabilityLevel = replicabilityLevel; }
     public String getInputSnapshotHash() { return inputSnapshotHash; }
     public void setInputSnapshotHash(String inputSnapshotHash) { this.inputSnapshotHash = inputSnapshotHash; }
+    public String getSourceContentHash() { return sourceContentHash; }
+    public void setSourceContentHash(String value) { sourceContentHash = value; }
+    public Integer getSourceRevision() { return sourceRevision; }
+    public void setSourceRevision(Integer value) { sourceRevision = value; }
+    public String getTemplateVersion() { return templateVersion; }
+    public void setTemplateVersion(String value) { templateVersion = value; }
+    public Long getTaskId() { return taskId; }
+    public void setTaskId(Long value) { taskId = value; }
 }

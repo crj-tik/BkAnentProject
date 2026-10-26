@@ -30,6 +30,8 @@ public class InterviewCaseEntity extends BaseEntity {
     private String mustCollectItems;
     /** 创建人工号（双入口对齐字段） */
     private String creatorWorkNo;
+    /** Auth actor id; null on legacy rows whose owner has not been verified. */
+    private Long createdByUserId;
 
     public String getScene() { return scene; }
     public void setScene(String scene) { this.scene = scene; }
@@ -59,4 +61,6 @@ public class InterviewCaseEntity extends BaseEntity {
     public void setMustCollectItems(String mustCollectItems) { this.mustCollectItems = mustCollectItems; }
     public String getCreatorWorkNo() { return creatorWorkNo; }
     public void setCreatorWorkNo(String creatorWorkNo) { this.creatorWorkNo = creatorWorkNo; }
+    public Long getCreatedByUserId() { return createdByUserId; }
+    public void setCreatedByUserId(Long createdByUserId) { this.createdByUserId = createdByUserId; }
 }

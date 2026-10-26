@@ -2,6 +2,7 @@ package com.bkanent.interview.runtime;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.bkanent.interview.config.InterviewRuntimeProperties;
+import com.bkanent.interview.config.InterviewAuthorizationProperties;
 import com.bkanent.interview.entity.InterviewDirectorCommandEntity;
 import com.bkanent.interview.entity.InterviewQuestionEntity;
 import com.bkanent.interview.entity.InterviewSessionEntity;
@@ -19,6 +20,8 @@ import com.bkanent.interview.mapper.InterviewQuestionMapper;
 import com.bkanent.interview.mapper.InterviewSessionMapper;
 import com.bkanent.interview.mapper.InterviewTurnMapper;
 import com.bkanent.interview.service.InterviewPrepService;
+import com.bkanent.interview.service.InterviewParticipantService;
+import com.bkanent.interview.service.InterviewAuthorizationService;
 import com.bkanent.common.skill.core.SkillRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,6 +65,8 @@ public class InterviewRuntimeService {
     private final InterviewPrepService prepService;
     private final InterviewSessionStateMachine stateMachine;
     private final InterviewRuntimeProperties properties;
+    private final InterviewAuthorizationProperties authorizationProperties;
+    private final InterviewParticipantService participantService;
 
     public InterviewRuntimeService(ChatModel chatModel,
                                    SkillRegistry skillRegistry,
@@ -71,7 +76,9 @@ public class InterviewRuntimeService {
                                    InterviewDirectorCommandMapper directorCommandMapper,
                                    InterviewPrepService prepService,
                                    InterviewSessionStateMachine stateMachine,
-                                   InterviewRuntimeProperties properties) {
+                                   InterviewRuntimeProperties properties,
+                                   InterviewAuthorizationProperties authorizationProperties,
+                                   InterviewParticipantService participantService) {
         this.chatModel = chatModel;
         this.skillRegistry = skillRegistry;
         this.sessionMapper = sessionMapper;
@@ -81,6 +88,8 @@ public class InterviewRuntimeService {
         this.prepService = prepService;
         this.stateMachine = stateMachine;
         this.properties = properties;
+        this.authorizationProperties = authorizationProperties;
+        this.participantService = participantService;
     }
 
     /** 单轮回复结果。 */
@@ -95,7 +104,8 @@ public class InterviewRuntimeService {
                 .eq(InterviewTurnEntity::getIdempotencyKey, requestId)
                 .eq(InterviewTurnEntity::getRole, "INTERVIEWER")
                 .last("LIMIT 1"));
-        return existing == null ? null : new TurnResult(existing.getSanitizedContent(), existing.getProbeMove(), "CLOSE".equals(existing.getProbeMove()));
+        return existing == null ? null : new TurnResult(Sanitizer.redactCredentials(existing.getSanitizedContent()),
+                existing.getProbeMove(), "CLOSE".equals(existing.getProbeMove()));
     }
 
     /**
@@ -129,13 +139,16 @@ public class InterviewRuntimeService {
                     .eq(InterviewTurnEntity::getRole, "INTERVIEWER")
                     .last("LIMIT 1"));
             if (existing != null) {
-                return new TurnResult(existing.getSanitizedContent(), existing.getProbeMove(), false);
+                return new TurnResult(Sanitizer.redactCredentials(existing.getSanitizedContent()),
+                        existing.getProbeMove(), false);
             }
         }
 
         // ② 入模脱敏闸（映射表仅存服务端，不进模型）
-        Sanitizer.SanitizeResult sanitized = Sanitizer.sanitize(respondentText);
-        persistTurn(sessionId, nextTurnSeq(sessionId), "RESPONDENT", respondentText,
+        String credentialRedactedText = Sanitizer.redactCredentials(respondentText);
+        Sanitizer.SanitizeResult sanitized = Sanitizer.sanitize(credentialRedactedText,
+                prepService.knownPrivateTranscriptValues(session.getCaseId()));
+        persistTurn(sessionId, nextTurnSeq(sessionId), "RESPONDENT", credentialRedactedText,
                 sanitized.sanitizedText(), null, null, idempotencyKey == null ? UUID.randomUUID().toString() : idempotencyKey + ":in");
 
         // ③ 信号识别
@@ -187,6 +200,7 @@ public class InterviewRuntimeService {
                     markAnswered(current);
                     decision = new ProbeDecisionEngine.Decision(ProbeDecisionEngine.Move.ADVANCE, 0);
                 }
+                case "END_SESSION" -> decision = ProbeDecisionEngine.Decision.of(ProbeDecisionEngine.Move.CLOSE);
                 case "NEXT_QUESTION" -> {
                     // 直接下一问：当前题标记 SKIPPED 后推进
                     if (current != null) {
@@ -283,6 +297,10 @@ public class InterviewRuntimeService {
         if (modelOutput == null || modelOutput.isBlank()) {
             return fallbackNextQuestion(session);
         }
+        if (Sanitizer.containsCredentialShape(modelOutput)) {
+            log.warn("Output gate blocked a credential-shaped response for session {}", session.getId());
+            return fallbackNextQuestion(session);
+        }
         ProhibitedQuestionFilter.GateResult gate = ProhibitedQuestionFilter.apply(modelOutput);
         if (gate.blocked()) {
             log.info("Output gate blocked ({}), falling back to next question", gate.reason());
@@ -299,7 +317,7 @@ public class InterviewRuntimeService {
     /** 兜底：清单下一题原文（代码给定，不走模型）。 */
     private String fallbackNextQuestion(InterviewSessionEntity session) {
         InterviewQuestionEntity next = prepService.currentQuestion(session.getCaseId());
-        return next != null ? next.getContent() : ClosingDetector.lockedReplyText();
+        return next != null ? Sanitizer.redactCredentials(next.getContent()) : ClosingDetector.lockedReplyText();
     }
 
     /** 近期已问问题台账（近 20 条）。 */
@@ -311,7 +329,9 @@ public class InterviewRuntimeService {
                         .orderByDesc(InterviewTurnEntity::getTurnSeq)
                         .last("LIMIT 20"))
                 .stream()
-                .map(t -> t.getSanitizedContent() == null ? t.getContent() : t.getSanitizedContent())
+                .map(InterviewTurnEntity::getSanitizedContent)
+                .map(Sanitizer::redactCredentials)
+                .filter(content -> content != null && !content.isBlank())
                 .toList();
     }
 
@@ -328,7 +348,7 @@ public class InterviewRuntimeService {
                 + "\n\n[当前决策]（代码已定，必须遵守）" + decision.move()
                 + (decision.angleLevel() > 0 ? " 第" + decision.angleLevel() + "角度" : "")
                 + "\n[决策指令] " + decisionInstruction
-                + (question != null ? "\n[当前问题] " + question.getContent() : "")
+                + (question != null ? "\n[当前问题] " + Sanitizer.redactCredentials(question.getContent()) : "")
                 + "\n[输出约束] 一句话（≤4小句、≤160字），口语自然，不提问清单外的新话题。"));
 
         // 三段记忆：>12 轮拆「已问问题台账 + 事实摘要 + 近期对话」
@@ -348,7 +368,8 @@ public class InterviewRuntimeService {
         // 取最近 6 条后反转为时间正序——对话模型要求历史从旧到新
         java.util.Collections.reverse(recentTurns);
         for (InterviewTurnEntity t : recentTurns) {
-            String content = t.getSanitizedContent() == null ? t.getContent() : t.getSanitizedContent();
+            String content = Sanitizer.redactCredentials(t.getSanitizedContent());
+            if (content == null || content.isBlank()) continue;
             if ("RESPONDENT".equals(t.getRole())) {
                 messages.add(new UserMessage(content));
             } else if (!content.isBlank()) {
@@ -407,8 +428,9 @@ public class InterviewRuntimeService {
                         .last("LIMIT 20"));
         StringBuilder sb = new StringBuilder();
         for (InterviewTurnEntity t : respondentTurns) {
-            sb.append("- ").append(t.getSanitizedContent() == null ? t.getContent() : t.getSanitizedContent())
-                    .append('\n');
+            if (t.getSanitizedContent() != null && !t.getSanitizedContent().isBlank()) {
+                sb.append("- ").append(Sanitizer.redactCredentials(t.getSanitizedContent())).append('\n');
+            }
         }
         return sb.length() == 0 ? "（暂无）" : sb.toString();
     }
@@ -428,7 +450,7 @@ public class InterviewRuntimeService {
 
     private String nextQuestionText(List<InterviewQuestionEntity> confirmed, InterviewQuestionEntity current) {
         InterviewQuestionEntity next = nextQuestion(confirmed, current);
-        return next != null ? next.getContent() : "自然收尾致谢";
+        return next != null ? Sanitizer.redactCredentials(next.getContent()) : "自然收尾致谢";
     }
 
     private void markAnswered(InterviewQuestionEntity question) {
@@ -462,6 +484,17 @@ public class InterviewRuntimeService {
         if (pending == null) {
             return null;
         }
+        if (authorizationProperties.isEnabled() && !validAuthorizedCommand(pending)) {
+            InterviewDirectorCommandEntity reject = new InterviewDirectorCommandEntity();
+            reject.setId(pending.getId());
+            reject.setStatus("REJECTED");
+            directorCommandMapper.update(reject, new LambdaQueryWrapper<InterviewDirectorCommandEntity>()
+                    .eq(InterviewDirectorCommandEntity::getId, pending.getId())
+                    .eq(InterviewDirectorCommandEntity::getStatus, "PENDING"));
+            log.warn("Director command {} rejected at consume boundary for session {}",
+                    pending.getId(), sessionId);
+            return null;
+        }
         InterviewDirectorCommandEntity consume = new InterviewDirectorCommandEntity();
         consume.setId(pending.getId());
         consume.setStatus("CONSUMED");
@@ -472,9 +505,24 @@ public class InterviewRuntimeService {
         if (rows == 0) {
             return null; // 并发消费，本轮回退引擎决策
         }
-        log.info("Director command {} consumed for session {}: {}",
-                pending.getId(), sessionId, pending.getCommand());
+        log.info("Director command {} consumed for session {}: {}, actor={}, permissionRevision={}",
+                pending.getId(), sessionId, pending.getCommand(), pending.getRequestedByUserId(),
+                pending.getPermissionRevision());
         return pending;
+    }
+
+
+    private boolean validAuthorizedCommand(InterviewDirectorCommandEntity command) {
+        if (command.getRequestedByUserId() == null || command.getRequestedByUserId() <= 0
+                || command.getPermissionRevision() == null || command.getPermissionRevision() <= 0
+                || command.getCredentialEpoch() == null || command.getCredentialEpoch() < 0
+                || command.getAuthorizationExpiresAt() == null
+                || !command.getAuthorizationExpiresAt().isAfter(java.time.LocalDateTime.now())) return false;
+        String requiredOperation = "END_SESSION".equals(command.getCommand())
+                ? InterviewAuthorizationService.END : InterviewAuthorizationService.ASSIST;
+        return requiredOperation.equals(command.getAuthorizationOperation())
+                && participantService.hasConfirmedRelation(command.getSessionId(), command.getRequestedByUserId(),
+                InterviewParticipantService.CREATE);
     }
 
     /** 幂等落库（写队列语义：唯一键防重，失败由补偿器退避重试）。 */
@@ -484,8 +532,8 @@ public class InterviewRuntimeService {
         turn.setSessionId(sessionId);
         turn.setTurnSeq(seq);
         turn.setRole(role);
-        turn.setContent(content == null ? "" : content);
-        turn.setSanitizedContent(sanitized == null ? content : sanitized);
+        turn.setContent(Sanitizer.redactCredentials(content == null ? "" : content));
+        turn.setSanitizedContent(Sanitizer.redactCredentials(sanitized == null ? "" : sanitized));
         turn.setProbeMove(move);
         turn.setQuestionId(questionId);
         turn.setIdempotencyKey(idempotencyKey);

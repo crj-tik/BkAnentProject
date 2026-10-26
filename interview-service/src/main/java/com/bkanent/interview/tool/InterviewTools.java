@@ -1,6 +1,7 @@
 package com.bkanent.interview.tool;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.bkanent.interview.entity.InterviewAssetEntity;
 import com.bkanent.interview.entity.InterviewCaseEntity;
 import com.bkanent.interview.entity.InterviewDirectorCommandEntity;
@@ -14,7 +15,11 @@ import com.bkanent.interview.mapper.InterviewQuestionMapper;
 import com.bkanent.interview.mapper.InterviewSessionMapper;
 import com.bkanent.interview.runtime.InterviewSessionStateMachine;
 import com.bkanent.interview.service.InterviewPrepService;
+import com.bkanent.interview.service.InterviewAssetService;
 import com.bkanent.interview.service.InterviewReportService;
+import com.bkanent.interview.service.InterviewAuthorizationService;
+import com.bkanent.interview.security.InterviewAuthorizationScope;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
@@ -32,6 +37,7 @@ import java.util.Map;
 public class InterviewTools {
 
     private final InterviewPrepService prepService;
+    private final InterviewAuthorizationService authorizationService;
     private final InterviewSessionMapper sessionMapper;
     private final InterviewQuestionMapper questionMapper;
     private final InterviewAssetMapper assetMapper;
@@ -39,16 +45,20 @@ public class InterviewTools {
     private final InterviewDirectorCommandMapper directorCommandMapper;
     private final InterviewSessionStateMachine stateMachine;
     private final InterviewReportService reportService;
+    private final InterviewAssetService assetService;
 
     public InterviewTools(InterviewPrepService prepService,
+                          InterviewAuthorizationService authorizationService,
                           InterviewSessionMapper sessionMapper,
                           InterviewQuestionMapper questionMapper,
                           InterviewAssetMapper assetMapper,
                           InterviewCaseMapper caseMapper,
                           InterviewDirectorCommandMapper directorCommandMapper,
                           InterviewSessionStateMachine stateMachine,
-                          InterviewReportService reportService) {
+                          InterviewReportService reportService,
+                          InterviewAssetService assetService) {
         this.prepService = prepService;
+        this.authorizationService = authorizationService;
         this.sessionMapper = sessionMapper;
         this.questionMapper = questionMapper;
         this.assetMapper = assetMapper;
@@ -56,6 +66,7 @@ public class InterviewTools {
         this.directorCommandMapper = directorCommandMapper;
         this.stateMachine = stateMachine;
         this.reportService = reportService;
+        this.assetService = assetService;
     }
 
     /** 解析候选题草稿 JSON（治理面模型产出 / 表单前端提交共用格式）。 */
@@ -113,10 +124,12 @@ public class InterviewTools {
             @ToolParam(description = "Org level 3: business district name, e.g. 珠江新城商圈") String businessDistrict,
             @ToolParam(description = "Case status: won|active|lost|churned. lost/churned auto-enables the no-success-preset question constraints") String caseStatus,
             @ToolParam(description = "Reference duration in minutes: 15/30/45/60, controls question budget only, never auto-ends the interview") Integer referenceMinutes,
-            @ToolParam(description = "Creator work number (operator employee ID)") String creatorWorkNo) {
+            @ToolParam(description = "Creator work number for business metadata only; it never identifies the authenticated actor") String creatorWorkNo) {
+        authorizationService.requireOperation(InterviewAuthorizationService.INITIATE);
+        long actorId = InterviewAuthorizationScope.requireActorId();
         return prepService.openCase(scene, respondentRole, caseStatus, objective,
                 divisionName, regionName, businessDistrict, referenceMinutes,
-                "A2A", creatorWorkNo);
+                "A2A", creatorWorkNo, actorId, null);
     }
 
     @Tool(description = "Create candidate questions for an interview case (first step of the question confirmation "
@@ -147,35 +160,53 @@ public class InterviewTools {
         return Map.of("caseId", caseId, "confirmedCount", confirmed);
     }
 
-    @Tool(description = "Start the interview session: transitions QUESTIONS_CONFIRMED -> IN_PROGRESS, issues the "
-            + "session ticket (only valid for this session's turn/monitor endpoints) and returns the entry "
-            + "artifact (sessionId, ticket, entry path) for the front-end interview card.")
+    @Tool(description = "Change the interview mode before start. This action does not start the session or issue a credential.")
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> changeInterviewMode(
+            @ToolParam(description = "Interview session ID") Long sessionId,
+            @ToolParam(description = "Interview mode: AI_LEAD or ASSIST") String mode) {
+        authorizationService.requireInitiator(sessionId, InterviewAuthorizationService.INITIATE);
+        if (!List.of("AI_LEAD", "ASSIST").contains(mode)) {
+            return Map.of("error", "unknown interview mode: " + mode);
+        }
+        int changed = sessionMapper.update(null, new LambdaUpdateWrapper<InterviewSessionEntity>()
+                .set(InterviewSessionEntity::getMode, mode)
+                .eq(InterviewSessionEntity::getId, sessionId)
+                .in(InterviewSessionEntity::getStatus, InterviewSessionStateMachine.DRAFT,
+                        InterviewSessionStateMachine.QUESTIONS_CONFIRMED));
+        if (changed != 1) return Map.of("error", "interview mode can only change before start");
+        return Map.of("sessionId", sessionId, "mode", mode);
+    }
+
+    @Tool(description = "Start a confirmed interview session and return a safe entry reference. "
+            + "Repeated starts do not change mode or rotate credentials.")
+    @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> startInterviewSession(
-            @ToolParam(description = "Interview session ID from openInterviewCase") Long sessionId,
-            @ToolParam(description = "Interview mode: AI_LEAD (AI-driven) or ASSIST (interviewer-led, AI suggests)") String mode) {
+            @ToolParam(description = "Interview session ID from openInterviewCase") Long sessionId) {
+        authorizationService.requireInitiator(sessionId, InterviewAuthorizationService.INITIATE);
+        InterviewSessionEntity existing = sessionMapper.selectById(sessionId);
+        if (existing == null) return Map.of("error", "session not found: " + sessionId);
+        if (InterviewSessionStateMachine.IN_PROGRESS.equals(existing.getStatus())) {
+            return startedArtifact(existing);
+        }
+        if (!InterviewSessionStateMachine.QUESTIONS_CONFIRMED.equals(existing.getStatus())) {
+            return Map.of("error", "questions must be confirmed before the session can start");
+        }
         InterviewSessionEntity session = stateMachine.transition(sessionId,
                 InterviewSessionStateMachine.IN_PROGRESS,
                 InterviewSessionStateMachine.Actor.GOVERNANCE);
-        if (mode != null && !mode.isBlank()) {
-            InterviewSessionEntity update = new InterviewSessionEntity();
-            update.setId(sessionId);
-            update.setMode(mode);
-            sessionMapper.updateById(update);
-            session = sessionMapper.selectById(sessionId);
-        }
-        // 对话式权威签发点：此处重签并随卡片返回。开台时签发的那张仅存在于
-        // 治理面工具响应中（对话式前端不经手），被覆盖无副作用；表单入口前端
-        // 持有的开台 ticket 则由 POST /start 保持不重签。
-        String ticket = stateMachine.issueTicket(session);
+        return startedArtifact(session);
+    }
 
+    private Map<String, Object> startedArtifact(InterviewSessionEntity session) {
         Map<String, Object> artifact = new LinkedHashMap<>();
-        artifact.put("sessionId", sessionId);
+        artifact.put("sessionId", session.getId());
         artifact.put("caseId", session.getCaseId());
         artifact.put("mode", session.getMode());
         artifact.put("status", session.getStatus());
-        artifact.put("ticket", ticket);
-        artifact.put("entryPath", "/interviews/" + sessionId + "/turns");
-        artifact.put("streamPath", "/interviews/" + sessionId + "/stream");
+        artifact.put("entryPath", "/interviews/" + session.getId());
+        artifact.put("credentialClaimPath", "/interviews/" + session.getId() + "/credentials");
+        artifact.put("streamPath", "/interviews/" + session.getId() + "/stream");
         return artifact;
     }
 
@@ -183,6 +214,7 @@ public class InterviewTools {
             + "counts, session status, closing lock. Works identically for A2A-opened and form-opened sessions.")
     public Map<String, Object> getInterviewMonitor(
             @ToolParam(description = "Interview session ID") Long sessionId) {
+        authorizationService.requireRead(sessionId);
         InterviewSessionEntity session = sessionMapper.selectById(sessionId);
         if (session == null) {
             return Map.of("error", "session not found: " + sessionId);
@@ -196,20 +228,29 @@ public class InterviewTools {
         monitor.put("closingLocked", session.getClosingLocked());
         monitor.put("confirmedQuestions", prepService.confirmedCount(caseId));
         monitor.put("answeredQuestions", prepService.answeredCount(caseId));
-        monitor.put("currentQuestion", current == null ? null : current.getContent());
+        monitor.put("currentQuestion", current == null ? null
+                : com.bkanent.interview.engine.Sanitizer.redactCredentials(current.getContent()));
         monitor.put("currentQuestionId", current == null ? null : current.getId());
         return monitor;
     }
 
     @Tool(description = "Send a director command to a running interview: WRAP_UP (wrap up current question), "
             + "NEXT_QUESTION (advance to next question), PINNED_QUESTION (ask a pinned question verbatim next).")
+    @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> sendDirectorCommand(
             @ToolParam(description = "Interview session ID") Long sessionId,
             @ToolParam(description = "Command: WRAP_UP|NEXT_QUESTION|PINNED_QUESTION") String command,
             @ToolParam(description = "For PINNED_QUESTION: the exact question text to ask verbatim") String pinnedQuestion) {
-        InterviewSessionEntity session = sessionMapper.selectById(sessionId);
+        authorizationService.requireInitiator(sessionId, InterviewAuthorizationService.ASSIST);
+        if (com.bkanent.interview.engine.Sanitizer.containsCredentialShape(pinnedQuestion)) {
+            return Map.of("error", "pinnedQuestion contains a credential-like value");
+        }
+        InterviewSessionEntity session = sessionMapper.selectOne(new LambdaQueryWrapper<InterviewSessionEntity>()
+                .eq(InterviewSessionEntity::getId, sessionId)
+                .eq(InterviewSessionEntity::getStatus, InterviewSessionStateMachine.IN_PROGRESS)
+                .last("LIMIT 1 FOR UPDATE"));
         if (session == null) {
-            return Map.of("error", "session not found: " + sessionId);
+            return Map.of("error", "collaboration commands require an in-progress session");
         }
         if (!List.of("WRAP_UP", "NEXT_QUESTION", "PINNED_QUESTION").contains(command)) {
             return Map.of("error", "unknown command: " + command);
@@ -224,6 +265,7 @@ public class InterviewTools {
         cmd.setPinnedQuestion("PINNED_QUESTION".equals(command) ? pinnedQuestion : null);
         cmd.setStatus("PENDING");
         cmd.setSource("A2A");
+        authorizationService.stampAuthorizedCommand(cmd);
         directorCommandMapper.insert(cmd);
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -237,13 +279,24 @@ public class InterviewTools {
         return result;
     }
 
-    @Tool(description = "Finalize an interview session: transitions to CLOSING_LOCKED. The collection "
-            + "compensator then archives the transcript with deterministic L0-L3 grading.")
+    @Tool(description = "Request the running interview to finish through its normal respondent-turn closing path.")
+    @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> finalizeInterview(
             @ToolParam(description = "Interview session ID") Long sessionId) {
-        stateMachine.transition(sessionId, InterviewSessionStateMachine.CLOSING_LOCKED,
-                InterviewSessionStateMachine.Actor.RUNTIME);
-        return Map.of("sessionId", sessionId, "status", "CLOSING_LOCKED");
+        authorizationService.requireInitiator(sessionId, InterviewAuthorizationService.END);
+        InterviewSessionEntity session = sessionMapper.selectOne(new LambdaQueryWrapper<InterviewSessionEntity>()
+                .eq(InterviewSessionEntity::getId, sessionId)
+                .eq(InterviewSessionEntity::getStatus, InterviewSessionStateMachine.IN_PROGRESS)
+                .last("LIMIT 1 FOR UPDATE"));
+        if (session == null) return Map.of("error", "active end request requires an in-progress session");
+        InterviewDirectorCommandEntity command = new InterviewDirectorCommandEntity();
+        command.setSessionId(sessionId);
+        command.setCommand("END_SESSION");
+        command.setStatus("PENDING");
+        command.setSource("A2A");
+        authorizationService.stampAuthorizedCommand(command);
+        directorCommandMapper.insert(command);
+        return Map.of("sessionId", sessionId, "status", "END_REQUESTED", "commandId", command.getId());
     }
 
     @Tool(description = "Trigger case card report generation as a durable task. Idempotent: same input snapshot "
@@ -263,8 +316,16 @@ public class InterviewTools {
             @ToolParam(description = "Status filter, blank for all") String status,
             @ToolParam(description = "Page number, 1-based") Integer page,
             @ToolParam(description = "Page size, max 100") Integer pageSize) {
+        List<Long> visibleCaseIds = authorizationService.visibleCaseIds();
         return reportService.listCaseCardTasks(creatorWorkNo, status,
-                page == null ? 1 : page, pageSize == null ? 20 : pageSize);
+                page == null ? 1 : page, pageSize == null ? 20 : pageSize, visibleCaseIds);
+    }
+
+    @Tool(description = "Get one report task and its current report result by task ID. Foreign or stale task IDs "
+            + "are returned as not found. Use this to poll a task created by generateCaseReport.")
+    public Map<String, Object> getReportTaskDetail(
+            @ToolParam(description = "Report task ID") Long taskId) {
+        return reportService.getTaskDetail(taskId, authorizationService.visibleCaseIds());
     }
 
     @Tool(description = "Search case card reports across tasks and cases by keyword (paginated). "
@@ -276,8 +337,9 @@ public class InterviewTools {
             @ToolParam(description = "Creator work number filter, blank for all") String creatorWorkNo,
             @ToolParam(description = "Page number, 1-based") Integer page,
             @ToolParam(description = "Page size, max 100") Integer pageSize) {
+        List<Long> visibleCaseIds = authorizationService.visibleCaseIds();
         return reportService.searchReports(keyword, creatorWorkNo,
-                page == null ? 1 : page, pageSize == null ? 20 : pageSize);
+                page == null ? 1 : page, pageSize == null ? 20 : pageSize, visibleCaseIds);
     }
 
     @Tool(description = "Search archived interview transcripts (L2/L3 only) and derived reports by keyword, "
@@ -286,6 +348,7 @@ public class InterviewTools {
             @ToolParam(description = "Keyword to match in title, blank to skip") String keyword,
             @ToolParam(description = "Scene filter, e.g. SECOND_HAND_PARTY, blank to skip") String scene,
             @ToolParam(description = "Creator work number filter, blank to skip") String creatorWorkNo) {
+        List<Long> visibleCaseIds = authorizationService.visibleCaseIds();
         // 创建人与场景在 case 表上：先解析 caseId 集合再过滤资产
         List<Long> caseIdFilter = null;
         boolean hasCaseFilter = (scene != null && !scene.isBlank())
@@ -299,6 +362,12 @@ public class InterviewTools {
             if (caseIdFilter.isEmpty()) {
                 return List.of();
             }
+        }
+        if (visibleCaseIds != null) {
+            if (visibleCaseIds.isEmpty()) return List.of();
+            if (caseIdFilter == null) caseIdFilter = new ArrayList<>(visibleCaseIds);
+            else caseIdFilter.retainAll(visibleCaseIds);
+            if (caseIdFilter.isEmpty()) return List.of();
         }
         LambdaQueryWrapper<InterviewAssetEntity> wrapper = new LambdaQueryWrapper<InterviewAssetEntity>()
                 .in(InterviewAssetEntity::getArchiveGrade, "L2", "L3")
@@ -314,7 +383,7 @@ public class InterviewTools {
         for (InterviewAssetEntity asset : assets) {
             Map<String, Object> item = new LinkedHashMap<>();
             item.put("assetId", asset.getId());
-            item.put("title", asset.getTitle());
+            item.put("title", com.bkanent.interview.engine.Sanitizer.redactCredentials(asset.getTitle()));
             item.put("grade", asset.getArchiveGrade());
             item.put("source", asset.getSource());
             item.put("turnCount", asset.getTurnCount());
@@ -327,21 +396,8 @@ public class InterviewTools {
     @Tool(description = "Re-grade an asset after metadata completion, using the same deterministic L0-L3 rules.")
     public Map<String, Object> regradeAsset(
             @ToolParam(description = "Asset ID to re-grade") Long assetId) {
-        InterviewAssetEntity asset = assetMapper.selectById(assetId);
-        if (asset == null) {
-            return Map.of("error", "asset not found: " + assetId);
-        }
-        int wordCount = asset.getWordCount() == null ? 0 : asset.getWordCount();
-        int turnCount = asset.getTurnCount() == null ? 0 : asset.getTurnCount();
-        var grade = com.bkanent.interview.engine.ArchiveGrader.grade(wordCount,
-                true, wordCount >= com.bkanent.interview.engine.ArchiveGrader.L2_TOPIC_FOCUS_WORDS,
-                turnCount >= 6, turnCount >= com.bkanent.interview.engine.ArchiveGrader.L2_MIN_TURNS,
-                turnCount, true);
-        InterviewAssetEntity update = new InterviewAssetEntity();
-        update.setId(assetId);
-        update.setArchiveGrade(grade.grade());
-        update.setGradeBasis(com.bkanent.interview.engine.ArchiveGrader.gradeBasisJson(grade));
-        assetMapper.updateById(update);
-        return Map.of("assetId", assetId, "grade", grade.grade());
+        InterviewAssetEntity asset = assetService.regrade(assetId);
+        return Map.of("assetId", assetId, "grade", asset.getArchiveGrade(),
+                "visibility", asset.getVisibility(), "publicationRevision", asset.getPublicationRevision());
     }
 }

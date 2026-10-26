@@ -5,6 +5,7 @@ import com.bkanent.interview.entity.InterviewAssetEntity;
 import com.bkanent.interview.entity.InterviewSessionEntity;
 import com.bkanent.interview.entity.InterviewTurnEntity;
 import com.bkanent.interview.engine.ArchiveGrader;
+import com.bkanent.interview.engine.Sanitizer;
 import com.bkanent.interview.mapper.InterviewAssetMapper;
 import com.bkanent.interview.mapper.InterviewSessionMapper;
 import com.bkanent.interview.mapper.InterviewTurnMapper;
@@ -12,6 +13,7 @@ import com.bkanent.interview.runtime.InterviewSessionStateMachine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -45,11 +47,27 @@ public class InterviewCollectionService {
     /**
      * 归集一个会话为逐字稿资产（冻结快照哈希防覆盖）。
      */
-    public InterviewAssetEntity collect(InterviewSessionEntity session) {
-        // 补偿器推进 CLOSING_LOCKED → COLLECT_PENDING
-        stateMachine.transition(session.getId(),
-                InterviewSessionStateMachine.COLLECT_PENDING,
-                InterviewSessionStateMachine.Actor.COMPENSATOR);
+    @Transactional(rollbackFor = Exception.class)
+    public InterviewAssetEntity collect(InterviewSessionEntity requested) {
+        InterviewSessionEntity session = sessionMapper.selectOne(new LambdaQueryWrapper<InterviewSessionEntity>()
+                .eq(InterviewSessionEntity::getId, requested.getId())
+                .last("LIMIT 1 FOR UPDATE"));
+        if (session == null) throw new IllegalArgumentException("session not found: " + requested.getId());
+        if (InterviewSessionStateMachine.ARCHIVED.equals(session.getStatus())) {
+            return existingAutoAsset(session.getId());
+        }
+        if (InterviewSessionStateMachine.CLOSING_LOCKED.equals(session.getStatus())) {
+            session = stateMachine.transition(session.getId(), InterviewSessionStateMachine.COLLECT_PENDING,
+                    InterviewSessionStateMachine.Actor.COMPENSATOR);
+        } else if (!InterviewSessionStateMachine.COLLECT_PENDING.equals(session.getStatus())) {
+            throw new IllegalStateException("session is not recoverable for collection: " + session.getStatus());
+        }
+        InterviewAssetEntity existing = findAutoAsset(session.getId());
+        if (existing != null) {
+            stateMachine.transition(session.getId(), InterviewSessionStateMachine.ARCHIVED,
+                    InterviewSessionStateMachine.Actor.COMPENSATOR);
+            return existing;
+        }
 
         List<InterviewTurnEntity> turns = turnMapper.selectList(
                 new LambdaQueryWrapper<InterviewTurnEntity>()
@@ -59,7 +77,7 @@ public class InterviewCollectionService {
         StringBuilder content = new StringBuilder();
         int respondentTurns = 0;
         for (InterviewTurnEntity turn : turns) {
-            String text = turn.getSanitizedContent() == null ? turn.getContent() : turn.getSanitizedContent();
+            String text = Sanitizer.redactCredentials(turn.getSanitizedContent());
             if (text == null || text.isBlank()) {
                 continue;
             }
@@ -91,6 +109,11 @@ public class InterviewCollectionService {
         asset.setTitle("访谈会话 #" + session.getId() + " 逐字稿");
         asset.setContent(markdown);
         asset.setSnapshotHash(snapshotHash);
+        asset.setContentHash(snapshotHash);
+        asset.setContentRevision(1);
+        asset.setSanitizationRevision(Sanitizer.VERSION);
+        asset.setVisibility("PRIVATE");
+        asset.setPublicationRevision(0);
         asset.setArchiveGrade(grade.grade());
         asset.setGradeBasis(ArchiveGrader.gradeBasisJson(grade));
         asset.setTurnCount(turns.size());
@@ -108,7 +131,22 @@ public class InterviewCollectionService {
     /** 扫描待归集会话（补偿器入口）。 */
     public List<InterviewSessionEntity> scanCollectable() {
         return sessionMapper.selectList(new LambdaQueryWrapper<InterviewSessionEntity>()
-                .eq(InterviewSessionEntity::getStatus, InterviewSessionStateMachine.CLOSING_LOCKED));
+                .in(InterviewSessionEntity::getStatus, InterviewSessionStateMachine.CLOSING_LOCKED,
+                        InterviewSessionStateMachine.COLLECT_PENDING));
+    }
+
+    private InterviewAssetEntity findAutoAsset(Long sessionId) {
+        return assetMapper.selectOne(new LambdaQueryWrapper<InterviewAssetEntity>()
+                .eq(InterviewAssetEntity::getSessionId, sessionId)
+                .eq(InterviewAssetEntity::getSource, "AUTO")
+                .eq(InterviewAssetEntity::getDeleted, 0)
+                .last("LIMIT 1"));
+    }
+
+    private InterviewAssetEntity existingAutoAsset(Long sessionId) {
+        InterviewAssetEntity existing = findAutoAsset(sessionId);
+        if (existing == null) throw new IllegalStateException("archived session is missing its transcript asset");
+        return existing;
     }
 
     private String sha256(String text) {

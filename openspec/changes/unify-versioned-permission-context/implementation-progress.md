@@ -138,3 +138,13 @@ Interview正式`ToolCallbackProvider`仅在服务端本地验签guard启用时�
 RAG出站URL复核确认本批未新增任意HTTP URL权限回调或新的服务端URL目标；权限/身份RPC仍用Dubbo。现有RAG受保护HTTP transport继续在连接前按精确host和DNS解析地址校验、拒绝localhost/环回/私有/保留地址、禁用redirect并绑定校验后的目标地址。
 
 验证：common、Agent、Memory、RAG与Listing跨模块定向回归共**69项通过**，失败/错误/跳过均0；RAG HTTP出站与DNS/host策略回归共**175项通过**，失败/错误/跳过均0。测试证明本地序列化、验签、消费端资源策略和受保护transport回归；未验证真实部署的Auth公钥登记、密钥轮换、多实例调用或生产启用。严格OpenSpec校验通过后，当前进度为**33/63**。LR-144记录RAG的双签名和请求级消费边界；KI-57仍OPEN，完整ES合规目标的部署联调不由本批代码测试代替。
+
+## Interview鉴权与凭据边界续批（2026-10-26）
+
+按模块完成任务7.1–7.5、8.1–8.2及9.1–9.6。Interview参与者资格与临时票由持久化owner、session、purpose、hash、过期时间及撤销状态约束；受保护请求从已验证actor派生身份，题单、流、MCP与报告仍执行本域关系/来源/状态检查。上传原文经凭据形状清理后仅保存在受权域内，历史轮次、追问摘要和归集副本再次清理，报告默认私有且公共读取需满足发布条件。
+
+采用请求级签名授权上下文：Gateway/Supervisor入口建立绑定身份，执行请求带逐请求证明，由接收端本地验证；Graph内部多次调用subAgent不逐次远程调用Auth，权限变化仅在规划/刷新边界联系Auth。模型生成的userId、role或admin字段不能替代已绑定actor。该边界已记录在LR-1/LR-145及A2A任务6.1中。
+
+凭据领取契约要求认证POST、no-store与专用请求头；SSE由fetch流携带headers，移除query票据入口。浏览器前端不在此仓库，故浏览器领取/流接线、真实ReactAgent归档/artifact链及存量凭据扫描分别保留任务8.3–8.5未完成；KI-202/KI-203记录历史数据扫描与前端验收边界。四项增量迁移及schema checks已登记manifest并完成静态路径/哈希校验，尚未应用到MySQL。
+
+验证：`mvn -gs .mvn-settings.xml -s .mvn-settings.xml -pl interview-service -am test`的7模块reactor成功；Interview 120项通过、失败/错误/跳过均0。可读Surefire报告合计487项，其中1项既有跳过、失败/错误0。OpenSpec严格校验通过。任务进度由33/63更新为46/63；未运行全仓测试、浏览器端到端验收或存量数据库扫描，新授权模式没有生产启用。

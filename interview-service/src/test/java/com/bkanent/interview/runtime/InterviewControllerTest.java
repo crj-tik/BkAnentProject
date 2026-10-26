@@ -1,22 +1,27 @@
 package com.bkanent.interview.runtime;
 
+import com.bkanent.interview.config.InterviewAuthorizationProperties;
 import com.bkanent.interview.entity.InterviewQuestionEntity;
 import com.bkanent.interview.entity.InterviewSessionEntity;
 import com.bkanent.interview.mapper.InterviewDirectorCommandMapper;
 import com.bkanent.interview.mapper.InterviewSessionMapper;
+import com.bkanent.interview.security.InterviewAuthorizationScope;
+import com.bkanent.interview.security.InterviewAuthzFixture;
+import com.bkanent.interview.service.InterviewAuthorizationService;
+import com.bkanent.interview.service.InterviewParticipantService;
+import com.bkanent.interview.service.InterviewParticipantTicketService;
 import com.bkanent.interview.service.InterviewPrepService;
 import com.bkanent.interview.service.InterviewReportService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 class InterviewControllerTest {
 
@@ -26,7 +31,10 @@ class InterviewControllerTest {
     private InterviewPrepService prepService;
     private InterviewDirectorCommandMapper directorCommandMapper;
     private InterviewReportService reportService;
+    private InterviewAuthorizationService authorizationService;
+    private InterviewParticipantTicketService ticketService;
     private InterviewController controller;
+    private InterviewAuthorizationScope.Scope scope;
 
     @BeforeEach
     void setUp() {
@@ -36,24 +44,36 @@ class InterviewControllerTest {
         prepService = mock(InterviewPrepService.class);
         directorCommandMapper = mock(InterviewDirectorCommandMapper.class);
         reportService = mock(InterviewReportService.class);
+        authorizationService = mock(InterviewAuthorizationService.class);
+        ticketService = mock(InterviewParticipantTicketService.class);
+        InterviewAuthorizationProperties properties = new InterviewAuthorizationProperties();
+        properties.setEnabled(true);
         controller = new InterviewController(runtimeService, stateMachine, sessionMapper,
-                prepService, directorCommandMapper, reportService);
+                prepService, directorCommandMapper, reportService, mock(InterviewParticipantService.class),
+                properties, authorizationService, ticketService);
+        scope = InterviewAuthorizationScope.open(InterviewAuthzFixture.response("101", List.of(
+                InterviewAuthorizationService.INITIATE, InterviewAuthorizationService.READ,
+                InterviewAuthorizationService.RESPOND, InterviewAuthorizationService.ASSIST,
+                InterviewAuthorizationService.READ_ALL)));
     }
 
-    @Test
-    void monitorRejectsInvalidTicketBeforeReadingSession() {
-        when(stateMachine.validateTicket(12L, "bad-ticket")).thenReturn(false);
+    @AfterEach
+    void clearScope() { scope.close(); }
 
+    @Test
+    void monitorRejectsInvalidCredentialBeforeReadingSession() {
         var response = controller.monitor(12L, "bad-ticket");
 
         assertThat(response.success()).isFalse();
-        assertThat(response.code()).isEqualTo("INTERVIEW_INVALID_TICKET");
+        assertThat(response.code()).isEqualTo("INTERVIEW_INVALID_CREDENTIAL");
         verifyNoInteractions(sessionMapper, prepService);
+        verify(ticketService).validate(12L, "bad-ticket", InterviewParticipantTicketService.READ);
     }
 
     @Test
-    void monitorReturnsCurrentQuestionAndProgressForValidTicket() {
-        when(stateMachine.validateTicket(12L, "valid-ticket")).thenReturn(true);
+    void monitorReturnsCurrentQuestionAndProgressForValidCredential() {
+        when(ticketService.validate(12L, "valid-ticket", InterviewParticipantTicketService.READ))
+                .thenReturn(lease(44L, 12L, 101L, InterviewParticipantTicketService.READ));
         InterviewSessionEntity session = new InterviewSessionEntity();
         session.setId(12L);
         session.setCaseId(6L);
@@ -77,19 +97,19 @@ class InterviewControllerTest {
     }
 
     @Test
-    void startRequiresTicketAndRejectsInvalidOne() {
-        when(stateMachine.validateTicket(12L, "bad-ticket")).thenReturn(false);
-
+    void startRequiresManageCredentialAndRejectsInvalidOne() {
         var response = controller.start(12L, "bad-ticket");
 
         assertThat(response.success()).isFalse();
-        assertThat(response.code()).isEqualTo("INTERVIEW_INVALID_TICKET");
+        assertThat(response.code()).isEqualTo("INTERVIEW_INVALID_CREDENTIAL");
         verifyNoInteractions(directorCommandMapper);
+        verify(ticketService).validate(12L, "bad-ticket", InterviewParticipantTicketService.MANAGE);
     }
 
     @Test
-    void startAdvancesConfirmedSessionWithoutReissuingTicket() {
-        when(stateMachine.validateTicket(12L, "form-ticket")).thenReturn(true);
+    void startAdvancesConfirmedSessionWithoutReturningCredential() {
+        when(ticketService.validate(12L, "form-ticket", InterviewParticipantTicketService.MANAGE))
+                .thenReturn(lease(45L, 12L, 101L, InterviewParticipantTicketService.MANAGE));
         InterviewSessionEntity started = new InterviewSessionEntity();
         started.setId(12L);
         started.setCaseId(6L);
@@ -102,14 +122,15 @@ class InterviewControllerTest {
 
         assertThat(response.success()).isTrue();
         assertThat(response.data().get("status")).isEqualTo("IN_PROGRESS");
-        assertThat(response.data().get("turnsPath")).isEqualTo("/interviews/12/turns");
-        // 显式开始不重签：start 不调用 issueTicket（ticket 由开台响应签发、前端一直持有）
+        assertThat(response.data().get("credentialClaimPath")).isEqualTo("/interviews/12/credentials");
+        assertThat(response.data()).doesNotContainKey("ticket");
         verifyNoInteractions(runtimeService);
     }
 
     @Test
     void startSurfacesIllegalTransitionAsFriendlyError() {
-        when(stateMachine.validateTicket(12L, "form-ticket")).thenReturn(true);
+        when(ticketService.validate(12L, "form-ticket", InterviewParticipantTicketService.MANAGE))
+                .thenReturn(lease(45L, 12L, 101L, InterviewParticipantTicketService.MANAGE));
         when(stateMachine.transition(12L, InterviewSessionStateMachine.IN_PROGRESS,
                 InterviewSessionStateMachine.Actor.GOVERNANCE))
                 .thenThrow(new InterviewSessionStateMachine.IllegalTransitionException(
@@ -122,34 +143,43 @@ class InterviewControllerTest {
     }
 
     @Test
-    void listReportTasksDelegatesWithDefaultsAndFilters() {
-        when(reportService.listCaseCardTasks("emp-01", "SUCCEEDED", 2, 50))
+    void reportTaskListsAreScopedBeforePagination() {
+        when(authorizationService.visibleCaseIds()).thenReturn(List.of(6L));
+        when(reportService.listCaseCardTasks("emp-01", "SUCCEEDED", 2, 50, List.of(6L)))
                 .thenReturn(Map.of("tasks", List.of(), "total", 0L, "page", 2, "pageSize", 50));
 
         var response = controller.listReportTasks("emp-01", "SUCCEEDED", 2, 50);
 
         assertThat(response.success()).isTrue();
-        verify(reportService).listCaseCardTasks("emp-01", "SUCCEEDED", 2, 50);
+        verify(reportService).listCaseCardTasks("emp-01", "SUCCEEDED", 2, 50, List.of(6L));
     }
 
     @Test
-    void searchReportsDelegatesKeywordCreatorAndPaging() {
-        when(reportService.searchReports("学区房", "emp-01", 1, 20))
+    void searchReportsAreScopedBeforePagination() {
+        when(authorizationService.visibleCaseIds()).thenReturn(List.of(6L));
+        when(reportService.searchReports("学区房", "emp-01", 1, 20, List.of(6L)))
                 .thenReturn(Map.of("reports", List.of(), "total", 0L, "page", 1, "pageSize", 20));
 
         var response = controller.searchReports("学区房", "emp-01", 1, 20);
 
         assertThat(response.success()).isTrue();
-        verify(reportService).searchReports("学区房", "emp-01", 1, 20);
+        verify(reportService).searchReports("学区房", "emp-01", 1, 20, List.of(6L));
     }
 
     @Test
-    void reportTaskDetailMapsMissingTaskToFriendlyError() {
-        when(reportService.getTaskDetail(404L)).thenReturn(Map.of("error", "task not found: 404"));
+    void reportTaskDetailHidesUnknownIds() {
+        when(authorizationService.visibleCaseIds()).thenReturn(List.of(6L));
+        when(reportService.getTaskDetail(404L, List.of(6L))).thenReturn(Map.of("error", "task not found: 404"));
 
         var response = controller.reportTaskDetail(404L);
 
         assertThat(response.success()).isFalse();
         assertThat(response.code()).isEqualTo("INTERVIEW_TASK_NOT_FOUND");
+    }
+
+    private InterviewParticipantTicketService.CredentialLease lease(Long id, Long sessionId, Long actorId,
+                                                                     String purpose) {
+        return new InterviewParticipantTicketService.CredentialLease(id, sessionId, actorId,
+                purpose, "a".repeat(64), 1, LocalDateTime.now().plusMinutes(10));
     }
 }

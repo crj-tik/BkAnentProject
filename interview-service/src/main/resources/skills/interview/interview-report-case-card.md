@@ -13,6 +13,9 @@ trigger_keywords:
 tools:
   - getInterviewMonitor
   - generateCaseReport
+  - listReportTasks
+  - getReportTaskDetail
+  - searchReports
   - searchAssets
   - regradeAsset
   - finalizeInterview

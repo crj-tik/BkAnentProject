@@ -6,7 +6,7 @@ import com.bkanent.common.model.BaseEntity;
 import java.time.LocalDateTime;
 
 /**
- * 访谈会话：状态机、乐观锁、收尾锁、会话凭据、行业大脑预读缓存。
+ * 访谈会话：状态机、乐观锁、收尾锁、行业大脑预读缓存。
  */
 @TableName("interview_session")
 public class InterviewSessionEntity extends BaseEntity {
@@ -21,9 +21,6 @@ public class InterviewSessionEntity extends BaseEntity {
     private Integer referenceMinutes;
     /** XIAOZHI|XIAOFENG|COMMUNITY_26Q（P1 仅 XIAOZHI） */
     private String engineType;
-    /** 会话凭据 HMAC 哈希（仅放行本场 turn/monitor） */
-    private String ticketHash;
-    private LocalDateTime ticketExpiresAt;
     /** 收尾持久锁：首次收尾后强制极短对等道别 */
     private Integer closingLocked;
     /** 风险主题跨轮计数 JSON（同类题全场≤2） */
@@ -33,6 +30,8 @@ public class InterviewSessionEntity extends BaseEntity {
     /** A2A|FORM 双入口 */
     private String entrySource;
     private String creatorWorkNo;
+    /** Auth actor id; null on legacy rows whose owner has not been verified. */
+    private Long createdByUserId;
     private LocalDateTime startedAt;
     private LocalDateTime closedAt;
 
@@ -48,10 +47,6 @@ public class InterviewSessionEntity extends BaseEntity {
     public void setReferenceMinutes(Integer referenceMinutes) { this.referenceMinutes = referenceMinutes; }
     public String getEngineType() { return engineType; }
     public void setEngineType(String engineType) { this.engineType = engineType; }
-    public String getTicketHash() { return ticketHash; }
-    public void setTicketHash(String ticketHash) { this.ticketHash = ticketHash; }
-    public LocalDateTime getTicketExpiresAt() { return ticketExpiresAt; }
-    public void setTicketExpiresAt(LocalDateTime ticketExpiresAt) { this.ticketExpiresAt = ticketExpiresAt; }
     public Integer getClosingLocked() { return closingLocked; }
     public void setClosingLocked(Integer closingLocked) { this.closingLocked = closingLocked; }
     public String getRiskTopicCounter() { return riskTopicCounter; }
@@ -62,6 +57,8 @@ public class InterviewSessionEntity extends BaseEntity {
     public void setEntrySource(String entrySource) { this.entrySource = entrySource; }
     public String getCreatorWorkNo() { return creatorWorkNo; }
     public void setCreatorWorkNo(String creatorWorkNo) { this.creatorWorkNo = creatorWorkNo; }
+    public Long getCreatedByUserId() { return createdByUserId; }
+    public void setCreatedByUserId(Long createdByUserId) { this.createdByUserId = createdByUserId; }
     public LocalDateTime getStartedAt() { return startedAt; }
     public void setStartedAt(LocalDateTime startedAt) { this.startedAt = startedAt; }
     public LocalDateTime getClosedAt() { return closedAt; }

@@ -1514,6 +1514,26 @@
 
 **关联**：LR-143；change `unify-versioned-permission-context`任务6.5。
 
+## KI-202 [OPEN·P1] 访谈历史内容中的旧票据/凭据形状尚未完成存量核查
+
+**发现日期与依据**：2026-10-26，实施任务8.4/8.5。新入口已在访谈话轮、上传原文、候选题、director 指令和报告结果的相关路径加入凭据形状拦截/清理，但本地代码回归不能证明历史 MySQL 消息、摘要、副本、报告及可恢复状态中从未存入旧 HMAC ticket、JWT 或其它凭据。
+
+**当前处置**：未连接或扫描任何运行数据库；没有存量匹配计数、撤销或清理结果，也不宣称历史数据已安全。Interview 新凭据改为认证后领取、数据库只存随机票据 SHA-256 摘要、15分钟内有效，并只经 `X-Ticket` 使用。新实现不接受把历史 HMAC 票据当身份凭据。
+
+**后续验收**：在获得受权只读数据源后，按任务8.5运行仅输出计数的历史扫描，不记录或回显匹配值；若有结果，再由受权路径撤销并清除可恢复副本，分别验证处理状态与保留数据。该扫描必须覆盖消息、摘要、报告、日志/副本和可恢复工件，不能以新写入拦截替代。
+
+**关联**：LR-1/89/145；KI-157；change `unify-versioned-permission-context`任务8.4/8.5。
+
+## KI-203 [OPEN·P2] Interview 浏览器领取与自定义头流消费尚无前端仓库验收
+
+**发现日期与依据**：2026-10-26，实施任务8.3/8.4。当前仓库没有 Interview 浏览器应用源码；服务端已实现登录用户的 credentials 领取、`no-store` 响应、`X-Ticket` 请求头和 query-ticket 拒绝，但无法验证真实页面领取后只在内存保存、使用 `fetch`/`ReadableStream` 消费 SSE、票据到期/撤销后重新领取的完整链路。
+
+**当前处置**：契约记录在 `docs/interview-credential-client-contract.md`。服务端权限开关默认关闭；未将服务端单测或文档当作浏览器集成证据。
+
+**后续验收**：前端接入后增加登录态领取、不同用途/关系拒绝、页面刷新重领、query拒绝、fetch SSE自定义头、撤销/过期中止和错误恢复用例，并验证票据不出现在URL、日志、持久化、prompt、Memory、progress或artifact。
+
+**关联**：LR-1/89/145；KI-166；change `unify-versioned-permission-context`任务8.2–8.4。
+
 ---
 
-**变更历史**：本提交 持久化A2A请求防重放与任务归属（KI-172）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
+**变更历史**：本提交补齐 Interview 权限/凭据存量核查与浏览器验收边界（KI-202/203），并持久化A2A请求防重放与任务归属（KI-172）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。

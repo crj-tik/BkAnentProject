@@ -52,6 +52,8 @@
 
 场次资格 SHALL 从真实用户与资源关系派生，票据只作为认证后的短期场次参与绑定，不代替Gateway登录凭据。开台/启动工具 SHALL 只返回非凭据场次引用；授权前端通过受鉴权领取接口获取自己的场次凭据，不经模型转述或A2A业务结果携票。票据 SHALL 绑定用户、场次、用途、截止与撤销版本，支持独立重签/撤销，原文只在领取响应和专用请求头中使用，不进入URL、prompt、普通metadata、Memory、checkpoint、日志或SSE。认证上下文到期/撤销采用统一失效语义，场次关系和票据状态仍本域核查。
 
+领取契约固定为 `POST /interviews/{sessionId}/credentials`，由当前Gateway签名actor领取 `MANAGE`、`RESPOND` 或 `READ` 用途；响应 MUST 设置 `Cache-Control: no-store`，仅回传本次随机凭据和领取元数据。会话 REST 与 SSE 请求 MUST 通过 `X-Ticket` 头提交票据，并继续携带登录认证；任何 query-ticket 形式 MUST 在业务解析前拒绝。浏览器 SSE SHALL 使用可携带自定义请求头的 fetch/stream API，不使用不能设置认证头的原生 `EventSource`。
+
 #### Scenario: A2A session start reaches the front end
 - **WHEN** 合法用户通过Supervisor启动访谈
 - **THEN** 输出含安全场次导航与领取标识，前端经受鉴权接口领取票据；工具消息、模型、Memory、终态artifact和progress均无票据原文
@@ -63,6 +65,10 @@
 #### Scenario: Ticket is revoked while the session remains active
 - **WHEN** 创建用户或受权管理员撤销指定票据
 - **THEN** 后续该票据访问被拒绝，其他参与资格不受无关重签影响，密钥轮换不会被误认为自动完成票据撤销
+
+#### Scenario: Browser sends a session credential
+- **WHEN** 已登录的浏览器调用受保护会话 REST/SSE
+- **THEN** 登录认证继续由Gateway签署为请求上下文，场次票据仅放在 `X-Ticket`；凭据放在 query 或使用不能携带自定义头的原生 `EventSource` 时拒绝/无法集成，凭据领取响应不被缓存
 
 ### Requirement: Published interview material is a separate authorized projection
 

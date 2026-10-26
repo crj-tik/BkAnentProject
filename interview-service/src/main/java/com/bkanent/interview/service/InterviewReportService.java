@@ -2,17 +2,19 @@ package com.bkanent.interview.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.bkanent.interview.config.InterviewReportProperties;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.bkanent.interview.entity.InterviewAssetEntity;
 import com.bkanent.interview.entity.InterviewCaseEntity;
 import com.bkanent.interview.entity.InterviewReportEntity;
 import com.bkanent.interview.entity.InterviewReportTaskEntity;
 import com.bkanent.interview.engine.EvidenceVerifier;
+import com.bkanent.interview.engine.Sanitizer;
 import com.bkanent.interview.mapper.InterviewAssetMapper;
 import com.bkanent.interview.mapper.InterviewCaseMapper;
 import com.bkanent.interview.mapper.InterviewReportMapper;
 import com.bkanent.interview.mapper.InterviewReportTaskMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.model.ChatModel;
@@ -40,6 +42,7 @@ import java.util.UUID;
 public class InterviewReportService {
 
     private static final Logger log = LoggerFactory.getLogger(InterviewReportService.class);
+    public static final String TEMPLATE_VERSION = "case-card-v1";
 
     private static final String CASE_CARD_SYSTEM_PROMPT = """
             You are a real-estate case report writer. Based ONLY on the provided interview transcript,
@@ -62,14 +65,21 @@ public class InterviewReportService {
     private final ChatModel chatModel;
     private final InterviewReportProperties properties;
     private final ObjectMapper objectMapper;
+    private final InterviewAssetService assetService;
+    private final InterviewAuthorizationService authorizationService;
+    private final InterviewReportTaskCommitter taskCommitter;
 
+    @Autowired
     public InterviewReportService(InterviewReportTaskMapper taskMapper,
                                   InterviewReportMapper reportMapper,
                                   InterviewAssetMapper assetMapper,
                                   InterviewCaseMapper caseMapper,
                                   ChatModel chatModel,
                                   InterviewReportProperties properties,
-                                  ObjectMapper objectMapper) {
+                                  ObjectMapper objectMapper,
+                                  InterviewAssetService assetService,
+                                  InterviewAuthorizationService authorizationService,
+                                  InterviewReportTaskCommitter taskCommitter) {
         this.taskMapper = taskMapper;
         this.reportMapper = reportMapper;
         this.assetMapper = assetMapper;
@@ -77,6 +87,9 @@ public class InterviewReportService {
         this.chatModel = chatModel;
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.assetService = assetService;
+        this.authorizationService = authorizationService;
+        this.taskCommitter = taskCommitter;
     }
 
     /**
@@ -85,8 +98,17 @@ public class InterviewReportService {
      */
     public Map<String, Object> listCaseCardTasks(String creatorWorkNo, String status,
                                                  int page, int pageSize) {
+        return listCaseCardTasks(creatorWorkNo, status, page, pageSize, null);
+    }
+
+    /** Versioned callers pass the participant-derived case scope before pagination. */
+    public Map<String, Object> listCaseCardTasks(String creatorWorkNo, String status,
+                                                 int page, int pageSize, List<Long> visibleCaseIds) {
         int safePage = Math.max(1, page);
         int safeSize = Math.min(Math.max(1, pageSize), 100);
+        if (visibleCaseIds != null && visibleCaseIds.isEmpty()) {
+            return Map.of("tasks", List.of(), "total", 0L, "page", safePage, "pageSize", safeSize);
+        }
 
         // 创建人在 case 表：先解析创建人的 caseId 集合（IN 过滤；空集合即无任务）
         List<Long> caseIdFilter = null;
@@ -97,6 +119,10 @@ public class InterviewReportService {
             if (caseIdFilter.isEmpty()) {
                 return Map.of("tasks", List.of(), "total", 0L, "page", safePage, "pageSize", safeSize);
             }
+        }
+        caseIdFilter = intersect(caseIdFilter, visibleCaseIds);
+        if (caseIdFilter != null && caseIdFilter.isEmpty()) {
+            return Map.of("tasks", List.of(), "total", 0L, "page", safePage, "pageSize", safeSize);
         }
 
         LambdaQueryWrapper<InterviewReportTaskEntity> wrapper = new LambdaQueryWrapper<InterviewReportTaskEntity>()
@@ -119,8 +145,8 @@ public class InterviewReportService {
             item.put("assetId", task.getAssetId());
             item.put("status", task.getStatus());
             item.put("reportId", task.getReportId());
-            item.put("errorClass", task.getErrorClass());
-            item.put("errorMessage", task.getErrorMessage());
+            item.put("errorClass", Sanitizer.redactCredentials(task.getErrorClass()));
+            item.put("errorMessage", Sanitizer.redactCredentials(task.getErrorMessage()));
             item.put("retries", task.getRetries());
             item.put("createdAt", task.getCreatedAt() == null ? null : task.getCreatedAt().toString());
             item.put("updatedAt", task.getUpdatedAt() == null ? null : task.getUpdatedAt().toString());
@@ -140,8 +166,17 @@ public class InterviewReportService {
      */
     public Map<String, Object> searchReports(String keyword, String creatorWorkNo,
                                              int page, int pageSize) {
+        return searchReports(keyword, creatorWorkNo, page, pageSize, null);
+    }
+
+    /** Versioned callers pass the participant-derived case scope before pagination. */
+    public Map<String, Object> searchReports(String keyword, String creatorWorkNo,
+                                             int page, int pageSize, List<Long> visibleCaseIds) {
         int safePage = Math.max(1, page);
         int safeSize = Math.min(Math.max(1, pageSize), 100);
+        if (visibleCaseIds != null && visibleCaseIds.isEmpty()) {
+            return Map.of("reports", List.of(), "total", 0L, "page", safePage, "pageSize", safeSize);
+        }
         if (keyword == null || keyword.isBlank()) {
             return Map.of("reports", List.of(), "total", 0L, "page", safePage, "pageSize", safeSize);
         }
@@ -155,20 +190,18 @@ public class InterviewReportService {
                 return Map.of("reports", List.of(), "total", 0L, "page", safePage, "pageSize", safeSize);
             }
         }
-
-        LambdaQueryWrapper<InterviewReportEntity> wrapper = new LambdaQueryWrapper<InterviewReportEntity>()
-                .like(InterviewReportEntity::getReportJson, keyword.trim())
-                .orderByDesc(InterviewReportEntity::getId);
-        if (caseIdFilter != null) {
-            wrapper.in(InterviewReportEntity::getCaseId, caseIdFilter);
+        caseIdFilter = intersect(caseIdFilter, visibleCaseIds);
+        if (caseIdFilter != null && caseIdFilter.isEmpty()) {
+            return Map.of("reports", List.of(), "total", 0L, "page", safePage, "pageSize", safeSize);
         }
-        long total = reportMapper.selectCount(wrapper);
-        wrapper.last("LIMIT " + safeSize + " OFFSET " + (safePage - 1) * safeSize);
-        List<InterviewReportEntity> reports = reportMapper.selectList(wrapper);
+
+        long total = reportMapper.countCurrentReports(keyword.trim(), caseIdFilter);
+        List<InterviewReportEntity> reports = reportMapper.selectCurrentReports(keyword.trim(), caseIdFilter,
+                safeSize, (safePage - 1) * safeSize);
 
         List<Map<String, Object>> items = new ArrayList<>(reports.size());
         for (InterviewReportEntity report : reports) {
-            items.add(reportView(report));
+            if (isCurrentReport(report)) items.add(reportView(report));
         }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("reports", items);
@@ -176,6 +209,39 @@ public class InterviewReportService {
         result.put("page", safePage);
         result.put("pageSize", safeSize);
         return result;
+    }
+
+    /** Public report projection: SQL and domain source facts must both still qualify. */
+    public Map<String, Object> getPublicReport(Long reportId, Long assetId) {
+        if ((reportId == null) == (assetId == null)) return null;
+        InterviewReportEntity report = reportId != null
+                ? reportMapper.findPublicReportById(reportId, com.bkanent.interview.engine.Sanitizer.VERSION)
+                : reportMapper.findPublicReportByAssetId(assetId, com.bkanent.interview.engine.Sanitizer.VERSION);
+        if (report == null || !isCurrentReport(report) || !isPublicSourceCurrent(report)) return null;
+        Map<String, Object> view = reportView(report);
+        view.put("report", report.getReportJson());
+        view.put("evidenceVerification", report.getEvidenceVerification());
+        view.put("missingItems", report.getMissingItems());
+        return view;
+    }
+
+    /** Public MCP report search, filtered by publication and source validity before pagination. */
+    public Map<String, Object> searchPublicReports(String keyword, int page, int pageSize) {
+        int safePage = Math.max(1, page);
+        int safeSize = Math.min(Math.max(1, pageSize), 20);
+        if (keyword == null || keyword.isBlank() || keyword.length() > 200) {
+            return Map.of("reports", List.of(), "total", 0L, "page", safePage, "pageSize", safeSize);
+        }
+        String normalized = keyword.trim();
+        long total = reportMapper.countPublicReports(normalized,
+                com.bkanent.interview.engine.Sanitizer.VERSION);
+        List<InterviewReportEntity> reports = reportMapper.selectPublicReports(normalized,
+                com.bkanent.interview.engine.Sanitizer.VERSION, safeSize, (safePage - 1) * safeSize);
+        List<Map<String, Object>> items = new ArrayList<>(reports.size());
+        for (InterviewReportEntity report : reports) {
+            if (isCurrentReport(report) && isPublicSourceCurrent(report)) items.add(reportView(report));
+        }
+        return Map.of("reports", items, "total", total, "page", safePage, "pageSize", safeSize);
     }
 
     /** 报告摘要视图：不回传全文（report_json 可能很长），前端经任务详情端点按需取全文。 */
@@ -191,6 +257,43 @@ public class InterviewReportService {
         item.put("oneLiner", extractOneLiner(report.getReportJson()));
         item.put("createdAt", report.getCreatedAt() == null ? null : report.getCreatedAt().toString());
         return item;
+    }
+
+    private boolean isCurrentReport(InterviewReportEntity report) {
+        if (report == null || report.getId() == null || report.getTaskId() == null
+                || report.getAssetId() == null || report.getCaseId() == null
+                || report.getSourceContentHash() == null || report.getSourceRevision() == null
+                || report.getTemplateVersion() == null || Sanitizer.containsCredentialShape(report.getReportJson())
+                || Sanitizer.containsCredentialShape(report.getEvidenceVerification())
+                || Sanitizer.containsCredentialShape(report.getMissingItems())) return false;
+        InterviewReportTaskEntity task = taskMapper.selectById(report.getTaskId());
+        InterviewAssetEntity source = assetMapper.selectById(report.getAssetId());
+        return task != null && "SUCCEEDED".equals(task.getStatus())
+                && source != null
+                && report.getTaskId().equals(task.getId())
+                && report.getId().equals(task.getReportId())
+                && report.getCaseId().equals(task.getCaseId())
+                && report.getAssetId().equals(task.getAssetId())
+                && report.getInputSnapshotHash() != null
+                && report.getInputSnapshotHash().equals(task.getInputSnapshotHash())
+                && report.getSourceContentHash().equals(task.getSourceContentHash())
+                && report.getSourceRevision().equals(task.getSourceRevision())
+                && task.getSourceSanitizationRevision() != null
+                && task.getSourceSanitizationRevision().equals(source.getSanitizationRevision())
+                && report.getTemplateVersion().equals(task.getTemplateVersion())
+                && report.getCaseId().equals(source.getCaseId())
+                && report.getSourceContentHash().equals(source.getContentHash())
+                && report.getSourceRevision().equals(source.getContentRevision())
+                && report.getTemplateVersion().equals(task.getTemplateVersion())
+                && assetService.isUsableReportSource(source);
+    }
+
+    private boolean isPublicSourceCurrent(InterviewReportEntity report) {
+        InterviewAssetEntity source = report == null ? null : assetMapper.selectById(report.getAssetId());
+        return source != null && assetService.isPubliclyEligible(source)
+                && report.getCaseId().equals(source.getCaseId())
+                && report.getSourceContentHash().equals(source.getContentHash())
+                && report.getSourceRevision().equals(source.getContentRevision());
     }
 
     /** 从 report_json 抽 oneLiner 作结果行摘要；解析失败时返回 null（前端回退显示 ID）。 */
@@ -216,8 +319,13 @@ public class InterviewReportService {
      * 任务详情（含已生成报告的结构化结论与核验状态）。
      */
     public Map<String, Object> getTaskDetail(Long taskId) {
+        return getTaskDetail(taskId, null);
+    }
+
+    /** Hides foreign task IDs exactly like missing IDs. */
+    public Map<String, Object> getTaskDetail(Long taskId, List<Long> visibleCaseIds) {
         InterviewReportTaskEntity task = taskMapper.selectById(taskId);
-        if (task == null) {
+        if (task == null || visibleCaseIds != null && !visibleCaseIds.contains(task.getCaseId())) {
             return Map.of("error", "task not found: " + taskId);
         }
         Map<String, Object> view = new LinkedHashMap<>();
@@ -225,14 +333,14 @@ public class InterviewReportService {
         view.put("caseId", task.getCaseId());
         view.put("assetId", task.getAssetId());
         view.put("status", task.getStatus());
-        view.put("errorClass", task.getErrorClass());
-        view.put("errorMessage", task.getErrorMessage());
+        view.put("errorClass", Sanitizer.redactCredentials(task.getErrorClass()));
+        view.put("errorMessage", Sanitizer.redactCredentials(task.getErrorMessage()));
         view.put("retries", task.getRetries());
         view.put("reportId", task.getReportId());
         view.put("createdAt", task.getCreatedAt() == null ? null : task.getCreatedAt().toString());
         if (task.getReportId() != null) {
             InterviewReportEntity report = reportMapper.selectById(task.getReportId());
-            if (report != null) {
+            if (report != null && task.getId().equals(report.getTaskId()) && isCurrentReport(report)) {
                 view.put("report", Map.of(
                         "reportId", report.getId(),
                         "reportType", report.getReportType(),
@@ -246,17 +354,34 @@ public class InterviewReportService {
         return view;
     }
 
+    private static List<Long> intersect(List<Long> first, List<Long> second) {
+        if (second == null) return first;
+        if (first == null) return List.copyOf(new java.util.LinkedHashSet<>(second));
+        java.util.Set<Long> allowed = new java.util.HashSet<>(second);
+        return first.stream().filter(allowed::contains).distinct().toList();
+    }
+
     /**
      * 提交案例卡任务：输入快照哈希幂等——相同输入复用同一任务；
      * 已成功且有报告直接返回（不再调模型）。
      */
     public Map<String, Object> submitCaseCardTask(Long caseId, Long assetId) {
-        String snapshotHash = sha256("CASE_CARD:" + caseId + ":" + assetId);
+        authorizationService.requireOperation(InterviewAuthorizationService.REPORT_GENERATE);
+        InterviewAssetEntity asset = assetService.requireReportSource(caseId, assetId);
+        if (asset.getSessionId() != null) {
+            authorizationService.requireInitiator(asset.getSessionId(), InterviewAuthorizationService.REPORT_GENERATE);
+        } else {
+            authorizationService.requireInitiatorForCase(caseId, InterviewAuthorizationService.REPORT_GENERATE);
+        }
+        InterviewAuthorizationService.ActorFacts actor = authorizationService.currentActorFacts();
+        String snapshotHash = sha256(String.join(":", "CASE_CARD", TEMPLATE_VERSION,
+                caseId.toString(), assetId.toString(), asset.getContentHash(),
+                asset.getContentRevision().toString(), asset.getSanitizationRevision().toString(),
+                String.valueOf(asset.getArchiveGrade())));
 
         InterviewReportTaskEntity existing = taskMapper.selectOne(
                 new LambdaQueryWrapper<InterviewReportTaskEntity>()
-                        .eq(InterviewReportTaskEntity::getTaskType, "CASE_CARD")
-                        .eq(InterviewReportTaskEntity::getInputSnapshotHash, snapshotHash));
+                        .eq(InterviewReportTaskEntity::getIdempotencyKey, snapshotHash));
         if (existing != null) {
             // 已成功的任务且报告已存在 → 幂等完成凭据，直接返回
             if ("SUCCEEDED".equals(existing.getStatus()) && existing.getReportId() != null) {
@@ -277,10 +402,29 @@ public class InterviewReportService {
         task.setTaskType("CASE_CARD");
         task.setStatus("PENDING");
         task.setInputSnapshotHash(snapshotHash);
+        task.setIdempotencyKey(snapshotHash);
         task.setLeaseEpoch(0);
         task.setRetries(0);
         task.setMaxRetries(properties.getMaxRetries());
-        taskMapper.insert(task);
+        task.setSessionId(asset.getSessionId());
+        task.setSourceContentHash(asset.getContentHash());
+        task.setSourceRevision(asset.getContentRevision());
+        task.setSourceSanitizationRevision(asset.getSanitizationRevision());
+        task.setTemplateVersion(TEMPLATE_VERSION);
+        task.setRequestedByUserId(actor.userId());
+        task.setPermissionRevision(actor.permissionRevision());
+        task.setCredentialEpoch(actor.credentialEpoch());
+        task.setAuthorizationExpiresAt(LocalDateTime.ofInstant(
+                java.time.Instant.ofEpochSecond(actor.expiresAtEpochSecond()), java.time.ZoneId.systemDefault()));
+        task.setBusinessWide(actor.businessWide());
+        try {
+            taskMapper.insert(task);
+        } catch (DuplicateKeyException raced) {
+            InterviewReportTaskEntity winner = taskMapper.selectOne(new LambdaQueryWrapper<InterviewReportTaskEntity>()
+                    .eq(InterviewReportTaskEntity::getIdempotencyKey, snapshotHash));
+            if (winner == null) throw raced;
+            return taskView(winner, "reused");
+        }
         return taskView(task, "created");
     }
 
@@ -290,7 +434,7 @@ public class InterviewReportService {
         view.put("status", task.getStatus());
         view.put("disposition", disposition);
         view.put("reportId", task.getReportId());
-        view.put("errorClass", task.getErrorClass());
+        view.put("errorClass", Sanitizer.redactCredentials(task.getErrorClass()));
         return view;
     }
 
@@ -311,50 +455,44 @@ public class InterviewReportService {
     }
 
     private void acquireAndRun(InterviewReportTaskEntity task) {
-        // 租约获取（乐观）：lease_epoch 防旧执行复活
-        InterviewReportTaskEntity acquire = new InterviewReportTaskEntity();
-        acquire.setId(task.getId());
-        acquire.setStatus("RUNNING");
-        acquire.setLeaseOwner(UUID.randomUUID().toString());
-        acquire.setLeaseExpiresAt(LocalDateTime.now().plusMinutes(properties.getLeaseMinutes()));
-        acquire.setLeaseEpoch((task.getLeaseEpoch() == null ? 0 : task.getLeaseEpoch()) + 1);
-        int rows = taskMapper.update(acquire, new LambdaQueryWrapper<InterviewReportTaskEntity>()
+        LocalDateTime now = LocalDateTime.now();
+        String owner = UUID.randomUUID().toString();
+        int epoch = (task.getLeaseEpoch() == null ? 0 : task.getLeaseEpoch()) + 1;
+        int rows = taskMapper.update(null, new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<InterviewReportTaskEntity>()
                 .eq(InterviewReportTaskEntity::getId, task.getId())
-                .eq(InterviewReportTaskEntity::getLeaseEpoch, task.getLeaseEpoch() == null ? 0 : task.getLeaseEpoch()));
+                .eq(InterviewReportTaskEntity::getLeaseEpoch, task.getLeaseEpoch() == null ? 0 : task.getLeaseEpoch())
+                .in(InterviewReportTaskEntity::getStatus, "PENDING", "RETRYABLE", "RUNNING")
+                .and(w -> w.isNull(InterviewReportTaskEntity::getLeaseExpiresAt)
+                        .or().lt(InterviewReportTaskEntity::getLeaseExpiresAt, now))
+                .set(InterviewReportTaskEntity::getStatus, "RUNNING")
+                .set(InterviewReportTaskEntity::getLeaseOwner, owner)
+                .set(InterviewReportTaskEntity::getLeaseExpiresAt, now.plusMinutes(properties.getLeaseMinutes()))
+                .set(InterviewReportTaskEntity::getLeaseEpoch, epoch));
         if (rows == 0) {
             return; // 其他执行器抢到
         }
+        InterviewReportTaskCommitter.Claim claim = new InterviewReportTaskCommitter.Claim(task.getId(), owner, epoch);
         try {
-            execute(task);
+            execute(claim);
         } catch (Exception e) {
-            log.warn("Report task {} failed: {}", task.getId(), e.getMessage());
-            markRetryable(task.getId(), e);
+            log.warn("Report task {} failed in {}", task.getId(), e.getClass().getSimpleName());
+            taskCommitter.fail(claim, e.getClass().getSimpleName());
         }
     }
 
-    /** 幂等执行：已成功直接返回。 */
-    private void execute(InterviewReportTaskEntity task) throws Exception {
-        InterviewReportEntity existing = reportMapper.selectOne(
-                new LambdaQueryWrapper<InterviewReportEntity>()
-                        .eq(InterviewReportEntity::getCaseId, task.getCaseId())
-                        .eq(InterviewReportEntity::getInputSnapshotHash, task.getInputSnapshotHash()));
-        if (existing != null) {
-            InterviewReportTaskEntity done = new InterviewReportTaskEntity();
-            done.setId(task.getId());
-            done.setStatus("SUCCEEDED");
-            done.setReportId(existing.getId());
-            taskMapper.updateById(done);
-            return;
-        }
-
-        InterviewAssetEntity asset = task.getAssetId() == null ? null : assetMapper.selectById(task.getAssetId());
-        if (asset == null) {
-            InterviewReportTaskEntity blocked = new InterviewReportTaskEntity();
-            blocked.setId(task.getId());
-            blocked.setStatus("BLOCKED");
-            blocked.setErrorClass("blocked");
-            blocked.setErrorMessage("source asset missing or not provided");
-            taskMapper.updateById(blocked);
+    /** Executes the accepted sanitized snapshot outside a transaction; the final write is fenced separately. */
+    private void execute(InterviewReportTaskCommitter.Claim claim) throws Exception {
+        InterviewReportTaskEntity task = taskMapper.selectOne(new LambdaQueryWrapper<InterviewReportTaskEntity>()
+                .eq(InterviewReportTaskEntity::getId, claim.taskId())
+                .eq(InterviewReportTaskEntity::getLeaseOwner, claim.owner())
+                .eq(InterviewReportTaskEntity::getLeaseEpoch, claim.epoch())
+                .eq(InterviewReportTaskEntity::getStatus, "RUNNING")
+                .gt(InterviewReportTaskEntity::getLeaseExpiresAt, LocalDateTime.now())
+                .last("LIMIT 1"));
+        if (task == null) return;
+        InterviewAssetEntity asset = assetMapper.selectById(task.getAssetId());
+        if (!matchesAcceptedSource(task, asset) || !assetService.isUsableReportSource(asset)) {
+            taskCommitter.block(claim, "source_snapshot_changed");
             return;
         }
 
@@ -362,6 +500,10 @@ public class InterviewReportService {
         String llmResponse = chatModel.call(new Prompt(List.of(
                 new SystemMessage(CASE_CARD_SYSTEM_PROMPT),
                 new UserMessage(asset.getContent())))).getResult().getOutput().getText();
+        if (Sanitizer.containsCredentialShape(llmResponse)) {
+            taskCommitter.block(claim, "credential_shaped_report_output");
+            return;
+        }
         Map<String, Object> parsed = parseJson(llmResponse);
 
         // 服务端证据核验（脱敏域内比对）
@@ -391,38 +533,25 @@ public class InterviewReportService {
         report.setScore(score);
         report.setReplicabilityLevel(replicability);
         report.setInputSnapshotHash(task.getInputSnapshotHash());
-        reportMapper.insert(report);
-
-        InterviewReportTaskEntity done = new InterviewReportTaskEntity();
-        done.setId(task.getId());
-        done.setStatus("SUCCEEDED");
-        done.setReportId(report.getId());
-        taskMapper.updateById(done);
-        log.info("Report task {} succeeded: report={} score={} replicability={}",
-                task.getId(), report.getId(), score, replicability);
+        report.setSourceContentHash(task.getSourceContentHash());
+        report.setSourceRevision(task.getSourceRevision());
+        report.setTemplateVersion(task.getTemplateVersion());
+        if (taskCommitter.complete(claim, report)) {
+            log.info("Report task {} succeeded with score={} replicability={}",
+                    task.getId(), score, replicability);
+        }
     }
 
-    private void markRetryable(Long taskId, Exception e) {
-        InterviewReportTaskEntity task = taskMapper.selectById(taskId);
-        if (task == null) {
-            return;
-        }
-        int retries = (task.getRetries() == null ? 0 : task.getRetries()) + 1;
-        int maxRetries = task.getMaxRetries() == null ? properties.getMaxRetries() : task.getMaxRetries();
-        InterviewReportTaskEntity update = new InterviewReportTaskEntity();
-        update.setId(taskId);
-        update.setRetries(retries);
-        update.setLeaseOwner(null);
-        update.setLeaseExpiresAt(null);
-        if (retries >= maxRetries) {
-            update.setStatus("BLOCKED");
-            update.setErrorClass("blocked");
-        } else {
-            update.setStatus("RETRYABLE");
-            update.setErrorClass("retryable");
-        }
-        update.setErrorMessage(e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
-        taskMapper.updateById(update);
+    private static boolean matchesAcceptedSource(InterviewReportTaskEntity task, InterviewAssetEntity source) {
+        return source != null && task.getCaseId() != null && task.getCaseId().equals(source.getCaseId())
+                && java.util.Objects.equals(task.getSessionId(), source.getSessionId())
+                && task.getSourceContentHash() != null && task.getSourceContentHash().equals(source.getContentHash())
+                && task.getSourceRevision() != null && task.getSourceRevision().equals(source.getContentRevision())
+                && task.getSourceSanitizationRevision() != null
+                && task.getSourceSanitizationRevision().equals(source.getSanitizationRevision())
+                && task.getTemplateVersion() != null && TEMPLATE_VERSION.equals(task.getTemplateVersion())
+                && task.getIdempotencyKey() != null
+                && task.getInputSnapshotHash() != null && task.getInputSnapshotHash().equals(task.getIdempotencyKey());
     }
 
     private Map<String, Object> parseJson(String llmResponse) throws Exception {

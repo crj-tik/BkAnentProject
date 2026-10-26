@@ -12,18 +12,7 @@ public class InterviewRuntimeProperties {
     private int turnTimeoutSeconds = 6;
     /** 题目预算：分钟→题数。 */
     private String questionBudget = "15:8,30:14,45:20,60:26";
-    private final Ticket ticket = new Ticket();
     private final Collection collection = new Collection();
-
-    public static class Ticket {
-        private String secret = "";
-        private int ttlHours = 24;
-
-        public String getSecret() { return secret; }
-        public void setSecret(String secret) { this.secret = secret; }
-        public int getTtlHours() { return ttlHours; }
-        public void setTtlHours(int ttlHours) { this.ttlHours = ttlHours; }
-    }
 
     public static class Collection {
         private int scanFixedRateSeconds = 60;
@@ -39,7 +28,6 @@ public class InterviewRuntimeProperties {
     public void setTurnTimeoutSeconds(int turnTimeoutSeconds) { this.turnTimeoutSeconds = turnTimeoutSeconds; }
     public String getQuestionBudget() { return questionBudget; }
     public void setQuestionBudget(String questionBudget) { this.questionBudget = questionBudget; }
-    public Ticket getTicket() { return ticket; }
     public Collection getCollection() { return collection; }
 
     /** 按参考时长解析题目预算，未知时长取上一档。 */

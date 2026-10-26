@@ -99,6 +99,11 @@ agent:
     watch-enabled: ${AGENT_SKILLS_WATCH_ENABLED:true}
 
 interview:
+  authorization:
+    enabled: ${INTERVIEW_AUTHORIZATION_ENABLED:false}
+    participant-ticket-ttl-minutes: ${INTERVIEW_TICKET_TTL_MINUTES:15}
+    authority-public-keys:
+      auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
   agent:
     model: ${INTERVIEW_AGENT_MODEL:gpt-5.6-terra}
     temperature: ${INTERVIEW_AGENT_TEMPERATURE:0.3}
@@ -111,16 +116,12 @@ interview:
       3. Post-interview: trigger case card reports and search archived transcripts (L2/L3) and derived reports.
       Always call available tools for real data before answering. Never fabricate quotes.
       The top-level JSON must include contentType="interview", summary (string), and nextHints (string array; use [] when no next agent is needed).
-      When an interview session is successfully started, include an "entry" object with the exact sessionId, caseId, ticket, and entryPath returned by startInterviewSession so the authorized front end can open that session. Keep the ticket only inside this structured entry object; do not place it in summary or user-facing prose. Do not expose other internal IDs. Return only the JSON object without Markdown fences, reasoning, tool arguments, or extra prose.
+      When an interview session is successfully started, include an "entry" object with the exact sessionId, caseId, entryPath, and credentialClaimPath returned by startInterviewSession so the authorized front end can open that session. Never request or return a session ticket. The front end must use the current login to claim its own short-lived ticket through credentialClaimPath and send it only in the dedicated request header. Do not put credentials in URLs, model arguments, Memory, progress events, summary, or user-facing prose. Do not expose other internal IDs. Return only the JSON object without Markdown fences, reasoning, tool arguments, or extra prose.
   runtime:
     # 单轮追问 SLO 6 秒：造句调用预算
     turn-timeout-seconds: 6
     # 题目预算（按时长）：15/30/45/60 分钟 → 8/14/20/26 题
     question-budget: "15:8,30:14,45:20,60:26"
-    ticket:
-      # 会话凭据签名密钥（生产经环境变量注入，勿硬编码）
-      secret: ${INTERVIEW_TICKET_SECRET}
-      ttl-hours: 24
     collection:
       scan-fixed-rate-seconds: 60
       max-retries: 8
@@ -130,3 +131,23 @@ interview:
     max-retries: 3
 a2a:
   memory:
+
+mcp:
+  authorization:
+    server:
+      # Keep disabled until both key sets and the exact per-tool allowlist are configured.
+      enabled: false
+      caller-service: agent-service
+      authority-public-keys:
+        auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+      caller-public-keys:
+        agent-service-current: ${AGENT_SERVICE_IDENTITY_PUBLIC_KEY:}
+      # tool name -> registered permission code; no implicit public tools.
+      tool-operations:
+        submit_transcript: interview.asset.submit
+        generate_case_report: interview.report.generate
+      public-tools:
+        - search_transcripts
+        - get_case_report
+        - grade_transcript
+        - search_reports

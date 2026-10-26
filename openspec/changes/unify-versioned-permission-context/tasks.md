@@ -52,28 +52,28 @@
 
 ## 7. 访谈主体关系与状态动作
 
-- [ ] 7.1 增量建立created_by_user_id和CREATE/RESPOND场次关系、平台用户选择/受访确认流程；工号仅metadata，旧工号未知映射隔离供受权治理，不猜姓名、不删记录。
-- [ ] 7.2 实现发起interview.initiate及普通用户创建/受访范围查询，受访无发起许可仍可本人读取/答题；管理员业务全读与Memory self-only反例同时通过。
-- [ ] 7.3 对REST/A2A题单创建/确认先验操作/关系/允许状态，非法ID原子拒绝不先更新；运行后题单不可修改，保留原状态机。
-- [ ] 7.4 分离start、mode变更和重签，transition幂等也先核actor合法；协助指令仅创建关系/管理权限且IN_PROGRESS，保存并消费actor/版本，不新增导演Auth角色。
-- [ ] 7.5 主动结束走原运行受权指令而非治理工具冒用RUNTIME，受访道别/收尾锁/原固定决策保持；为真实转换调用新增权限表单测。
+- [x] 7.1 增量建立created_by_user_id和CREATE/RESPOND场次关系、平台用户选择/受访确认流程；工号仅metadata，旧工号未知映射隔离供受权治理，不猜姓名、不删记录。
+- [x] 7.2 实现发起interview.initiate及普通用户创建/受访范围查询，受访无发起许可仍可本人读取/答题；管理员业务全读与Memory self-only反例同时通过。
+- [x] 7.3 对REST/A2A题单创建/确认先验操作/关系/允许状态，非法ID原子拒绝不先更新；运行后题单不可修改，保留原状态机。
+- [x] 7.4 分离start、mode变更和重签，transition幂等也先核actor合法；协助指令仅创建关系/管理权限且IN_PROGRESS，保存并消费actor/版本，不新增导演Auth角色。
+- [x] 7.5 主动结束走原运行受权指令而非治理工具冒用RUNTIME，受访道别/收尾锁/原固定决策保持；为真实转换调用新增权限表单测。
 
 ## 8. 访谈凭据与前端交付
 
-- [ ] 8.1 新建绑定user/session/purpose/hash/expiry/revoked/version的短期参与票；默认15分钟且不代替登录，独立重签/撤销不作废其他用户资格。
-- [ ] 8.2 A2A/REST开台和启动仅返回安全导航/领取引用，新增认证POST credentials领取及no-store响应；票只专用请求头，不经模型转述。
+- [x] 8.1 新建绑定user/session/purpose/hash/expiry/revoked/version的短期参与票；默认15分钟且不代替登录，独立重签/撤销不作废其他用户资格。
+- [x] 8.2 A2A/REST开台和启动仅返回安全导航/领取引用，新增认证POST credentials领取及no-store响应；票只专用请求头，不经模型转述。
 - [ ] 8.3 monitor/turns/replies/协助与stream核可信actor+purpose，删除query-ticket入口并公告迁移；浏览器fetch流携headers，票到期/撤销后拒绝后续访问。
 - [ ] 8.4 在工具入模和归档入口彻底排除ticket/token/授权证明，保留共享sanitizer不放行票；验证真实ReactAgent工具后prompt、Memory、progress、终态artifact和前端领取链。
 - [ ] 8.5 扫描存量消息/摘要/副本的凭据形状只输出计数，受权撤销并清理可恢复票副本，处理未完成状态不宣称全删；不日志回显秘密。
 
 ## 9. 访谈私有资料、公开投影与后台任务
 
-- [ ] 9.1 建立PRIVATE/PUBLISHED、发布revision/审核与脱敏投影，默认私有；L2/L3仅质量条件，明确发布后才在公共MCP显示，上传只新增且核case关联。
-- [ ] 9.2 区分公共投影的PUBLISHED/L2/L3源许可与本人/管理员私有读取及获准私有报告生成；均补case/asset/session关联、源hash/revision和模板版本幂等，测试私有结果可读但不公开，未知ID不建任务。
-- [ ] 9.3 上传真正Sanitizer脱敏，冷历史/归集/报告缺脱敏字段不回退raw，原文仅域内受权保存；重评级核真实metadata/证据，不固定true提升公开资格。
-- [ ] 9.4 报告worker获取lease epoch后事务外模型执行，提交/失败用epoch+source版本围栏和唯一报告键；源撤回/降级/删除阻止公开派生结果，用户离线不取消精确已接受任务。
-- [ ] 9.5 归集可恢复状态和完整话轮保留，防COLLECT_PENDING失败后丢恢复及并发重复asset；不为补记忆/报告重执已完成业务动作。
-- [ ] 9.6 对齐三技能允许工具与真实候选创建/确认/任务查询路径，MCP六工具注册/写动作权限准确，LR-8公开语义不变成私有数据通行证。
+- [x] 9.1 建立PRIVATE/PUBLISHED、发布revision/审核与脱敏投影，默认私有；L2/L3仅质量条件，明确发布后才在公共MCP显示，上传只新增且核case关联。
+- [x] 9.2 区分公共投影的PUBLISHED/L2/L3源许可与本人/管理员私有读取及获准私有报告生成；均补case/asset/session关联、源hash/revision和模板版本幂等，测试私有结果可读但不公开，未知ID不建任务。
+- [x] 9.3 上传真正Sanitizer脱敏，冷历史/归集/报告缺脱敏字段不回退raw，原文仅域内受权保存；重评级核真实metadata/证据，不固定true提升公开资格。
+- [x] 9.4 报告worker获取lease epoch后事务外模型执行，提交/失败用epoch+source版本围栏和唯一报告键；源撤回/降级/删除阻止公开派生结果，用户离线不取消精确已接受任务。
+- [x] 9.5 归集可恢复状态和完整话轮保留，防COLLECT_PENDING失败后丢恢复及并发重复asset；不为补记忆/报告重执已完成业务动作。
+- [x] 9.6 对齐三技能允许工具与真实候选创建/确认/任务查询路径，MCP六工具注册/写动作权限准确，LR-8公开语义不变成私有数据通行证。
 
 ## 10. 其余域逐操作准入
 

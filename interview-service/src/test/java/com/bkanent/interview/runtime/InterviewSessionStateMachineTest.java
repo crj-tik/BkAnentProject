@@ -1,26 +1,18 @@
 package com.bkanent.interview.runtime;
 
-import com.bkanent.interview.config.InterviewRuntimeProperties;
 import com.bkanent.interview.entity.InterviewSessionEntity;
+import com.bkanent.interview.mapper.InterviewSessionMapper;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * 状态机权限表与前置状态单测（防权限表错位回归）：
  * 每个用例对应一个真实调用点。
  */
 class InterviewSessionStateMachineTest {
-
-    @Test
-    void ticketSigningFailsClosedWithoutConfiguredSecret() {
-        var stateMachine = new InterviewSessionStateMachine(null, new InterviewRuntimeProperties());
-
-        IllegalStateException exception = assertThrows(IllegalStateException.class,
-                () -> stateMachine.issueTicket(new InterviewSessionEntity()));
-
-        assertTrue(exception.getMessage().contains("INTERVIEW_TICKET_SECRET"));
-    }
 
     // ---- 调用点对齐：每个 transition(...) 调用必须能通过权限表 ----
 
@@ -75,6 +67,20 @@ class InterviewSessionStateMachineTest {
     void compensatorCannotEnterRunningPhase() {
         assertFalse(InterviewSessionStateMachine.isAllowed(
                 InterviewSessionStateMachine.CLOSING_LOCKED, InterviewSessionStateMachine.Actor.COMPENSATOR));
+    }
+
+    @Test
+    void idempotentTargetStillChecksTransitionActor() {
+        InterviewSessionMapper mapper = mock(InterviewSessionMapper.class);
+        InterviewSessionEntity session = new InterviewSessionEntity();
+        session.setId(12L);
+        session.setStatus(InterviewSessionStateMachine.IN_PROGRESS);
+        when(mapper.selectById(12L)).thenReturn(session);
+        InterviewSessionStateMachine machine = new InterviewSessionStateMachine(mapper);
+
+        assertThrows(InterviewSessionStateMachine.IllegalTransitionException.class,
+                () -> machine.transition(12L, InterviewSessionStateMachine.IN_PROGRESS,
+                        InterviewSessionStateMachine.Actor.RUNTIME));
     }
 
     // ---- 前置状态链完整性 ----

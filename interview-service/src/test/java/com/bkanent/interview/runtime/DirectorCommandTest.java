@@ -16,11 +16,19 @@ class DirectorCommandTest {
 
     @Test
     void commandSetIsClosed() {
-        // 控制器与工具层白名单一致：收束/下一问/加问置顶
+        // 协助白名单与主动结束指令分离；结束由独立 end 权限入口创建。
         List<String> allowed = List.of("WRAP_UP", "NEXT_QUESTION", "PINNED_QUESTION");
         assertTrue(allowed.contains("WRAP_UP"));
-        assertFalse(allowed.contains("FINALIZE"));   // 收尾不走导演指令（有独立的 finalizeInterview）
+        assertFalse(allowed.contains("FINALIZE"));
         assertFalse(allowed.contains("DELETE"));     // 管理动作不在指令面
+    }
+
+    @Test
+    void activeEndUsesRuntimeCloseDecision() {
+        // END_SESSION only sets the same CLOSE decision consumed by the established turn pipeline.
+        ProbeDecisionEngine.Decision end = ProbeDecisionEngine.Decision.of(ProbeDecisionEngine.Move.CLOSE);
+        assertEquals(ProbeDecisionEngine.Move.CLOSE, end.move());
+        assertEquals("CLOSING_LOCKED", InterviewSessionStateMachine.CLOSING_LOCKED);
     }
 
     @Test

@@ -33,6 +33,13 @@ service:
     key-id: ${SERVICE_IDENTITY_KEY_ID:interview-service-current}
     private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
 
+interview:
+  authorization:
+    enabled: ${INTERVIEW_AUTHORIZATION_ENABLED:false}
+    participant-ticket-ttl-minutes: ${INTERVIEW_TICKET_TTL_MINUTES:15}
+    authority-public-keys:
+      auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+
 a2a:
   memory:
     compression-enabled: ${INTERVIEW_MEMORY_V2_COMPRESSION_ENABLED:false}
@@ -41,3 +48,22 @@ a2a:
   auth:
     response-key-id: ${AUTH_SERVICE_IDENTITY_KEY_ID:auth-service-current}
     response-public-key: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+
+# Disabled until Auth and this MCP service have reviewed keys and per-tool permissions.
+mcp:
+  authorization:
+    server:
+      enabled: false
+      caller-service: agent-service
+      authority-public-keys:
+        auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+      caller-public-keys:
+        agent-service-current: ${AGENT_SERVICE_IDENTITY_PUBLIC_KEY:}
+      tool-operations:
+        submit_transcript: interview.asset.submit
+        generate_case_report: interview.report.generate
+      public-tools:
+        - search_transcripts
+        - get_case_report
+        - grade_transcript
+        - search_reports

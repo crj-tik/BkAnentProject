@@ -12,7 +12,9 @@ trigger_keywords:
   - 发起访谈
 tools:
   - openInterviewCase
+  - generateQuestionSet
   - confirmQuestions
+  - changeInterviewMode
   - startInterviewSession
   - getInterviewMonitor
 priority: 9
@@ -43,8 +45,11 @@ supervisor_skill: false
 请发起人勾选。调用 `confirmQuestions` 落库——只有确认后的题进入访谈，未选题不计为「未回答」。
 
 ### 第三步：启动会话
-调用 `startInterviewSession`（mode: AI_LEAD 或 ASSIST），返回 sessionId、ticket 与入口路径——
-这是给前端的「访谈入口卡片」工件，原样返回给发起人即可，不要改写 ticket。
+若需使用非默认模式，先调用 `changeInterviewMode`（AI_LEAD 或 ASSIST）；该动作只允许在启动前修改模式。
+再调用 `startInterviewSession`，只推进已确认的会话并返回安全入口引用。重复启动不改模式、不重新签发凭据。
+工具结果只包含 `sessionId`、`caseId`、`entryPath` 和 `credentialClaimPath`，不返回 session ticket。
+前端使用当前登录身份向 `credentialClaimPath` 发起认证领取请求，再将领取到的短期票据放在专用请求头中调用访谈接口；
+不得把票据传给模型、放进 URL、普通参数、Memory、进度事件或最终答复。授权未启用时私有入口保持关闭。
 
 ## 输出要求
 - 开台结果必须包含：场景、提纲路由、已确认题数、参考时长、入口卡片
