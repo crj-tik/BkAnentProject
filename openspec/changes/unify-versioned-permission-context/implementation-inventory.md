@@ -89,3 +89,15 @@ USER域Ed25519+caller/domain/agent/context owner。版本化Memory proof v3携�
 | A2A | Java client对send、stream、get、cancel、resubscribe发5类POST，逐请求本地签名，版本化分支Auth RPC=0。 | 正式SDK client与recording HTTP transport；不代表真实A2A server部署。 |
 
 定向回归：`gateway,agent-service,common-a2a -am`选定入口/Graph/Auth refresh/transport测试，合计60项通过（Agent 46、Gateway 11、common-a2a 3），失败/错误/跳过均0。实际Redis命令数、生产流事件、MySQL/Redis撤权窗口与故障行为仍归11.1/11.4，不由本节fixture推断。
+
+## 11.3 跨模块授权攻击反例回归
+
+| 风险面 | 已执行反例 | 本地结果 | 限定 |
+|---|---|---|---|
+| 身份/元数据伪造 | Agent入口body声明其他actor、session、管理员、通配权限；请求正文、头和marker篡改 | Handler使用签名actor；错误入口拒绝 | Servlet/过滤器fixture，不是线上Gateway部署流量。 |
+| A2A受众/正文/task/nonce | 合法签名但错误target audience；task id改写；正文改写；同请求nonce重放 | 所有无效请求在官方handler前拒绝 | verifier使用本地密钥和共享store fixture。 |
+| owner/会话/调用者 | 跨actor访问已有task、跨实例重放、不同run/session绑定与续接冲突 | 拒绝；owner绑定不转移 | JDBC store测试为本地数据库fixture；真实多实例DB由11.1/11.4。 |
+| 范围/审批 | Auth执行绑定请求actor/caller/hash/policy不符或扩scope；Graph继续请求更换输入/owner/policy | 授权边界或持久请求冲突前置拒绝，无新工具副作用 | 本地Auth/Graph fixture，不是部署级权限更新测试。 |
+| 管理员边界 | Interview业务`read.all`与Memory个人读取分离；Memory RAG admin scope保持self-only | 业务全读不产生个人Memory通行权 | Interview/Memory服务单测。 |
+
+选定命令覆盖common、common-a2a、gateway、auth-service、agent-service、memory-service、interview-service，合计**171项通过，失败/错误/跳过均0**。审计记录、正式ReactAgent归档/浏览器领取、运行栈及存量消息扫描分别仍由8.3–8.5、11.4处理；真实MySQL/Redis并发及新鲜度仍由11.1处理。

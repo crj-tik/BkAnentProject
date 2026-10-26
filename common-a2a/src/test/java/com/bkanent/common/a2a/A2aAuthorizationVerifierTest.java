@@ -78,6 +78,30 @@ class A2aAuthorizationVerifierTest {
     }
 
     @Test
+    void rejectsWrongAudienceAndSubstitutedTaskBeforeOfficialHandler() throws Exception {
+        long now = Instant.now().getEpochSecond();
+        KeyPair authority = keyPair();
+        KeyPair agent = keyPair();
+        var properties = properties(authority, agent);
+        var verifier = verifier(properties, Clock.fixed(Instant.ofEpochSecond(now), ZoneOffset.UTC));
+        var guard = new A2aAuthenticatedRequestGuard(mock(A2aBeaconAuthentication.class), verifier);
+        String body = sendBody("task-audience-proof", "7");
+        var called = new AtomicInteger();
+
+        var wrongAudience = signedRequest(body, "7", now, authority, agent, List.of(OPERATION), "contract-service");
+        assertThatThrownBy(() -> guard.handle(body, headers(wrongAudience), () -> {
+            called.incrementAndGet(); return "must not run";
+        })).isInstanceOf(RagException.class);
+
+        var valid = signedRequest(body, "7", now, authority, agent);
+        String substitutedTask = body.replace("task-audience-proof", "task-substituted");
+        assertThatThrownBy(() -> guard.handle(substitutedTask, headers(valid), () -> {
+            called.incrementAndGet(); return "must not run";
+        })).isInstanceOf(RagException.class);
+        assertThat(called).hasValue(0);
+    }
+
+    @Test
     void signedRequestIsBoundToTheOriginalTaskOwner() throws Exception {
         long now = Instant.now().getEpochSecond();
         KeyPair authority = keyPair();
@@ -226,6 +250,12 @@ class A2aAuthorizationVerifierTest {
     private static DelegatedAuthorizationRequest signedRequest(String body, String actor, long now,
                                                                  KeyPair authority, KeyPair agent,
                                                                  List<String> parentOperations) {
+        return signedRequest(body, actor, now, authority, agent, parentOperations, "listing-master-service");
+    }
+
+    private static DelegatedAuthorizationRequest signedRequest(String body, String actor, long now,
+                                                                 KeyPair authority, KeyPair agent,
+                                                                 List<String> parentOperations, String targetAudience) {
         String nonce = nonce((byte) 1);
         String hash = "a".repeat(64);
         String policy = "b".repeat(64);
@@ -238,7 +268,7 @@ class A2aAuthorizationVerifierTest {
         var facts = requestFacts(body);
         String requestNonce = randomNonce();
         long expiresAt = now + 20;
-        DelegationBinding binding = new DelegationBinding("agent-service", "listing-master-service", actor,
+        DelegationBinding binding = new DelegationBinding("agent-service", targetAudience, actor,
                 List.of(OPERATION), context.runId(), facts.taskId(), facts.requestId(),
                 AuthzCanonicalHash.bodyHash(body.getBytes(java.nio.charset.StandardCharsets.UTF_8)),
                 context.policyDigest(), requestNonce, now, expiresAt);

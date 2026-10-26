@@ -2,7 +2,7 @@
 
 ## 当前实施状态（2026-10-26）
 
-OpenSpec `spec-driven` change `unify-versioned-permission-context` 当前完成 **54/63** 项（以`tasks.md`勾选为准）。任务10.1–10.6按Auth/Listing/Customer、Business/Settlement、Contract/Marketing、Compare/Media、Notification模块完成源码与本地定向回归及跨域准入矩阵；任务3.3的专用Redis ACL/连接配置及隔离ACL正反验收已完成；任务11.2的Gateway、Agent Graph、A2A、MCP本地调用计数fixture已完成。新授权入口、数据库迁移和真实跨服务密钥仍未在运行环境启用；8.3–8.5、11.1、11.3–11.7保持未完成。
+OpenSpec `spec-driven` change `unify-versioned-permission-context` 当前完成 **55/63** 项（以`tasks.md`勾选为准）。任务10.1–10.6按Auth/Listing/Customer、Business/Settlement、Contract/Marketing、Compare/Media、Notification模块完成源码与本地定向回归及跨域准入矩阵；任务3.3的专用Redis ACL/连接配置及隔离ACL正反验收已完成；任务11.2的Gateway、Agent Graph、A2A、MCP本地调用计数fixture与11.3跨模块攻击反例回归已完成。新授权入口、数据库迁移和真实跨服务密钥仍未在运行环境启用；8.3–8.5、11.1、11.4–11.7保持未完成。
 
 Notification、Contract、Customer及依赖模块的定向回归 **16项通过，失败/错误/跳过均0**；Notification REST/MCP授权入口保持默认关闭，SQL迁移未应用，caller公钥和真实跨服务链未部署验收。Contract/Customer提醒因broker recipient绑定缺失保持关闭（KI-206）。Compare/Media与共享鉴权前批定向回归48项通过；Media任务/结果仍为进程内存（KI-117），新owner与permit协议未宣称具备跨重启恢复。域级具体边界及证据见下方10.6矩阵。
 
@@ -20,7 +20,7 @@ Notification、Contract、Customer及依赖模块的定向回归 **16项通过�
 
 - 已按Auth、Listing、Customer、Business、Settlement、Contract、Marketing、Compare、Media、Notification逐域记录可信入口、资源真源、可证明的owner/恢复事实、本地回归组和仍关闭的节点，详见`implementation-inventory.md`的10.6节。
 - 回归证据按模块批次引用，不将有共享依赖的测试组相加；本地fixture/A2A wiring不被表述为生产准入或全域恢复通过。
-- 仍未完成：Interview浏览器领取、真实ReactAgent归档链及历史凭据扫描（8.3–8.5）；真实MySQL/Redis发布与撤权失效（11.1）、攻击反例全矩阵（11.3）、开发栈端到端（11.4）、全量Maven回归（11.5）、迁移/回滚（11.6）及最终同步归档（11.7）。任务11.2的本地调用计数fixture已完成。Settlement主体映射、KI-117跨域恢复、KI-206提醒收件绑定继续关闭。
+- 仍未完成：Interview浏览器领取、真实ReactAgent归档链及历史凭据扫描（8.3–8.5）；真实MySQL/Redis发布与撤权失效（11.1）、开发栈端到端（11.4）、全量Maven回归（11.5）、迁移/回滚（11.6）及最终同步归档（11.7）。任务11.2调用计数fixture与11.3本地攻击反例矩阵已完成；并不代表真实部署联调。Settlement主体映射、KI-117跨域恢复、KI-206提醒收件绑定继续关闭。
 
 ## Auth/Redis权限ACL与专用连接（2026-10-26，任务3.3）
 
@@ -201,3 +201,13 @@ Auth权限目录/营销owner增量迁移与schema check已登记init manifest，
 MCP transport customizer fixture发出5个不同JSON-RPC `tools/call` body，每个proof均在本地按实际body验证且nonce唯一；初次规划head读取为1次，5次工具请求没有增加读取或Auth RPC。正式A2A Java client fixture覆盖send、stream、get、cancel、resubscribe五类POST，本地签署每个请求proof，版本化路径Auth beacon RPC为0次。Gateway、Agent与A2A入口/传输以及Graph/MCP计数由定向回归共**60项**验证：Agent 46、Gateway 11、common-a2a 3，失败/错误/跳过均0。
 
 这些是隔离的本地fixture计数，不代表真实Redis、MySQL、运行密钥、跨服务部署或生产Graph/ReactAgent流量已经联调；真实存储撤权与故障矩阵继续由11.1/11.4验收。任务11.2完成后进度为**54/63**。
+
+## 跨模块授权攻击反例回归（2026-10-26，任务11.3）
+
+补齐A2A verifier的直接反例：合法签名但错误受众、签名正文中的task被替换时，官方handler均不执行；已有用例覆盖同body重放nonce与篡改正文拒绝。Agent入口测试用LLM JSON伪造actor、session、`businessAdmin`和`permissions=["*"]`，仍只接受签名actor；伪造marker、重复头、改body均拒绝。
+
+跨用户/多会话与范围收缩由A2A持久task owner/JDBC共享nonce测试、`AuthorizationSessionTest`的共享snapshot但隔离run/session/policy测试、Auth绑定的actor/caller/policy/扩权拒绝，以及Supervisor审批恢复原始参数/owner/policy冲突测试覆盖。权限刷新只能与原context交集，不能扩大首次请求或审批范围。
+
+管理员`interview.read.all`可读取业务访谈但不授予`memory.read`，Memory RAG仍把管理员个人scope限制为自身owner且不启用`businessWideRead`。Gateway、Auth、Agent、A2A、MCP、Interview、Memory和common的选定回归共**171项通过，失败/错误/跳过均0**（按模块：common 39、common-a2a 16、Gateway 15、Auth 33、Agent 51、Memory 11、Interview 6）。
+
+上述均为本地单测/fixture；没有推断真实MySQL/Redis并发、部署密钥、跨服务运行或撤权窗口已验收。任务11.3完成后进度为**55/63**。
