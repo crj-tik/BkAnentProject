@@ -90,6 +90,6 @@
 - [x] 11.2 使用Graph/正式ReactAgent/MCP fixture统计：Gateway->Supervisor入口Auth一次；同版Model返回只核版本；新域入口一次；N工具/M流项新增逐节点Auth/Redis为零，Memory资源检查独立计数。
 - [x] 11.3 覆盖伪造actor/admin/metadata、错误audience/body/task/nonce、跨用户与多会话、管理员业务全读/个人Memory拒绝、权限新增不越原审批和请求政策。
 - [ ] 11.4 在开发栈做真实send/stream/get/cancel/resubscribe、访谈开台领取答题回执/报告及撤权故障验收；未知/未运行业务域和Studio未就绪浏览器如实标未验，不启动无关真实外部副作用。
-- [ ] 11.5 使用仓库settings运行相关模块及全量compile/test；失败与跳过有具体证据，新增transition均有防回归；发布配置只用受管服务身份，不回显秘密。
+- [x] 11.5 使用仓库settings运行相关模块及全量compile/test；失败与跳过有具体证据，新增transition均有防回归；发布配置只用受管服务身份，不回显秘密。
 - [ ] 11.6 验证fresh/upgrade/repeat、权限格式及票交付兼容、同等安全制品成组回滚、outbox/permit/原任务保留；不能回滚到审计旁路、匿名或票入模策略。
 - [ ] 11.7 同实现提交更新LR/KI及协议/部署/操作清单，严格OpenSpec验证，中文commit并push当前对应远程分支；仅真实验证后勾任务，实施完成后另行归档。

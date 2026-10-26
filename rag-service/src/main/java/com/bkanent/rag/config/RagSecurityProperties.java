@@ -7,6 +7,7 @@ import java.security.MessageDigest;
 import java.security.PublicKey;
 import java.util.*;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.ConstructorBinding;
 
 @ConfigurationProperties("rag.security")
 public record RagSecurityProperties(Map<String, TrustedKey> trustedKeys, String authRequestKeyId,
@@ -22,6 +23,7 @@ public record RagSecurityProperties(Map<String, TrustedKey> trustedKeys, String 
         this(trustedKeys, authRequestKeyId, authRequestSecret, authResponseKeyId, authResponseSecret,
                 versionedAuthorizationEnabled, Map.of());
     }
+    @ConstructorBinding
     public RagSecurityProperties {
         trustedKeys = trustedKeys == null ? Map.of() : Map.copyOf(trustedKeys);
         authzAuthorityPublicKeys = authzAuthorityPublicKeys == null ? Map.of() : Map.copyOf(authzAuthorityPublicKeys);

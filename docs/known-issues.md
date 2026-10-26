@@ -1570,6 +1570,16 @@
 
 **关联**：LR-150；KI-151；change `unify-versioned-permission-context`任务10.5/10.6。
 
+## KI-207 [FIXED·本提交·P1] RagSecurityProperties兼容构造器使Spring配置绑定无法实例化
+
+**发现日期与依据**：2026-10-26，全仓`mvn test`在`RagRuntimeConfigurationTest`出现2个失败和2个错误，Spring Boot配置绑定报`RagSecurityProperties`无默认构造器。该配置类型为record，但额外保留了旧字段数的兼容构造器，绑定器无法自动选出canonical constructor。
+
+**修复**：在`RagSecurityProperties`的canonical compact constructor上声明`@ConstructorBinding`，保留旧构造器和record字段，不改变配置键或安全默认值。
+
+**验证与边界**：Rag运行配置定向7项通过；修复后全仓23模块`compile`和`test`均成功，1726项测试失败/错误0，14项显式外部环境测试跳过。该本地结果不证明RAG实际部署配置或外部依赖已运行。
+
+**关联**：`rag-service/RagRuntimeConfigurationTest`；change `unify-versioned-permission-context`任务11.5。
+
 ---
 
-**变更历史**：本提交补齐 Interview 权限/凭据存量核查与浏览器验收边界（KI-202/203），并持久化A2A请求防重放与任务归属（KI-172）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
+**变更历史**：本提交修复RAG配置绑定问题（KI-207），完成全仓Maven回归并补齐Interview权限/凭据存量核查与浏览器验收边界（KI-202/203），并持久化A2A请求防重放与任务归属（KI-172）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。

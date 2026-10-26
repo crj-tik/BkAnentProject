@@ -101,3 +101,35 @@ USER域Ed25519+caller/domain/agent/context owner。版本化Memory proof v3携�
 | 管理员边界 | Interview业务`read.all`与Memory个人读取分离；Memory RAG admin scope保持self-only | 业务全读不产生个人Memory通行权 | Interview/Memory服务单测。 |
 
 选定命令覆盖common、common-a2a、gateway、auth-service、agent-service、memory-service、interview-service，合计**171项通过，失败/错误/跳过均0**。审计记录、正式ReactAgent归档/浏览器领取、运行栈及存量消息扫描分别仍由8.3–8.5、11.4处理；真实MySQL/Redis并发及新鲜度仍由11.1处理。
+
+## 11.5 全仓Maven compile/test
+
+命令：`mvn -gs .mvn-settings.xml -s .mvn-settings.xml compile`及`mvn -gs .mvn-settings.xml -s .mvn-settings.xml test`。两条命令均为23/23 reactor模块成功。全量测试分模块统计如下（`a2a-java-sdk-client`与`common-config-manager`无测试源）：
+
+| 模块 | 测试数 | 失败/错误 | 跳过 |
+|---|---:|---:|---:|
+| common | 183 | 0/0 | 0 |
+| common-memory | 3 | 0/0 | 0 |
+| a2a-java-sdk-client | 0 | 0/0 | 0 |
+| common-skill | 54 | 0/0 | 0 |
+| common-a2a | 133 | 0/0 | 1 |
+| common-config-manager | 0 | 0/0 | 0 |
+| gateway | 20 | 0/0 | 0 |
+| auth-service | 209 | 0/0 | 0 |
+| agent-service | 269 | 0/0 | 6 |
+| memory-service | 231 | 0/0 | 7 |
+| rag-service | 361 | 0/0 | 0 |
+| notification-service | 14 | 0/0 | 0 |
+| listing-master-service | 53 | 0/0 | 0 |
+| customer-service | 10 | 0/0 | 0 |
+| compare-engine-service | 8 | 0/0 | 0 |
+| media-worker-service | 10 | 0/0 | 0 |
+| marketing-content-service | 17 | 0/0 | 0 |
+| promotion-service | 2 | 0/0 | 0 |
+| business-service | 4 | 0/0 | 0 |
+| contract-service | 18 | 0/0 | 0 |
+| settlement-service | 7 | 0/0 | 0 |
+| interview-service | 120 | 0/0 | 0 |
+| **总计** | **1726** | **0/0** | **14** |
+
+14个skip均为显式选择加入的外部验收，不是失败：`LiveSkillAgentCardsDockerTest`需要Docker Nacos；Agent的`ApprovalClaimDatabaseConcurrencyTest`、`NacosRollingUpgradeDockerTest`、`SupervisorDistributedAcceptanceTest`、`SupervisorDockerDatabaseTest`、`SupervisorRealModelEvaluationTest`及`NacosAgentRegistryDockerTest`需真实MySQL/Nacos/模型环境；Memory的7项MySQL/live-model测试受`MEMORY_ARCHIVE_TEST_MYSQL_URL`或`MEMORY_PREFERENCE_LIVE_MODEL=true`条件控制。环境未配置，保持跳过，未启动Docker、外部数据库或真实模型。首轮回归中发现并修复RAG配置构造器绑定问题（KI-207）；Listing管理员测试fixture补入目录中已登记的`listing.read.all`后通过。全量成功不证明真实服务部署、数据库迁移或安全开关已启用。

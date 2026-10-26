@@ -97,9 +97,10 @@ class ListingRagIdentityTest {
 
         // Administrators can have no role rows; the signed admin fact controls the listing
         // business-wide state filter, while the operation remains explicitly granted.
-        var administrator = versionedPrincipal(true, List.of(), List.of("listing.read"));
+        var administrator = versionedPrincipal(true, List.of(), List.of("listing.read", "listing.read.all"));
         var adminScope = grants.scope(administrator, request);
         assertTrue(adminScope.businessAdmin());
+        assertEquals("listing.read.all", adminScope.operationCode());
         assertFalse(adminScope.activeOnly());
         assertTrue(adminScope.authPrincipal().roles().isEmpty());
     }

@@ -2,7 +2,7 @@
 
 ## 当前实施状态（2026-10-26）
 
-OpenSpec `spec-driven` change `unify-versioned-permission-context` 当前完成 **55/63** 项（以`tasks.md`勾选为准）。任务10.1–10.6按Auth/Listing/Customer、Business/Settlement、Contract/Marketing、Compare/Media、Notification模块完成源码与本地定向回归及跨域准入矩阵；任务3.3的专用Redis ACL/连接配置及隔离ACL正反验收已完成；任务11.2的Gateway、Agent Graph、A2A、MCP本地调用计数fixture与11.3跨模块攻击反例回归已完成。新授权入口、数据库迁移和真实跨服务密钥仍未在运行环境启用；8.3–8.5、11.1、11.4–11.7保持未完成。
+OpenSpec `spec-driven` change `unify-versioned-permission-context` 当前完成 **56/63** 项（以`tasks.md`勾选为准）。任务10.1–10.6按Auth/Listing/Customer、Business/Settlement、Contract/Marketing、Compare/Media、Notification模块完成源码与本地定向回归及跨域准入矩阵；任务3.3的专用Redis ACL/连接配置及隔离ACL正反验收已完成；任务11.2的调用计数fixture、11.3跨模块攻击反例和11.5全仓Maven compile/test已完成。新授权入口、数据库迁移和真实跨服务密钥仍未在运行环境启用；8.3–8.5、11.1、11.4、11.6–11.7保持未完成。
 
 Notification、Contract、Customer及依赖模块的定向回归 **16项通过，失败/错误/跳过均0**；Notification REST/MCP授权入口保持默认关闭，SQL迁移未应用，caller公钥和真实跨服务链未部署验收。Contract/Customer提醒因broker recipient绑定缺失保持关闭（KI-206）。Compare/Media与共享鉴权前批定向回归48项通过；Media任务/结果仍为进程内存（KI-117），新owner与permit协议未宣称具备跨重启恢复。域级具体边界及证据见下方10.6矩阵。
 
@@ -20,7 +20,7 @@ Notification、Contract、Customer及依赖模块的定向回归 **16项通过�
 
 - 已按Auth、Listing、Customer、Business、Settlement、Contract、Marketing、Compare、Media、Notification逐域记录可信入口、资源真源、可证明的owner/恢复事实、本地回归组和仍关闭的节点，详见`implementation-inventory.md`的10.6节。
 - 回归证据按模块批次引用，不将有共享依赖的测试组相加；本地fixture/A2A wiring不被表述为生产准入或全域恢复通过。
-- 仍未完成：Interview浏览器领取、真实ReactAgent归档链及历史凭据扫描（8.3–8.5）；真实MySQL/Redis发布与撤权失效（11.1）、开发栈端到端（11.4）、全量Maven回归（11.5）、迁移/回滚（11.6）及最终同步归档（11.7）。任务11.2调用计数fixture与11.3本地攻击反例矩阵已完成；并不代表真实部署联调。Settlement主体映射、KI-117跨域恢复、KI-206提醒收件绑定继续关闭。
+- 仍未完成：Interview浏览器领取、真实ReactAgent归档链及历史凭据扫描（8.3–8.5）；真实MySQL/Redis发布与撤权失效（11.1）、开发栈端到端（11.4）、迁移/回滚（11.6）及最终同步归档（11.7）。任务11.2调用计数fixture、11.3本地攻击反例矩阵与11.5全仓Maven回归已完成；并不代表真实部署联调。Settlement主体映射、KI-117跨域恢复、KI-206提醒收件绑定继续关闭。
 
 ## Auth/Redis权限ACL与专用连接（2026-10-26，任务3.3）
 
@@ -211,3 +211,11 @@ MCP transport customizer fixture发出5个不同JSON-RPC `tools/call` body，每
 管理员`interview.read.all`可读取业务访谈但不授予`memory.read`，Memory RAG仍把管理员个人scope限制为自身owner且不启用`businessWideRead`。Gateway、Auth、Agent、A2A、MCP、Interview、Memory和common的选定回归共**171项通过，失败/错误/跳过均0**（按模块：common 39、common-a2a 16、Gateway 15、Auth 33、Agent 51、Memory 11、Interview 6）。
 
 上述均为本地单测/fixture；没有推断真实MySQL/Redis并发、部署密钥、跨服务运行或撤权窗口已验收。任务11.3完成后进度为**55/63**。
+
+## 全仓compile/test交付回归（2026-10-26，任务11.5）
+
+使用仓库Maven settings运行全仓`compile`及`test`。23个reactor模块均构建成功，完整测试共**1726项，失败0、错误0、跳过14**；各模块测试数、跳过数和跳过测试名称见`implementation-inventory.md`的11.5节。
+
+首轮全量测试发现`RagSecurityProperties`是含兼容构造器的配置record但未标明canonical constructor，Spring配置绑定失败；加`@ConstructorBinding`后Rag运行配置定向7项和完整回归通过（KI-207）。首轮Listing失败由管理员fixture未携Auth目录中的`listing.read.all`导致，fixture已补齐该显式操作，Listing定向6项与完整回归通过；生产授权逻辑未放宽。
+
+14项跳过均为既有可选外部验收：common-a2a/Agent的Docker Nacos、真实MySQL并发/分布式验收或真实模型评估未配置；Memory的真实MySQL测试未提供`MEMORY_ARCHIVE_TEST_MYSQL_URL`，在线模型测试未启用`MEMORY_PREFERENCE_LIVE_MODEL`。未启动Docker、连接外部数据库或使用模型凭据。完整回归通过仅证明当前源码与本地测试，不代表真实开发栈验收、迁移已应用或新授权开关已启用；这些仍由11.1/11.4/11.6验收。任务11.5完成后进度为**56/63**。
