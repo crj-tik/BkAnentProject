@@ -15,6 +15,8 @@ import com.bkanent.interview.service.InterviewReportService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.codec.ServerSentEvent;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -140,6 +142,84 @@ class InterviewControllerTest {
 
         assertThat(response.success()).isFalse();
         assertThat(response.code()).isEqualTo("INTERVIEW_START_INVALID");
+    }
+
+    @Test
+    void credentialClaimReturnsNoStoreAndOnlyTheAuthenticatedClaimResponseContainsTheValue() {
+        String rawCredential = "A".repeat(43);
+        when(ticketService.issue(12L, InterviewParticipantTicketService.READ))
+                .thenReturn(new InterviewParticipantTicketService.IssuedCredential(44L, rawCredential,
+                        InterviewParticipantTicketService.READ, LocalDateTime.now().plusMinutes(10)));
+
+        var response = controller.issueParticipantCredential(12L,
+                new InterviewController.ParticipantCredentialRequest(InterviewParticipantTicketService.READ));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getHeaders().getCacheControl()).contains("no-store");
+        assertThat(response.getHeaders().getPragma()).contains("no-cache");
+        assertThat(response.getBody().data()).containsEntry("credential", rawCredential)
+                .containsEntry("headerName", "X-Ticket");
+        verify(ticketService).issue(12L, InterviewParticipantTicketService.READ);
+    }
+
+    @Test
+    void respondentTurnRequiresRespondPurposeBeforeCallingRuntime() {
+        when(ticketService.validate(12L, "read-ticket", InterviewParticipantTicketService.RESPOND))
+                .thenReturn(null);
+
+        ServerSentEvent<String> event = controller.submitTurn(12L, "request-1", "read-ticket",
+                new InterviewController.TurnRequest("回答", null)).blockFirst();
+
+        assertThat(event).isNotNull();
+        assertThat(event.event()).isEqualTo("error");
+        assertThat(event.data()).isEqualTo("INTERVIEW_INVALID_CREDENTIAL");
+        verify(authorizationService).requireRespondent(12L);
+        verify(ticketService).validate(12L, "read-ticket", InterviewParticipantTicketService.RESPOND);
+        verifyNoInteractions(runtimeService);
+    }
+
+    @Test
+    void replyUsesReadPurposeAndRejectsBeforeLoadingAnySavedReply() {
+        when(ticketService.validate(12L, "respond-ticket", InterviewParticipantTicketService.READ))
+                .thenReturn(null);
+
+        var response = controller.reply(12L, "request-1", "respond-ticket");
+
+        assertThat(response.success()).isFalse();
+        assertThat(response.code()).isEqualTo("INTERVIEW_INVALID_CREDENTIAL");
+        verify(authorizationService).requireRead(12L);
+        verify(ticketService).validate(12L, "respond-ticket", InterviewParticipantTicketService.READ);
+        verifyNoInteractions(runtimeService);
+    }
+
+    @Test
+    void assistanceRequiresManagePurposeBeforeLoadingOrWritingCommand() {
+        when(ticketService.validate(12L, "read-ticket", InterviewParticipantTicketService.MANAGE))
+                .thenReturn(null);
+
+        var response = controller.sendDirectorCommand(12L, "read-ticket",
+                new InterviewController.DirectorCommandRequest("NEXT_QUESTION", null));
+
+        assertThat(response.success()).isFalse();
+        assertThat(response.code()).isEqualTo("INTERVIEW_INVALID_CREDENTIAL");
+        verify(authorizationService).requireInitiator(12L, InterviewAuthorizationService.ASSIST);
+        verify(ticketService).validate(12L, "read-ticket", InterviewParticipantTicketService.MANAGE);
+        verifyNoInteractions(sessionMapper, directorCommandMapper);
+    }
+
+    @Test
+    void monitorStreamRejectsInvalidReadCredentialBeforeOpeningHeartbeatStream() {
+        when(ticketService.validate(12L, "respond-ticket", InterviewParticipantTicketService.READ))
+                .thenReturn(null);
+
+        ServerSentEvent<String> event = controller.stream(12L, "respond-ticket").blockFirst();
+
+        assertThat(event).isNotNull();
+        assertThat(event.event()).isEqualTo("error");
+        assertThat(event.data()).isEqualTo("INTERVIEW_INVALID_CREDENTIAL");
+        verify(authorizationService).requireRead(12L);
+        verify(ticketService).validate(12L, "respond-ticket", InterviewParticipantTicketService.READ);
+        verifyNoInteractions(sessionMapper, prepService);
     }
 
     @Test

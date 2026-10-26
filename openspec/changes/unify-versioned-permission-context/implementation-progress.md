@@ -227,3 +227,9 @@ MCP transport customizer fixture发出5个不同JSON-RPC `tools/call` body，每
 验证：`python scripts/deploy/test_init_manifest.py`通过，检查44项清单目标、覆盖、顺序、文件与规范SHA-256；受管runner fresh与upgrade dry-run均列出44/41项且未连接数据库；Git Bash `-n`语法检查通过。Auth执行绑定29项、common-a2a持久状态2项、Interview参与票4项定向测试通过；`git diff --check`通过。没有真实MySQL执行/重复、Redis、跨实例运行、服务制品回滚或outbox/permit/任务保留现场演练。
 
 补充`docs/authz-versioned-rollout-rollback.md`定义兼容制品组、forward-only schema、暂停流量顺序和outbox、permit、原task/owner/checkpoint及票据安全保留条件。KI-208记录已修复的清单交付缺口；LR-151记录每个A2A provider使用其自身耐久数据库的原因。任务11.7文档同步、严格验证及中文提交推送完成，进度为**57/63**；11.6仍未勾选，须在授权真实数据库/运行环境完成fresh/upgrade/repeat和同等安全成组回滚后才能关闭。
+
+## Interview 服务端凭据边界复核（2026-10-27）
+
+复核 8.3/8.4 服务端实现：会话监控/回执/流只接受 `READ`，话轮只接受 `RESPOND`，题单/启动/协助只接受 `MANAGE`；actor 由签名 scope 提供，query credential 在 Interview filter 中拒绝，领取响应使用 `no-store`，SSE 周期复核票据当前性。凭据形状在访谈入模、持久化、模型输出门、报告归档和 A2A 输出清理路径由 Interview/shared sanitizer 处理。
+
+本轮 `InterviewControllerTest` 与 `InterviewParticipantTicketServiceTest` 共 **18 项通过，失败/错误/跳过均0**，覆盖入口用途分离、无效凭据在读取/写入副作用前拒绝、领取响应缓存头和长流 lease 的完整绑定条件。任务 8.3/8.4 仍未勾选：仓库不含 Interview 浏览器应用，真实 `fetch`/ReadableStream 接线及正式 ReactAgent→prompt/Memory/progress/终态 artifact 链尚无现场证据（KI-203）；任务 8.5 仍需受权数据源上的历史只计数扫描及结果处置（KI-202）。没有访问或修改运行数据库，未将定向单测计作端到端验收。

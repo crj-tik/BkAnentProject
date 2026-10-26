@@ -105,6 +105,27 @@ class InterviewParticipantTicketServiceTest {
     }
 
     @Test
+    void longLivedStreamLeaseRecheckBindsTheFullCredentialTupleAndRejectsMissingCurrentRow() {
+        var lease = new InterviewParticipantTicketService.CredentialLease(44L, 12L, 202L,
+                InterviewParticipantTicketService.READ, "b".repeat(64), 3,
+                LocalDateTime.now().plusMinutes(5));
+        when(mapper.selectCount(any())).thenReturn(0L);
+
+        assertFalse(service.isCurrent(lease));
+
+        ArgumentCaptor<LambdaQueryWrapper<InterviewParticipantTicketEntity>> query =
+                ArgumentCaptor.forClass(LambdaQueryWrapper.class);
+        verify(mapper).selectCount(query.capture());
+        query.getValue().getSqlSegment();
+        assertTrue(query.getValue().getParamNameValuePairs().containsValue(44L));
+        assertTrue(query.getValue().getParamNameValuePairs().containsValue(12L));
+        assertTrue(query.getValue().getParamNameValuePairs().containsValue(202L));
+        assertTrue(query.getValue().getParamNameValuePairs().containsValue(InterviewParticipantTicketService.READ));
+        assertTrue(query.getValue().getParamNameValuePairs().containsValue("b".repeat(64)));
+        assertTrue(query.getValue().getParamNameValuePairs().containsValue(3));
+    }
+
+    @Test
     void revokeChangesOnlyTheNamedCredentialAndItsRevision() {
         InterviewParticipantTicketEntity row = new InterviewParticipantTicketEntity();
         row.setId(44L);

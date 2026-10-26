@@ -139,3 +139,9 @@ USER域Ed25519+caller/domain/agent/context owner。版本化Memory proof v3携�
 受管迁移清单现有44项。新增Auth执行绑定`bk_auth`版本和七个有持久A2A provider DataSource的版本（Interview、Listing、Marketing、Notification、Business、Contract、Settlement），使用同一SQL与`DATABASE()`结构检查。Compare/Media没有受管关系型DataSource，不启用其版本化A2A store。runner target whitelist与manifest一致，迁移及schema check通过规范LF SHA-256校验；check执行前在独立连接中选择对应目标库。修复第340项原错误登记的Marketing check hash。`scripts/deploy/test_init_manifest.py`检查所有行、目标、必需迁移、幂等建表及哈希。
 
 Fresh与upgrade dry-run分别列出44项和41项，仅证明清单格式、受控目标及工件哈希，不连数据库。定向回归：`AuthorizationExecutionBindingRepositoryTest` 29项、`JdbcA2aTaskAuthorizationStoreTest` 2项、`InterviewParticipantTicketServiceTest` 4项，均通过；未执行真实数据库migration apply/repeat、跨服务回滚或现场outbox/permit/task保留核对。回滚文档要求兼容制品成组回退、schema前向保留、无安全兼容制品则入口关闭，并保留outbox、permit、原任务/owner/checkpoint与票据事实。故任务11.6仍未完成；Compare/Media未接durable store、真实MySQL/Redis和发布回滚验收仍是门禁。
+
+## Interview 凭据服务端回归补强（2026-10-27）
+
+复核受保护 REST/SSE 入口按可信 actor 与精确 purpose 取票：监控、回执和 stream 使用 READ，话轮使用 RESPOND，启动和协助使用 MANAGE。无效或错用途票据在 runtime、session 或 director-command 访问之前拒绝；领取接口显式返回 no-store/no-cache。长流续传 lease 的复核查询绑定 credential/session/actor/purpose/hash/revision，并检查撤销、截止和删除状态。
+
+定向验证 `InterviewControllerTest` 与 `InterviewParticipantTicketServiceTest` 共18项通过。此证据只覆盖服务端组件；KI-203 的真实前端领取/fetch SSE/恢复链、KI-202 的历史凭据扫描与处置仍待外部环境，任务8.3–8.5继续未勾选。
