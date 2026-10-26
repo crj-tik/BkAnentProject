@@ -31,7 +31,34 @@ public final class AgentAuthorizationConsumer {
         var session = AuthorizationSession.fromEntry(response, properties.getAudience(), correlation, cache,
                 properties.authorityKeys(), clock);
         monitor.registry().register(session);
-        return new AgentAuthorizationScope.Entry(response, binding, session);
+        var entry = new AgentAuthorizationScope.Entry(response, binding, session);
+        entry.registrationRelease(monitor.registry()::unregister);
+        return entry;
+    }
+
+    public void bind(AgentAuthorizationScope.Entry entry, ExecutionBinding binding, AuthzResponse response) {
+        AuthzSignature.verifyExecutionBindingResponse(entry.response(), binding, response,
+                properties.authorityKeys(), clock.instant());
+        var correlation = new AuthorizationSession.ResponseCorrelation(binding.requestId(),
+                AuthzCanonicalHash.executionBindingRequestHash(entry.response(), binding), binding.nonce());
+        var bound = AuthorizationSession.fromEntry(response, properties.getAudience(), correlation, cache,
+                properties.authorityKeys(), clock);
+        var original = entry.session();
+        // Register first so a concurrent known version/epoch notice cannot be forgotten by replacement.
+        monitor.registry().register(bound);
+        try {
+            entry.requireActor(binding.actorId());
+            if (bound.state() != AuthorizationLocalState.VALID) throw new AuthzException(AuthzErrorCode.CONTEXT_CONFLICT);
+            entry.installBoundSession(bound, binding, AuthzCanonicalHash.executionBindingTupleHash(entry.response(), binding));
+            monitor.registry().unregister(original);
+        } catch (RuntimeException failure) {
+            monitor.registry().unregister(bound);
+            throw failure;
+        }
+    }
+
+    public void releaseIngress(AgentAuthorizationScope.Entry entry) {
+        if (!entry.hasCapturedLease()) entry.releaseRegistration();
     }
 
     public AuthorizationVersionMonitor monitor() { return monitor; }

@@ -73,4 +73,12 @@ login/refresh/me和管理列表/写入结果从同一次AuthorizationFacts读取
 
 AuthorizationUserInfoTest新增5项真实H2/MyBatis谓词与DTO/JSON兼容回归；与现Auth测试共35项通过。全量settings test 23模块成功、1524项、失败/错误0、跳过14项既有外部依赖门控；该总数按包含WARNING摘要和Surefire XML核对，不与先前1519重复相加。只读复核未确认严重问题。
 
-当前15/63完成，KI-170依然阻塞实际Gateway→Supervisor run/session签名绑定、Model与新子域消费。不得用新增响应字段当认证证明，也未启用新模式、未修改生产Nacos或执行真实业务动作。
+多角色响应兼容交付时为15/63。此后任务4.4完成，当前16/63；KI-170仍保持OPEN，因为Gateway实际转发验收（4.3）、Graph/Model与新领域consumer（5.x/6.x）及运行配置未完成。新授权开关仍默认关闭，未修改生产Nacos或执行真实业务动作。
+
+## Supervisor独立执行绑定续批（2026-10-26）
+
+按D7b新增`BIND_EXECUTION`：Auth只接受完整签名且尚未绑定的入口context，以原入口requestHash为唯一键保存不可变actor/caller/run/session/policy/scope/executionHash和原deadline；同tuple新nonce幂等重取，重放旧nonce或改变tuple冲突。Agent协调器在Supervisor提交边界先核查已有run owner、session和输入幂等，再绑定实际run/session；绑定后才登记执行与捕获短期credential lease。执行输入hash复用`OrchestrationStore`的规范化算法，refresh不改写入口证明。直接Agent HTTP在两项可信入口头都缺失时，用实际token及method/path/query/body发起一次独立resolve；缺一项、篡改证明或actor替换失败，不读取固定marker。
+
+执行期Graph节点和子Agent工具回调不调用协调器；一次入口绑定只发生在Supervisor执行入口。lease里只在进程内暂存已绑定context，不把Auth response、proof或token写入request/checkpoint。异步任务进程重启后的原owner重新认证/恢复仍未实现，故KI-170和新授权开关保持OPEN/关闭。
+
+定向验证：common签名和hard-deadline 4项、Auth provider 10项、Auth MySQL binding repository 29项、Agent ingress filter 4项、Supervisor/direct HTTP MVC 7项，均通过；合计54项，失败/错误/跳过0。验证仅覆盖代码fixture和H2，不代表Gateway路由/头预算、Redis/TLS、真实异步跨实例恢复或部署验收。

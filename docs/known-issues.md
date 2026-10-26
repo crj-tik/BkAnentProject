@@ -1470,9 +1470,11 @@
 
 **确认依据**：本轮版本化入口实现复核，Gateway签实际body/path/query/audience，但context.runId/sessionId目前null。Supervisor从业务requestId/session生成实际执行身份；新委托/刷新协议明确要求原signed run/session不变，因此不能把null入口证明直接用于实际run。Agent在chat/supervisor bind/capture显式409，不把普通metadata填入签名上下文；新开关默认关闭。
 
-**处置**：任务4.3/4.4/5.x/6.x保持未完成。需在精确执行入口定义非授权关联标签的签发/消费契约：业务requestId、continueRunId、sessionId只是定位，仍由持久owner和幂等真源验证；缺省、重投和续接须一致，不能简单Gateway随机session覆盖原会话，也不能在consumer重签原Auth证明。header预算/公开规则/直接服务独立认证与该关联一起成组验收后才能启用，不放宽scope/deadline或提供legacy回退。
+**处置**：已按D7b确定独立`BIND_EXECUTION`。Agent先验签入口三签并恢复可信actor；Supervisor用持久run owner、原始请求幂等和session归属校验后，以实际run/session及归一化输入调用Auth绑定。Auth把原入口hash唯一绑定到不可变tuple；仅同tuple新nonce可幂等重取，actor、scope、policy或硬截止不变，不用refresh改写入口证明。绑定成功后才捕获执行lease；一次入口不会在Graph节点或子Agent调用中重复执行`BIND_EXECUTION`。现有业务权限RPC/工具资源守卫尚未全迁移至本地版本上下文，仍由任务5.x/6.x验收。直接访问Agent且无可信入口证明时，由Agent用服务身份和实际HTTP请求事实独立调用Auth resolve；部分/伪造入口头失败关闭，固定marker不作为身份。
 
-**关联**：LR-106；change `unify-versioned-permission-context`。当前单次入口验签/真实字节绑定原型和Redis本地监控已通过fixture，不代表完整业务run能运行。
+**验证与未决**：任务4.4的协议、Auth持久幂等、四类Supervisor提交、直接HTTP独立认证和actor替换反例已有定向测试；本次仍不代表Gateway路由/头预算与公开规则、async跨实例重启恢复、Graph真实模型/工具消费或A2A新入口完成。任务4.3、5.x、6.x仍未完成；Gateway/Auth/Agent版本化开关继续默认关闭，未部署。不得据本条称新授权链已生产可用。
+
+**关联**：LR-106/138；change `unify-versioned-permission-context`；任务4.3/5.x/6.x。
 
 ## KI-171 [FIXED·7ca683c·P1] Token编码别名绕过按原串摘要的注销
 

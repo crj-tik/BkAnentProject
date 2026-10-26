@@ -58,12 +58,12 @@ class AgentAuthorizationIngressTest {
             assertThat(principal.userId()).isEqualTo("42");
             assertThat(leases.currentUserId()).isEqualTo("42");
             assertThat(leases.verifiedIdentity("42").principal().userId()).isEqualTo(42L);
-            leases.capture("business-run-key", "42");
+            leases.capture("run", "42");
         });
         assertThat(response.getStatus()).isEqualTo(200);
         assertThat(AgentAuthorizationScope.current()).isNull();
         assertThat(request.getAttribute(AgentAuthorizationScope.VERIFIED_ATTRIBUTE)).isNull();
-        try (var scope = leases.openLease("business-run-key", "42")) {
+        try (var scope = leases.openLease("run", "42")) {
             assertThat(AgentAuthorizationScope.current()).isNotNull();
             assertThat(leases.currentUserId()).isEqualTo("42");
         }

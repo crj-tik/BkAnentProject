@@ -1035,3 +1035,13 @@
 **代码位置（当前与规划）**：四个change既有proposal/design/specs/tasks及 `docs/business-domain-change-roadmap.md`；规划要求未来实现各自来源/消费适配及隔离测试。本次只修订规划，没有创建四个会话或worktree、实施代码、修改运行配置或执行真实联调。
 
 **关联**：LR-22/23/53/59/94/96/97/99/100/101/102；现有KI状态不因并行规划而改变。
+
+## LR-138 入口授权与持久执行身份分两步绑定
+
+**结论**：Gateway不能预猜Supervisor最终持久化的run/session。Agent消费Gateway签发的未绑定入口后，先用持久owner、request幂等和session事实确定实际执行tuple，再调用独立`BIND_EXECUTION`；Auth将完整入口hash唯一绑定到actor/run/session/operations/policy/executionHash。新nonce重试仅对同tuple幂等，不能换身份、扩大scope或延长入口硬截止。refresh不承担身份绑定，Agent也不重签或覆盖原入口证明。直接Agent HTTP缺少完整入口证明时，以Agent服务身份对token与实际method/path/query/body发起独立Auth resolve；不得从固定marker恢复身份。
+
+**根因**：Gateway位于JSON解析及持久run创建之前，`requestId`、`continueRunId`和`sessionId`尚不能代表最终执行资源。把这些字段提前写进Gateway签名会产生错误关联；由consumer填字段或重签会破坏原始请求证明。每个Graph节点或子Agent重复调用执行绑定又会把控制流复杂度和失败面放大。独立绑定把“谁能做什么”与“本次落在哪个已核验执行资源”分开，只在Supervisor执行入口增加一次`BIND_EXECUTION`；业务权限RPC和资源守卫迁移至本地版本上下文仍由任务5.x/6.x验收。
+
+**代码位置**：`common/authz/ExecutionBinding`、`AuthzSignature.verifyExecutionBinding`、`AuthAuthorizationRpcServiceImpl.bindExecution`、`AuthorizationRepository.bindIngressExecution`、`agent-service/AgentExecutionBindingCoordinator`、`AgentRagCredentialFilter`、`OrchestrationStore.executionHash`。入口原始三签保留在请求scope，绑定context不写入模型输入或checkpoint。
+
+**关联**：LR-104/106；KI-170；change `unify-versioned-permission-context`任务4.4。功能开关默认关闭；Gateway路由/预算、A2A和Graph真实consumer、异步跨实例重启恢复仍需独立验收。

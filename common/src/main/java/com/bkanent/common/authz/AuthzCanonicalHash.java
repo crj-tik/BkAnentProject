@@ -63,6 +63,47 @@ public final class AuthzCanonicalHash {
                 parent.keyId(), parent.signature(), delegationFields(binding))));
     }
 
+    /** Independent proof type covers every field and signature of the complete ingress response. */
+    public static String executionBindingRequestHash(AuthzResponse ingress, ExecutionBinding binding) {
+        AuthzContract.require(ingress != null && binding != null);
+        return digest(encode("execution-binding-request", Arrays.asList(
+                signedResponseFields(ingress), executionFields(binding), binding.requestId(), binding.nonce(),
+                binding.issuedAtEpochSecond(), binding.expiresAtEpochSecond(), binding.algorithm())));
+    }
+
+    /** Durable identity excludes retry correlation/time but fixes the original authority and deadlines. */
+    public static String executionBindingTupleHash(AuthzResponse ingress, ExecutionBinding binding) {
+        AuthzContract.require(ingress != null && binding != null);
+        AuthorizationContext context = ingress.context();
+        return digest(encode("execution-binding-tuple", Arrays.asList(executionFields(binding),
+                context.permissionRevision(), context.credentialEpoch(), context.permissionHash(),
+                context.expiresAtEpochSecond(), context.runHardDeadlineEpochSecond())));
+    }
+
+    /** Canonical scope digest for the durable ingress-binding fact (order/duplicates normalized). */
+    public static String executionOperationsHash(List<String> operations) {
+        return digest(encode("execution-operations", AuthzContract.permissions(operations)));
+    }
+
+    private static List<?> executionFields(ExecutionBinding value) {
+        return Arrays.asList(value.callerService(), value.actorId(), value.runId(), value.sessionId(),
+                value.operations(), value.ingressRequestHash(), value.executionHash(), value.policyDigest());
+    }
+
+    private static List<?> signedResponseFields(AuthzResponse value) {
+        AuthzContract.require(value.snapshot().signature() != null && value.context().signature() != null
+                && value.freshness().signature() != null);
+        AuthorizationSnapshot snapshot = value.snapshot();
+        AuthorizationContext context = value.context();
+        AuthzFreshness freshness = value.freshness();
+        return Arrays.asList(snapshotFields(snapshot), snapshot.algorithm(), snapshot.keyId(), snapshot.signature(),
+                contextFields(context), context.algorithm(), context.keyId(), context.signature(),
+                Arrays.asList(freshness.userId(), freshness.permissionRevision(), freshness.credentialEpoch(),
+                        freshness.status().name(), freshness.permissionHash(), freshness.checkedAtEpochSecond(),
+                        freshness.notAfterEpochSecond(), freshness.nonce()),
+                freshness.algorithm(), freshness.keyId(), freshness.signature());
+    }
+
     static byte[] snapshotBytes(AuthorizationSnapshot value) {
         return signed("snapshot", snapshotFields(value), value.algorithm(), value.keyId());
     }

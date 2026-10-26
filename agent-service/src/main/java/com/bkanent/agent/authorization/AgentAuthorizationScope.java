@@ -17,7 +17,37 @@ public final class AgentAuthorizationScope {
     public static final class Entry {
         private final AuthzResponse response;
         private final RequestBinding binding;
-        private final AuthorizationSession session;
+        private volatile AuthorizationSession session;
+        private String executionTupleHash;
+        private ExecutionBinding executionBinding;
+        private String defaultRequestId;
+        private java.util.function.Consumer<AuthorizationSession> registrationRelease = ignored -> { };
+        private boolean leaseCaptured;
+        private boolean registrationReleased;
+        synchronized void registrationRelease(java.util.function.Consumer<AuthorizationSession> release) {
+            registrationRelease = release;
+            registrationReleased = false;
+        }
+        public synchronized void markLeaseCaptured() { leaseCaptured = true; }
+        public synchronized boolean hasCapturedLease() { return leaseCaptured; }
+        public synchronized void releaseRegistration() {
+            if (registrationReleased) return;
+            registrationReleased = true;
+            registrationRelease.accept(session);
+        }
+        public synchronized String normalizeRequestId(String requested) {
+            if (requested != null && !requested.isBlank()) return requested.trim();
+            if (defaultRequestId == null) defaultRequestId = java.util.UUID.randomUUID().toString();
+            return defaultRequestId;
+        }
+        synchronized String executionTupleHash() { return executionTupleHash; }
+        public synchronized ExecutionBinding executionBinding() { return executionBinding; }
+        synchronized void installBoundSession(AuthorizationSession bound, ExecutionBinding binding, String tupleHash) {
+            if (executionTupleHash != null) throw new AuthzException(AuthzErrorCode.CONTEXT_CONFLICT);
+            session = bound;
+            executionBinding = binding;
+            executionTupleHash = tupleHash;
+        }
         Entry(AuthzResponse response, RequestBinding binding, AuthorizationSession session) {
             this.response = response;
             this.binding = binding;

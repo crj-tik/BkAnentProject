@@ -19,7 +19,10 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.util.Enumeration;
+import java.security.SecureRandom;
+import java.security.PrivateKey;
 
 /** Only the real transport header supplies a token; caller metadata is never inspected. */
 @Component
@@ -28,16 +31,32 @@ public class AgentRagCredentialFilter extends OncePerRequestFilter {
     private final AgentRagCredentialLeaseStore credentials;
     private final AgentAuthorizationProperties authorization;
     private final ObjectProvider<AgentAuthorizationConsumer> consumer;
+    private final ObjectProvider<AuthAuthorizationRpcService> authorizationRpc;
+    private final SecureRandom random = new SecureRandom();
+    private final Clock clock;
+    private volatile PrivateKey directAuthSigningKey;
 
     public AgentRagCredentialFilter(AgentRagCredentialLeaseStore credentials) {
-        this(credentials, new AgentAuthorizationProperties(), null);
+        this(credentials, new AgentAuthorizationProperties(), null, null);
     }
     @Autowired
     public AgentRagCredentialFilter(AgentRagCredentialLeaseStore credentials, AgentAuthorizationProperties authorization,
-                                    ObjectProvider<AgentAuthorizationConsumer> consumer) {
+                                    ObjectProvider<AgentAuthorizationConsumer> consumer,
+                                    ObjectProvider<AuthAuthorizationRpcService> authorizationRpc) {
+        this(credentials, authorization, consumer, authorizationRpc, Clock.systemUTC());
+    }
+    public AgentRagCredentialFilter(AgentRagCredentialLeaseStore credentials, AgentAuthorizationProperties authorization,
+                                    ObjectProvider<AgentAuthorizationConsumer> consumer,
+                                    ObjectProvider<AuthAuthorizationRpcService> authorizationRpc, Clock clock) {
         this.credentials = credentials;
         this.authorization = authorization;
         this.consumer = consumer;
+        this.authorizationRpc = authorizationRpc;
+        this.clock = clock;
+    }
+    public AgentRagCredentialFilter(AgentRagCredentialLeaseStore credentials, AgentAuthorizationProperties authorization,
+                                    ObjectProvider<AgentAuthorizationConsumer> consumer) {
+        this(credentials, authorization, consumer, null);
     }
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
@@ -76,14 +95,25 @@ public class AgentRagCredentialFilter extends OncePerRequestFilter {
             String token = tokenHeader.substring(7).trim();
             if (token.isEmpty() || token.length() > 16384 || token.indexOf(',') >= 0
                     || token.chars().anyMatch(Character::isWhitespace)) throw new AuthzException(AuthzErrorCode.AUTHENTICATION_REQUIRED);
-            // Missing/forged ingress never falls back to the marker or legacy Auth resolver.
-            // Direct-service independent resolve RPC is not implemented and remains closed.
-            var authResponse = AuthzWireCodec.decodeResponse(singleHeader(request, AuthzTransportHeaders.RESPONSE_HEADER));
-            var binding = AuthzWireCodec.decodeBinding(singleHeader(request, AuthzTransportHeaders.REQUEST_BINDING_HEADER));
+            String responseHeader = optionalSingleHeader(request, AuthzTransportHeaders.RESPONSE_HEADER);
+            String bindingHeader = optionalSingleHeader(request, AuthzTransportHeaders.REQUEST_BINDING_HEADER);
+            if ((responseHeader == null) != (bindingHeader == null))
+                throw new AuthzException(AuthzErrorCode.AUTHENTICATION_REQUIRED);
             byte[] body = request.getInputStream().readNBytes(authorization.getMaxBodyBytes() + 1);
             if (body.length > authorization.getMaxBodyBytes()) throw new AuthzException(AuthzErrorCode.INVALID_ARGUMENT);
             AgentAuthorizationConsumer verifier = consumer == null ? null : consumer.getIfAvailable();
             if (verifier == null) throw new AuthzException(AuthzErrorCode.AUTHORIZATION_UNAVAILABLE);
+            AuthzResponse authResponse;
+            RequestBinding binding;
+            if (responseHeader == null) {
+                // A direct service request gets its own signed Auth admission. Never trust marker/user headers.
+                var direct = resolveDirect(request, token, body);
+                authResponse = direct.response();
+                binding = direct.binding();
+            } else {
+                authResponse = AuthzWireCodec.decodeResponse(responseHeader);
+                binding = AuthzWireCodec.decodeBinding(bindingHeader);
+            }
             var entry = verifier.verify(authResponse, binding, token, request.getMethod(), request.getRequestURI(),
                     request.getQueryString(), body);
             request.setAttribute(AgentAuthorizationScope.VERIFIED_ATTRIBUTE, entry);
@@ -93,6 +123,7 @@ public class AgentRagCredentialFilter extends OncePerRequestFilter {
                  var ignored = credentials.openVerifiedAuthorization(token, entry)) {
                 chain.doFilter(new ReplayRequest(request, body), response);
             } finally {
+                verifier.releaseIngress(entry);
                 request.removeAttribute(AgentAuthorizationScope.VERIFIED_ATTRIBUTE);
                 request.removeAttribute(AgentAuthorizationScope.RESPONSE_ATTRIBUTE);
                 request.removeAttribute(AgentAuthorizationScope.BINDING_ATTRIBUTE);
@@ -122,6 +153,49 @@ public class AgentRagCredentialFilter extends OncePerRequestFilter {
         catch (Exception failure) { throw new ServletException("authorization context cleanup failed"); }
     }
 
+    private DirectAdmission resolveDirect(HttpServletRequest request, String token, byte[] body) {
+        AuthAuthorizationRpcService provider = authorizationRpc == null ? null : authorizationRpc.getIfAvailable();
+        if (provider == null) throw new AuthzException(AuthzErrorCode.AUTHORIZATION_UNAVAILABLE);
+        long now = clock.instant().getEpochSecond();
+        byte[] nonceBytes = new byte[32];
+        random.nextBytes(nonceBytes);
+        String nonce = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(nonceBytes);
+        String requestId = java.util.UUID.randomUUID().toString();
+        String path = AuthzWireCodec.validatePath(request.getRequestURI());
+        var query = AuthzWireCodec.parseQuery(request.getQueryString());
+        String bodyHash = AuthzCanonicalHash.bodyHash(body);
+        var binding = new RequestBinding(authorization.getCallerService(), authorization.getAudience(),
+                request.getMethod(), path, path, query, requestId, null, null, bodyHash, bodyHash,
+                nonce, now, now + AuthzDeadlines.REQUEST_SECONDS);
+        String requestHash = AuthzCanonicalHash.resolveRequestHash(token, binding);
+        var proof = AuthzSignature.sign(new CallerProof(authorization.getCallerService(), "auth-service",
+                AuthzRpcOperation.RESOLVE_REQUEST_AUTHORIZATION, requestId, requestHash, nonce,
+                now, now + AuthzDeadlines.REQUEST_SECONDS, AuthzContract.ALGORITHM,
+                authorization.getKeyId(), null), directAuthSigningKey());
+        AuthzResponse response;
+        try {
+            response = provider.resolveRequestAuthorization(token, binding, proof);
+        } catch (AuthzException failure) {
+            throw failure;
+        } catch (RuntimeException failure) {
+            throw new AuthzException(AuthzErrorCode.AUTHORIZATION_UNAVAILABLE);
+        }
+        AuthzWireCodec.verifyIngress(response, binding, token, authorization.getAudience(),
+                request.getMethod(), path, query, body, authorization.authorityKeys(), clock.instant());
+        return new DirectAdmission(response, binding);
+    }
+
+    private record DirectAdmission(AuthzResponse response, RequestBinding binding) { }
+
+    private PrivateKey directAuthSigningKey() {
+        PrivateKey key = directAuthSigningKey;
+        if (key != null) return key;
+        synchronized (this) {
+            if (directAuthSigningKey == null) directAuthSigningKey = authorization.signingKey();
+            return directAuthSigningKey;
+        }
+    }
+
     private static String singleHeader(HttpServletRequest request, String name) {
         Enumeration<String> values = request.getHeaders(name);
         if (values == null || !values.hasMoreElements()) throw new AuthzException(AuthzErrorCode.AUTHENTICATION_REQUIRED);
@@ -129,6 +203,14 @@ public class AgentRagCredentialFilter extends OncePerRequestFilter {
         if (values.hasMoreElements() || value == null || value.isEmpty() || value.indexOf(',') >= 0) {
             throw new AuthzException(AuthzErrorCode.AUTHENTICATION_FAILED);
         }
+        return value;
+    }
+    private static String optionalSingleHeader(HttpServletRequest request, String name) {
+        Enumeration<String> values = request.getHeaders(name);
+        if (values == null || !values.hasMoreElements()) return null;
+        String value = values.nextElement();
+        if (values.hasMoreElements() || value == null || value.isEmpty() || value.indexOf(',') >= 0)
+            throw new AuthzException(AuthzErrorCode.AUTHENTICATION_FAILED);
         return value;
     }
     private static void writeFailure(HttpServletResponse response, AuthzErrorCode code) throws IOException {

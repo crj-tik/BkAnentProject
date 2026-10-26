@@ -31,6 +31,15 @@ public class AgentAuthorizationConfiguration {
     @EnableConfigurationProperties(AgentAuthorizationRedisProperties.class)
     @ConditionalOnProperty(prefix = "agent.authorization", name = "enabled", havingValue = "true")
     public static class Enabled {
+        @org.apache.dubbo.config.annotation.DubboReference(group = "authorization", version = "1.0",
+                protocol = "dubbo", retries = 0, timeout = 3000, check = false)
+        private com.bkanent.common.authz.AuthAuthorizationRpcService executionAuthorizationRpc;
+
+        @Bean
+        public com.bkanent.common.authz.AuthAuthorizationRpcService agentExecutionAuthorizationRpc() {
+            return executionAuthorizationRpc;
+        }
+
         @Bean(defaultCandidate = false)
         public Clock agentAuthorizationClock() { return Clock.systemUTC(); }
 

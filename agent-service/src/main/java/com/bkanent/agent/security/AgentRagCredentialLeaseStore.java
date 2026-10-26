@@ -52,13 +52,25 @@ public class AgentRagCredentialLeaseStore {
         }
         return () -> { if (previous == null) CURRENT.remove(); else CURRENT.set(previous); };
     }
+    public RagCredentialContext verifiedIngressCredentials(String actor,
+            com.bkanent.agent.authorization.AgentAuthorizationScope.Entry entry) {
+        Lease lease = CURRENT.get();
+        if (lease == null || lease.authorization != entry
+                || entry != com.bkanent.agent.authorization.AgentAuthorizationScope.current())
+            throw new com.bkanent.common.authz.AuthzException(com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
+        verify(lease, actor);
+        return lease.credentials;
+    }
+
     public synchronized void capture(String key, String originalUserId) {
         Lease current = CURRENT.get();
         if (current == null) return; // Metadata/userId alone must never mint credentials.
         if (current.authorization != null) {
             current.authorization.requireActor(originalUserId);
             current.authorization.requireRunAssociation();
-            // Existing business key maps to this verified session; never edit signed context.runId.
+            if (!key.equals(current.authorization.session().context().runId()))
+                throw new com.bkanent.common.authz.AuthzException(com.bkanent.common.authz.AuthzErrorCode.CONTEXT_CONFLICT);
+            // The execution key must match the independently bound run.
         }
         if (originalUserId == null || current.owner != null && !current.owner.equals(originalUserId)) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
         Lease existing = leases.get(key);
@@ -68,10 +80,18 @@ public class AgentRagCredentialLeaseStore {
                 || !java.util.Objects.equals(existing.authorization.session().context().sessionId(), current.authorization.session().context().sessionId()))) {
             throw new com.bkanent.common.authz.AuthzException(com.bkanent.common.authz.AuthzErrorCode.CONTEXT_CONFLICT);
         }
-        leases.entrySet().removeIf(entry -> entry.getValue().expiresAt <= clock.millis());
+        leases.entrySet().removeIf(entry -> {
+            Lease expired = entry.getValue();
+            if (expired.expiresAt > clock.millis()) return false;
+            if (expired.authorization != null) expired.authorization.releaseRegistration();
+            return true;
+        });
         if (!leases.containsKey(key) && leases.size() >= Math.min(10000, Math.max(1, properties.getMaxCredentialLeases())))
             throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
-        leases.put(key, new Lease(originalUserId, current.credentials, current.expiresAt, current.authorization));
+        Lease replaced = leases.put(key, new Lease(originalUserId, current.credentials, current.expiresAt, current.authorization));
+        if (current.authorization != null) current.authorization.markLeaseCaptured();
+        if (replaced != null && replaced.authorization != null && replaced.authorization != current.authorization)
+            replaced.authorization.releaseRegistration();
     }
     public synchronized AutoCloseable openLease(String key, String originalUserId) {
         Lease previous = CURRENT.get();
@@ -153,7 +173,10 @@ public class AgentRagCredentialLeaseStore {
         } catch (RagException ex) { throw ex; }
         catch (RuntimeException ex) { throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE); }
     }
-    public synchronized void discard(String key) { leases.remove(key); }
+    public synchronized void discard(String key) {
+        Lease removed = leases.remove(key);
+        if (removed != null && removed.authorization != null) removed.authorization.releaseRegistration();
+    }
     private static final class Lease {
         private final String owner;
         private final RagCredentialContext credentials;

@@ -9,6 +9,10 @@ public interface AuthAuthorizationRpcService {
     AuthzResponse resolveRequestAuthorization(String token, RequestBinding requestBinding, CallerProof callerProof)
             throws AuthzException;
 
+    /** Binds an unbound, fully signed ingress once; never refreshes or replaces an existing execution. */
+    AuthzResponse bindExecution(AuthzResponse ingress, ExecutionBinding binding, CallerProof proof)
+            throws AuthzException;
+
     /**
      * Refreshes a still-valid run with real access credentials, never a new audience, scope or deadline.
      * Caller signs REFRESH_AUTHORIZATION over refreshRequestHash(token, originalContext, binding).

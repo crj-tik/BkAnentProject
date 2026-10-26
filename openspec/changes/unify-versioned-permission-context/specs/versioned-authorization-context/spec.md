@@ -100,6 +100,22 @@
 - **WHEN** 已可靠接受的精确结果事件待补交付但用户凭据已到期
 - **THEN** 受限 SERVICE 可按原许可补交付，不换发用户读取凭据，删除和来源撤回仍生效
 
+### Requirement: Execution binding is independent and can only narrow ingress authority
+
+系统 SHALL 提供独立执行绑定操作，将尚未绑定run/session的可信入口授权关联到经Supervisor持久归属和幂等核查的真实执行。绑定不重新认证用户或扩大权限，必须验证原入口授权、当前版本/epoch/状态、受权服务签名、本次请求和原入口关联；只允许一次确定的actor/caller/run/session/执行输入/范围tuple。合法同tuple重试可幂等返回，不同tuple拒绝，不延长原context或run硬期限。已绑定context不能通过该操作换执行，刷新接口也不能替代绑定。绑定成功前不得进入业务执行或捕获执行权限，业务owner核查仍属Supervisor/领域责任。
+
+#### Scenario: Supervisor resolves the actual session after Gateway admission
+- **WHEN** Gateway已验证请求但入口run/session为空，Supervisor核实持久归属后确定执行关联
+- **THEN** 独立绑定返回Auth签署的非空执行context，保留原actor/scope上限/policy和hard截止，不修改原入口签名
+
+#### Scenario: The same ingress is bound to another execution
+- **WHEN** 原入口证明已绑定后被用于另一run、session、输入或许可范围
+- **THEN** 绑定记录及请求证明拒绝冲突，零业务副作用，不把入口身份当无限任务签发权
+
+#### Scenario: A valid binding request is retried
+- **WHEN** 同入口、同actor/执行tuple使用新的受权请求nonce重试
+- **THEN** 可幂等确认原关联，期限保持原值；重放同nonce仍被拒绝
+
 ### Requirement: Same-run refresh is independent and cannot renew authority boundaries
 
 系统 SHALL 提供独立同运行刷新操作，验证真实有效access凭据、原Auth签名context和受权调用服务证明；可以接受旧permissionRevision以更新授权，但原credentialEpoch必须当前有效，原context和run硬期限不得已到期。新请求必须绑定原actor/run/session/audience/policy以及本次requestId/nonce/body；返回当前完整snapshot及原许可与当前权限的交集，不增加范围或延长任何原截止。刷新成功的签名响应 SHALL 可被原本地运行接受；子域仅持委托或userId时不能自行换发，必须经原可信用户入口处理。注销等epoch失效必须要求新的认证续接，不以版本刷新绕过。首次授权、委托和刷新证明不得跨操作或请求复用。

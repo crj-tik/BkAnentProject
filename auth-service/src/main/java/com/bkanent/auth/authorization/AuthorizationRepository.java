@@ -334,6 +334,117 @@ public final class AuthorizationRepository {
                 """, timestamp(nextAttemptAt), eventId, leaseEpoch, timestamp(now)) == 1;
     }
 
+    /**
+     * Records one execution tuple per verified ingress, not an authentication credential or an owner check.
+     * The provider verifies signatures/ACL/scope and supplies hashes plus the original absolute deadlines.
+     * Retries use a new nonce, but must preserve every recorded field, including both deadlines.
+     *
+     * Current account/state and grant boundaries are checked under the same mutex as all authorization
+     * writers. No binding write changes a revision, credential epoch or outbox. A due grant boundary may
+     * independently version authorization; the stale expected revision then conflicts. Providers should
+     * wrap nonce consumption, this call and signing in withWriterLock and throw on CONFLICT/signing failure
+     * to roll back that entire admission. No remote I/O belongs inside that transaction.
+     */
+    public BindingResult bindIngressExecution(String ingressHash, String tupleHash, long actorId, String caller,
+                                               String runId, String sessionId, String policyDigest,
+                                               String operationsHash, String executionHash,
+                                               long expiresAtEpochSecond, long hardDeadlineEpochSecond,
+                                               long expectedPermissionRevision, long expectedCredentialEpoch) {
+        requireExecutionDigest(ingressHash);
+        requireExecutionDigest(tupleHash);
+        requireExecutionDigest(policyDigest);
+        requireExecutionDigest(operationsHash);
+        requireExecutionDigest(executionHash);
+        if (actorId <= 0 || caller == null || !caller.matches("[a-z][a-z0-9-]{0,95}")
+                || expectedPermissionRevision <= 0 || expectedCredentialEpoch < 0
+                || expiresAtEpochSecond <= 0 || hardDeadlineEpochSecond < expiresAtEpochSecond) {
+            throw new IllegalArgumentException("Invalid execution binding metadata");
+        }
+        requireExecutionId(runId);
+        requireExecutionId(sessionId);
+        IngressExecutionBinding requested = new IngressExecutionBinding(ingressHash, tupleHash, actorId, caller,
+                runId, sessionId, policyDigest, operationsHash, executionHash,
+                expiresAtEpochSecond, hardDeadlineEpochSecond);
+        return withWriterLock(() -> {
+            // Read time only after acquiring the mutex; waiting cannot prolong an ingress deadline.
+            Instant now = Instant.now();
+            if (expiresAtEpochSecond <= now.getEpochSecond() || hardDeadlineEpochSecond <= now.getEpochSecond()) {
+                return BindingResult.CONFLICT;
+            }
+            // Preserve the repository-wide mutex -> account -> authorization state lock order.
+            if (jdbc.queryForList("SELECT id FROM user_account WHERE id = ? FOR UPDATE",
+                    Long.class, actorId).size() != 1
+                    || jdbc.queryForList("SELECT user_id FROM auth_user_authorization_state WHERE user_id = ? FOR UPDATE",
+                    Long.class, actorId).size() != 1) {
+                return BindingResult.CONFLICT;
+            }
+            processUserGrantBoundaries(actorId, now);
+            if (jdbc.queryForObject("""
+                    SELECT COUNT(*) FROM user_account u
+                    JOIN auth_user_authorization_state s ON s.user_id = u.id
+                    WHERE u.id = ? AND u.account_status = 'ACTIVE' AND u.deleted = 0 AND s.status = 'ACTIVE'
+                      AND s.permission_revision = ? AND s.credential_epoch = ?
+                    """, Integer.class, actorId, expectedPermissionRevision, expectedCredentialEpoch) != 1) {
+                return BindingResult.CONFLICT;
+            }
+            Optional<IngressExecutionBinding> existing = jdbc.query("""
+                    SELECT ingress_request_hash, tuple_hash, actor_id, caller, run_id, session_id,
+                           policy_digest, operations_hash, execution_hash, expires_at, hard_deadline
+                    FROM auth_authorization_execution_binding WHERE ingress_request_hash = ?
+                    """, (rs, row) -> new IngressExecutionBinding(rs.getString(1), rs.getString(2), rs.getLong(3),
+                    rs.getString(4), rs.getString(5), rs.getString(6), rs.getString(7), rs.getString(8),
+                    rs.getString(9), rs.getLong(10), rs.getLong(11)), ingressHash).stream().findFirst();
+            if (expiresAtEpochSecond <= Instant.now().getEpochSecond()) {
+                return BindingResult.CONFLICT;
+            }
+            if (existing.isPresent()) {
+                return existing.get().equals(requested) ? BindingResult.IDEMPOTENT : BindingResult.CONFLICT;
+            }
+            // All binding writers hold the database mutex, including writers in other Auth instances.
+            if (jdbc.update("""
+                    INSERT INTO auth_authorization_execution_binding
+                    (ingress_request_hash, tuple_hash, actor_id, caller, run_id, session_id, policy_digest,
+                     operations_hash, execution_hash, expires_at, hard_deadline) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                    """, ingressHash, tupleHash, actorId, caller, runId, sessionId, policyDigest,
+                    operationsHash, executionHash, expiresAtEpochSecond, hardDeadlineEpochSecond) != 1) {
+                throw new IllegalStateException("Execution binding was not recorded");
+            }
+            return BindingResult.CREATED;
+        });
+    }
+
+    private static void requireExecutionDigest(String digest) {
+        if (digest == null || !digest.matches("[a-f0-9]{64}")) {
+            throw new IllegalArgumentException("Invalid execution binding digest");
+        }
+    }
+
+    private static void requireExecutionId(String value) {
+        if (value == null || value.isBlank() || value.length() > 128) {
+            throw new IllegalArgumentException("Invalid execution binding identifier");
+        }
+        for (int i = 0; i < value.length(); i++) {
+            char character = value.charAt(i);
+            if (Character.isISOControl(character)) {
+                throw new IllegalArgumentException("Invalid execution binding identifier");
+            }
+            if (Character.isHighSurrogate(character)) {
+                if (i + 1 >= value.length() || !Character.isLowSurrogate(value.charAt(++i))) {
+                    throw new IllegalArgumentException("Invalid execution binding identifier");
+                }
+            } else if (Character.isLowSurrogate(character)) {
+                throw new IllegalArgumentException("Invalid execution binding identifier");
+            }
+        }
+    }
+
+    public enum BindingResult { CREATED, IDEMPOTENT, CONFLICT }
+
+    private record IngressExecutionBinding(String ingressHash, String tupleHash, long actorId, String caller,
+                                          String runId, String sessionId, String policyDigest, String operationsHash,
+                                          String executionHash, long expiresAtEpochSecond,
+                                          long hardDeadlineEpochSecond) { }
+
     /** Call after validating the signature, binding and deadline. Hash only; never persist a raw nonce. */
     public boolean consumeNonce(String caller, String keyId, String nonceHash, Instant now, Instant expiresAt) {
         if (caller == null || !caller.matches("[A-Za-z0-9._-]{1,64}")

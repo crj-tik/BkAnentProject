@@ -37,13 +37,13 @@ public class OrchestrationStore {
     public void assertSameRequest(SupervisorTaskRequest original, SupervisorTaskRequest supplied) {
         if (original == null || supplied == null
                 || !java.util.Objects.equals(original.sessionId(), supplied.sessionId())
-                || !requestHash(original).equals(requestHash(supplied))) {
+                || !executionHash(original).equals(executionHash(supplied))) {
             throw new IllegalStateException("RUN_REQUEST_ID_CONFLICT");
         }
     }
 
-    /** Trace and delivery mode are transport details; input and original policy are immutable. */
-    private String requestHash(SupervisorTaskRequest request) {
+    /** Shared business-input hash; trace and delivery mode stay transport-only. */
+    public String executionHash(SupervisorTaskRequest request) {
         ObjectNode value = mapper.valueToTree(request);
         value.remove(java.util.List.of("traceId", "stream"));
         Map<String, Object> context = new java.util.LinkedHashMap<>(

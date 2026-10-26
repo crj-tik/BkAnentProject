@@ -26,6 +26,9 @@ public class SupervisorToolLoopRunner {
     private final OrchestrationStore store;
     private final SupervisorOrchestrationProperties properties;
     private final ApprovalResumeClaimStore claims;
+    private com.bkanent.agent.authorization.AgentExecutionBindingCoordinator executionBinding;
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setExecutionBinding(com.bkanent.agent.authorization.AgentExecutionBindingCoordinator coordinator) { executionBinding = coordinator; }
     private com.bkanent.agent.security.AgentRagCredentialLeaseStore ragCredentials;
     @org.springframework.beans.factory.annotation.Autowired
     public void setRagCredentials(com.bkanent.agent.security.AgentRagCredentialLeaseStore credentials) { ragCredentials = credentials; }
@@ -42,6 +45,20 @@ public class SupervisorToolLoopRunner {
                                     SupervisorOrchestrationProperties properties, ApprovalResumeClaimStore claims) {
         this.factory = factory; this.graph = graph; this.store = store; this.properties = properties; this.claims = claims;
     }
+    private com.bkanent.agent.config.AgentChatProperties chatProperties = new com.bkanent.agent.config.AgentChatProperties();
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setChatProperties(com.bkanent.agent.config.AgentChatProperties value) { chatProperties = value; }
+
+    public void assertChatIdentity(com.bkanent.agent.model.chat.AgentChatRequest request, String sessionId) {
+        Map<String, Object> context = new LinkedHashMap<>();
+        if (request.continueRunId() == null || request.collectionName() != null || request.topK() != null) {
+            context.put("spaceId", com.bkanent.agent.rag.AgentRagCompatibility.space(request.collectionName(), "supervisor.knowledge"));
+            context.put("topK", com.bkanent.agent.rag.AgentRagCompatibility.topK(request.topK(), chatProperties.getDefaultTopK()));
+        }
+        assertRequestIdentity(new SupervisorTaskRequest(sessionId, request.userId(), request.requestId(), null,
+                request.message(), context, "chat", false, request.skill(), request.continueRunId(), request.allowMcp()));
+    }
+
     public boolean hasRun(String runId) { return snapshot(runId) != null; }
 
     public String sessionIdForChat(String continueRunId, String requestId, String sessionId, String actorId) {
@@ -82,6 +99,8 @@ public class SupervisorToolLoopRunner {
         var normalized = new SupervisorTaskRequest(sessionId, request.userId(), runId, traceId, request.userMessage(),
                 com.bkanent.agent.security.AgentRagContextPolicy.normalize(request.context()), request.channel(), request.stream(), request.skill(), null, request.allowMcp(), request.matterIntent());
         if (!hasRun(runId) && !properties.isAccepting()) throw new IllegalStateException("SUPERVISOR_ACCEPTANCE_PAUSED");
+        assertRequestIdentity(normalized);
+        bindExecution(normalized);
         store.register(runId, normalized);
         if (ragCredentials != null) ragCredentials.capture(runId, normalized.userId());
         return leased(runId, token -> {
@@ -125,6 +144,8 @@ public class SupervisorToolLoopRunner {
         String runId = request.continueRunId();
         if (!StringUtils.hasText(request.requestId())) throw new IllegalArgumentException("continuation requestId required");
         store.assertOwner(runId, request.userId());
+        assertRequestIdentity(request);
+        bindExecution(request);
         if (ragCredentials != null) ragCredentials.capture(runId, request.userId());
         return leased(runId, token -> {
             StateSnapshot existing = snapshot(runId);
@@ -190,6 +211,19 @@ public class SupervisorToolLoopRunner {
     public SupervisorTaskResponse resume(ApprovalCallbackRequest request) {
         if (request.status() == null || request.status() == ApprovalStatus.PENDING) throw new IllegalArgumentException("approval decision required");
         store.assertOwner(request.taskId(), request.reviewerId());
+        assertApprovalIdentity(request);
+        if (executionBinding != null) {
+            var fixedState = factory.stateOf(snapshot(request.taskId()).state());
+            Map<String, Object> fixedDecision = new LinkedHashMap<>();
+            fixedDecision.put("decision", request);
+            fixedDecision.put("originalRequest", fixedState.request);
+            fixedDecision.put("pendingApproval", fixedState.pendingApproval);
+            fixedDecision.put("skillSnapshot", fixedState.skillSnapshot);
+            fixedDecision.put("allowMcp", fixedState.allowMcp);
+            executionBinding.bindApproval(request.reviewerId(), request.taskId(),
+                    store.originalRequest(request.taskId()).sessionId(), fixedDecision);
+        }
+        else requireNoUnboundEntry();
         if (ragCredentials != null) ragCredentials.capture(request.taskId(), request.reviewerId());
         return leased(request.taskId(), token -> {
             StateSnapshot existing = snapshot(request.taskId());
@@ -293,6 +327,34 @@ public class SupervisorToolLoopRunner {
             }
             catch (Exception exception) { throw new IllegalStateException(exception); }
         });
+    }
+
+    private void assertApprovalIdentity(ApprovalCallbackRequest request) {
+        var existing = snapshot(request.taskId());
+        if (existing == null) throw new IllegalArgumentException("run not found");
+        var state = factory.stateOf(existing.state());
+        if (!request.reviewerId().equals(state.userId)
+                || StringUtils.hasText(request.sessionId()) && !state.sessionId.equals(request.sessionId()))
+            throw new IllegalArgumentException("approval session mismatch");
+        ApprovalDecision previous = existing.state().value(LATEST_APPROVAL_DECISION)
+                .map(value -> store.read(store.json(value), ApprovalDecision.class)).orElse(null);
+        boolean pending = state.pendingApproval != null && request.approvalId().equals(state.pendingApproval.approvalId());
+        boolean replay = previous != null && request.approvalId().equals(previous.approvalId());
+        if (!pending && !replay || replay && previous.status() != request.status()
+                || pending && request.approvalVersion() != null
+                && !request.approvalVersion().equals(state.pendingApproval.subjectVersion())
+                || !replay && !"WAITING_USER_APPROVAL".equals(state.status))
+            throw new IllegalArgumentException("approval does not match current call");
+    }
+
+    private void bindExecution(SupervisorTaskRequest request) {
+        if (executionBinding != null) executionBinding.bind(request);
+        else requireNoUnboundEntry();
+    }
+
+    private void requireNoUnboundEntry() {
+        var entry = com.bkanent.agent.authorization.AgentAuthorizationScope.current();
+        if (entry != null) entry.requireRunAssociation();
     }
 
     private SupervisorTaskResponse leased(String runId, Function<String, SupervisorTaskResponse> operation) {

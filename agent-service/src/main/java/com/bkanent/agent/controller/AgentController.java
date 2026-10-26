@@ -80,6 +80,11 @@ import java.util.concurrent.CompletableFuture;
 @RestController
 @RequestMapping("/agent")
 public class AgentController {
+    private com.bkanent.agent.authorization.AgentExecutionBindingCoordinator executionBinding;
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setExecutionBinding(com.bkanent.agent.authorization.AgentExecutionBindingCoordinator coordinator) {
+        this.executionBinding = coordinator;
+    }
     private com.bkanent.agent.orchestration.SupervisorToolLoopRunner toolLoopRunner;
     @org.springframework.beans.factory.annotation.Autowired
     public void setToolLoopRunner(com.bkanent.agent.orchestration.SupervisorToolLoopRunner runner) { this.toolLoopRunner = runner; }
@@ -89,6 +94,7 @@ public class AgentController {
         return guarded(() -> {
             String actor = authenticatedPrincipal.resolveUserId(userId);
             if (supervisorWorkflowQueryService.findWorkflow(runId, actor).isEmpty()) return ApiResponse.fail("RUN_NOT_FOUND", "run not found");
+            requireSupportedControlBinding();
             return ApiResponse.ok(toolLoopRunner.cancel(runId, actor));
         });
     }
@@ -98,6 +104,7 @@ public class AgentController {
         return guarded(() -> {
             String actor = authenticatedPrincipal.resolveUserId(userId);
             if (supervisorWorkflowQueryService.findWorkflow(runId, actor).isEmpty()) return ApiResponse.fail("RUN_NOT_FOUND", "run not found");
+            requireSupportedControlBinding();
             return ApiResponse.ok(toolLoopRunner.reconcile(runId, actor));
         });
     }
@@ -383,6 +390,7 @@ public class AgentController {
             }
             String sessionId = toolLoopRunner.sessionIdForChat(authenticatedRequest.continueRunId(), authenticatedRequest.requestId(),
                     authenticatedRequest.sessionId(), authenticatedRequest.userId());
+            toolLoopRunner.assertChatIdentity(authenticatedRequest, sessionId);
             supervisorSessionOwnershipService.claim(sessionId, authenticatedRequest.userId());
             return ApiResponse.ok(agentOrchestratorService.chat(new AgentChatRequest(
                     authenticatedRequest.userId(), authenticatedRequest.message(), authenticatedRequest.collectionName(),
@@ -405,6 +413,7 @@ public class AgentController {
             toolLoopRunner.assertRequestIdentity(governedRequest);
             supervisorSessionOwnershipService.claim(governedRequest.sessionId(), governedRequest.userId());
             supervisorGovernanceService.assertRateLimit("supervisor.tasks", governedRequest);
+            bindExecution(governedRequest);
             return ApiResponse.ok(supervisorTaskService.submitTask(governedRequest));
         });
     }
@@ -420,6 +429,7 @@ public class AgentController {
             toolLoopRunner.assertRequestIdentity(governedRequest);
             supervisorSessionOwnershipService.claim(governedRequest.sessionId(), governedRequest.userId());
             supervisorGovernanceService.assertRateLimit("supervisor.tasks.async", governedRequest);
+            bindExecution(governedRequest);
             return ApiResponse.ok(supervisorAsyncTaskService.submitTask(governedRequest));
         });
     }
@@ -458,6 +468,7 @@ public class AgentController {
             toolLoopRunner.assertRequestIdentity(governedRequest);
             supervisorSessionOwnershipService.claim(governedRequest.sessionId(), governedRequest.userId());
             supervisorGovernanceService.assertRateLimit("supervisor.workflows", governedRequest);
+            bindExecution(governedRequest);
             return ApiResponse.ok(supervisorWorkflowService.startWorkflow(governedRequest));
         });
     }
@@ -473,6 +484,7 @@ public class AgentController {
             toolLoopRunner.assertRequestIdentity(governedRequest);
             supervisorSessionOwnershipService.claim(governedRequest.sessionId(), governedRequest.userId());
             supervisorGovernanceService.assertRateLimit("supervisor.workflows.async", governedRequest);
+            bindExecution(governedRequest);
             return ApiResponse.ok(supervisorAsyncWorkflowService.submitWorkflow(governedRequest));
         });
     }
@@ -503,6 +515,7 @@ public class AgentController {
     public ApiResponse<SupervisorAsyncWorkflowStatusResponse> cancelSupervisorAsyncWorkflow(@RequestParam String asyncWorkflowId,
                                                                                             @RequestParam String userId) {
         String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
+        requireSupportedControlBinding();
         SupervisorAsyncWorkflowStatusResponse response = supervisorAsyncWorkflowService.cancelWorkflow(asyncWorkflowId, authenticatedUserId);
         if (response == null) {
             return ApiResponse.fail("SUPERVISOR_ASYNC_WORKFLOW_NOT_FOUND", "async workflow not found");
@@ -515,6 +528,7 @@ public class AgentController {
                                                                                            @RequestParam String userId) {
         try {
             String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
+            requireSupportedControlBinding();
             SupervisorAsyncWorkflowCreateResponse response = supervisorAsyncWorkflowService.retryWorkflow(asyncWorkflowId, authenticatedUserId);
             if (response == null) {
                 return ApiResponse.fail("SUPERVISOR_ASYNC_WORKFLOW_NOT_FOUND", "async workflow not found");
@@ -642,6 +656,18 @@ public class AgentController {
     @PostMapping("/supervisor/governance/gray-release/clear")
     public ApiResponse<SupervisorGovernanceView> clearGrayReleaseOverride() {
         return guarded(() -> ApiResponse.ok(supervisorGovernanceService.clearGrayReleaseOverride()));
+    }
+
+    /** Recovery controls need a fixed original checkpoint binding; until wired, no queue or side effects. */
+    private void requireSupportedControlBinding() {
+        if (com.bkanent.agent.authorization.AgentAuthorizationScope.current() != null)
+            throw new com.bkanent.common.authz.AuthzException(com.bkanent.common.authz.AuthzErrorCode.CONTEXT_CONFLICT);
+    }
+
+    private void bindExecution(SupervisorTaskRequest request) {
+        if (executionBinding != null) executionBinding.bind(request);
+        else if (com.bkanent.agent.authorization.AgentAuthorizationScope.current() != null)
+            throw new com.bkanent.common.authz.AuthzException(com.bkanent.common.authz.AuthzErrorCode.AUTHORIZATION_UNAVAILABLE);
     }
 
     private <T> ApiResponse<T> guarded(java.util.function.Supplier<ApiResponse<T>> supplier) {

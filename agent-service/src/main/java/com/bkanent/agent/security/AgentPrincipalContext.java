@@ -77,10 +77,10 @@ public class AgentPrincipalContext {
 
     public AgentChatRequest bind(AgentChatRequest request) {
         requireRequest(request);
-        if (verifiedAuthorization != null) verifiedAuthorization.requireRunAssociation();
         resolveUserId(request.userId());
+        String requestId = normalizedRequestId(request.requestId());
         return new AgentChatRequest(userId, request.message(), request.collectionName(),
-                request.topK(), request.allowMcp(), request.skill(), request.continueRunId(), request.sessionId(), request.requestId());
+                request.topK(), request.allowMcp(), request.skill(), request.continueRunId(), request.sessionId(), requestId);
     }
 
     public ListingIndexRequest bind(ListingIndexRequest request) {
@@ -101,20 +101,12 @@ public class AgentPrincipalContext {
         if (request == null) {
             throw new AgentPrincipalException("supervisor request is required");
         }
-        if (verifiedAuthorization != null) {
-            verifiedAuthorization.requireRunAssociation();
-            var signed = verifiedAuthorization.session().context();
-            if (StringUtils.hasText(request.sessionId()) && !signed.sessionId().equals(request.sessionId())
-                    || StringUtils.hasText(request.continueRunId()) && !signed.runId().equals(request.continueRunId())) {
-                throw new com.bkanent.common.authz.AuthzException(com.bkanent.common.authz.AuthzErrorCode.CONTEXT_CONFLICT);
-            }
-        }
         resolveUserId(request.userId());
+        String requestId = normalizedRequestId(request.requestId());
         Map<String, Object> context = new LinkedHashMap<>(request.context() == null ? Map.of() : request.context());
         context = new LinkedHashMap<>(AgentRagContextPolicy.normalize(context));
         context.put("userId", userId);
-        String sessionId = verifiedAuthorization != null ? verifiedAuthorization.session().context().sessionId()
-                : StringUtils.hasText(request.sessionId()) ? request.sessionId().trim() : UUID.randomUUID().toString();
+        String sessionId = StringUtils.hasText(request.sessionId()) ? request.sessionId().trim() : UUID.randomUUID().toString();
         if (StringUtils.hasText(request.continueRunId()) && orchestrationStore != null) {
             orchestrationStore.assertOwner(request.continueRunId(), userId);
             String originalSession = orchestrationStore.originalRequest(request.continueRunId()).sessionId();
@@ -127,9 +119,14 @@ public class AgentPrincipalContext {
             orchestrationStore.assertOwner(request.requestId(), userId);
             sessionId = orchestrationStore.originalRequest(request.requestId()).sessionId();
         }
-        return new SupervisorTaskRequest(sessionId, userId, request.requestId(), request.traceId(),
+        return new SupervisorTaskRequest(sessionId, userId, requestId, request.traceId(),
                 request.userMessage(), Collections.unmodifiableMap(context), request.channel(), request.stream(),
                 request.skill(), request.continueRunId(), request.allowMcp(), request.matterIntent());
+    }
+
+    private String normalizedRequestId(String requested) {
+        if (verifiedAuthorization != null) return verifiedAuthorization.normalizeRequestId(requested);
+        return StringUtils.hasText(requested) ? requested.trim() : UUID.randomUUID().toString();
     }
 
     private void requireRequest(Object request) {

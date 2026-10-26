@@ -2,5 +2,5 @@ package com.bkanent.common.authz;
 
 /** Service-operation ACL entries, separate from users' business permissions. */
 public enum AuthzRpcOperation {
-    RESOLVE_REQUEST_AUTHORIZATION, VALIDATE_DELEGATION, REFRESH_AUTHORIZATION
+    RESOLVE_REQUEST_AUTHORIZATION, VALIDATE_DELEGATION, REFRESH_AUTHORIZATION, BIND_EXECUTION
 }

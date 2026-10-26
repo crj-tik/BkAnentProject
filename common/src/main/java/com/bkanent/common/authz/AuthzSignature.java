@@ -111,6 +111,50 @@ public final class AuthzSignature {
         AuthzContract.check(callerAcl != null && callerAcl.contains(value.operation()), AuthzErrorCode.PERMISSION_DENIED);
     }
 
+    /** Only a live, unbound ingress can acquire an execution identity; all three signatures are required. */
+    public static void verifyExecutionBinding(AuthzResponse ingress, ExecutionBinding binding,
+                                               Map<String, PublicKey> authorityKeys, Instant now) {
+        authenticate(ingress != null && binding != null);
+        AuthorizationContext original = ingress.context();
+        verifyResponse(ingress, binding.callerService(), original.requestId(), original.requestHash(),
+                original.nonce(), authorityKeys, now);
+        time(binding.issuedAtEpochSecond(), binding.expiresAtEpochSecond(), now);
+        AuthzContract.check(original.runId() == null && original.sessionId() == null
+                && original.actorId().equals(binding.actorId())
+                && original.requestHash().equals(binding.ingressRequestHash())
+                && original.policyDigest().equals(binding.policyDigest())
+                && !original.requestId().equals(binding.requestId())
+                && !original.nonce().equals(binding.nonce())
+                && binding.issuedAtEpochSecond() >= original.issuedAtEpochSecond()
+                && binding.expiresAtEpochSecond() <= original.expiresAtEpochSecond()
+                && binding.expiresAtEpochSecond() <= original.runHardDeadlineEpochSecond(),
+                AuthzErrorCode.CONTEXT_CONFLICT);
+        AuthzContract.check(original.allowedOperations().containsAll(binding.operations()), AuthzErrorCode.PERMISSION_DENIED);
+    }
+
+    /** Verify the independent binding transition before creating a new local session, never via refresh. */
+    public static void verifyExecutionBindingResponse(AuthzResponse ingress, ExecutionBinding binding,
+                                                       AuthzResponse response,
+                                                       Map<String, PublicKey> authorityKeys, Instant now) {
+        verifyExecutionBinding(ingress, binding, authorityKeys, now);
+        verifyResponse(response, binding.callerService(), binding.requestId(),
+                AuthzCanonicalHash.executionBindingRequestHash(ingress, binding), binding.nonce(), authorityKeys, now);
+        AuthorizationContext original = ingress.context();
+        AuthorizationContext bound = response.context();
+        AuthzContract.check(bound.actorId().equals(original.actorId())
+                && bound.permissionRevision() == original.permissionRevision()
+                && bound.credentialEpoch() == original.credentialEpoch()
+                && bound.permissionHash().equals(original.permissionHash())
+                && Objects.equals(bound.runId(), binding.runId()) && Objects.equals(bound.sessionId(), binding.sessionId())
+                && bound.policyDigest().equals(original.policyDigest())
+                && bound.allowedOperations().equals(binding.operations())
+                && bound.runHardDeadlineEpochSecond() == original.runHardDeadlineEpochSecond()
+                && bound.expiresAtEpochSecond() <= original.expiresAtEpochSecond()
+                && bound.issuedAtEpochSecond() >= binding.issuedAtEpochSecond()
+                && response.freshness().checkedAtEpochSecond() >= ingress.freshness().checkedAtEpochSecond(),
+                AuthzErrorCode.CONTEXT_CONFLICT);
+    }
+
     /** Refresh validates the original signature/time, not its obsolete permission version or freshness. */
     public static void verifyRefreshBinding(AuthorizationContext original, RequestBinding binding,
                                             Map<String, PublicKey> authorityKeys, Instant now) {

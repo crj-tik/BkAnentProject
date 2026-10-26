@@ -100,6 +100,18 @@ Auth先验证原context签名及真实actor/audience/期限，不要求原permis
 
 验收必须执行真实provider→签名response→AuthorizationSession.refresh闭环：T0建立300秒run，T0+10改变permissionRevision后刷新成功但hardDeadline仍T0+300；原子域委托拒旧版本且接受刷新后的受限版本。增加撤权/再授予不扩scope、错actor/audience/run/session/policy、伪造原签名、错操作proof、nonce重放、epoch变化、access/context硬到期、签发并发版本变化和依赖失败反例。该接口不自动标记4.2/4.5完成，须实现与测试后更新KI-169。
 
+### D7b. 独立执行绑定接口（用户明确选择）
+
+新增 `bindExecution(ingressResponse, executionBinding, callerProof)`，操作为 `BIND_EXECUTION`；保留独立refresh接口，不使用刷新把null run/session改成具体身份。Gateway入口仍签实际请求字节与用户权限、不预猜持久run/session。Supervisor本地验证入口三签和实际请求，解析缺省/重投/续接/审批的真实run与session，先核持久owner、输入/政策幂等、会话归属，再调用绑定；绑定成功后才能捕获执行lease、入异步队列、调用模型或发起工具。Auth不读取业务数据库，会话归属由受信Supervisor执行点负责，绑定RPC只核授权与服务证明。
+
+`ExecutionBinding`包含callerService、actorId、runId、sessionId、operations、原入口requestHash、归一化业务executionHash、原policyDigest、本次requestId/nonce以及短请求期限。caller必须等于原context.audience且在独立BIND_EXECUTION ACL内；只允许原context.runId/sessionId均null的入口证明，已绑定context不能再次换run/session。绑定hash以独立类型覆盖完整入口三签响应和ExecutionBinding；证明签给Auth。Auth验证三签、原入口freshness、当前revision/credentialEpoch/status、scope子集及期限，再持久消费nonce与原入口绑定记录。记录以原入口requestHash唯一，保存actor/caller/run/session/executionHash/operationsHash/policyDigest/原hard期限的最小事实；同入口不同tuple返回409，合法同tuple带新nonce可幂等重取，但不延长原截止。
+
+签发的context保留actor、audience、policyDigest、permissionHash/revision/epoch及原runHardDeadline，加入经Supervisor核查的run/session；scope只能收窄，expiresAt不超过原context、原hard期限和当前grant截止。response.requestId/requestHash/nonce关联本次绑定，与Gateway原请求binding分开。旧入口响应/原始请求验证事实保留在请求内，不被新执行上下文覆盖；消费者建立新的已验运行session并更新原专用Entry，原权限证明不原地改签。原入口到绑定最多一次新增Auth调用；该开销不扩成每节点调用，Model同版仍只核Redis版本。
+
+新增增量MySQL绑定表，不能修改已应用250/260迁移；绑定记录既不是用户登录凭据，也不允许从checkpoint恢复。初始REST/A2A执行接线先覆盖chat、Supervisor sync/async tasks/workflows及已有run的显式续接；审批/取消等恢复入口只在核原关联后绑定，未完成路径保持拒绝并记录未验，不虚构上线。依赖故障失败关闭，原请求冲突在任何业务副作用之前返回，权限版本竞争须刷新或重新认证后再绑定，不以旧证明放行。
+
+验收：入口Auth一次、执行绑定一次，实际Supervisor模型执行与lease捕获使用非null绑定；同actor缺省session重投沿原持久关联，显式跨session/变输入拒绝；跨actor、已绑定换run、错scope/nonce/body/epoch/过期拒绝；同步/异步线程清理与恢复不保存凭据，已完成工具不因绑定失败重发。Gateway和下游header预算及所有新模式配置仍按启用门禁管理。
+
 ### D8. MCP第一阶段只开放可验证服务
 
 InterviewMcpTools当前6个普通@Tool无真实provider bean，先完成明确ToolCallbackProvider/官方注册及专用HTTP鉴权过滤（或服务器支持的标准鉴权扩展）。MCP客户端在模型不可见的headers/transport上下文附binding；接收服务在新call执行入口调用Auth验证一次，同一调用内代码不逐步认证。外部MCP不支持用户委托时只允许清单标记的无私有数据能力，不把userId业务参数当身份。Supervisor动态连接管理仍需独立管理权限与地址防护。

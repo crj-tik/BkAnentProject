@@ -87,6 +87,63 @@ public class AuthAuthorizationRpcServiceImpl implements AuthAuthorizationRpcServ
     }
 
     @Override
+    public AuthzResponse bindExecution(AuthzResponse ingress, ExecutionBinding binding, CallerProof proof) {
+        try {
+            Instant now = clock.instant();
+            require(ingress != null && binding != null && proof != null, AuthzErrorCode.AUTHENTICATION_REQUIRED);
+            AuthzSignature.verifyExecutionBinding(ingress, binding, authorityKeys, now);
+            String requestHash = AuthzCanonicalHash.executionBindingRequestHash(ingress, binding);
+            var caller = verifyProof(proof, binding.callerService(), AUTH_AUDIENCE, AuthzRpcOperation.BIND_EXECUTION,
+                    binding.requestId(), requestHash, binding.nonce(), now);
+            require(caller.getAudiences().contains(binding.callerService()), AuthzErrorCode.PERMISSION_DENIED);
+            require(caller.getPermissionCodes().containsAll(binding.operations()), AuthzErrorCode.PERMISSION_DENIED);
+            // Nonce admission, immutable ingress fact, version recheck and signing join one writer transaction.
+            // No token lookup, publication, network or business-resource operation occurs under this lock.
+            AuthzResponse bound = repository.withWriterLock(() -> {
+                Instant checkedAt = clock.instant();
+                AuthzSignature.verifyExecutionBinding(ingress, binding, authorityKeys, checkedAt);
+                AuthorizationContext original = ingress.context();
+                var facts = load(Long.parseLong(original.actorId()), checkedAt);
+                require(facts.permissionRevision() == original.permissionRevision()
+                        && facts.credentialEpoch() == original.credentialEpoch()
+                        && AuthzCanonicalHash.snapshotHash(snapshot(facts)).equals(original.permissionHash()),
+                        AuthzErrorCode.CONTEXT_CONFLICT);
+                require(facts.permissions().containsAll(binding.operations()), AuthzErrorCode.PERMISSION_DENIED);
+                requireCurrent(facts);
+                long expiry = AuthzDeadlines.contextExpiresAt(checkedAt.getEpochSecond(),
+                        original.expiresAtEpochSecond(), original.runHardDeadlineEpochSecond(), deadline(facts));
+                require(expiry > checkedAt.getEpochSecond(), AuthzErrorCode.EXPIRED);
+                AuthzResponse response = response(facts, binding.operations(), original.audience(), binding.requestId(),
+                        binding.runId(), binding.sessionId(), original.policyDigest(), requestHash, binding.nonce(),
+                        checkedAt, expiry, original.runHardDeadlineEpochSecond());
+                Instant admittedAt = clock.instant();
+                AuthzSignature.verifyExecutionBindingResponse(ingress, binding, response, authorityKeys, admittedAt);
+                verifyProof(proof, binding.callerService(), AUTH_AUDIENCE, AuthzRpcOperation.BIND_EXECUTION,
+                        binding.requestId(), requestHash, binding.nonce(), admittedAt);
+                consume(proof, admittedAt);
+                var result = repository.bindIngressExecution(binding.ingressRequestHash(),
+                        AuthzCanonicalHash.executionBindingTupleHash(ingress, binding), facts.userId(),
+                        binding.callerService(), binding.runId(), binding.sessionId(), binding.policyDigest(),
+                        AuthzCanonicalHash.executionOperationsHash(binding.operations()), binding.executionHash(),
+                        expiry, original.runHardDeadlineEpochSecond(), facts.permissionRevision(), facts.credentialEpoch());
+                require(result == AuthorizationRepository.BindingResult.CREATED
+                        || result == AuthorizationRepository.BindingResult.IDEMPOTENT, AuthzErrorCode.CONTEXT_CONFLICT);
+                requireCurrent(facts);
+                Instant completedAt = clock.instant();
+                AuthzSignature.verifyExecutionBindingResponse(ingress, binding, response, authorityKeys, completedAt);
+                verifyProof(proof, binding.callerService(), AUTH_AUDIENCE, AuthzRpcOperation.BIND_EXECUTION,
+                        binding.requestId(), requestHash, binding.nonce(), completedAt);
+                return response;
+            });
+            return registerActive(bound);
+        } catch (AuthzException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new AuthzException(AuthzErrorCode.AUTHORIZATION_UNAVAILABLE);
+        }
+    }
+
+    @Override
     public AuthzResponse refreshAuthorization(String token, AuthorizationContext original,
                                               RequestBinding binding, CallerProof proof) {
         try {
