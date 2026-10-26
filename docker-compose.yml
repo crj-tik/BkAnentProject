@@ -627,14 +627,6 @@ services:
       MARKETING_MEMORY_V2_COMPRESSION_ENABLED: ${MARKETING_MEMORY_V2_COMPRESSION_ENABLED:-false}
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,elasticsearch
 
-  promotion-service:
-    <<: *app-service
-    profiles: [full]
-    environment:
-      <<: *app-environment
-      SERVICE_ARTIFACT: promotion-service-1.0.0-SNAPSHOT.jar
-      A2A_PUBLIC_BASE_URL: http://promotion-service:9009
-
   business-service:
     <<: *app-service
     profiles: [full]

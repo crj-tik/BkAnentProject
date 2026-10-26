@@ -45,6 +45,7 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
     public List<MarketingContentDTO> saveContents(List<MarketingContentDTO> contents) {
         List<MarketingContentEntity> entities = contents.stream()
                 .map(marketingContentConverter::toEntity)
+                .peek(entity -> entity.setAuditStatus(MarketingAuditStatusEnum.DRAFT.name()))
                 .toList();
         saveBatch(entities);
         entities.forEach(marketingContentSearchService::indexContent);
@@ -117,17 +118,18 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
     @Override
     @Transactional(rollbackFor = Exception.class)
     public MarketingContentDetailResponse updatePublishStatus(Long contentId, MarketingPublishStatusUpdateRequest request) {
-        if (!MarketingPublishStatusEnum.contains(request.publishStatus())) {
-            throw new IllegalArgumentException("发布状态不合法: " + request.publishStatus());
-        }
+        throw com.bkanent.marketing.campaign.CampaignDomainException.legacyWriteDisabled(
+                "publish status is owned by marketing campaign receipts; use the campaign confirm and receipt APIs");
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MarketingContentDetailResponse updateAuditStatus(Long contentId, String auditStatus) {
+        if (!MarketingAuditStatusEnum.contains(auditStatus)) throw new IllegalArgumentException("审核状态不合法: " + auditStatus);
         MarketingContentEntity entity = requireContent(contentId);
-        entity.setStatus(request.publishStatus().toUpperCase());
-        entity.setPublishMessage(request.publishMessage());
-        entity.setExternalPublishId(request.externalPublishId());
-        entity.setPublishTime(request.publishTime());
+        entity.setAuditStatus(auditStatus.toUpperCase());
         updateById(entity);
         marketingContentSearchService.indexContent(entity);
-        log.info("更新营销内容发布状态成功，contentId={}，status={}", contentId, entity.getStatus());
         return marketingContentConverter.toDetailResponse(entity);
     }
 
@@ -148,9 +150,6 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
         if (!MarketingContentTypeEnum.contains(request.contentType())) {
             throw new IllegalArgumentException("内容类型不合法: " + request.contentType());
         }
-        if (StringUtils.hasText(request.auditStatus()) && !MarketingAuditStatusEnum.contains(request.auditStatus())) {
-            throw new IllegalArgumentException("审核状态不合法: " + request.auditStatus());
-        }
     }
 
     private void applyUpsert(MarketingContentEntity entity, MarketingContentUpsertRequest request) {
@@ -164,7 +163,7 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
         entity.setVideoUrl(request.videoUrl());
         entity.setPlatformVariant(StringUtils.hasText(request.platformVariant()) ? request.platformVariant() : "DEFAULT");
         entity.setTags(marketingContentConverter.joinValues(request.tags()));
-        entity.setAuditStatus(StringUtils.hasText(request.auditStatus()) ? request.auditStatus().toUpperCase() : MarketingAuditStatusEnum.DRAFT.name());
+        entity.setAuditStatus(MarketingAuditStatusEnum.DRAFT.name());
         entity.setParentContentId(request.parentContentId());
         entity.setSource(StringUtils.hasText(request.source()) ? request.source() : "manual");
     }

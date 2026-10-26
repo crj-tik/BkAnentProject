@@ -206,7 +206,7 @@ if [ "$PROFILE" = rag ]; then
   required_configs="auth-service.yaml rag-service.yaml listing-master-service.yaml memory-service.yaml agent-service.yaml customer-service.yaml marketing-content-service.yaml"
 fi
 if [ "$PROFILE" = "full" ]; then
-  required_configs="$required_configs agent-service.yaml business-service.yaml compare-engine-service.yaml contract-service.yaml customer-service.yaml interview-service.yaml listing-master-service.yaml marketing-content-service.yaml media-worker-service.yaml memory-service.yaml notification-service.yaml promotion-service.yaml settlement-service.yaml"
+  required_configs="$required_configs agent-service.yaml business-service.yaml compare-engine-service.yaml contract-service.yaml customer-service.yaml interview-service.yaml listing-master-service.yaml marketing-content-service.yaml media-worker-service.yaml memory-service.yaml notification-service.yaml settlement-service.yaml"
 fi
 config_missing=0
 for cfg in $required_configs; do
@@ -222,7 +222,7 @@ if [ "$BIND_ADDR" != "0.0.0.0" ] && [ "$PROFILE" != "mcp" ]; then
   log_info "  - 默认只绑定 127.0.0.1；需要局域网访问时用 --bind 0.0.0.0 或手工改 .env 的 HOST_BIND_ADDRESS，并同步复查 A2A_PUBLIC_BASE_URL / MINIO_PUBLIC_BASE_URL"
 fi
 log_info "  - .env 只放端口/连接/密钥/启动参数；Token TTL、模型、排行榜、流式和搜索开关在 Nacos 维护"
-log_info "  - 分布式生产必须在 Nacos 将 contract/notification/media/promotion 的 integration.mode 显式设为 real，并接入/选择真实 provider（合同需真实 OCR + 电子签）；不能在 .env 切换，不能削弱 readiness"
+log_info "  - 分布式生产必须在 Nacos 显式配置 contract/notification/media 的真实集成和营销 campaign REAL 模式；未接入真实推广 provider 时发布会失败关闭，合同需真实 OCR + 电子签；不能在 .env 切换，不能削弱 readiness"
 log_info "  - nacos/*.yaml 默认为 Docker 开发配置；生产导入前准备环境专属配置，避免 config-init 覆盖生产 data ID"
 log_info "  - NACOS_USERNAME / NACOS_PASSWORD 可从 .env 传入应用容器；Admin 账号初始化与目标命名空间 Card 更新授权仍需另行完成"
 if [ "$SKIP_DOCKER" -eq 0 ]; then

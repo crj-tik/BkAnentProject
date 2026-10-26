@@ -41,7 +41,7 @@ public class MarketingContentRpcServiceImpl implements MarketingContentRpcServic
                                     String publishMessage,
                                     String externalPublishId,
                                     LocalDateTime publishTime) {
-        marketingAssetService.updatePublishStatus(contentId,
-                new MarketingPublishStatusUpdateRequest(publishStatus, publishMessage, externalPublishId, publishTime));
+        throw com.bkanent.marketing.campaign.CampaignDomainException.legacyWriteDisabled(
+                "remote publish status write is retired; campaign attempts own the publish state");
     }
 }

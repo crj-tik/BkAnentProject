@@ -36,8 +36,8 @@ spring:
             uri: lb://settlement-service
             predicates:
               - Path=/settlements/**
-          - id: promotion-service
-            uri: lb://promotion-service
+          - id: marketing-promotion-compat
+            uri: lb://marketing-content-service
             predicates:
               - Path=/promotions/**
           - id: marketing-content-service

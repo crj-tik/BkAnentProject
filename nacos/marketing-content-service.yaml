@@ -103,6 +103,12 @@ a2a:
   memory:
 
 marketing:
+  campaign:
+    mode: REAL
+    dispatch-enabled: true
+    rule-version: campaign-rules-v1
+    plan-ttl-seconds: 900
+    listing-snapshot-base-url: ${LISTING_SNAPSHOT_BASE_URL:http://listing-master-service:9003}
   listing-read:
     key-id: marketing-read-current
     signing-secret: ${MARKETING_LISTING_READ_SECRET:}

@@ -46,6 +46,8 @@ public interface MarketingAssetService extends IService<MarketingContentEntity> 
      */
     MarketingContentDetailResponse updatePublishStatus(Long contentId, MarketingPublishStatusUpdateRequest request);
 
+    MarketingContentDetailResponse updateAuditStatus(Long contentId, String auditStatus);
+
     /**
      * 业务方法：searchContents。
      */

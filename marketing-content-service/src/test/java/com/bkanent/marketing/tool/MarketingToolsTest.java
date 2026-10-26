@@ -6,6 +6,8 @@ import com.bkanent.marketing.config.MarketingAgentProperties;
 import com.bkanent.marketing.model.MarketingContentUpsertRequest;
 import com.bkanent.marketing.service.MarketingAgentService;
 import com.bkanent.marketing.service.MarketingAssetService;
+import com.bkanent.marketing.campaign.CampaignLifecycleService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.ObjectProvider;
@@ -30,9 +32,10 @@ class MarketingToolsTest {
     @SuppressWarnings("unchecked")
     private final ObjectProvider<MarketingAgentService> agentServiceProvider = Mockito.mock(ObjectProvider.class);
     private final MarketingAgentProperties properties = new MarketingAgentProperties();
+    private final CampaignLifecycleService campaignLifecycleService = Mockito.mock(CampaignLifecycleService.class);
 
     private final MarketingTools tools = new MarketingTools(
-            assetService, agentServiceProvider, properties, listingRpcService);
+            assetService, agentServiceProvider, properties, listingRpcService, campaignLifecycleService, new ObjectMapper());
 
     @Test
     void explicitCopywritingKeepsLegacyPathWithManualSource() {

@@ -1005,15 +1005,95 @@
 
 **关联**：LR-22/23/53/73/75/82/83/94/96/97；KI-114、KI-128、KI-166。
 
-## LR-102 内容推广同域保存发布事实，效果必须标明来源（规划）
+## LR-102 内容推广同域保存发布事实，效果必须标明来源
 
-**结论**：2026-10-25 独立 change `consolidate-marketing-promotion-domain` 规划将推广迁入营销域，统一内容修订、发布计划和平台尝试。外部发布保留原 attempt 与 UNKNOWN 对账，本地事务只确认本地受理；效果区分真实、模拟和未知来源，真实 ROI 要求可归属收入/成本，不能按线索数乘固定金额生成收入。
+**结论**：2026-10-26 change `consolidate-marketing-promotion-domain` 将推广迁入营销域，统一内容修订、发布计划和平台尝试。外部发布保留原 attempt 与 UNKNOWN 对账，本地事务只确认本地受理；效果区分真实、模拟和未知来源，真实 ROI 要求可归属收入/成本，不能按线索数乘固定金额生成收入。
 
 **根因**：当前跨服务状态回写无法随本地事务回滚外部发布；样例统计若缺来源标记，又会被经营诊断或效果看板解释成真实增长。让发布状态由同一领域管理并保留外部回执，能避免双写与重复发布；把来源和指标口径保存为事实，可限制模拟样例的使用含义。
 
-**代码位置（当前与规划）**：当前 `MarketingAssetServiceImpl`、`PromotionManagementServiceImpl` 和 provider dispatcher；拟迁入营销 campaign 包，保留媒体 Worker 和原数据库迁移映射。方案见 `openspec/changes/consolidate-marketing-promotion-domain/`；尚未实施，KI-167 仍为 OPEN。
+**代码位置**：`marketing-content-service/.../campaign/CampaignLifecycleService`、`CampaignJdbcRepository`、`CampaignOutboxDispatcher`、`CampaignListingSnapshotClient`；API DTO 位于 `common/.../marketing/campaign/`。旧直接发布状态写入被围栏，素材/内容/发布计划/尝试/回执在营销域协作。迁移映射表和新增 schema 位于 `sql/migrations/20261026_marketing_campaign_lifecycle.sql`；真实渠道 provider 与共享数据库迁移仍由协调阶段接入。
 
-**关联**：LR-22/23/53/94/96；KI-114、KI-167。
+**关联**：LR-22/23/53/94/96、LR-130–137；KI-114、KI-167。
+
+## LR-130 发布计划必须绑定不可变内容和目标快照
+
+**结论**：prepare 将内容 revision/hash、房源快照、素材 hash、目标账号 revision、平台参数 hash 和规则版本固化到计划快照；confirm 要求 expectedPlanVersion/hash 匹配，并重新检查内容审核、素材、房源和账号当前版本。计划过期后必须重新 prepare。
+
+**根因**：用户确认的是某一具体内容、素材和发布范围。确认后任一输入变化都不能沿用旧批准，否则回执与用户看到的计划不一致。
+
+**代码位置**：`CampaignLifecycleService.prepare/confirm/validateCurrentSnapshot`、`CampaignJdbcRepository.contentRevision/findAssets/findAccount/isPlanExpired`、`CampaignPlanPrepareRequest`、`CampaignPlanResponse`。
+
+**关联**：LR-102、LR-22。
+
+## LR-131 发布身份和渠道账号授权由受信服务与登记记录决定
+
+**结论**：当前 actor 从 Auth 解析，关键动作逐次调用 `AuthPermissionRpcService`；计划只能引用营销库内已登记且 active、平台匹配、模式匹配的账号 grant。调用方不能凭请求里的账号名称授予自己发布权。Auth RPC 缺失或失败时拒绝操作。
+
+**根因**：账号名和客户端请求字段不构成授权证据；营销域也不能在 Auth 未登记新权限时自行放行。
+
+**代码位置**：`CampaignActorResolver`、`CampaignAuthorizationService`、`CampaignAssetAdminService`、`CampaignJdbcRepository.findAccount`、`marketing_campaign_account` schema。
+
+**关联**：LR-102、LR-6/8。
+
+## LR-132 外部发布走持久 outbox，未知结果只按原 attempt 核对
+
+**结论**：本地事务只生成 ACCEPTED 回执、稳定每目标 attempt 和 outbox；dispatcher 在事务外调 provider，并以 attemptVersion 和 leaseToken 条件回写。租约过期将原 attempt 置为 OUTCOME_UNKNOWN，进入同 attempt 核对，不自动创建第二个发布。
+
+**根因**：数据库事务不能撤销平台已接受的发布；超时或进程中断后重新发送可能造成重复发布，迟到响应也不能覆盖较新的核对结果。
+
+**代码位置**：`CampaignLifecycleService.dispatchOne/reconcile`、`CampaignOutboxDispatcher`、`CampaignJdbcRepository.claimPending/finishAttempt/recoverExpiredDispatches`。
+
+**关联**：LR-102、LR-22/23。
+
+## LR-133 效果观察按来源事件与版本幂等保存
+
+**结论**：每条效果记录包含来源系统、来源事件 ID/version、窗口、采集时刻、来源模式和 payload hash；同版本重放不重复计数，更高版本修订当前观察并追加 revision，较低版本不能回滚新值。缺来源的结果保持 UNKNOWN。
+
+**根因**：渠道可能重复投递或迟到修正；仅按发布记录或日期累计会重复计算，缺字段也不能用样例补齐为真实值。
+
+**代码位置**：`CampaignEffectObservation`、`CampaignJdbcRepository.saveEffect/findEffect`、`marketing_campaign_effect_observation`、`marketing_campaign_effect_revision`。
+
+**关联**：LR-102、KI-167。
+
+## LR-134 真实 ROI 需要同币种归属收入、成本和定义版本
+
+**结论**：真实效果报告只有在记录具备可归属收入、成本、相同币种和相同 ROI 定义版本时才计算 ROI；缺收入时可报告已知线索成本，ROI 保持 null。模拟 fixture 不生成收入。
+
+**根因**：线索数不是收入，跨币种或跨口径相加也不是可解释的投资回报；估算值如果进入 REAL 字段会误导经营结论。
+
+**代码位置**：`CampaignLifecycleService.roiGroup`、`CampaignJdbcRepository.effectResponse/saveEffect`、`CampaignRoiReportResponse`、`SimulatedCampaignPlatformProvider`。
+
+**关联**：LR-102、KI-167。
+
+## LR-135 内容创建默认草稿，审核和发布状态拥有明确写入口
+
+**结论**：内容创建/变体写入强制 DRAFT；只有 `marketing.content.review` 授权的同域审核入口可改审核状态；旧内容 publish-status HTTP/RPC 写入返回 `LEGACY_WRITE_DISABLED`，发布状态由 campaign 回执维护。
+
+**根因**：内容正文的作者提交不等于审核通过，旧跨域回写也不能继续成为第二个发布状态真源。
+
+**代码位置**：`MarketingAssetServiceImpl.saveContents/updatePublishStatus/updateAuditStatus`、`CampaignContentReviewService`、`CampaignController`、`MarketingContentRpcServiceImpl`。
+
+**关联**：LR-102、LR-22/23。
+
+## LR-136 旧业务 ID 必须带来源和实体命名空间
+
+**结论**：旧 ID 通过 `(source_system, entity_type, legacy_id)` 映射到新营销目标身份；目标唯一性按实体类型和目标表约束。新 schema 可重复升级，但不直接合并两个库的自增值，也不在本 change 改写已应用初始化清单。
+
+**根因**：不同旧库和实体类型可能有相同数字 ID；未核对旧数据就删除旧表或复用 ID 会破坏历史回执、素材和效果关联。
+
+**代码位置**：`marketing_campaign_legacy_map` schema、`CampaignJdbcRepository.findAttemptIdByLegacyPublishId`、`CampaignSchemaMigrationTest`、`docs/acceptance/marketing-promotion-domain-20261026.md`。
+
+**关联**：LR-102、KI-167。
+
+## LR-137 房源依赖使用固定公开契约，测试 fixture 不作为真实回退
+
+**结论**：营销自有 `CampaignListingSnapshotClient` 按 `domain-parallel-v1` 调用公开 batch-read 路径，并校验来源身份、revision、hash、时间、数据集和 REAL 模式。SIMULATED 时使用显式本地房源 fixture；REAL 来源故障时失败关闭。
+
+**根因**：独立 change 不能依赖房源分支尚未合入的 Java 类型，也不能让真实流量在来源不可用时静默读取测试房源。
+
+**代码位置**：`CampaignListingSnapshotClient`、`CampaignLifecycleIntegrationTest`、`nacos/marketing-content-service.yaml`。
+
+**关联**：LR-102、LR-22/23。
 
 ## LR-106 同run刷新只收缩许可，发布新鲜度与业务执行身份分开
 

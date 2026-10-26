@@ -20,6 +20,7 @@ trigger_keywords:
 tools:
   - createMarketingContent
   - searchContents
+  - prepareMarketingCampaign
 priority: 10
 supervisor_skill: false
 ---
@@ -35,12 +36,19 @@ supervisor_skill: false
 - keyword: 用户提供的核心卖点关键词
 - platform: 目标平台（xiaohongshu/douyin/wechat）
 
-### 第二步：生成营销内容
+### 第二步：生成营销草稿
 调用 `createMarketingContent`：
 - 根据房源特点（户型、面积、价格、区位优势）生成平台适配文案
 - 小红書风格：活泼生动，多用emoji，标签化
 - 抖音风格：短句有力，前三秒抓眼球，引导互动
 - 朋友圈风格：专业可信，突出性价比
+
+该工具只创建 DRAFT 内容，不代表审核通过，也不会调用平台。
+
+### 第三步：用户明确要求发布时准备计划
+只有用户明确要求发布，且内容已由有权限的审核人通过后，才调用 `prepareMarketingCampaign`。
+准备结果会固定内容、素材、房源快照和受权账号。向用户展示平台、账号和 `snapshotHash`，不得把准备计划说成已发布。
+只有用户随后明确确认这份确切计划，才能通过受权确认入口提交；正文、素材、账号或房源版本变化时必须重新准备。
 
 ## 输出格式
 ```json
