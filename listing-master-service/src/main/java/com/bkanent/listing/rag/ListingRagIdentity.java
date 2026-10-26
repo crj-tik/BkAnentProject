@@ -137,6 +137,52 @@ public class ListingRagIdentity {
                 credentials, new RagSigningKey(envelope.keyId(), caller.getCallerService(), null,
                         Set.of(RagOperation.SEARCH, RagOperation.READ, RagOperation.SUBMIT), bytes(caller.getSecret())), Instant.now());
     }
+
+    public com.bkanent.common.authz.AuthzRequestScope.Scope openAuthorizedReadScope(
+            com.bkanent.common.rag.RagAuthorizedListingReadRequest request, RagAuthEnvelope envelope,
+            com.bkanent.common.authz.AuthzResponse authorization,
+            java.util.Map<String, java.security.PublicKey> authorityKeys) {
+        try {
+            if (request == null || authorization == null || authorityKeys == null || authorityKeys.isEmpty()) {
+                throw new com.bkanent.common.authz.AuthzException(
+                        com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
+            }
+            verifyCaller(request, request.request().requestId(), RagOperation.READ, envelope, null);
+            var context = authorization.context();
+            if (envelope.actorMode() != RagActorMode.USER
+                    || !context.audience().equals(envelope.callerService())
+                    || !context.actorId().equals(envelope.actorId())
+                    || !request.authorizationEvidenceHash().equals(
+                            com.bkanent.common.authz.AuthzCanonicalHash.signedResponseHash(authorization))) {
+                throw new com.bkanent.common.authz.AuthzException(
+                        com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_FAILED);
+            }
+            var scope = com.bkanent.common.authz.AuthzRequestScope.verifyAndOpenForwarded(authorization,
+                    envelope.callerService(), authorityKeys, Instant.now());
+            try {
+                String operationCode = authorization.snapshot().businessAdmin() ? "listing.read.all" : "listing.read";
+                com.bkanent.common.authz.AuthzRequestScope.requireOperation(operationCode);
+                return scope;
+            } catch (RuntimeException failure) {
+                scope.close();
+                throw failure;
+            }
+        } catch (com.bkanent.common.authz.AuthzException failure) {
+            throw toRagException(failure);
+        }
+    }
+
+    private static RagException toRagException(com.bkanent.common.authz.AuthzException failure) {
+        RagErrorCode code = switch (failure.code()) {
+            case PERMISSION_DENIED -> RagErrorCode.FORBIDDEN;
+            case EXPIRED -> RagErrorCode.AUTHENTICATION_EXPIRED;
+            case INVALID_ARGUMENT -> RagErrorCode.INVALID_ARGUMENT;
+            case AUTHORIZATION_UNAVAILABLE -> RagErrorCode.DEPENDENCY_UNAVAILABLE;
+            case CONTEXT_CONFLICT, REPLAY_DETECTED, AUTHENTICATION_REQUIRED, AUTHENTICATION_FAILED ->
+                    RagErrorCode.AUTHENTICATION_FAILED;
+        };
+        return new RagException(code);
+    }
     static byte[] bytes(String secret) {
         if (secret == null || secret.isBlank()) { throw new RagException(RagErrorCode.AUTHENTICATION_FAILED); }
         return secret.getBytes(StandardCharsets.UTF_8);

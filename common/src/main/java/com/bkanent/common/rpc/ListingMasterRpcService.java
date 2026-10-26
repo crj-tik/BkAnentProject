@@ -16,6 +16,12 @@ public interface ListingMasterRpcService {
                           com.bkanent.common.rag.RagAuthEnvelope authentication,
                           com.bkanent.common.rag.RagCredentialContext credentials) throws com.bkanent.common.rag.RagException;
 
+    /** Request-level signed Auth context plus a caller-signed proof; no user bearer is forwarded. */
+    List<ListingDTO> readAuthorized(com.bkanent.common.rag.RagAuthorizedListingReadRequest request,
+                                    com.bkanent.common.rag.RagAuthEnvelope authentication,
+                                    com.bkanent.common.authz.AuthzResponse authorization)
+            throws com.bkanent.common.rag.RagException;
+
     /**
      * 获取指定房源摘要。
      */

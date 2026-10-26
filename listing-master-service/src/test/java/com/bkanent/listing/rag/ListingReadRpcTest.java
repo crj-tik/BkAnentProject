@@ -1,6 +1,9 @@
 package com.bkanent.listing.rag;
 
 import com.bkanent.common.rag.*;
+import com.bkanent.common.authz.*;
+import com.bkanent.common.security.ServiceIdentityCrypto;
+import com.bkanent.listing.config.ListingAuthorizationProperties;
 import com.bkanent.listing.config.ListingRagProperties;
 import com.bkanent.listing.converter.ListingConverter;
 import com.bkanent.listing.entity.ListingEntity;
@@ -10,6 +13,9 @@ import com.bkanent.listing.service.ListingManagementService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.util.Base64;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +24,7 @@ import static org.mockito.Mockito.*;
 
 class ListingReadRpcTest {
     private static final String SECRET = "consumer-independent-read-test-secret-0123456789";
+    private static final String AUTH_KEY_ID = "auth-forwarded-test";
     private RagAuthEnvelope sign(RagListingReadRequest request, RagActorMode mode, RagCredentialContext token) {
         long now = Instant.now().getEpochSecond();
         return RagRequestSigner.sign(new RagAuthEnvelope(1,"consumer-read","listing-master-service","customer-service",RagOperation.READ,
@@ -57,4 +64,86 @@ class ListingReadRpcTest {
         assertThrows(RagException.class, () -> rpc.read(request,sign(request,RagActorMode.USER,token),token));
         verify(management,times(1)).searchListingSummaries("region");
     }
+
+    @Test void forwardedSignedContextIsLocallyVerifiedAndUsedForListingRead() throws Exception {
+        var signing = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        var fixture = authorization(signing, List.of("listing.read"), List.of("listing.read"));
+        var request = new RagListingReadRequest(1, "internal-read", null, "region");
+        var authorized = new RagAuthorizedListingReadRequest(1, request,
+                AuthzCanonicalHash.signedResponseHash(fixture.response()));
+        var proof = signAuthorized(authorized, fixture.response(), "7");
+        var authorizationProperties = new ListingAuthorizationProperties();
+        authorizationProperties.setAuthorityPublicKeys(Map.of(AUTH_KEY_ID,
+                ServiceIdentityCrypto.encodePublicKey(signing.getPublic())));
+        var management = mock(ListingManagementService.class);
+        when(management.searchListingSummaries("region")).thenAnswer(call -> {
+            assertTrue(AuthzRequestScope.present());
+            assertEquals(7L, AuthzRequestScope.actorId());
+            assertEquals(41L, AuthzRequestScope.requireBrokerIdentity());
+            return List.of();
+        });
+        var rpc = new ListingMasterRpcServiceImpl(management, identity(), mock(ListingDomainService.class),
+                new ListingConverter(), authorizationProperties);
+
+        assertTrue(rpc.readAuthorized(authorized, proof, fixture.response()).isEmpty());
+        assertFalse(AuthzRequestScope.present());
+        verify(management).searchListingSummaries("region");
+    }
+
+    @Test void forwardedContextRejectsSpoofedActorAndMissingListingPermissionBeforeRead() throws Exception {
+        var signing = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        var fixture = authorization(signing, List.of("listing.read"), List.of("listing.read"));
+        var request = new RagListingReadRequest(1, "internal-read", null, "region");
+        var authorized = new RagAuthorizedListingReadRequest(1, request,
+                AuthzCanonicalHash.signedResponseHash(fixture.response()));
+        var authorizationProperties = new ListingAuthorizationProperties();
+        authorizationProperties.setAuthorityPublicKeys(Map.of(AUTH_KEY_ID,
+                ServiceIdentityCrypto.encodePublicKey(signing.getPublic())));
+        var management = mock(ListingManagementService.class);
+        var rpc = new ListingMasterRpcServiceImpl(management, identity(), mock(ListingDomainService.class),
+                new ListingConverter(), authorizationProperties);
+
+        assertEquals(RagErrorCode.AUTHENTICATION_FAILED, assertThrows(RagException.class,
+                () -> rpc.readAuthorized(authorized, signAuthorized(authorized, fixture.response(), "8"), fixture.response())).code());
+        var changedQuery = new RagAuthorizedListingReadRequest(1,
+                new RagListingReadRequest(1, "internal-read", null, "different-region"),
+                authorized.authorizationEvidenceHash());
+        assertEquals(RagErrorCode.AUTHENTICATION_FAILED, assertThrows(RagException.class,
+                () -> rpc.readAuthorized(changedQuery, signAuthorized(authorized, fixture.response(), "7"), fixture.response())).code());
+
+        var restricted = authorization(signing, List.of("customer.match.own"), List.of("customer.match.own"));
+        var restrictedRead = new RagAuthorizedListingReadRequest(1, request,
+                AuthzCanonicalHash.signedResponseHash(restricted.response()));
+        assertEquals(RagErrorCode.FORBIDDEN, assertThrows(RagException.class,
+                () -> rpc.readAuthorized(restrictedRead,
+                        signAuthorized(restrictedRead, restricted.response(), "7"), restricted.response())).code());
+        verifyNoInteractions(management);
+    }
+
+    private AuthFixture authorization(KeyPair key, List<String> permissions, List<String> operations) {
+        long now = Instant.now().getEpochSecond();
+        String nonce = Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]);
+        String hash = "a".repeat(64);
+        var identities = Map.of("BROKER", 41L);
+        var snapshot = AuthzSignature.sign(new AuthorizationSnapshot("7", 9, 3, false,
+                permissions, null, identities, AuthzContract.ALGORITHM, AUTH_KEY_ID, null), key.getPrivate());
+        String permissionHash = AuthzCanonicalHash.snapshotHash(snapshot);
+        var context = AuthzSignature.sign(new AuthorizationContext("7", 9, 0, permissionHash, operations,
+                "customer-service", "customer-request", null, null, hash, hash, nonce,
+                now, now + 60, now + 300, identities, AuthzContract.ALGORITHM, AUTH_KEY_ID, null), key.getPrivate());
+        var freshness = AuthzSignature.sign(new AuthzFreshness("7", 9, 0, AuthorizationStatus.ACTIVE,
+                permissionHash, now, now + 30, nonce, AuthzContract.ALGORITHM, AUTH_KEY_ID, null), key.getPrivate());
+        return new AuthFixture(new AuthzResponse(snapshot, context, freshness));
+    }
+
+    private RagAuthEnvelope signAuthorized(RagAuthorizedListingReadRequest request, AuthzResponse authorization,
+                                           String actorId) {
+        long now = Instant.now().getEpochSecond();
+        return RagRequestSigner.sign(new RagAuthEnvelope(1, "consumer-read", "listing-master-service",
+                "customer-service", RagOperation.READ, request.request().requestId(),
+                RagCanonicalHash.requestHash(request), RagActorMode.USER, actorId, now, now + 60, null, null),
+                SECRET.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private record AuthFixture(AuthzResponse response) { }
 }

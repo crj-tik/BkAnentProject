@@ -38,6 +38,15 @@ public final class AuthzCanonicalHash {
                 freshness.keyId(), freshness.signature())));
     }
 
+    /** Digest of all three signed Auth facts for a bounded downstream service request proof. */
+    public static String signedResponseHash(AuthzResponse response) {
+        AuthzContract.require(response != null && response.snapshot().signature() != null
+                && response.context().signature() != null && response.freshness().signature() != null);
+        return digest(encode("signed-response-v1", Arrays.asList(snapshotHash(response.snapshot()),
+                response.snapshot().algorithm(), response.snapshot().keyId(), response.snapshot().signature(),
+                signedContextHash(response.context()), signedFreshnessHash(response.freshness()))));
+    }
+
     /** Hash exact received/forwarded bytes before JSON parsing. Streaming/oversized bodies reject. */
     public static String bodyHash(byte[] body) {
         AuthzContract.require(body != null && body.length <= AuthzContract.MAX_BODY_BYTES);

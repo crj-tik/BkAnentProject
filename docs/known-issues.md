@@ -433,7 +433,7 @@
 
 **现象与根因**：`common/.../rpc/AuthenticatedPrincipal.java` 只返回 userId；`auth-service/.../rpc/AuthPermissionRpcServiceImpl.java:36-60` 验证账号/角色活跃，但 hasPermission 不按具体权限码授予资源范围。房源 brokerId 来自业务请求，当前未证明等于认证 userId。固定 gateway 标记、普通 userId 或 Dubbo 服务名不能作为新 RAG 的服务认证或跨空间授权证明。
 
-**处置（实施中）**：在现有RAG principal/独立scope基础上，新增Auth唯一维护的类型化userId→brokerId表、受权管理API、版本化outbox及签名快照；Listing详情与写操作、Customer档案及子记录使用签名映射核资源归属，公开Listing摘要继续只返回未删除ON_SALE范围。Common/Auth/RAG/Listing/Customer定向回归通过。无历史映射回填；Customer→Listing RPC和其他跨服务入口尚未迁移到请求级上下文，Gateway/服务公钥与生产配置未接线，新入口仍默认关闭。因此当前代码回归不证明线上资源授权已启用，本项保持OPEN。
+**处置（实施中）**：在现有RAG principal/独立scope基础上，新增Auth唯一维护的类型化userId→brokerId表、受权管理API、版本化outbox及签名快照；Listing详情与写操作、Customer档案及子记录使用签名映射核资源归属，公开Listing摘要继续只返回未删除ON_SALE范围。Customer→Listing RPC已转发原Auth签名响应，并以服务请求证明绑定授权摘要与查询，由Listing本地验签，不逐次调用Auth或转发用户Bearer。Common/Auth/RAG/Listing/Customer定向回归通过。无历史映射回填；Gateway/服务公钥与生产配置未接线，其他跨服务入口尚未迁移，新入口仍默认关闭。因此当前代码回归不证明线上资源授权已启用，本项保持OPEN。
 
 **本批实施提交**：`9f87f87`（跨服务接线、生产配置和历史映射回填仍未完成）。
 

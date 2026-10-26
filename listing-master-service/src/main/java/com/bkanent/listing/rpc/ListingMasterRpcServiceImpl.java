@@ -5,7 +5,9 @@ import com.bkanent.common.model.ListingDTO;
 import com.bkanent.common.model.ListingKeywordSearchRequest;
 import com.bkanent.common.model.ListingKeywordSearchResultDTO;
 import com.bkanent.common.rpc.ListingMasterRpcService;
+import com.bkanent.listing.config.ListingAuthorizationProperties;
 import com.bkanent.listing.service.ListingManagementService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.apache.dubbo.config.annotation.DubboService;
 
 import java.util.List;
@@ -23,18 +25,29 @@ public class ListingMasterRpcServiceImpl implements ListingMasterRpcService {
     private final com.bkanent.listing.rag.ListingRagIdentity identity;
     private final com.bkanent.listing.service.ListingDomainService domain;
     private final com.bkanent.listing.converter.ListingConverter converter;
+    private final ListingAuthorizationProperties authorizationProperties;
 
     /**
      * 构造 ListingMasterRpcServiceImpl 实例。
      */
+    @Autowired
     public ListingMasterRpcServiceImpl(ListingManagementService listingManagementService,
-                                        com.bkanent.listing.rag.ListingRagIdentity identity,
-                                        com.bkanent.listing.service.ListingDomainService domain,
-                                        com.bkanent.listing.converter.ListingConverter converter) {
+                                       com.bkanent.listing.rag.ListingRagIdentity identity,
+                                       com.bkanent.listing.service.ListingDomainService domain,
+                                       com.bkanent.listing.converter.ListingConverter converter,
+                                       ListingAuthorizationProperties authorizationProperties) {
         this.listingManagementService = listingManagementService;
         this.identity = identity;
         this.domain = domain;
         this.converter = converter;
+        this.authorizationProperties = authorizationProperties;
+    }
+
+    public ListingMasterRpcServiceImpl(ListingManagementService listingManagementService,
+                                       com.bkanent.listing.rag.ListingRagIdentity identity,
+                                       com.bkanent.listing.service.ListingDomainService domain,
+                                       com.bkanent.listing.converter.ListingConverter converter) {
+        this(listingManagementService, identity, domain, converter, new ListingAuthorizationProperties());
     }
 
     @Override
@@ -55,6 +68,20 @@ public class ListingMasterRpcServiceImpl implements ListingMasterRpcService {
         }
         // No production background READ caller exists: missing USER context cannot select SERVICE.
         throw new com.bkanent.common.rag.RagException(com.bkanent.common.rag.RagErrorCode.FORBIDDEN);
+    }
+
+    @Override
+    public List<ListingDTO> readAuthorized(com.bkanent.common.rag.RagAuthorizedListingReadRequest request,
+                                           com.bkanent.common.rag.RagAuthEnvelope authentication,
+                                           com.bkanent.common.authz.AuthzResponse authorization) {
+        var scope = identity.openAuthorizedReadScope(request, authentication, authorization,
+                authorizationProperties.decodedAuthorityPublicKeys());
+        try (scope) {
+            var read = request.request();
+            if (read.listingId() == null) return listingManagementService.searchListingSummaries(read.keyword());
+            var dto = listingManagementService.getListingSummary(read.listingId());
+            return dto == null ? List.of() : List.of(dto);
+        }
     }
 
     /**

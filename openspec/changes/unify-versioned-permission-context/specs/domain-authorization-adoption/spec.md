@@ -20,6 +20,10 @@
 - **WHEN** 经纪人读取或变更客户档案、跟进、委托、收藏等关联数据
 - **THEN** 所有记录在执行前按签名BROKER映射核归属，请求体brokerId不匹配时拒绝，管理员业务范围不伪造broker身份
 
+#### Scenario: Customer delegates one listing read within an authenticated request
+- **WHEN** Customer在已经验签的用户请求中调用Listing读取匹配候选
+- **THEN** Customer转发原Auth签名响应，并用服务请求证明绑定其摘要、actor和精确查询；Listing本地验签并核`listing.read`及公开房源状态，不转发用户Bearer或为该次RPC另调Auth
+
 #### Scenario: A registered agent still lacks a recipient mapping
 - **WHEN** 通知Agent服务身份有效但未能证明当前用户对目标recipient的读取或发送关系
 - **THEN** 受保护消息读取/发送在工具执行前拒绝，不因Memory caller已登记而开放

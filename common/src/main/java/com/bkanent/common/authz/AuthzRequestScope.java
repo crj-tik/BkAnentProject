@@ -20,6 +20,21 @@ public final class AuthzRequestScope {
         return () -> { if (previous == null) CURRENT.remove(); else CURRENT.set(previous); };
     }
 
+    /**
+     * Opens a downstream scope after its caller proof has been checked. The Auth-signed response
+     * remains bound to the original service audience and request; this method does not perform Auth RPC.
+     */
+    public static Scope verifyAndOpenForwarded(AuthzResponse response, String expectedCallerService,
+                                               Map<String, PublicKey> authorityKeys, Instant now) {
+        AuthzContract.require(response != null && expectedCallerService != null);
+        AuthorizationContext context = response.context();
+        AuthzSignature.verifyResponse(response, expectedCallerService, context.requestId(),
+                context.requestHash(), context.nonce(), authorityKeys, now);
+        AuthzResponse previous = CURRENT.get();
+        CURRENT.set(response);
+        return () -> { if (previous == null) CURRENT.remove(); else CURRENT.set(previous); };
+    }
+
     public static boolean present() { return CURRENT.get() != null; }
 
     public static AuthzResponse requireCurrent() {

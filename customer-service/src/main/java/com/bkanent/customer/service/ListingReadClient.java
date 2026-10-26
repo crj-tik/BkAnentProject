@@ -29,6 +29,13 @@ public class ListingReadClient {
     }
 
     public UserRead authenticate() {
+        if (com.bkanent.common.authz.AuthzRequestScope.present()) {
+            String operation = com.bkanent.common.authz.AuthzRequestScope.businessAdmin()
+                    ? "listing.read.all" : "listing.read";
+            com.bkanent.common.authz.AuthzRequestScope.requireOperation(operation);
+            var response = com.bkanent.common.authz.AuthzRequestScope.requireCurrent();
+            return new UserRead(response.context().actorId(), null, response);
+        }
         var attributes = RequestContextHolder.getRequestAttributes();
         if (!(attributes instanceof ServletRequestAttributes servlet)) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
         String authorization = servlet.getRequest().getHeader("Authorization");
@@ -52,6 +59,19 @@ public class ListingReadClient {
         if (secret == null || secret.getBytes(StandardCharsets.UTF_8).length < 32) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
         var request = new RagListingReadRequest(1, UUID.randomUUID().toString(), null, keyword == null ? "" : keyword);
         long now = Instant.now().getEpochSecond();
+        if (user.authorization() != null) {
+            var authorizedRequest = new RagAuthorizedListingReadRequest(1, request,
+                    com.bkanent.common.authz.AuthzCanonicalHash.signedResponseHash(user.authorization()));
+            var signature = RagRequestSigner.sign(new RagAuthEnvelope(1, keyId, "listing-master-service", "customer-service",
+                    RagOperation.READ, request.requestId(), RagCanonicalHash.requestHash(authorizedRequest),
+                    RagActorMode.USER, user.actorId(), now, now + 60, null, null), secret.getBytes(StandardCharsets.UTF_8));
+            try {
+                var result = listings.readAuthorized(authorizedRequest, signature, user.authorization());
+                if (result == null) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
+                return result;
+            } catch (RagException failure) { throw failure; }
+            catch (RuntimeException failure) { throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE); }
+        }
         var signature = RagRequestSigner.sign(new RagAuthEnvelope(1,keyId,"listing-master-service","customer-service",RagOperation.READ,
                 request.requestId(),RagCanonicalHash.requestHash(request),RagActorMode.USER,user.actorId(),now,now+60,
                 RagCanonicalHash.credentialDigest(user.credentials()),null),secret.getBytes(StandardCharsets.UTF_8));
@@ -63,7 +83,9 @@ public class ListingReadClient {
         catch (RuntimeException failure) { throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE); }
     }
 
-    public record UserRead(String actorId, RagCredentialContext credentials) {
+    public record UserRead(String actorId, RagCredentialContext credentials,
+                           com.bkanent.common.authz.AuthzResponse authorization) {
+        public UserRead(String actorId, RagCredentialContext credentials) { this(actorId, credentials, null); }
         @Override public String toString() { return "UserRead[REDACTED]"; }
     }
 }
