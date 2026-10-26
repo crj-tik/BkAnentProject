@@ -1322,13 +1322,15 @@
 
 **修复与防回归**：改用允许空元素的列表构造器，并增加 `A2aMemoryAgentHookTest.listingHookColdLoadsAuthorizedHistoryAndArchivesSourceHashedToolEvidence`，覆盖冷加载、工具结果完整归档及来源哈希。提交 `94fd089` 的 9 项 A2A Hook/三域 Agent 定向测试通过。
 
-## KI-151 [OPEN·P1] 通知 A2A 工具按模型传入的 userId 查询而未绑定当前主体
+## KI-151 [FIXED·本提交·P1] 通知工具曾按模型传入的 userId 查询
 
-**确认日期**：2026-10-21。源码核对发现 `NotificationTools.listUserMessages` 与 `countUnreadMessages` 将模型提供的 `userId` 直接传给查询服务；`NotificationManagementServiceImpl` 和 `NotificationRecordDomainServiceImpl` 仅按该值过滤记录，未与 `A2aCredentialContext` 当前租约 actor 对比。当前尚未确认 actorId 与通知 recipientUserId 的受管映射，因此不能安全地把查询结果持久化到调用者的长期记忆。
+**确认日期与原问题**：2026-10-21。旧 `NotificationTools.listUserMessages` 与 `countUnreadMessages` 将模型提供的 `userId` 直接传给 SQL 查询，服务没有与当前认证 actor 比较；当时的记录也错误声称 memory-service 未登记 `notification-service` caller。
 
-**处置**：notification 的 ReactAgent 已接入必需 Memory Hook；memory-service 暂不登记 `notification-service` trusted caller，所以其官方 A2A 请求会在模型/工具执行前因无精确 caller 授权而失败关闭。修复前须在受信认证边界建立并回归调用者与 recipient 的授权映射；不以 agent prompt、Supervisor metadata 或字段同名代替主体校验。当前为源码审查结论，未运行真实接口探测。
+**修复**：A2A/MCP 私有读取工具已移除 `userId` 输入，并从已验证上下文注入 actor；REST 保留的 `userId` 仅是可选一致性断言，查询始终由 actor 限定。标读还核实消息 recipient owner。站内消息自发与跨用户收件分别要求 `.send.own` / `.send.all`，邮件、机器人和工作流事件查询使用独立操作。旧 Dubbo 三发送方法不含请求级 recipient 证明，现明确失败关闭。
 
-**关联**：LR-79、KI-114、KI-117；change 5.8。
+**配置事实与限制**：`nacos/memory-service.yaml` 已登记 `notification-service` caller、公钥环境变量和 `notification-agent` 域；`nacos/auth-service.yaml` 中同名 caller 只允许 `RESOLVE_BEACON`，不是 Notification 业务权限。配置登记不证明运行公钥已设置或真实调用成功。Contract/Customer 定时提醒不能将 `brokerId` 当 Auth `userId`，当前保持关闭并由 KI-206 跟踪。定向回归通过；没有进行真实多服务部署探测。
+
+**关联**：LR-79、LR-150；KI-114、KI-117、KI-206；change `unify-versioned-permission-context`任务10.5。
 
 ## KI-152 [FIXED·f1b3a7f] 空历史与基础 Memory 故障未向 Agent 明确表达
 
@@ -1557,6 +1559,16 @@
 **验证与边界**：Listing RPC与Marketing客户端反例/正例定向回归通过；完整生产密钥、A2A跨服务部署和数据库迁移尚未验证/启用。后续使用真实运行栈验收任务11.4，不能从本地fixture推断生产开放。
 
 **关联**：LR-140/145/146/148；change `unify-versioned-permission-context`任务10.3/11.4。
+
+## KI-206 [OPEN·P1] Contract/Customer定时通知缺少可信broker到Auth用户收件绑定
+
+**发现日期与依据**：2026-10-26，实施Notification任务10.5时复核`ContractReminderServiceImpl`与`CustomerReminderServiceImpl`。两个提醒任务从合同或客户记录读取`brokerId`，旧`NotificationRpcService.sendStationMessage`却把参数当作`recipientUserId`；两者是不同业务ID，偶然同值也不证明身份。Auth现维护的权威方向是`userId→brokerId`，当前定时调用没有可验证的反向解析或收件人绑定。
+
+**当前处置**：旧无请求证明Dubbo发送方法拒绝；Contract/Customer提醒缺省关闭，即使配置显式启用仍记录跳过且不查询或发送。没有把经纪人私有消息误投到同号用户。
+
+**解除条件**：由Auth对已维护映射做受限、唯一的broker反查，或签发可在Notification本地验证的服务请求证明，将受管服务身份、精确通知操作、recipientUserId、正文hash、幂等标识与期限绑定。映射缺失/多值时保持拒绝；实现后补跨服务反例与定时重试/幂等验证。不得按同号、姓名或模型字段猜测收件人。
+
+**关联**：LR-150；KI-151；change `unify-versioned-permission-context`任务10.5/10.6。
 
 ---
 

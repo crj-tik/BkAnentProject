@@ -1,5 +1,6 @@
 package com.bkanent.notification.service.impl;
 
+import com.bkanent.common.a2a.VerifiedDomainAuthorization;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.bkanent.notification.entity.NotificationEventConsumeEntity;
 import com.bkanent.notification.model.NotificationWorkflowEventConsumeResponse;
@@ -24,6 +25,7 @@ public class NotificationWorkflowEventQueryServiceImpl implements NotificationWo
                                                                      String taskId,
                                                                      Long recipientUserId,
                                                                      Integer limit) {
+        VerifiedDomainAuthorization.requirePermission("notification.workflow.events.read.all");
         int size = limit == null || limit <= 0 ? 20 : Math.min(limit, 100);
         LambdaQueryWrapper<NotificationEventConsumeEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(StringUtils.hasText(consumeStatus), NotificationEventConsumeEntity::getConsumeStatus, consumeStatus);

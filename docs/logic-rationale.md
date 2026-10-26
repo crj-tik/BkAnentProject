@@ -1161,3 +1161,13 @@
 **代码位置**：`compare-engine-service/CompareListingReadClient`、`CompareAnalysisServiceImpl`、`CompareReportCacheServiceImpl`、`CompareAuthorizationIngressFilter`；`common/rag/RagAuthorizedListingAssetWriteRequest`、`RagContextAuthorizedListingAssetWriteRequest`；`listing-master-service/ListingMasterRpcServiceImpl.authorizeAssetWrite*`；`media-worker-service/MediaListingAuthorizationClient`、`MediaBackgroundPermitSigner`、`MediaGenerationTaskServiceImpl`、`MediaTaskStoreServiceImpl`。
 
 **关联**：LR-145/146/148；KI-115/117；change `unify-versioned-permission-context`任务10.4。新操作只登记、无推断角色授予，REST/Listing授权默认关闭；Media任务状态仍为进程内存，重启恢复未验且未实现。
+
+## LR-150 Notification actor与recipient分离并按操作边界授权
+
+**结论**：Notification中当前登录/委托用户只从本地已验证Auth context读取。REST兼容字段`userId`仅能作为可选一致性断言，查询始终使用actor；Agent/MCP本人消息查询不暴露该参数。标读先查消息recipient必须等于actor。站内本人发送和向他人发送分别要求`notification.message.send.own`与`.send.all`；邮件、机器人、事件消费审计查询使用独立显式操作，角色或Memory caller登记都不替代recipient范围。Supervisor工作流事件由服务端从已绑定run写入actor和run metadata，Notification仅消费事件白名单并检查recipient与执行关联。旧Dubbo通知签名没有请求证明，不能安全推断actor或目标，因此关闭；Contract/Customer定时任务不能把brokerId当userId，保持停用，见KI-206。
+
+**根因**：用户是消息动作的主体，recipient是消息目标。共用`userId`字段名会把目标错当主体；而同号broker/user数据也不形成映射。把本人读取、本人发送、跨用户发送和外部通道分成精确操作，才能避免模型改写主体或在工具之间继承过宽权限。一次run内部继续验证本地已签名请求上下文，权限刷新留在Supervisor/Auth边界，不为每条消息调用Auth。
+
+**代码位置**：`notification-service/NotificationController`、`NotificationManagementServiceImpl`、`NotificationTools`、`NotificationMcpTools`、`NotificationWorkflowEventService`、`NotificationRpcServiceImpl`；`contract-service/ContractReminderServiceImpl`、`customer-service/CustomerReminderServiceImpl`；权限迁移`20261026_notification_authorization.sql`；契约`docs/notification-api-auth-contract.md`。回归覆盖actor查询/目标篡改、消息owner、精确发送操作、服务端事件recipient、旧RPC拒绝与提醒关闭。
+
+**关联**：LR-103/106/143；KI-151/206；change `unify-versioned-permission-context`任务10.5/10.6。HTTP和MCP验证开关默认关闭；SQL权限码登记不授予普通角色，也不证明生产密钥或调用链已启用。

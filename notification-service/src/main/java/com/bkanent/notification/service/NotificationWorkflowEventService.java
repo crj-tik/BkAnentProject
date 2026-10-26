@@ -2,7 +2,6 @@ package com.bkanent.notification.service;
 
 import com.bkanent.common.agent.SessionStreamEvent;
 import com.bkanent.notification.config.NotificationWorkflowEventProperties;
-import com.bkanent.notification.model.NotificationMessageRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -56,14 +55,8 @@ public class NotificationWorkflowEventService {
         }
         long startedAt = System.currentTimeMillis();
         try {
-            Long notificationId = notificationManagementService.sendStationMessage(new NotificationMessageRequest(
-                    userId,
-                    null,
-                    "AGENT_WORKFLOW_EVENT",
-                    buildTitle(event),
-                    buildContent(event),
-                    "notification-workflow-consumer"
-            ));
+            Long notificationId = notificationManagementService.sendWorkflowEventMessage(
+                    event, buildTitle(event), buildContent(event));
             notificationEventConsumeService.markConsumed(dedupeKey, notificationId);
             notificationMetricsService.recordConsumeResult("CONSUMED");
             notificationMetricsService.recordWorkflowEvent(event.eventType(), "CONSUMED", System.currentTimeMillis() - startedAt);

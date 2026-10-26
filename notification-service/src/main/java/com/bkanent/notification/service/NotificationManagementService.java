@@ -3,6 +3,7 @@ package com.bkanent.notification.service;
 import com.bkanent.notification.model.NotificationListItemResponse;
 import com.bkanent.notification.model.NotificationMessageRequest;
 import com.bkanent.notification.model.RobotMessageRequest;
+import com.bkanent.common.agent.SessionStreamEvent;
 
 import java.util.List;
 
@@ -15,6 +16,9 @@ public interface NotificationManagementService {
      * 业务方法：sendStationMessage。
      */
     Long sendStationMessage(NotificationMessageRequest request);
+
+    /** Sends only a server-stamped workflow event to the user id carried by that event. */
+    Long sendWorkflowEventMessage(SessionStreamEvent event, String title, String content);
 
     /**
      * 业务方法：sendEmailMessage。

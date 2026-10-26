@@ -11,7 +11,7 @@ public class ContractReminderProperties {
     /**
      * 业务属性：enabled。
      */
-    private boolean enabled = true;
+    private boolean enabled;
     /**
      * 业务属性：pendingSignDays。
      */

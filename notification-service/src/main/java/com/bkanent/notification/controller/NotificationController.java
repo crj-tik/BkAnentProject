@@ -1,5 +1,6 @@
 package com.bkanent.notification.controller;
 
+import com.bkanent.common.a2a.VerifiedDomainAuthorization;
 import com.bkanent.common.model.ApiResponse;
 import com.bkanent.common.model.HealthStatusDTO;
 import com.bkanent.notification.model.NotificationListItemResponse;
@@ -51,7 +52,7 @@ public class NotificationController {
     }
 
     @GetMapping
-    public ApiResponse<List<NotificationListItemResponse>> list(@RequestParam Long userId,
+    public ApiResponse<List<NotificationListItemResponse>> list(@RequestParam(required = false) Long userId,
                                                                 @RequestParam(required = false) String channel,
                                                                 @RequestParam(required = false) String readStatus) {
         return ApiResponse.ok(notificationManagementService.listUserMessages(userId, channel, readStatus));
@@ -59,12 +60,12 @@ public class NotificationController {
 
     @PostMapping("/{id}/read")
     public ApiResponse<Void> markRead(@PathVariable Long id, @RequestBody NotificationReadRequest request) {
-        notificationManagementService.markMessageRead(id, request.userId());
+        notificationManagementService.markMessageRead(id, request == null ? null : request.userId());
         return ApiResponse.ok(null);
     }
 
     @GetMapping("/unread-count")
-    public ApiResponse<Long> unreadCount(@RequestParam Long userId) {
+    public ApiResponse<Long> unreadCount(@RequestParam(required = false) Long userId) {
         return ApiResponse.ok(notificationManagementService.countUnreadMessages(userId));
     }
 
@@ -75,6 +76,7 @@ public class NotificationController {
             @RequestParam(required = false) String taskId,
             @RequestParam(required = false) Long recipientUserId,
             @RequestParam(required = false) Integer limit) {
+        VerifiedDomainAuthorization.requirePermission("notification.workflow.events.read.all");
         return ApiResponse.ok(notificationWorkflowEventQueryService.listRecent(
                 consumeStatus,
                 eventType,
