@@ -435,6 +435,8 @@
 
 **处置（实施中）**：在现有RAG principal/独立scope基础上，新增Auth唯一维护的类型化userId→brokerId表、受权管理API、版本化outbox及签名快照；Listing详情与写操作、Customer档案及子记录使用签名映射核资源归属，公开Listing摘要继续只返回未删除ON_SALE范围。Common/Auth/RAG/Listing/Customer定向回归通过。无历史映射回填；Customer→Listing RPC和其他跨服务入口尚未迁移到请求级上下文，Gateway/服务公钥与生产配置未接线，新入口仍默认关闭。因此当前代码回归不证明线上资源授权已启用，本项保持OPEN。
 
+**本批实施提交**：`9f87f87`（跨服务接线、生产配置和历史映射回填仍未完成）。
+
 **关联**：LR-31；该 change 的 design D3、tasks 第 3 组。
 
 ## KI-56 [OPEN·P1] 房源与记忆索引生命周期缺少可靠事件和双索引补偿
