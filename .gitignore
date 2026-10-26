@@ -16,3 +16,8 @@ __pycache__/
 /runtime-logs/diagnostics/
 /derby.log
 /.work/
+
+# Local AI tooling history and generated command copies
+/.mimosa/
+/.zcode/
+/.zcodeignore
