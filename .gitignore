@@ -12,3 +12,6 @@ target/
 __pycache__/
 .codex/config.toml
 .codex/config.toml.bak
+
+/runtime-logs/diagnostics/
+/derby.log
