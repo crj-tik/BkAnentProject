@@ -23,6 +23,14 @@ Use Java 17, 4-space indentation, and UTF-8 files. Keep package names lowercase 
 ## Testing Guidelines
 New business logic should add tests under `src/test/java` in the owning module. Prefer focused unit tests for pure logic and Spring Boot tests for controller/service wiring. Name test classes `*Test` and mirror production package structure. At minimum, cover RPC providers, authentication, RAG/Milvus integration adapters, and MyBatis query behavior.
 
+## Test and Temporary File Hygiene
+- Permanent, reusable tests belong in the owning module's `src/test/java` or `src/test/resources`; keep and commit them as project source.
+- One-off test harnesses, generated fixtures, and temporary inspection scripts belong under `.work/YYYY-MM-DD/<session-id>/`, never in the repository root or production source directories. `.work/` is local-only and must remain ignored by Git.
+- Put test/build outputs in the tool's existing output directory (for Maven, `target/`). Put session logs in `runtime-logs/sessions/YYYY-MM-DD/<session-id>/` as described in `runtime-logs/README.md`.
+- After a test or investigation finishes, remove its disposable scripts, fixtures, and outputs. Keep an artifact only when it is a reproducible project test, required input, or useful diagnostic record; move retained diagnostics into the dated `runtime-logs/diagnostics/` archive.
+- Before removing any pre-existing or shared file, inspect its purpose and references. Do not delete maintained tests, OpenSpec artifacts, user data, or another active session's files as cleanup.
+- Apply these rules to every assistant, agent, and developer session working in this repository.
+
 ## Commit & Pull Request Guidelines
 The repository has no commit history yet, so adopt short imperative commit messages such as `feat: add listing rag indexing` or `fix: handle empty Milvus search response`. Keep one logical change per commit. Pull requests should include scope, affected modules, config or schema changes, verification commands, and sample requests/responses for API changes.
 

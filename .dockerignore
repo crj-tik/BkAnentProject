@@ -4,6 +4,7 @@
 .codegraph
 .mvn-local
 runtime-logs
+.work
 **/target
 *.iml
 .codex-temp-*

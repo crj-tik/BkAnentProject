@@ -93,9 +93,11 @@ docker compose --profile mcp config --quiet
 本地协议和权限策略测试（无需数据库，数据库操作使用测试替身）：
 
 ```powershell
-python -m venv .codex-temp-mysql-mcp-venv
-.\.codex-temp-mysql-mcp-venv\Scripts\python.exe -m pip install -r mysql-mcp/requirements.txt
-.\.codex-temp-mysql-mcp-venv\Scripts\python.exe -m unittest discover -s mysql-mcp/tests -v
+python -m venv .work\mysql-mcp-venv
+.\.work\mysql-mcp-venv\Scripts\python.exe -m pip install -r mysql-mcp/requirements.txt
+.\.work\mysql-mcp-venv\Scripts\python.exe -m unittest discover -s mysql-mcp/tests -v
+
+测试完成后删除 `.work\mysql-mcp-venv`；若仍需复用环境，可在下一轮测试前重新创建。
 ```
 
 只升级 MCP 镜像并重启 MCP，不重启 MySQL：

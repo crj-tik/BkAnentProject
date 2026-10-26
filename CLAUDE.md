@@ -31,6 +31,15 @@ mvn -pl auth-service "-Dspring-boot.run.profiles=distributed" spring-boot:run
 
 All modules share parent `bk-agent-project:1.0.0-SNAPSHOT` (root `pom.xml`). Version properties are centralized in the root POM's `<properties>`.
 
+## 测试与临时文件
+
+- 可复用、需要长期回归的测试放在所属模块的 `src/test/java` 或 `src/test/resources`，作为项目源码保留。
+- 一次性测试脚本、临时夹具和排查脚本统一放在 `.work/YYYY-MM-DD/<session-id>/`，不得散落在仓库根目录或生产代码目录；`.work/` 仅本地使用并必须加入 Git 忽略。
+- 测试与构建输出使用工具默认目录（Maven 使用各模块 `target/`）；会话日志统一放在 `runtime-logs/sessions/YYYY-MM-DD/<session-id>/`，规则见 `runtime-logs/README.md`。
+- 测试或排查结束后，删除一次性脚本、临时夹具和无保留价值的输出。只有可复现的正式测试、必要输入或有复用价值的诊断记录可以保留；诊断记录按日期归档到 `runtime-logs/diagnostics/`。
+- 清理既有或共享文件前先检查用途和引用。不得把正式测试、OpenSpec 产物、用户数据或其他正在运行会话的文件当垃圾清除。
+- 本规则适用于所有在本仓库工作的助手、Agent 和开发者会话。
+
 ## Architecture
 
 This is a **multi-agent real-estate middle-platform** built on Spring Cloud Alibaba, Spring AI (DeepSeek + DashScope), Dubbo, MCP, and Nacos.

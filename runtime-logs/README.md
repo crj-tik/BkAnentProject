@@ -20,4 +20,4 @@
 
 ## 历史诊断归档
 
-旧的根目录临时诊断文件按生成日期放入 `runtime-logs/diagnostics/YYYY-MM-DD/`，保留原文件名和内容。诊断归档只保存在本地，不进入 Git。
+旧的根目录临时诊断记录（日志、文本、JSON 和需要保留的检查快照）按生成日期放入 `runtime-logs/diagnostics/YYYY-MM-DD/`，保留原文件名和内容。诊断归档只保存在本地，不进入 Git。
