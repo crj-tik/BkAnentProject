@@ -4,6 +4,8 @@ import org.mybatis.spring.annotation.MapperScan;
 import org.apache.dubbo.config.spring.context.annotation.EnableDubbo;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Import;
+import com.bkanent.common.authz.AuthzRestExceptionHandler;
 
 /**
  * ListingMasterServiceApplication 启动类。
@@ -11,6 +13,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @MapperScan("com.bkanent.listing.mapper")
 @EnableDubbo
 @SpringBootApplication
+@Import(AuthzRestExceptionHandler.class)
 public class ListingMasterServiceApplication {
 
     public static void main(String[] args) {

@@ -21,6 +21,7 @@ INSERT INTO auth_permission(permission_code,domain,operation) VALUES
 ('agent.workflow.read','agent','workflow.read'),
 ('agent.workflow.artifact.read','agent','workflow.artifact.read'),
 ('auth.users.manage','auth','users.manage'),('auth.roles.manage','auth','roles.manage'),
+('auth.business-identity.manage','auth','business-identity.manage'),
 ('interview.read','interview','read'),('interview.respond','interview','respond'),
 ('listing.read','listing','read'),('memory.read','memory','read');
 INSERT INTO auth_role_permission(role_id,permission_code)

@@ -20,6 +20,22 @@
 - **WHEN** 业务管理员具有所有操作权限但请求另一用户的个人 Agent 工作集或偏好
 - **THEN** 领域拒绝访问，不将全权限解释为跨 owner 授权
 
+### Requirement: Auth-owned business identity mapping is versioned and signed
+
+Auth SHALL maintain explicit, typed mappings from a platform actor to business identity identifiers; the first adopted mapping is userId to brokerId. Mapping type and identifier SHALL be persisted in Auth, uniquely assigned to at most one active user for that type, and changed only through an audited authorization-management operation. The effective mapping SHALL be included in the Auth-signed snapshot and request context so Gateway, Supervisor, A2A and domain consumers can verify it locally without resolving an identifier from model arguments or making an Auth call for every tool. A mapping change SHALL increment permissionRevision and publish the normal authorization outbox event in the same transaction. Consumers MUST use only the exact identity type required by the target resource and SHALL still check the resource's owner, state and domain relationship. businessAdmin grants business operations but MUST NOT fabricate a broker identity or bypass personal Memory ownership.
+
+#### Scenario: Broker attempts to replace the mapped identity in tool input
+- **WHEN** the signed context maps the actor to brokerId 81 but a tool argument or request body supplies brokerId 82
+- **THEN** the domain uses the signed mapping or rejects the mismatch before reading or changing the resource
+
+#### Scenario: Administrator changes the broker mapping during a run
+- **WHEN** an audited Auth update replaces the user's broker mapping
+- **THEN** Auth increments permissionRevision and publishes invalidation; old snapshots remain bounded by the existing freshness and hard-deadline rules, and a refresh cannot replace the identity inside an already-bound run
+
+#### Scenario: Business administrator has no broker mapping
+- **WHEN** a business administrator with no BROKER mapping requests a broker-owned resource
+- **THEN** the domain may use its explicitly permitted business-wide scope but MUST NOT invent a brokerId or weaken personal Memory owner checks
+
 ### Requirement: Shared versioned authorization and isolated execution identity
 
 系统 SHALL 为经认证用户提供完整、有界、不可变的有效操作权限快照及单调授权版本；多个同用户同版本运行 SHALL 复用该快照，不按每个运行复制分布式权限副本。运行身份 MUST 绑定真实 actor、认证有效期、原 session/run 和请求政策；身份与权限 MUST 只经专用服务端上下文传播，不从 LLM、普通 metadata、userId 或 checkpoint 恢复凭据。授权版本变化 SHALL 不改变原 actor；角色增加也不得突破原请求政策、已绑定审批或服务委托范围。

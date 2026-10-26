@@ -24,6 +24,9 @@ public class ListingRagIdentity {
         this.auth = auth;
     }
     public AuthRagPrincipal resolve(RagCredentialContext credentials) {
+        if (com.bkanent.common.authz.AuthzRequestScope.present()) {
+            return scopedPrincipal();
+        }
         if (credentials == null) {
             throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
         }
@@ -59,18 +62,44 @@ public class ListingRagIdentity {
         return principal;
     }
     public AuthRagPrincipal requireReader(RagCredentialContext credentials) {
+        if (com.bkanent.common.authz.AuthzRequestScope.present()) {
+            String operation = com.bkanent.common.authz.AuthzRequestScope.businessAdmin()
+                    ? "listing.read.all" : "listing.read";
+            com.bkanent.common.authz.AuthzRequestScope.requireOperation(operation);
+            return scopedPrincipal();
+        }
         AuthRagPrincipal p = resolve(credentials);
         if (p.versionedAuthorization() ? !p.hasPermission("listing.read")
                 : !properties.getReadRoleCodes().contains(p.roleCode())) { throw new RagException(RagErrorCode.FORBIDDEN); }
         return p;
     }
     public AuthRagPrincipal requireAdmin(RagCredentialContext credentials) {
+        if (com.bkanent.common.authz.AuthzRequestScope.present()) {
+            com.bkanent.common.authz.AuthzRequestScope.requireOperation("listing.index.manage");
+            if (!com.bkanent.common.authz.AuthzRequestScope.businessAdmin()) throw new RagException(RagErrorCode.FORBIDDEN);
+            return scopedPrincipal();
+        }
         AuthRagPrincipal p = resolve(credentials);
         if (p.versionedAuthorization() ? !p.hasPermission("agent.vector-store.manage")
                 : !"ADMIN".equals(p.roleCode()) || !properties.getAdminRoleCodes().contains(p.roleCode())) {
             throw new RagException(RagErrorCode.FORBIDDEN);
         }
         return p;
+    }
+
+    private AuthRagPrincipal scopedPrincipal() {
+        var response = com.bkanent.common.authz.AuthzRequestScope.requireCurrent();
+        var context = response.context();
+        long expires = Math.min(context.expiresAtEpochSecond(),
+                Math.min(context.runHardDeadlineEpochSecond(), response.freshness().notAfterEpochSecond()));
+        if (response.snapshot().grantDeadlineEpochSecond() != null) {
+            expires = Math.min(expires, response.snapshot().grantDeadlineEpochSecond());
+        }
+        return new AuthRagPrincipal(Long.parseLong(context.actorId()), "SIGNED", true, true, expires,
+                AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION, context.permissionRevision(),
+                context.credentialEpoch(), response.snapshot().businessAdmin(),
+                response.snapshot().businessAdmin() ? java.util.List.of("BUSINESS_ADMIN") : java.util.List.of("BROKER"),
+                response.snapshot().permissions(), null);
     }
     public static void requireCurrent(AuthRagPrincipal principal) {
         if (principal == null || principal.userId() == null || principal.userId() <= 0

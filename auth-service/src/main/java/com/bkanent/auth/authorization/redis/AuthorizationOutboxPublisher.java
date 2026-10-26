@@ -176,7 +176,7 @@ public final class AuthorizationOutboxPublisher {
         RedisAuthorizationWriter.requireOutsideTransaction();
         AuthorizationSnapshot snapshot = writer.sign(new AuthorizationSnapshot(Long.toString(userId),
                 facts.permissionRevision(), facts.catalogVersion(), facts.businessAdmin(), facts.permissions(),
-                facts.grantDeadline() == null ? null : facts.grantDeadline().getEpochSecond(),
+                facts.grantDeadline() == null ? null : facts.grantDeadline().getEpochSecond(), facts.businessIdentities(),
                 AuthzContract.ALGORITHM, authority.getResponseKeyId(), null));
         AuthzFreshness head = writer.attest(snapshot, facts.credentialEpoch(), AuthorizationStatus.valueOf(facts.status()),
                 readStartedAt, freshnessNonce());

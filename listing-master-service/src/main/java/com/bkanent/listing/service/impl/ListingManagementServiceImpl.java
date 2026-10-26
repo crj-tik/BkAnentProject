@@ -80,8 +80,12 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ListingDetailResponse createListing(ListingUpsertRequest request) {
+        requireOperation("listing.create");
+        long brokerId = com.bkanent.common.authz.AuthzRequestScope.requireBrokerIdentity();
+        requireSubmittedBroker(request.brokerId(), brokerId);
         currentReader();
         ListingEntity entity = new ListingEntity();
+        entity.setBrokerId(brokerId);
         applyUpsert(entity, request);
         entity.setStatus(ListingStatusEnum.PENDING_REVIEW.name());
         entity.setOcrStatus("PENDING");
@@ -98,8 +102,13 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ListingDetailResponse updateListing(Long listingId, ListingUpsertRequest request) {
+        requireOperation("listing.update.own");
         outbox.lock(listingId);
         ListingEntity entity = requireListing(listingId);
+        requireOwner(entity, "listing.update.own", "listing.update.all");
+        if (request.brokerId() != null && !request.brokerId().equals(entity.getBrokerId())) {
+            throw new com.bkanent.common.authz.AuthzException(com.bkanent.common.authz.AuthzErrorCode.PERMISSION_DENIED);
+        }
         applyUpsert(entity, request);
         listingDomainService.updateById(entity);
         outbox.publishCurrent(listingId);
@@ -113,8 +122,10 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deleteListing(Long listingId) {
+        requireOperation("listing.delete.own");
         outbox.lock(listingId);
-        requireListing(listingId);
+        ListingEntity entity = requireListing(listingId);
+        requireOwner(entity, "listing.delete.own", "listing.delete.all");
         listingDomainService.removeById(listingId);
         outbox.publishCurrent(listingId);
         log.info("删除房源成功，listingId={}", listingId);
@@ -125,7 +136,9 @@ public class ListingManagementServiceImpl implements ListingManagementService {
      */
     @Override
     public ListingDetailResponse getListingDetail(Long listingId) {
+        requireReadPermission();
         ListingEntity entity = requireListing(listingId);
+        requireOwner(entity, "listing.read", "listing.read.all");
         requireReadable(entity, currentReader());
         return listingConverter.toDetailResponse(entity);
     }
@@ -135,6 +148,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
      */
     @Override
     public List<ListingDetailResponse> searchListings(ListingQueryRequest request) {
+        request = authorizedQuery(request, "listing.read", "listing.read.all");
         var principal = currentReader();
         if (com.bkanent.listing.rag.ListingRagIdentity.activeOnly(principal)) {
             if (request != null && StringUtils.hasText(request.status()) && !"ON_SALE".equals(request.status())) {
@@ -147,8 +161,12 @@ public class ListingManagementServiceImpl implements ListingManagementService {
         var rows = listingDomainService.search(request);
         principal = currentReader();
         var current = principal;
-        return rows.stream().filter(e -> com.bkanent.listing.rag.ListingRagIdentity.canRead(current, e))
-                .map(listingConverter::toDetailResponse).toList();
+        List<ListingDetailResponse> result = new java.util.ArrayList<>();
+        for (ListingEntity row : rows) {
+            if (com.bkanent.common.authz.AuthzRequestScope.present()) requireOwner(row, "listing.read", "listing.read.all");
+            if (com.bkanent.listing.rag.ListingRagIdentity.canRead(current, row)) result.add(listingConverter.toDetailResponse(row));
+        }
+        return List.copyOf(result);
     }
 
     /**
@@ -156,13 +174,18 @@ public class ListingManagementServiceImpl implements ListingManagementService {
      */
     @Override
     public List<ListingDTO> searchListingSummaries(String keyword) {
+        ListingQueryRequest query = authorizedSummaryQuery(new ListingQueryRequest(keyword, null, null,
+                null, null, null, null, null));
         var principal = currentReader();
         var rows = listingDomainService.search(new ListingQueryRequest(keyword,
                 com.bkanent.listing.rag.ListingRagIdentity.activeOnly(principal) ? "ON_SALE" : null,
-                null, null, null, null, null, null));
+                query.brokerId(), null, null, null, null, null));
         var current = currentReader();
-        return rows.stream().filter(e -> com.bkanent.listing.rag.ListingRagIdentity.canRead(current, e))
-                .map(listingConverter::toDto).toList();
+        List<ListingDTO> result = new java.util.ArrayList<>();
+        for (ListingEntity row : rows) {
+            if (com.bkanent.listing.rag.ListingRagIdentity.canRead(current, row)) result.add(listingConverter.toDto(row));
+        }
+        return List.copyOf(result);
     }
 
     /**
@@ -170,6 +193,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
      */
     @Override
     public List<ListingKeywordSearchResultDTO> searchListingSummariesByKeyword(ListingKeywordSearchRequest request) {
+        requireReadPermission();
         return listingSearchService.searchByKeyword(request);
     }
 
@@ -178,6 +202,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
      */
     @Override
     public ListingDTO getListingSummary(Long listingId) {
+        requireReadPermission();
         var principal = currentReader();
         ListingEntity entity = listingDomainService.getById(listingId);
         var current = currentReader();
@@ -204,11 +229,13 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ListingDetailResponse updateStatus(Long listingId, ListingStatusUpdateRequest request) {
+        requireOperation("listing.status.update.own");
         if (!ListingStatusEnum.contains(request.status())) {
             throw new IllegalArgumentException("房源状态不合法: " + request.status());
         }
         outbox.lock(listingId);
         ListingEntity entity = requireListing(listingId);
+        requireOwner(entity, "listing.status.update.own", "listing.status.update.all");
         entity.setStatus(request.status().toUpperCase());
         listingDomainService.updateById(entity);
         outbox.publishCurrent(listingId);
@@ -222,8 +249,10 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ListingDetailResponse bindAssets(Long listingId, ListingAssetBindRequest request) {
+        requireOperation("listing.assets.bind.own");
         outbox.lock(listingId);
         ListingEntity entity = requireListing(listingId);
+        requireOwner(entity, "listing.assets.bind.own", "listing.assets.bind.all");
         entity.setImageUrls(listingConverter.joinValues(request.imageUrls()));
         entity.setFloorPlanUrls(listingConverter.joinValues(request.floorPlanUrls()));
         entity.setVideoUrls(listingConverter.joinValues(request.videoUrls()));
@@ -239,8 +268,10 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ListingDetailResponse recognizeOcr(Long listingId, ListingOcrRecognizeRequest request) {
+        requireOperation("listing.ocr.own");
         outbox.lock(listingId);
         ListingEntity entity = requireListing(listingId);
+        requireOwner(entity, "listing.ocr.own", "listing.ocr.all");
         entity.setPropertyCertificateUrl(request.propertyCertificateUrl());
         entity.setContractUrl(request.contractUrl());
         entity.setOcrStatus("DONE");
@@ -262,8 +293,10 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ListingDetailResponse verifyAuthenticity(Long listingId, ListingVerifyRequest request) {
+        requireOperation("listing.verify.own");
         outbox.lock(listingId);
         ListingEntity entity = requireListing(listingId);
+        requireOwner(entity, "listing.verify.own", "listing.verify.all");
         if (StringUtils.hasText(request.certificateNo())) {
             entity.setCertificateNo(request.certificateNo());
         }
@@ -287,7 +320,6 @@ public class ListingManagementServiceImpl implements ListingManagementService {
      * 应用upsert字段。
      */
     private void applyUpsert(ListingEntity entity, ListingUpsertRequest request) {
-        entity.setBrokerId(request.brokerId());
         entity.setTitle(request.title());
         entity.setAddress(request.address());
         entity.setLayout(request.layout());
@@ -319,7 +351,66 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     }
 
     private com.bkanent.common.rag.AuthRagPrincipal currentReader() {
+        if (com.bkanent.common.authz.AuthzRequestScope.present()) {
+            return identity.requireReader(null);
+        }
         return identity.requireReader(com.bkanent.listing.rag.ListingRagCredentialContext.current());
+    }
+
+    private void requireOperation(String operation) {
+        if (!com.bkanent.common.authz.AuthzRequestScope.present()) {
+            throw new com.bkanent.common.authz.AuthzException(com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
+        }
+        com.bkanent.common.authz.AuthzRequestScope.requireOperation(operation);
+    }
+
+    private void requireReadPermission() {
+        if (com.bkanent.common.authz.AuthzRequestScope.present()) {
+            if (com.bkanent.common.authz.AuthzRequestScope.businessAdmin()) {
+                com.bkanent.common.authz.AuthzRequestScope.requireOperation("listing.read.all");
+            } else {
+                com.bkanent.common.authz.AuthzRequestScope.requireOperation("listing.read");
+            }
+        }
+    }
+
+    private ListingQueryRequest authorizedQuery(ListingQueryRequest request, String ownOperation, String allOperation) {
+        if (!com.bkanent.common.authz.AuthzRequestScope.present()) return request;
+        if (com.bkanent.common.authz.AuthzRequestScope.businessAdmin()) {
+            com.bkanent.common.authz.AuthzRequestScope.requireOperation(allOperation);
+            return request;
+        }
+        com.bkanent.common.authz.AuthzRequestScope.requireOperation(ownOperation);
+        long brokerId = com.bkanent.common.authz.AuthzRequestScope.requireBrokerIdentity();
+        if (request != null && request.brokerId() != null && request.brokerId() != brokerId) {
+            throw new com.bkanent.common.authz.AuthzException(com.bkanent.common.authz.AuthzErrorCode.PERMISSION_DENIED);
+        }
+        return request == null ? new ListingQueryRequest(null, null, brokerId, null, null, null, null, null)
+                : new ListingQueryRequest(request.keyword(), request.status(), brokerId, request.minArea(),
+                request.maxArea(), request.minTotalPrice(), request.maxTotalPrice(), request.verifiedOnly());
+    }
+
+    /** Public listing summaries keep the established ON_SALE browse range; private detail routes use owner checks. */
+    private ListingQueryRequest authorizedSummaryQuery(ListingQueryRequest request) {
+        if (!com.bkanent.common.authz.AuthzRequestScope.present()) return request;
+        if (com.bkanent.common.authz.AuthzRequestScope.businessAdmin()) {
+            com.bkanent.common.authz.AuthzRequestScope.requireOperation("listing.read.all");
+        } else {
+            com.bkanent.common.authz.AuthzRequestScope.requireOperation("listing.read");
+        }
+        return request;
+    }
+
+    private void requireOwner(ListingEntity entity, String ownOperation, String allOperation) {
+        if (com.bkanent.common.authz.AuthzRequestScope.present()) {
+            com.bkanent.common.authz.AuthzRequestScope.requireBrokerOwnership(entity.getBrokerId(), ownOperation, allOperation);
+        }
+    }
+
+    private void requireSubmittedBroker(Long submittedBrokerId, long trustedBrokerId) {
+        if (submittedBrokerId != null && submittedBrokerId.longValue() != trustedBrokerId) {
+            throw new com.bkanent.common.authz.AuthzException(com.bkanent.common.authz.AuthzErrorCode.PERMISSION_DENIED);
+        }
     }
 
     private void requireReadable(ListingEntity entity, com.bkanent.common.rag.AuthRagPrincipal principal) {

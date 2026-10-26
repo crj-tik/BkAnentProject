@@ -3,7 +3,10 @@ package com.bkanent.common.authz;
 import com.bkanent.common.security.ServiceIdentityCrypto;
 
 import java.util.Base64;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.TreeSet;
 
 /** Wire bounds and canonical forms. Changes to these limits must not widen timing windows. */
@@ -12,6 +15,7 @@ public final class AuthzContract {
     public static final int MAX_PERMISSION_LENGTH = 128;
     public static final int MAX_BODY_BYTES = 1024 * 1024;
     public static final int MAX_QUERY_PARAMETERS = 128;
+    public static final int MAX_BUSINESS_IDENTITIES = 8;
     public static final String ALGORITHM = ServiceIdentityCrypto.ED25519;
 
     private AuthzContract() { }
@@ -82,6 +86,16 @@ public final class AuthzContract {
             sorted.add(value);
         }
         return List.copyOf(sorted);
+    }
+
+    public static Map<String, Long> businessIdentities(Map<String, Long> values) {
+        require(values != null && values.size() <= MAX_BUSINESS_IDENTITIES);
+        TreeMap<String, Long> sorted = new TreeMap<>();
+        for (var entry : values.entrySet()) {
+            require("BROKER".equals(entry.getKey()) && entry.getValue() != null && entry.getValue() > 0);
+            sorted.put(entry.getKey(), entry.getValue());
+        }
+        return Collections.unmodifiableMap(sorted);
     }
 
     static void signature(String algorithm, String keyId, String signature) {

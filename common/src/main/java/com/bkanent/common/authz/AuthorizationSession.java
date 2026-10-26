@@ -145,6 +145,7 @@ public final class AuthorizationSession {
         AuthorizationContext next = response.context();
         AuthzContract.check(actorId.equals(next.actorId()) && Objects.equals(runId, next.runId())
                 && Objects.equals(sessionId, next.sessionId()) && policyDigest.equals(next.policyDigest())
+                && context.businessIdentities().equals(next.businessIdentities())
                 && runHardDeadline == next.runHardDeadlineEpochSecond()
                 && next.expiresAtEpochSecond() <= context.expiresAtEpochSecond()
                 && next.expiresAtEpochSecond() <= originalDeadline

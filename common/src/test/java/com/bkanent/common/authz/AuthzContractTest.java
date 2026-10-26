@@ -44,6 +44,15 @@ class AuthzContractTest {
                 new AuthorizationSnapshot("123", 7, 3, false, PERMISSIONS, NOW + 100, AuthzContract.ALGORITHM, KID, null))) {
             assertNotEquals(original, AuthzCanonicalHash.snapshotHash(changed));
         }
+        AuthorizationSnapshot assigned = new AuthorizationSnapshot("123", 7, 3, false, PERMISSIONS, null,
+                Map.of("BROKER", 901L), AuthzContract.ALGORITHM, KID, null);
+        AuthorizationSnapshot reassigned = new AuthorizationSnapshot("123", 7, 3, false, PERMISSIONS, null,
+                Map.of("BROKER", 902L), AuthzContract.ALGORITHM, KID, null);
+        assertNotEquals(original, AuthzCanonicalHash.snapshotHash(assigned));
+        assertNotEquals(AuthzCanonicalHash.snapshotHash(assigned), AuthzCanonicalHash.snapshotHash(reassigned));
+        assertThrows(AuthzException.class, () -> new AuthorizationSnapshot("123", 7, 3, false,
+                PERMISSIONS, null, Map.of("EMPLOYEE", 9L), AuthzContract.ALGORITHM, KID, null));
+        assertThrows(UnsupportedOperationException.class, () -> assigned.businessIdentities().put("BROKER", 903L));
     }
 
     @Test

@@ -162,6 +162,7 @@ public class AuthAuthorizationRpcServiceImpl implements AuthAuthorizationRpcServ
             var facts = load(principal.userId(), checkedAt);
             require(facts.credentialEpoch() == original.credentialEpoch()
                     && facts.permissionRevision() >= original.permissionRevision(), AuthzErrorCode.CONTEXT_CONFLICT);
+            require(facts.businessIdentities().equals(original.businessIdentities()), AuthzErrorCode.CONTEXT_CONFLICT);
             require(facts.permissionRevision() != original.permissionRevision()
                     || AuthzCanonicalHash.snapshotHash(snapshot(facts)).equals(original.permissionHash()),
                     AuthzErrorCode.CONTEXT_CONFLICT);
@@ -291,7 +292,7 @@ public class AuthAuthorizationRpcServiceImpl implements AuthAuthorizationRpcServ
         AuthorizationContext context = AuthzSignature.sign(new AuthorizationContext(Long.toString(facts.userId()),
                 facts.permissionRevision(), facts.credentialEpoch(), hash, operations, audience, requestId,
                 runId, sessionId, policyDigest, requestHash, nonce, now, expiry, hardDeadline,
-                AuthzContract.ALGORITHM, properties.getResponseKeyId(), null), signingKey);
+                facts.businessIdentities(), AuthzContract.ALGORITHM, properties.getResponseKeyId(), null), signingKey);
         AuthzFreshness freshness = AuthzSignature.sign(new AuthzFreshness(Long.toString(facts.userId()),
                 facts.permissionRevision(), facts.credentialEpoch(), AuthorizationStatus.ACTIVE, hash, now,
                 AuthzDeadlines.freshnessNotAfter(now), nonce, AuthzContract.ALGORITHM,
@@ -303,7 +304,7 @@ public class AuthAuthorizationRpcServiceImpl implements AuthAuthorizationRpcServ
     private AuthorizationSnapshot snapshot(EffectivePermissionService.Snapshot facts) {
         return AuthzSignature.sign(new AuthorizationSnapshot(Long.toString(facts.userId()),
                 facts.permissionRevision(), facts.catalogVersion(), facts.businessAdmin(), facts.permissions(),
-                deadline(facts), AuthzContract.ALGORITHM, properties.getResponseKeyId(), null), signingKey);
+                deadline(facts), facts.businessIdentities(), AuthzContract.ALGORITHM, properties.getResponseKeyId(), null), signingKey);
     }
 
     private static Long deadline(EffectivePermissionService.Snapshot facts) {

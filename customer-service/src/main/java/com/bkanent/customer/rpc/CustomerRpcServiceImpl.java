@@ -21,13 +21,13 @@ public class CustomerRpcServiceImpl implements CustomerRpcService {
 
     @Override
     public CustomerProfileDTO getCustomerProfile(Long customerId) {
-        return customerManagementService.getCustomerDetail(customerId).profile();
+        throw new com.bkanent.common.authz.AuthzException(
+                com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
     }
 
     @Override
     public List<Long> matchListingsForCustomer(Long customerId) {
-        return customerManagementService.matchListings(customerId).stream()
-                .map(match -> match.listing().id())
-                .toList();
+        throw new com.bkanent.common.authz.AuthzException(
+                com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
     }
 }

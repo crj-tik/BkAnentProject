@@ -6,11 +6,13 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.stereotype.Component;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 /** Authenticate direct HTTP business entrypoints too; static gateway markers are not credentials. */
 @Component
+@ConditionalOnProperty(prefix = "listing.authorization", name = "enabled", havingValue = "false", matchIfMissing = true)
 public class ListingRequestAuthenticationFilter extends OncePerRequestFilter {
     private final ListingRagIdentity identity;
 

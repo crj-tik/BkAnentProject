@@ -86,23 +86,29 @@ class ListingReadClientTest {
         assertEquals(RagErrorCode.DEPENDENCY_UNAVAILABLE, assertThrows(RagException.class, () -> client.search("region", user)).code());
     }
 
-    @Test void actualMatchingAuthenticatesBeforeCustomerLookupAndEmptyPreferenceShortcut() {
+    @Test void matchingChecksTheMappedCustomerBeforeListingLookupAndEmptyPreferenceShortcut() {
         var client = mock(ListingReadClient.class);
         var customers = mock(CustomerDomainService.class);
         var management = new CustomerManagementServiceImpl(customers, mock(CustomerFollowRecordDomainService.class),
                 mock(OwnerEntrustRecordDomainService.class), mock(CustomerFavoriteListingDomainService.class),
                 new CustomerConverter(), client);
+        var customer = new CustomerEntity(); customer.setId(9L); customer.setBrokerId(41L);
+        when(customers.getById(9L)).thenReturn(customer);
         when(client.authenticate()).thenThrow(new RagException(RagErrorCode.AUTHENTICATION_FAILED));
-        assertThrows(RagException.class, () -> management.matchListings(9L));
-        verifyNoInteractions(customers);
+        try (var ignored = CustomerAuthzScopeFixture.open(false,
+                List.of("customer.match.own"), java.util.Map.of("BROKER", 41L))) {
+            assertThrows(RagException.class, () -> management.matchListings(9L));
+            verify(customers).getById(9L);
+        }
         var user = new ListingReadClient.UserRead("42", new RagCredentialContext("valid-token"));
         doReturn(user).when(client).authenticate();
-        var customer = new CustomerEntity(); customer.setId(9L);
-        when(customers.getById(9L)).thenReturn(customer);
-        assertTrue(management.matchListings(9L).isEmpty());
-        customer.setPreferredArea("region");
-        when(client.search("region", user)).thenReturn(List.of());
-        assertTrue(management.matchListings(9L).isEmpty());
-        verify(client).search("region", user);
+        try (var ignored = CustomerAuthzScopeFixture.open(false,
+                List.of("customer.match.own"), java.util.Map.of("BROKER", 41L))) {
+            assertTrue(management.matchListings(9L).isEmpty());
+            customer.setPreferredArea("region");
+            when(client.search("region", user)).thenReturn(List.of());
+            assertTrue(management.matchListings(9L).isEmpty());
+            verify(client).search("region", user);
+        }
     }
 }

@@ -15,6 +15,7 @@ public record AuthzResponse(AuthorizationSnapshot snapshot, AuthorizationContext
                 && snapshot.actorId().equals(freshness.userId())
                 && snapshot.permissionRevision() == context.permissionRevision()
                 && snapshot.permissionRevision() == freshness.permissionRevision()
+                && snapshot.businessIdentities().equals(context.businessIdentities())
                 && context.credentialEpoch() == freshness.credentialEpoch()
                 && context.permissionHash().equals(AuthzCanonicalHash.snapshotHash(snapshot))
                 && context.permissionHash().equals(freshness.permissionHash())

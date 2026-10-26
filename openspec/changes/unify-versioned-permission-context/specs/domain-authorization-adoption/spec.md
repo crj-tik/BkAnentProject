@@ -6,7 +6,19 @@
 
 ### Requirement: Domain admission requires an explicit operation and subject mapping
 
-每个业务域 SHALL 为真实REST/RPC/A2A/MCP动作登记稳定权限码、执行入口、可信actor来源、业务目标字段、资源真源和状态条件；不存在的资源主体映射或未落地能力 MUST 明确拒绝，不以工具描述、固定caller名称、模型userId/employeeId/brokerId/recipient或服务公钥登记推断授权。业务管理员全操作权限 SHALL 仅作用于明确的业务资源范围，不扩展个人Memory。
+每个业务域 SHALL 为真实REST/RPC/A2A/MCP动作登记稳定权限码、执行入口、可信actor来源、业务目标字段、资源真源和状态条件；需要broker范围时，brokerId SHALL 来自Auth维护并签入版本化授权上下文的userId→brokerId映射。不存在的资源主体映射或未落地能力 MUST 明确拒绝，不以工具描述、固定caller名称、模型userId/employeeId/brokerId/recipient或服务公钥登记推断授权。业务管理员全操作权限 SHALL 仅作用于明确的业务资源范围，不扩展个人Memory。
+
+#### Scenario: Broker mapping is absent or stale
+- **WHEN** Auth上下文没有当前版本的BROKER映射，或本地授权上下文因映射变更已DIRTY
+- **THEN** Listing/Customer拒绝经纪人私有读取和写入，直到获取可信刷新上下文；不能退回模型brokerId或数据库中任意同号记录
+
+#### Scenario: Listing public summary and private detail use different resource scopes
+- **WHEN** 经纪人读取房源摘要/RAG候选，或读取完整房源详情、创建和修改房源
+- **THEN** 摘要/RAG保留既有未删除ON_SALE范围并可跨broker浏览；完整详情及创建/修改/删除/状态/附件/核验动作必须使用签名BROKER映射检查归属，管理员全状态范围要求显式`listing.read.all`或对应`.all`操作
+
+#### Scenario: Customer records follow the mapped broker owner
+- **WHEN** 经纪人读取或变更客户档案、跟进、委托、收藏等关联数据
+- **THEN** 所有记录在执行前按签名BROKER映射核归属，请求体brokerId不匹配时拒绝，管理员业务范围不伪造broker身份
 
 #### Scenario: A registered agent still lacks a recipient mapping
 - **WHEN** 通知Agent服务身份有效但未能证明当前用户对目标recipient的读取或发送关系

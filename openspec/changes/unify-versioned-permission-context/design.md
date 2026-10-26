@@ -46,7 +46,11 @@ snapshot内容不因读取改变；Redis回收TTL属于缓存存储属性，过�
 
 ### D3. 可信请求上下文与一期运行有效期
 
-新增共享框架无关DTO：`AuthorizationSnapshot`、`AuthorizationContext`、`DelegationBinding`、`AuthorizationStatus`和固定错误码。snapshot为Auth签名不可变数据；context包含actorId、permissionRevision、credentialEpoch、permissionHash、认证expiresAt、audience、requestId/run/session绑定及policyDigest，绝不进入模型或业务metadata。权限引用本身不是Bearer；对请求持有与调用服务的证明必须另外验证。
+新增共享框架无关DTO：`AuthorizationSnapshot`、`AuthorizationContext`、`DelegationBinding`、`AuthorizationStatus`和固定错误码。snapshot为Auth签名不可变数据；context包含actorId、permissionRevision、credentialEpoch、permissionHash、认证expiresAt、audience、requestId/run/session绑定及policyDigest，绝不进入模型或业务metadata。Auth维护显式类型化的用户业务身份映射，首个类型为BROKER；映射同时进入snapshot/context签名和快照hash，映射变更在同一writer事务递增permissionRevision并写outbox。A2A/MCP沿现有签名context传播映射，接收域本地取用，不额外逐工具调用Auth。权限引用本身不是Bearer；对请求持有与调用服务的证明必须另外验证。
+
+### D3a. Auth是用户到经纪人身份映射的唯一真源（用户已选择）
+
+增加Auth管理的userId→brokerId显式映射表，一种身份类型同一时刻最多归属一个Auth用户；创建、替换、撤销必须经过独立管理权限、审计、单调permissionRevision和授权outbox。业务域只相信签名AuthorizationContext中的BROKER映射，不以相同数字、roleCode、request body或LLM参数推断。映射未配置、签名上下文已过期/变更或本地状态DIRTY时，经纪人私有范围拒绝；业务管理员可按登记的businessAdmin范围管理业务数据，但不能伪造broker身份或读取他人个人Memory。后续EMPLOYEE等身份类型需在对应领域核实后再登记，不由本决定自动推出。
 
 一期默认：入口建立固定 `runHardDeadline=min(entryAuthenticatedAt+300秒, accessExpiresAt, grantDeadline)`，且快照没有授予截止时该项视为无穷。每次域context期限 `min(parentContextExpiresAt, runHardDeadline, 当前grantDeadline, verifiedAt+300秒)`；专用请求绑定证明期限 `min(now+60秒, contextExpiresAt)`。同run版本刷新或新鲜证明签发只更新版本和new-check时刻，不重置runHardDeadline；原有较早授权截止也不能因权限新增自动延长。自动刷新需仍有效的真实交互凭据或未到期父委托，不能从owner/run/旧版本号生成新凭据。停止/重启、run硬到期或原access到期后要求原用户新的认证续接，保留当前任务待续接事实，不盲重发。长访谈前端可用仍有效登录session在认证领取端刷新自己的参与票，不通过模型续票。
 

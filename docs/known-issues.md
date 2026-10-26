@@ -433,7 +433,7 @@
 
 **现象与根因**：`common/.../rpc/AuthenticatedPrincipal.java` 只返回 userId；`auth-service/.../rpc/AuthPermissionRpcServiceImpl.java:36-60` 验证账号/角色活跃，但 hasPermission 不按具体权限码授予资源范围。房源 brokerId 来自业务请求，当前未证明等于认证 userId。固定 gateway 标记、普通 userId 或 Dubbo 服务名不能作为新 RAG 的服务认证或跨空间授权证明。
 
-**处置（实施中）**：`2a3fa12` 已提交最小 RAG principal 事实契约、请求绑定 HMAC 及 auth 响应签名，common 全量 30 项、auth 全量 53 项无外部依赖测试通过。领域权威 scope、房源资源 grant 与服务/用户/操作交集已实现并经反例回归，真实部署接线仍待验收；偏好强制当前 owner，系统约束由显式角色和 active 规则授权。保持原一般认证接口，不扩张为全系统 RBAC 重构。真实跨服务密钥、资源基线及 A2A 凭据传播尚未验收，本项保持 OPEN。
+**处置（实施中）**：在现有RAG principal/独立scope基础上，新增Auth唯一维护的类型化userId→brokerId表、受权管理API、版本化outbox及签名快照；Listing详情与写操作、Customer档案及子记录使用签名映射核资源归属，公开Listing摘要继续只返回未删除ON_SALE范围。Common/Auth/RAG/Listing/Customer定向回归通过。无历史映射回填；Customer→Listing RPC和其他跨服务入口尚未迁移到请求级上下文，Gateway/服务公钥与生产配置未接线，新入口仍默认关闭。因此当前代码回归不证明线上资源授权已启用，本项保持OPEN。
 
 **关联**：LR-31；该 change 的 design D3、tasks 第 3 组。
 

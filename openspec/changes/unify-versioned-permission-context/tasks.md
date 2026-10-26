@@ -77,7 +77,7 @@
 
 ## 10. 其余域逐操作准入
 
-- [ ] 10.1 Listing与Customer登记读写操作和可信broker/customer关系；保留房源角色状态范围，写权限不能只用reader，跨协议反例通过后启用。
+- [ ] 10.1 Auth维护并签署显式userId→brokerId映射，映射变化递增授权版本并失效消费者；Listing与Customer登记读写操作和可信broker/customer关系，actor从上下文取映射，保留房源角色状态范围，写权限不能只用reader，跨协议反例通过后启用。
 - [ ] 10.2 Business与Settlement核员工/门店/合同/收款主体映射，报表/计算/确认/分账独立操作；未定义关系或真实支付保持拒绝，SERVICE不继承用户无限读取。
 - [ ] 10.3 Contract与Marketing核合同/附件/内容owner及办理/编辑/审批动作；签章与真实发布未接通不授权mock成功，原业务状态不由权限替代。
 - [ ] 10.4 Compare迁移已退役无凭据Listing读取，分享/PDF绑定owner/公开范围/源版本；Media绑定task/material owner及精确后台许可，内存ID不当身份。

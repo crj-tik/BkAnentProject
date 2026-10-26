@@ -148,6 +148,56 @@ public class RoleAuthorizationManagementService {
         });
     }
 
+    public BusinessIdentityChange setBrokerIdentity(String accessToken, long userId, Long brokerId) {
+        return authenticated(accessToken, "auth.business-identity.manage", actor -> {
+            if (!actor.businessAdmin()) throw error(HttpStatus.FORBIDDEN, "Business administrator required");
+            requireActiveUser(userId);
+            if (brokerId != null && brokerId <= 0) throw error(HttpStatus.BAD_REQUEST, "Invalid broker id");
+            List<Long> current = repository.jdbc().queryForList(
+                    "SELECT identity_id FROM auth_user_business_identity WHERE user_id=? AND identity_type='BROKER'",
+                    Long.class, userId);
+            Long oldBrokerId = current.isEmpty() ? null : current.get(0);
+            if (Objects.equals(oldBrokerId, brokerId)) {
+                return new BusinessIdentityChange(userId, brokerId, null, List.of());
+            }
+            if (brokerId != null && repository.jdbc().queryForObject("""
+                    SELECT COUNT(*) FROM auth_user_business_identity
+                    WHERE identity_type='BROKER' AND identity_id=? AND user_id<>?
+                    """, Integer.class, brokerId, userId) != 0) {
+                throw error(HttpStatus.CONFLICT, "Broker identity is already assigned");
+            }
+            var result = repository.mutateUsers(List.of(userId), "BUSINESS_IDENTITY_CHANGED", false, jdbc -> {
+                jdbc.update("DELETE FROM auth_user_business_identity WHERE user_id=? AND identity_type='BROKER'", userId);
+                if (brokerId != null) jdbc.update("""
+                        INSERT INTO auth_user_business_identity(user_id,identity_type,identity_id)
+                        VALUES (?,'BROKER',?)
+                        """, userId, brokerId);
+            });
+            if (oldBrokerId != null) auditIdentity(actor, userId, oldBrokerId, "BROKER_IDENTITY_REMOVED", result.eventId());
+            if (brokerId != null) auditIdentity(actor, userId, brokerId, "BROKER_IDENTITY_ASSIGNED", result.eventId());
+            return new BusinessIdentityChange(userId, brokerId, result.eventId(), result.versions());
+        });
+    }
+
+    public List<BusinessIdentity> businessIdentities(String accessToken, long userId) {
+        return authenticated(accessToken, "auth.business-identity.manage", actor -> {
+            if (!actor.businessAdmin()) throw error(HttpStatus.FORBIDDEN, "Business administrator required");
+            requireActiveUser(userId);
+            return repository.jdbc().query("""
+                    SELECT identity_type,identity_id FROM auth_user_business_identity
+                    WHERE user_id=? ORDER BY identity_type
+                    """, (rs, row) -> new BusinessIdentity(rs.getString(1), rs.getLong(2)), userId);
+        });
+    }
+
+    private void auditIdentity(EffectivePermissionService.Snapshot actor, long userId, long brokerId,
+                               String action, String eventId) {
+        repository.jdbc().update("""
+                INSERT INTO auth_authorization_audit(audit_id,actor_id,actor_revision,action,target_type,target_id,event_id)
+                VALUES (?,?,?,?,?,?,?)
+                """, UUID.randomUUID().toString(), actor.userId(), actor.permissionRevision(), action, "BROKER", brokerId, eventId);
+    }
+
     private <T> T authenticated(String accessToken, String permission, Function<EffectivePermissionService.Snapshot,T> work) {
         authenticate(accessToken, permission);
         return repository.withWriterLock(() -> work.apply(authenticate(accessToken, permission)));
@@ -223,4 +273,9 @@ public class RoleAuthorizationManagementService {
     }
     public record UserRoleGrant(long roleId,Instant validFrom,Instant validUntil) { }
     public record ManagementResult(long targetId,String eventId,List<AuthorizationRepository.UserVersion> versions,boolean publicationConfirmed) { }
+    public record BusinessIdentity(String type, long identityId) { }
+    public record BusinessIdentityChange(long userId, Long brokerId, String eventId,
+                                         List<AuthorizationRepository.UserVersion> versions) {
+        public BusinessIdentityChange { versions = List.copyOf(versions); }
+    }
 }

@@ -116,6 +116,10 @@ public class CustomerController {
 
     @PostMapping("/entrusts/remind")
     public ApiResponse<Integer> remindExpiringEntrusts(@RequestParam(defaultValue = "7") int days) {
+        if (!com.bkanent.common.authz.AuthzRequestScope.businessAdmin()) {
+            throw new com.bkanent.common.authz.AuthzException(com.bkanent.common.authz.AuthzErrorCode.PERMISSION_DENIED);
+        }
+        com.bkanent.common.authz.AuthzRequestScope.requireOperation("customer.reminder.send");
         return ApiResponse.ok(customerReminderService.sendEntrustExpiryReminders(days));
     }
 

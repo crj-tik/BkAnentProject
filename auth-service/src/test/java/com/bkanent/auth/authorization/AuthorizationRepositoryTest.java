@@ -41,6 +41,7 @@ class AuthorizationRepositoryTest {
             jdbc.execute(sql);
         }
         jdbc.execute("ALTER TABLE user_account ADD COLUMN business_admin TINYINT NOT NULL DEFAULT 0");
+        jdbc.execute("CREATE TABLE auth_user_business_identity (user_id BIGINT NOT NULL, identity_type VARCHAR(24) NOT NULL, identity_id BIGINT NOT NULL, PRIMARY KEY(user_id,identity_type), UNIQUE(identity_type,identity_id))");
         jdbc.update("INSERT INTO auth_authorization_writer_lock VALUES (1)");
         repository = new AuthorizationRepository(jdbc, new DataSourceTransactionManager(dataSource));
         user(1, false); user(2, false); user(3, true);
@@ -86,6 +87,15 @@ class AuthorizationRepositoryTest {
         jdbc.update("DELETE FROM auth_user_authorization_state WHERE user_id=2");
         assertTrue(repository.snapshot(2, now).isEmpty());
         assertTrue(repository.snapshot(404, now).isEmpty());
+    }
+
+    @Test
+    void authBusinessIdentityIsExplicitAndPartOfTheCalculatedSnapshot() {
+        jdbc.update("INSERT INTO auth_user_business_identity(user_id,identity_type,identity_id) VALUES (1,'BROKER',901)");
+        assertEquals(java.util.Map.of("BROKER", 901L), repository.snapshot(1, now).orElseThrow().businessIdentities());
+        assertTrue(repository.snapshot(3, now).orElseThrow().businessIdentities().isEmpty());
+        assertThrows(org.springframework.dao.DuplicateKeyException.class, () -> jdbc.update(
+                "INSERT INTO auth_user_business_identity(user_id,identity_type,identity_id) VALUES (2,'BROKER',901)"));
     }
 
     @Test

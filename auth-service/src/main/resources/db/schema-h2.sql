@@ -33,6 +33,8 @@ CREATE TABLE auth_role_permission (role_id BIGINT NOT NULL, permission_code VARC
 CREATE TABLE auth_user_role (user_id BIGINT NOT NULL, role_id BIGINT NOT NULL,
     valid_from TIMESTAMP, valid_until TIMESTAMP, active INT NOT NULL DEFAULT 1,
     PRIMARY KEY(user_id,role_id));
+CREATE TABLE auth_user_business_identity (user_id BIGINT NOT NULL, identity_type VARCHAR(24) NOT NULL,
+    identity_id BIGINT NOT NULL, PRIMARY KEY(user_id,identity_type), UNIQUE(identity_type,identity_id));
 CREATE TABLE auth_user_authorization_state (user_id BIGINT PRIMARY KEY,
     permission_revision BIGINT NOT NULL DEFAULT 1, credential_epoch BIGINT NOT NULL DEFAULT 1,
     status VARCHAR(16) NOT NULL, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP);

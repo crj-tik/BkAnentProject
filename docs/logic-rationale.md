@@ -1121,3 +1121,13 @@
 **代码位置**：`common/authz/AuthzWireCodec`、`common-a2a/A2aAuthorizationVerifier`、`common/mcp/authz/McpAuthorizationFilter`、`agent-service/SupervisorToolLoopGraph`、`InterviewAuthorizationFilter` 与 `InterviewAuthorizationScope`。
 
 **关联**：LR-1/139/140/142/143/144；KI-170/174/202/203；change `unify-versioned-permission-context`任务5–9。各新消费开关默认关闭；本地验签和模块测试不能替代跨实例nonce、真实浏览器、真实MySQL/Redis或部署启用验收。
+
+## LR-146 Auth维护显式broker映射，公开房源范围与私有归属分开
+
+**结论**：Auth维护类型化且唯一的`userId→brokerId`映射，并将其纳入授权快照、请求上下文签名与版本失效；不从相同数字、登录角色、请求体或模型参数推断业务身份。Customer档案及其跟进、委托、收藏等子记录按映射brokerId限于本人；房源创建、变更、删除和含业主/证件/合同字段的详情按映射brokerId限于本人。`ListingDTO`与RAG公开摘要继续保持既有范围：经纪人只看未删除且ON_SALE的房源，可跨broker浏览；业务管理员使用显式`listing.read.all`业务范围查看全部状态。管理员没有broker映射时不生成虚构brokerId，因此不能以管理员身份新建个人归属数据。
+
+**根因**：brokerId是业务库主体键，不等于平台userId，模型或请求中的同名字段不能证明归属。房源摘要是既有在售业务检索面，不能因为新增身份映射而改变LR-31的状态范围；详情响应含证件及合同资料，写操作也会改变主体资源，必须再验证资源归属。请求级Auth上下文让Listing/Customer在入口本地验签并复用主体映射，RAG继续独立检查签名范围和房源状态。
+
+**代码位置**：`common/authz/AuthzContract`、`AuthorizationSnapshot`、`AuthorizationContext`、`AuthzRequestScope`；`auth-service/AuthorizationRepository`、`RoleAuthorizationManagementService`、`AuthAuthorizationRpcServiceImpl`；`listing-master-service/ListingAuthorizationIngressFilter`、`ListingManagementServiceImpl`、`ListingRagIdentity`、`ListingRagGrantService`；`customer-service/CustomerAuthorizationIngressFilter`、`CustomerManagementServiceImpl`；`rag-service/RagAccessControl`。
+
+**关联**：LR-31/145；KI-55；change `unify-versioned-permission-context`任务4.6、10.1。Listing/Customer新入口开关默认关闭；跨服务RPC调用、Gateway与各环境公钥配置、业务映射回填及运行栈验收完成前不得启用。

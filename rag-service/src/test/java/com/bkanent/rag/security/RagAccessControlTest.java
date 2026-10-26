@@ -296,12 +296,17 @@ class RagAccessControlTest {
     }
 
     private static AuthzResponse authzResponse(boolean admin, List<String> permissions, List<String> allowedOperations) {
+        return authzResponse(admin, permissions, allowedOperations, "agent-service", "run-1", "session-1");
+    }
+
+    private static AuthzResponse authzResponse(boolean admin, List<String> permissions, List<String> allowedOperations,
+                                               String audience, String runId, String sessionId) {
         var unsignedSnapshot = new AuthorizationSnapshot("7", 17, 1, admin, permissions, null,
                 AuthzContract.ALGORITHM, "auth-service-current", null);
         var snapshot = AuthzSignature.sign(unsignedSnapshot, AUTHZ_KEY_PAIR.getPrivate());
         String hash = AuthzCanonicalHash.snapshotHash(snapshot);
         var context = AuthzSignature.sign(new AuthorizationContext("7", 17, 4, hash, allowedOperations,
-                "agent-service", "ingress-req", "run-1", "session-1", "b".repeat(64), "a".repeat(64),
+                audience, "ingress-req", runId, sessionId, "b".repeat(64), "a".repeat(64),
                 nonce((byte) 0), NOW.getEpochSecond(), NOW.plusSeconds(60).getEpochSecond(),
                 NOW.plusSeconds(300).getEpochSecond(), AuthzContract.ALGORITHM, "auth-service-current", null),
                 AUTHZ_KEY_PAIR.getPrivate());
@@ -348,6 +353,50 @@ class RagAccessControlTest {
                 null, false, true, false, "listing.read", "BROKER", List.of("BROKER", "SALES"), List.of("listing.read"));
         denied(() -> access.search(request, envelope(request, RagOperation.SEARCH, "req", RagActorMode.USER,
                 "consumer-current", null), null, inactiveListingScope), RagErrorCode.FORBIDDEN);
+    }
+
+    @Test void versionedBusinessAdministratorNeedsExplicitAllListingsPermission() {
+        var base = space("listing.knowledge");
+        var listing = new RagSpaceDefinition(base.spaceId(), "listing-master-service", "listing-v2", base.schemaVersion(),
+                base.elasticsearchIndex(), base.vectorSchema(), base.fields(), base.returnFields(), Set.of(), Set.of(),
+                Map.of("agent-service", EnumSet.allOf(RagOperation.class),
+                        "listing-master-service", EnumSet.allOf(RagOperation.class)), base.limits(), base.rerankProfile());
+        var access = versionedAccess(listing, null, true, List.of(), List.of("listing.read.all"));
+        var request = RagSearchRequest.defaults("req", "listing.knowledge", "query");
+        var adminScope = versionedScope(request, "listing-current", "listing-master-service", "listing-master-service",
+                null, false, true, true, "listing.read.all", null, List.of(), List.of("listing.read.all"));
+        assertThat(access.search(request, envelope(request, RagOperation.SEARCH, "req", RagActorMode.USER,
+                "consumer-current", null), null, adminScope)).isEmpty();
+
+        var weakerScope = versionedScope(request, "listing-current", "listing-master-service", "listing-master-service",
+                null, false, true, true, "listing.read", null, List.of(), List.of("listing.read.all"));
+        denied(() -> access.search(request, envelope(request, RagOperation.SEARCH, "req", RagActorMode.USER,
+                "consumer-current", null), null, weakerScope), RagErrorCode.FORBIDDEN);
+    }
+
+    @Test void directListingRequestContextIsVerifiedLocallyWithoutRunIdentifiers() {
+        var base = space("listing.knowledge");
+        var listing = new RagSpaceDefinition(base.spaceId(), "listing-master-service", "listing-v2", base.schemaVersion(),
+                base.elasticsearchIndex(), base.vectorSchema(), base.fields(), base.returnFields(), Set.of(), Set.of(),
+                Map.of("agent-service", EnumSet.allOf(RagOperation.class),
+                        "listing-master-service", EnumSet.allOf(RagOperation.class)), base.limits(), base.rerankProfile());
+        var access = versionedAccess(listing, "BROKER", false, List.of("BROKER"), List.of("listing.read"));
+        var request = RagSearchRequest.defaults("req", "listing.knowledge", "query");
+        var response = authzResponse(false, List.of("listing.read"), List.of("listing.read"),
+                "listing-master-service", null, null);
+        long now = NOW.getEpochSecond();
+        var scope = RagScopeSigner.sign(new RagAuthorizationScope(1, "listing-current", "listing-master-service",
+                "listing-master-service", "listing.knowledge", "7", RagOperation.SEARCH,
+                RagCanonicalHash.requestHash(request), "listing-v2", now, now + 60, null, List.of(), true,
+                true, AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION, 17, 4, false, "listing.read",
+                null, response, null), RagSecurityProperties.bytes(LISTING_SECRET));
+        var envelope = RagRequestSigner.sign(new RagAuthEnvelope(1, "listing-current", "rag-service",
+                "listing-master-service", RagOperation.SEARCH, request.requestId(), RagCanonicalHash.requestHash(request),
+                RagActorMode.USER, "7", now, now + 60, null, null), RagSecurityProperties.bytes(LISTING_SECRET));
+
+        assertThat(access.search(request, envelope, null, scope))
+                .containsExactly(new RagFilter("active", RagFilterOperator.EQ, RagValue.bool(true)));
+        assertThat(authCalls.get()).isZero();
     }
 
     @Test void versionedAdministratorStillCannotSearchAnotherUsersPersonalMemory() {

@@ -36,6 +36,9 @@ public class ListingReadClient {
             throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
         }
         var credentials = new RagCredentialContext(authorization.substring(7));
+        if (com.bkanent.common.authz.AuthzRequestScope.present()) {
+            return new UserRead(Long.toString(com.bkanent.common.authz.AuthzRequestScope.actorId()), credentials);
+        }
         if (auth == null) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
         AuthenticatedPrincipal principal;
         try { principal = auth.resolvePrincipal(credentials.accessToken()); }

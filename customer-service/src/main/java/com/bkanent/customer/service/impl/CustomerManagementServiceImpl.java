@@ -71,8 +71,12 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public CustomerProfileDTO createProfile(CustomerUpsertRequest request) {
+        requireOperation("customer.create", null);
         validateProfileRequest(request);
+        long brokerId = com.bkanent.common.authz.AuthzRequestScope.requireBrokerIdentity();
+        requireSubmittedBroker(request.brokerId(), brokerId);
         CustomerEntity entity = new CustomerEntity();
+        entity.setBrokerId(brokerId);
         applyProfile(entity, request);
         customerDomainService.save(entity);
         log.info("新增客户档案成功，customerId={}，姓名={}", entity.getId(), entity.getName());
@@ -83,7 +87,8 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
     @Transactional(rollbackFor = Exception.class)
     public CustomerProfileDTO updateProfile(Long customerId, CustomerUpsertRequest request) {
         validateProfileRequest(request);
-        CustomerEntity entity = requireCustomer(customerId);
+        CustomerEntity entity = requireCustomer(customerId, "customer.update.own", "customer.update.all");
+        if (request.brokerId() != null && !request.brokerId().equals(entity.getBrokerId())) deny();
         applyProfile(entity, request);
         customerDomainService.updateById(entity);
         log.info("更新客户档案成功，customerId={}", customerId);
@@ -93,14 +98,14 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deleteProfile(Long customerId) {
-        requireCustomer(customerId);
+        requireCustomer(customerId, "customer.delete.own", "customer.delete.all");
         customerDomainService.removeById(customerId);
         log.info("删除客户档案成功，customerId={}", customerId);
     }
 
     @Override
     public CustomerDetailResponse getCustomerDetail(Long customerId) {
-        CustomerEntity entity = requireCustomer(customerId);
+        CustomerEntity entity = requireCustomer(customerId, "customer.read", "customer.read.all");
         return new CustomerDetailResponse(
                 customerConverter.toProfile(entity),
                 listFollowRecords(customerId),
@@ -111,6 +116,7 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
 
     @Override
     public List<CustomerProfileDTO> searchProfiles(CustomerQueryRequest request) {
+        request = authorizedQuery(request);
         return customerDomainService.searchProfiles(request).stream()
                 .map(customerConverter::toProfile)
                 .toList();
@@ -119,13 +125,17 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public CustomerFollowRecordResponse addFollowRecord(Long customerId, CustomerFollowRecordRequest request) {
-        requireCustomer(customerId);
+        CustomerEntity customer = requireCustomer(customerId, "customer.follow.write.own", "customer.follow.write.all");
         if (!FollowTypeEnum.contains(request.followType())) {
             throw new IllegalArgumentException("跟进方式不合法: " + request.followType());
         }
         CustomerFollowRecordEntity entity = new CustomerFollowRecordEntity();
         entity.setCustomerId(customerId);
-        entity.setBrokerId(request.brokerId());
+        long brokerId = com.bkanent.common.authz.AuthzRequestScope.requireBrokerIdentity();
+        if (request.brokerId() != null && request.brokerId() != brokerId) deny();
+        if (!com.bkanent.common.authz.AuthzRequestScope.businessAdmin()
+                && !brokerIdEquals(customer.getBrokerId(), brokerId)) deny();
+        entity.setBrokerId(brokerId);
         entity.setFollowType(request.followType().toUpperCase());
         entity.setContent(request.content());
         entity.setResultTag(request.resultTag());
@@ -137,7 +147,7 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
 
     @Override
     public List<CustomerFollowRecordResponse> listFollowRecords(Long customerId) {
-        requireCustomer(customerId);
+        requireCustomer(customerId, "customer.follow.read.own", "customer.follow.read.all");
         return followRecordDomainService.listByCustomerId(customerId).stream()
                 .map(customerConverter::toFollowResponse)
                 .toList();
@@ -145,8 +155,9 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
 
     @Override
     public List<CustomerMatchResponse> matchListings(Long customerId) {
+        // Resource ownership and the exact match operation are checked before external listing lookup.
+        CustomerEntity customer = requireCustomer(customerId, "customer.match.own", "customer.match.all");
         var user = listingReadClient.authenticate();
-        CustomerEntity customer = requireCustomer(customerId);
         if (!StringUtils.hasText(customer.getPreferredArea()) && !StringUtils.hasText(customer.getPreferredLayout())) {
             return List.of();
         }
@@ -179,13 +190,14 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public OwnerEntrustResponse saveEntrust(Long customerId, OwnerEntrustUpsertRequest request) {
-        CustomerEntity customer = requireCustomer(customerId);
+        CustomerEntity customer = requireCustomer(customerId, "customer.entrust.write.own", "customer.entrust.write.all");
         if (!CustomerProfileTypeEnum.OWNER.name().equalsIgnoreCase(customer.getProfileType())) {
             throw new IllegalArgumentException("只有业主档案才允许维护委托书");
         }
         if (!EntrustStatusEnum.contains(request.status())) {
             throw new IllegalArgumentException("委托状态不合法: " + request.status());
         }
+        if (request.listingId() != null) deny();
 
         OwnerEntrustRecordEntity entity = ownerEntrustRecordDomainService.getOne(
                 new LambdaQueryWrapper<OwnerEntrustRecordEntity>()
@@ -212,7 +224,7 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
 
     @Override
     public List<OwnerEntrustResponse> listEntrusts(Long customerId) {
-        requireCustomer(customerId);
+        requireCustomer(customerId, "customer.entrust.read.own", "customer.entrust.read.all");
         return ownerEntrustRecordDomainService.listByCustomerId(customerId).stream()
                 .map(customerConverter::toEntrustResponse)
                 .toList();
@@ -220,6 +232,7 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
 
     @Override
     public List<OwnerEntrustResponse> listExpiringEntrusts(int days) {
+        requireAdminOperation("customer.entrust.expiring.read");
         return ownerEntrustRecordDomainService.listExpiringWithinDays(days).stream()
                 .map(customerConverter::toEntrustResponse)
                 .toList();
@@ -228,7 +241,7 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public CustomerFavoriteResponse addFavorite(Long customerId, CustomerFavoriteRequest request) {
-        requireCustomer(customerId);
+        requireCustomer(customerId, "customer.favorite.write.own", "customer.favorite.write.all");
         CustomerFavoriteListingEntity existing = favoriteListingDomainService.getOne(
                 new LambdaQueryWrapper<CustomerFavoriteListingEntity>()
                         .eq(CustomerFavoriteListingEntity::getCustomerId, customerId)
@@ -256,7 +269,7 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void removeFavorite(Long customerId, Long listingId) {
-        requireCustomer(customerId);
+        requireCustomer(customerId, "customer.favorite.write.own", "customer.favorite.write.all");
         favoriteListingDomainService.remove(new LambdaQueryWrapper<CustomerFavoriteListingEntity>()
                 .eq(CustomerFavoriteListingEntity::getCustomerId, customerId)
                 .eq(CustomerFavoriteListingEntity::getListingId, listingId));
@@ -265,7 +278,7 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
 
     @Override
     public List<CustomerFavoriteResponse> listFavorites(Long customerId) {
-        requireCustomer(customerId);
+        requireCustomer(customerId, "customer.favorite.read.own", "customer.favorite.read.all");
         return favoriteListingDomainService.listByCustomerId(customerId).stream()
                 .map(customerConverter::toFavoriteResponse)
                 .toList();
@@ -296,17 +309,66 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
         entity.setBudgetMax(request.budgetMax());
         entity.setPreferredAreaMin(request.preferredAreaMin());
         entity.setPreferredAreaMax(request.preferredAreaMax());
-        entity.setBrokerId(request.brokerId());
         entity.setSourceChannel(request.sourceChannel());
         entity.setRemark(request.remark());
     }
 
-    private CustomerEntity requireCustomer(Long customerId) {
+    private CustomerEntity requireCustomer(Long customerId, String ownOperation, String businessWideOperation) {
+        com.bkanent.common.authz.AuthzRequestScope.requireCurrent();
+        boolean businessAdmin = com.bkanent.common.authz.AuthzRequestScope.businessAdmin();
+        if (businessAdmin) {
+            com.bkanent.common.authz.AuthzRequestScope.requireOperation(businessWideOperation);
+        } else {
+            com.bkanent.common.authz.AuthzRequestScope.requireOperation(ownOperation);
+        }
         CustomerEntity customer = customerDomainService.getById(customerId);
         if (customer == null) {
             throw new IllegalArgumentException("客户档案不存在: " + customerId);
         }
+        if (!businessAdmin) {
+            Long brokerId = com.bkanent.common.authz.AuthzRequestScope.businessIdentity("BROKER");
+            if (brokerId == null || !brokerId.equals(customer.getBrokerId())) deny();
+        }
         return customer;
+    }
+
+    private CustomerQueryRequest authorizedQuery(CustomerQueryRequest request) {
+        if (request == null) request = new CustomerQueryRequest(null, null, null, null, null, null);
+        if (com.bkanent.common.authz.AuthzRequestScope.businessAdmin()) {
+            com.bkanent.common.authz.AuthzRequestScope.requireOperation("customer.read.all");
+            return request;
+        }
+        com.bkanent.common.authz.AuthzRequestScope.requireOperation("customer.read");
+        long brokerId = com.bkanent.common.authz.AuthzRequestScope.requireBrokerIdentity();
+        if (request.brokerId() != null && request.brokerId() != brokerId) deny();
+        return new CustomerQueryRequest(request.profileType(), request.keyword(), brokerId,
+                request.intention(), request.budgetMin(), request.budgetMax());
+    }
+
+    private void requireOperation(String ownOperation, String businessWideOperation) {
+        if (com.bkanent.common.authz.AuthzRequestScope.businessAdmin()) {
+            com.bkanent.common.authz.AuthzRequestScope.requireOperation(
+                    businessWideOperation == null ? ownOperation : businessWideOperation);
+        } else {
+            com.bkanent.common.authz.AuthzRequestScope.requireOperation(ownOperation);
+        }
+    }
+
+    private void requireAdminOperation(String operation) {
+        if (!com.bkanent.common.authz.AuthzRequestScope.businessAdmin()) deny();
+        com.bkanent.common.authz.AuthzRequestScope.requireOperation(operation);
+    }
+
+    private void requireSubmittedBroker(Long submittedBrokerId, long trustedBrokerId) {
+        if (submittedBrokerId != null && submittedBrokerId != trustedBrokerId) deny();
+    }
+
+    private static boolean brokerIdEquals(Long storedBrokerId, long trustedBrokerId) {
+        return storedBrokerId != null && storedBrokerId == trustedBrokerId;
+    }
+
+    private static void deny() {
+        throw new com.bkanent.common.authz.AuthzException(com.bkanent.common.authz.AuthzErrorCode.PERMISSION_DENIED);
     }
 
     private int calculateMatchScore(CustomerEntity customer, ListingDTO listing) {

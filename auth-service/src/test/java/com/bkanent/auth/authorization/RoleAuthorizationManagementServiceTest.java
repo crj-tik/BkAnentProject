@@ -29,6 +29,7 @@ class RoleAuthorizationManagementServiceTest {
     void setup() throws Exception {
         fixture = new AuthorizationRepositoryTest(); fixture.setup();
         fixture.jdbc.update("INSERT INTO auth_permission VALUES ('auth.roles.manage','auth','roles.manage',1,4,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)");
+        fixture.jdbc.update("INSERT INTO auth_permission VALUES ('auth.business-identity.manage','auth','business-identity.manage',1,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)");
         var properties = new AuthTokenProperties(); properties.setSecret("management-unit-test-secret");
         tokens = new AuthTokenService(properties,new InMemoryTokenRevocationStore()); tokens.initialize();
         service = new RoleAuthorizationManagementService(tokens,fixture.repository,Clock.fixed(now,ZoneOffset.UTC));
@@ -110,6 +111,25 @@ class RoleAuthorizationManagementServiceTest {
         service.setBusinessAdmin(admin,2,false);
         assertEquals(1,fixture.jdbc.queryForObject("SELECT COUNT(*) FROM user_account WHERE business_admin=1",Integer.class));
         assertEquals(1,fixture.jdbc.queryForObject("SELECT business_admin FROM user_account WHERE id=3",Integer.class));
+    }
+
+    @Test
+    void brokerIdentityIsExplicitUniqueAuditedAndVersionsAffectedUser() {
+        var first = service.setBrokerIdentity(admin, 1, 8101L);
+        assertEquals(2, first.versions().get(0).permissionRevision());
+        assertEquals(java.util.Map.of("BROKER", 8101L), fixture.repository.snapshot(1, now).orElseThrow().businessIdentities());
+        assertEquals(List.of(new RoleAuthorizationManagementService.BusinessIdentity("BROKER", 8101L)),
+                service.businessIdentities(admin, 1));
+        assertEquals(first.eventId(), fixture.jdbc.queryForObject(
+                "SELECT event_id FROM auth_authorization_audit WHERE action='BROKER_IDENTITY_ASSIGNED'", String.class));
+        status(HttpStatus.CONFLICT, () -> service.setBrokerIdentity(admin, 2, 8101L));
+        assertEquals(1, fixture.repository.currentVersion(2).orElseThrow().permissionRevision());
+        assertEquals(0, service.setBrokerIdentity(admin, 1, 8101L).versions().size());
+        var changed = service.setBrokerIdentity(admin, 1, 8102L);
+        assertEquals(3, changed.versions().get(0).permissionRevision());
+        assertEquals(2, fixture.jdbc.queryForObject(
+                "SELECT COUNT(*) FROM auth_authorization_audit WHERE event_id=?", Integer.class, changed.eventId()));
+        status(HttpStatus.FORBIDDEN, () -> service.setBrokerIdentity(ordinary, 2, 8103L));
     }
 
     @Test

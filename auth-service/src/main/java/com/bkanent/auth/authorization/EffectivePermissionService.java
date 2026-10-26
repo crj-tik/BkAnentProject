@@ -3,6 +3,7 @@ package com.bkanent.auth.authorization;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
@@ -43,7 +44,8 @@ public final class EffectivePermissionService {
         }
         return new Snapshot(user.userId(), user.permissionRevision(), user.credentialEpoch(),
                 eligible ? "ACTIVE" : user.deleted() ? "DELETED" : "DISABLED",
-                eligible && user.businessAdmin(), catalogVersion, List.copyOf(permissions), deadline);
+                eligible && user.businessAdmin(), catalogVersion, List.copyOf(permissions), deadline,
+                eligible ? facts.businessIdentities() : Map.of());
     }
 
     private static Instant earlier(Instant first, Instant second) {
@@ -52,9 +54,17 @@ public final class EffectivePermissionService {
 
     public record Snapshot(long userId, long permissionRevision, long credentialEpoch, String status,
                            boolean businessAdmin, long catalogVersion, List<String> permissions,
-                           Instant grantDeadline) {
+                           Instant grantDeadline, Map<String, Long> businessIdentities) {
         public Snapshot {
             permissions = List.copyOf(new TreeSet<>(permissions));
+            businessIdentities = com.bkanent.common.authz.AuthzContract.businessIdentities(businessIdentities);
+        }
+
+        public Snapshot(long userId, long permissionRevision, long credentialEpoch, String status,
+                        boolean businessAdmin, long catalogVersion, List<String> permissions,
+                        Instant grantDeadline) {
+            this(userId, permissionRevision, credentialEpoch, status, businessAdmin, catalogVersion,
+                    permissions, grantDeadline, Map.of());
         }
 
         public boolean hasPermission(String exactCode, Instant now) {

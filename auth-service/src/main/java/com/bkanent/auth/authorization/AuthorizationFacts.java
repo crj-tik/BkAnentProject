@@ -2,13 +2,20 @@ package com.bkanent.auth.authorization;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /** Database facts only; these records are not authentication or resource-scope proofs. */
-public record AuthorizationFacts(User user, List<Permission> catalog, List<RoleGrant> grants) {
+public record AuthorizationFacts(User user, List<Permission> catalog, List<RoleGrant> grants,
+                                 Map<String, Long> businessIdentities) {
     public AuthorizationFacts {
         catalog = List.copyOf(catalog);
         grants = List.copyOf(grants);
+        businessIdentities = com.bkanent.common.authz.AuthzContract.businessIdentities(businessIdentities);
+    }
+
+    public AuthorizationFacts(User user, List<Permission> catalog, List<RoleGrant> grants) {
+        this(user, catalog, grants, Map.of());
     }
 
     public record User(long userId, boolean active, boolean deleted, boolean businessAdmin,

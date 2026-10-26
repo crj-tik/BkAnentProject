@@ -64,6 +64,20 @@ public class RoleAuthorizationManagementController {
         return service.setBusinessAdmin(bearer(header),userId,body.enabled());
     }
 
+    @GetMapping("/users/{userId}/business-identities")
+    public List<RoleAuthorizationManagementService.BusinessIdentity> businessIdentities(
+            @RequestHeader(value="Authorization",required=false) String header, @PathVariable("userId") long userId) {
+        return service.businessIdentities(bearer(header), userId);
+    }
+
+    @PutMapping("/users/{userId}/broker-identity")
+    public RoleAuthorizationManagementService.BusinessIdentityChange brokerIdentity(
+            @RequestHeader(value="Authorization",required=false) String header,
+            @PathVariable("userId") long userId, @RequestBody BrokerIdentity body) {
+        if (body == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Identity body required");
+        return service.setBrokerIdentity(bearer(header), userId, body.brokerId());
+    }
+
     private static String bearer(String header) {
         if (header==null || !header.startsWith("Bearer ") || header.length()<=7 || header.substring(7).contains(" "))
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"Bearer access token required");
@@ -72,4 +86,5 @@ public class RoleAuthorizationManagementController {
 
     public record UserRoles(List<RoleAuthorizationManagementService.UserRoleGrant> grants) { }
     public record BusinessAdmin(boolean enabled) { }
+    public record BrokerIdentity(Long brokerId) { }
 }

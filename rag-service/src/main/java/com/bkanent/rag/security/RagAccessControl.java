@@ -51,7 +51,7 @@ public final class RagAccessControl {
             require(scope.permissionRevision() == principal.permissionRevision()
                     && scope.credentialEpoch() == principal.credentialEpoch()
                     && scope.businessAdmin() == principal.businessAdmin());
-            String requiredOperation = requiredSearchPermission(space.spaceId());
+            String requiredOperation = requiredSearchPermission(space.spaceId(), principal.businessAdmin());
             require(requiredOperation != null && requiredOperation.equals(scope.operationCode())
                     && principal.hasPermission(requiredOperation));
         } else {
@@ -225,12 +225,12 @@ public final class RagAccessControl {
                 response = new AuthzResponse(response.snapshot(), response.context(), response.freshness());
                 AuthzSignature.verifySnapshot(response.snapshot(), authzKeys, clock.instant());
                 AuthzSignature.verifyFreshness(response.freshness(), authzKeys, clock.instant());
-                AuthzSignature.verifyContext(response.context(), "agent-service", authzKeys, clock.instant());
+                AuthzSignature.verifyContext(response.context(), scope.issuerService(), authzKeys, clock.instant());
             } catch (RuntimeException invalid) {
                 throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
             }
             var context = response.context();
-            if (context.runId() == null || context.sessionId() == null
+            if ((context.runId() == null) != (context.sessionId() == null)
                     || !String.valueOf(response.snapshot().actorId()).equals(caller.actorId())) {
                 throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
             }
@@ -265,9 +265,9 @@ public final class RagAccessControl {
                 .contains(RagOperation.SEARCH);
     }
 
-    private static String requiredSearchPermission(String spaceId) {
+    private static String requiredSearchPermission(String spaceId, boolean businessAdmin) {
         return switch (spaceId) {
-            case "listing.knowledge" -> "listing.read";
+            case "listing.knowledge" -> businessAdmin ? "listing.read.all" : "listing.read";
             case "memory.preference" -> "memory.search";
             case "memory.constraint" -> "memory.constraint.read";
             case "supervisor.knowledge" -> "agent.rag.search";

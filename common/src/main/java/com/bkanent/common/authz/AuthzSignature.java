@@ -11,14 +11,14 @@ import java.util.Set;
 
 /** Ed25519-only primitives, isolated from existing A2A/Memory/RAG signatures (LR-98). */
 public final class AuthzSignature {
-    public static final String SIGNATURE_DOMAIN = "bkanent-authz-v1";
+    public static final String SIGNATURE_DOMAIN = "bkanent-authz-v2";
 
     private AuthzSignature() { }
 
     public static AuthorizationSnapshot sign(AuthorizationSnapshot value, PrivateKey key) {
         AuthzContract.require(value != null);
         return new AuthorizationSnapshot(value.actorId(), value.permissionRevision(), value.catalogVersion(),
-                value.businessAdmin(), value.permissions(), value.grantDeadlineEpochSecond(), value.algorithm(),
+                value.businessAdmin(), value.permissions(), value.grantDeadlineEpochSecond(), value.businessIdentities(), value.algorithm(),
                 value.keyId(), signBytes(AuthzCanonicalHash.snapshotBytes(value), key));
     }
 
@@ -34,7 +34,7 @@ public final class AuthzSignature {
         return new AuthorizationContext(value.actorId(), value.permissionRevision(), value.credentialEpoch(),
                 value.permissionHash(), value.allowedOperations(), value.audience(), value.requestId(), value.runId(),
                 value.sessionId(), value.policyDigest(), value.requestHash(), value.nonce(), value.issuedAtEpochSecond(),
-                value.expiresAtEpochSecond(), value.runHardDeadlineEpochSecond(), value.algorithm(), value.keyId(),
+                value.expiresAtEpochSecond(), value.runHardDeadlineEpochSecond(), value.businessIdentities(), value.algorithm(), value.keyId(),
                 signBytes(AuthzCanonicalHash.contextBytes(value), key));
     }
 
@@ -145,6 +145,7 @@ public final class AuthzSignature {
                 && bound.permissionRevision() == original.permissionRevision()
                 && bound.credentialEpoch() == original.credentialEpoch()
                 && bound.permissionHash().equals(original.permissionHash())
+                && bound.businessIdentities().equals(original.businessIdentities())
                 && Objects.equals(bound.runId(), binding.runId()) && Objects.equals(bound.sessionId(), binding.sessionId())
                 && bound.policyDigest().equals(original.policyDigest())
                 && bound.allowedOperations().equals(binding.operations())
@@ -199,6 +200,7 @@ public final class AuthzSignature {
                 && parent.permissionRevision() == child.permissionRevision()
                 && parent.credentialEpoch() == child.credentialEpoch()
                 && parent.permissionHash().equals(child.permissionHash())
+                && parent.businessIdentities().equals(child.businessIdentities())
                 && Objects.equals(parent.runId(), child.runId())
                 && Objects.equals(parent.sessionId(), child.sessionId())
                 && parent.policyDigest().equals(child.policyDigest())

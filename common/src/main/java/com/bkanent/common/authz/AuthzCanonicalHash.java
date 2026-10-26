@@ -9,9 +9,10 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 
 /**
- * v1 explicit ordered, typed, length-prefixed UTF-8 fields; no map, JSON, reflection or toString.
+ * v2 explicit ordered, typed, length-prefixed UTF-8 fields; no map, JSON, reflection or toString.
  * Hashes and signature inputs have independent type tags. Wire changes require a protocol bump.
  */
 public final class AuthzCanonicalHash {
@@ -20,13 +21,13 @@ public final class AuthzCanonicalHash {
     /** Only stable authority facts: signature, algorithm, key rotation and cache TTL are excluded. */
     public static String snapshotHash(AuthorizationSnapshot snapshot) {
         AuthzContract.require(snapshot != null);
-        return digest(encode("snapshot-content", snapshotFields(snapshot)));
+        return digest(encode("snapshot-content-v2", snapshotFields(snapshot)));
     }
 
     /** Digest of every signed context field, including its key identity and signature. */
     public static String signedContextHash(AuthorizationContext context) {
         AuthzContract.require(context != null && context.signature() != null);
-        return digest(encode("signed-context", Arrays.asList(contextFields(context), context.algorithm(),
+        return digest(encode("signed-context-v2", Arrays.asList(contextFields(context), context.algorithm(),
                 context.keyId(), context.signature())));
     }
 
@@ -138,14 +139,22 @@ public final class AuthzCanonicalHash {
 
     private static List<?> snapshotFields(AuthorizationSnapshot value) {
         return Arrays.asList(value.actorId(), value.permissionRevision(), value.catalogVersion(),
-                value.businessAdmin(), value.permissions(), value.grantDeadlineEpochSecond());
+                value.businessAdmin(), value.permissions(), value.grantDeadlineEpochSecond(),
+                identityFields(value.businessIdentities()));
     }
 
     private static List<?> contextFields(AuthorizationContext value) {
         return Arrays.asList(value.actorId(), value.permissionRevision(), value.credentialEpoch(), value.permissionHash(),
                 value.allowedOperations(), value.audience(), value.requestId(), value.runId(), value.sessionId(),
                 value.policyDigest(), value.requestHash(), value.nonce(), value.issuedAtEpochSecond(),
-                value.expiresAtEpochSecond(), value.runHardDeadlineEpochSecond());
+                value.expiresAtEpochSecond(), value.runHardDeadlineEpochSecond(),
+                identityFields(value.businessIdentities()));
+    }
+
+    private static List<?> identityFields(Map<String, Long> identities) {
+        return identities.entrySet().stream().sorted(Map.Entry.comparingByKey())
+                .flatMap(entry -> java.util.stream.Stream.of(entry.getKey(), entry.getValue()))
+                .toList();
     }
 
     private static List<?> freshnessFields(AuthzFreshness value) {
@@ -175,7 +184,7 @@ public final class AuthzCanonicalHash {
         try {
             ByteArrayOutputStream bytes = new ByteArrayOutputStream();
             try (DataOutputStream out = new DataOutputStream(bytes)) {
-                write(out, "bkanent-authz-v1");
+                write(out, "bkanent-authz-v2");
                 write(out, type);
                 write(out, fields);
             }

@@ -39,8 +39,8 @@ public class AuthAuthorizationRedisConfiguration {
             throw new IllegalStateException("Authorization must use Auth's registered service identity");
         }
         byte[] probe = "auth-authorization-identity-check".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
-        if (!ServiceIdentityCrypto.verify("bkanent-authz-v1", "Ed25519", probe,
-                ServiceIdentityCrypto.sign("bkanent-authz-v1", "Ed25519", probe, authority.signingKey()),
+        if (!ServiceIdentityCrypto.verify("bkanent-authz-v2", "Ed25519", probe,
+                ServiceIdentityCrypto.sign("bkanent-authz-v2", "Ed25519", probe, authority.signingKey()),
                 ServiceIdentityCrypto.decodePublicKey(authority.getResponsePublicKey()))) {
             throw new IllegalStateException("Authorization public/private identity mismatch");
         }
