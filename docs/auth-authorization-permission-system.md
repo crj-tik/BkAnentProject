@@ -112,7 +112,7 @@ flowchart LR
 
 ## 6. 权限目录分域清单
 
-下表是操作目录的组织清单，不是自动授予清单。具体目录定义见对应 Auth SQL migration 和本域服务守卫；每个 `.own`/`.all` 均应逐项确认其主体范围和角色授予策略。
+下表是操作目录的分域速查，不是自动授予清单。表内 `.*`、`own/all` 是便于阅读的分组简写，**不是可授予的通配权限码**；当前迁移中逐条登记的精确权限码见 6.1 节。
 
 | 域 | 操作类别 / 权限码示例 | 权威资源与额外边界 | 当前状态摘要 |
 |---|---|---|---|
@@ -130,6 +130,217 @@ flowchart LR
 | Media | `media.task.submit.*`、`media.task.read.*`、`media.generate.background` | taskId 只是定位符；后台 permit 绑定 actor、resource、请求 hash 与硬截止 | 许可守卫已实现；当前内存 TaskStore 不保证跨重启恢复，不能当生产耐久任务 |
 | Notification | `notification.message.read.own`、`notification.message.mark-read.own`、`notification.message.send.own/all`、`notification.email.send.all`、`notification.robot.send.all`、`notification.workflow.events.read.all` | actor 与 recipient 分离；消息 SQL recipient 关系为真源；旧无 proof Dubbo 发送拒绝 | 源码与定向回归完成；Contract/Customer 提醒缺 recipient 映射，保持关闭 |
 | Interview | `interview.initiate/read/respond/assist/end/report.generate/asset.submit/asset.publish/asset.regrade`、`interview.read.all` | session owner、participant relation、purpose ticket、报告/附件状态；短票不替代登录 | 服务端已加目的和 owner 检查；浏览器 fetch/SSE 和真实 ReactAgent 归档链冻结待前端接入 |
+
+### 6.1 当前迁移中登记的精确权限码
+
+以下按权限目录迁移中的精确字符串列出。Auth 表同时保存 `domain` 与 `operation`；代码匹配使用完整 `permission_code`，不能把下面的分组标题或省略符当权限。
+
+**Auth、Agent 与 RAG**
+
+```text
+auth.users.manage
+auth.roles.manage
+auth.business-identity.manage
+agent.chat.use
+agent.workflow.read
+agent.workflow.artifact.read
+agent.workflow.invoke.interview
+agent.workflow.invoke.memory
+agent.governance.read
+agent.governance.manage
+agent.audit.read
+agent.audit.manage
+agent.rag.read
+agent.rag.search
+agent.rag.manage
+agent.vector-store.read
+agent.vector-store.manage
+agent.rag.memory.search
+agent.rag.listing.query
+rag.space.manage
+```
+
+**Listing**
+
+```text
+listing.read
+listing.read.all
+listing.create
+listing.update.own
+listing.update.all
+listing.delete.own
+listing.delete.all
+listing.status.update.own
+listing.status.update.all
+listing.assets.bind.own
+listing.assets.bind.all
+listing.ocr.own
+listing.ocr.all
+listing.verify.own
+listing.verify.all
+listing.index.manage
+```
+
+**Customer**
+
+```text
+customer.read
+customer.read.all
+customer.create
+customer.update.own
+customer.update.all
+customer.delete.own
+customer.delete.all
+customer.follow.read.own
+customer.follow.read.all
+customer.follow.write.own
+customer.follow.write.all
+customer.entrust.read.own
+customer.entrust.read.all
+customer.entrust.write.own
+customer.entrust.write.all
+customer.favorite.read.own
+customer.favorite.read.all
+customer.favorite.write.own
+customer.favorite.write.all
+customer.match.own
+customer.match.all
+customer.entrust.expiring.read
+customer.reminder.send
+```
+
+**Business 与 Settlement**
+
+```text
+business.kpi.read.all
+business.workload.read.all
+business.assessment.calculate.all
+business.ranking.read.all
+business.ranking.rebuild.all
+business.turnover.read.all
+business.store-dashboard.read.all
+business.dashboard.read.all
+settlement.rule.read.all
+settlement.rule.write.all
+settlement.calculate.all
+settlement.record.create.all
+settlement.split.calculate.all
+settlement.generate.all
+settlement.record.read.all
+settlement.split.read.all
+settlement.payout-status.update.all
+settlement.summary.read.all
+settlement.summary.rebuild.all
+settlement.batch.create.all
+settlement.commission.read.all
+```
+
+**Contract**
+
+```text
+contract.template.read.all
+contract.template.write.all
+contract.create.own
+contract.read.own
+contract.read.all
+contract.status.update.own
+contract.status.update.all
+contract.attachment.ocr.own
+contract.attachment.ocr.all
+contract.archive.own
+contract.archive.all
+contract.seal.own
+contract.seal.all
+contract.risk.read.own
+contract.risk.read.all
+contract.settlement.read.all
+contract.reminder.send.all
+```
+
+**Marketing 与 Promotion**
+
+```text
+marketing.content.create.own
+marketing.content.read.own
+marketing.content.read.all
+marketing.content.variant.create.own
+marketing.content.variant.create.all
+marketing.assets.bind.own
+marketing.assets.bind.all
+marketing.publish.status.update.own
+marketing.publish.status.update.all
+marketing.publish.execute.own
+marketing.publish.execute.all
+marketing.promotion.effect.read.all
+marketing.promotion.effect.sync.all
+marketing.promotion.roi.read.all
+marketing.brand-assets.read.all
+marketing.brand-assets.write.all
+```
+
+**Compare 与 Media**
+
+```text
+compare.report.create
+compare.report.read.own
+compare.report.share.public
+media.task.submit.own
+media.task.submit.all
+media.task.read.own
+media.task.read.all
+media.generate.background
+```
+
+**Notification**
+
+```text
+notification.message.read.own
+notification.message.mark-read.own
+notification.message.send.own
+notification.message.send.all
+notification.email.send.all
+notification.robot.send.all
+notification.workflow.events.read.all
+```
+
+**Interview 与 Memory**
+
+```text
+interview.initiate
+interview.read
+interview.read.all
+interview.respond
+interview.assist
+interview.end
+interview.report.generate
+interview.asset.submit
+interview.asset.publish
+interview.asset.regrade
+memory.read
+memory.write
+memory.search
+memory.share
+memory.revoke
+memory.delete
+memory.constraint.read
+memory.constraint.manage
+memory.experience.governance.publish
+```
+
+### 6.2 权限码的命名和授予语义
+
+权限码约定为 `domain.operation`；operation 可以继续分层，例如 `resource.action.scope`。例如：
+
+| 权限码 | Auth 保存的 domain / operation | 含义 |
+|---|---|---|
+| `customer.follow.write.own` | `customer` / `follow.write.own` | 执行客户跟进写操作，并由 Customer 服务限制为当前 actor 可管理的客户 |
+| `marketing.content.read.all` | `marketing` / `content.read.all` | 请求 Marketing 内容的业务宽范围读取；仍受本域数据状态和服务实现约束 |
+| `agent.workflow.invoke.interview` | `agent` / `workflow.invoke.interview` | 允许 Supervisor 发起 Interview 域工作流，不代表拥有任一 Interview session |
+| `interview.respond` | `interview` / `respond` | 允许执行答题动作；仍需参与者关系、session owner/purpose 和状态检查 |
+
+`.own` 是操作对应的主体范围，必须映射到已签名的 actor/business identity 并由目标数据核 owner；不能用请求体中的 `userId` 或 `brokerId` 替代。`.all` 表示目录中显式登记的宽业务范围操作，不是全局通配，也不能绕过该域状态机。没有 `.own/.all` 后缀的码也可能需要 owner 检查，例如 `listing.create`、`customer.create`。
+
+当前 SQL 授予是显式的：基础迁移给 `BROKER` 角色授予一组 Agent、Interview、Memory 等基础操作；Listing/Customer 迁移再显式给 `BROKER` 授予所列的本人范围操作。Marketing/Promotion 迁移登记目录码但不自动授予 `BROKER`。Auth 管理员使用独立可信 `businessAdmin` 标记，不依赖 `ADMIN` 角色通配权限；有效业务管理员可取得已登记权限，但本域 owner、个人 Memory 和业务状态约束仍然存在。
 
 ### 目录发布与授予检查
 
