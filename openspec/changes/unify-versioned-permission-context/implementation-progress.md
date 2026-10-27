@@ -233,3 +233,7 @@ MCP transport customizer fixture发出5个不同JSON-RPC `tools/call` body，每
 复核 8.3/8.4 服务端实现：会话监控/回执/流只接受 `READ`，话轮只接受 `RESPOND`，题单/启动/协助只接受 `MANAGE`；actor 由签名 scope 提供，query credential 在 Interview filter 中拒绝，领取响应使用 `no-store`，SSE 周期复核票据当前性。凭据形状在访谈入模、持久化、模型输出门、报告归档和 A2A 输出清理路径由 Interview/shared sanitizer 处理。
 
 本轮 `InterviewControllerTest` 与 `InterviewParticipantTicketServiceTest` 共 **18 项通过，失败/错误/跳过均0**，覆盖入口用途分离、无效凭据在读取/写入副作用前拒绝、领取响应缓存头和长流 lease 的完整绑定条件。任务 8.3/8.4 仍未勾选：仓库不含 Interview 浏览器应用，真实 `fetch`/ReadableStream 接线及正式 ReactAgent→prompt/Memory/progress/终态 artifact 链尚无现场证据（KI-203）；任务 8.5 仍需受权数据源上的历史只计数扫描及结果处置（KI-202）。没有访问或修改运行数据库，未将定向单测计作端到端验收。
+
+## 历史凭据扫描准备（2026-10-27）
+
+新增只读运维工具 `scripts/deploy/scan_interview_credential_shapes.py`：按受权选择的schema从`information_schema`发现文本/JSON列，使用固定的Bearer/JWT/凭据赋值/高熵不透明串形状执行逐列 `COUNT(*)`；只输出列名与计数，抑制MySQL错误详情，不支持修改/撤销/删除。测试用mock MySQL覆盖只计数、数据库标识符校验、元数据标识符转义、客户端错误脱敏和空metadata失败关闭，**5项通过**。实际现场扫描尚未执行；备份、文件日志及其它未选schema仍需分别核查，因此任务8.5保持未完成。

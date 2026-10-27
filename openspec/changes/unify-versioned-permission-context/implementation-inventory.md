@@ -145,3 +145,7 @@ Fresh与upgrade dry-run分别列出44项和41项，仅证明清单格式、受�
 复核受保护 REST/SSE 入口按可信 actor 与精确 purpose 取票：监控、回执和 stream 使用 READ，话轮使用 RESPOND，启动和协助使用 MANAGE。无效或错用途票据在 runtime、session 或 director-command 访问之前拒绝；领取接口显式返回 no-store/no-cache。长流续传 lease 的复核查询绑定 credential/session/actor/purpose/hash/revision，并检查撤销、截止和删除状态。
 
 定向验证 `InterviewControllerTest` 与 `InterviewParticipantTicketServiceTest` 共18项通过。此证据只覆盖服务端组件；KI-203 的真实前端领取/fetch SSE/恢复链、KI-202 的历史凭据扫描与处置仍待外部环境，任务8.3–8.5继续未勾选。
+
+## 历史凭据只计数扫描准备（2026-10-27）
+
+新增 `scripts/deploy/scan_interview_credential_shapes.py`，需运维人员明确选择schema并提供 MySQL 只读凭据配置。工具只查询文本/JSON列并执行逐列 `COUNT(*)`，结果不含匹配正文；它不连接数据库直到操作者显式运行，也不修改、撤销或删除数据。用mock MySQL测试验证只计数查询、schema注入拒绝、列名转义、错误细节抑制和空metadata失败关闭：**5项通过**。尚未进行真实存量扫描；外部日志、备份/副本及未选schema仍在任务8.5验收范围内。
