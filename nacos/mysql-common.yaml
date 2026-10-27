@@ -15,6 +15,7 @@ mysql:
     marketing: ${MYSQL_DB_MARKETING:bk_marketing}
     promotion: ${MYSQL_DB_PROMOTION:bk_promotion}
     business: ${MYSQL_DB_BUSINESS:bk_business}
+    business-review: ${MYSQL_DB_BUSINESS_REVIEW:bk_business_review}
     contract: ${MYSQL_DB_CONTRACT:bk_contract}
     settlement: ${MYSQL_DB_SETTLEMENT:bk_settlement}
 
@@ -28,6 +29,7 @@ mysql:
     marketing: jdbc:mysql://${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}/${MYSQL_DB_MARKETING:bk_marketing}?${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
     promotion: jdbc:mysql://${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}/${MYSQL_DB_PROMOTION:bk_promotion}?${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
     business: jdbc:mysql://${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}/${MYSQL_DB_BUSINESS:bk_business}?${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
+    business-review: jdbc:mysql://${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}/${MYSQL_DB_BUSINESS_REVIEW:bk_business_review}?${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
     contract: jdbc:mysql://${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}/${MYSQL_DB_CONTRACT:bk_contract}?${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
     settlement: jdbc:mysql://${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}/${MYSQL_DB_SETTLEMENT:bk_settlement}?${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
 

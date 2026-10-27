@@ -31,6 +31,7 @@
         <module>marketing-content-service</module>
         <module>promotion-service</module>
         <module>business-service</module>
+        <module>business-review-service</module>
         <module>contract-service</module>
         <module>settlement-service</module>
         <module>interview-service</module>

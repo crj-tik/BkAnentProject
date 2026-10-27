@@ -24,6 +24,10 @@ spring:
             uri: lb://business-service
             predicates:
               - Path=/business/**
+          - id: business-review-service
+            uri: lb://business-review-service
+            predicates:
+              - Path=/business-review/**
           - id: compare-engine-service
             uri: lb://compare-engine-service
             predicates:
@@ -87,6 +91,7 @@ gateway:
     route-audiences:
       auth-service: auth-service
       agent-service: agent-service
+      business-review-service: business-review-service
   access:
     whitelist-prefixes:
       - /auth/login

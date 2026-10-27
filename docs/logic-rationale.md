@@ -1013,13 +1013,23 @@
 
 ## LR-122 门店复盘新增独立服务并隔离现有业务与 Memory 身份
 
-**结论**：change `implement-store-business-review` 新增 `business-review-service`、`bk_business_review`、独立端口 9016 和 Gateway/Nacos/Compose/密钥配置；端口 9015 由并行 knowledge-service 规划占用。现有 `business-service`、`business-service.yaml`、`bk_business`、`trade-agent` 及 `business-service/trade/trade-agent` Memory 私域保持不变。新 Agent 使用 `business-review-service/business-review/business-review-agent` 的必需 Memory Hook、独立服务公钥和精确 domain allowlist。Memory 只承载该 Agent 获准的上下文读取/归档，不能成为复盘事实真源；模拟或人工回报不发布为生产经营经验结果。配置同步覆盖环境模板、Nacos、Compose、Gateway、Maven、数据库 manifest、Nacos 发布/启动白名单和服务 keygen；跨会话共享全局登记由协调会话合并。
+**结论**：change `implement-store-business-review` 在独立 worktree 中新增 `business-review-service`、`bk_business_review`、独立端口 9016 和 Gateway/Nacos/Compose/密钥配置；端口 9015 由并行 knowledge-service 使用。现有 `business-service`、`business-service.yaml`、`bk_business`、`trade-agent` 及 `business-service/trade/trade-agent` Memory 私域保持不变。新 Agent 使用 `business-review-service/business-review/business-review-agent` 的必需 Memory Hook、独立服务公钥和精确 domain allowlist。Memory 只承载该 Agent 获准的上下文读取/归档，不能成为复盘事实真源；模拟或人工回报不发布为生产经营经验结果。配置同步覆盖环境模板、Nacos、Compose、Gateway、Maven、数据库 manifest、Nacos 发布/启动白名单和服务 keygen；Auth 的 STORE 身份与六项操作以及跨会话 Memory 注册由协调会话合并后才可进行生产接入。
 
 **根因**：复盘事项、交易分析和 Agent 私域有不同数据所有权。把新业务继续塞入 business-service 会与并行服务拆分共享源码、数据库和配置写入范围，并使“更名”误触历史 Memory 归属。独立服务、数据库、路由、端口、Nacos Data ID、Agent/domain 和 key ID 构成完整隔离身份；共享注册只做各域唯一条目的合并，避免覆盖其它拆分会话的服务配置。
 
-**代码位置（规划）**：`openspec/changes/implement-store-business-review/proposal.md`、`design.md`、`tasks.md`；实施范围为新 `business-review-service` 与服务专属配置，并提供 `pom.xml`、Compose、Gateway、Agent/Auth、Memory、keygen 和初始化清单的最小差异。现阶段仅修订计划，不代表服务、Memory caller 或生产授权已接通。
+**代码位置**：`business-review-service/`、`nacos/business-review-service.yaml`、`nacos/memory-service.yaml`、Gateway/Agent 配置、`sql/migrations/20261027_business_review_schema.sql` 和 `docker/mysql/init-manifest.tsv`。`docs/business-review-auth-memory-handoff.md` 记录 Auth/Memory/来源生产者登记要求；代码与本地 fixture 不代表生产 STORE 映射、公钥生成或跨服务部署已完成。
 
 **关联**：LR-96/97/101/105/139/140/142/145/151/152；KI-114、KI-128、KI-166。
+
+## LR-123 经营复盘来源读取使用当前委托证明绑定 HTTP 路由和正文
+
+**结论**：business-review 调用 `domain-parallel-v1` 来源接口时复用当前 Auth context/freshness，并由 `business-review-service-current` 对 `DelegatedAuthorizationRequest` 的 CallerProof 签名。每次来源 POST 绑定目标 audience、精确 `business.review.*.store` 操作、实际正文 hash、短期限和 nonce；`requestId=dp1|POST|<path>|<uuid>` 同时绑定实际 HTTP method/path。来源请求不转发用户 Bearer、不逐来源调用 Auth。Listing/Knowledge 入口需验证 Auth 签名、consumer service proof、方法/路径、store scope、操作及 body，并消费 nonce；任一条件不满足即拒绝，不以空集或 fixture 代替。
+
+**根因**：将进入 business-review 的 Gateway 请求头原样转发，会把绑定错误的受众、方法和正文交给另一个服务；单独的 service key 又不能证明代表哪个用户、门店和授权操作。委托上下文保留 Auth 已确认的身份上限，consumer proof 标识受信服务，路由/body 绑定阻止跨 endpoint 重放；生产者仍需在其真实资源域验证 STORE 和来源授权。
+
+**代码位置**：`business-review-service/domain/DomainParallelAuthorizationSigner`、`DomainParallelHttpReadAdapter`；协议交接见 `docs/business-review-auth-memory-handoff.md`。验证仅覆盖本地 HTTP consumer fixture。房源/知识生产者的验签、持久 nonce 消费和跨服务真实互通仍需其独立 change 合并与部署。
+
+**关联**：LR-1/122/140/145；KI-204；change `implement-store-business-review` 任务 0.3/4.2/6.2。
 
 ## LR-102 内容推广同域保存发布事实，效果必须标明来源（规划）
 

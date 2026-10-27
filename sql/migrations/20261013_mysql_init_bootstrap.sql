@@ -1,0 +1,1058 @@
+CREATE DATABASE IF NOT EXISTS bk_auth DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS bk_listing DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS bk_customer DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS bk_notification DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS bk_marketing DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS bk_promotion DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS bk_business DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS bk_agent DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS bk_memory DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS bk_contract DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS bk_settlement DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS nacos DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+
+USE bk_auth;
+
+CREATE TABLE IF NOT EXISTS user_account (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    username VARCHAR(64) NOT NULL,
+    password_hash VARCHAR(128) NOT NULL,
+    display_name VARCHAR(64) NOT NULL,
+    role_code VARCHAR(32) NOT NULL,
+    tenant_code VARCHAR(64) NOT NULL,
+    account_status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_user_account_username (username),
+    KEY idx_user_account_role_code (role_code),
+    KEY idx_user_account_tenant_code (tenant_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO user_account (username, password_hash, display_name, role_code, tenant_code, account_status)
+SELECT 'broker01', '$2a$10$ZmOp25bIZbbJLus780rqTuVZff7jjdcmJ4VqhXgio/t073Q3b5AXC', 'Broker Demo', 'BROKER', 'store-shanghai-001', 'ACTIVE'
+WHERE NOT EXISTS (
+    SELECT 1 FROM user_account WHERE username = 'broker01'
+);
+
+CREATE TABLE IF NOT EXISTS auth_role (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    role_code VARCHAR(32) NOT NULL,
+    role_name VARCHAR(64) NOT NULL,
+    description VARCHAR(255) NULL,
+    active TINYINT NOT NULL DEFAULT 1,
+    assignable TINYINT NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_auth_role_role_code (role_code),
+    KEY idx_auth_role_active (active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO auth_role (role_code, role_name, description, active, assignable)
+SELECT 'ADMIN', '系统管理员', '维护用户、角色和系统账户', 1, 1
+WHERE NOT EXISTS (SELECT 1 FROM auth_role WHERE role_code = 'ADMIN');
+INSERT INTO auth_role (role_code, role_name, description, active, assignable)
+SELECT 'MANAGER', '门店经理', '查看门店经营数据并管理业务协作', 1, 1
+WHERE NOT EXISTS (SELECT 1 FROM auth_role WHERE role_code = 'MANAGER');
+INSERT INTO auth_role (role_code, role_name, description, active, assignable)
+SELECT 'BROKER', '经纪人', '处理房源、客户和智能助手任务', 1, 1
+WHERE NOT EXISTS (SELECT 1 FROM auth_role WHERE role_code = 'BROKER');
+
+INSERT INTO user_account (username, password_hash, display_name, role_code, tenant_code, account_status)
+SELECT 'admin01', '$2a$10$ZmOp25bIZbbJLus780rqTuVZff7jjdcmJ4VqhXgio/t073Q3b5AXC', '系统管理员', 'ADMIN', 'local-demo', 'ACTIVE'
+WHERE NOT EXISTS (SELECT 1 FROM user_account WHERE username = 'admin01');
+
+USE bk_listing;
+
+CREATE TABLE IF NOT EXISTS listing_info (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    broker_id BIGINT NULL,
+    title VARCHAR(128) NOT NULL,
+    address VARCHAR(255) NOT NULL,
+    layout VARCHAR(32) NOT NULL,
+    area DECIMAL(10, 2) NOT NULL,
+    total_price DECIMAL(12, 2) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    floor_level VARCHAR(32) NULL,
+    decoration VARCHAR(32) NULL,
+    school_zone VARCHAR(64) NULL,
+    traffic VARCHAR(64) NULL,
+    owner_name VARCHAR(64) NULL,
+    certificate_no VARCHAR(64) NULL,
+    property_certificate_url VARCHAR(255) NULL,
+    contract_url VARCHAR(255) NULL,
+    image_urls TEXT NULL,
+    floor_plan_urls TEXT NULL,
+    video_urls TEXT NULL,
+    ocr_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+    verification_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+    verification_source VARCHAR(64) NULL,
+    verification_remark VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_listing_info_broker_id (broker_id),
+    KEY idx_listing_info_status (status),
+    KEY idx_listing_info_verification_status (verification_status),
+    KEY idx_listing_info_certificate_no (certificate_no)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+USE bk_customer;
+
+CREATE TABLE IF NOT EXISTS customer_profile (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    profile_type VARCHAR(32) NOT NULL,
+    name VARCHAR(64) NOT NULL,
+    mobile VARCHAR(32) NOT NULL,
+    wechat_no VARCHAR(64) NULL,
+    gender VARCHAR(16) NULL,
+    intention VARCHAR(64) NULL,
+    preferred_area VARCHAR(128) NULL,
+    preferred_layout VARCHAR(64) NULL,
+    budget_min DECIMAL(12, 2) NULL,
+    budget_max DECIMAL(12, 2) NULL,
+    preferred_area_min DECIMAL(10, 2) NULL,
+    preferred_area_max DECIMAL(10, 2) NULL,
+    broker_id BIGINT NULL,
+    source_channel VARCHAR(64) NULL,
+    remark VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_customer_profile_profile_type (profile_type),
+    KEY idx_customer_profile_mobile (mobile),
+    KEY idx_customer_profile_broker_id (broker_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS customer_follow_record (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    customer_id BIGINT NOT NULL,
+    broker_id BIGINT NOT NULL,
+    follow_type VARCHAR(32) NOT NULL,
+    content TEXT NOT NULL,
+    result_tag VARCHAR(64) NULL,
+    next_follow_time DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_customer_follow_record_customer_id (customer_id),
+    KEY idx_customer_follow_record_broker_id (broker_id),
+    KEY idx_customer_follow_record_next_follow_time (next_follow_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS owner_entrust_record (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    customer_id BIGINT NOT NULL,
+    listing_id BIGINT NOT NULL,
+    contract_no VARCHAR(64) NOT NULL,
+    entrust_start_date DATE NULL,
+    entrust_end_date DATE NULL,
+    reminder_days INT NULL,
+    status VARCHAR(32) NOT NULL,
+    remark VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_owner_entrust_record_customer_id (customer_id),
+    KEY idx_owner_entrust_record_listing_id (listing_id),
+    KEY idx_owner_entrust_record_status (status),
+    KEY idx_owner_entrust_record_entrust_end_date (entrust_end_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS customer_favorite_listing (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    customer_id BIGINT NOT NULL,
+    listing_id BIGINT NOT NULL,
+    favorite_source VARCHAR(64) NULL,
+    remark VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_customer_favorite_listing_customer_id (customer_id),
+    KEY idx_customer_favorite_listing_listing_id (listing_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+USE bk_notification;
+
+CREATE TABLE IF NOT EXISTS notification_record (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    recipient_user_id BIGINT NOT NULL,
+    channel VARCHAR(32) NOT NULL,
+    scene_code VARCHAR(64) NOT NULL,
+    title VARCHAR(128) NOT NULL,
+    content TEXT NOT NULL,
+    receiver_address VARCHAR(128) NULL,
+    external_webhook VARCHAR(255) NULL,
+    send_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+    read_status VARCHAR(32) NOT NULL DEFAULT 'UNREAD',
+    read_time DATETIME NULL,
+    send_time DATETIME NULL,
+    external_message_id VARCHAR(128) NULL,
+    error_message VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_notification_record_recipient_user_id (recipient_user_id),
+    KEY idx_notification_record_channel (channel),
+    KEY idx_notification_record_send_status (send_status),
+    KEY idx_notification_record_read_status (read_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS notification_event_consume (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    dedupe_key VARCHAR(255) NOT NULL,
+    event_type VARCHAR(64) NOT NULL,
+    task_id VARCHAR(64) NULL,
+    trace_id VARCHAR(64) NULL,
+    recipient_user_id BIGINT NULL,
+    consume_status VARCHAR(32) NOT NULL DEFAULT 'PROCESSING',
+    attempt_count INT NOT NULL DEFAULT 1,
+    notification_id BIGINT NULL,
+    error_message VARCHAR(255) NULL,
+    consumed_at DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_notification_event_consume_dedupe_key (dedupe_key),
+    KEY idx_notification_event_consume_event_type (event_type),
+    KEY idx_notification_event_consume_task_id (task_id),
+    KEY idx_notification_event_consume_recipient_user_id (recipient_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+USE bk_marketing;
+
+CREATE TABLE IF NOT EXISTS marketing_content (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    listing_id BIGINT NOT NULL,
+    platform VARCHAR(32) NOT NULL,
+    title VARCHAR(128) NOT NULL,
+    content_type VARCHAR(32) NOT NULL,
+    copywriting TEXT NULL,
+    asset_urls TEXT NULL,
+    cover_image_url VARCHAR(255) NULL,
+    video_url VARCHAR(255) NULL,
+    version_no INT NOT NULL DEFAULT 1,
+    parent_content_id BIGINT NULL,
+    platform_variant VARCHAR(64) NULL,
+    tags VARCHAR(255) NULL,
+    audit_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+    status VARCHAR(32) NOT NULL DEFAULT 'DRAFT',
+    publish_message VARCHAR(255) NULL,
+    external_publish_id VARCHAR(128) NULL,
+    publish_time DATETIME NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_marketing_content_listing_id (listing_id),
+    KEY idx_marketing_content_platform (platform),
+    KEY idx_marketing_content_status (status),
+    KEY idx_marketing_content_audit_status (audit_status),
+    KEY idx_marketing_content_parent_content_id (parent_content_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+USE bk_promotion;
+
+CREATE TABLE IF NOT EXISTS promotion_publish_record (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    content_id BIGINT NOT NULL,
+    listing_id BIGINT NOT NULL,
+    platform VARCHAR(32) NOT NULL,
+    channel_account VARCHAR(128) NULL,
+    publish_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+    external_publish_id VARCHAR(128) NULL,
+    publish_time DATETIME NULL,
+    publish_message VARCHAR(255) NULL,
+    cost_amount DECIMAL(12, 2) NULL,
+    operator_name VARCHAR(64) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_promotion_publish_record_content_id (content_id),
+    KEY idx_promotion_publish_record_listing_id (listing_id),
+    KEY idx_promotion_publish_record_platform (platform),
+    KEY idx_promotion_publish_record_publish_status (publish_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS promotion_effect_stat (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    publish_record_id BIGINT NOT NULL,
+    content_id BIGINT NOT NULL,
+    listing_id BIGINT NOT NULL,
+    platform VARCHAR(32) NOT NULL,
+    exposure_count INT NOT NULL DEFAULT 0,
+    click_count INT NOT NULL DEFAULT 0,
+    private_message_count INT NOT NULL DEFAULT 0,
+    lead_count INT NOT NULL DEFAULT 0,
+    ctr_value DECIMAL(10, 4) NULL,
+    conversion_rate DECIMAL(10, 4) NULL,
+    roi_value DECIMAL(10, 4) NULL,
+    stat_date VARCHAR(32) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_promotion_effect_stat_publish_record_id (publish_record_id),
+    KEY idx_promotion_effect_stat_content_id (content_id),
+    KEY idx_promotion_effect_stat_listing_id (listing_id),
+    KEY idx_promotion_effect_stat_platform (platform),
+    KEY idx_promotion_effect_stat_stat_date (stat_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS brand_asset (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    asset_type VARCHAR(32) NOT NULL,
+    asset_name VARCHAR(128) NOT NULL,
+    asset_url VARCHAR(255) NOT NULL,
+    platform_scope VARCHAR(64) NULL,
+    tag_names VARCHAR(255) NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    remark VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_brand_asset_asset_type (asset_type),
+    KEY idx_brand_asset_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+USE bk_business;
+
+CREATE TABLE IF NOT EXISTS employee_kpi_stat (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    employee_id BIGINT NOT NULL,
+    employee_name VARCHAR(64) NOT NULL,
+    store_name VARCHAR(64) NOT NULL,
+    region_name VARCHAR(64) NULL,
+    stat_month VARCHAR(16) NOT NULL,
+    sale_deals INT NOT NULL DEFAULT 0,
+    rental_deals INT NOT NULL DEFAULT 0,
+    closed_deals INT NOT NULL DEFAULT 0,
+    viewing_count INT NOT NULL DEFAULT 0,
+    new_listings INT NOT NULL DEFAULT 0,
+    new_customers INT NOT NULL DEFAULT 0,
+    private_message_count INT NOT NULL DEFAULT 0,
+    performance_amount DECIMAL(14, 2) NULL,
+    completion_rate DECIMAL(10, 4) NULL,
+    conversion_rate DECIMAL(10, 4) NULL,
+    satisfaction_score DECIMAL(10, 4) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_employee_kpi_stat_employee_id (employee_id),
+    KEY idx_employee_kpi_stat_store_name (store_name),
+    KEY idx_employee_kpi_stat_region_name (region_name),
+    KEY idx_employee_kpi_stat_stat_month (stat_month)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS employee_daily_workload (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    employee_id BIGINT NOT NULL,
+    employee_name VARCHAR(64) NOT NULL,
+    store_name VARCHAR(64) NOT NULL,
+    region_name VARCHAR(64) NULL,
+    stat_date VARCHAR(16) NOT NULL,
+    viewing_count INT NOT NULL DEFAULT 0,
+    new_listings INT NOT NULL DEFAULT 0,
+    new_customers INT NOT NULL DEFAULT 0,
+    follow_up_count INT NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_employee_daily_workload_employee_id (employee_id),
+    KEY idx_employee_daily_workload_store_name (store_name),
+    KEY idx_employee_daily_workload_region_name (region_name),
+    KEY idx_employee_daily_workload_stat_date (stat_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS listing_turnover_stat (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    listing_id BIGINT NOT NULL,
+    listing_title VARCHAR(128) NOT NULL,
+    store_name VARCHAR(64) NOT NULL,
+    region_name VARCHAR(64) NULL,
+    stat_month VARCHAR(16) NOT NULL,
+    listing_to_viewing_days INT NULL,
+    viewing_to_deal_days INT NULL,
+    total_turnover_days INT NULL,
+    turnover_status VARCHAR(32) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_listing_turnover_stat_listing_id (listing_id),
+    KEY idx_listing_turnover_stat_store_name (store_name),
+    KEY idx_listing_turnover_stat_region_name (region_name),
+    KEY idx_listing_turnover_stat_stat_month (stat_month),
+    KEY idx_listing_turnover_stat_turnover_status (turnover_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS store_dashboard_snapshot (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    store_name VARCHAR(64) NOT NULL,
+    region_name VARCHAR(64) NULL,
+    stat_date VARCHAR(16) NOT NULL,
+    active_listing_count INT NOT NULL DEFAULT 0,
+    today_viewing_count INT NOT NULL DEFAULT 0,
+    today_new_customer_count INT NOT NULL DEFAULT 0,
+    today_deal_count INT NOT NULL DEFAULT 0,
+    today_performance_amount DECIMAL(14, 2) NULL,
+    satisfaction_score DECIMAL(10, 4) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_store_dashboard_snapshot_store_name (store_name),
+    KEY idx_store_dashboard_snapshot_region_name (region_name),
+    KEY idx_store_dashboard_snapshot_stat_date (stat_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+USE bk_contract;
+
+CREATE TABLE IF NOT EXISTS contract_template (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    template_code VARCHAR(64) NOT NULL,
+    template_name VARCHAR(128) NOT NULL,
+    contract_type VARCHAR(32) NOT NULL,
+    version_no INT NOT NULL DEFAULT 1,
+    template_content LONGTEXT NULL,
+    template_file_url VARCHAR(255) NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    remark VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_contract_template_template_code (template_code),
+    KEY idx_contract_template_contract_type (contract_type),
+    KEY idx_contract_template_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS contract_record (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    template_id BIGINT NULL,
+    contract_no VARCHAR(64) NOT NULL,
+    title VARCHAR(128) NOT NULL,
+    contract_type VARCHAR(32) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    expiry_date VARCHAR(32) NULL,
+    broker_id BIGINT NULL,
+    listing_id BIGINT NULL,
+    customer_name VARCHAR(64) NULL,
+    party_a_name VARCHAR(64) NULL,
+    party_b_name VARCHAR(64) NULL,
+    deal_amount DECIMAL(14, 2) NULL,
+    signed_document_url VARCHAR(255) NULL,
+    external_seal_no VARCHAR(128) NULL,
+    sign_start_time VARCHAR(32) NULL,
+    both_signed_time VARCHAR(32) NULL,
+    archived_time VARCHAR(32) NULL,
+    dispute_time VARCHAR(32) NULL,
+    archive_status VARCHAR(32) NULL,
+    seal_status VARCHAR(32) NULL,
+    seal_provider VARCHAR(64) NULL,
+    seal_time VARCHAR(32) NULL,
+    ocr_summary TEXT NULL,
+    remark VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_contract_record_contract_no (contract_no),
+    KEY idx_contract_record_template_id (template_id),
+    KEY idx_contract_record_contract_type (contract_type),
+    KEY idx_contract_record_status (status),
+    KEY idx_contract_record_listing_id (listing_id),
+    KEY idx_contract_record_broker_id (broker_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS contract_attachment (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    contract_id BIGINT NOT NULL,
+    attachment_type VARCHAR(32) NOT NULL,
+    file_name VARCHAR(128) NOT NULL,
+    file_url VARCHAR(255) NOT NULL,
+    ocr_status VARCHAR(32) NULL,
+    ocr_text LONGTEXT NULL,
+    ocr_structured_data LONGTEXT NULL,
+    ocr_provider VARCHAR(64) NULL,
+    ocr_time VARCHAR(32) NULL,
+    remark VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_contract_attachment_contract_id (contract_id),
+    KEY idx_contract_attachment_attachment_type (attachment_type),
+    KEY idx_contract_attachment_ocr_status (ocr_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO contract_template (
+    template_code, template_name, contract_type, version_no, template_content, template_file_url, status, remark
+)
+SELECT
+    'SALE_DEFAULT_V1',
+    'Sale Contract Default Template',
+    'SALE',
+    1,
+    'Default sale contract template content.',
+    'https://example.local/contracts/templates/sale-default-v1.docx',
+    'ACTIVE',
+    'Initialized by mysql-init.sql'
+WHERE NOT EXISTS (
+    SELECT 1 FROM contract_template WHERE template_code = 'SALE_DEFAULT_V1'
+);
+
+USE bk_settlement;
+
+CREATE TABLE IF NOT EXISTS settlement_rule (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    rule_code VARCHAR(64) NOT NULL,
+    rule_name VARCHAR(128) NOT NULL,
+    contract_type VARCHAR(32) NOT NULL,
+    min_deal_amount DECIMAL(14, 2) NULL,
+    max_deal_amount DECIMAL(14, 2) NULL,
+    commission_rate DECIMAL(10, 4) NULL,
+    store_split_ratio DECIMAL(10, 4) NULL,
+    team_split_ratio DECIMAL(10, 4) NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    remark VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_settlement_rule_rule_code (rule_code),
+    KEY idx_settlement_rule_contract_type (contract_type),
+    KEY idx_settlement_rule_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS settlement_rule_tier (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    rule_id BIGINT NOT NULL,
+    tier_level INT NOT NULL,
+    min_deal_amount DECIMAL(14, 2) NULL,
+    max_deal_amount DECIMAL(14, 2) NULL,
+    commission_rate DECIMAL(10, 4) NULL,
+    store_split_ratio DECIMAL(10, 4) NULL,
+    team_split_ratio DECIMAL(10, 4) NULL,
+    remark VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_settlement_rule_tier_rule_level (rule_id, tier_level),
+    KEY idx_settlement_rule_tier_rule_id (rule_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS settlement_record (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    employee_id BIGINT NOT NULL,
+    employee_name VARCHAR(64) NOT NULL,
+    team_name VARCHAR(64) NULL,
+    store_name VARCHAR(64) NULL,
+    contract_id BIGINT NULL,
+    listing_id BIGINT NULL,
+    stat_month VARCHAR(16) NOT NULL,
+    deal_amount DECIMAL(14, 2) NULL,
+    commission_rate DECIMAL(10, 4) NULL,
+    commission_amount DECIMAL(14, 2) NULL,
+    payout_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+    payout_time VARCHAR(32) NULL,
+    rule_code VARCHAR(64) NULL,
+    remark VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_settlement_record_employee_id (employee_id),
+    KEY idx_settlement_record_contract_id (contract_id),
+    KEY idx_settlement_record_listing_id (listing_id),
+    KEY idx_settlement_record_stat_month (stat_month),
+    KEY idx_settlement_record_payout_status (payout_status),
+    KEY idx_settlement_record_rule_code (rule_code)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS settlement_split_record (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    settlement_id BIGINT NOT NULL,
+    split_scope VARCHAR(32) NOT NULL,
+    split_target_name VARCHAR(128) NOT NULL,
+    split_ratio DECIMAL(10, 4) NULL,
+    split_amount DECIMAL(14, 2) NULL,
+    remark VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_settlement_split_record_settlement_id (settlement_id),
+    KEY idx_settlement_split_record_split_scope (split_scope)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS settlement_monthly_summary (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    summary_scope VARCHAR(32) NOT NULL,
+    employee_id BIGINT NULL,
+    employee_name VARCHAR(64) NULL,
+    team_name VARCHAR(64) NULL,
+    stat_month VARCHAR(16) NOT NULL,
+    deal_count INT NOT NULL DEFAULT 0,
+    total_deal_amount DECIMAL(14, 2) NULL,
+    total_commission_amount DECIMAL(14, 2) NULL,
+    payout_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+    remark VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_settlement_monthly_summary_summary_scope (summary_scope),
+    KEY idx_settlement_monthly_summary_employee_id (employee_id),
+    KEY idx_settlement_monthly_summary_stat_month (stat_month),
+    KEY idx_settlement_monthly_summary_payout_status (payout_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS settlement_payout_batch (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    batch_no VARCHAR(64) NOT NULL,
+    stat_month VARCHAR(16) NOT NULL,
+    batch_status VARCHAR(32) NOT NULL DEFAULT 'CREATED',
+    total_records INT NOT NULL DEFAULT 0,
+    total_amount DECIMAL(14, 2) NULL,
+    submit_time VARCHAR(32) NULL,
+    paid_time VARCHAR(32) NULL,
+    remark VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_settlement_payout_batch_batch_no (batch_no),
+    KEY idx_settlement_payout_batch_stat_month (stat_month),
+    KEY idx_settlement_payout_batch_batch_status (batch_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS settlement_payment_record (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    batch_id BIGINT NOT NULL,
+    settlement_id BIGINT NOT NULL,
+    payee_employee_id BIGINT NOT NULL,
+    payee_name VARCHAR(64) NOT NULL,
+    payment_amount DECIMAL(14, 2) NOT NULL,
+    payment_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+    payment_time VARCHAR(32) NULL,
+    bank_serial_no VARCHAR(128) NULL,
+    remark VARCHAR(255) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_settlement_payment_record_batch_id (batch_id),
+    KEY idx_settlement_payment_record_settlement_id (settlement_id),
+    KEY idx_settlement_payment_record_payee_employee_id (payee_employee_id),
+    KEY idx_settlement_payment_record_payment_status (payment_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO settlement_rule (
+    rule_code, rule_name, contract_type, min_deal_amount, max_deal_amount, commission_rate,
+    store_split_ratio, team_split_ratio, status, remark
+)
+SELECT
+    'SALE_DEFAULT',
+    'Sale Default Commission Rule',
+    'SALE',
+    0.00,
+    99999999.99,
+    0.0100,
+    0.2000,
+    0.1000,
+    'ACTIVE',
+    'Initialized by mysql-init.sql'
+WHERE NOT EXISTS (
+    SELECT 1 FROM settlement_rule WHERE rule_code = 'SALE_DEFAULT'
+);
+
+INSERT INTO settlement_rule (
+    rule_code, rule_name, contract_type, min_deal_amount, max_deal_amount, commission_rate,
+    store_split_ratio, team_split_ratio, status, remark
+)
+SELECT
+    'LEASE_DEFAULT',
+    'Lease Default Commission Rule',
+    'LEASE',
+    0.00,
+    99999999.99,
+    0.0080,
+    0.1000,
+    0.0500,
+    'ACTIVE',
+    'Initialized by mysql-init.sql'
+WHERE NOT EXISTS (
+    SELECT 1 FROM settlement_rule WHERE rule_code = 'LEASE_DEFAULT'
+);
+
+INSERT INTO settlement_rule_tier (
+    rule_id, tier_level, min_deal_amount, max_deal_amount, commission_rate, store_split_ratio, team_split_ratio, remark
+)
+SELECT
+    r.id, 1, 0.00, 99999999.99, 0.0100, 0.2000, 0.1000, 'Default single tier'
+FROM settlement_rule r
+WHERE r.rule_code = 'SALE_DEFAULT'
+  AND NOT EXISTS (
+      SELECT 1 FROM settlement_rule_tier t WHERE t.rule_id = r.id AND t.tier_level = 1
+  );
+
+USE bk_agent;
+
+CREATE TABLE IF NOT EXISTS agent_planner_log (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    session_no VARCHAR(64) NOT NULL,
+    execution_mode VARCHAR(32) NOT NULL,
+    user_message TEXT NOT NULL,
+    final_answer LONGTEXT NULL,
+    plan_summary VARCHAR(255) NULL,
+    final_plan_json LONGTEXT NULL,
+    tool_context LONGTEXT NULL,
+    replan_count INT NOT NULL DEFAULT 0,
+    completed TINYINT NOT NULL DEFAULT 0,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_agent_planner_log_session_no (session_no),
+    KEY idx_agent_planner_log_execution_mode (execution_mode),
+    KEY idx_agent_planner_log_completed (completed)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS agent_planner_step_log (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    planner_log_id BIGINT NOT NULL,
+    session_no VARCHAR(64) NOT NULL,
+    step_no INT NOT NULL,
+    action VARCHAR(64) NOT NULL,
+    success TINYINT NOT NULL DEFAULT 0,
+    skipped TINYINT NOT NULL DEFAULT 0,
+    request_content TEXT NULL,
+    resolved_input LONGTEXT NULL,
+    output_key VARCHAR(128) NULL,
+    output_content LONGTEXT NULL,
+    output_payload_json LONGTEXT NULL,
+    error_message TEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    KEY idx_agent_planner_step_log_planner_log_id (planner_log_id),
+    KEY idx_agent_planner_step_log_session_no (session_no),
+    KEY idx_agent_planner_step_log_step_no (step_no)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS agent_workflow_checkpoint (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    task_id VARCHAR(64) NOT NULL,
+    session_id VARCHAR(64) NOT NULL,
+    trace_id VARCHAR(64) NOT NULL,
+    workflow_status VARCHAR(32) NOT NULL,
+    selected_agent_id VARCHAR(64) NULL,
+    pending_approval_id VARCHAR(64) NULL,
+    snapshot_json LONGTEXT NOT NULL,
+    checkpoint_version INT NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_agent_workflow_checkpoint_task_version (task_id, checkpoint_version),
+    KEY idx_agent_workflow_checkpoint_session_id (session_id),
+    KEY idx_agent_workflow_checkpoint_trace_id (trace_id),
+    KEY idx_agent_workflow_checkpoint_workflow_status (workflow_status),
+    KEY idx_agent_workflow_checkpoint_pending_approval_id (pending_approval_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS agent_workflow_approval_claim (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    approval_id VARCHAR(64) NOT NULL,
+    task_id VARCHAR(64) NOT NULL,
+    session_id VARCHAR(64) NULL,
+    approval_version INT NULL,
+    decision_status VARCHAR(32) NOT NULL,
+    result_json LONGTEXT NULL,
+    error_message TEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_agent_workflow_approval_claim_approval_id (approval_id),
+    KEY idx_agent_workflow_approval_claim_task_id (task_id),
+    KEY idx_agent_workflow_approval_claim_status (decision_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS agent_task_artifact (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    artifact_id VARCHAR(64) NOT NULL,
+    task_id VARCHAR(64) NOT NULL,
+    session_id VARCHAR(64) NOT NULL,
+    agent_id VARCHAR(64) NOT NULL,
+    artifact_type VARCHAR(64) NOT NULL,
+    version_no INT NOT NULL DEFAULT 1,
+    content_json LONGTEXT NOT NULL,
+    metadata_json LONGTEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_agent_task_artifact_artifact_id (artifact_id),
+    KEY idx_agent_task_artifact_task_id (task_id),
+    KEY idx_agent_task_artifact_session_id (session_id),
+    KEY idx_agent_task_artifact_agent_id (agent_id),
+    KEY idx_agent_task_artifact_artifact_type (artifact_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS agent_async_task (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    async_task_id VARCHAR(64) NOT NULL,
+    session_id VARCHAR(64) NOT NULL,
+    task_id VARCHAR(64) NOT NULL,
+    trace_id VARCHAR(64) NOT NULL,
+    user_id VARCHAR(64) NULL,
+    selected_agent_id VARCHAR(64) NOT NULL,
+    mode VARCHAR(32) NOT NULL,
+    child_async_task_id VARCHAR(128) NULL,
+    status VARCHAR(32) NOT NULL,
+    result_json LONGTEXT NULL,
+    error_message TEXT NULL,
+    original_request_json LONGTEXT NULL,
+    started_at_ms BIGINT NULL,
+    finished_at_ms BIGINT NULL,
+    attempt_count INT NOT NULL DEFAULT 0,
+    lease_owner VARCHAR(128) NULL,
+    lease_until_ms BIGINT NULL,
+    next_attempt_at_ms BIGINT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_agent_async_task_async_task_id (async_task_id),
+    KEY idx_agent_async_task_task_id (task_id),
+    KEY idx_agent_async_task_session_id (session_id),
+    KEY idx_agent_async_task_trace_id (trace_id),
+    KEY idx_agent_async_task_selected_agent_id (selected_agent_id),
+    KEY idx_agent_async_task_status (status),
+    KEY idx_agent_async_task_dispatch (status, next_attempt_at_ms, lease_until_ms)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS agent_async_workflow (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    async_workflow_id VARCHAR(64) NOT NULL,
+    session_id VARCHAR(64) NOT NULL,
+    task_id VARCHAR(64) NOT NULL,
+    trace_id VARCHAR(64) NOT NULL,
+    user_id VARCHAR(64) NULL,
+    status VARCHAR(32) NOT NULL,
+    result_json LONGTEXT NULL,
+    error_message TEXT NULL,
+    original_request_json LONGTEXT NOT NULL,
+    cancel_requested TINYINT NOT NULL DEFAULT 0,
+    started_at_ms BIGINT NULL,
+    finished_at_ms BIGINT NULL,
+    attempt_count INT NOT NULL DEFAULT 0,
+    lease_owner VARCHAR(128) NULL,
+    lease_until_ms BIGINT NULL,
+    next_attempt_at_ms BIGINT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_agent_async_workflow_async_workflow_id (async_workflow_id),
+    KEY idx_agent_async_workflow_task_id (task_id),
+    KEY idx_agent_async_workflow_session_id (session_id),
+    KEY idx_agent_async_workflow_trace_id (trace_id),
+    KEY idx_agent_async_workflow_status (status),
+    KEY idx_agent_async_workflow_dispatch (status, next_attempt_at_ms, lease_until_ms)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS agent_governance_override (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    override_type VARCHAR(32) NOT NULL,
+    override_key VARCHAR(128) NOT NULL,
+    payload_json LONGTEXT NOT NULL,
+    active TINYINT NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_agent_governance_override_type_key (override_type, override_key),
+    KEY idx_agent_governance_override_type (override_type),
+    KEY idx_agent_governance_override_active (active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS agent_event_audit (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    event_id VARCHAR(64) NULL,
+    session_id VARCHAR(64) NOT NULL,
+    task_id VARCHAR(64) NULL,
+    agent_id VARCHAR(64) NOT NULL,
+    event_type VARCHAR(128) NOT NULL,
+    stage VARCHAR(64) NULL,
+    content TEXT NULL,
+    metadata_json LONGTEXT NULL,
+    trace_id VARCHAR(64) NULL,
+    approval_id VARCHAR(64) NULL,
+    artifact_id VARCHAR(64) NULL,
+    async_task_id VARCHAR(64) NULL,
+    async_workflow_id VARCHAR(64) NULL,
+    gray_strategy_version VARCHAR(64) NULL,
+    event_timestamp BIGINT NOT NULL,
+    archived TINYINT NOT NULL DEFAULT 0,
+    archived_at_ms BIGINT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_agent_event_audit_event_id (event_id),
+    KEY idx_agent_event_audit_session_sequence (session_id, id),
+    KEY idx_agent_event_audit_session_task_sequence (session_id, task_id, id),
+    KEY idx_agent_event_audit_task_id (task_id),
+    KEY idx_agent_event_audit_trace_id (trace_id),
+    KEY idx_agent_event_audit_event_type (event_type),
+    KEY idx_agent_event_audit_approval_id (approval_id),
+    KEY idx_agent_event_audit_artifact_id (artifact_id),
+    KEY idx_agent_event_audit_async_task_id (async_task_id),
+    KEY idx_agent_event_audit_async_workflow_id (async_workflow_id),
+    KEY idx_agent_event_audit_gray_strategy_version (gray_strategy_version),
+    KEY idx_agent_event_audit_event_timestamp (event_timestamp),
+    KEY idx_agent_event_audit_archived (archived)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+USE bk_memory;
+
+CREATE TABLE IF NOT EXISTS session_shared_memory (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    session_id VARCHAR(64) NOT NULL,
+    user_id VARCHAR(64) NULL,
+    memory_json LONGTEXT NOT NULL,
+    summary VARCHAR(255) NULL,
+    trace_id VARCHAR(64) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_session_shared_memory_session_id (session_id),
+    KEY idx_session_shared_memory_user_id (user_id),
+    KEY idx_session_shared_memory_trace_id (trace_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS task_artifact_memory (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    artifact_id VARCHAR(64) NOT NULL,
+    task_id VARCHAR(64) NOT NULL,
+    session_id VARCHAR(64) NOT NULL,
+    agent_id VARCHAR(64) NOT NULL,
+    artifact_type VARCHAR(64) NOT NULL,
+    version_no INT NOT NULL DEFAULT 1,
+    content_json LONGTEXT NOT NULL,
+    metadata_json LONGTEXT NULL,
+    trace_id VARCHAR(64) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_task_artifact_memory_artifact_id (artifact_id),
+    KEY idx_task_artifact_memory_task_id (task_id),
+    KEY idx_task_artifact_memory_session_id (session_id),
+    KEY idx_task_artifact_memory_agent_id (agent_id),
+    KEY idx_task_artifact_memory_artifact_type (artifact_type),
+    KEY idx_task_artifact_memory_trace_id (trace_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS handoff_relation_memory (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    handoff_id VARCHAR(64) NOT NULL,
+    session_id VARCHAR(64) NOT NULL,
+    task_id VARCHAR(64) NOT NULL,
+    parent_task_id VARCHAR(64) NULL,
+    trace_id VARCHAR(64) NOT NULL,
+    from_agent VARCHAR(64) NOT NULL,
+    to_agent VARCHAR(64) NOT NULL,
+    reason VARCHAR(255) NULL,
+    user_goal VARCHAR(512) NULL,
+    structured_context_json LONGTEXT NULL,
+    artifact_ids_json LONGTEXT NULL,
+    constraints_json LONGTEXT NULL,
+    expected_output VARCHAR(512) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_handoff_relation_memory_handoff_id (handoff_id),
+    KEY idx_handoff_relation_memory_task_id (task_id),
+    KEY idx_handoff_relation_memory_session_id (session_id),
+    KEY idx_handoff_relation_memory_trace_id (trace_id),
+    KEY idx_handoff_relation_memory_from_agent (from_agent),
+    KEY idx_handoff_relation_memory_to_agent (to_agent)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS user_preference_memory (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    user_id VARCHAR(64) NOT NULL,
+    preference_key VARCHAR(128) NOT NULL,
+    preference_value VARCHAR(512) NOT NULL,
+    category VARCHAR(64) NULL,
+    confidence DECIMAL(5, 4) NOT NULL DEFAULT 0.5000,
+    evidence VARCHAR(512) NULL,
+    source_session_id VARCHAR(64) NULL,
+    last_observed_at DATETIME NULL,
+    observation_count INT NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_user_preference_memory_user_key (user_id, preference_key),
+    KEY idx_user_preference_memory_user_id (user_id),
+    KEY idx_user_preference_memory_category (category),
+    KEY idx_user_preference_memory_confidence (confidence)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS system_constraint_memory (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    constraint_key VARCHAR(128) NOT NULL,
+    constraint_text TEXT NOT NULL,
+    category VARCHAR(64) NULL,
+    source VARCHAR(64) NOT NULL DEFAULT 'manual',
+    tags VARCHAR(255) NULL,
+    active TINYINT NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_system_constraint_memory_key (constraint_key),
+    KEY idx_system_constraint_memory_category (category),
+    KEY idx_system_constraint_memory_active (active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS session_memory_snapshot (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    session_id VARCHAR(64) NOT NULL,
+    task_id VARCHAR(64) NOT NULL,
+    version INT NOT NULL DEFAULT 1,
+    memory_json LONGTEXT NOT NULL,
+    summary VARCHAR(512) NULL,
+    trace_id VARCHAR(64) NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_session_memory_snapshot_task_version (task_id, version),
+    KEY idx_session_memory_snapshot_session_id (session_id),
+    KEY idx_session_memory_snapshot_trace_id (trace_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
