@@ -11,6 +11,23 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
 
 auth:
+  authorization:
+    enabled: ${AUTH_AUTHORIZATION_ENABLED:false}
+    response-key-id: ${AUTH_SERVICE_IDENTITY_KEY_ID:auth-service-current}
+    private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
+    response-public-key: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+    # Keep empty until each caller's service identity and exact RPC/permission allowlist is reviewed.
+    trusted-callers: {}
+    redis:
+      enabled: false
+      protected-writer-configured: false
+      namespace: authz
+      channel: authz:versions
+      host: ${REDIS_HOST:10.117.102.54}
+      port: ${REDIS_PORT:6379}
+      username: authz-writer
+      password: ${AUTHZ_REDIS_WRITER_PASSWORD:}
+      tls: ${AUTHZ_REDIS_TLS:true}
   rag:
     rpc:
       trusted-keys:

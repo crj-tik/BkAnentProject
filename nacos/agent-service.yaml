@@ -117,9 +117,41 @@ a2a:
 agent:
   authorization:
     enabled: ${AGENT_AUTHORIZATION_ENABLED:false}
+    caller-service: agent-service
+    key-id: ${SERVICE_IDENTITY_KEY_ID:agent-service-current}
+    private-key-path: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
+    public-key: ${AGENT_SERVICE_IDENTITY_PUBLIC_KEY:}
+    audience: agent-service
+    authority-public-keys:
+      auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+    cache-entries: 1000
+    cache-bytes: 16777216
+    max-users: 1000
+    max-sessions: 4000
+    max-sessions-per-user: 32
     # Capability ID -> exact permission code already registered in Auth; missing mappings hide capabilities.
     capability-permissions:
       "local:milvusKnowledgeSearch": agent.rag.search
+    mcp-target-audiences:
+      business-mcp-server: business-service
+      compare-mcp-server: compare-engine-service
+      marketing-mcp-server: marketing-content-service
+      contract-mcp-server: contract-service
+      settlement-mcp-server: settlement-service
+      notification-mcp-server: notification-service
+      media-mcp-server: media-worker-service
+      interview-mcp-server: interview-service
+    public-mcp-capabilities: []
+    redis:
+      # Create the dedicated Redis ACL and verify its namespace/channel scope before setting true.
+      protected-reader-configured: false
+      host: ${REDIS_HOST:10.117.102.54}
+      port: ${REDIS_PORT:6379}
+      username: agent-authz-reader
+      password: ${AUTHZ_REDIS_READER_PASSWORD:}
+      tls: ${AUTHZ_REDIS_TLS:true}
+      namespace: authz
+      channel: authz:versions
   memory-v2:
   skills:
     external-dir: ${AGENT_SKILLS_EXTERNAL_DIR:}

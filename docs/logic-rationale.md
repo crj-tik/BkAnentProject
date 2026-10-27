@@ -1181,3 +1181,13 @@
 **代码位置**：`sql/migrations/20261026_authorization_execution_binding.sql`、`sql/migrations/20261026_a2a_task_authorization.sql`；`docker/mysql/init-manifest.tsv`与对应 schema checks；`scripts/deploy/run-init-manifest.sh`；`common-a2a/JdbcA2aTaskAuthorizationStore`；`auth-service/AuthorizationRepository`；`docs/authz-versioned-rollout-rollback.md`。
 
 **关联**：LR-41/141/145；KI-170/172/208；change `unify-versioned-permission-context`任务6.2/11.6/11.7。manifest 静态验证不表示真实数据库迁移、应用回滚或多实例验收已完成。
+
+## LR-152 版本化鉴权秘密只经 Compose 注入，Nacos仅保存占位符
+
+**结论**：Auth/Agent 新授权开关分别使用 `AUTH_AUTHORIZATION_ENABLED` 与 `AGENT_AUTHORIZATION_ENABLED`，默认均为false。Compose仅把Auth Redis writer密码传给Auth、reader密码传给Agent，并把TLS设置传给两者；Nacos只保留环境变量占位符，绝不保存密码明文。Redis ACL `enabled`/`protected-*-configured` 声明仍独立且默认false，专用ACL、服务密钥和caller-operation登记完成前不可仅凭密码存在启用新链。Nacos发布成功与容器配置更新是两个不同动作；运行中容器需按部署流程重新创建才会接收新的Compose环境值。
+
+**根因**：Nacos模板是可共享配置，不是容器秘密存储；Compose若不显式透传，`.env`值不会进入应用进程，而把值写进Nacos会扩大凭据读取面。主授权开关、Redis ACL就绪声明和密码各表达独立事实，合并或自动推导会导致不完整部署被误判为安全就绪。
+
+**代码位置**：`docker-compose.yml`的Auth/Agent environment；两服务 `application.yml` 与 `nacos/auth-service.yaml`、`nacos/agent-service.yaml`；`docs/authz-versioned-rollout-rollback.md`。
+
+**关联**：KI-209；change `unify-versioned-permission-context`任务11.5/11.7。配置透传和Nacos模板read-back不代表新授权链已开启或运行态ACL已验收。

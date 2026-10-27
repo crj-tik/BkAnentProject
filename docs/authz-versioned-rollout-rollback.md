@@ -2,6 +2,12 @@
 
 本文约束 `unify-versioned-permission-context` 的开发/生产发布。代码测试与清单 dry-run 不能代替真实 MySQL/Redis、跨服务或浏览器验收；任务 11.1、11.4、8.3–8.5 未通过前，不得启用对应的新授权开关。
 
+## 开发 Compose 配置
+
+Compose 从仓库根目录 `.env` 读取运行值，并只将所需值传给对应服务：`AUTH_AUTHORIZATION_ENABLED`、`AUTHZ_REDIS_WRITER_PASSWORD` 与 `AUTHZ_REDIS_TLS` 传给 Auth；`AGENT_AUTHORIZATION_ENABLED`、`AUTHZ_REDIS_READER_PASSWORD` 与 `AUTHZ_REDIS_TLS` 传给 Agent。`.env.example` 只列变量名和安全默认值，不放密码。
+
+`nacos/auth-service.yaml` 与 `nacos/agent-service.yaml` 保存 `${...}` 占位符，由应用容器环境在运行时解析；发布到 Nacos 的内容不得替换成密码明文。Auth 总开关为 `auth.authorization.enabled`，Agent 总开关为 `agent.authorization.enabled`，两者默认关闭。密码和 TLS 变量只提供连接参数，不会自动开启 Redis 授权存储或宣告 ACL 已配置：`auth.authorization.redis.enabled`、`auth.authorization.redis.protected-writer-configured` 与 `agent.authorization.redis.protected-reader-configured` 仍须在对应 ACL 已创建、验证后显式配置。缺少 ACL、服务身份或调用方登记时保持关闭，避免服务启动或请求因不完整配置失败。
+
 ## 发布制品组
 
 Auth、Gateway、Agent/Supervisor、`common` 鉴权契约、受保护的 A2A/MCP/Memory/RAG 消费端，以及本次启用的业务域服务必须使用同一兼容版本组发布。新协议密钥、公钥登记、Redis ACL、服务调用方/操作 ACL 与 MySQL schema 是发布组的一部分。禁止单独升级 Auth 后让旧消费者访问新接口，也禁止单独回退消费者而继续接受它不能验证的签名上下文。

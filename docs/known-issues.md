@@ -1590,6 +1590,16 @@
 
 **关联**：LR-42/141/151；KI-160/170/172；change `unify-versioned-permission-context`任务6.2/11.6。
 
+## KI-209 [FIXED·本提交·P1] Compose未透传Auth/Agent版本化鉴权开关与Redis凭据
+
+**发现日期与依据**：2026-10-27，核对 `docker compose config --profile full --format json` 及 `docker-compose.yml` 时发现Auth和Agent服务均未收到版本化鉴权开关及专用Redis密码/TLS环境变量。Auth主开关在应用和Nacos模板固定为false；`.env.example`的待提交改动还含非空凭据值，并将Agent开关设为true。首次检查时Compose根目录 `.env` 与进程环境没有这些变量，`.env.example`不会被Compose自动当作运行环境读取；用户随后将配置补入根目录 `.env`，当前Compose渲染已确认两总开关与各自密码均映射到正确服务，不输出实际值。
+
+**修复**：Compose按服务透传独立的Auth/Agent总开关及writer/reader密码和TLS；Auth与Agent应用配置均使用默认false的环境占位符，Auth Nacos模板同步使用占位符，Agent模板保留原有占位符。已将跟踪模板中的疑似密码清空、开关设为false，并补充发布/秘密管理说明。Nacos仅发布包含变量占位符的模板，不存放实际密码。Redis ACL ready声明继续false，不自动启用授权链。
+
+**验证与边界**：通过 `docker compose --profile full config --quiet` 检查解析；渲染结果确认Auth/Agent总开关当前为true、writer/reader密码非空且只进入各自服务、TLS为true。Auth/Agent模板已发布至 `BK-AGENT/DEFAULT_GROUP` 并以内容回读校验；Nacos只保存环境变量占位符，不保存密码明文。开发Redis当前没有 `authz-writer` 与 `agent-authz-reader` ACL用户，Nacos的Redis `enabled`/`protected-*-configured` 仍为false，因此没有用未验证配置重建运行中的服务；Agent若此时开启会因reader ACL未就绪而拒绝启动。新授权链仍未通过运行验收。若模板中的旧值曾被真实Redis ACL使用，应轮换对应凭据；轮换和专用Redis ACL运行验收仍未完成。
+
+**关联**：LR-152；change `unify-versioned-permission-context`任务11.5/11.7。
+
 ---
 
 **变更历史**：本提交补齐鉴权迁移交付清单与安全回滚边界（KI-208），并修复RAG配置绑定问题（KI-207）、完成全仓Maven回归和Interview凭据边界记录（KI-202/203），持久化A2A请求防重放与任务归属（KI-172）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。

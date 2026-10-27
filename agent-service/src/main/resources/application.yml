@@ -32,6 +32,41 @@ a2a:
     response-public-key: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
 
 agent:
+  authorization:
+    enabled: ${AGENT_AUTHORIZATION_ENABLED:false}
+    caller-service: agent-service
+    key-id: ${SERVICE_IDENTITY_KEY_ID:agent-service-current}
+    private-key-path: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
+    public-key: ${AGENT_SERVICE_IDENTITY_PUBLIC_KEY:}
+    audience: agent-service
+    authority-public-keys:
+      auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+    cache-entries: 1000
+    cache-bytes: 16777216
+    max-users: 1000
+    max-sessions: 4000
+    max-sessions-per-user: 32
+    capability-permissions:
+      "local:milvusKnowledgeSearch": agent.rag.search
+    mcp-target-audiences:
+      business-mcp-server: business-service
+      compare-mcp-server: compare-engine-service
+      marketing-mcp-server: marketing-content-service
+      contract-mcp-server: contract-service
+      settlement-mcp-server: settlement-service
+      notification-mcp-server: notification-service
+      media-mcp-server: media-worker-service
+      interview-mcp-server: interview-service
+    public-mcp-capabilities: []
+    redis:
+      protected-reader-configured: false
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      username: agent-authz-reader
+      password: ${AUTHZ_REDIS_READER_PASSWORD:}
+      tls: ${AUTHZ_REDIS_TLS:true}
+      namespace: authz
+      channel: authz:versions
   memory-v2:
     compression-enabled: ${AGENT_MEMORY_V2_COMPRESSION_ENABLED:false}
     key-id: ${SERVICE_IDENTITY_KEY_ID:agent-service-current}
