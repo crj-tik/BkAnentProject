@@ -3,7 +3,7 @@
 ## 0. 独立会话与契约基线
 
 - [ ] 0.1 按并行总览记录独立worktree/分支、共同base SHA、.m2repo和测试资源，用git/构建记录验证未导入另外三个实现分支。
-- [ ] 0.2 固定business模块和common/business/review修改范围及本域编号段，用源码引用扫描验证未依赖房源/知识change新增的Java类型，也未修改它们的业务代码。
+- [ ] 0.2 固定拆分边界：只改business-service复盘领域/API/存储/技能、bk_business迁移、common/business/review最小业务DTO、本域fixture和一条a2a:trade-agent受管映射；源码引用扫描验证未依赖房源/知识change新增Java类型，且未修改common/authz、auth-service、其它业务服务、Studio或Agent通用框架。
 - [ ] 0.3 按domain-parallel-v1固定房源/知识HTTP样例和成功/空匹配/拒绝/过时/不可用反例，启动本会话本地fixture验证所需输入全部可独立提供。
 
 ## 1. 数据与度量边界
@@ -11,7 +11,7 @@
 - [ ] 1.1 定义复盘输入、来源引用、dataset 和数据模式契约及固定模拟样例，用契约测试验证事件/观察时间、稳定版本和模拟/真实隔离。
 - [ ] 1.2 实现带看、跟进、议价和维护的 fixture 数据端口，用同输入同输出及非法来源测试验证无随机推造经营事实。
 - [ ] 1.3 定义指标版本、窗口/时区、去重机会单位和有效下一步事件，使用零分母、缺反馈、迟到事件及跨窗口测试验证 UNKNOWN 和分子/分母。
-- [ ] 1.4 实现当前Auth主体/门店范围消费适配，以本会话精确测试登记验证伪造storeId/employeeId、跨门店及失联拒绝，验证真实范围未配置不放行且无需等待Auth新提交。
+- [ ] 1.4 定义TrustedStoreScopePort并用测试替身注入固定的已验证actor/store范围；验证请求storeId/employeeId不能授予范围、跨店/缺失/过期范围拒绝。当前Auth签名身份只允许BROKER，生产适配在Auth提供签名STORE身份前必须失败关闭；测试替身只验证Business边界，不冒充生产Auth验收，也不阻塞本change独立实现。
 
 ## 2. 复盘事项与依赖
 
@@ -29,12 +29,12 @@
 
 ## 4. API 与 Agent 接入
 
-- [ ] 4.1 提供复盘、计划、确认、动作及观察的公开 API/DTO，用 controller/服务契约测试验证授权、幂等回执和分页范围。
-- [ ] 4.2 在现有 trade/trade-agent 身份下增加诊断、方案准备和复盘技能，用装配测试验证 Memory 必需接入、技能范围及写动作审批。
+- [ ] 4.1 按design中的HTTP方法/路径/DTO矩阵提供复盘、计划、确认、动作及观察API；沿用ApiResponse和有界cursor，storeId仅作已签范围内的选择器。用controller/服务契约测试逐路由验证精确business.review.*.store操作、真实事项store owner、跨店拒绝、expectedDiagnosisRevision/expectedPlanVersion/expectedActionVersion，并验证确认与反馈的同requestId同hash重放、同号异hash冲突。
+- [ ] 4.2 保留trade/trade-agent、trade Memory及现有拦截器；只在受管Agent配置增加CapabilityId.a2a("trade-agent")→agent.workflow.invoke.trade映射，并交付该调用码及全部business.review.*.store操作的Auth登记清单。按D9请求级proof验证A2A实际body绑定、本地验签和精确领域操作；技能/内部工具只读并形成未落库草稿，确认/反馈不作为A2A或MCP写工具发布，仍由用户显式调用领域API并绑定actor/store/plan版本/hash。
 - [ ] 4.3 输出安全的领域 artifact 和引用契约，用结果投影测试验证 owner/来源/dataMode，保留原 Studio work/command 语义且不勾选其未完成任务。
 
 ## 5. 独立验收与交付
 
-- [ ] 5.1 仅用本会话本地v1 HTTP fixture、Auth/Memory测试登记及真实本域持久处理器，完成模拟带看停滞和维护闭环，验证回执/撤回/重复输入；无需其它三个实现或Auth新提交即可验收完成。
+- [ ] 5.1 仅用本会话本地v1 HTTP fixture、Auth/Memory精确测试登记、TrustedStoreScopePort测试替身及真实本域持久处理器，完成模拟带看停滞和维护闭环，验证回执/撤回/重复输入；无需其它三个实现或Auth新提交即可验收Business实现，但单独记录生产STORE范围和权限登记尚未启用。
 - [ ] 5.2 在共同基线及本change独立运行business及必要消费契约测试/编译，记录自身Maven仓库、功能与模式证据；跨服务联机/真实增长另列未验证，不作为本期等待任务。
-- [ ] 5.3 更新独立部署回退、口径及本域LR引用，严格校验和diff检查后中文commit/push本会话分支，交付head SHA/配置和迁移差异；不推dev-fix、不关闭KI-114/128/166，合并后联调交协调会话。
+- [ ] 5.3 更新独立部署回退、口径及本域LR引用，严格校验和diff检查后中文commit/push本会话分支；交付head SHA、迁移/最小Agent映射差异及Auth登记交接（agent.workflow.invoke.trade、六个business.review.*.store操作和签名STORE身份范围），不修改Auth代码/全局目录、不推dev-fix、不关闭KI-114/128/166，合并后生产权限登记与联调交协调/Auth会话。
