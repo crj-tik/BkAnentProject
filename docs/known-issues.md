@@ -1520,13 +1520,13 @@
 
 **关联**：LR-143；change `unify-versioned-permission-context`任务6.5。
 
-## KI-202 [OPEN·P1] 访谈历史内容中的旧票据/凭据形状尚未完成存量核查
+## KI-202 [OPEN·P1] 历史内容中的凭据形状候选尚未完成归属复核与处置
 
 **发现日期与依据**：2026-10-26，实施任务8.4/8.5。新入口已在访谈话轮、上传原文、候选题、director 指令和报告结果的相关路径加入凭据形状拦截/清理，但本地代码回归不能证明历史 MySQL 消息、摘要、副本、报告及可恢复状态中从未存入旧 HMAC ticket、JWT 或其它凭据。
 
-**当前处置**：未连接或扫描任何运行数据库；没有存量匹配计数、撤销或清理结果，也不宣称历史数据已安全。新增 `scripts/deploy/scan_interview_credential_shapes.py` 与 `docs/interview-credential-history-scan.md`，提供受权运维人员使用只读账号进行文本/JSON列逐列计数的准备工具；它不输出匹配行、不撤销票据、不删除数据，且不覆盖外部日志、备份或其它未选schema。Interview 新凭据改为认证后领取、数据库只存随机票据 SHA-256 摘要、15分钟内有效，并只经 `X-Ticket` 使用。新实现不接受把历史 HMAC 票据当身份凭据。
+**当前处置**：2026-10-27在本地开发MySQL以只读session对13个schema完成count-only扫描：`bk_interview` 61个文本/JSON列为0；`bk_auth`、Business、Contract、Customer、Marketing、Notification、Promotion、Settlement也为0。`bk_agent`、`bk_listing`、`bk_memory`、`bk_rag`分别出现404、12、174、131个候选列行计数。计数包含列间重复，正数位于请求/事件/artifact/RAG outbox等ID或JSON字段；由于不读取正文，当前不能区分长标识、引用与有效凭据。未撤销或删除任何数据，不将候选计数称为泄漏。扫描器已排除schema迁移账本及SHA/MD5摘要列，避免校验数据误报。Interview 新凭据改为认证后领取、数据库只存随机票据 SHA-256 摘要、15分钟内有效，并只经 `X-Ticket` 使用；新实现不接受把历史 HMAC 票据当身份凭据。
 
-**后续验收**：在获得受权只读数据源后，对每个纳入范围的 MySQL schema 运行只输出计数的历史扫描，不记录或回显匹配值；另行核查文件日志、备份/副本与可恢复工件。若有结果，再由受权路径撤销并清除可恢复副本，分别验证处理状态与保留数据。不能以工具通过单测或新写入拦截替代现场扫描。
+**后续验收**：由数据责任人对四个正计数schema按字段语义复核，不导出或记录匹配正文；若确认存在旧凭据，使用已授权撤销/清理路径并验证处理状态与保留数据。另行核查文件日志、备份/binlog、消息副本和可恢复工件。不能仅凭当前开发库扫描关闭KI-202。
 
 **关联**：LR-1/89/145；KI-157；change `unify-versioned-permission-context`任务8.4/8.5。
 

@@ -11,14 +11,16 @@ from dataclasses import dataclass
 
 
 DATABASE_NAME = re.compile(r"[A-Za-z0-9_]+")
+CONTAINER_NAME = re.compile(r"[A-Za-z0-9_.-]+")
 MAX_QUERY_TIME_MS = 10000
 TEXT_COLUMN_QUERY = """
 SELECT table_name, column_name
 FROM information_schema.columns
 WHERE table_schema = DATABASE()
   AND LOWER(data_type) IN ('char', 'varchar', 'tinytext', 'text', 'mediumtext', 'longtext', 'json')
+  AND LOWER(table_name) <> 'bk_schema_migration'
   AND NOT (table_name = 'interview_participant_ticket' AND column_name = 'ticket_hash')
-  AND LOWER(column_name) NOT REGEXP '(^|_)(hash|digest|checksum)(_|$)'
+  AND LOWER(column_name) NOT REGEXP '(^|_)(hash|digest|checksum|sha1|sha256|sha512|md5)(_|$)'
 ORDER BY table_name, ordinal_position;
 """.strip()
 
@@ -46,12 +48,27 @@ def quote_identifier(value: str) -> str:
     return "`" + value.replace("`", "``") + "`"
 
 
-def mysql_args(mysql: str, database: str, defaults_extra_file: str | None) -> list[str]:
+def mysql_args(mysql: str, database: str, defaults_extra_file: str | None,
+               docker_container: str | None = None) -> list[str]:
+    client_args = [
+        "--init-command=SET SESSION TRANSACTION READ ONLY",
+        "--batch", "--raw", "--skip-column-names", "--connect-timeout=10", f"--database={database}",
+    ]
+    if docker_container:
+        if defaults_extra_file:
+            raise ScanError("do not combine a Docker container with a host option file")
+        if not CONTAINER_NAME.fullmatch(docker_container):
+            raise ScanError("docker container name contains unsupported characters")
+        return [
+            "docker", "exec", "-i", docker_container, "sh", "-c",
+            'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql "$@"', "mysql", *client_args,
+        ]
+
     args = [mysql]
     # MySQL requires defaults-extra-file to appear before other client options.
     if defaults_extra_file:
         args.append(f"--defaults-extra-file={defaults_extra_file}")
-    args.extend(["--batch", "--raw", "--skip-column-names", "--connect-timeout=10", f"--database={database}"])
+    args.extend(client_args)
     return args
 
 
@@ -92,10 +109,11 @@ def count_queries(database: str, columns: list[TextColumn]) -> str:
     return "\n".join(statements)
 
 
-def scan(database: str, mysql: str = "mysql", defaults_extra_file: str | None = None) -> list[tuple[TextColumn, int]]:
+def scan(database: str, mysql: str = "mysql", defaults_extra_file: str | None = None,
+         docker_container: str | None = None) -> list[tuple[TextColumn, int]]:
     if not DATABASE_NAME.fullmatch(database):
         raise ScanError("database must contain only ASCII letters, digits, and underscores")
-    args = mysql_args(mysql, database, defaults_extra_file)
+    args = mysql_args(mysql, database, defaults_extra_file, docker_container)
     columns = parse_columns(invoke_mysql(args, TEXT_COLUMN_QUERY))
     if not columns:
         raise ScanError("no readable text or JSON columns were found; no scan was performed")
@@ -110,9 +128,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--database", required=True, help="selected interview database, for example bk_interview")
     parser.add_argument("--mysql", default="mysql", help="mysql client executable")
     parser.add_argument("--defaults-extra-file", help="protected MySQL option file; credentials are never printed")
+    parser.add_argument("--docker-container", help="running MySQL container with MYSQL_ROOT_PASSWORD in its environment")
     options = parser.parse_args(argv)
     try:
-        results = scan(options.database, options.mysql, options.defaults_extra_file)
+        results = scan(options.database, options.mysql, options.defaults_extra_file, options.docker_container)
     except ScanError as error:
         print(f"scan failed: {error}", file=sys.stderr)
         return 2

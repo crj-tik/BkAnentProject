@@ -234,6 +234,12 @@ MCP transport customizer fixture发出5个不同JSON-RPC `tools/call` body，每
 
 本轮 `InterviewControllerTest` 与 `InterviewParticipantTicketServiceTest` 共 **18 项通过，失败/错误/跳过均0**，覆盖入口用途分离、无效凭据在读取/写入副作用前拒绝、领取响应缓存头和长流 lease 的完整绑定条件。任务 8.3/8.4 仍未勾选：仓库不含 Interview 浏览器应用，真实 `fetch`/ReadableStream 接线及正式 ReactAgent→prompt/Memory/progress/终态 artifact 链尚无现场证据（KI-203）；任务 8.5 仍需受权数据源上的历史只计数扫描及结果处置（KI-202）。没有访问或修改运行数据库，未将定向单测计作端到端验收。
 
-## 历史凭据扫描准备（2026-10-27）
+## 历史凭据形状只计数开发库扫描（2026-10-27）
 
-新增只读运维工具 `scripts/deploy/scan_interview_credential_shapes.py`：按受权选择的schema从`information_schema`发现文本/JSON列，使用固定的Bearer/JWT/凭据赋值/高熵不透明串形状执行逐列 `COUNT(*)`；只输出列名与计数，抑制MySQL错误详情，不支持修改/撤销/删除。测试用mock MySQL覆盖只计数、数据库标识符校验、元数据标识符转义、客户端错误脱敏和空metadata失败关闭，**5项通过**。实际现场扫描尚未执行；备份、文件日志及其它未选schema仍需分别核查，因此任务8.5保持未完成。
+`scripts/deploy/scan_interview_credential_shapes.py` 对13个本地开发schema完成MySQL只读session逐列 `COUNT(*)`，输出仅含schema/列名/计数，不含匹配正文，也未修改、撤销或删除数据。第一轮确认迁移账本SHA校验列会被高熵模式误计，已扩展排除规则并增加回归；当前 `bk_interview` 61列计数为0，`bk_auth`/Business/Contract/Customer/Marketing/Notification/Promotion/Settlement也为0。`bk_agent`、`bk_listing`、`bk_memory`、`bk_rag`的候选列行数合计分别为404/12/174/131，集中在ID与JSON字段，需数据责任人确认是否为业务标识或可撤销凭据；计数不等于唯一记录数。扫描器定向测试**8项通过**。由于尚未复核正计数、处置可恢复凭据，也未检查外部日志/备份/副本，任务8.5与KI-202仍未关闭。
+
+## 开发栈鉴权冒烟与全仓回归（2026-10-27）
+
+`mvn -gs .mvn-settings.xml -s .mvn-settings.xml test` 全23模块成功，Surefire汇总 **1732项，失败0、错误0、跳过14**；跳过项为外部MySQL、Docker/Nacos或真实模型环境测试。扫描器定向测试8项、迁移manifest测试44项、`git diff --check`与严格OpenSpec校验通过。
+
+运行栈只读冒烟：Auth与Gateway readiness/liveness均HTTP 200/`UP`；经Gateway无凭据请求 `/auth/me`、`/auth/roles`、`/auth/authorization/catalog` 均HTTP 401。当前Auth/Agent版本化授权开关关闭，Auth Redis writer与Agent Redis reader专用密码未配置；本轮没有应用迁移或执行授权写操作。Agent容器检查时已重启20次，近期启动错误包括RocketMQ `RemotingConnectException`，当前栈没有RocketMQ服务；Listing等业务域服务和Interview浏览器应用也未在运行/本仓，故不能完成真实A2A、ReactAgent归档、浏览器领取/SSE及撤权故障端到端验收。任务8.3–8.5、11.1、11.4、11.6保持未勾选，整体进度仍为**57/63**。

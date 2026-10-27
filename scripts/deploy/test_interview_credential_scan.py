@@ -6,7 +6,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import patch
 
-from scan_interview_credential_shapes import main, scan
+from scan_interview_credential_shapes import TEXT_COLUMN_QUERY, main, mysql_args, scan
 
 
 class InterviewCredentialScanTest(unittest.TestCase):
@@ -30,6 +30,19 @@ class InterviewCredentialScanTest(unittest.TestCase):
         self.assertEqual(2, count_sql.count("MAX_EXECUTION_TIME(10000)"))
         self.assertIn("REGEXP", count_sql)
         self.assertNotRegex(count_sql, r"(?i)\b(INSERT|UPDATE|DELETE|DROP|TRUNCATE)\b")
+        self.assertIn("--init-command=SET SESSION TRANSACTION READ ONLY", run.call_args_list[0].args[0])
+
+    def test_docker_client_keeps_password_expansion_inside_container(self) -> None:
+        args = mysql_args("mysql", "bk_interview", None, "bk-anent-dev-mysql-1")
+
+        self.assertEqual(args[:4], ["docker", "exec", "-i", "bk-anent-dev-mysql-1"])
+        self.assertTrue(any('MYSQL_PWD="$MYSQL_ROOT_PASSWORD"' in arg for arg in args))
+        self.assertNotIn("--password", " ".join(args))
+        self.assertIn("--init-command=SET SESSION TRANSACTION READ ONLY", args)
+
+    def test_excludes_schema_migration_hashes_from_credential_scan(self) -> None:
+        self.assertIn("LOWER(table_name) <> 'bk_schema_migration'", TEXT_COLUMN_QUERY)
+        self.assertRegex(TEXT_COLUMN_QUERY, r"sha1\|sha256\|sha512\|md5")
 
     def test_validates_database_before_invoking_mysql(self) -> None:
         stderr = io.StringIO()
@@ -76,6 +89,17 @@ class InterviewCredentialScanTest(unittest.TestCase):
         self.assertEqual(2, result)
         self.assertEqual("", stdout.getvalue())
         self.assertIn("no scan was performed", stderr.getvalue())
+
+    def test_rejects_host_option_file_with_docker_container(self) -> None:
+        stderr = io.StringIO()
+        with patch("scan_interview_credential_shapes.subprocess.run") as run:
+            with redirect_stderr(stderr):
+                result = main(["--database", "bk_interview", "--docker-container", "bk-anent-dev-mysql-1",
+                               "--defaults-extra-file", "C:\\secure\\client.cnf"])
+
+        self.assertEqual(2, result)
+        self.assertIn("do not combine", stderr.getvalue())
+        run.assert_not_called()
 
 
 if __name__ == "__main__":
