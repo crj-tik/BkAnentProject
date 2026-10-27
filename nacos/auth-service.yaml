@@ -16,8 +16,12 @@ auth:
     response-key-id: ${AUTH_SERVICE_IDENTITY_KEY_ID:auth-service-current}
     private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
     response-public-key: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
-    # Keep empty until each caller's service identity and exact RPC/permission allowlist is reviewed.
-    trusted-callers: {}
+    trusted-callers:
+      gateway-current:
+        service: gateway
+        public-key: ${GATEWAY_IDENTITY_PUBLIC_KEY:}
+        operations: [RESOLVE_REQUEST_AUTHORIZATION]
+        audiences: [auth-service, agent-service]
     redis:
       enabled: ${AUTH_AUTHORIZATION_REDIS_ENABLED:false}
       protected-writer-configured: ${AUTHZ_REDIS_WRITER_CONFIGURED:false}

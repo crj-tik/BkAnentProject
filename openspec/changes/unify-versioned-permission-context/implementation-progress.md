@@ -247,3 +247,15 @@ MCP transport customizer fixture发出5个不同JSON-RPC `tools/call` body，每
 授权开关的实际配置位置：Auth为`auth.authorization.enabled`，在`auth-service/src/main/resources/application.yml`与`nacos/auth-service.yaml`当前均为`false`；其Redis子项`auth.authorization.redis.enabled`与`protected-writer-configured`也均为`false`。Agent本地默认在`agent-service/src/main/resources/application.yml`为`false`，Nacos配置`nacos/agent-service.yaml`使用`${AGENT_AUTHORIZATION_ENABLED:false}`。`.env.example`虽列出Agent开关及`AUTHZ_REDIS_WRITER_PASSWORD`/`AUTHZ_REDIS_READER_PASSWORD`，但`docker-compose.yml`当前未把这些变量传入对应容器；当前容器中开关未启用、专用Redis密码未设置。Auth `trusted-callers`及Redis writer/reader configured门禁也尚未完成，故没有启用新授权链或应用数据库迁移。
 
 Listing等其它业务域服务和Interview浏览器应用未在运行/本仓，不能完成有效凭据下的真实A2A、ReactAgent归档、浏览器领取/SSE及撤权故障端到端验收。任务8.3–8.5、11.1、11.4、11.6保持未勾选，整体进度仍为**57/63**。
+
+## Auth→Gateway→Agent真实API与开发栈迁移验收（2026-10-27）
+
+用户提供根目录 `.env` 的非管理员BROKER测试账号及授权开关/Redis专用凭据。Compose把 `AUTH_AUTHORIZATION_ENABLED`、`GATEWAY_AUTHORIZATION_ENABLED`、`AGENT_AUTHORIZATION_ENABLED` 及Auth writer/Agent reader独立凭据传入各自容器；对应Nacos配置为 `nacos/auth-service.yaml`、`nacos/gateway.yaml`、`nacos/agent-service.yaml`，Nacos只使用环境占位符，服务公钥由忽略的 `.secrets/service-identities/public-keys.env` 注入。三个总开关与Auth Redis/writer/reader门禁在本地 `.env` 均已启用。Auth/Gateway、MySQL、Nacos、Redis保持healthy，Agent、Interview与RocketMQ NameServer/Broker运行。
+
+Postman通过真实Gateway执行非管理员账号验收共**14项断言**：login、初始与刷新后`/auth/me`、refresh轮换、旧refresh重放拒绝、多角色和管理员字段、Agent受保护读取、无token伪造身份返回401、请求`userId`替换返回403、logout与撤销token后返回401。已知API兼容行为：refresh重放以HTTP 200返回业务封套`success=false, code=AUTH_401`。迁移前后各跑一次冒烟，结果相同。
+
+专用Redis ACL/TLS验证脚本在Compose Redis 7.4上再次通过：writer精确namespace/channel、reader head只读、非法key/channel拒绝，以及reader订阅收到writer harmless probe。当前`docker/mysql/init-manifest.tsv`共45项（3项fresh、42项upgrade）；经受控runner对现有开发库完成一次upgrade并完整重复第二次，所有42项迁移与schema checks均通过，未做fresh初始化和DDL回滚。静态清单校验和strict OpenSpec校验通过。
+
+修复了真实Dubbo授权RPC的 `RequestBinding.query` wire类型兼容：Auth provider局部优先选择既有`fastjson2ctor` SPI，查询列表使用普通ArrayList与防御性副本；契约断言同步验证副本修改不影响原签名内容。修正后Common定向8项、Auth授权23项通过，全仓Maven 23模块**1733项通过、失败/错误0、跳过14项既有外部依赖测试**；真实Postman API用例在迁移后再次通过。
+
+本轮没有完成任务11.1要求的权限写入/失效/并发/30秒新鲜度故障矩阵，也没有完成11.4要求的真实A2A send/stream/get/cancel/resubscribe及Interview开台/领取/答题/回执/报告/撤权链。Listing A2A provider当前未运行；现有resubscribe脚本还指向旧容器地址并请求真实房源检索/报告生成，未作为本次无副作用API验收执行。任务11.6已有upgrade/repeat证据，但未做fresh数据库或同等安全制品回滚演练，因此不能勾选。8.3/8.4中浏览器`fetch`/ReadableStream以及真实ReactAgent→prompt/Memory/progress/artifact链在仓库当前无对应前端/现场链路，API单测不替代现场证据。剩余未完成项仍为8.3、8.4、11.1、11.4、11.6，整体**58/63**。

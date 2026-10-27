@@ -16,6 +16,23 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Exercises the existing constructor-based Dubbo serializer, without changing its SPI. */
 class AuthzSerializationTest {
     @Test
+    void requestBindingQueryRoundTripsAsPlainArrayListWithoutExposingMutation() throws Exception {
+        var first = new RequestBinding.QueryParameter("q", "one");
+        var second = new RequestBinding.QueryParameter("q", "two");
+        var request = request(List.of(first, second, first));
+        request.query().clear();
+        assertEquals(List.of(first, first, second), request.query());
+
+        var serialization = new Fastjson2ConstructorSerialization();
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        ObjectOutput output = serialization.serialize(null, bytes);
+        output.writeObject(request);
+        output.flushBuffer();
+        ObjectInput input = serialization.deserialize(null, new ByteArrayInputStream(bytes.toByteArray()));
+        assertEquals(request, input.readObject(RequestBinding.class));
+    }
+
+    @Test
     void signedResponseAndBindingsRoundTripExistingNativeRpcSerialization() throws Exception {
         var key = keyPair();
         AuthorizationSnapshot snapshot = AuthzSignature.sign(snapshot(), key.getPrivate());

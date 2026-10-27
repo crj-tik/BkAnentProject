@@ -1191,3 +1191,13 @@
 **代码位置**：`docker-compose.yml`的Redis ACL/TLS服务及Auth/Agent environment；两服务 `application.yml` 与 `nacos/auth-service.yaml`、`nacos/agent-service.yaml`；`scripts/security/configure-authorization-redis-acl.sh`、`verify-authorization-redis-acl.sh`；`docs/authorization-redis-acl.md` 与 `docs/authz-versioned-rollout-rollback.md`。
 
 **关联**：KI-209/210；change `unify-versioned-permission-context`任务11.1/11.5/11.7。Redis专用通道与ACL已在本地开发栈验收；Nacos中的 `trusted-callers` 仍为空，服务健康及Redis链路通过不代表浏览器/Gateway到Agent的用户授权调用已完成端到端验收。
+
+## LR-153 Auth授权RPC选择构造器序列化并规范查询集合的wire类型
+
+**结论**：Auth授权provider仅对 `AuthAuthorizationRpcService` 声明Dubbo `fastjson2ctor`序列化及优先协议，不全局切换RPC序列化。`RequestBinding.query` 在签名规范化后存为普通 `ArrayList`，访问器每次返回防御性 `ArrayList` 副本；调用方可修改副本但不能改变原上下文，query仍保留排序、重复项和哈希语义。
+
+**根因**：Auth授权DTO是record且含参数化查询列表，Dubbo默认Fastjson2 JSONB在真实provider调用上不能稳定重建查询集合；改成Hessian会触发Java 17模块反射限制，全局改协议则会影响其他Dubbo服务。使用仓库已有的构造器序列化SPI并固定wire集合类型，把兼容范围限制在Auth授权provider；返回防御性副本则同时维持逻辑不可变性与可序列化类型。
+
+**代码位置**：`auth-service/AuthAuthorizationRpcServiceImpl`；`common/authz/RequestBinding`；`common/serialize/Fastjson2ConstructorSerialization`；`common/authz/AuthzSerializationTest`。
+
+**关联**：KI-211；change `unify-versioned-permission-context`任务4.2/11.5。Dubbo序列化协商取决于provider/export协议声明，见[Apache Dubbo Serialization Protocol Upgrade](https://dubbo.apache.org/en/overview/mannual/java-sdk/reference-manual/serialization/serialization-upgrade/)；全局序列化配置未变。

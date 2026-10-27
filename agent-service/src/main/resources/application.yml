@@ -47,16 +47,9 @@ agent:
     max-sessions: 4000
     max-sessions-per-user: 32
     capability-permissions:
-      "local:milvusKnowledgeSearch": agent.rag.search
-    mcp-target-audiences:
-      business-mcp-server: business-service
-      compare-mcp-server: compare-engine-service
-      marketing-mcp-server: marketing-content-service
-      contract-mcp-server: contract-service
-      settlement-mcp-server: settlement-service
-      notification-mcp-server: notification-service
-      media-mcp-server: media-worker-service
-      interview-mcp-server: interview-service
+      "[local:milvusKnowledgeSearch]": agent.rag.search
+    # Keep user-delegated MCP destinations closed until static streamable-http connections exist.
+    mcp-target-audiences: {}
     public-mcp-capabilities: []
     redis:
       protected-reader-configured: ${AUTHZ_REDIS_READER_CONFIGURED:false}

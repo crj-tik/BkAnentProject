@@ -121,3 +121,17 @@ settlement:
       Return only the JSON object without Markdown fences, internal IDs, reasoning, tool arguments, or extra prose.
 a2a:
   memory:
+
+mcp:
+  authorization:
+    server:
+      # Keep disabled until both key sets and the exact per-tool allowlist are configured.
+      enabled: false
+      caller-service: agent-service
+      authority-public-keys:
+        auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+      caller-public-keys:
+        agent-service-current: ${AGENT_SERVICE_IDENTITY_PUBLIC_KEY:}
+      # tool name -> registered permission code; no implicit public tools.
+      tool-operations: {}
+      public-tools: []

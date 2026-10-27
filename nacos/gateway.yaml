@@ -76,6 +76,17 @@ service:
       nacos: "${NACOS_SERVER:10.117.102.54:8848}"
 
 gateway:
+  authorization:
+    enabled: ${GATEWAY_AUTHORIZATION_ENABLED:false}
+    caller-service: gateway
+    key-id: ${GATEWAY_AUTHORIZATION_KEY_ID:gateway-current}
+    private-key-path: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
+    authority-public-keys:
+      auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+    # Only the Auth and Agent APIs are enabled for this acceptance; unmapped routes fail closed.
+    route-audiences:
+      auth-service: auth-service
+      agent-service: agent-service
   access:
     whitelist-prefixes:
       - /auth/login

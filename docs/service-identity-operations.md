@@ -14,7 +14,7 @@
 .\scripts\security\New-ServiceIdentities.ps1
 ```
 
-脚本用本机 Java 17 为 Auth 和 11 个调用服务各生成一组密钥；再次执行只校验既有密钥对，不覆盖它们。脚本不输出私钥。生成后 Compose 才能找到 `public-keys.env` 与各服务的私钥文件。部署配置中 `SERVICE_IDENTITY_PRIVATE_KEY_FILE` 指向容器内的只读挂载路径；各调用服务默认使用自己的 `<service>-current` key ID，Auth 响应用 `AUTH_SERVICE_IDENTITY_KEY_ID=auth-service-current`。
+脚本用本机 Java 17 为 Auth 和 12 个调用服务各生成一组密钥；再次执行只校验既有密钥对，不覆盖它们。脚本不输出私钥。生成后 Compose 才能找到 `public-keys.env` 与各服务的私钥文件。部署配置中 `SERVICE_IDENTITY_PRIVATE_KEY_FILE` 指向容器内的只读挂载路径；各调用服务默认使用自己的 `<service>-current` key ID，Auth 响应用 `AUTH_SERVICE_IDENTITY_KEY_ID=auth-service-current`。
 
 ## verifier 登记范围
 

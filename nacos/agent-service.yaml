@@ -131,16 +131,9 @@ agent:
     max-sessions-per-user: 32
     # Capability ID -> exact permission code already registered in Auth; missing mappings hide capabilities.
     capability-permissions:
-      "local:milvusKnowledgeSearch": agent.rag.search
-    mcp-target-audiences:
-      business-mcp-server: business-service
-      compare-mcp-server: compare-engine-service
-      marketing-mcp-server: marketing-content-service
-      contract-mcp-server: contract-service
-      settlement-mcp-server: settlement-service
-      notification-mcp-server: notification-service
-      media-mcp-server: media-worker-service
-      interview-mcp-server: interview-service
+      "[local:milvusKnowledgeSearch]": agent.rag.search
+    # Keep user-delegated MCP destinations closed until static streamable-http connections exist.
+    mcp-target-audiences: {}
     public-mcp-capabilities: []
     redis:
       # This readiness declaration is independent from the Agent authorization switch.

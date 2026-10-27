@@ -483,9 +483,18 @@ services:
         condition: service_completed_successfully
       auth-service:
         condition: service_healthy
+    volumes:
+      - type: bind
+        source: ./.secrets/service-identities/gateway/private-key.pem
+        target: /run/secrets/service-identity.pem
+        read_only: true
+        bind:
+          create_host_path: false
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: gateway-1.0.0-SNAPSHOT.jar
+      GATEWAY_AUTHORIZATION_ENABLED: ${GATEWAY_AUTHORIZATION_ENABLED:-false}
+      GATEWAY_AUTHORIZATION_KEY_ID: ${GATEWAY_AUTHORIZATION_KEY_ID:-gateway-current}
       A2A_PUBLIC_BASE_URL: http://gateway:5010
       AUTH_ROUTE_URI: http://auth-service:9101
     ports:

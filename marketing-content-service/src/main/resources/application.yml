@@ -52,3 +52,16 @@ marketing:
   listing-read:
     key-id: ${MARKETING_LISTING_READ_KEY_ID:marketing-read-current}
     signing-secret: ${MARKETING_LISTING_READ_SECRET:}
+
+# Disabled until Auth and this MCP service have reviewed keys and per-tool permissions.
+mcp:
+  authorization:
+    server:
+      enabled: false
+      caller-service: agent-service
+      authority-public-keys:
+        auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+      caller-public-keys:
+        agent-service-current: ${AGENT_SERVICE_IDENTITY_PUBLIC_KEY:}
+      tool-operations: {}
+      public-tools: []

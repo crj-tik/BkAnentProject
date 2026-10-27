@@ -24,7 +24,14 @@ EXPECTED_AUTHZ_MIGRATIONS = {
     ("a2a-task-authorization-settlement-20261026-v1", "bk_settlement", "sql/migrations/20261026_a2a_task_authorization.sql"),
 }
 
+EXPECTED_SUPPORT_MIGRATIONS = {
+    ("interview-director-command-20260930-v1", "bk_interview", "sql/migrations/20260930_interview_director_command.sql"),
+}
+
 MIGRATION_TABLES = {
+    "sql/migrations/20260930_interview_director_command.sql": (
+        "interview_director_command",
+    ),
     "sql/migrations/20261026_authorization_execution_binding.sql": (
         "auth_authorization_execution_binding",
     ),
@@ -83,6 +90,9 @@ def main() -> None:
     missing = EXPECTED_AUTHZ_MIGRATIONS - observed
     if missing:
         fail(f"required auth/A2A migration entries are missing: {sorted(missing)}")
+    missing_support = EXPECTED_SUPPORT_MIGRATIONS - observed
+    if missing_support:
+        fail(f"required upgrade compatibility migrations are missing: {sorted(missing_support)}")
 
     for relative, tables in MIGRATION_TABLES.items():
         migration = (ROOT / relative).read_text(encoding="utf-8")
@@ -91,6 +101,11 @@ def main() -> None:
         for table in tables:
             if not re.search(rf"(?i)CREATE TABLE IF NOT EXISTS\s+{re.escape(table)}\b", migration):
                 fail(f"idempotent table creation missing for {table} in {relative}")
+
+    for check_path in sorted({row[6] for row in rows}):
+        check = (ROOT / check_path).read_text(encoding="utf-8")
+        if len(re.findall(r"(?m)^SELECT\b", check)) != 1:
+            fail(f"schema check must return exactly one scalar result: {check_path}")
 
     print(f"OK: {len(rows)} manifest entries, all targets and canonical SHA-256 values verified")
 

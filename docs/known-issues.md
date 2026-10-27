@@ -1596,7 +1596,9 @@
 
 **修复**：Compose按服务透传Auth writer、Agent reader各自凭据及TLS。开发Redis保留普通6379，为版本化授权单独启用6380 TLS端口；证书、Java信任库和带SHA-256口令摘要的ACL文件存放于Git忽略的 `.secrets/redis/`。新增运行配置占位符供Auth/Agent连接专用端口，ACL脚本在验证前后正反例与Pub/Sub后执行 `ACL SAVE`。Auth Redis开关及writer/reader ready声明仅在现场验证成功后才在 `.env` 与Nacos配置打开；Nacos继续只保存环境变量占位符，不保存口令或私钥。共享 `default` 用户与普通业务Redis连接保持不变。
 
-**验证与边界**：Redis 7.4.11 ACL/TLS配置脚本全部通过：writer命名空间与channel正反例、reader head只读/channel边界、Java TLS hostname验证及两用户认证、真实Pub/Sub收发。Compose渲染确认Auth/Agent开关、专用端口、各自凭据和信任库只进入对应服务。Auth/Agent模板已发布到 `BK-AGENT/DEFAULT_GROUP` 并完成内容回读，真实凭据仍仅在忽略文件。重建后Redis healthy、Auth readiness healthy、Agent readiness UP。全仓Maven回归1732项、失败/错误为0、14项既有外部依赖测试跳过；Nacos发布脚本4项通过，OpenSpec严格校验有效。`auth.authorization.trusted-callers` 仍为空，且当前没有前端，因此没有执行浏览器登录/Gateway到Agent的真实用户授权流；服务健康与Redis连通性不代表此链路验收完成，OpenSpec 11.1/11.4/11.6及访谈前端交付项仍未全部完成。
+**首次验证与边界**：Redis 7.4.11 ACL/TLS配置脚本全部通过：writer命名空间与channel正反例、reader head只读/channel边界、Java TLS hostname验证及两用户认证、真实Pub/Sub收发。Compose渲染确认Auth/Agent开关、专用端口、各自凭据和信任库只进入对应服务。Auth/Agent模板已发布到 `BK-AGENT/DEFAULT_GROUP` 并完成内容回读，真实凭据仍仅在忽略文件。重建后Redis healthy、Auth readiness healthy、Agent readiness UP。首次全仓Maven回归1732项、失败/错误为0、14项既有外部依赖测试跳过；Nacos发布脚本4项通过，OpenSpec严格校验有效。首次验收时用户环境变量尚未完成，Gateway→Agent真实用户流未执行；该次状态由下方后续验收更新。
+
+**后续验收（2026-10-27）**：用户在根目录 `.env` 配置Auth/Gateway/Agent总开关、Redis writer/reader就绪门禁和测试账号；Compose按服务注入，公钥由忽略的 `public-keys.env` 提供，Nacos只存占位符。Redis ACL/TLS专用验收重新通过；Auth/Gateway/MySQL/Nacos/Redis healthy，Agent、Interview与RocketMQ运行。Postman真实API流程14项断言通过：登录、`/auth/me`、刷新与旧refresh token重放拒绝、刷新后身份、多角色/非管理员字段、Agent受保护读取、无token伪造身份401、请求userId替换403、logout及撤销后401。旧refresh重放保持既有HTTP 200封装，响应体 `success=false, code=AUTH_401`。全仓23模块回归1733项、失败/错误0、外部依赖测试跳过14项。此证据证明当前Gateway→Auth→Agent API路径工作；真实A2A五操作、访谈完整业务流、浏览器fetch/SSE与ReactAgent归档仍未完成，见OpenSpec任务11.4与8.3/8.4。
 
 **关联**：LR-152；KI-210；change `unify-versioned-permission-context`任务11.1/11.4/11.5/11.6/11.7。
 
@@ -1609,6 +1611,16 @@
 **验证与边界**：Redis 7.4.11 TLS服务端上重新运行ACL配置及验收脚本，要求同时通过权限正反例和真实订阅/发布探针；运行结果记入本提交及OpenSpec任务验收记录。
 
 **关联**：KI-209；`scripts/security/verify-authorization-redis-acl.sh`；change `unify-versioned-permission-context`任务11.1。
+
+## KI-211 [FIXED·本提交·P1] Auth授权RPC中的查询列表未使用稳定的JSONB wire类型
+
+**发现日期与依据**：2026-10-27，真实Gateway→Auth→Agent授权调用在Auth provider解码 `RequestBinding.query` 时暴露Dubbo默认Fastjson2 JSONB对record参数化列表运行时类型的兼容问题；授权解析失败会使受保护请求安全拒绝。此前单测只覆盖值和哈希，没有覆盖真实provider序列化。改用Hessian实验又在Java 17上因JDK模块反射限制失败，因此不适合作为修复。
+
+**修复**：仅在Auth授权provider上优先使用仓库已有 `fastjson2ctor` Dubbo序列化SPI，不更改全局RPC协议。`RequestBinding` 将规范排序后的query保存为普通 `ArrayList`，访问器返回防御性副本，避免调用方修改签名内容；记录值与哈希仍由原query的有序多重集决定。将契约测试改为验证副本修改不影响原上下文，并增加SPI解码往返测试。
+
+**验证与边界**：构造器序列化round-trip、Auth授权定向23项及Common请求绑定/序列化8项均通过。真实API冒烟登录、refresh/replay、`/auth/me`、Agent受保护读取及身份替换反例14项断言通过。整仓测试首次回归暴露 `AuthzContractTest`仍要求访问器抛出不可修改异常；测试契约已修正为与防御性副本一致，修正后全仓23模块1733项、失败/错误0、跳过14项。该修复只调整Auth授权provider，不证明未纳入运行调用的其它provider协议已联调。
+
+**关联**：LR-153；`AuthAuthorizationRpcServiceImpl`、`RequestBinding`、`AuthzContractTest`、`AuthzSerializationTest`；change `unify-versioned-permission-context`任务4.2/11.5。
 
 ---
 

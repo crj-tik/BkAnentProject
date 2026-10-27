@@ -23,7 +23,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-@DubboService(version = "1.0", group = "authorization")
+@DubboService(version = "1.0", group = "authorization", serialization = "fastjson2ctor",
+        preferSerialization = "fastjson2ctor")
 @ConditionalOnProperty(prefix = "auth.authorization", name = "enabled", havingValue = "true")
 public class AuthAuthorizationRpcServiceImpl implements AuthAuthorizationRpcService {
     private static final String AUTH_AUDIENCE = "auth-service";

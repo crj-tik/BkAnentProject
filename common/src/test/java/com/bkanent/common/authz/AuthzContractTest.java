@@ -69,7 +69,9 @@ class AuthzContractTest {
                 request.bodyHash(), request.policyDigest(), request.nonce(), NOW, NOW + 60);
         assertNotEquals(AuthzCanonicalHash.requestBindingHash(request), AuthzCanonicalHash.requestBindingHash(rewrite));
         assertNotEquals(AuthzCanonicalHash.resolveRequestHash("access-a", request), AuthzCanonicalHash.resolveRequestHash("access-b", request));
-        assertThrows(UnsupportedOperationException.class, () -> request.query().clear());
+        List<RequestBinding.QueryParameter> exposedQuery = request.query();
+        exposedQuery.clear();
+        assertEquals(List.of(a, a, b), request.query());
         assertEquals("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", AuthzCanonicalHash.bodyHash(new byte[0]));
         assertThrows(AuthzException.class, () -> AuthzCanonicalHash.bodyHash(new byte[AuthzContract.MAX_BODY_BYTES + 1]));
     }

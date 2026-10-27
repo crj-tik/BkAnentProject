@@ -2,6 +2,7 @@ package com.bkanent.common.authz;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
@@ -22,7 +23,8 @@ public record RequestBinding(String callerService, String audience, String metho
         AuthzContract.require(query != null && query.size() <= AuthzContract.MAX_QUERY_PARAMETERS
                 && query.stream().allMatch(java.util.Objects::nonNull));
         query = query.stream().sorted(Comparator.comparing(QueryParameter::name)
-                .thenComparing(QueryParameter::value)).toList();
+                .thenComparing(QueryParameter::value))
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
         requestId = AuthzContract.text(requestId, 128);
         runId = AuthzContract.nullableText(runId, 128);
         sessionId = AuthzContract.nullableText(sessionId, 128);
@@ -38,6 +40,9 @@ public record RequestBinding(String callerService, String audience, String metho
                 && value.indexOf('?') < 0 && value.indexOf('#') < 0 && value.indexOf('\\') < 0);
         return value;
     }
+
+    /** Return a defensive copy while retaining a Fastjson2-compatible ArrayList on the wire. */
+    @Override public List<QueryParameter> query() { return new ArrayList<>(query); }
 
     /** Empty value is distinct from an absent pair; duplicate pairs remain in the hash. */
     public record QueryParameter(String name, String value) implements Serializable {

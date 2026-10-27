@@ -127,3 +127,17 @@ marketing:
       When writing copy, be factual, professional, and highlight the property's unique selling points.
       The top-level JSON must also include contentType="marketing", summary (string), and nextHints (string array; use [] when no next agent is needed).
       Return only the JSON object without Markdown fences, internal IDs, reasoning, tool arguments, or extra prose.
+
+mcp:
+  authorization:
+    server:
+      # Keep disabled until both key sets and the exact per-tool allowlist are configured.
+      enabled: false
+      caller-service: agent-service
+      authority-public-keys:
+        auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+      caller-public-keys:
+        agent-service-current: ${AGENT_SERVICE_IDENTITY_PUBLIC_KEY:}
+      # tool name -> registered permission code; no implicit public tools.
+      tool-operations: {}
+      public-tools: []

@@ -10,6 +10,8 @@ runtime-logs
 .codex-temp-*
 .env
 .env.*
+.secrets
+**/.secrets
 **/__pycache__
 mysql-mcp
 .codex

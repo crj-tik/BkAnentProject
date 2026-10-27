@@ -58,8 +58,7 @@ public class A2aBeaconRpcServiceImpl implements A2aBeaconRpcService {
         } catch (RuntimeException exception) {
             throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
         }
-        return new AuthRagPrincipal(principal.userId(), principal.roleCode(), true, true,
-                principal.expiresAtEpochSecond(), response);
+        return principal.withAttestation(response);
     }
 
     private void verify(A2aBeaconBinding binding, RagCredentialContext credentials, RagAuthEnvelope auth,

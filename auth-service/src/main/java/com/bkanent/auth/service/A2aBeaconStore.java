@@ -15,10 +15,15 @@ public class A2aBeaconStore {
     private final AuthTokenService tokens;
     private final UserAccountService users;
     private final UserManagementService roles;
+    private com.bkanent.auth.authorization.AuthAccountMutationService versionedAuthorization;
     private final SecureRandom random = new SecureRandom();
     private final Map<String, Lease> leases = new HashMap<>();
     public A2aBeaconStore(AuthTokenService tokens, UserAccountService users, UserManagementService roles) {
         this.tokens = tokens; this.users = users; this.roles = roles;
+    }
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setVersionedAuthorization(org.springframework.beans.factory.ObjectProvider<com.bkanent.auth.authorization.AuthAccountMutationService> provider) {
+        this.versionedAuthorization = provider.getIfAvailable();
     }
     public AuthRagPrincipal accessPrincipal(String token) {
         try {
@@ -28,8 +33,19 @@ public class A2aBeaconStore {
             if (!"access".equals(principal.tokenType())) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
             UserAccountEntity account = users.getById(principal.userId());
             if (account == null || !Long.valueOf(principal.userId()).equals(account.getId())
-                    || !Integer.valueOf(0).equals(account.getDeleted()) || !"ACTIVE".equalsIgnoreCase(account.getAccountStatus())
-                    || !UserManagementService.isSupportedRole(account.getRoleCode()) || !roles.isActiveRole(account.getRoleCode()))
+                    || !Integer.valueOf(0).equals(account.getDeleted()) || !"ACTIVE".equalsIgnoreCase(account.getAccountStatus()))
+                throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+            if (versionedAuthorization != null) {
+                var info = versionedAuthorization.authorizationInfo(account.getId());
+                var snapshot = info.snapshot();
+                if (!"ACTIVE".equals(snapshot.status())) throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+                boolean roleActive = snapshot.businessAdmin() || !info.roles().isEmpty();
+                return new AuthRagPrincipal(account.getId(), account.getRoleCode(), true, roleActive,
+                        principal.expiresAt(), AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION,
+                        snapshot.permissionRevision(), snapshot.credentialEpoch(), snapshot.businessAdmin(),
+                        info.roles(), snapshot.permissions(), null);
+            }
+            if (!UserManagementService.isSupportedRole(account.getRoleCode()) || !roles.isActiveRole(account.getRoleCode()))
                 throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
             return new AuthRagPrincipal(account.getId(), account.getRoleCode(), true, true, principal.expiresAt());
         } catch (RagException ex) { throw ex; }
@@ -86,8 +102,10 @@ public class A2aBeaconStore {
     private AuthRagPrincipal current(Lease lease) {
         AuthRagPrincipal principal = accessPrincipal(lease.token);
         if (!principal.userId().toString().equals(lease.binding.actorId())) throw new RagException(RagErrorCode.FORBIDDEN);
-        return new AuthRagPrincipal(principal.userId(), principal.roleCode(), true, true,
-                Math.min(principal.expiresAtEpochSecond(), lease.expiresAt));
+        return new AuthRagPrincipal(principal.userId(), principal.roleCode(), principal.accountActive(), principal.roleActive(),
+                Math.min(principal.expiresAtEpochSecond(), lease.expiresAt), principal.authorizationVersion(),
+                principal.permissionRevision(), principal.credentialEpoch(), principal.businessAdmin(),
+                principal.roles(), principal.permissions(), null);
     }
     private record Lease(A2aBeaconBinding binding, String token, long expiresAt) {
         @Override public String toString() { return "Lease[REDACTED]"; }
