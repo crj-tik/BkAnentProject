@@ -1009,6 +1009,18 @@
 
 **关联**：LR-22/23/53/73/75/82/83/94/96/97；KI-114、KI-128、KI-166。
 
+**演进**：本条记录 2026-10-25 初版对服务归属的规划。2026-10-27 确认的独立拆分方案由 LR-122 取代“在 business-service 增加复盘、沿用 trade-agent 身份”这一实现边界；有来源事实、动作/结果分离和模拟结果不作为真实效果证据等业务原则继续适用。
+
+## LR-122 门店复盘新增独立服务并隔离现有业务与 Memory 身份
+
+**结论**：change `implement-store-business-review` 新增 `business-review-service`、`bk_business_review` 和独立 Gateway/Nacos/Compose/密钥配置；现有 `business-service`、`business-service.yaml`、`bk_business`、`trade-agent` 及 `business-service/trade/trade-agent` Memory 私域保持不变。新 Agent 使用 `business-review-service/business-review/business-review-agent` 的必需 Memory Hook、独立服务公钥和精确 domain allowlist。Memory 只承载该 Agent 获准的上下文读取/归档，不能成为复盘事实真源；模拟或人工回报不发布为生产经营经验结果。配置同步覆盖环境模板、Nacos、Compose、Gateway、Maven、数据库 manifest、Nacos 发布/启动白名单和服务 keygen；跨会话共享全局登记由协调会话合并。
+
+**根因**：复盘事项、交易分析和 Agent 私域有不同数据所有权。把新业务继续塞入 business-service 会与并行服务拆分共享源码、数据库和配置写入范围，并使“更名”误触历史 Memory 归属。独立服务、数据库、路由、端口、Nacos Data ID、Agent/domain 和 key ID 构成完整隔离身份；共享注册只做各域唯一条目的合并，避免覆盖其它拆分会话的服务配置。
+
+**代码位置（规划）**：`openspec/changes/implement-store-business-review/proposal.md`、`design.md`、`tasks.md`；实施范围为新 `business-review-service` 与服务专属配置，并提供 `pom.xml`、Compose、Gateway、Agent/Auth、Memory、keygen 和初始化清单的最小差异。现阶段仅修订计划，不代表服务、Memory caller 或生产授权已接通。
+
+**关联**：LR-96/97/101/105/139/140/142/145/151/152；KI-114、KI-128、KI-166。
+
 ## LR-102 内容推广同域保存发布事实，效果必须标明来源（规划）
 
 **结论**：2026-10-25 独立 change `consolidate-marketing-promotion-domain` 规划将推广迁入营销域，统一内容修订、发布计划和平台尝试。外部发布保留原 attempt 与 UNKNOWN 对账，本地事务只确认本地受理；效果区分真实、模拟和未知来源，真实 ROI 要求可归属收入/成本，不能按线索数乘固定金额生成收入。
