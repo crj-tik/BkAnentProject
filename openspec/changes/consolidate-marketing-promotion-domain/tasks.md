@@ -46,3 +46,11 @@
 - [ ] 6.4 在隔离 Supervisor profile 配置实际目录返回的 confirmMarketingCampaign capabilityId 到 agent.supervisor.orchestration.approval-capabilities，交付独立配置差异并标明合并时取并集；用 Supervisor 审批测试验证 prepare 不触发外部副作用、confirm 等待批准且计划参数变更后旧批准失效。
 - [ ] 6.5 通过实际 Supervisor 目录、A2A/ReAct 和 MCP fixture 完成草稿、内容审核、计划预览、确认、receipt 查询及 UNKNOWN 核对闭环；覆盖拒绝/待批准不发布、confirm 后不重发、通知与发布状态必须有真实回执。
 - [ ] 6.6 盘点旧 /promotions/** 调用方并迁移已知客户端到当前 DTO；为旧请求体增加明确的契约不支持响应及契约测试，不将路径级过渡映射描述为旧 DTO 兼容。
+
+## 7. 原营销功能完整性与退役门槛
+
+- [ ] 7.1 建立内容及推广源功能矩阵，覆盖内容/渠道版本/审核状态/列表检索、发布、效果同步/查询、ROI、品牌素材、各模拟渠道以及 REST/Dubbo/A2A/ReAct/MCP/Supervisor 入口，逐项登记统一域目标能力、调用方与验收证据。
+- [ ] 7.2 盘点并迁移旧 `/promotions/publish`、`PromotionRpcService.publish` 和全部已知 REST/RPC/Agent/客户端调用方到内容审核、计划预览、批准确认和回执/核对闭环；验证 prepare 不冒充发布成功。
+- [ ] 7.3 端到端验证内容创建到渠道发布回执、UNKNOWN 核对、效果同步/读取、ROI 查询及品牌素材创建/列表；证明旧业务结果在合并后均有目标入口。
+- [ ] 7.4 对 BEIKE、DOUYIN、XIAOHONGSHU fixture 分别验证发布和结果查询的 SIMULATED 传递，并验证无真实 provider 时生产模式失败关闭、不回退模拟成功。
+- [ ] 7.5 只有功能矩阵零未映射项、已知调用方均有迁移记录且端到端证据通过后，才允许退役旧服务接收或删除旧部署配置；真实平台联机另列，不以模拟通过标记为已接通。

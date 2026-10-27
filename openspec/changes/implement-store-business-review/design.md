@@ -86,3 +86,18 @@ Auth、Memory 的当前协议通过测试配置下的精确服务/用户登记�
 ## Open Questions
 
 首批 fixture 的具体字段值、门店代号和展示示例可以在实施中替换，但必须满足既定来源、模式、事件时间及版本契约。真实经营 feed 的地址和业务样本不构成本期模拟功能验收的前置条件。
+
+## 现有分析能力覆盖矩阵与兼容门槛
+
+本 change 仅向 `business-service` 添加复盘业务包，现有分析 API 和 Agent 工具仍是同一业务域需要交付的功能。
+
+| 现有能力 | 目标归属 | 合并后验收 |
+| --- | --- | --- |
+| 月度 KPI、每日工作量、KPI 评估 | 原 `BusinessAnalyticsService` API | 原请求参数、权限范围、指标口径和响应结果继续可用 |
+| 排行榜查询与重建、房源流转报表 | 原 analytics API 与 `TradeTools` | 查询和重建入口均可调用；结果口径与既有基线一致 |
+| 门店看板、大屏 | 原 business dashboard API | 两类看板持续返回原有数据，不被复盘新对象替代或过滤 |
+| TradeTools：KPI、流转、门店看板、评估、排行、日工作量 | 现有 trade-agent 工具映射 | 工具名/参数/授权范围兼容，旧调用方仍能完成结果查询 |
+| TradeMcpTools：月度 KPI | 现有 MCP capability | capability 仍在活动目录，指标语义、范围和返回兼容 |
+| 新增门店卡点复盘 | `business-service` review API、prepare/confirm MCP 和新技能 | 作为新能力并列加入，不替代上述任何一行 |
+
+验收需先固化现有路由、工具目录和代表性结果基线，再回归原 API/Agent/MCP 调用并运行复盘闭环。原分析功能无映射、调用不可达或结果语义被复盘改写时，change 不算完整。

@@ -125,3 +125,39 @@ MCP 草稿创建 SHALL 返回每条已保存草稿的 contentId、platform 和 D
 #### Scenario: 模拟验收后切换真实模式
 - **WHEN** 配置改为真实渠道但真实 provider 或当前账号授权缺失
 - **THEN** 真实发布明确失败，不能因模拟生命周期曾通过而继续使用测试身份、模拟回执或模拟效果
+
+### Requirement: 合并后的营销域保留内容与推广全生命周期
+
+统一营销域 SHALL 保留原有内容创建、渠道版本创建、审核/发布状态维护、按房源列表和多条件检索，以及推广发布、效果同步/查询、ROI 报告、品牌素材创建/列表等业务结果。原 REST、Dubbo、Agent、MCP 和 Supervisor 调用 MUST 映射到新契约并记录迁移；发布状态 MUST 由受控流程和真实 provider 回执推进，不得由任意状态更新伪造。
+
+#### Scenario: 创建并检索多渠道营销内容
+- **WHEN** 营销人员为一套获准房源创建内容及渠道版本，并通过房源条件检索
+- **THEN** 新域能返回内容、各渠道版本及当前审核/发布状态，旧内容引用不会因合并丢失
+
+#### Scenario: 查询效果和品牌素材
+- **WHEN** 当前获准用户同步或查询一套房源的推广效果、查看 ROI，并创建或列出品牌素材
+- **THEN** 新域保留这些业务结果及来源/窗口/模式信息；缺少可归属收入时真实 ROI 为未知，不估造收入
+
+### Requirement: 旧单次发布入口迁移后仍可完成发布业务
+
+旧 `/promotions/publish` 和 Dubbo `PromotionRpcService.publish` 的调用方 SHALL 迁移到内容选择/创建、审核、计划准备、明确确认及回执/核对组成的统一流程。prepare 只表示计划已就绪，不得对外报告发布完成；迁移 MUST 覆盖已知 HTTP、RPC、A2A/ReAct、MCP 和 Supervisor 调用方。
+
+#### Scenario: 旧调用方完成一次批准发布
+- **WHEN** 已迁移的调用方按新流程提交内容并取得明确批准
+- **THEN** 系统通过原 attempt 执行发布并按 provider 回执返回结果，调用方可查询 receipt 或核对 UNKNOWN，不重复创建发布尝试
+
+#### Scenario: 仅准备了发布计划
+- **WHEN** 调用方只调用 prepare 或用户尚未批准 confirm
+- **THEN** 内容保持未发布，系统不返回发布成功或通知已发送的结果
+
+### Requirement: 原模拟渠道能力继续可验收且不冒充真实发布
+
+既有 BEIKE、DOUYIN、XIAOHONGSHU 目标在本 change 中 SHALL 继续通过显式 fixture provider 覆盖发布结果；模拟回执 MUST 保留 SIMULATED。没有对应真实 provider 和授权配置时，生产模式 MUST 明确不可用且不得使用 fixture 成功回退。
+
+#### Scenario: 模拟渠道闭环
+- **WHEN** 用户在显式 fixture 模式选择任一既有模拟渠道并完成获批发布
+- **THEN** 内容、attempt、回执和后续效果均保留模拟模式，并能沿原 attempt 查询
+
+#### Scenario: 生产渠道 provider 缺失
+- **WHEN** 生产模式选择尚未接入真实 provider 的渠道
+- **THEN** 系统明确报告不可用，不创建模拟成功回执或真实发布状态
