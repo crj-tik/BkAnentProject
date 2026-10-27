@@ -2,95 +2,115 @@
 
 ## Context
 
-动机见 proposal.md。`InterviewCollectionService` 已生成脱敏逐字稿资产及 snapshotHash，`InterviewReportService` 已有异步案例报告、原声核验和任务回执；`PlaybookCardEntity`、`CommonalityReportEntity` 当前为占位。访谈运行面、状态机和证据脱敏具有既定边界（LR-3/4/5/6/8），不得迁成 Supervisor 的自由工具步骤。
+见 proposal.md。当前 Interview 公开 MCP 的逐字稿搜索只返回资产元数据，不返回正文；InterviewAssetMapper.selectPublicAssets 的候选条件包括已发布、L2/L3、脱敏版本、未删除、案例有效、session 归属一致且已归档，InterviewAssetService.isPubliclyEligible 还验证标题/正文凭据形态、正文哈希和来源有效性。InterviewAssetEntity 不含 dataMode。现有 Interview Java、配置和表均由另一会话/既有服务继续维护，本 change 不修改这些部分。
 
-逐字稿由访谈业务域接入；当前 Interview asset 只有 `AUTO|UPLOAD` 来源字段，没有持久化数据模式/provenance，不能据此判断生产真实性。初期服务知识运营人员与店长的经营提效，存量模式不明按 `UNKNOWN`，受控测试夹具可标记 `SIMULATED`。现有 Memory v2 共享经验是独立治理对象（LR-90），不能代替运营人员可编辑、审核、撤回的知识资产库。
+本仓库的知识 Agent 模式使用 common-a2a 的 A2aMemoryHookFactory。A2aMemoryAgentHook 在模型执行前加载当前工作集，在完整 Agent 轮次后复核来源并归档；它会投影当前用户、助手、工具调用参数和工具响应。由此，Knowledge Agent 的工具消息不能携带逐字稿正文或原声摘录，否则 Memory 会保存它们。
 
 ## Goals / Non-Goals
 
-**Goals:** 建立独立知识运营事实、来源证据与发布生命周期；保持访谈真源；向店长业务提供当前受权的知识版本。
+**Goals:** 新建独立 Knowledge 微服务和事实库；在原 Interview 服务不改 Java/配置/源表的情况下，只读消费当前已发布脱敏快照；使用现有 Auth 与必需 Memory 协议；将所有新增配置放入一致的模板、容器和 Nacos 清单。
 
-**Non-Goals:** 不搬迁会话/话轮/逐字稿，不改变访谈状态机或原报告接口；不建设新人带教、自动绩效评定或直接共享个人 Memory；不把行业大脑语料建设 KI-13 当作本 change 已解决。
+**Non-Goals:** 不搬迁 Interview session/turn/transcript/report；不改 Interview 运行状态机、Java、应用配置或 bk_interview schema；不增加 Interview 授权 API/表；不改 Auth 或 Memory Java 实现；不自动创建 Memory 共享经验；不启用尚无可信映射的 STORE 范围。
 
 ### 拆分边界
 
-| 责任事实/代码 | 唯一归属 | 本 change 的交付边界 |
+| 责任事实或入口 | 唯一归属 | 本 change 的边界 |
 | --- | --- | --- |
-| Interview session、turn、case、transcript asset、原始/脱敏正文、来源 hash/修订、原报告及报告任务 | `interview-service` / `bk_interview` | 保持真源；只增加窄只读来源契约和独立的知识用途授权生命周期，不迁移表、ID 或报告任务 |
-| 新经营案例、打法、不可变 revision、审核、发布范围、来源依赖、生成任务/receipt、查询与当前使用检查 | `knowledge-service` / `bk_knowledge` | 全部新建并由知识服务负责，不回写访谈事实、不直连 `bk_interview` |
-| 用户身份、角色/操作目录、签名 context/freshness 和可信业务身份映射 | `auth-service` | 只消费现有协议；本分支交付精确操作/身份登记差异供 Auth 协调合入，不改 Auth 实现或 Auth 数据 |
-| 通用 Supervisor、Agent 授权协议和 Memory 生命周期 | `agent-service` / `memory-service` | Agent 仅增加 knowledge 的受众映射、能力映射和最小注册配置；不增 Graph 领域分支、不改 Memory 实现/全局白名单 |
-| 服务间传输类型 | `common/knowledge/**`、`common/interview/transcript/**` | 只放序列化 wire DTO/枚举，不放 Entity、Mapper、Repository 或业务规则 |
-| 门店经营读取/复盘 | Business 后续 change | 本 change 只交付冻结的 `domain-parallel-v1` HTTP 知识只读契约，不实现消费者或增加 Java 跨域依赖 |
+| Interview session、turn、case、transcript asset、原始/脱敏正文、hash/修订、发布状态、报告及报告任务 | interview-service / bk_interview | 保持原样。新 Knowledge 只通过 bk_knowledge 内的受控只读来源投影视图读取当前合格脱敏内容；不修改 Interview Java、配置或源表 |
+| 新经营案例、打法、revision、审核、发布范围、来源引用、生成任务、回执和 HTTP 读契约 | knowledge-service / bk_knowledge | 独立新建，不与 Interview 对象共用 ID，不回写 Interview |
+| Auth 主体、签名 AuthorizationContext/AuthzFreshness、操作目录及可信业务身份 | auth-service | Knowledge 只验证/消费现有协议；精确操作码及角色授权以协调差异登记，不改 Auth 实现。当前无可信 STORE identity 时门店范围关闭 |
+| 必需 Agent 工作集与会话记忆 | memory-service | 复用现有 Memory v2；只在 Nacos 精确登记 knowledge-service / knowledge / knowledge-agent caller，不改 Memory Java，不开启经验发布或共享 grant |
+| Supervisor 与 Agent 能力发现 | agent-service | 仅加入 knowledge-agent 的 audience 解析、单项精确 capability 权限和最小动态注册；不加 Graph 专属分支 |
+| 知识 wire/API DTO | common/knowledge/** | 只放 Knowledge 序列化契约；不增加 Interview wire provider、Entity、Mapper 或跨域服务依赖 |
+| 门店复盘、来源迁移、消费者实现 | Business 或后续 change | 本 change 只冻结 domain-parallel-v1 HTTP 合同，不要求消费者先合入 |
 
-`playbook_card`、`commonality_report` 已在 `interview-service`，本 change 只盘点并列映射建议，保留其表、ID 和内容；新知识以新 ID 建立。报告正文和报告任务不作为首期输入，报告 ID 仅可作不透明关联。Memory 私有/共享经验不是知识资产库，也不由知识发布自动生成。
+Interview 当前 playbook_card/commonality_report 和历史报告只盘点并输出映射建议；旧表和 ID 留在原域。知识域只建新 ID 和 revision。来源 mode 不由 AUTO/UPLOAD、评级或 PUBLISHED 推断；缺少可信 provenance 的历史来源为 UNKNOWN。报告正文/任务不是本期输入。
 
 ## Decisions
 
-### 1. 新增 knowledge-service，保留访谈采集引擎
+### 1. 新增知识运营微服务，不搬迁旧事实
 
-新服务和 `bk_knowledge` 管理知识资产、修订、审核、范围、依赖及操作回执。相比继续向 interview 增加所有运营动作，独立服务能区分“发生过的访谈事实”和“运营人员批准的经营知识”；相比放入营销内容服务，知识证据及内部使用范围无需与渠道发布状态混用。
+knowledge-service 维护 KnowledgeCase、Playbook、不可变 KnowledgeRevision、SourceRef、ReviewDecision、OperationReceipt 及持久生成任务。新表和索引只在 bk_knowledge。新模块加入根 Maven 聚合，Compose 按服务 artifact 构建，旧 Interview 模块和服务定义原样保留。generic Dockerfile 已能打包根模块制品；实现时确认即可，不因为新增服务重复改造镜像入口。
 
-现有案例报告和报告任务留在访谈域，v1 只记录可选的不透明 report reference，不读取报告正文、不重放任务；知识域新增的打法/运营案例有独立 ID 和 revision，不能将旧 reportId/assetId 直接当作新业务对象。原 `playbook_card/commonality_report` 表只做存量盘点和来源映射，未验证为空前不删除、不迁移、不复用其固定置信度规则。
+替代方案是把运营编辑继续放入 Interview 或搬迁旧表。本方案将“发生过的访谈事实”和“运营人员审核发布的经营知识”分开，避免双重权威，并使另一并行拆分会话无需改同一 Interview 服务代码。
 
-### 2. 通过窄逐字稿契约取得获准快照
+### 2. 通过 bk_knowledge 内只读视图接入 Interview 来源
 
-在 common 定义访谈来源元数据、精确脱敏快照读取、知识用途授权签发/撤回及当前使用检查的 wire 契约；访谈实现只读 provider 和独立授权表，知识域实现 `InterviewTranscriptSource` 适配。授权绑定 `assetId`、`snapshotHash`、`contentHash`、`contentRevision`、`sanitizationRevision`、`knowledge_derivation` 用途、唯一 consumer `knowledge-service` 和目标知识范围，并保留签发主体/撤回审计。授权变化或其绑定字段变化时立即失效。
+当前没有正文 API，因此增加 Knowledge 自有的 InterviewTranscriptSource 数据库适配。为了不改 bk_interview，在 bk_knowledge 建版本化只读视图 knowledge_interview_public_source_v1。该视图从 Interview asset/case/session 联查，只投影来源 ID、快照/内容 hash、内容/脱敏/发布修订、评级、来源类型、关系状态和脱敏 content；不投影 rawContent、映射表或其他敏感列。视图 SQL 复刻当前公开资格条件：asset 为 PUBLISHED、L2/L3、未删除、sanitizationRevision 至少为当前支持版本、case 未删除；无 session 的来源只能是 UPLOAD，有 session 时必须属于相同 case 且为 ARCHIVED。Knowledge adapter 另核验标题/正文凭据形态和 SHA-256(content)=contentHash。当前 Sanitizer.VERSION 为 1；未知版本、列缺失、视图检查失败或版本不支持一律不入模。
 
-请求从 `A2aCredentialContext.Lease` 携带 Auth 签名 `AuthorizationContext` 与 `AuthzFreshness`。原 Auth context 仍以 `agent-service` 为 audience 并按其签名验证；知识服务使用自己的注册身份为精确请求体生成服务 proof，proof audience 为 `interview-service`，绑定 caller、操作、requestId 及签名上下文。Interview 本地验签 proof/context/freshness、硬期限、精确 Auth 操作、来源 grant 和当前案例关系。沿用 Marketing→Listing 的 `readAuthorizedContext` 模式；不转发用户 Bearer、不信任模型/请求体中的 actor、不对每次读取回退到旧 `AuthPermissionRpcService` 调用。
+knowledge-service 使用第二个专用只读 DataSource 访问该视图。运行账号只获得视图 SELECT，不获 Interview 表权限或写权限；视图采用 SQL SECURITY DEFINER，由受管迁移/DBA owner 创建并维护必要的源表读取权；definer 权限由迁移/DBA 控制。bk_knowledge 主 DataSource 使用独立 Knowledge 应用账号，只获 bk_knowledge 业务表所需的读写权限，不获 bk_interview 表或来源视图权限。只读投影视图 DataSource 使用另一个专用账号，仅获该视图 SELECT；两个账号均不得使用 Compose 共享的 MYSQL_USER=root。SQL 适配按 assetId 做两步读取：先取来源状态/版本元数据，满足准入条件后再取脱敏正文；正文读取绑定当前的 snapshotHash、contentHash、contentRevision、sanitizationRevision 和 publicationRevision。数据库账户与参数由环境变量/密钥注入，Nacos 仅含占位符。该策略保留强制只读边界，代价是 Knowledge 对 Interview 表结构和当前资格规则有显式耦合；视图版本与适配测试用于发现结构漂移，未知状态失败关闭。
 
-正文只能使用 Interview 脱敏 `content`，读取前核验 grant 和当前来源状态，读取后重验快照一致；`rawContent` 不进入 common、Knowledge、Memory 或模型。MCP 的 L2/L3 / `PUBLISHED` 仅影响访谈既有公开读路径，不等同知识用途授权。没有 grant、scope 未验证、来源不可达或被撤回时拒绝正文。跨库 SQL 和复制原始逐字稿均不是接入方式。
+PUBLISHED 是现有 Interview 可见性发布动作，本期将它作为唯一来源准入/分享信号，不新增 Interview 用途 grant。来源公开状态本身不授予用户 Knowledge 操作权限：只有已验签 Auth actor、当前 freshness、对应精确 Knowledge 操作和目标资源范围通过后，才能导入/生成/使用来源。Knowledge 记录发起者、assetId、来源快照/修订、用途、任务和回执。来源 PRIVATE/删除/失格时返回 NOT_ACCESSIBLE；当前内容或绑定修订改变时返回 STALE；来源库/视图不可用时返回 UNAVAILABLE。已发布知识的 search/detail/export/Agent 输出前都实时复核，不能依赖缓存或异步失效通知。后续若产品要求区别于公开发布的专用知识用途授权，应另建 Interview API change，不在本 change 暗中实现。
 
-当前 `InterviewAssetEntity` 没有 `dataMode`/可信 provenance，`source` 仅表示 `AUTO|UPLOAD`。因此无独立服务端 provenance 的存量资产返回 `UNKNOWN`，不能从来源字段、L0–L3 或发布状态推断 `REAL`；SIMULATED 只由受控来源元数据或本地测试夹具明确给出。来源模式描述不得改写旧正文、`contentHash` 或 `snapshotHash`。多来源派生结果全为 REAL 才可为 REAL；含 UNKNOWN 为 UNKNOWN，REAL 与 SIMULATED 混合为 MIXED。
+证据定位保存 quoteHash、相对脱敏快照的 offset/locator 与来源引用；Knowledge 生成服务可内部读取和验证短原声证据。Interview 当前没有可信 dataMode，旧资产统一为 UNKNOWN；受控测试输入可显式标 SIMULATED。多来源派生的模式不得比最不可信来源更强，不能将未知或混合样本包装成 REAL。
 
-知识可保存必需的原声摘录和派生正文，但每条证据须记录 grantRef、assetId、snapshot/content hash、内容/脱敏修订、精确引用和相对脱敏快照可复核的 quoteHash/定位符；不可复用当前 `EvidenceVerifier` 的占位 `matchedAssetRef="asset"` 作为稳定来源锚点。来源失效后的查询先重核 Interview grant，再输出派生正文；通知/索引失效仅优化响应速度，输出前仍复核。
+### 3. Knowledge 生命周期及 Auth 操作边界
 
-### 3. 单案例运营生命周期与证据质量分开
+Knowledge 领域包含草稿、待审、已发布、已撤回；编辑创建新 revision。写操作使用稳定 requestId、expectedVersion、内容 hash 和持久回执。模型生成与人工审核/发布分离。每个 REST、Agent tool 和下游读请求都从本地验签上下文取 actor，并检查 AuthzFreshness、精确动作和 Knowledge 记录所有权；不得从 payload、模型声明、等级、来源发布状态推断授权。来源 PUBLISHED 只控制来源能否被导入，不扩大 Knowledge 的 own/store 发布读取范围。现有 Auth 仅支持 BROKER 身份且未登记 knowledge 权限；可信 STORE 映射及操作授权到位前，真实 store publish/search/read/check 失败关闭。
 
-首期实体包括 KnowledgeCase、Playbook、不可变 KnowledgeRevision、SourceRef、ReviewDecision、OperationReceipt。版本状态为 `DRAFT / REVIEW_PENDING / PUBLISHED / WITHDRAWN`；编辑创建新 revision，提交/审核/撤回使用 expectedVersion、当前操作权限和稳定 requestId，正文、决定与回执同事务。审核要求当前审核权限和明确决定，是否要求编辑与审核由不同人员完成交给受管审核策略；提交者、最后编辑者与审核者均写入审计，不能由模型自行发布。
+Auth/权限协调差异仅包括 Agent 能力操作 agent.workflow.invoke.knowledge 与以下 Knowledge 动作码：knowledge.case.create.own、knowledge.case.edit.own、knowledge.case.submit.own、knowledge.case.generate.own、knowledge.case.review.decide.own、knowledge.case.review.decide.store、knowledge.case.publish.own、knowledge.case.publish.store、knowledge.case.withdraw.own、knowledge.case.withdraw.store、knowledge.case.read.own、knowledge.case.read.store。搜索、详情、batch-read 与 check 按目标资源使用对应 read 操作；own 还要验证 Knowledge 所有权，store 需验证 Auth 可信 STORE identity。不得登记 interview.asset.knowledge-use.* 来源授权操作，因为本 change 没有 Interview 授权 API。Auth catalog、角色策略和可信身份登记由协调 Auth 变更合入，不修改 Auth Java。测试 registry 仅用于本域隔离验收，不代表线上授权已启用。
 
-候选至少包含经营问题、情境、前提、行动、来源所述结果、适用边界及未核实项；原声片段由服务器在对应 snapshot 内逐字核验。L2/L3 仅为来源入库质量门，业务结果标记为 `REPORTED / EVIDENCED / UNVERIFIED` 等独立证据状态。多个案例重复出现可形成有来源的候选归纳，样本量不能直接提升为“已验证有效”。
+### 4. knowledge-agent 复用必需 Memory，且不让来源正文进入记忆
 
-生成过程使用持久任务身份和输入/规则版本 hash。已完成任务复用原结果，失败或结果未知沿原任务核对；生成完成不等于审核发布。现有访谈报告生成继续按原契约工作，不双写覆盖它。
+Knowledge 官方 Agent 通过 A2aMemoryHookFactory.create("knowledge-service", "knowledge", "knowledge-agent", chatModel) 建立固定 Memory 身份；同一 hook 安装到 ReactAgent hooks 和 OfficialA2aAgentExecutor。保持现有 Memory v2 生命周期：beforeAgent 在模型/工具前加载并校验当前用户/knowledge/knowledge-agent 工作集；afterAgent 在完整轮次后校验被用记忆的来源并归档，归档失败不得释放结果。Memory caller 仅获 service-delivery 和 knowledge: [knowledge-agent] 精确白名单，并使用 Knowledge 自己的 keypair。未登记、错误 owner/context、Memory 不可用或当前工作集失败均拒绝本轮执行，不允许降级旁路。
 
-### 4. 知识发布与个人记忆共享各守边界
+通用 A2aMemoryAgentHook 会把用户/助手文字、tool-call 参数和 tool response 纳入 Memory 事件。因此 Knowledge Agent 的消息合同只允许传 assetId、revision、状态、任务 ID 和受限的派生摘要；逐字稿正文/原声摘录在服务内部完成读取与生成，不作为 tool response 交给 ReactAgent。Agent 工具不得接收正文输入，不得在 assistant 输出或工具参数中回显原声正文；需要查看精确证据的审核者通过单独的授权 Knowledge REST/UI 路径访问，不进入 Agent Memory 对话。对 Memory 请求/归档做哨兵文本测试，逐字稿 body、quote、rawContent 和敏感映射均不得出现在消息、工具参数或响应载荷中。Memory 仅用于私人对话上下文，不因知识发布自动签发 Memory share grant、MemoryDomainExperience 或经验学习权限。
 
-知识域根据已验签 Auth context/freshness 中的可信主体、精确操作和已验证业务身份控制发布和读取。范围必须是 Auth 可信范围与所有来源用途授权目标范围的交集；客户端填写 `storeId`/`ownerId`/员工号不授予范围。当前 `AuthzContract` 仅接受 `BROKER` identity，没有可信 `STORE` identity 映射，因此门店级发布、搜索、读取和 check 在映射/登记到位前失败关闭；不得将测试夹具视为生产门店授权。普通草稿可按当前 Auth actor 记账，但不因此可发布到门店。查询、详情、引用、导出和 Agent 输出都复核当前 published revision、范围和来源依赖。
+该隔离约束比简单“使用 Memory hook”更严格，因为当前通用 hook 会保存完整工具参数和响应。若业务坚持在 Agent 对话中传递逐字稿正文或完整原声片段，必须先单独设计带字段级脱敏/拒存的 Memory 投影扩展，本期不允许该数据路径。
 
-知识索引是派生能力：首期提供按经营场景、标签、关键词和版本的受权数据库检索；需要语义检索时独立通过 RAG 受管空间和可靠投影接入，首期不新增第二套向量/embedding。知识发布不写入私有偏好，也不自动发布 MemoryDomainExperience；后者继续要求独立治理、非个人归纳和保留授权（LR-90/94/97）。
+### 5. 配置同步矩阵
 
-### 5. 官方 Agent 使用既有接入模式
+新模块配置必须按同一服务清单同步，密钥只放秘密文件或密钥管理器：
 
-登记 `knowledge-service / knowledge / knowledge-agent` 的独立服务身份、公钥与必需 Memory caller 范围，使用 common-a2a/common-skill。新增案例提炼、打法审核准备、知识检索技能；审核与发布仍是带当前权限和参数版本的领域动作，不通过纯文字结论推进状态。Agent 仅增加 `knowledge-agent -> knowledge-service` 受众解析和 `a2a:knowledge-agent -> agent.workflow.invoke.knowledge` 精确 capability 映射；Supervisor 继续动态发现能力，不新增固定领域执行分支。
+| 配置面 | 本 change 新增或调整 | 保留/不调整 |
+| --- | --- | --- |
+| .env.example 与已有本地 .env | 增加 MYSQL_DB_KNOWLEDGE=bk_knowledge、KNOWLEDGE_MYSQL_USER、KNOWLEDGE_MYSQL_PASSWORD、KNOWLEDGE_SOURCE_DB_USER、KNOWLEDGE_SOURCE_DB_PASSWORD、KNOWLEDGE_SERVICE_BASE_URL、KNOWLEDGE_MEMORY_V2_COMPRESSION_ENABLED。若部署已有本地 .env，只同步键名/安全默认值并保留其实际秘密值；不提交 .env。 | 当前 worktree 不存在本地 .env；若部署目录已有 .env，只同步键名并保留实际秘密值，不得提交或生成伪造口令。Interview 的 ticket、Memory、数据库和 A2A 变量保持原值/名称 |
+| 公钥与私钥模板 | 为 Knowledge 生成独立服务身份；公钥变量 KNOWLEDGE_SERVICE_IDENTITY_PUBLIC_KEY 加入现有生成的 public-keys.env；私钥独立挂载 .secrets/service-identities/knowledge-service/private-key.pem。 | 不放入 .env.example、Nacos 或版本库，不复用 Interview/Agent/Memory key |
+| knowledge-service application.yml | 新增端口 9015、Knowledge 主库和只读视图双 DataSource、Nacos import、Auth key、A2A 身份和必需 Memory 属性模板 | 运行秘密由 Compose/secret 注入 |
+| nacos/knowledge-service.yaml | 新增服务运行配置、主库/只读视图 URL 占位符、来源视图版本、Dubbo Memory registry、服务就绪依赖、必需 Memory 属性与可选压缩配置；不存秘密 | 只在 NACOS_CONFIG_DATA_IDS 显式选中后发布 |
+| docker-compose.yml | 新增 knowledge-service，指定制品与模块 build、独立私钥挂载、Knowledge 主库非 root 凭据和只读 view 凭据、端口/服务地址、MySQL/Nacos、Dubbo 注册地址、A2A_PUBLIC_BASE_URL 和 Memory 就绪依赖；添加 bk_knowledge 到可选只读 MySQL MCP 数据库白名单 | Interview service block 不改 |
+| nacos/agent-service.yaml | 增加 a2a:knowledge-agent → agent.workflow.invoke.knowledge 及 knowledge-agent 动态注册元数据 | 不添加 Supervisor Graph 分支 |
+| nacos/gateway.yaml | 增加 /knowledge/** → knowledge-service 路由及 knowledge-service audience 对应关系 | 既有路由与默认授权开关保持原样 |
+| nacos/memory-service.yaml | 新增 knowledge-service trusted caller、公钥 keyId 和 knowledge: [knowledge-agent]；不授予 experience publisher 或共享范围 | Memory Java 与全局 Memory 功能开关不变 |
+| Nacos data ID 文档/发布模板 | 将 knowledge-service.yaml 纳入可选择的受管 data ID 清单，部署时明确选择 | NACOS_CONFIG_DATA_IDS 默认仍为空，不自动上传或覆盖运行配置 |
+| root pom.xml、MySQL 初始化和说明 | 聚合 knowledge-service；bk_knowledge 建表与只读视图作为单独版本化迁移/check，按 Interview 现有 schema 顺序确保源表已存在；为 Knowledge 主账号仅授予本库业务表读写权限，为视图账号仅授予只读 SELECT；同步 MCP 只读库数量说明 | 不修改 Interview migration/hash/check；generic Dockerfile若无需改则保持不变 |
 
-当前 `OfficialA2aAgentClient.audienceFor` 用硬编码 agentId switch 选择服务 audience，`nacos/agent-service.yaml` 的 capability map 只有 `local:milvusKnowledgeSearch` 且 `agent.distributed.agents` 为空。因此本 change 只增加 knowledge-agent 对应的 audience switch、`agent.authorization.capability-permissions` 项和最小 `agent.distributed.agents.knowledge-agent` 动态注册块（serviceId/baseUrl/Agent Card/A2A path/domain/skills）；不改通用发现或 Graph 逻辑。服务 baseUrl/key 由受管环境变量/协调配置供给，不硬编码 secret。
+关于废弃项：本 change 不废除任何 Interview 配置，也不移走它仍拥有的功能。没有已证明只属于旧知识职责且已无引用的配置键。检查发现的新变量/废弃项必须同步更新 .env.example、Compose、Spring 模板、Nacos 占位符、配置 data ID 文档与使用说明；秘密值只由部署环境提供。
 
-当前 Auth permission catalog 有 `agent.workflow.invoke.interview`/`.memory` 及访谈资产操作，但没有 knowledge Agent、知识生命周期或来源用途授权操作；`AuthzContract` 不支持 `STORE` business identity。需交付协调登记清单（精确 Knowledge 动作操作见下段）：`agent.workflow.invoke.knowledge`、`interview.asset.knowledge-use.grant`、`interview.asset.knowledge-use.read`、`interview.asset.knowledge-use.revoke`，以及最小可信调用者/公钥/密钥来源和角色策略差异。此 change 不修改 `auth-service`/Auth 数据，也不把 legacy permission RPC 当替代。新 Knowledge 服务使用独立 keyId/keypair，不复用 Interview key、bearer 或 Memory caller。测试中用精确注册夹具验证正反路径；未登记/缺密钥时真实模式拒绝。
+Compose 中的 Memory/知识 readiness 仅描述依赖连通，不代表真实 Auth 操作登记、Nacos 配置已发布、Memory public key 已生成或 STORE 映射已验收。部署者本地 .env 与生成公钥文件分开维护；变更 Compose 环境值后需按既有容器重建流程生效。
 
-知识域生命周期另需协调登记精确操作，Agent invoke 权限不能代替领域动作权限：`knowledge.case.create.own`、`knowledge.case.edit.own`、`knowledge.case.submit.own`、`knowledge.case.generate.own`、`knowledge.case.review.decide.own`、`knowledge.case.review.decide.store`、`knowledge.case.publish.own`、`knowledge.case.publish.store`、`knowledge.case.withdraw.own`、`knowledge.case.withdraw.store`、`knowledge.case.read.own`、`knowledge.case.read.store`。`search`、batch-read 和 `check` 使用匹配资源范围的 `.read.own` 或 `.read.store`；`own` 以验签 actor 对知识记录的所有权核验，`store` 还必须以 Auth 可信 STORE identity 校验。当前 Auth catalog 不包含这些操作且不支持 STORE 映射；它们仅是本 change 的协调交接，不新增本分支 Auth 代码或开放生产门店权限。Auth 角色授予/服务身份登记未合入前，涉及相应操作的真实调用失败关闭。
+### 6. Agent 注册和冻结消费契约
 
-### 6. 并行会话与知识 v1 契约
+当前 OfficialA2aAgentClient.audienceFor 使用 agentId switch；本 change 增加 knowledge-agent → knowledge-service。agent-service 的 capability map 增加精确的 a2a:knowledge-agent → agent.workflow.invoke.knowledge，Nacos agent.distributed.agents 增加最小 serviceId/baseUrl/Agent Card/A2A path/domain/skills。Supervisor 继续动态发现，不新增固定业务执行分支。
 
-本会话拥有 knowledge 模块、访谈窄读取/grant 适配、`common/knowledge/**` 和 `common/interview/transcript/**`；仅对 `agent-service` 增加上述必要 capability/audience/config 映射。不修改 `auth-service`、`memory-service`、房源、经营、营销的业务模块和类型。向下游提供 `domain-parallel-v1` 的 published/search、batch-read、check 三个 POST 接口，路径、数据模式和错误语义见 [并行总览](../../../docs/business-domain-change-roadmap.md)。经营消费者可以独立用其自有 HTTP fixture，不要求本会话先发布 Java 制品。
+对下游只提供 domain-parallel-v1 的 published/search、published/batch-read、published/check 三个 POST 接口，路径、request/response 包络和状态以 docs/business-domain-change-roadmap.md 为准。check status-only；所有返回均依赖当前 Auth scope、published revision 与 Interview view 状态，不要求下游 change 先合并。
 
-本域生成/审核/发布和持久回执都是真实实现；访谈来源夹具/injvm provider、Auth 签名 identity/operation 测试 registry 和 Memory RPC 测试登记只替代远程依赖。应在共同基线上完成全生命周期、grant/read/revoke、身份拒绝、范围交集及版本测试，不拉取其它三个 change。真实模式不使用这些测试替身，缺接线前置失败；真实 Auth/Memory 登记、可信 STORE 映射和下游互通在合并后核验。
+### 7. 并行会话与部署边界
 
-工作区、分支、Maven仓库和数据库按总览独立。新增知识 SQL/check 在 `bk_knowledge` 隔离库验收；Interview 的唯一增量仅是独立的来源用途授权表及其 `bk_interview` migration/check，不改 `interview_asset` 的旧快照/hash，不触碰 report/task 表。交付两个 schema 的 manifest/allowlist 差异，由协调合并且不修改已应用 hash。本 change 可以独立完成，不以共享环境变更已执行为完成条件。
+本 change 拥有新 knowledge-service、bk_knowledge、Knowledge 只读来源视图/适配器、Knowledge DTO、Agent 映射和上述配置差异。它不拥有 Interview Java/config/源表，也不修改 Auth/Memory Java 或其它业务域。当前并行总览的知识范围行仍记有 Interview 窄来源适配和 common/interview/transcript；需由协调会话在实施前同步为本设计的 Knowledge 只读视图边界，冻结 HTTP 契约不变。共享 root pom、docker-compose、.env.example、Nacos 模板、MySQL manifest/MCP allowlist 的改动需保持为本 change 的显式小差异；与另一个会话发生相同共享文件变更时按键/服务块逐段合并，不覆盖对方服务配置。
+
+来源测试在 Knowledge DB/source-view fixture 隔离库进行，不要求共享数据库写入。MySQL 初始化迁移前向追加，不改已应用 SQL/check/hash。Agent/Memory/Auth 测试使用本 change 的独立服务身份夹具；真实 key、角色授权、Nacos 发布及 STORE 映射单独交接。下游 HTTP 消费者可用本域固定契约和独立测试夹具验证，不拉取并行模块的未合入制品。
 
 ## Risks / Trade-offs
 
-- [撤回后旧副本继续被引用] → 依赖记录、输出前复核及失效投影共同约束；保留操作事实但停止正文使用。
-- [Auth 缺 `.knowledge`/来源用途操作与 STORE 身份] → 在本域用精确签名上下文 fixture 开发；真实知识 A2A/门店级发布读取待协调登记前关闭，不能用 payload ID 或 `businessAdmin` 代替明确操作/范围。
-- [来源用途授权与知识撤回状态短暂不一致] → 每次正文读取、published/check、Agent 输出前重核来源 grant；通知和索引只作加速，不作授权事实。
-- [模拟材料混入真实效果证据] → 来源和派生 revision 继承数据模式，模拟候选保留醒目标记且不兑换真实结果证据。
-- [拆分重复生成旧报告] → 新资产与旧 report/source 引用分开，原任务与已完成结果不重放。
+- [Interview 表结构或公开资格规则变化导致镜像视图漂移] → 视图版本化并锁定当前列/筛选；Knowledge 集成检查与 Interview 当前 mapper/service 规则对照，未知版本或差异时关闭来源读取。
+- [source DB 账户读取越界] → Knowledge 主账号只访问本库业务表，来源账号只 SELECT bk_knowledge 受限视图；视图 definer 才有源表读取权限且不暴露 rawContent，Compose 应用容器不注入 root 凭据。
+- [PUBLISHED 不支持比公开发布更细的 Knowledge 用途授权] → 本期只允许从当前公开合格来源派生，并对每次调用单独执行 Knowledge Auth 操作；专用用途授权另立 Interview API change。
+- [撤回与请求并发] → 每次正文读取和最终输出都复核 publicationRevision；来源状态未知时返回 UNAVAILABLE，禁止回退到缓存。
+- [Memory hook 会保存工具参数和响应] → Agent/tool 消息只传来源 ID、任务状态和受限派生摘要；正文与精确原声留在 Knowledge 内部工作流及授权审核界面，并用 sentinel 测试验证不入 Memory。
+- [Auth 缺少 Knowledge 操作或 STORE 身份] → 提交精确操作/角色/身份登记差异；真实调用在登记前失败关闭，不用 payload ID、业务管理员角色或测试 key 代替。
+- [配置在 .env、Nacos 与 Compose 间漂移] → 实施任务维护逐项矩阵并扫描所有引用；Nacos data ID 显式选择，秘密值不写入模板/仓库；本 change 无待删除 Interview 键。
 
 ## Migration Plan
 
-以下为合并后的共享部署计划。独立会话交付代码、配置片段、SQL/check、隔离验证和步骤，不直接迁移原开发库或等待 Auth/其它 change 上线。
+以下为合并后的部署步骤。本 change 只交付代码、迁移/视图、配置片段、校验结果和 runbook，不直接操作共享数据库、Docker 或 Nacos 运行环境。
 
-1. 添加新模块、配置、`bk_knowledge` schema 和 Interview 来源授权增量及对应初始化片段；保留访谈资产/报告 API 与原表；核对旧占位表和报告存量，只产出映射清单。
-2. 增加访谈来源用途授权表、授权签发/撤回与窄来源 provider，再实现知识 source adapter；验证签名上下文/服务 proof、grant/hash/撤回/UNKNOWN 模式后，接通单案例草稿及审核发布。
-3. 先发布知识只读契约，再由协调会话登记 Auth 操作、`knowledge-service` 身份与 Memory caller；Agent 增加精确 audience/capability 映射。检验缺登记或 Memory 不可用时模型和业务工具均零执行。
-4. 在模拟材料上验收发布、引用和撤回闭环；之后由独立的门店复盘 change 消费公开契约。
-5. 回退停止知识新动作并取消能力发现，保留新 schema、版本及回执；逐字稿与原访谈运行能力继续由原服务承担，不回写/重建旧报告。
+1. 增加 knowledge-service、bk_knowledge 主 schema 与 Interview 当前公开来源投影视图；Knowledge 主账号仅写本库业务表，来源只读账号仅 SELECT 视图，definer/DBA 负责受限源表读取权；应用容器不注入 root 凭据，不应用 Interview migration。
+2. 部署者在本地 .env/密钥管理器配置 Knowledge DB 与独立只读视图账号、Knowledge 服务私钥/公钥；不提交实际秘密。核对 .env.example 与 Compose 变量齐全。
+3. 按审核后的 data ID 显式发布 knowledge-service、agent-service、gateway 和 memory-service Nacos 配置；Memory 配置只登记精确 caller/domain/agent 和公钥。
+4. 先启动 Knowledge 新服务并验证数据库视图、必需 Memory、Agent 动态发现和 Auth 拒绝/允许路径。Auth 操作登记、Memory 公钥、Nacos 配置未就绪时相应真实入口保持关闭。
+5. Gateway 发布 /knowledge 路由和能力映射，验收冻结 HTTP 契约与来源撤回/过期/不可用场景。回滚可停止 Knowledge 并撤掉 Gateway/Agent 注册；保留已应用 Knowledge schema/hash，不删除 Interview 或 Memory 数据。视图/Knowledge 版本迁移只前向应用。
+
+## Open Questions
+
+无。本期来源准入、只读数据库/视图方案、Memory 消息限制、Auth 操作交接和共享配置边界已在 proposal/spec/design/tasks 中固定。

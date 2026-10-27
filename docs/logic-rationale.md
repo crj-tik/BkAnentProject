@@ -1204,6 +1204,8 @@
 
 ## LR-114 知识派生通过访谈域独立用途授权跨域
 
+**状态**：这是本 change 的历史设计，已由 LR-116 取代；当前方案以 LR-116 为准。
+
 **结论**：本 change 新增的经营案例、打法、revision、审核/发布事实与任务回执归 `knowledge-service`/`bk_knowledge`；Interview 继续独占 session、turn、transcript/raw+sanitized body、来源版本、报告及报告任务。知识读取逐字稿必须先获得 Interview 独立签发且可撤回的用途授权，绑定精确 `assetId`、snapshot/content hash、内容/脱敏修订、`knowledge_derivation`、唯一 consumer `knowledge-service` 与目标知识 scope。`visibility=PRIVATE|PUBLISHED`、L0–L3 和报告 ID 不替代该 grant；grant 不改变访谈公开状态。知识只保存授权/来源引用和经验证的必要派生材料，不复制 raw transcript 或重用 Interview/报告 ID。知识来源访问继承当前 Auth 签名 context/freshness，由 `knowledge-service` 对完整请求生成服务 proof，Interview 本地验证 proof、来源关系与 grant，不转发用户 Bearer、不逐次调用旧 Auth permission RPC。来源 grant 撤回或精确绑定失效后，知识正文停止读取和输出。
 
 **根因**：Interview 报告、归档等级和公开可见性各自服务于访谈域内用途，不能表达“这个主体允许哪个服务把哪份冻结逐字稿用于哪个知识范围”。把知识事实继续写入 Interview 或复制原稿会造成双重权威；只靠发布状态会将公开读取权扩大成知识派生权；只缓存 grant 则会让撤回后的已发布知识继续输出。独立 grant 把用途授权放回来源真源域，并用精确版本及目标范围限制派生。
@@ -1218,6 +1220,26 @@
 
 **根因**：`source` 记录资产进入方式，archive grade 记录质量门槛，都不是现实/模拟的证据。把它们当数据模式会把未知样本错误包装成真实经营效果，并污染后续搜索与运营决策；对内容快照哈希混入模式字段也会在没有正文变化时重写来源版本。
 
-**代码位置**：`interview-service/InterviewAssetEntity.source/archiveGrade/contentHash/snapshotHash`、`InterviewCollectionService`、`InterviewAssetService`；来源 DTO 和知识适配规划在 `common/interview/transcript/**` 与 `knowledge-service`。
+**代码位置**：interview-service/InterviewAssetEntity.source/archiveGrade/contentHash/snapshotHash、InterviewCollectionService、InterviewAssetService；当前 Knowledge 来源映射与校验规划在 knowledge-service/InterviewTranscriptSource 和 bk_knowledge 只读视图。
 
 **关联**：LR-3/6/59/114；KI-15；change `extract-knowledge-operations-domain`。当前源码没有持久 provenance，该 change 对存量模式按 UNKNOWN；测试标记不证明生产数据模式。
+
+## LR-116 Knowledge 通过只读视图消费 Interview 当前已发布快照
+
+**结论**：Interview 目前没有返回逐字稿正文的 REST/RPC/MCP API。为满足新增 Knowledge 域且不与并行拆分会话冲突，本 change 不修改 Interview Java、应用配置、源表或迁移，而在 bk_knowledge 建 SQL SECURITY DEFINER 的版本化只读来源视图。该视图仅投影当前 PUBLISHED、L2/L3、脱敏版本达标、未删除且案例/会话关系有效的来源及脱敏 content，不投影 rawContent 或敏感映射；Knowledge 主账号仅获 bk_knowledge 业务表读写权，独立来源账号仅获此视图 SELECT；Compose 应用容器不持有 root 权限。PUBLISHED 是本期唯一现有来源准入信号，用户执行 Knowledge 动作仍需独立通过 Auth 签名上下文、freshness、精确操作和 Knowledge 资源范围。每次使用复核来源状态和 publication/content/sanitization 修订，发布撤回或检查失败时停止输出。
+
+**根因**：Interview 公开来源工具只有元数据，不能满足知识提炼对正文和精确证据的需要；向 Interview 加 grant/provider 会改动同时拆分的旧服务并产生迁移冲突。只读视图把最小数据面放在 Knowledge 自己的 schema 内，使 Knowledge 主账号没有 Interview 表权限，来源账号也不能读取源表或写入；来源访问仅依赖现有显式发布状态。相比直接授予源表列权限，受限视图能在数据库边界排除未发布正文；代价是 Knowledge 需镜像 Interview 当前表结构与公开资格规则，必须通过版本锁定、SQL/check 和资格对照测试发现漂移。
+
+**代码位置**：interview-service/InterviewAssetMapper.selectPublicAssets、InterviewAssetService.publish/revokePublication/isPubliclyEligible/requireUsableSource、InterviewAssetEntity 和 Sanitizer.VERSION；当前规划在 knowledge-service/InterviewTranscriptSource 及 bk_knowledge 的只读视图 migration/check。现有实现/计划依据不代表新适配器已实现。
+
+**关联**：LR-3/6/8/59/90/115；KI-15；change extract-knowledge-operations-domain。旧 LR-114 所述 Interview 用途 grant 方案已由本条替代，本 change 不增加 Interview grant API 或表。
+
+## LR-117 Knowledge Agent 的 Memory 对话流不得承载 Interview 正文
+
+**结论**：knowledge-agent 使用 A2aMemoryHookFactory 固定为 caller knowledge-service、domain knowledge、agent knowledge-agent，并在 ReactAgent 与 OfficialA2aAgentExecutor 共用同一 hook。现有 hook 在模型/工具执行前加载工作集，完整轮次结束后复核和归档；Memory 配置只允许 Knowledge 公钥与 knowledge: [knowledge-agent] caller/domain/agent 组合，并通过 Dubbo Nacos registry 连接；不授予经验发布或共享 grant。该 hook 会归档用户/助手文本以及工具调用参数和工具响应，因此逐字稿正文、原声 quote、rawContent、敏感映射和完整 Knowledge revision 不得进入 Agent 消息流。正文提炼与证据定位在 Knowledge 服务内部完成，Agent 工具只传 assetId、revision、状态、任务 ID 和受限摘要；以 Memory 哨兵测试验证归档中不含来源正文。
+
+**根因**：Memory 的工作集读取和 A2A 请求归档是 Agent 生命周期的必需部分；只确认 hook 已接入，不能保证来源正文不会沿着通用 tool-call/tool-response 投影写入 Memory。按 agent/domain 隔离并限制消息形状，才能同时复用既有工作集能力与保持逐字稿来源的存储边界。公钥、caller 白名单、Nacos data ID、Compose 环境、.env.example 和 Knowledge 配置模板必须同步；Nacos 仅含密钥占位符，私钥保留在服务独立秘密挂载中。
+
+**代码位置**：common-a2a/A2aMemoryHookFactory、A2aMemoryAgentHook.beforeAgent/afterAgent/project；InterviewOfficialA2aAgent 的 hook 接入方式；nacos/memory-service.yaml 的 trusted-callers；Knowledge Agent、application.yml、knowledge-service Nacos、Compose 与 .env.example 的配置规划。
+
+**关联**：LR-90/94/97/116/152；change extract-knowledge-operations-domain。Memory service Java 和已有 caller 权限不变；本条记录新增 Knowledge 接入约束，不表示 Knowledge caller/key/config 已部署。
