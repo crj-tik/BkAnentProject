@@ -1013,7 +1013,7 @@
 
 ## LR-122 门店复盘新增独立服务并隔离现有业务与 Memory 身份
 
-**结论**：change `implement-store-business-review` 新增 `business-review-service`、`bk_business_review` 和独立 Gateway/Nacos/Compose/密钥配置；现有 `business-service`、`business-service.yaml`、`bk_business`、`trade-agent` 及 `business-service/trade/trade-agent` Memory 私域保持不变。新 Agent 使用 `business-review-service/business-review/business-review-agent` 的必需 Memory Hook、独立服务公钥和精确 domain allowlist。Memory 只承载该 Agent 获准的上下文读取/归档，不能成为复盘事实真源；模拟或人工回报不发布为生产经营经验结果。配置同步覆盖环境模板、Nacos、Compose、Gateway、Maven、数据库 manifest、Nacos 发布/启动白名单和服务 keygen；跨会话共享全局登记由协调会话合并。
+**结论**：change `implement-store-business-review` 新增 `business-review-service`、`bk_business_review`、独立端口 9016 和 Gateway/Nacos/Compose/密钥配置；端口 9015 由并行 knowledge-service 规划占用。现有 `business-service`、`business-service.yaml`、`bk_business`、`trade-agent` 及 `business-service/trade/trade-agent` Memory 私域保持不变。新 Agent 使用 `business-review-service/business-review/business-review-agent` 的必需 Memory Hook、独立服务公钥和精确 domain allowlist。Memory 只承载该 Agent 获准的上下文读取/归档，不能成为复盘事实真源；模拟或人工回报不发布为生产经营经验结果。配置同步覆盖环境模板、Nacos、Compose、Gateway、Maven、数据库 manifest、Nacos 发布/启动白名单和服务 keygen；跨会话共享全局登记由协调会话合并。
 
 **根因**：复盘事项、交易分析和 Agent 私域有不同数据所有权。把新业务继续塞入 business-service 会与并行服务拆分共享源码、数据库和配置写入范围，并使“更名”误触历史 Memory 归属。独立服务、数据库、路由、端口、Nacos Data ID、Agent/domain 和 key ID 构成完整隔离身份；共享注册只做各域唯一条目的合并，避免覆盖其它拆分会话的服务配置。
 

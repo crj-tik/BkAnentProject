@@ -2,10 +2,10 @@
 
 ## 0. 拆分边界与契约基线
 
-- [ ] 0.1 在共同基线的独立 worktree、Maven 仓库和隔离数据库中实施；开始前重新核对 service ID、数据库 bk_business_review、端口 9015、路径 /business-review/**、Data ID business-review-service.yaml、A2A ID、Memory domain 和 key ID 没有被其它活动 change 占用。
-- [ ] 0.2 固定所有权：新增 business-review-service 承接本域实现；逐文件差异检查确认 business-service 的源码、application.yml、business-service.yaml、bk_business、/business/**、Compose 块、trade-agent、Memory 身份与旧 env 键均未修改。
-- [ ] 0.3 固定 domain-parallel-v1 房源/知识 HTTP 请求、响应和成功空集、拒绝、版本过期、撤回及不可用 fixture；新 consumer DTO 留在本服务，不引用并行会话新增 Java 类型。
-- [ ] 0.4 固定新服务配置身份元组和 Auth/Memory 交接：business-review-service、business-review-agent、business-review、agent.workflow.invoke.business-review、六个 business.review.*.store 操作、唯一公钥 key ID；与协调会话确认共享文件合并责任。
+- [x] 0.1 在共同基线的独立 worktree、Maven 仓库和隔离数据库中实施；开始前重新核对 service ID、数据库 bk_business_review、端口 9016、路径 /business-review/**、Data ID business-review-service.yaml、A2A ID、Memory domain 和 key ID 没有被其它活动 change 占用。发现知识拆分预留 9015 后改用 9016，并复核活动 worktree、服务配置和监听端口。
+- [x] 0.2 固定所有权：新增 business-review-service 承接本域实现；逐文件差异检查确认 business-service 的源码、application.yml、business-service.yaml、bk_business、/business/**、Compose 块、trade-agent、Memory 身份与旧 env 键均未修改。
+- [x] 0.3 固定 domain-parallel-v1 房源/知识 HTTP 请求、响应和成功空集、拒绝、版本过期、撤回及不可用 fixture；新 consumer DTO 留在本服务，不引用并行会话新增 Java 类型。
+- [x] 0.4 固定新服务配置身份元组和 Auth/Memory 交接：business-review-service、business-review-agent、business-review、agent.workflow.invoke.business-review、六个 business.review.*.store 操作、唯一公钥 key ID；共享文件由本 change 只追加本服务块，Memory/Auth 全局身份注册由协调会话合并。
 
 ## 1. 数据与指标边界
 
@@ -38,8 +38,8 @@
 ## 5. 服务配置与共享文件同步
 
 - [ ] 5.1 新增根 pom.xml 的 business-review-service 模块项；确认通用 Dockerfile 会构建并复制新 jar，仅在发现固定模块清单时追加本模块。
-- [ ] 5.2 新建本服务 application.yml 和 nacos/business-review-service.yaml：配置服务名、9015、独立 A2A audience/key ID、bk_business_review datasource、Memory 可选压缩默认关闭和实际 readiness；不复制或改写 business-service.yaml。
-- [ ] 5.3 在 docker-compose.yml 只增加本服务块，使用 business-review-service-1.0.0-SNAPSHOT.jar、http://business-review-service:9015、专属只读私钥挂载、数据库与 Nacos 配置；只声明真实依赖，不因旧 business-service 依赖 Redis 就增加 Redis 依赖。
+- [ ] 5.2 新建本服务 application.yml 和 nacos/business-review-service.yaml：配置服务名、9016、独立 A2A audience/key ID、bk_business_review datasource、Memory 可选压缩默认关闭和实际 readiness；不复制或改写 business-service.yaml。
+- [ ] 5.3 在 docker-compose.yml 只增加本服务块，使用 business-review-service-1.0.0-SNAPSHOT.jar、http://business-review-service:9016、专属只读私钥挂载、数据库与 Nacos 配置；只声明真实依赖，不因旧 business-service 依赖 Redis 就增加 Redis 依赖。
 - [ ] 5.4 在 .env.example 增加 MYSQL_DB_BUSINESS_REVIEW=bk_business_review 与 BUSINESS_REVIEW_MEMORY_V2_COMPRESSION_ENABLED=false；若本地忽略的 .env 存在，只补缺失非敏感项、保留既有值和秘密、不提交该文件；公钥从生成的 public-keys.env 注入。
 - [ ] 5.5 在 nacos/mysql-common.yaml 增加独立数据库别名；在 nacos/gateway.yaml 增加 /business-review/** 路由和 audience；在 nacos/agent-service.yaml 增加稳定 a2a:business-review-agent capability 映射，保留旧 /business/** 路由与 trade-agent 配置。
 - [ ] 5.6 向 nacos/memory-service.yaml 交付独立 trusted caller 片段：business-review-service-current 公钥、service-delivery=true、business-review: [business-review-agent]；向 ServiceIdentityKeygen 服务名单交付新增项并生成 BUSINESS_REVIEW_SERVICE_IDENTITY_PUBLIC_KEY；将新服务加入 RagRuntimeProbe 的 A2A audience 检查，但不加入 Memory RAG domain-agent 投影。由协调会话合并 Memory 全局 caller 和 keygen 注册，不增加 RAG space 或 experience outcome publisher。

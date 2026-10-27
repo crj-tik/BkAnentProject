@@ -8,7 +8,7 @@
 
 ## What Changes
 
-- 新增 business-review-service 微服务、独立数据库 bk_business_review、服务端口 9015、Nacos Data ID business-review-service.yaml 与 Gateway 路径 /business-review/**；复盘 API 使用 /business-review/reviews 前缀。旧 /business/** 路由和 business-service 代码不变。
+- 新增 business-review-service 微服务、独立数据库 bk_business_review、服务端口 9016、Nacos Data ID business-review-service.yaml 与 Gateway 路径 /business-review/**；复盘 API 使用 /business-review/reviews 前缀。旧 /business/** 路由和 business-service 代码不变。
 - 在新服务内保存复盘事项、证据快照、卡点假设、计划修订、确认动作、执行回执与指标观察。房源和知识通过冻结的 domain-parallel-v1 HTTP 契约读取；业务 DTO 留在新服务，不共享或迁移旧 business-service 数据。
 - 按当前稳定授权方案使用 CapabilityId.a2a(business-review-agent) 到 agent.workflow.invoke.business-review 的精确映射；领域 API 继续逐操作检查 business.review.*.store，并要求 Auth 签名的 STORE 身份及门店范围。Auth 全局登记由协调/Auth 会话接入。
 - 新 Agent 使用独立 A2A 服务身份和必需 Memory Hook，caller/domain/agent 固定为 business-review-service / business-review / business-review-agent。Memory 历史与现有 business-service / trade / trade-agent 隔离；Memory 不是经营事实真源，模拟或人工回报不发布为真实经验结果。

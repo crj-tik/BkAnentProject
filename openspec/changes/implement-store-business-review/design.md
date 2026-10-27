@@ -4,7 +4,7 @@
 
 当前 business-service 运行在 9010，公开控制器前缀为 /business，使用 bk_business 和 business-service.yaml。Gateway 将 /business/** 路由给 business-service。该服务持有现有 trade/trade-agent，其 A2A Memory 身份固定为 business-service / trade / trade-agent；required Memory Hook、业务技能、拦截器和 trade 历史均已在此服务中使用。上述服务和配置本身不承载门店复盘新业务。
 
-仓库根 Maven POM 显式列出服务模块；Compose 使用服务 artifact 和每服务私钥挂载。Nacos 发布脚本、启动预检、数据库初始化 manifest、MySQL MCP 默认库列表和 ServiceIdentityKeygen 服务名单也包含显式清单，新增微服务必须同步更新，不会因新增目录自动接入。当前可用服务端口扫描中 9015 尚未占用；实施会话开始前仍需复核并行 change 的预留。
+仓库根 Maven POM 显式列出服务模块；Compose 使用服务 artifact 和每服务私钥挂载。Nacos 发布脚本、启动预检、数据库初始化 manifest、MySQL MCP 默认库列表和 ServiceIdentityKeygen 服务名单也包含显式清单，新增微服务必须同步更新，不会因新增目录自动接入。并行知识拆分已将 9015 规划给 knowledge-service；本 change 改用 9016。已扫描当前已登记的其它活动 worktree、服务配置和监听端口，未发现 9016 冲突；合入或部署前仍按身份清单复核。
 
 Agent 的版本化 capability 配置当前只映射本地 Milvus 工具，没有 trade Agent 映射；Auth 侧尚未登记本 change 的 Agent 调用和门店操作权限。签名 businessIdentities 当前只接受 BROKER，生产 STORE 范围必须由 Auth 注册并写入签名上下文，不能由新服务推断。
 
@@ -18,7 +18,7 @@ Agent 的版本化 capability 配置当前只映射本地 Milvus 工具，没有
 
 ### 1. 新建独立的 business-review-service
 
-新增 Maven 模块 business-review-service，建议端口 9015，独立 Nacos Data ID business-review-service.yaml、数据库 bk_business_review、服务身份和 Gateway 路径 /business-review/**。公开领域 API 统一使用 /business-review/reviews。新服务以自己的 Spring 应用名、Dubbo 应用名、A2A audience 和容器服务名运行。
+新增 Maven 模块 business-review-service，建议端口 9016，独立 Nacos Data ID business-review-service.yaml、数据库 bk_business_review、服务身份和 Gateway 路径 /business-review/**。公开领域 API 统一使用 /business-review/reviews。新服务以自己的 Spring 应用名、Dubbo 应用名、A2A audience 和容器服务名运行。
 
 旧 /business/** 继续只指向 business-service。禁止将新代码加入 business-service、修改它的 application.yml 或 business-service.yaml、增加其 API、改写其数据库映射、路由或 trade Agent。新复盘事项不迁移到旧库；两服务不共享可变实体或 Java DTO。本地 API DTO 放在 business-review-service，公共 ApiResponse 可复用。
 
@@ -94,9 +94,9 @@ Memory Nacos 受信调用者必须增加 business-review-service 专属条目：
 | 文件或配置面 | 本 change 的新增项 | 并行责任 |
 | --- | --- | --- |
 | 根 pom.xml | 只追加 business-review-service Maven module。通用 Dockerfile 默认打包全模块，实施时确认新 jar 可进入镜像；只有发现固定模块清单才改 Dockerfile。 | 根模块列表为共享文件，协调合并所有新增服务行。 |
-| business-review-service/application.yml | 新应用名、端口 9015、独立 A2A audience 与 service identity key ID/private-key path；Memory 压缩键默认为 false。 | 只归本服务。 |
+| business-review-service/application.yml | 新应用名、端口 9016、独立 A2A audience 与 service identity key ID/private-key path；Memory 压缩键默认为 false。 | 只归本服务。 |
 | nacos/business-review-service.yaml | 新库连接、业务服务配置、A2A card、Memory 可选压缩及 readiness 配置；不复用 business-service.yaml。 | 只归本服务；Nacos 发布白名单另按行追加。 |
-| docker-compose.yml | 独立服务块、业务 jar 名、内部 A2A URL http://business-review-service:9015、私钥只读挂载和数据库连接；按实际依赖设置 health/readiness，不因为旧服务依赖 Redis 就默认引入 Redis。 | 只增加本服务块；容器名和端口不得占用其它拆分。 |
+| docker-compose.yml | 独立服务块、业务 jar 名、内部 A2A URL http://business-review-service:9016、私钥只读挂载和数据库连接；按实际依赖设置 health/readiness，不因为旧服务依赖 Redis 就默认引入 Redis。 | 只增加本服务块；容器名和端口不得占用其它拆分。 |
 | .env.example 与本机 .env | 模板增加 MYSQL_DB_BUSINESS_REVIEW=bk_business_review 和 BUSINESS_REVIEW_MEMORY_V2_COMPRESSION_ENABLED=false。若本机忽略的 .env 存在，只补缺项，不覆盖已有值或凭据、不提交 .env。 | 环境模板为共享文件；合并时保留别的域键。 |
 | nacos/mysql-common.yaml | 增加 business-review 独立数据库名和 JDBC 别名 MYSQL_DB_BUSINESS_REVIEW。 | 共享数据库映射，协调合并。 |
 | nacos/gateway.yaml | 新增 /business-review/** 到 business-review-service 的路由和该 audience 的授权关联；保留 /business/** 到 business-service。 | 共享路由块，协调合并。 |
@@ -114,7 +114,7 @@ Memory Nacos 受信调用者必须增加 business-review-service 专属条目：
 
 ### 8. 并行拆分的唯一所有权与合并规则
 
-本服务的身份元组为 business-review-service / bk_business_review / 9015 / /business-review/** / business-review-service.yaml / business-review-agent / business-review / business-review-service-current。实现前与其它活动 change 复核该元组无冲突；如冲突先由协调会话分配新值，再一起更新 app、Compose、Gateway、Nacos、密钥、manifest 和测试，不只改其中一份。
+本服务的身份元组为 business-review-service / bk_business_review / 9016 / /business-review/** / business-review-service.yaml / business-review-agent / business-review / business-review-service-current。实现前与其它活动 change 复核该元组无冲突；如冲突先由协调会话分配新值，再一起更新 app、Compose、Gateway、Nacos、密钥、manifest 和测试，不只改其中一份。
 
 各会话在共同基线的独立 worktree、独立 Maven repo 和隔离测试数据库中实现。不得共用暂存区、端口、数据库、密钥或测试输出。共享配置仅追加各自独有的服务块和名称；不改别的服务配置，不在并行会话中发布共享 Nacos、迁移共用数据库、轮换密钥或重启对方服务。协调会话逐项合并 pom、Compose、Gateway、Nacos、.env.example、keygen、SQL manifest 与发布清单，并验证配置集合无遗漏或重复。
 
@@ -127,7 +127,7 @@ Memory Nacos 受信调用者必须增加 business-review-service 专属条目：
 - 配置添加容易漏掉脚本白名单或数据库清单：按第 7 节矩阵审查 Nacos 发布、启动预检、keygen、SQL manifest、Compose readiness 和 gateway audience。
 - 原有经营分析依赖可能意外被移动：新服务只调用 domain-parallel-v1，不复制旧数据库、旧实体或旧服务源码；旧路由和 trade Agent 保持原样。
 - Memory 可能被误当作事实记录：Memory 仅是获准上下文的读取/归档面，新库是真实复盘状态；模拟和人工反馈不发布为经验结果。
-- 9015 当前未被占用但可能在实施前被其它 change 预留：开始编码前重新扫描所有活动 change 与容器端口映射。
+- 9016 当前未被占用但可能被尚未登记的 change 预留：合并或部署前重新扫描活动 change 与容器端口映射；9015 归 knowledge-service，本 change 不使用。
 
 ## Migration Plan
 
@@ -139,4 +139,4 @@ Memory Nacos 受信调用者必须增加 business-review-service 专属条目：
 
 ## Open Questions
 
-没有未决的领域契约。9015 在规划核对时空闲，实施会话仍须复核并行 change 的端口预留；Auth 的 STORE 身份签名及全局权限登记和 Memory 全局调用者登记是明确的协调交接，不是可绕过的实现选项。
+没有未决的领域契约。实施复核发现知识拆分预留了 9015，因此本服务使用已复核空闲的 9016；Auth 的 STORE 身份签名及全局权限登记和 Memory 全局调用者登记是明确的协调交接，不是可绕过的实现选项。

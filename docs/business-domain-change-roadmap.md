@@ -66,7 +66,7 @@
 | `agent-service`、Studio | 只更新本域必要兼容引用和新增能力映射；不改通用 Graph/身份框架，也不执行 `implement-studio-v2` 未完成任务。跨域呈现联调后置 |
 | LR/KI 动态清单 | 本域优先更新对应 LR-99/100/101/102；新增编号使用下方保留段；不得移动或改写别人的条目 |
 
-并行拆分的服务身份须各自唯一：Maven module / 服务名、业务库、端口、Gateway path、Nacos Data ID、A2A agent/domain、服务 key ID 不得跨会话复用。共享文件只追加本域块；根 POM、Compose、Gateway/Nacos、MySQL 映射、keygen、SQL manifest 和发布白名单的最终并集由协调会话审查。门店复盘当前规划为 business-review-service / bk_business_review / 9015 / /business-review/** / business-review-service.yaml / business-review-agent / business-review-service-current；实施前重新核对端口和身份占用。旧 business-service 与 trade/trade-agent 资产为只读边界。
+并行拆分的服务身份须各自唯一：Maven module / 服务名、业务库、端口、Gateway path、Nacos Data ID、A2A agent/domain、服务 key ID 不得跨会话复用。共享文件只追加本域块；根 POM、Compose、Gateway/Nacos、MySQL 映射、keygen、SQL manifest 和发布白名单的最终并集由协调会话审查。门店复盘当前规划为 business-review-service / bk_business_review / 9016 / /business-review/** / business-review-service.yaml / business-review-agent / business-review-service-current；实施前重新核对端口和身份占用。旧 business-service 与 trade/trade-agent 资产为只读边界。
 
 新增编号保留段：房源 LR-106–113/KI-170–177；知识 LR-114–121/KI-178–185；经营 LR-122–129/KI-186–193；营销 LR-130–137/KI-194–201。其它会话本批期间使用 LR-138 起、KI-202 起的未用编号；保留号不复用。已保留 Auth 会话的 LR-103/104 和 KI-168/169；LR-105 记录本次并行规则。若需要超出保留段，先由协调会话分配，不能各自取同一 max+1。KI-115 由房源、KI-15 由知识、KI-167 由营销维护；经营仅引用 KI-114/128/166，不替其他 change 宣布修复。
 
