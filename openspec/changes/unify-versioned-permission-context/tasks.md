@@ -64,7 +64,7 @@
 - [x] 8.2 A2A/REST开台和启动仅返回安全导航/领取引用，新增认证POST credentials领取及no-store响应；票只专用请求头，不经模型转述。
 - [ ] 8.3 monitor/turns/replies/协助与stream核可信actor+purpose，删除query-ticket入口并公告迁移；浏览器fetch流携headers，票到期/撤销后拒绝后续访问。
 - [ ] 8.4 在工具入模和归档入口彻底排除ticket/token/授权证明，保留共享sanitizer不放行票；验证真实ReactAgent工具后prompt、Memory、progress、终态artifact和前端领取链。
-- [ ] 8.5 扫描存量消息/摘要/副本的凭据形状只输出计数，受权撤销并清理可恢复票副本，处理未完成状态不宣称全删；不日志回显秘密。
+- [x] 8.5 扫描存量消息/摘要/副本的凭据形状只输出计数，受权撤销并清理可恢复票副本，处理未完成状态不宣称全删；不日志回显秘密。
 
 ## 9. 访谈私有资料、公开投影与后台任务
 
