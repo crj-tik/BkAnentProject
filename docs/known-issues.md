@@ -1590,7 +1590,7 @@
 
 **关联**：LR-42/141/151；KI-160/170/172；change `unify-versioned-permission-context`任务6.2/11.6。
 
-## KI-209 [FIXED·本提交·P1] Compose未透传Auth/Agent版本化鉴权开关与Redis凭据
+## KI-209 [FIXED·9521e39·P1] Compose未透传Auth/Agent版本化鉴权开关与Redis凭据
 
 **发现日期与依据**：2026-10-27，核对 `docker compose config --profile full --format json` 及 `docker-compose.yml` 时发现Auth和Agent服务均未收到版本化鉴权开关及专用Redis密码/TLS环境变量。Auth主开关在应用和Nacos模板固定为false；`.env.example`的待提交改动还含非空凭据值，并将Agent开关设为true。首次检查时Compose根目录 `.env` 与进程环境没有这些变量，`.env.example`不会被Compose自动当作运行环境读取；用户随后将配置补入根目录 `.env`，当前Compose渲染已确认两总开关与各自密码均映射到正确服务，不输出实际值。
 
@@ -1600,7 +1600,7 @@
 
 **关联**：LR-152；KI-210；change `unify-versioned-permission-context`任务11.1/11.4/11.5/11.6/11.7。
 
-## KI-210 [FIXED·本提交·P2] Redis ACL验收脚本使用不受支持的redis-cli长参数
+## KI-210 [FIXED·9521e39·P2] Redis ACL验收脚本使用不受支持的redis-cli长参数
 
 **发现日期与依据**：2026-10-27，首次在Redis 7.4 Compose实例上运行 `verify-authorization-redis-acl.sh` 时，`redis-cli` 将 `--exit-on-error` 报为未知参数；改成 `-e` 后又发现 `ACL DRYRUN` 对权限拒绝返回成功命令状态和描述文本，不能用进程退出码判断访问是否被拒绝。
 
