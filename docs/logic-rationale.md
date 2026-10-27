@@ -1201,3 +1201,13 @@
 **代码位置**：`auth-service/AuthAuthorizationRpcServiceImpl`；`common/authz/RequestBinding`；`common/serialize/Fastjson2ConstructorSerialization`；`common/authz/AuthzSerializationTest`。
 
 **关联**：KI-211；change `unify-versioned-permission-context`任务4.2/11.5。Dubbo序列化协商取决于provider/export协议声明，见[Apache Dubbo Serialization Protocol Upgrade](https://dubbo.apache.org/en/overview/mannual/java-sdk/reference-manual/serialization/serialization-upgrade/)；全局序列化配置未变。
+
+## LR-154 权限码只保护受限拦截点，基础操作保留身份与资源校验
+
+**结论**：权限码只用于默认不向所有有效登录用户开放、必须显式授予的受限能力；普遍开放的基础功能不要求逐 endpoint、CRUD、Graph 节点或 subAgent 配码。无权限码不表示匿名或无边界访问：所有操作仍验证有效 actor/签名上下文；涉及资源或状态转换时，业务域按可信身份检查 owner/参与关系和业务状态。`.own`/`.all` 是作用范围，不自动决定是否要码；本人范围签章、发布等高风险能力仍可设为受限拦截点。现有目录码和角色授予须逐项核对消费者后再经受控迁移精简，不能直接批量删码或移除守卫。
+
+**根因**：把每个接口操作都登记为权限码会造成目录和角色授予膨胀，并将普通 Graph/subAgent 调用耦合到多余的授权判断；反过来，把“免权限码”理解为免认证会让用户身份与业务数据隔离失守。将精确权限码限定为受限能力，同时保留始终执行的 actor、owner/关系和状态检查，能减小目录且不放松数据和状态边界。
+
+**代码位置**：`docs/auth-authorization-permission-system.md`；OpenSpec delta specs `openspec/changes/unify-versioned-permission-context/specs/versioned-authorization-context/spec.md`、`specs/authentication-baseline/spec.md`、`specs/domain-authorization-adoption/spec.md`。
+
+**关联**：LR-139/140/145/146；KI-170；change `unify-versioned-permission-context`。当前 6.1 目录仍是迁移现状，基础操作候选尚需逐项复核并通过后续实现迁移，不代表本次已修改运行时权限。
