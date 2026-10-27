@@ -161,3 +161,33 @@ MCP 草稿创建 SHALL 返回每条已保存草稿的 contentId、platform 和 D
 #### Scenario: 生产渠道 provider 缺失
 - **WHEN** 生产模式选择尚未接入真实 provider 的渠道
 - **THEN** 系统明确报告不可用，不创建模拟成功回执或真实发布状态
+
+### Requirement: 营销入口必须使用 Auth 操作许可与资源归属
+
+内容创建、版本编辑、检索、审核、素材管理、计划、确认、效果读取以及其 REST、Dubbo、Agent、A2A、MCP 和 Supervisor 入口 SHALL 统一验证可信 actor、精确操作许可与目标资源关系。请求体中的 userId、brokerId、ownerId、Supervisor skill 选择或服务身份本身 MUST NOT 作为用户许可或内容归属证据。Supervisor 审批 capability 与业务操作许可是两个独立门槛。
+
+营销域 SHALL 在 Auth 权限目录登记并使用稳定操作码，包括现有 campaign/review/channel 操作码及内容 create/read/edit 操作码；未知或未登记权限 MUST 拒绝。新内容 SHALL 保存可核验 owner/资源关联；历史内容无法映射 owner 时 MUST 按受控迁移策略保持不可写/不可私自扩权。跨服务 MCP/RPC 新执行 SHALL 验证 Auth 版本化上下文或受限委托，不能以旧 `hasPermission(userId, code)` 结果证明调用方真实持有该用户凭据。
+
+当前营销实现尚未满足本 requirement：campaign 入口仍使用 `AuthPermissionRpcService` 兼容接口；常规内容 REST/Dubbo/MCP 写入未统一实施操作/owner 检查；Auth v2 权限目录未登记营销操作码。完成前营销内容和 campaign 真实用户操作不得标记为 Auth v2 已准入。具体 adopter 验收由 `unify-versioned-permission-context` task 10.3 跟踪。
+
+#### Scenario: MCP 服务身份没有用户委托
+- **WHEN** MCP/RPC 调用只证明服务身份，或请求参数声明一个 userId，但没有绑定本次请求与该用户的受限 Auth 委托
+- **THEN** 入口拒绝创建/读取/修改内容或执行 campaign 操作，不把服务身份当作用户授权
+
+#### Scenario: 内容 owner 或权限目录缺失
+- **WHEN** 目标内容没有可核验 owner/资源关系，或请求的权限码未登记/已撤销
+- **THEN** 入口拒绝受保护操作；不能用 fixture、旧状态或 Supervisor 批准覆盖拒绝
+
+### Requirement: 营销对话沿用个人 Memory v2 生命周期
+
+营销 conversational A2A/ReAct SHALL 使用共享必需 Memory hook，并按认证 owner、marketing domain、agent identity 和稳定会话上下文隔离。Memory 只提供经授权的个人会话历史，不得作为 Auth 权限、房源归属或组织级营销知识的证据。Memory 不可用、owner/lease 无效或历史授权被拒绝时 MUST 在模型/业务工具执行前失败；本轮归档失败时不得把调用报告为 Memory 已保存。
+
+无会话上下文的 REST/MCP 单次草稿操作 SHALL 明确作为无记忆的 stateless command，只能使用请求显式提供的参数，不得伪称具备历史记忆；若要使用个人历史，调用方必须进入受 Memory hook 保护的对话入口。
+
+#### Scenario: Marketing A2A memory unavailable
+- **WHEN** 营销 A2A 请求没有有效认证租约、Memory 服务不可用或 Memory 授权拒绝
+- **THEN** Agent 在模型和营销工具执行前失败关闭
+
+#### Scenario: Stateless draft request
+- **WHEN** REST/MCP 草稿命令不携带受信会话上下文
+- **THEN** 系统只根据该命令显式输入生成 DRAFT，不读取/写入其他个人会话记忆，也不从 Memory 推导用户授权

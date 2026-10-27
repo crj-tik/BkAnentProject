@@ -46,15 +46,15 @@ ContentRevision 不可变；PublishPlan 固定 contentRevision、素材版本、
 
 保留路径不等于保留旧 wire contract：当前迁移入口使用营销域新的请求/响应 DTO，不兼容旧 `/promotions/**` 负载。方案将这一点标记为 breaking migration，要求清点并迁移已知调用方；旧形状须返回明确的契约不支持错误，不猜测字段或静默套用新语义。若盘点发现必须支持的外部旧调用，需另行定义版本化适配契约。
 
-房源仅通过公开来源引用读取，不新增 listing 私有表访问。Auth 由另一会话实现，当前发布动作须消费其账号/组织授权并校验实际计划范围。外部协议变更或不同微服务合并不要求把个人 Memory 改成组织知识。
+房源仅通过公开来源引用读取，不新增 listing 私有表访问。营销 A2A 会话使用共享 Memory v2 hook，Memory owner 必须从认证租约解析，Memory 只属于个人会话上下文，不构成角色权限、房源关系或组织共享营销知识。当前 campaign 操作使用 Auth 的 `AuthPermissionRpcService` 兼容入口；这不是 Auth 版本化签名上下文的域内 adoption。Marketing 还没有内容 owner 字段/关系，且 Auth 权限目录当前未登记 campaign/content 操作码；这些必须通过 `unify-versioned-permission-context` task 10.3 补齐后才能启用真实用户操作。外部协议变更或不同微服务合并不要求把个人 Memory 改成组织知识。
 
 ### 6. 并行交付和可替换依赖
 
 本会话只拥有营销/推广模块、`common/marketing/campaign/**` 和本域必要调用方差异；需要房源时按 `domain-parallel-v1` 的公开 HTTP契约实现自己的 consumer wire DTO/mapper和有界 fixture，不依赖房源 change 的新类型，也不引入知识或经营实现。固定路径、字段和错误见 [并行总览](../../../docs/business-domain-change-roadmap.md)。
 
-发布生命周期、回执、持久派发和效果口径是真实实现。外部平台、房源、媒体/通知及 Auth/Memory 依赖由明确测试配置的精确替身隔离，用本会话契约测试完成所有本期验收；真实 mode 未接 provider/授权时拒绝，不暗中转模拟。旧业务数据迁移及单writer切换先在私有夹具/库验证，已运行共享实例由协调合并后处理。
+发布生命周期、回执、持久派发和效果口径是真实实现。渠道 provider 缺失时真实 mode 失败关闭。Marketing A2A 生产路径使用必需 Memory hook；通用 hook 测试验证 Memory/授权不可用时在 Agent 执行前失败。Auth campaign 局部测试使用精确替身，只能证明本域逻辑对拒绝/撤权的反应，不能证明新 Auth 域目录、版本化上下文或内容资源授权已联通。旧业务数据迁移及单writer切换先在私有夹具/库验证，已运行共享实例由协调合并后处理。
 
-独立 worktree/分支、`.m2repo`、端口/数据库按总览执行，只push自己的分支。根POM和配置只提交promotion/marketing的最小语义变化；新增bk_marketing初始化allowlist/manifest差异交协调合并，不改已应用SQL/hash，不等待另外三个change或Auth新版本才完成本期任务。
+独立 worktree/分支、`.m2repo`、端口/数据库按总览执行，只push自己的分支。根POM和配置只提交promotion/marketing的最小语义变化；新增bk_marketing初始化allowlist/manifest差异交协调合并，不改已应用SQL/hash。Auth v2 的域准入由其共享 change task 10.3 所有；本 change 可以完成 fixture 业务闭环，但在营销内容操作码、owner/关系映射和 REST/RPC/A2A/MCP 统一消费版本化授权未通过验收前，不得作为完整生产授权合并或启用。
 
 ### 7. Supervisor、A2A、ReAct 与 MCP 分层治理
 

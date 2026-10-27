@@ -1496,6 +1496,18 @@
 
 **关联**：LR-131；`CampaignJdbcRepository.createAsset`、`CampaignLifecycleIntegrationTest`。
 
+## KI-173 [OPEN·P1] 营销内容多协议写入缺少 Auth 操作与内容归属准入
+
+**发现日期**：2026-10-27。审查营销合并与新 Auth v2 adoption 边界时发现，campaign prepare/confirm/review 等路径有局部 `CampaignActorResolver`/`CampaignAuthorizationService`，但一般内容入口没有形成同一安全边界。
+
+**现象与证据**：`MarketingContentController` 的 create、variant、list、search 直接调用 `MarketingAssetService`，没有精确 Auth 操作校验或内容 owner 限制；`MarketingContentRpcServiceImpl.saveGeneratedContents/bindGeneratedAssets` 与 MCP `createMarketingContentDraft` 也直接调用服务。`MarketingContentEntity` 和既有 `marketing_content` 表没有 owner 字段/关系，导致不能按当前用户隔离编辑及读取。Agent 的一次性草稿路径通过服务身份调用 MCP，业务参数不绑定 Auth 用户委托。campaign 受保护入口仍使用旧 `AuthPermissionRpcService`，并未验证 Auth 版本化上下文。Auth seed/migration 当前未登记 `marketing.campaign.*`、`marketing.content.*` 或 `marketing.channel.*.publish` 操作码；版本化 Auth 对未登记权限拒绝，旧兼容实现也没有营销权限白名单。
+
+**影响**：仅有登录或服务身份不足以证明可创建、读取、编辑目标内容；内容 owner 未映射时，无法建立稳定的多用户资源边界。Campaign 局部权限 mock 只证明拒绝逻辑，不代表 REST/RPC/MCP 入口已经受新 Auth 保护。未完成域准入前不得启用或宣称营销内容及 campaign 全入口安全合并完成；仍须保持发布 provider、审批、业务权限和 owner 检查各自独立。
+
+**处置**：由 `unify-versioned-permission-context` task 10.3 联同营销域登记精确目录权限，定义新内容 owner 与历史无 owner 数据的受控策略，并让 REST、Dubbo、Agent、A2A、MCP、Supervisor、回放及后台恢复使用真实 actor 与请求绑定的版本化上下文/受限委托。默认不广授角色；未知 owner、未知权限、无用户委托、Auth 不可用一律失败关闭。回归需覆盖伪造 actor、跨 owner、直接 RPC/MCP、权限撤回和缺服务委托，完成前 KI 保持 OPEN。
+
+**关联**：`openspec/changes/unify-versioned-permission-context/tasks.md` task 10.3；本 change task 7.6；LR-131；`MarketingContentController`、`MarketingContentRpcServiceImpl`、`MarketingMcpTools`、`MarketingContentEntity`。
+
 ---
 
 **变更历史**：e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。

@@ -1027,13 +1027,13 @@
 
 ## LR-131 发布身份和渠道账号授权由受信服务与登记记录决定
 
-**结论**：当前 actor 从 Auth 解析，关键动作逐次调用 `AuthPermissionRpcService`；计划只能引用营销库内已登记且 active、平台匹配、模式匹配的账号 grant。调用方不能凭请求里的账号名称授予自己发布权。Auth RPC 缺失或失败时拒绝操作。
+**结论**：当前 campaign 兼容路径从 Auth 解析 actor 并逐动作调用 `AuthPermissionRpcService`；计划只能引用营销库内已登记且 active、平台匹配、模式匹配的账号 grant。调用方不能凭请求里的账号名称授予自己发布权。Auth RPC 缺失或失败时拒绝 campaign 操作。该兼容调用不是 Auth 版本化签名上下文或受限委托的证明；营销内容 CRUD、MCP 和旧 Dubbo 资源授权尚未完成，必须由 `unify-versioned-permission-context` task 10.3 准入后方可声称全域授权完成。
 
 **根因**：账号名和客户端请求字段不构成授权证据；营销域也不能在 Auth 未登记新权限时自行放行。
 
-**代码位置**：`CampaignActorResolver`、`CampaignAuthorizationService`、`CampaignAssetAdminService`、`CampaignJdbcRepository.findAccount`、`marketing_campaign_account` schema。
+**代码位置**：`CampaignActorResolver`、`CampaignAuthorizationService`、`CampaignAssetAdminService`、`CampaignJdbcRepository.findAccount`、`marketing_campaign_account` schema；缺失入口/owner 映射见 KI-173。
 
-**关联**：LR-102、LR-6/8。
+**关联**：LR-102、LR-6/8；`unify-versioned-permission-context` task 10.3；KI-173。
 
 ## LR-132 外部发布走持久 outbox，未知结果只按原 attempt 核对
 

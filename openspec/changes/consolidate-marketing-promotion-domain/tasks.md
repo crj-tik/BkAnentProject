@@ -54,3 +54,5 @@
 - [x] 7.3 端到端验证内容创建到渠道发布回执、UNKNOWN 核对、效果同步/读取、ROI 查询及品牌素材创建/列表；证明旧业务结果在合并后均有目标入口。
 - [x] 7.4 对 BEIKE、DOUYIN、XIAOHONGSHU fixture 分别验证发布和结果查询的 SIMULATED 传递，并验证无真实 provider 时生产模式失败关闭、不回退模拟成功。
 - [x] 7.5 只有功能矩阵零未映射项、已知调用方均有迁移记录且端到端证据通过后，才允许退役旧服务接收或删除旧部署配置；真实平台联机另列，不以模拟通过标记为已接通。
+- [ ] 7.6 完成 Marketing 对 Auth v2 的逐入口准入：登记内容/campaign/channel 精确权限码，确定新旧内容 owner 与经纪人/业务资源关系，并为 REST、Dubbo、Agent、A2A、MCP、Supervisor 及回放/后台恢复接入可信版本化身份/受限委托；验证伪造 actor、无委托服务身份、owner 错配、未知权限、撤权和审批门分离。与 `unify-versioned-permission-context` task 10.3 协同；未完成前 campaign/content 真实用户操作不得标记为 Auth v2 已接通。
+- [x] 7.7 核验 Memory v2 的营销边界：Marketing A2A 注入共享必需 hook，按认证 owner/domain/agent/context 隔离，Memory/授权失败在模型前拒绝，归档失败不报成功；确认无会话 REST/MCP 草稿接口是无记忆单次命令，不用 Memory 推断权限或共享个人记忆。证据：营销 `ExplicitSkillAgentWiringTest` 与 common-a2a `A2aMemoryAgentHookTest`。

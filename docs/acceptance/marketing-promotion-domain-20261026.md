@@ -123,3 +123,18 @@ mvn -gs .mvn-settings.xml -s .mvn-settings.xml "-Dmaven.repo.local=.m2repo" -pl 
 ```
 
 完整 `marketing-content-service` reactor 回归 32 项通过，包含 A2A wiring、campaign fixture、MCP 目录/契约、旧 DTO 围栏和 ReAct 伪造 PUBLISHED 反例；Agent/Supervisor/Skill 定向用例 39 项通过。根 reactor 22 个模块编译，OpenSpec strict validation 已通过。全量 Agent suite 目前有 1 项上述既有 Spring test context 错误，其余本次定向覆盖通过。共享数据库迁移、活动 manifest/runner allowlist 登记及真实渠道联机不属于本分支本地验收，仍须协调环境执行；fixture 结果不代表真实渠道已接通。KI-172 修复于 `281f03a`。
+
+## Auth 与 Memory 模块边界复核（2026-10-27）
+
+### Auth：campaign 局部检查存在，跨入口准入尚未完成
+
+- `CampaignActorResolver`/`CampaignAuthorizationService` 在审核、计划、确认和效果路径上解析 Auth actor 并按精确权限调用 `AuthPermissionRpcService`；授权服务缺失或拒绝时这些 campaign 操作失败关闭。现有集成测试使用精确 Auth mock，覆盖权限拒绝和确认前撤权，但不证明 Auth v2 网络链路已接通。
+- 当前 marketing campaign consumer 尚未校验 Auth 版本化 `AuthorizationContext` 或受限跨服务委托。Auth v2 权限 migration/H2 seed 没有登记营销 campaign/content/channel 操作码；版本化目录对未知权限拒绝，旧兼容实现也没有营销许可白名单，因此真实业务能力不能仅凭本分支测试启用。
+- `MarketingContentController` 的 create/variant/list/search，`MarketingContentRpcServiceImpl` 的生成内容与素材绑定，以及 MCP `createMarketingContentDraft` 直接调用内容 service，没有统一的 Auth 操作许可和内容 owner 检查。既有 `MarketingContentEntity`/`marketing_content` 没有 owner 字段或业务关系；Agent 单次草稿命令的 MCP 调用也没有请求绑定的用户委托。Supervisor confirm 审批门不能替代这些领域许可。
+- 上述不是 fixture 未覆盖的“上线配置小项”，而是 Auth v2 的 Marketing adopter 缺口。由 `unify-versioned-permission-context` task 10.3 和本 change task 7.6 联合补齐；KI-173 记录全部受影响入口。在 owner/经纪人关系、权限目录、可信上下文及跨协议拒绝测试完成前，不得声称内容与 campaign 全入口完成 Auth v2 安全合并。
+
+### Memory：A2A 会话已沿用必需生命周期
+
+- `MarketingOfficialA2aAgent` 使用 shared `A2aMemoryHookFactory`，固定 caller/domain/agent 为 `marketing-content-service/marketing/marketing-agent`；hook 从认证 lease 解析 owner，并按用户、domain、agent 和稳定会话上下文读写个人 Memory。它不构成 campaign 权限或房源 owner 证明，也不将个人记忆共享成组织营销知识。
+- Memory 缺失、lease 无效或历史访问被拒绝会在模型执行前失败；本轮归档失败不会报告 Memory 已保存。证据包括营销 `ExplicitSkillAgentWiringTest` 及 common-a2a `A2aMemoryAgentHookTest.memoryUnavailableAndAuthorizationDenialBothFailBeforeAgentExecution`、`missingA2aLeaseFailsClosedBeforeTheAgentCanUseMemory`。
+- `/agent/marketing/drafts` 与无会话 MCP 调用是一次性 stateless 命令，不接收 Memory 会话上下文，只能按本次显式房源/平台/文案输入工作；不得描述为有历史偏好能力。需要使用个人历史时须走受 hook 保护的 A2A/Supervisor 对话路径。
