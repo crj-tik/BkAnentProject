@@ -240,7 +240,7 @@
 
 **关联**：LR-53、KI-12。源码/compile与实际部署分别报告；现有直写路径的历史权限缺口不能因新门面受控而标为修复。
 
-## KI-115 [FIXED·本提交·P1] 旧比较仍使用已停用房源读取；分享和PDF缺少owner边界
+## KI-115 [FIXED·070891b·P1] 旧比较仍使用已停用房源读取；分享和PDF缺少owner边界
 
 **确认日期**：2026-10-15；2026-10-26复核完成任务10.4。旧 `CompareAnalysisServiceImpl.loadListings` 调用 `ListingMasterRpcService.getListingById`，而该 provider 在 RAG 身份迁移后主动拒绝无凭据读取；旧 compare REST/RPC 正向路径因此不可用。另确认总价以万元存储而旧单价未换算为元，ID-only 缓存不能感知来源更新。
 
