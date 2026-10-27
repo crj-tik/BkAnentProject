@@ -1201,3 +1201,23 @@
 **代码位置**：`auth-service/AuthAuthorizationRpcServiceImpl`；`common/authz/RequestBinding`；`common/serialize/Fastjson2ConstructorSerialization`；`common/authz/AuthzSerializationTest`。
 
 **关联**：KI-211；change `unify-versioned-permission-context`任务4.2/11.5。Dubbo序列化协商取决于provider/export协议声明，见[Apache Dubbo Serialization Protocol Upgrade](https://dubbo.apache.org/en/overview/mannual/java-sdk/reference-manual/serialization/serialization-upgrade/)；全局序列化配置未变。
+
+## LR-114 知识派生通过访谈域独立用途授权跨域
+
+**结论**：本 change 新增的经营案例、打法、revision、审核/发布事实与任务回执归 `knowledge-service`/`bk_knowledge`；Interview 继续独占 session、turn、transcript/raw+sanitized body、来源版本、报告及报告任务。知识读取逐字稿必须先获得 Interview 独立签发且可撤回的用途授权，绑定精确 `assetId`、snapshot/content hash、内容/脱敏修订、`knowledge_derivation`、唯一 consumer `knowledge-service` 与目标知识 scope。`visibility=PRIVATE|PUBLISHED`、L0–L3 和报告 ID 不替代该 grant；grant 不改变访谈公开状态。知识只保存授权/来源引用和经验证的必要派生材料，不复制 raw transcript 或重用 Interview/报告 ID。知识来源访问继承当前 Auth 签名 context/freshness，由 `knowledge-service` 对完整请求生成服务 proof，Interview 本地验证 proof、来源关系与 grant，不转发用户 Bearer、不逐次调用旧 Auth permission RPC。来源 grant 撤回或精确绑定失效后，知识正文停止读取和输出。
+
+**根因**：Interview 报告、归档等级和公开可见性各自服务于访谈域内用途，不能表达“这个主体允许哪个服务把哪份冻结逐字稿用于哪个知识范围”。把知识事实继续写入 Interview 或复制原稿会造成双重权威；只靠发布状态会将公开读取权扩大成知识派生权；只缓存 grant 则会让撤回后的已发布知识继续输出。独立 grant 把用途授权放回来源真源域，并用精确版本及目标范围限制派生。
+
+**代码位置**：现有来源字段为 `interview-service/InterviewAssetEntity` 与 `InterviewAssetService`；现有用户/案例授权入口为 `InterviewAuthorizationService`、`InterviewAuthorizationScope`；新 grant/provider 规划在 `interview-service`，wire 类型在 `common/interview/transcript/**`，知识依赖和校验在 `knowledge-service`。跨服务签名请求沿用 `A2aCredentialContext.Lease` 的 Auth context/freshness 及 Marketing→Listing `readAuthorizedContext` 模式。
+
+**关联**：LR-3/6/8/59/90/148；KI-15/204；change `extract-knowledge-operations-domain`。本条记录该 change 的目标边界，不表示 Interview grant、knowledge-service 或真实 Auth/Memory 登记已经实现/上线。
+
+## LR-115 来源数据模式必须来自可信 provenance
+
+**结论**：Knowledge 来源 `dataMode` 必须由服务端可信 provenance 提供；当前 `InterviewAssetEntity.source` 仅为 `AUTO|UPLOAD` 且没有 `dataMode` 字段，因此无独立可信来源信息的存量逐字稿返回 `UNKNOWN`。L0–L3、公开状态、自动采集/人工上传都不推断 REAL 或 SIMULATED；仅受控来源元数据或测试夹具能标记 SIMULATED。新增模式描述不改写既有脱敏正文、contentHash 或 snapshotHash；派生 knowledge revision 保留每个来源的模式。
+
+**根因**：`source` 记录资产进入方式，archive grade 记录质量门槛，都不是现实/模拟的证据。把它们当数据模式会把未知样本错误包装成真实经营效果，并污染后续搜索与运营决策；对内容快照哈希混入模式字段也会在没有正文变化时重写来源版本。
+
+**代码位置**：`interview-service/InterviewAssetEntity.source/archiveGrade/contentHash/snapshotHash`、`InterviewCollectionService`、`InterviewAssetService`；来源 DTO 和知识适配规划在 `common/interview/transcript/**` 与 `knowledge-service`。
+
+**关联**：LR-3/6/59/114；KI-15；change `extract-knowledge-operations-domain`。当前源码没有持久 provenance，该 change 对存量模式按 UNKNOWN；测试标记不证明生产数据模式。
