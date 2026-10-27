@@ -26,7 +26,7 @@ REDIS_TLS="${REDIS_TLS:-true}"
 [[ "$AUTHZ_WRITER_PASSWORD" =~ ^[A-Fa-f0-9]{64}$ && "$AUTHZ_READER_PASSWORD" =~ ^[A-Fa-f0-9]{64}$ ]] \
   || fail "Authorization user passwords must be 32-byte random values encoded as hex"
 
-redis_args=(--no-auth-warning --raw --exit-on-error -h "$REDIS_HOST" -p "$REDIS_PORT")
+redis_args=(--no-auth-warning --raw -e -h "$REDIS_HOST" -p "$REDIS_PORT")
 if [[ "$REDIS_TLS" == "true" ]]; then
   redis_args+=(--tls)
   if [[ -n "${REDIS_TLS_CA_CERT:-}" ]]; then redis_args+=(--cacert "$REDIS_TLS_CA_CERT"); fi
@@ -57,11 +57,10 @@ expect_allowed() {
 expect_denied() {
   local username="$1"; shift
   local output
-  if output="$(admin ACL DRYRUN "$username" "$@" 2>&1)"; then
-    fail "ACL unexpectedly allowed ${username} to run ${1}"
-  fi
+  output="$(admin ACL DRYRUN "$username" "$@" 2>&1)" \
+    || fail "ACL dry-run command failed before checking ${username} ${1}"
   [[ "$output" == *"no permissions"* || "$output" == *"NOPERM"* ]] \
-    || fail "ACL dry-run failed for an unexpected reason (${username} ${1})"
+    || fail "ACL unexpectedly allowed ${username} to run ${1}"
 }
 
 writer="authz-writer"
@@ -87,6 +86,10 @@ expect_allowed "$writer" ZADD "$active" 1700000000 42
 expect_allowed "$writer" EXPIRE "$active" 301
 expect_allowed "$writer" ZRANGE "$active" 0 99 WITHSCORES
 expect_allowed "$writer" PUBLISH "$AUTHZ_CHANNEL" probe
+expect_allowed "$writer" PING
+expect_allowed "$writer" HELLO 3
+expect_allowed "$writer" CLIENT SETNAME authz-acl-probe
+expect_allowed "$writer" CLIENT SETINFO LIB-NAME authz-acl-probe
 expect_denied "$writer" SET "unrelated:{42}:head" value
 expect_denied "$writer" PUBLISH "unrelated:channel" probe
 expect_denied "$writer" SPUBLISH "$AUTHZ_CHANNEL" probe
@@ -94,6 +97,10 @@ expect_denied "$writer" SPUBLISH "$AUTHZ_CHANNEL" probe
 expect_allowed "$reader" GET "$head"
 expect_allowed "$reader" MGET "$head" "${AUTHZ_NAMESPACE}:{7}:head"
 expect_allowed "$reader" SUBSCRIBE "$AUTHZ_CHANNEL"
+expect_allowed "$reader" PING
+expect_allowed "$reader" HELLO 3
+expect_allowed "$reader" CLIENT SETNAME authz-acl-probe
+expect_allowed "$reader" CLIENT SETINFO LIB-NAME authz-acl-probe
 expect_denied "$reader" GET "$snapshot"
 expect_denied "$reader" SET "$head" value
 expect_denied "$reader" EXPIRE "$head" 300

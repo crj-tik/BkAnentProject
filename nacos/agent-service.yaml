@@ -143,10 +143,10 @@ agent:
       interview-mcp-server: interview-service
     public-mcp-capabilities: []
     redis:
-      # Create the dedicated Redis ACL and verify its namespace/channel scope before setting true.
-      protected-reader-configured: false
-      host: ${REDIS_HOST:10.117.102.54}
-      port: ${REDIS_PORT:6379}
+      # This readiness declaration is independent from the Agent authorization switch.
+      protected-reader-configured: ${AUTHZ_REDIS_READER_CONFIGURED:false}
+      host: ${AUTHZ_REDIS_HOST:${REDIS_HOST:10.117.102.54}}
+      port: ${AUTHZ_REDIS_PORT:6380}
       username: agent-authz-reader
       password: ${AUTHZ_REDIS_READER_PASSWORD:}
       tls: ${AUTHZ_REDIS_TLS:true}

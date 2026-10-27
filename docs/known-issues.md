@@ -1594,11 +1594,21 @@
 
 **发现日期与依据**：2026-10-27，核对 `docker compose config --profile full --format json` 及 `docker-compose.yml` 时发现Auth和Agent服务均未收到版本化鉴权开关及专用Redis密码/TLS环境变量。Auth主开关在应用和Nacos模板固定为false；`.env.example`的待提交改动还含非空凭据值，并将Agent开关设为true。首次检查时Compose根目录 `.env` 与进程环境没有这些变量，`.env.example`不会被Compose自动当作运行环境读取；用户随后将配置补入根目录 `.env`，当前Compose渲染已确认两总开关与各自密码均映射到正确服务，不输出实际值。
 
-**修复**：Compose按服务透传独立的Auth/Agent总开关及writer/reader密码和TLS；Auth与Agent应用配置均使用默认false的环境占位符，Auth Nacos模板同步使用占位符，Agent模板保留原有占位符。已将跟踪模板中的疑似密码清空、开关设为false，并补充发布/秘密管理说明。Nacos仅发布包含变量占位符的模板，不存放实际密码。Redis ACL ready声明继续false，不自动启用授权链。
+**修复**：Compose按服务透传Auth writer、Agent reader各自凭据及TLS。开发Redis保留普通6379，为版本化授权单独启用6380 TLS端口；证书、Java信任库和带SHA-256口令摘要的ACL文件存放于Git忽略的 `.secrets/redis/`。新增运行配置占位符供Auth/Agent连接专用端口，ACL脚本在验证前后正反例与Pub/Sub后执行 `ACL SAVE`。Auth Redis开关及writer/reader ready声明仅在现场验证成功后才在 `.env` 与Nacos配置打开；Nacos继续只保存环境变量占位符，不保存口令或私钥。共享 `default` 用户与普通业务Redis连接保持不变。
 
-**验证与边界**：通过 `docker compose --profile full config --quiet` 检查解析；渲染结果确认Auth/Agent总开关当前为true、writer/reader密码非空且只进入各自服务、TLS为true。Auth/Agent模板已发布至 `BK-AGENT/DEFAULT_GROUP` 并以内容回读校验；Nacos只保存环境变量占位符，不保存密码明文。开发Redis当前没有 `authz-writer` 与 `agent-authz-reader` ACL用户，Nacos的Redis `enabled`/`protected-*-configured` 仍为false，因此没有用未验证配置重建运行中的服务；Agent若此时开启会因reader ACL未就绪而拒绝启动。新授权链仍未通过运行验收。若模板中的旧值曾被真实Redis ACL使用，应轮换对应凭据；轮换和专用Redis ACL运行验收仍未完成。
+**验证与边界**：Redis 7.4.11 ACL/TLS配置脚本全部通过：writer命名空间与channel正反例、reader head只读/channel边界、Java TLS hostname验证及两用户认证、真实Pub/Sub收发。Compose渲染确认Auth/Agent开关、专用端口、各自凭据和信任库只进入对应服务。Auth/Agent模板已发布到 `BK-AGENT/DEFAULT_GROUP` 并完成内容回读，真实凭据仍仅在忽略文件。重建后Redis healthy、Auth readiness healthy、Agent readiness UP。全仓Maven回归1732项、失败/错误为0、14项既有外部依赖测试跳过；Nacos发布脚本4项通过，OpenSpec严格校验有效。`auth.authorization.trusted-callers` 仍为空，且当前没有前端，因此没有执行浏览器登录/Gateway到Agent的真实用户授权流；服务健康与Redis连通性不代表此链路验收完成，OpenSpec 11.1/11.4/11.6及访谈前端交付项仍未全部完成。
 
-**关联**：LR-152；change `unify-versioned-permission-context`任务11.5/11.7。
+**关联**：LR-152；KI-210；change `unify-versioned-permission-context`任务11.1/11.4/11.5/11.6/11.7。
+
+## KI-210 [FIXED·本提交·P2] Redis ACL验收脚本使用不受支持的redis-cli长参数
+
+**发现日期与依据**：2026-10-27，首次在Redis 7.4 Compose实例上运行 `verify-authorization-redis-acl.sh` 时，`redis-cli` 将 `--exit-on-error` 报为未知参数；改成 `-e` 后又发现 `ACL DRYRUN` 对权限拒绝返回成功命令状态和描述文本，不能用进程退出码判断访问是否被拒绝。
+
+**修复**：改用Redis CLI兼容的 `-e` 检测传输/命令执行错误；拒绝用例改为断言 `ACL DRYRUN` 的响应包含明确的无权限结果，避免把“模拟成功执行了一次拒绝检查”误判为“权限通过”。
+
+**验证与边界**：Redis 7.4.11 TLS服务端上重新运行ACL配置及验收脚本，要求同时通过权限正反例和真实订阅/发布探针；运行结果记入本提交及OpenSpec任务验收记录。
+
+**关联**：KI-209；`scripts/security/verify-authorization-redis-acl.sh`；change `unify-versioned-permission-context`任务11.1。
 
 ---
 

@@ -192,11 +192,52 @@ services:
     image: redis:7.4-alpine
     profiles: [minimal, full]
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --aclfile
+      - /etc/redis/users.acl
+      - --port
+      - "6379"
+      - --tls-port
+      - "6380"
+      - --tls-cert-file
+      - /run/secrets/redis/server.crt
+      - --tls-key-file
+      - /run/secrets/redis/server.key
+      - --tls-ca-cert-file
+      - /run/secrets/redis/ca.crt
+      - --tls-auth-clients
+      - "no"
     volumes:
       - redis-data:/data
+      - type: bind
+        source: ./.secrets/redis/acl
+        target: /etc/redis
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.secrets/redis/tls/server.crt
+        target: /run/secrets/redis/server.crt
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.secrets/redis/tls/server.key
+        target: /run/secrets/redis/server.key
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.secrets/redis/tls/ca.crt
+        target: /run/secrets/redis/ca.crt
+        read_only: true
+        bind:
+          create_host_path: false
     ports:
       - "${HOST_BIND_ADDRESS:-127.0.0.1}:${REDIS_EXPOSED_PORT:-6379}:6379"
+      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${REDIS_TLS_EXPOSED_PORT:-6380}:6380"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -399,12 +440,23 @@ services:
         read_only: true
         bind:
           create_host_path: false
+      - type: bind
+        source: ./.secrets/redis/tls/truststore.jks
+        target: /run/secrets/redis-truststore.jks
+        read_only: true
+        bind:
+          create_host_path: false
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: auth-service-1.0.0-SNAPSHOT.jar
       AUTH_AUTHORIZATION_ENABLED: ${AUTH_AUTHORIZATION_ENABLED:-false}
+      AUTH_AUTHORIZATION_REDIS_ENABLED: ${AUTH_AUTHORIZATION_REDIS_ENABLED:-false}
+      AUTHZ_REDIS_WRITER_CONFIGURED: ${AUTHZ_REDIS_WRITER_CONFIGURED:-false}
+      AUTHZ_REDIS_HOST: ${AUTHZ_REDIS_HOST:-redis}
+      AUTHZ_REDIS_PORT: ${AUTHZ_REDIS_PORT:-6380}
       AUTHZ_REDIS_WRITER_PASSWORD: ${AUTHZ_REDIS_WRITER_PASSWORD:-}
       AUTHZ_REDIS_TLS: ${AUTHZ_REDIS_TLS:-true}
+      JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/run/secrets/redis-truststore.jks -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.trustStoreType=JKS
       RAG_AUTH_RPC_SECRET: ${RAG_AUTH_RPC_SECRET:-}
       LISTING_RAG_RPC_SECRET: ${LISTING_RAG_RPC_SECRET:-}
       MEMORY_RAG_RPC_SECRET: ${MEMORY_RAG_RPC_SECRET:-}
@@ -466,12 +518,22 @@ services:
         read_only: true
         bind:
           create_host_path: false
+      - type: bind
+        source: ./.secrets/redis/tls/truststore.jks
+        target: /run/secrets/redis-truststore.jks
+        read_only: true
+        bind:
+          create_host_path: false
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: agent-service-1.0.0-SNAPSHOT.jar
       AGENT_AUTHORIZATION_ENABLED: ${AGENT_AUTHORIZATION_ENABLED:-false}
+      AUTHZ_REDIS_READER_CONFIGURED: ${AUTHZ_REDIS_READER_CONFIGURED:-false}
+      AUTHZ_REDIS_HOST: ${AUTHZ_REDIS_HOST:-redis}
+      AUTHZ_REDIS_PORT: ${AUTHZ_REDIS_PORT:-6380}
       AUTHZ_REDIS_READER_PASSWORD: ${AUTHZ_REDIS_READER_PASSWORD:-}
       AUTHZ_REDIS_TLS: ${AUTHZ_REDIS_TLS:-true}
+      JAVA_TOOL_OPTIONS: -Djavax.net.ssl.trustStore=/run/secrets/redis-truststore.jks -Djavax.net.ssl.trustStorePassword=changeit -Djavax.net.ssl.trustStoreType=JKS
       A2A_PUBLIC_BASE_URL: http://agent-service:9002
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: "6379"

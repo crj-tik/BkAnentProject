@@ -62,12 +62,13 @@ writer_rules=(
   "&${AUTHZ_CHANNEL}"
   +eval +evalsha +time +hmget +get +exists +set +expireat +hset
   +zremrangebyscore +zscore +zcard +zadd +expire +zrange +publish
+  +ping +hello +client\|setname +client\|setinfo
 )
 reader_rules=(
   reset on resetpass resetkeys resetchannels -@all
   "%R~${AUTHZ_NAMESPACE}:*:head"
   "&${AUTHZ_CHANNEL}"
-  +get +mget +subscribe +unsubscribe +ping +client\|setname +client\|setinfo
+  +get +mget +subscribe +unsubscribe +ping +hello +client\|setname +client\|setinfo
 )
 
 set_user() {
@@ -86,5 +87,9 @@ set_user() {
 # Only these two dedicated principals are changed; the shared default and other app users remain untouched.
 set_user authz-writer "$AUTHZ_WRITER_PASSWORD" "${writer_rules[@]}"
 set_user agent-authz-reader "$AUTHZ_READER_PASSWORD" "${reader_rules[@]}"
+
+# Persist ACL changes to the mounted ACL directory before testing the live rules.
+save_response="$(run_admin ACL SAVE)" || fail "Redis could not persist the ACL file"
+[[ "$save_response" == "OK" ]] || fail "Redis did not confirm ACL persistence"
 
 "$(dirname -- "${BASH_SOURCE[0]}")/verify-authorization-redis-acl.sh"

@@ -1184,10 +1184,10 @@
 
 ## LR-152 版本化鉴权秘密只经 Compose 注入，Nacos仅保存占位符
 
-**结论**：Auth/Agent 新授权开关分别使用 `AUTH_AUTHORIZATION_ENABLED` 与 `AGENT_AUTHORIZATION_ENABLED`，默认均为false。Compose仅把Auth Redis writer密码传给Auth、reader密码传给Agent，并把TLS设置传给两者；Nacos只保留环境变量占位符，绝不保存密码明文。Redis ACL `enabled`/`protected-*-configured` 声明仍独立且默认false，专用ACL、服务密钥和caller-operation登记完成前不可仅凭密码存在启用新链。Nacos发布成功与容器配置更新是两个不同动作；运行中容器需按部署流程重新创建才会接收新的Compose环境值。
+**结论**：Auth/Agent 新授权开关分别使用 `AUTH_AUTHORIZATION_ENABLED` 与 `AGENT_AUTHORIZATION_ENABLED`，默认均为false。Compose仅把Auth Redis writer密码传给Auth、reader密码传给Agent，并把TLS设置传给两者；Nacos只保留环境变量占位符，绝不保存密码明文。开发栈普通业务Redis继续使用6379；版本化授权读写使用独立TLS端口6380、独立JVM信任库与Git忽略的持久ACL文件，Auth/Agent各自只持有自己的ACL凭据。Auth Redis启用和writer/reader就绪声明仍是独立开关，只有服务端ACL持久化、TLS hostname验证和正反权限验收后才能设为true。Nacos发布成功与容器配置更新是两个不同动作；运行中容器需按部署流程重新创建才会接收新的Compose环境值。
 
-**根因**：Nacos模板是可共享配置，不是容器秘密存储；Compose若不显式透传，`.env`值不会进入应用进程，而把值写进Nacos会扩大凭据读取面。主授权开关、Redis ACL就绪声明和密码各表达独立事实，合并或自动推导会导致不完整部署被误判为安全就绪。
+**根因**：Nacos模板是可共享配置，不是容器秘密存储；Compose若不显式透传，`.env`值不会进入应用进程，而把值写进Nacos会扩大凭据读取面。主授权开关、Redis ACL就绪声明和密码各表达独立事实，合并或自动推导会导致不完整部署被误判为安全就绪。专用TLS端口将新增授权传输保护与现有业务Redis客户端隔离，避免让没有TLS配置的既有客户端被隐式切换。
 
-**代码位置**：`docker-compose.yml`的Auth/Agent environment；两服务 `application.yml` 与 `nacos/auth-service.yaml`、`nacos/agent-service.yaml`；`docs/authz-versioned-rollout-rollback.md`。
+**代码位置**：`docker-compose.yml`的Redis ACL/TLS服务及Auth/Agent environment；两服务 `application.yml` 与 `nacos/auth-service.yaml`、`nacos/agent-service.yaml`；`scripts/security/configure-authorization-redis-acl.sh`、`verify-authorization-redis-acl.sh`；`docs/authorization-redis-acl.md` 与 `docs/authz-versioned-rollout-rollback.md`。
 
-**关联**：KI-209；change `unify-versioned-permission-context`任务11.5/11.7。配置透传和Nacos模板read-back不代表新授权链已开启或运行态ACL已验收。
+**关联**：KI-209/210；change `unify-versioned-permission-context`任务11.1/11.5/11.7。Redis专用通道与ACL已在本地开发栈验收；Nacos中的 `trusted-callers` 仍为空，服务健康及Redis链路通过不代表浏览器/Gateway到Agent的用户授权调用已完成端到端验收。

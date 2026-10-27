@@ -59,9 +59,9 @@ agent:
       interview-mcp-server: interview-service
     public-mcp-capabilities: []
     redis:
-      protected-reader-configured: false
-      host: ${REDIS_HOST:127.0.0.1}
-      port: ${REDIS_PORT:6379}
+      protected-reader-configured: ${AUTHZ_REDIS_READER_CONFIGURED:false}
+      host: ${AUTHZ_REDIS_HOST:${REDIS_HOST:127.0.0.1}}
+      port: ${AUTHZ_REDIS_PORT:6380}
       username: agent-authz-reader
       password: ${AUTHZ_REDIS_READER_PASSWORD:}
       tls: ${AUTHZ_REDIS_TLS:true}
