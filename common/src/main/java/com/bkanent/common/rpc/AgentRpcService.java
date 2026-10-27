@@ -1,6 +1,5 @@
 package com.bkanent.common.rpc;
 
-import com.bkanent.common.model.CompareReportDTO;
 import com.bkanent.common.model.KpiSummaryDTO;
 import com.bkanent.common.model.MarketingContentDTO;
 
@@ -20,15 +19,5 @@ public interface AgentRpcService {
      * 业务方法：generateKpiNarrative。
      */
     String generateKpiNarrative(List<KpiSummaryDTO> kpis);
-
-    /**
-     * 业务方法：analyzeListings。
-     */
-    CompareReportDTO analyzeListings(List<Long> listingIds);
-
-    /**
-     * 业务方法：generateCompareConclusion。
-     */
-    String generateCompareConclusion(String comparePrompt);
 
 }

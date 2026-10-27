@@ -28,6 +28,8 @@ public final class RagCanonicalHash {
     private static final Set<Class<?>> REQUESTS = Set.of(RagSearchRequest.class, RagIndexEvent.class,
             RagStatusRequest.class, RagInspectRequest.class, RagProvisionRequest.class, RagReplayRequest.class,
             RagListingSearchRequest.class, RagListingReadRequest.class, RagAuthorizedListingReadRequest.class,
+            RagAuthorizedListingBusinessSearchRequest.class, RagAuthorizedListingBusinessBatchReadRequest.class,
+            RagAuthorizedListingBusinessCheckRequest.class,
             RagContextAuthorizedListingReadRequest.class, RagAuthorizedListingAssetWriteRequest.class,
             RagContextAuthorizedListingAssetWriteRequest.class,
             RagListingIndexRequest.class, MemoryRagSearchRequest.class,
@@ -36,9 +38,16 @@ public final class RagCanonicalHash {
             RagFusionOptions.class, RagFilter.class, RagValue.class, RagDocument.class, RagIndexEvent.class,
             RagStatusRequest.class, RagInspectRequest.class, RagProvisionRequest.class, RagReplayRequest.class,
             RagListingSearchRequest.class, RagListingReadRequest.class, RagAuthorizedListingReadRequest.class,
+            RagAuthorizedListingBusinessSearchRequest.class, RagAuthorizedListingBusinessBatchReadRequest.class,
+            RagAuthorizedListingBusinessCheckRequest.class,
             RagContextAuthorizedListingReadRequest.class, RagAuthorizedListingAssetWriteRequest.class,
             RagContextAuthorizedListingAssetWriteRequest.class, RagListingIndexRequest.class, MemoryRagSearchRequest.class,
-            RagCandidateAuthorizationRequest.class, RagCandidateReference.class, A2aBeaconBinding.class);
+            RagCandidateAuthorizationRequest.class, RagCandidateReference.class, A2aBeaconBinding.class,
+            com.bkanent.common.listing.ListingBusinessSearchRequest.class,
+            com.bkanent.common.listing.ListingSnapshotBatchReadRequest.class,
+            com.bkanent.common.listing.ListingSnapshotCheckRequest.class,
+            com.bkanent.common.listing.ListingSourceVersionRef.class,
+            com.bkanent.common.listing.ListingRef.class);
 
     private RagCanonicalHash() { }
 
@@ -49,6 +58,21 @@ public final class RagCanonicalHash {
         if (request instanceof RagAuthorizedListingReadRequest authorizedRead) {
             return hash(encode("rag.authorized-listing-read.v1", Arrays.asList(authorizedRead.contractVersion(),
                     authorizedRead.request(), authorizedRead.authorizationEvidenceHash()), false));
+        }
+        if (request instanceof RagAuthorizedListingBusinessSearchRequest authorizedSearch) {
+            return hash(encode("rag.authorized-listing-business-search.v1", Arrays.asList(
+                    authorizedSearch.contractVersion(), authorizedSearch.requestId(), authorizedSearch.request(),
+                    authorizedSearch.authorizationEvidenceHash()), false));
+        }
+        if (request instanceof RagAuthorizedListingBusinessBatchReadRequest authorizedRead) {
+            return hash(encode("rag.authorized-listing-business-batch-read.v1", Arrays.asList(
+                    authorizedRead.contractVersion(), authorizedRead.requestId(), authorizedRead.request(),
+                    authorizedRead.authorizationEvidenceHash()), false));
+        }
+        if (request instanceof RagAuthorizedListingBusinessCheckRequest authorizedCheck) {
+            return hash(encode("rag.authorized-listing-business-check.v1", Arrays.asList(
+                    authorizedCheck.contractVersion(), authorizedCheck.requestId(), authorizedCheck.request(),
+                    authorizedCheck.authorizationEvidenceHash()), false));
         }
         if (request instanceof RagContextAuthorizedListingReadRequest authorizedRead) {
             return hash(encode("rag.context-authorized-listing-read.v1", Arrays.asList(

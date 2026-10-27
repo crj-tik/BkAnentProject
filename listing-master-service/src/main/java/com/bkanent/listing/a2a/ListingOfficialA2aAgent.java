@@ -52,7 +52,7 @@ public class ListingOfficialA2aAgent {
         executionTools = List.copyOf(tools);
         return ReactAgent.builder()
                 .name("listing-agent")
-                .description("Responsible for property listing search, recommendation, and summary with LLM-driven insights")
+                .description("Responsible for authorized property listing search, recommendation, version-bound comparison, and summary")
                 .model(chatModel)
                 .systemPrompt(properties.getSystemPrompt())
                 .tools(tools)

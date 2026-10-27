@@ -147,6 +147,15 @@ public class ListingRagIdentity {
                 "listing.read", "listing.read.all");
     }
 
+    /** Verifies an internal stable-source RPC against the exact caller request and signed Auth response. */
+    public com.bkanent.common.authz.AuthzRequestScope.Scope openAuthorizedBusinessSourceScope(
+            Object signedRequest, String requestId, String authorizationEvidenceHash, RagAuthEnvelope envelope,
+            com.bkanent.common.authz.AuthzResponse authorization,
+            java.util.Map<String, java.security.PublicKey> authorityKeys) {
+        return openAuthorizedOperationScope(signedRequest, requestId, authorizationEvidenceHash, envelope,
+                authorization, authorityKeys, "listing.read", "listing.read.all");
+    }
+
     /** Verifies one caller-signed Listing request for its exact user or explicitly-wide operation. */
     public com.bkanent.common.authz.AuthzRequestScope.Scope openAuthorizedOperationScope(
             com.bkanent.common.rag.RagAuthorizedListingReadRequest request, RagAuthEnvelope envelope,

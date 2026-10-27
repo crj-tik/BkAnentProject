@@ -19,11 +19,12 @@ class McpConfigurationRegressionTest {
         assertThat(agentConfig)
                 .contains("mcp:")
                 .contains("type: STREAMABLE")
-                .contains("/mcp");
+                .contains("/mcp")
+                .contains("\"[a2a:listing-agent]\": listing.read")
+                .doesNotContain("compare-mcp-server", "COMPARE_MCP_ENDPOINT");
 
         Map<String, String> serverConfigs = Map.of(
                 "business-mcp-server", "business-service.yaml",
-                "compare-mcp-server", "compare-engine-service.yaml",
                 "contract-mcp-server", "contract-service.yaml",
                 "marketing-mcp-server", "marketing-content-service.yaml",
                 "media-mcp-server", "media-worker-service.yaml",

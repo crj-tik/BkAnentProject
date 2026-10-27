@@ -242,11 +242,11 @@
 
 ## KI-115 [FIXED·本提交·P1] 旧比较仍使用已停用房源读取；分享和PDF缺少owner边界
 
-**确认日期**：2026-10-15；2026-10-26复核完成任务10.4。旧CompareAnalysisServiceImpl.loadListings调用ListingMasterRpcService.getListingById，而该provider在RAG身份迁移后主动拒绝无凭据读取；旧compare REST/RPC正向路径因此不可用。另确认totalPrice为万元而原单价未乘10000，且ID-only缓存无法感知来源更新。
+**确认日期**：2026-10-15；2026-10-26复核完成任务10.4。旧 `CompareAnalysisServiceImpl.loadListings` 调用 `ListingMasterRpcService.getListingById`，而该 provider 在 RAG 身份迁移后主动拒绝无凭据读取；旧 compare REST/RPC 正向路径因此不可用。另确认总价以万元存储而旧单价未换算为元，ID-only 缓存不能感知来源更新。
 
-**修复**：Compare改用Listing签名请求级读取；报告缓存按已验签actor隔离，缓存与报告绑定当前Listing快照hash。显式`compare.report.share.public`操作才能发布公开链接；未发布链接的报告/PDF仅owner并持`compare.report.read.own`可读。旧缓存缺owner或source hash时不恢复。既有单位换算与来源指纹逻辑保持。
+**修复**：当前比较、报告和 PDF 路径迁入 `listing-master-service`，从稳定来源引用读取带修订号/hash/数据模式的签名快照。报告按已验签 actor 隔离并绑定当前来源；创建要求 `compare.report.create`，历史与 PDF 要求 owner 当前持有 `compare.report.read.own` 且来源仍可读/未变化。分享码不再单独授予正文或 PDF 权限，旧缺 owner/source hash 的报告不恢复，旧 JSON/PDF 字节保留供受控盘点。单价使用元/平方米。Agent 与 Studio 使用 Listing 来源契约，不再调用 Compare MCP；Supervisor 对 Listing Agent 只映射精确 `listing.read`，Memory 继续沿用 Listing Agent 已有必需 Hook。旧 Compare 的 A2A、MCP、REST、RPC 入口与 Compose profile 均默认关闭；旧 Auth/Memory 身份和报告卷仅为回滚/排空保留，现场排空完成前不删除。
 
-**验证与边界**：Compare/Listing定向回归和共享鉴权测试通过；本地源码验证不代表生产公钥/HMAC密钥、HTTP入口开关或迁移已部署。分享是生成时快照，不跟随房源实时变更。关联LR-54/LR-149；change `unify-versioned-permission-context`任务10.4。
+**验证与边界**：`ListingSourceContractTest`、source/controller/service、versioned/business authorization、comparison/report store/legacy mapper、Agent wiring、Studio signed-reader 和配置矩阵定向回归通过；模拟来源完成搜索、比较、历史、PDF、重试复用与模式保留。源码/隔离测试不证明真实来源、公钥注入、共享 Nacos、Compose 部署或线上路由已切换。`legacy-compare` profile 默认为关闭；主动启用旧匹配制品前仍需按 `docs/listing-comparison-cutover.md` 完成受控回滚/排空检查。关联 LR-54/LR-99/LR-149；change `unify-versioned-permission-context` 任务10.4及 `consolidate-listing-comparison-domain`。
 
 ## KI-1 [OPEN·P0] 表单式 prep 阶段凭据真空（鸡生蛋）
 

@@ -35,6 +35,11 @@ a2a:
     key-id: ${SERVICE_IDENTITY_KEY_ID:compare-engine-service-current}
     private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
 
+compare:
+  legacy:
+    rest-enabled: ${COMPARE_LEGACY_REST_ENABLED:false}
+    rpc-enabled: ${COMPARE_LEGACY_RPC_ENABLED:false}
+
 dubbo:
   application:
     name: compare-engine-service

@@ -8,7 +8,6 @@ import com.bkanent.common.agent.*;
 import com.bkanent.agent.registry.*;
 import com.bkanent.agent.service.*;
 import com.bkanent.agent.mcp.AgentMcpClient;
-import com.bkanent.agent.mcp.model.*;
 import com.bkanent.common.skill.SkillDefinition;
 import com.bkanent.common.skill.core.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -104,28 +103,37 @@ class SupervisorRealModelEvaluationTest {
         var registry = mock(AgentRegistry.class); var permissions = mock(AgentPermissionService.class);
         when(permissions.canInvokeChildAgent(eq("1"), any())).thenReturn(true);
         when(permissions.canUseMcpTools("1")).thenReturn(true); when(permissions.canReadMcpServer(eq("1"), any())).thenReturn(true);
-        var descriptions = Map.of("listing", "根据地区、预算、户型查询真实房源，返回候选 ID 与详情。",
+        var descriptions = Map.of("listing", "按稳定来源引用检索房源并执行版本绑定的确定性比较。",
                 "marketing", "基于真实房源和对比形成营销草稿，发布的 marketing-draft 仅草稿不发布。",
                 "contract", "审阅已提供的合同原文，分析条款风险与违约责任，不发送通知。",
                 "notification", "向联系人发送通知，会产生发送副作用，仅用户明确要求时调用。");
-        var skillNames = Map.of("listing", "listing-search", "marketing", "marketing-draft", "contract", "contract-risk-review", "notification", "notification-send");
+        var skillNames = Map.of("listing", List.of("listing-search", "listing-comparison"),
+                "marketing", List.of("marketing-draft"), "contract", List.of("contract-risk-review"),
+                "notification", List.of("notification-send"));
         var descriptors = new ArrayList<RegisteredAgentDescriptor>();
         for (var domain : List.of("listing", "marketing", "contract", "notification")) {
-            String agentId = domain + "-agent", name = skillNames.get(domain), skillId = "bk-skill/" + domain + "/" + name;
-            var publication = new SkillPublication(skillId, name, domain, "1", "evaluation-fixture-hash");
-            var card = new AgentCard(agentId, agentId, descriptions.get(domain), "1", List.of(name), List.of(domain), false, false,
+            String agentId = domain + "-agent";
+            List<AgentSkillDescriptor> cardSkills = new ArrayList<>();
+            List<SkillPublication> publications = new ArrayList<>();
+            for (String name : skillNames.get(domain)) {
+                String skillId = "bk-skill/" + domain + "/" + name;
+                cardSkills.add(new AgentSkillDescriptor(skillId, name, descriptions.get(domain), List.of(domain), List.of(), List.of(), List.of()));
+                publications.add(new SkillPublication(skillId, name, domain, "1", "evaluation-fixture-hash-" + name));
+            }
+            var card = new AgentCard(agentId, agentId, descriptions.get(domain), "1", skillNames.get(domain), List.of(domain), false, false,
                     "http://evaluation-fixture/a2a", List.of("text"), List.of("application/json"),
-                    List.of(new AgentSkillDescriptor(skillId, name, descriptions.get(domain), List.of(domain), List.of(), List.of(), List.of())),
+                    cardSkills,
                     Map.of("extensions", List.of(Map.of("uri", SkillPublication.EXTENSION_URI, "params",
-                            Map.of("contractVersion", "1", "owner", domain, "skills", List.of(publication))))), "JSONRPC", "0.2.5");
+                            Map.of("contractVersion", "1", "owner", domain, "skills", publications)))), "JSONRPC", "0.2.5");
             var descriptor = new RegisteredAgentDescriptor(agentId, "http://evaluation-fixture", "/.well-known/agent.json", "/a2a",
                     AgentRuntimeType.ALIBABA_A2A, AgentDescriptorSource.DISCOVERED_CARD, card, Map.of());
             descriptors.add(descriptor); when(registry.getByAgentId(agentId)).thenReturn(Optional.of(descriptor));
         }
         when(registry.listDescriptors()).thenReturn(descriptors);
         var results = Map.of(
-                "listing-agent", "{\"listingIds\":[101,102],\"listings\":[{\"id\":101,\"district\":\"浦东\",\"rooms\":2,\"priceWan\":280},{\"id\":102,\"district\":\"浦东\",\"rooms\":2,\"priceWan\":295}],\"source\":\"evaluation-fixture\"}",
-                "marketing-agent", "{\"contentType\":\"copy_draft\",\"platform\":\"小红书\",\"listingId\":101,\"draftText\":\"浦东两居，总价280万，适合首次置业家庭。具体信息以核验为准。\",\"published\":false,\"source\":\"evaluation-fixture\"}",
+                "listing-search", "{\"listings\":[{\"listingRef\":{\"sourceSystem\":\"fixture\",\"sourceId\":\"listing-001\"},\"revision\":\"fixture-rev-1\",\"contentHash\":\"a\",\"dataMode\":\"SIMULATED\",\"totalPriceYuan\":2800000},{\"listingRef\":{\"sourceSystem\":\"fixture\",\"sourceId\":\"listing-002\"},\"revision\":\"fixture-rev-2\",\"contentHash\":\"b\",\"dataMode\":\"SIMULATED\",\"totalPriceYuan\":2950000}],\"source\":\"evaluation-fixture\"}",
+                "listing-comparison", "{\"contentType\":\"listing_comparison\",\"dataMode\":\"SIMULATED\",\"listingRefs\":[{\"sourceSystem\":\"fixture\",\"sourceId\":\"listing-001\",\"revision\":\"fixture-rev-1\"},{\"sourceSystem\":\"fixture\",\"sourceId\":\"listing-002\",\"revision\":\"fixture-rev-2\"}],\"lowerPriceListingRef\":{\"sourceSystem\":\"fixture\",\"sourceId\":\"listing-001\"}}",
+                "marketing-agent", "{\"contentType\":\"copy_draft\",\"platform\":\"小红书\",\"listingRef\":{\"sourceSystem\":\"fixture\",\"sourceId\":\"listing-001\"},\"draftText\":\"浦东两居，总价280万，适合首次置业家庭。具体信息以核验为准。\",\"published\":false,\"source\":\"evaluation-fixture\"}",
                 "contract-agent", "{\"analysis\":\"买方与卖方逾期责任明显不对等，建议明确对等的违约责任及交付期限\",\"source\":\"evaluation-fixture\"}",
                 "notification-agent", "{\"sent\":true}");
         var execution = mock(A2aExecutionService.class);
@@ -134,17 +142,14 @@ class SupervisorRealModelEvaluationTest {
             var arguments = new LinkedHashMap<String, Object>(); arguments.put("instruction", request.instruction());
             arguments.put("context", request.structuredContext()); arguments.put("skillSelection", request.skillSelection());
             effects.add(Map.of("capabilityId", "a2a:" + request.targetAgentId(), "arguments", arguments));
+            String resultKey = "listing-agent".equals(request.targetAgentId())
+                    ? request.skillSelection() == null ? "listing-search" : request.skillSelection().name()
+                    : request.targetAgentId();
             return new AgentTaskInvokeResponse(request.sessionId(), request.taskId(), request.targetAgentId(), "COMPLETED",
-                    mapper.readValue(results.get(request.targetAgentId()), Map.class), List.of(), List.of(), "fixture result", request.traceId());
+                    mapper.readValue(results.get(resultKey), Map.class), List.of(), List.of(), "fixture result", request.traceId());
         });
         var mcp = mock(AgentMcpClient.class);
-        when(mcp.listTools()).thenReturn(List.of(new AgentMcpToolDescriptor("compare-mcp-server", "compareListings", "对比实际候选 ID 对应的价格与户型。",
-                "{\"type\":\"object\",\"properties\":{\"listingIds\":{\"type\":\"string\",\"minLength\":1}},\"required\":[\"listingIds\"],\"additionalProperties\":false}", null)));
-        when(mcp.callTool(eq("compare-mcp-server"), eq("compareListings"), anyMap())).thenAnswer(invocation -> {
-            effects.add(Map.of("capabilityId", "mcp:compare-mcp-server:compareListings", "arguments", invocation.getArgument(2)));
-            return new AgentMcpCallResult("compare-mcp-server", "compareListings", "101总价280万，102总价295万，均两居，101总价较低。",
-                    Map.of("listingIds", List.of(101,102), "lowerPriceListingId", 101, "source", "evaluation-fixture"));
-        });
+        when(mcp.listTools()).thenReturn(List.of());
         return new SupervisorCapabilityCatalog(registry, mcp, permissions, execution, org.springframework.ai.tool.ToolCallbackProvider.from(), mapper);
     }
     private record EvaluationCase(String id, String text, boolean explicit, String continuation) {}

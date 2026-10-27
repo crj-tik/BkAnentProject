@@ -1,7 +1,6 @@
 package com.bkanent.agent.rpc;
 
 import com.bkanent.agent.service.AgentCapabilityService;
-import com.bkanent.common.model.CompareReportDTO;
 import com.bkanent.common.model.KpiSummaryDTO;
 import com.bkanent.common.model.MarketingContentDTO;
 import com.bkanent.common.rpc.AgentRpcService;
@@ -31,13 +30,4 @@ public class AgentRpcServiceImpl implements AgentRpcService {
         return agentCapabilityService.generateKpiNarrative(kpis);
     }
 
-    @Override
-    public CompareReportDTO analyzeListings(List<Long> listingIds) {
-        return agentCapabilityService.analyzeListings(listingIds);
-    }
-
-    @Override
-    public String generateCompareConclusion(String comparePrompt) {
-        return agentCapabilityService.generateCompareConclusion(comparePrompt);
-    }
 }

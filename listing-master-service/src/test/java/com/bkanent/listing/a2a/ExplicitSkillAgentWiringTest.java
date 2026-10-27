@@ -32,6 +32,7 @@ class ExplicitSkillAgentWiringTest {
         var registry = new SkillRegistry(new SkillFileLoader(), "");
         var selected = registry.findOperationalSkills("listing").stream().filter(skill -> !skill.tools().isEmpty()).findFirst().orElseThrow();
         ChatModel model = mock(ChatModel.class); AtomicInteger turns = new AtomicInteger();
+        var memoryRpc = requiredMemoryRpc();
         when(model.call(any(Prompt.class))).thenAnswer(invocation -> {
             Prompt prompt = invocation.getArgument(0);
             for (var message : prompt.getInstructions()) {
@@ -49,7 +50,7 @@ class ExplicitSkillAgentWiringTest {
         args[2] = ToolCallbackProvider.class.isAssignableFrom(types[2])
                 ? MethodToolCallbackProvider.builder().toolObjects(mock(Class.forName("com.bkanent.listing.tool.ListingTools"))).build()
                 : mock(types[2]);
-        args[4] = requiredMemoryHookFactory();
+        args[4] = requiredMemoryHookFactory(memoryRpc);
         Object component = constructor.newInstance(args);
         var card = (AgentCard) ListingOfficialA2aAgent.class.getMethod("listingPublishedAgentCard",
                 com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerProperties.class, com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerAgentCardProperties.class)
@@ -79,6 +80,8 @@ class ExplicitSkillAgentWiringTest {
             assertCompleted(ordinary.queue);
         }
         assertThat(turns).hasValue(2);
+        verify(memoryRpc, times(2)).readWorkingSet(any(), any());
+        verify(memoryRpc, atLeast(2)).deliverMessages(any(), any());
         Map<String,Object> bad = new LinkedHashMap<>(selection); bad.put("version", "unknown-version");
         try (QueueScope mismatch = new QueueScope()) {
             executeAuthenticated(executor, context("bad", Map.of("supervisor", Map.of("skillSelection", bad))), mismatch.queue);
@@ -92,6 +95,42 @@ class ExplicitSkillAgentWiringTest {
         assertThat(turns).hasValue(2);
     }
 
+    @Test
+    void requiredMemoryFailureStopsListingModelAndBusinessToolsBeforeExecution() throws Exception {
+        var registry = new SkillRegistry(new SkillFileLoader(), "");
+        ChatModel model = mock(ChatModel.class);
+        var listingTools = mock(com.bkanent.listing.tool.ListingTools.class);
+        var rpc = requiredMemoryRpc();
+        doThrow(new com.bkanent.common.memory.MemoryException(
+                com.bkanent.common.memory.MemoryErrorCode.MEMORY_UNAVAILABLE))
+                .when(rpc).readWorkingSet(any(), any());
+        var constructor = ListingOfficialA2aAgent.class.getConstructors()[0];
+        Object[] args = new Object[constructor.getParameterCount()];
+        var types = constructor.getParameterTypes();
+        args[0] = model; args[1] = types[1].getConstructor().newInstance(); args[3] = registry;
+        args[2] = ToolCallbackProvider.class.isAssignableFrom(types[2])
+                ? MethodToolCallbackProvider.builder().toolObjects(listingTools).build()
+                : listingTools;
+        args[4] = requiredMemoryHookFactory(rpc);
+        Object component = constructor.newInstance(args);
+        var executor = (AgentExecutor) ListingOfficialA2aAgent.class.getMethod("listingA2aAgentExecutor", ObjectMapper.class,
+                com.bkanent.common.a2a.A2aExecutionProperties.class)
+                .invoke(component, new ObjectMapper(), new com.bkanent.common.a2a.A2aExecutionProperties());
+
+        try (QueueScope queue = new QueueScope()) {
+            executeAuthenticated(executor, context("memory-unavailable", Map.of()), queue.queue);
+            boolean failed = false;
+            Event event;
+            while ((event = queue.queue.dequeueEvent(0)) != null) {
+                if (event instanceof TaskStatusUpdateEvent update) failed |= update.getStatus().state() == TaskState.FAILED;
+            }
+            assertThat(failed).isTrue();
+        }
+        verify(model, never()).call(any(Prompt.class));
+        verifyNoInteractions(listingTools);
+        verify(rpc).readWorkingSet(any(), any());
+    }
+
     private void assertMemoryHookWiring(Object component, AgentExecutor executor, String caller, String domain, String agentId) {
         assertThat(executor).isInstanceOf(com.bkanent.common.a2a.OfficialA2aAgentExecutor.class);
         Object hook = org.springframework.test.util.ReflectionTestUtils.getField(component, "memoryHook");
@@ -103,10 +142,14 @@ class ExplicitSkillAgentWiringTest {
     }
 
     private com.bkanent.common.a2a.A2aMemoryHookFactory requiredMemoryHookFactory() throws Exception {
+        return requiredMemoryHookFactory(requiredMemoryRpc());
+    }
+
+    private com.bkanent.common.a2a.A2aMemoryHookFactory requiredMemoryHookFactory(
+            com.bkanent.common.memory.MemoryV2RpcService rpc) throws Exception {
         var properties = new com.bkanent.common.a2a.A2aMemoryProperties();
         properties.setKeyId("wiring-test-current");
         properties.setPrivateKeyFile(testPrivateKeyFile());
-        var rpc = requiredMemoryRpc();
         return new com.bkanent.common.a2a.A2aMemoryHookFactory(properties, () -> rpc,
                 new com.bkanent.memory.runtime.MemoryWorkingSetCache(64, 16L * 1024 * 1024, 60_000, java.time.Clock.systemUTC()),
                 new ObjectMapper());

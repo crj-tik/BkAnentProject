@@ -3,6 +3,7 @@ package com.bkanent.compare.rpc;
 import com.bkanent.common.model.CompareReportDTO;
 import com.bkanent.common.rpc.CompareEngineRpcService;
 import com.bkanent.compare.service.CompareAnalysisService;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.apache.dubbo.config.annotation.DubboService;
 
 import java.util.List;
@@ -11,6 +12,7 @@ import java.util.List;
  * 对比引擎 RPC 服务实现。
  */
 @DubboService
+@ConditionalOnProperty(prefix = "compare.legacy", name = "rpc-enabled", havingValue = "true")
 public class CompareEngineRpcServiceImpl implements CompareEngineRpcService {
 
     private final CompareAnalysisService compareAnalysisService;

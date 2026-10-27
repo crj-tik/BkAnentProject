@@ -54,7 +54,6 @@ import com.bkanent.common.agent.ApprovalCallbackRequest;
 import com.bkanent.common.agent.GovernanceErrorCodes;
 import com.bkanent.common.agent.PermissionErrorCodes;
 import com.bkanent.common.model.ApiResponse;
-import com.bkanent.common.model.CompareReportDTO;
 import com.bkanent.common.model.HealthStatusDTO;
 import com.bkanent.common.model.MarketingContentDTO;
 import com.bkanent.common.model.PublishRequest;
@@ -219,14 +218,6 @@ public class AgentController {
     @PostMapping("/publish-preview")
     public ApiResponse<List<MarketingContentDTO>> publishPreview(@RequestBody PublishRequest request) {
         return ApiResponse.ok(agentCapabilityService.publishListingByPrompt(request.prompt()));
-    }
-
-    /**
-     * 对比preview。
-     */
-    @GetMapping("/compare-preview")
-    public ApiResponse<CompareReportDTO> comparePreview() {
-        return ApiResponse.ok(agentCapabilityService.analyzeListings(List.of(1L, 2L)));
     }
 
     /**

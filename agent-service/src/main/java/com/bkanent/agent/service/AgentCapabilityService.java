@@ -1,6 +1,5 @@
 package com.bkanent.agent.service;
 
-import com.bkanent.common.model.CompareReportDTO;
 import com.bkanent.common.model.KpiSummaryDTO;
 import com.bkanent.common.model.MarketingContentDTO;
 
@@ -15,7 +14,4 @@ public interface AgentCapabilityService {
 
     String generateKpiNarrative(List<KpiSummaryDTO> kpis);
 
-    CompareReportDTO analyzeListings(List<Long> listingIds);
-
-    String generateCompareConclusion(String comparePrompt);
 }

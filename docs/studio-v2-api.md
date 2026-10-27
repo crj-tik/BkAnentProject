@@ -69,19 +69,21 @@ baseArtifactRefs 由服务端检查 owner/work/series/version/revisionId并装�
   "expectedContextRevision":1,
   "artifactRefs":[{"seriesId":"<候选seriesId>","revisionId":"<revisionId>","version":1}],
   "input":{
-    "listingIds":["101","102"],
-    "sourceVersions":[{"id":"101","sourceRevision":"<来源哈希>"},{"id":"102","sourceRevision":"<来源哈希>"}]
+    "listingRefs":[
+      {"sourceSystem":"legacy-local","sourceId":"101","sourceRevision":"<revision>","contentHash":"<64位SHA-256>","dataMode":"UNKNOWN"},
+      {"sourceSystem":"provider-a","sourceId":"A-102","sourceRevision":"<revision>","contentHash":"<64位SHA-256>","dataMode":"SIMULATED"}
+    ]
   }
 }
 ```
 
-只接受候选中的2–6套不同房源；来源变化返回 SOURCE_VERSION_CONFLICT。成功回执示意：
+新调用使用 `listingRefs` 中的完整稳定来源身份和当前版本；每套引用必须与指定候选成果完全一致，并在比较前后通过 Listing 来源 `check` 核验。只接受候选中的2–6套不同房源；来源变化返回 SOURCE_VERSION_CONFLICT，撤权不返回历史内容。旧版 `listingIds`/`sourceVersions` 暂作兼容输入，只能在候选成果中唯一映射到对应来源，缺少稳定来源元数据时要求重新加载候选，不能把 Long ID 当成跨来源身份。成功回执示意：
 
 ```json
 {"success":true,"code":"0","message":"OK","data":{"requestId":"request-003","workId":"<workId>","status":"COMPLETED","artifactRefs":[{"seriesId":"<新seriesId>","revisionId":"<新revisionId>","version":1}]}}
 ```
 
-比较成果含 columns/rows/snapshots/snapshotHash/analysisMode/generatedAt，来源重新签名读取且不使用旧无凭据比较 RPC。共享 `ListingComparisonFacts` 负责单位及数据指纹；旧比较缓存也在来源加载后用 compare-yuan-v2 指纹隔离。旧 `/compare` 正向读取与分享授权尚待迁移，不标为可用。
+比较成果仍写入 Studio 自己的 `listing.comparison` 工件并保留幂等回执，含 columns/rows/snapshots/snapshotHash/analysisMode/generatedAt；列及快照补充 `sourceSystem/sourceId/sourceRevision/contentHash/dataMode`，金额明确使用 CNY 元、面积使用平方米，未知事实标为未知。来源经精确 `listing.read` 签名 RPC 读取并在报告前后核验，不使用旧无凭据比较 RPC。共享 `ListingComparisonFacts` 负责元/㎡计算和稳定版本指纹；旧 `/compare` 分享读取已由房源域兼容入口按当前 owner 与来源权限围栏。
 
 `publish-plan:<草稿seriesId>` 的 input 为 seriesId/revisionId/version；当前仅保存正文快照及 contentHash，生成 `publish.plan`。planVersion=1、status=INCOMPLETE、providerMode=NOT_CONFIGURED、targets/materialRefs为空，无执行 action。COMPLETED 只表示准备命令保存完成，绝非发布成功。
 

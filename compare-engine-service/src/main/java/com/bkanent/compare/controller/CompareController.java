@@ -5,6 +5,7 @@ import com.bkanent.common.model.CompareReportDTO;
 import com.bkanent.common.model.HealthStatusDTO;
 import com.bkanent.compare.model.CompareReportResponse;
 import com.bkanent.compare.service.CompareAnalysisService;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -23,6 +24,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/compare")
+@ConditionalOnProperty(prefix = "compare.legacy", name = "rest-enabled", havingValue = "true")
 public class CompareController {
 
     private final CompareAnalysisService compareAnalysisService;

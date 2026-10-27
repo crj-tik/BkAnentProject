@@ -24,8 +24,8 @@ spring:
             uri: lb://business-service
             predicates:
               - Path=/business/**
-          - id: compare-engine-service
-            uri: lb://compare-engine-service
+          - id: listing-comparison-compatibility
+            uri: lb://listing-master-service
             predicates:
               - Path=/compare/**
           - id: contract-service

@@ -49,6 +49,25 @@ dubbo:
     protocol: dubbo
 
 listing:
+  authorization:
+    enabled: ${LISTING_AUTHORIZATION_ENABLED:false}
+    audience: listing-master-service
+    authority-public-keys:
+      auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+  source:
+    provider: ${LISTING_SOURCE_PROVIDER:legacy-local}
+    dataset-id: ${LISTING_SOURCE_DATASET_ID:legacy-local}
+    fixture-broker-id: ${LISTING_SOURCE_FIXTURE_BROKER_ID:1}
+    http:
+      base-url: ${LISTING_SOURCE_HTTP_BASE_URL:}
+      bearer-token: ${LISTING_SOURCE_HTTP_BEARER_TOKEN:}
+      source-system: ${LISTING_SOURCE_HTTP_SYSTEM:upstream}
+      confirmed-data-mode: ${LISTING_SOURCE_HTTP_CONFIRMED_DATA_MODE:UNKNOWN}
+      connect-timeout-ms: ${LISTING_SOURCE_HTTP_CONNECT_TIMEOUT_MS:1000}
+      read-timeout-ms: ${LISTING_SOURCE_HTTP_READ_TIMEOUT_MS:3000}
+  comparison:
+    report:
+      storage-dir: ${LISTING_COMPARISON_STORAGE_DIR:/app/runtime/reports}
   rag:
     key-id: ${LISTING_RAG_RPC_KEY_ID:listing-current}
     secret: ${LISTING_RAG_RPC_SECRET:}

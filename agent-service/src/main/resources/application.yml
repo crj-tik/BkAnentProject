@@ -48,6 +48,7 @@ agent:
     max-sessions-per-user: 32
     capability-permissions:
       "[local:milvusKnowledgeSearch]": agent.rag.search
+      "[a2a:listing-agent]": listing.read
     # Keep user-delegated MCP destinations closed until static streamable-http connections exist.
     mcp-target-audiences: {}
     public-mcp-capabilities: []

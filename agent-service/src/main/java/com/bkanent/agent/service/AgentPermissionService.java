@@ -293,9 +293,6 @@ public class AgentPermissionService {
         if (AgentMcpNames.BUSINESS_SERVER.equalsIgnoreCase(serverName)) {
             return "agent.mcp.server.business.read";
         }
-        if (AgentMcpNames.COMPARE_SERVER.equalsIgnoreCase(serverName)) {
-            return "agent.mcp.server.compare.read";
-        }
         if (AgentMcpNames.MARKETING_SERVER.equalsIgnoreCase(serverName)) {
             return "agent.mcp.server.marketing.read";
         }

@@ -5,7 +5,6 @@ import com.bkanent.agent.mcp.AgentMcpNames;
 import com.bkanent.agent.mcp.model.AgentMcpCallResult;
 import com.bkanent.agent.service.AgentCapabilityService;
 import com.bkanent.agent.service.AgentChatService;
-import com.bkanent.common.model.CompareReportDTO;
 import com.bkanent.common.model.KpiSummaryDTO;
 import com.bkanent.common.model.MarketingContentDTO;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -14,7 +13,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * AgentCapabilityServiceImpl 服务实现类。
@@ -32,12 +30,6 @@ public class AgentCapabilityServiceImpl implements AgentCapabilityService {
             你是房产业务分析助手。
             请根据 KPI 数据输出管理层可读的月度总结。
             总结必须包含现状判断、风险提示和建议动作。
-            """;
-
-    private static final String COMPARE_CONCLUSION_SYSTEM_PROMPT = """
-            你是房源对比分析助手。
-            请根据输入的房源对比信息输出中文分析结论。
-            结论需要包含差异总结、性价比判断、适合人群和决策建议。
             """;
 
     /**
@@ -98,32 +90,6 @@ public class AgentCapabilityServiceImpl implements AgentCapabilityService {
                 KPI_NARRATIVE_SYSTEM_PROMPT,
                 "请基于以下 KPI 数据生成总结：\n" + formatKpis(source)
         );
-    }
-
-    /**
-     * 分析listings。
-     */
-    @Override
-    public CompareReportDTO analyzeListings(List<Long> listingIds) {
-        String listingIdsText = listingIds == null ? "" : listingIds.stream()
-                .map(String::valueOf)
-                .collect(Collectors.joining(","));
-        AgentMcpCallResult result = agentMcpClient.callTool(
-                AgentMcpNames.COMPARE_SERVER,
-                AgentMcpNames.COMPARE_LISTINGS,
-                Map.of("listingIds", listingIdsText)
-        );
-        String markdown = String.valueOf(result.payload().getOrDefault("comparisonTableMarkdown", ""));
-        String conclusion = String.valueOf(result.payload().getOrDefault("aiConclusion", result.text()));
-        return new CompareReportDTO(List.of(), markdown, conclusion);
-    }
-
-    /**
-     * 生成compareConclusion。
-     */
-    @Override
-    public String generateCompareConclusion(String comparePrompt) {
-        return agentChatService.call(COMPARE_CONCLUSION_SYSTEM_PROMPT, comparePrompt);
     }
 
     /**

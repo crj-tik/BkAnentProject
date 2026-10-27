@@ -979,15 +979,15 @@
 **根因**：只核owner会串同用户不同会话结果，只有Memory复合key不能保护按session分发的SSE；在principal已随机补session后才核幂等又会误拒合法重投。审计全表查询与治理只检查登录会把普通用户身份当全局数据/写权限。
 
 **代码位置**：`AgentPrincipalContext.bind`、`AgentController.chat`及各Supervisor入口、`OrchestrationStore.assertRequestIdentity/ownedRunScopes`、`SupervisorToolLoopRunner`、`SupervisorEventAuditQueryService`、`SessionEventAuditService.queryOwned`、`SupervisorGovernanceService`。当前管理许可仍走旧Auth接口，审计明确记录 `legacy-rpc-unversioned`，未伪造新版本接线；新目录consumer迁移和异步入队并发门禁仍待实施。关联KI-168、LR-15/22/23、KI-80；新增真实request-scope/MockMvc重投及H2审计反例。
-## LR-99 房源与比较共享领域事实，合并保留历史身份（规划）
+## LR-99 房源与比较共享领域事实，合并保留历史身份
 
-**结论**：2026-10-25 独立 change `consolidate-listing-comparison-domain` 规划将比较能力迁入房源域，房源经接口来源接入，对比/报告统一使用当前获准快照。上游事实与本地维护记录分开表达；历史 `compare/compare-agent` Memory 和已接受任务保持原身份，不因服务合并重命名、扩权或换任务重发。
+**结论**：`consolidate-listing-comparison-domain` 将当前 Listing 来源查询、快照校验、比较、报告与 PDF 入口收敛到 `listing-master-service`。业务 API 使用 `domain-parallel-v1` 稳定来源引用、来源修订号、内容 hash、单位和 `REAL/SIMULATED/UNKNOWN` 模式；客户端不能把未知来源声明为真实。比较创建前批量读取获准快照，报告缓存、历史与 PDF 读取时再次核对当前来源和当前操作权限。`legacy-local` 历史 ID 只映射到该命名空间，旧 JSON/PDF 保留原字节且不恢复缺少 owner/source hash 的报告。
 
-**根因**：当前比较没有独立事实来源，分服务放大了相同数据的授权与缓存边界；直接改 Agent 名或复制历史会把部署重构误作新的记忆授权。统一领域能力，同时保留来源、版本和原执行身份，可避免旧报告泄露和未知调用重复执行。
+**根因**：拆分的比较服务依赖 Listing 事实，却缺少可跨来源稳定验证的身份与版本；ID-only 缓存不能发现来源更新，也会把服务重构误作授权变化。稳定引用和当前签名 Auth 上下文共同限定每次读取，来源模式作为服务端事实保留；当前 `listing/listing-agent` 继续使用已登记的必需 Memory Hook，旧 `compare/compare-agent` caller/domain/agent 身份与已接受任务只保留用于受控历史读取和排空，不复制 Memory、重命名身份、扩大许可或将未知调用改发成新任务。
 
-**代码位置（当前与规划）**：当前 `listing-master-service`、`compare-engine-service`、`common/model/ListingComparisonFacts` 与 `agent-service/studio`；方案见 `openspec/changes/consolidate-listing-comparison-domain/`。本条是尚未实施的设计约束，不代表服务已合并或数据已迁移。
+**代码位置**：`common/listing` 中的来源与版本契约、`common/model/ListingComparisonFacts` 和 `common/rag/RagCanonicalHash`；`listing-master-service/source` 的 legacy-local、fixture、HTTP provider 与业务来源授权服务；`listing-master-service/comparison` 的比较、版本指纹、报告存储、迁移映射和 PDF；`ListingBusinessSourceController`、`ListingComparisonController`、legacy 兼容控制器及 RPC provider；`ListingComparisonAuthorizationIngressFilter`；`agent-service/studio/StudioListingReader` 与 Studio 工件/回执流程；Listing Agent 的既有 Memory Hook 与 `listing-comparison` skill。配置迁移和排空/回退门禁见 `docs/listing-comparison-cutover.md`。
 
-**关联**：LR-22/23/54/79/96/97；KI-115。
+**关联**：LR-22/23/54/79/96/97/149；KI-115。定向契约、来源、授权、报告、Agent 装配、Studio 授权与配置矩阵测试通过；真实上游联机、共享 Nacos 发布、容器部署和线上切流仍待部署验收。
 
 ## LR-100 知识运营拥有派生资产，逐字稿继续归访谈域（规划）
 

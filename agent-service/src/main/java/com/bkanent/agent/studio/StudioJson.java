@@ -64,7 +64,8 @@ public class StudioJson {
         for (Map<String, Object> ref : refs) {
             Map<String, Object> safe = new LinkedHashMap<>();
             safe.put("type", required(ref.get("type"), "对象类型", 64)); safe.put("id", required(ref.get("id"), "对象编号", 128));
-            for (String key : List.of("label", "sourceRevision")) if (ref.get(key) instanceof String s && s.length() <= 500) safe.put(key, s);
+            for (String key : List.of("label", "sourceSystem", "sourceRevision", "contentHash", "dataMode"))
+                if (ref.get(key) instanceof String s && s.length() <= 500) safe.put(key, s);
             safeRefs.add(safe);
         }
         Map<String, Object> criteria = object(context.get("criteria"));

@@ -564,7 +564,6 @@ services:
       AGENT_RAG_RPC_SECRET: ${AGENT_RAG_RPC_SECRET:-}
       MEMORY_SERVICE_BASE_URL: http://memory-service:9011
       BUSINESS_MCP_ENDPOINT: http://business-service:9010/mcp
-      COMPARE_MCP_ENDPOINT: http://compare-engine-service:9006/mcp
       MARKETING_MCP_ENDPOINT: http://marketing-content-service:9008/mcp
       CONTRACT_MCP_ENDPOINT: http://contract-service:9012/mcp
       SETTLEMENT_MCP_ENDPOINT: http://settlement-service:9013/mcp
@@ -599,6 +598,7 @@ services:
     <<: *app-service
     profiles: [full]
     volumes:
+      - compare-report-data:/app/runtime
       - type: bind
         source: ./.secrets/service-identities/listing-master-service/private-key.pem
         target: /run/secrets/service-identity.pem
@@ -611,6 +611,17 @@ services:
       A2A_PUBLIC_BASE_URL: http://listing-master-service:9004
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database
       LISTING_RAG_RPC_SECRET: ${LISTING_RAG_RPC_SECRET:-}
+      LISTING_AUTHORIZATION_ENABLED: ${LISTING_AUTHORIZATION_ENABLED:-false}
+      LISTING_SOURCE_PROVIDER: ${LISTING_SOURCE_PROVIDER:-legacy-local}
+      LISTING_SOURCE_DATASET_ID: ${LISTING_SOURCE_DATASET_ID:-legacy-local}
+      LISTING_SOURCE_FIXTURE_BROKER_ID: ${LISTING_SOURCE_FIXTURE_BROKER_ID:-1}
+      LISTING_SOURCE_HTTP_BASE_URL: ${LISTING_SOURCE_HTTP_BASE_URL:-}
+      LISTING_SOURCE_HTTP_BEARER_TOKEN: ${LISTING_SOURCE_HTTP_BEARER_TOKEN:-}
+      LISTING_SOURCE_HTTP_SYSTEM: ${LISTING_SOURCE_HTTP_SYSTEM:-upstream}
+      LISTING_SOURCE_HTTP_CONFIRMED_DATA_MODE: ${LISTING_SOURCE_HTTP_CONFIRMED_DATA_MODE:-UNKNOWN}
+      LISTING_SOURCE_HTTP_CONNECT_TIMEOUT_MS: ${LISTING_SOURCE_HTTP_CONNECT_TIMEOUT_MS:-1000}
+      LISTING_SOURCE_HTTP_READ_TIMEOUT_MS: ${LISTING_SOURCE_HTTP_READ_TIMEOUT_MS:-3000}
+      LISTING_COMPARISON_STORAGE_DIR: ${LISTING_COMPARISON_STORAGE_DIR:-/app/runtime/reports}
       AGENT_RAG_RPC_SECRET: ${AGENT_RAG_RPC_SECRET:-}
       CUSTOMER_LISTING_READ_SECRET: ${CUSTOMER_LISTING_READ_SECRET:-}
       MARKETING_LISTING_READ_SECRET: ${MARKETING_LISTING_READ_SECRET:-}
@@ -636,7 +647,7 @@ services:
 
   compare-engine-service:
     <<: *app-service
-    profiles: [full]
+    profiles: [legacy-compare]
     volumes:
       - compare-report-data:/app/runtime
       - type: bind
@@ -649,8 +660,16 @@ services:
       <<: *app-environment
       SERVICE_ARTIFACT: compare-engine-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://compare-engine-service:9006
+      COMPARE_A2A_ENABLED: ${COMPARE_A2A_ENABLED:-false}
+      COMPARE_MCP_ENABLED: ${COMPARE_MCP_ENABLED:-false}
+      COMPARE_LEGACY_REST_ENABLED: ${COMPARE_LEGACY_REST_ENABLED:-false}
+      COMPARE_LEGACY_RPC_ENABLED: ${COMPARE_LEGACY_RPC_ENABLED:-false}
+      COMPARE_AGENT_MODEL: ${COMPARE_AGENT_MODEL:-gpt-5.6-terra}
+      COMPARE_AGENT_TEMPERATURE: ${COMPARE_AGENT_TEMPERATURE:-0.2}
+      COMPARE_AGENT_MAX_TOKENS: ${COMPARE_AGENT_MAX_TOKENS:-4000}
+      COMPARE_AI_CONCLUSION_ENABLED: ${COMPARE_AI_CONCLUSION_ENABLED:-true}
       COMPARE_MEMORY_V2_COMPRESSION_ENABLED: ${COMPARE_MEMORY_V2_COMPRESSION_ENABLED:-false}
-      COMPARE_REPORT_STORAGE_DIR: /app/runtime/reports
+      COMPARE_REPORT_STORAGE_DIR: ${COMPARE_REPORT_STORAGE_DIR:-/app/runtime/reports}
 
   media-worker-service:
     <<: *app-service
@@ -748,6 +767,7 @@ services:
     environment:
       <<: *app-environment
       SERVICE_ARTIFACT: memory-service-1.0.0-SNAPSHOT.jar
+      MEMORY_V2_AUTHORIZATION_CONTEXT_ENABLED: ${MEMORY_V2_AUTHORIZATION_CONTEXT_ENABLED:-false}
       DUBBO_REGISTRY_ADDRESS: "nacos://nacos:8848?namespace=${NACOS_NAMESPACE:-BK-AGENT}&group=DEFAULT_GROUP"
       MYSQL_DB_MEMORY: ${MYSQL_DB_MEMORY:-bk_memory}
       MEMORY_V2_SHARING_ENABLED: ${MEMORY_V2_SHARING_ENABLED:-false}
