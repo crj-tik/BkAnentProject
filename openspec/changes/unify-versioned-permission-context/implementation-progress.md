@@ -242,4 +242,8 @@ MCP transport customizer fixture发出5个不同JSON-RPC `tools/call` body，每
 
 `mvn -gs .mvn-settings.xml -s .mvn-settings.xml test` 全23模块成功，Surefire汇总 **1732项，失败0、错误0、跳过14**；跳过项为外部MySQL、Docker/Nacos或真实模型环境测试。扫描器定向测试8项、迁移manifest测试44项、`git diff --check`与严格OpenSpec校验通过。
 
-运行栈只读冒烟：Auth与Gateway readiness/liveness均HTTP 200/`UP`；经Gateway无凭据请求 `/auth/me`、`/auth/roles`、`/auth/authorization/catalog` 均HTTP 401。当前Auth/Agent版本化授权开关关闭，Auth Redis writer与Agent Redis reader专用密码未配置；本轮没有应用迁移或执行授权写操作。Agent容器检查时已重启20次，近期启动错误包括RocketMQ `RemotingConnectException`，当前栈没有RocketMQ服务；Listing等业务域服务和Interview浏览器应用也未在运行/本仓，故不能完成真实A2A、ReactAgent归档、浏览器领取/SSE及撤权故障端到端验收。任务8.3–8.5、11.1、11.4、11.6保持未勾选，整体进度仍为**57/63**。
+运行栈只读冒烟：Auth与Gateway readiness/liveness均HTTP 200/`UP`；经Gateway无凭据请求 `/auth/me`、`/auth/roles`、`/auth/authorization/catalog` 均HTTP 401。收到用户启动授权后，按Compose只启动 `rocketmq-namesrv` 与 `rocketmq-broker`；NameServer/Broker运行，`mqadmin clusterList`可见`broker-a`。Agent当前运行约2分钟，readiness/liveness均HTTP 200/`UP`，历史重启计数为71；启动RocketMQ前的连接错误不再作为当前未就绪证据。
+
+授权开关的实际配置位置：Auth为`auth.authorization.enabled`，在`auth-service/src/main/resources/application.yml`与`nacos/auth-service.yaml`当前均为`false`；其Redis子项`auth.authorization.redis.enabled`与`protected-writer-configured`也均为`false`。Agent本地默认在`agent-service/src/main/resources/application.yml`为`false`，Nacos配置`nacos/agent-service.yaml`使用`${AGENT_AUTHORIZATION_ENABLED:false}`。`.env.example`虽列出Agent开关及`AUTHZ_REDIS_WRITER_PASSWORD`/`AUTHZ_REDIS_READER_PASSWORD`，但`docker-compose.yml`当前未把这些变量传入对应容器；当前容器中开关未启用、专用Redis密码未设置。Auth `trusted-callers`及Redis writer/reader configured门禁也尚未完成，故没有启用新授权链或应用数据库迁移。
+
+Listing等其它业务域服务和Interview浏览器应用未在运行/本仓，不能完成有效凭据下的真实A2A、ReactAgent归档、浏览器领取/SSE及撤权故障端到端验收。任务8.3–8.5、11.1、11.4、11.6保持未勾选，整体进度仍为**57/63**。
