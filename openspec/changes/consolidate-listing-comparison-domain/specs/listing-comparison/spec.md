@@ -8,7 +8,7 @@
 
 ### Requirement: 对比属于房源域内的获准能力
 
-系统 SHALL 通过 `listing-agent` 的 `listing-comparison` 技能提供对比能力，接受 2 至 6 套不同的稳定 `listingRef={sourceSystem,sourceId}` 及预期来源版本，使用同次获准来源快照计算事实指标。结果 MUST 绑定每套房源的来源引用、revision/contentHash、数据模式和计算规则版本。新请求 MUST 不依赖独立 compare Agent 或 Long ID-only 比较契约；迁移期旧 Long ID 入口只可解析为 `legacy-local`。
+系统 SHALL 通过 `listing-agent` 的 `listing-comparison` 技能提供对比能力，接受 2 至 6 套不同的稳定 `listingRef={sourceSystem,sourceId}` 及预期来源版本，使用同次获准来源快照计算事实指标。创建对比 MUST 要求当前用户具有 `compare.report.create`，并对每套来源分别满足适用的 `listing.read` 或 `listing.read.all`。结果 MUST 绑定每套房源的来源引用、revision/contentHash、数据模式和计算规则版本。新请求 MUST 不依赖独立 compare Agent 或 Long ID-only 比较契约；迁移期旧 Long ID 入口只可解析为 `legacy-local`。
 
 #### Scenario: 通过房源能力发起比较
 - **WHEN** 当前用户通过 `listing-comparison` 提交 3 套获准房源引用及期望来源版本
@@ -18,7 +18,12 @@
 - **WHEN** 迁移期旧 `/compare/**` 入口收到不能唯一映射到 `legacy-local` 的 Long ID
 - **THEN** 系统拒绝该请求并要求调用方迁移到稳定来源引用，不从其他来源猜测或匹配房源
 
+#### Scenario: 比较创建操作未获授权
+- **WHEN** 当前用户能够读取房源，但当前授权上下文不含 `compare.report.create`
+- **THEN** 系统拒绝创建报告，不把 `listing.read`、Agent 可调用资格或管理员展示字段当作比较创建权限
+
 ### Requirement: 结果明确事实与生成解释
+
 
 比较 SHALL 区分确定性指标、未知字段和模型解释，并将结果绑定到当前获准的来源引用、来源版本、数据模式与规则版本。模型解释 MUST 只依据当前获准事实，不得将最低单价自动解释为对所有客户最优，也不得创造外部事实。
 
@@ -26,9 +31,10 @@
 - **WHEN** 对比房源缺少有效面积
 - **THEN** 该房源单价显示未知，结论说明资料缺口，不根据其他房源或模型估算填入数值
 
+
 ### Requirement: 报告缓存和历史查看复核当前来源
 
-缓存命中、历史详情和生成新报告 SHALL 在返回报告正文前核验当前身份、逐套读取权与来源版本。缓存中保存的来源指纹只用于识别报告绑定的快照，不代替对当前来源状态的核验。期望版本改变 MUST 返回明确冲突或将旧报告标为 STALE；来源不可核验时不得把旧报告作为当前事实返回。
+缓存命中和历史详情 SHALL 在返回报告正文前核验当前身份、`compare.report.read.own`、报告 owner、逐套来源读取权与来源版本。缓存中保存的来源指纹只用于识别报告绑定的快照，不代替对当前来源状态的核验。期望版本改变 MUST 返回明确冲突或将旧报告标为 STALE；来源不可核验时不得把旧报告作为当前事实返回。
 
 #### Scenario: 价格改变后查看旧报告
 - **WHEN** 某套来源房源价格版本与历史报告绑定版本不同
@@ -38,7 +44,12 @@
 - **WHEN** 当前用户请求一份缓存报告，但至少一套房源的当前读取权已撤回或来源状态无法核验
 - **THEN** 系统不返回缓存的报告正文、指标或 PDF，并返回可辨识的拒绝或不可用结果
 
+#### Scenario: 报告读取操作未获授权
+- **WHEN** 请求者不是报告 owner，或当前授权上下文不含 `compare.report.read.own`
+- **THEN** 系统拒绝返回报告正文、指标和 PDF，不因报告 ID、分享码或旧缓存命中而放行
+
 ### Requirement: 报告分享及 PDF 使用同等授权
+
 
 报告详情、分享和 PDF 导出 SHALL 执行相同当前用户与来源访问检查。报告 ID 或分享码只可定位报告，MUST NOT 单独授予访问权；系统 MUST NOT 创建或继续接受匿名公开分享。旧文件缺少可核验归属、或带有旧公开分享标记时，未经当前授权 SHALL 明确拒绝或返回退役语义，并保留原存储供受控迁移。
 
@@ -57,3 +68,15 @@
 #### Scenario: 停服前有结果未知的比较任务
 - **WHEN** 某旧 compare 任务已经被接受但结果尚未确认
 - **THEN** 系统沿原任务查询或登记未知事实，不在 listing Agent 下创建替代任务，历史私有内容仍按原授权读取
+
+### Requirement: 新比较回合使用 Listing Agent 的必需 Memory 生命周期
+
+经 `listing-agent` 执行的比较 SHALL 使用该 Agent 当前已登记的私有 Memory 身份完成回合前读取、来源复核及成功后的归档。Memory 查询成功但无历史内容是合法空结果；Memory 缺失、授权失败或不可用 MUST 在模型和业务工具执行前阻断本轮。新比较不得读取或迁移旧 `compare/compare-agent` 私有记忆。
+
+#### Scenario: Listing Memory 不可用
+- **WHEN** 比较请求开始时必需的 Listing Memory 读取、授权或来源复核失败
+- **THEN** 系统在调用模型、房源来源或报告写入工具前拒绝本轮，不绕过 Memory 重试另一条比较路径
+
+#### Scenario: 旧 Compare 记忆不属于新 Listing 身份
+- **WHEN** 新 Listing 比较请求需要历史上下文
+- **THEN** 系统只读取当前用户获准的 Listing Agent Memory，不因服务合并读取旧 `compare/compare-agent` 空间
