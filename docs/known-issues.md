@@ -1486,7 +1486,7 @@
 
 **关联**：LR-106；AuthTokenServiceTest、AuthAccountMutationServiceTest。本提交同时修复账号写入只保留actor而丢失真实凭据的竞争：密码计算后writer锁内复验实际access/actor/当前管理权限，注销/到期时零账号写与审计副作用。
 
-## KI-172 [OPEN·P2] Campaign 品牌素材新增和计划快照在 JDBC 列名映射上不稳定
+## KI-172 [FIXED·281f03a·P2] Campaign 品牌素材新增和计划快照在 JDBC 列名映射上不稳定
 
 **发现日期**：2026-10-27。品牌素材闭环集成验收在 H2 MySQL mode 下触发 `GeneratedKeyHolder.getKey()` 的多列结果异常；修正主键读取后又发现 `queryForList` 返回列标签大小写影响从资产快照恢复 ID，导致 confirm 将未变化的素材误判为变化。
 

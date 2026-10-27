@@ -113,7 +113,7 @@ mvn -gs .mvn-settings.xml -s .mvn-settings.xml "-Dmaven.repo.local=.m2repo" -Dsk
 - `agent-service/src/test/resources/application-marketing-campaign-test.yml` 单独配置 `mcp:marketing-mcp-server:confirmMarketingCampaign`。这是隔离测试差异，未写入共享 `nacos/agent-service.yaml`；合并 Nacos 审批清单时需要与其它已批准 capability 取并集，不能覆盖既有值。
 - 旧 Agent 的生成函数不再调用不存在/越权语义的 `publishMarketingContent` MCP 工具，也不再把 listingId 固定为 1、忽略平台。它按请求中真实 listingId/platforms 生成草稿并返回新内容身份。
 - 多渠道 fixture 以一个已审核草稿绑定品牌素材，走 MCP draft → 内容审核 → MCP prepare → Supervisor confirm gate → MCP receipt → 三渠道派发 → effects/ROI；UNKNOWN 用 MCP reconcile 原 attempt。另有 A2A/ReAct/Supervisor 各自真实文件/工具边界测试。没有启动真实 MCP/Nacos/外部平台，也没有把 fixture 断言为真实联机。
-- 2026-10-27 扩展集成测试发现品牌素材生成键与 JDBC 列名大小写问题，已限定主键生成列并用稳定 RowMapper 固定快照键；KI-172 记录该修复及防回归用例。
+- 2026-10-27 扩展集成测试发现品牌素材生成键与 JDBC 列名大小写问题，已在提交 `281f03a` 中限定主键生成列并用稳定 RowMapper 固定快照键；KI-172 记录该修复及防回归用例。
 
 新增/调整验证命令：
 
@@ -122,4 +122,4 @@ mvn -gs .mvn-settings.xml -s .mvn-settings.xml "-Dmaven.repo.local=.m2repo" -pl 
 mvn -gs .mvn-settings.xml -s .mvn-settings.xml "-Dmaven.repo.local=.m2repo" -pl agent-service -am "-Dtest=AgentCapabilityServiceImplTest,MarketingCampaignPublishSkillTest,MarketingCampaignApprovalProfileTest,SupervisorToolLoopGraphTest,DemonstrationSkillTest" "-Dsurefire.failIfNoSpecifiedTests=false" test
 ```
 
-完整 `marketing-content-service` reactor 回归 32 项通过，包含 A2A wiring、campaign fixture、MCP 目录/契约、旧 DTO 围栏和 ReAct 伪造 PUBLISHED 反例；Agent/Supervisor/Skill 定向用例 39 项通过。根 reactor 22 个模块编译，OpenSpec strict validation 已通过。全量 Agent suite 目前有 1 项上述既有 Spring test context 错误，其余本次定向覆盖通过。共享数据库迁移、活动 manifest/runner allowlist 登记及真实渠道联机不属于本分支本地验收，仍须协调环境执行；fixture 结果不代表真实渠道已接通。KI-172 修复提交号将在提交后登记。
+完整 `marketing-content-service` reactor 回归 32 项通过，包含 A2A wiring、campaign fixture、MCP 目录/契约、旧 DTO 围栏和 ReAct 伪造 PUBLISHED 反例；Agent/Supervisor/Skill 定向用例 39 项通过。根 reactor 22 个模块编译，OpenSpec strict validation 已通过。全量 Agent suite 目前有 1 项上述既有 Spring test context 错误，其余本次定向覆盖通过。共享数据库迁移、活动 manifest/runner allowlist 登记及真实渠道联机不属于本分支本地验收，仍须协调环境执行；fixture 结果不代表真实渠道已接通。KI-172 修复于 `281f03a`。
