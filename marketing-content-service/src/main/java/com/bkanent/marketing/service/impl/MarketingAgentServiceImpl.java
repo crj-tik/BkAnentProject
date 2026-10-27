@@ -81,9 +81,9 @@ public class MarketingAgentServiceImpl implements MarketingAgentService {
         return new AgentCard(
                 "marketing-agent",
                 "Marketing Agent",
-                "Responsible for marketing copy generation, content creation, publish preparation and execution with LLM-driven creativity",
+                "Responsible for marketing copy generation, DRAFT content creation, and campaign plan preparation; publication confirmation is handled separately by Supervisor",
                 "2.0.0",
-                List.of("marketing-copy", "marketing-adaptation", "marketing-publish"),
+                List.of("marketing-copy", "marketing-adaptation", "campaign-plan-prepare"),
                 List.of("marketing"),
                 true,
                 true,
@@ -177,21 +177,27 @@ public class MarketingAgentServiceImpl implements MarketingAgentService {
         return options;
     }
 
-    private AgentTaskInvokeResponse buildResponse(AgentTaskInvokeRequest request,
-                                                   Map<String, Object> parsed) {
+    AgentTaskInvokeResponse buildResponse(AgentTaskInvokeRequest request,
+                                         Map<String, Object> parsed) {
         Map<String, Object> output = new LinkedHashMap<>();
         output.put("resultType", "marketing_result");
-        output.put("intent", parsed.getOrDefault("intent", "generate_copy"));
-        output.put("decision", parsed.getOrDefault("decision", "SUCCESS"));
+        String requestedIntent = String.valueOf(parsed.getOrDefault("intent", "generate_copy"));
+        String intent = List.of("generate_copy", "publish_prepare").contains(requestedIntent)
+                ? requestedIntent : "generate_copy";
+        String requestedDecision = String.valueOf(parsed.getOrDefault("decision", "SUCCESS"));
+        String decision = List.of("SUCCESS", "FAILED", "QUEUED").contains(requestedDecision)
+                ? requestedDecision : "SUCCESS";
+        output.put("intent", intent);
+        output.put("decision", decision);
         output.put("contentId", parsed.getOrDefault("contentId", 0));
         output.put("platform", parsed.getOrDefault("platform", "DOUYIN"));
-        output.put("publishStatus", parsed.getOrDefault("publishStatus", "DRAFT"));
+        output.put("publishStatus", "DRAFT");
         output.put("draftText", parsed.getOrDefault("draftText", ""));
-        output.put("summary", parsed.getOrDefault("summary", ""));
+        output.put("summary", "营销 Agent 仅生成草稿或准备发布计划；当前内容状态为 DRAFT，尚未发布。发布须由 Supervisor 单独确认并以领域回执为准。");
         output.put("contentType", "marketing_result");
 
-        String intent = String.valueOf(output.get("intent"));
-        List<String> nextHints = deriveNextHints(intent);
+        String resolvedIntent = String.valueOf(output.get("intent"));
+        List<String> nextHints = deriveNextHints(resolvedIntent);
 
         return new AgentTaskInvokeResponse(
                 request.sessionId(),
@@ -209,8 +215,7 @@ public class MarketingAgentServiceImpl implements MarketingAgentService {
     private List<String> deriveNextHints(String intent) {
         return switch (intent) {
             case "generate_copy" -> List.of("marketing.publish_prepare", "marketing.adapt_content");
-            case "publish_prepare" -> List.of("marketing.publish", "notification.send");
-            case "publish" -> List.of("notification.send");
+            case "publish_prepare" -> List.of("supervisor.marketing-campaign-publish");
             default -> List.of("marketing.generate_copy");
         };
     }

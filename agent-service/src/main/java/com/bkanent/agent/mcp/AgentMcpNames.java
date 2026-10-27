@@ -27,9 +27,9 @@ public final class AgentMcpNames {
      */
     public static final String COMPARE_LISTINGS = "compareListings";
     /**
-     * 字段：PUBLISH_MARKETING_CONTENT。
+     * 字段：CREATE_MARKETING_CONTENT_DRAFT。
      */
-    public static final String PUBLISH_MARKETING_CONTENT = "publishMarketingContent";
+    public static final String CREATE_MARKETING_CONTENT_DRAFT = "createMarketingContentDraft";
 
     /**
      * 处理AgentMcpNames。

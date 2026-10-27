@@ -1067,11 +1067,11 @@
 
 ## LR-135 内容创建默认草稿，审核和发布状态拥有明确写入口
 
-**结论**：内容创建/变体写入强制 DRAFT；只有 `marketing.content.review` 授权的同域审核入口可改审核状态；旧内容 publish-status HTTP/RPC 写入返回 `LEGACY_WRITE_DISABLED`，发布状态由 campaign 回执维护。
+**结论**：内容创建/变体写入强制 DRAFT；所有文案生成入口只能生成/保存草稿并准备计划，不能确认发布或发送通知。只有 `marketing.content.review` 授权的同域审核入口可改审核状态；Supervisor 的营销发布技能可调用 campaign confirm，但该 capability 必须经过 `approval-capabilities` 审批；发布状态由 campaign provider 回执维护。旧内容 publish-status HTTP/RPC 写入返回 `LEGACY_WRITE_DISABLED`。
 
 **根因**：内容正文的作者提交不等于审核通过，旧跨域回写也不能继续成为第二个发布状态真源。
 
-**代码位置**：`MarketingAssetServiceImpl.saveContents/updatePublishStatus/updateAuditStatus`、`CampaignContentReviewService`、`CampaignController`、`MarketingContentRpcServiceImpl`。
+**代码位置**：`MarketingAssetServiceImpl.saveContents/updatePublishStatus/updateAuditStatus`、`CampaignContentReviewService`、`CampaignController`、`MarketingContentRpcServiceImpl`、ReAct `MarketingAgentServiceImpl`、Supervisor `marketing-campaign-publish` skill 与 `approval-capabilities`、campaign receipt/provider。
 
 **关联**：LR-102、LR-22/23。
 

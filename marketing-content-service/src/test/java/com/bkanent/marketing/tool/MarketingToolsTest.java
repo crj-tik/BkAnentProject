@@ -7,10 +7,13 @@ import com.bkanent.marketing.model.MarketingContentUpsertRequest;
 import com.bkanent.marketing.service.MarketingAgentService;
 import com.bkanent.marketing.service.MarketingAssetService;
 import com.bkanent.marketing.campaign.CampaignLifecycleService;
+import com.bkanent.common.skill.core.SkillFileLoader;
+import com.bkanent.common.skill.core.SkillRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -44,7 +47,8 @@ class MarketingToolsTest {
         tools.createMarketingContent(5L, "DOUYIN", "标题", "TEXT", "已有文案", null, null);
 
         verify(assetService).createContent(Mockito.argThat(request ->
-                "manual".equals(request.source()) && "已有文案".equals(request.copywriting())));
+                "manual".equals(request.source()) && "已有文案".equals(request.copywriting())
+                        && "DRAFT".equals(request.auditStatus())));
         verifyNoInteractions(agentServiceProvider, listingRpcService);
     }
 
@@ -59,7 +63,19 @@ class MarketingToolsTest {
 
         verify(agentService).generateCopy(Mockito.contains("望江府"), eq("DOUYIN"));
         verify(assetService).createContent(Mockito.argThat(request ->
-                "llm".equals(request.source()) && "LLM 生成的文案正文".equals(request.copywriting())));
+                "llm".equals(request.source()) && "LLM 生成的文案正文".equals(request.copywriting())
+                        && "DRAFT".equals(request.auditStatus())));
+    }
+
+    @Test
+    void copyGenerationSkillAndReActToolsCannotConfirmPublishOrSendNotifications() {
+        var skill = new SkillRegistry(new SkillFileLoader(), "").getByName("marketing-copy-generation");
+        assertThat(skill.tools()).containsExactly("createMarketingContent", "searchContents", "prepareMarketingCampaign");
+
+        var callbacks = MethodToolCallbackProvider.builder().toolObjects(tools).build().getToolCallbacks();
+        assertThat(java.util.Arrays.stream(callbacks).map(callback -> callback.getToolDefinition().name()).toList())
+                .containsExactlyInAnyOrder("createMarketingContent", "searchContents", "prepareMarketingCampaign")
+                .doesNotContain("confirmMarketingCampaign", "sendNotification", "publishMarketingContent", "updatePublishStatus");
     }
 
     @Test

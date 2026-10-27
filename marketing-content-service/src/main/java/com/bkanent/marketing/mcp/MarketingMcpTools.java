@@ -6,6 +6,8 @@ import com.bkanent.common.marketing.campaign.CampaignPlanPrepareRequest;
 import com.bkanent.common.marketing.campaign.CampaignPlanResponse;
 import com.bkanent.common.marketing.campaign.CampaignReceiptResponse;
 import com.bkanent.common.marketing.campaign.CampaignTargetRequest;
+import com.bkanent.common.marketing.campaign.MarketingContentDraftResponse;
+import com.bkanent.common.marketing.campaign.MarketingContentDraftsResponse;
 import com.bkanent.common.rpc.MediaWorkerRpcService;
 import com.bkanent.common.tool.McpTool;
 import com.bkanent.marketing.campaign.CampaignDomainException;
@@ -40,7 +42,7 @@ public class MarketingMcpTools implements McpTool {
     }
 
     @Tool(description = "生成并保存营销内容草稿。此工具不会发布；必须先准备并由用户确认确切计划。")
-    public String createMarketingContentDraft(
+    public MarketingContentDraftsResponse createMarketingContentDraft(
             @ToolParam(description = "Listing ID") Long listingId,
             @ToolParam(description = "Comma-separated platforms, e.g. 'douyin,wechat,xiaohongshu'") String platforms,
             @ToolParam(description = "Marketing copywriting text") String copywriting) {
@@ -51,7 +53,10 @@ public class MarketingMcpTools implements McpTool {
                         assets, null, null, 1, "DEFAULT", List.of("agent-generated"), "DRAFT", "DRAFT"))
                 .toList();
         List<MarketingContentDTO> savedContents = marketingAssetService.saveContents(contents);
-        return "已生成并保存 " + savedContents.size() + " 条营销草稿；尚未发布。";
+        List<MarketingContentDraftResponse> drafts = savedContents.stream()
+                .map(content -> new MarketingContentDraftResponse(content.id(), content.platform(), content.status()))
+                .toList();
+        return new MarketingContentDraftsResponse(drafts);
     }
 
     @Tool(description = "为已审核通过的营销内容创建受权发布计划。此操作仅准备，不执行平台发布。")
@@ -74,6 +79,18 @@ public class MarketingMcpTools implements McpTool {
         if (expectedPlanVersion == null) throw new IllegalArgumentException("expectedPlanVersion is required");
         return campaignLifecycleService.confirm(planId,
                 new CampaignConfirmRequest(requestId, expectedPlanVersion, expectedSnapshotHash));
+    }
+
+    @Tool(description = "Read the publication receipt and per-target outcomes. A receipt is evidence of provider results, not a new publish request.")
+    public CampaignReceiptResponse getMarketingCampaignReceipt(
+            @ToolParam(description = "Receipt ID returned by confirmMarketingCampaign") String receiptId) {
+        return campaignLifecycleService.getReceipt(receiptId);
+    }
+
+    @Tool(description = "Reconcile an OUTCOME_UNKNOWN result using the original attempt ID. This never creates or resends an attempt.")
+    public CampaignReceiptResponse reconcileMarketingCampaignAttempt(
+            @ToolParam(description = "Original attempt ID whose outcome is OUTCOME_UNKNOWN") String attemptId) {
+        return campaignLifecycleService.reconcile(attemptId);
     }
 
     private List<String> parsePlatforms(String platforms) {

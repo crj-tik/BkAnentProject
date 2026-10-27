@@ -4,6 +4,10 @@ import com.bkanent.common.marketing.campaign.CampaignConfirmRequest;
 import com.bkanent.common.marketing.campaign.CampaignDataMode;
 import com.bkanent.common.marketing.campaign.CampaignPlanPrepareRequest;
 import com.bkanent.common.marketing.campaign.CampaignTargetRequest;
+import com.bkanent.common.marketing.campaign.MarketingContentDraftResponse;
+import com.bkanent.common.marketing.campaign.MarketingContentDraftsResponse;
+import com.bkanent.common.model.MarketingContentDTO;
+import com.bkanent.common.rpc.MediaWorkerRpcService;
 import com.bkanent.common.rag.RagCredentialContext;
 import com.bkanent.common.rpc.AuthPermissionRpcService;
 import com.bkanent.common.rpc.AuthenticatedPrincipal;
@@ -44,6 +48,9 @@ class CampaignLifecycleIntegrationTest {
     private CampaignRuntimeProperties properties;
     private CampaignJdbcRepository repository;
     private CampaignLifecycleService campaigns;
+    private CampaignAssetAdminService campaignAssets;
+    private CampaignActorResolver actorResolver;
+    private CampaignAuthorizationService authorization;
     private MockHttpServletRequest request;
     private HttpServer listingFixture;
 
@@ -56,6 +63,8 @@ class CampaignLifecycleIntegrationTest {
         jdbc = new JdbcTemplate(dataSource);
         jdbc.execute("CREATE TABLE marketing_content(id BIGINT PRIMARY KEY,status VARCHAR(32),publish_message VARCHAR(1024),external_publish_id VARCHAR(128),publish_time TIMESTAMP)");
         jdbc.update("INSERT INTO marketing_campaign_account(platform,external_account_ref,permission_code,revision_no,data_mode,active,default_account) VALUES('DOUYIN','fixture-account','marketing.channel.douyin.publish',1,'SIMULATED',1,1)");
+        jdbc.update("INSERT INTO marketing_campaign_account(platform,external_account_ref,permission_code,revision_no,data_mode,active,default_account) VALUES('BEIKE','fixture-beike','marketing.channel.beike.publish',1,'SIMULATED',1,0)");
+        jdbc.update("INSERT INTO marketing_campaign_account(platform,external_account_ref,permission_code,revision_no,data_mode,active,default_account) VALUES('XIAOHONGSHU','fixture-xiaohongshu','marketing.channel.xiaohongshu.publish',1,'SIMULATED',1,0)");
         jdbc.update("INSERT INTO marketing_content(id,status) VALUES(5,'DRAFT')");
 
         marketingAssets = mock(MarketingAssetService.class);
@@ -70,8 +79,8 @@ class CampaignLifecycleIntegrationTest {
         when(auth.hasPermission(eq(42L), anyString())).thenReturn(true);
         @SuppressWarnings("unchecked") ObjectProvider<AuthPermissionRpcService> provider = mock(ObjectProvider.class);
         when(provider.getIfAvailable()).thenReturn(auth);
-        CampaignActorResolver actorResolver = new CampaignActorResolver(provider);
-        CampaignAuthorizationService authorization = new CampaignAuthorizationService(provider);
+        actorResolver = new CampaignActorResolver(provider);
+        authorization = new CampaignAuthorizationService(provider);
         properties = new CampaignRuntimeProperties();
         properties.setMode(CampaignRuntimeProperties.Mode.SIMULATED);
         listingFixture = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -89,6 +98,7 @@ class CampaignLifecycleIntegrationTest {
         properties.setListingSnapshotBaseUrl("http://127.0.0.1:" + listingFixture.getAddress().getPort());
         ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
         repository = new CampaignJdbcRepository(jdbc, mapper);
+        campaignAssets = new CampaignAssetAdminService(repository, actorResolver, authorization);
         CampaignListingSnapshotClient listings = new CampaignListingSnapshotClient(properties, mapper);
         campaigns = new CampaignLifecycleService(repository, actorResolver, authorization, properties, listings,
                 marketingAssets, mapper, List.of(new SimulatedCampaignPlatformProvider()));
@@ -150,11 +160,89 @@ class CampaignLifecycleIntegrationTest {
     }
 
     @Test
+    void brandAssetAndAllFixtureChannelsCompleteTheUnifiedCampaignFlowAsSimulated() {
+        var brandAsset = campaignAssets.create(new CampaignBrandAssetRequest("LOGO", "营销品牌标识",
+                "https://example.test/brand.svg", "ALL", List.of("brand", "fixture"), "ACTIVE", "acceptance fixture"));
+        assertEquals(brandAsset.id(), campaignAssets.list("LOGO", "品牌").get(0).id());
+
+        MarketingContentEntity content = marketingAssets.getById(5L);
+        content.setAuditStatus("DRAFT");
+        when(marketingAssets.saveContents(any())).thenAnswer(invocation -> {
+            List<MarketingContentDTO> drafts = invocation.getArgument(0);
+            MarketingContentDTO draft = drafts.get(0);
+            return List.of(new MarketingContentDTO(5L, draft.listingId(), draft.platform(), draft.title(),
+                    draft.contentType(), draft.copywriting(), draft.assetUrls(), draft.coverImageUrl(), draft.videoUrl(),
+                    draft.versionNo(), draft.platformVariant(), draft.tags(), "DRAFT", "DRAFT"));
+        });
+        @SuppressWarnings("unchecked") ObjectProvider<MediaWorkerRpcService> mediaProvider = mock(ObjectProvider.class);
+        when(mediaProvider.getIfAvailable()).thenReturn(null);
+        var marketingMcp = new com.bkanent.marketing.mcp.MarketingMcpTools(marketingAssets, mediaProvider, campaigns,
+                new ObjectMapper().findAndRegisterModules());
+        MarketingContentDraftsResponse drafts = marketingMcp.createMarketingContentDraft(50L, "DOUYIN", "待审核草稿");
+        MarketingContentDraftResponse draft = drafts.contents().get(0);
+        assertEquals(5L, draft.contentId());
+        assertEquals("DRAFT", draft.status());
+        when(marketingAssets.updateAuditStatus(5L, "APPROVED")).thenAnswer(invocation -> {
+            content.setAuditStatus("APPROVED");
+            return null;
+        });
+        new CampaignContentReviewService(actorResolver, authorization, marketingAssets)
+                .review(draft.contentId(), new CampaignContentReviewRequest("APPROVED"));
+
+        List<CampaignTargetRequest> targets = List.of(
+                new CampaignTargetRequest("BEIKE", accountId("BEIKE"), Map.of()),
+                new CampaignTargetRequest("DOUYIN", accountId("DOUYIN"), Map.of()),
+                new CampaignTargetRequest("XIAOHONGSHU", accountId("XIAOHONGSHU"), Map.of()));
+        String targetsJson = "[{\"platform\":\"BEIKE\",\"accountId\":" + accountId("BEIKE") +
+                "},{\"platform\":\"DOUYIN\",\"accountId\":" + accountId("DOUYIN") +
+                "},{\"platform\":\"XIAOHONGSHU\",\"accountId\":" + accountId("XIAOHONGSHU") + "}]";
+        var prepared = marketingMcp.prepareMarketingCampaign(draft.contentId(), targetsJson, Long.toString(brandAsset.id()));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM marketing_campaign_publish_attempt", Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM marketing_campaign_outbox", Integer.class));
+
+        var accepted = marketingMcp.confirmMarketingCampaign(prepared.planId(), "all-fixture-channels",
+                prepared.planVersion(), prepared.snapshotHash());
+        for (int i = 0; i < targets.size(); i++) assertTrue(campaigns.dispatchOne());
+        var receipt = marketingMcp.getMarketingCampaignReceipt(accepted.receiptId());
+        assertEquals(3, receipt.attempts().size());
+        assertTrue(receipt.attempts().stream().allMatch(attempt -> "SUCCESS".equals(attempt.status())
+                && CampaignDataMode.SIMULATED == attempt.dataMode()));
+        assertEquals(List.of("BEIKE", "DOUYIN", "XIAOHONGSHU"), receipt.attempts().stream()
+                .map(com.bkanent.common.marketing.campaign.CampaignAttemptReceipt::platform).sorted().toList());
+
+        var effects = receipt.attempts().stream().map(attempt -> campaigns.readEffect(attempt.attemptId(), true)).toList();
+        assertTrue(effects.stream().allMatch(effect -> CampaignDataMode.SIMULATED == effect.dataMode()
+                && effect.roi() == null && effect.attributableRevenue() == null));
+        assertTrue(campaigns.roiReport(null).stream().allMatch(report -> report.roi() == null));
+    }
+
+    @Test
+    void draftCannotPrepareUntilAuthorizedReviewerApprovesIt() {
+        MarketingContentEntity content = marketingAssets.getById(5L);
+        content.setAuditStatus("DRAFT");
+        var failure = assertThrows(CampaignDomainException.class, () -> campaigns.prepare(new CampaignPlanPrepareRequest(5L,
+                List.of(), List.of(new CampaignTargetRequest("DOUYIN", 1L, Map.of())), null)));
+        assertEquals(com.bkanent.common.marketing.campaign.CampaignErrorCode.CONTENT_NOT_APPROVED, failure.code());
+
+        when(marketingAssets.updateAuditStatus(5L, "APPROVED")).thenAnswer(invocation -> {
+            content.setAuditStatus("APPROVED");
+            return null;
+        });
+        var reviews = new CampaignContentReviewService(actorResolver, authorization, marketingAssets);
+        reviews.review(5L, new CampaignContentReviewRequest("APPROVED"));
+        assertEquals("APPROVED", content.getAuditStatus());
+        assertEquals("PREPARED", campaigns.prepare(new CampaignPlanPrepareRequest(5L,
+                List.of(), List.of(new CampaignTargetRequest("DOUYIN", 1L, Map.of())), null)).status());
+    }
+
+    @Test
     void realModeWithoutProviderFailsBeforeCreatingReceiptOrOutbox() {
         properties.setMode(CampaignRuntimeProperties.Mode.REAL);
-        jdbc.update("UPDATE marketing_campaign_account SET data_mode='REAL' WHERE id=1");
+        jdbc.update("UPDATE marketing_campaign_account SET data_mode='REAL'");
         var prepared = campaigns.prepare(new CampaignPlanPrepareRequest(5L, List.of(),
-                List.of(new CampaignTargetRequest("douyin", 1L, Map.of())), null));
+                List.of(new CampaignTargetRequest("BEIKE", accountId("BEIKE"), Map.of()),
+                        new CampaignTargetRequest("DOUYIN", accountId("DOUYIN"), Map.of()),
+                        new CampaignTargetRequest("XIAOHONGSHU", accountId("XIAOHONGSHU"), Map.of())), null));
         var failure = assertThrows(CampaignDomainException.class, () -> campaigns.confirm(prepared.planId(),
                 new CampaignConfirmRequest("confirm-real", 1, prepared.snapshotHash())));
         assertEquals(com.bkanent.common.marketing.campaign.CampaignErrorCode.PROVIDER_NOT_CONFIGURED, failure.code());
@@ -227,7 +315,7 @@ class CampaignLifecycleIntegrationTest {
         jdbc.update("INSERT INTO marketing_campaign_account(platform,external_account_ref,permission_code,revision_no,data_mode,active,default_account) VALUES('DOUYIN','fixture-account-2','marketing.channel.douyin.publish',1,'SIMULATED',1,0)");
         var prepared = campaigns.prepare(new CampaignPlanPrepareRequest(5L, List.of(), List.of(
                 new CampaignTargetRequest("douyin", 1L, Map.of()),
-                new CampaignTargetRequest("douyin", 2L, Map.of("fixtureOutcome", "FAILED"))), null));
+                new CampaignTargetRequest("douyin", jdbc.queryForObject("SELECT id FROM marketing_campaign_account WHERE external_account_ref='fixture-account-2'", Long.class), Map.of("fixtureOutcome", "FAILED"))), null));
         var accepted = campaigns.confirm(prepared.planId(), new CampaignConfirmRequest("partial-request", 1, prepared.snapshotHash()));
         String successId = accepted.attempts().get(0).attemptId();
         String failedId = accepted.attempts().get(1).attemptId();
@@ -245,7 +333,9 @@ class CampaignLifecycleIntegrationTest {
         String originalAttemptId = unknownReceipt.attempts().get(0).attemptId();
         assertTrue(campaigns.dispatchOne());
         assertEquals("OUTCOME_UNKNOWN", campaigns.findReceipt(unknownPlan.planId(), "unknown-request").status());
-        var reconciled = campaigns.reconcile(originalAttemptId);
+        var reconciled = new com.bkanent.marketing.mcp.MarketingMcpTools(marketingAssets,
+                mediaProvider(), campaigns, new ObjectMapper().findAndRegisterModules())
+                .reconcileMarketingCampaignAttempt(originalAttemptId);
         assertEquals("SUCCESS", reconciled.status());
         assertEquals(originalAttemptId, reconciled.attempts().get(0).attemptId());
         assertEquals(CampaignDataMode.SIMULATED, campaigns.readEffect(originalAttemptId, true).dataMode());
@@ -359,5 +449,16 @@ class CampaignLifecycleIntegrationTest {
         Path parent = Path.of("..", relative);
         if (Files.exists(parent)) return parent;
         throw new IllegalStateException("Cannot locate repository file: " + relative);
+    }
+
+    private long accountId(String platform) {
+        return jdbc.queryForObject("SELECT id FROM marketing_campaign_account WHERE platform=?", Long.class, platform);
+    }
+
+    @SuppressWarnings("unchecked")
+    private ObjectProvider<MediaWorkerRpcService> mediaProvider() {
+        ObjectProvider<MediaWorkerRpcService> provider = mock(ObjectProvider.class);
+        when(provider.getIfAvailable()).thenReturn(null);
+        return provider;
     }
 }

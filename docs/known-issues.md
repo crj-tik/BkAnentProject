@@ -1486,6 +1486,16 @@
 
 **关联**：LR-106；AuthTokenServiceTest、AuthAccountMutationServiceTest。本提交同时修复账号写入只保留actor而丢失真实凭据的竞争：密码计算后writer锁内复验实际access/actor/当前管理权限，注销/到期时零账号写与审计副作用。
 
+## KI-172 [OPEN·P2] Campaign 品牌素材新增和计划快照在 JDBC 列名映射上不稳定
+
+**发现日期**：2026-10-27。品牌素材闭环集成验收在 H2 MySQL mode 下触发 `GeneratedKeyHolder.getKey()` 的多列结果异常；修正主键读取后又发现 `queryForList` 返回列标签大小写影响从资产快照恢复 ID，导致 confirm 将未变化的素材误判为变化。
+
+**根因**：JDBC insert 请求所有生成键，H2 driver 返回 ID 以及创建/更新时间列；`getKey()` 仅允许单列。资产 `Map` 快照直接依赖 JDBC driver 列标签大小写，生成的 JSON 字段名与读取时 `id` 大小写不稳定。
+
+**修复与防回归**：限定 insert 只请求 `id` 生成键，并用 RowMapper 固定资产快照字段名和类型；品牌素材创建、列表、绑定计划和发布 fixture 在同一 H2 集成测试覆盖。
+
+**关联**：LR-131；`CampaignJdbcRepository.createAsset`、`CampaignLifecycleIntegrationTest`。
+
 ---
 
 **变更历史**：e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。

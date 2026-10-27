@@ -44,4 +44,8 @@ public class CampaignDomainException extends RuntimeException {
     public static CampaignDomainException legacyWriteDisabled(String message) {
         return new CampaignDomainException(CampaignErrorCode.LEGACY_WRITE_DISABLED, HttpStatus.GONE, message);
     }
+
+    public static CampaignDomainException legacyContractUnsupported(String message) {
+        return new CampaignDomainException(CampaignErrorCode.LEGACY_CONTRACT_UNSUPPORTED, HttpStatus.GONE, message);
+    }
 }

@@ -19,11 +19,11 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.LinkedHashMap;
 import java.util.UUID;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
-import java.sql.Statement;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import java.util.Arrays;
@@ -43,15 +43,27 @@ public class CampaignJdbcRepository {
     public List<Map<String, Object>> findAssets(List<Long> ids) {
         if (ids.isEmpty()) return List.of();
         String placeholders = String.join(",", ids.stream().map(id -> "?").toList());
-        return jdbc.queryForList("SELECT id,asset_type,asset_name,asset_url,platform_scope,tag_names,status,revision_no " +
-                "FROM marketing_campaign_brand_asset WHERE deleted=0 AND status='ACTIVE' AND id IN (" + placeholders + ") ORDER BY id", ids.toArray());
+        return jdbc.query("SELECT id,asset_type,asset_name,asset_url,platform_scope,tag_names,status,revision_no " +
+                "FROM marketing_campaign_brand_asset WHERE deleted=0 AND status='ACTIVE' AND id IN (" + placeholders + ") ORDER BY id",
+                (rs, row) -> {
+                    Map<String, Object> asset = new LinkedHashMap<>();
+                    asset.put("id", rs.getLong("id"));
+                    asset.put("asset_type", rs.getString("asset_type"));
+                    asset.put("asset_name", rs.getString("asset_name"));
+                    asset.put("asset_url", rs.getString("asset_url"));
+                    asset.put("platform_scope", rs.getString("platform_scope"));
+                    asset.put("tag_names", rs.getString("tag_names"));
+                    asset.put("status", rs.getString("status"));
+                    asset.put("revision_no", rs.getInt("revision_no"));
+                    return asset;
+                }, ids.toArray());
     }
 
     public long createAsset(CampaignBrandAssetRequest request) {
         KeyHolder key = new GeneratedKeyHolder();
         jdbc.update(connection -> {
             var statement = connection.prepareStatement("INSERT INTO marketing_campaign_brand_asset(asset_type,asset_name,asset_url,platform_scope,tag_names,status,revision_no,remark) VALUES(?,?,?,?,?,?,1,?)",
-                    Statement.RETURN_GENERATED_KEYS);
+                    new String[] {"id"});
             statement.setString(1, request.assetType()); statement.setString(2, request.assetName());
             statement.setString(3, request.assetUrl()); statement.setString(4, request.platformScope());
             statement.setString(5, String.join(",", request.tags())); statement.setString(6, request.status());
