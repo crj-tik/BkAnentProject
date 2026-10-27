@@ -134,6 +134,8 @@ fill_secret MYSQL_MCP_PASSWORD
 fill_secret MYSQL_MCP_TOKEN
 if [ "$PROFILE" = rag ] || [ "$PROFILE" = full ]; then
   fill_secret RAG_MYSQL_PASSWORD
+  fill_secret KNOWLEDGE_MYSQL_PASSWORD
+  fill_secret KNOWLEDGE_SOURCE_DB_PASSWORD
   fill_secret RAG_AUTH_RPC_SECRET
   fill_secret LISTING_RAG_RPC_SECRET
   fill_secret MEMORY_RAG_RPC_SECRET
@@ -206,7 +208,7 @@ if [ "$PROFILE" = rag ]; then
   required_configs="auth-service.yaml rag-service.yaml listing-master-service.yaml memory-service.yaml agent-service.yaml customer-service.yaml marketing-content-service.yaml"
 fi
 if [ "$PROFILE" = "full" ]; then
-  required_configs="$required_configs agent-service.yaml business-service.yaml compare-engine-service.yaml contract-service.yaml customer-service.yaml interview-service.yaml listing-master-service.yaml marketing-content-service.yaml media-worker-service.yaml memory-service.yaml notification-service.yaml promotion-service.yaml settlement-service.yaml"
+  required_configs="$required_configs agent-service.yaml business-service.yaml compare-engine-service.yaml contract-service.yaml customer-service.yaml interview-service.yaml knowledge-service.yaml listing-master-service.yaml marketing-content-service.yaml media-worker-service.yaml memory-service.yaml notification-service.yaml promotion-service.yaml settlement-service.yaml"
 fi
 config_missing=0
 for cfg in $required_configs; do

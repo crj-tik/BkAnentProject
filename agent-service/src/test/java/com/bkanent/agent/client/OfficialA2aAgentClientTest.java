@@ -46,6 +46,15 @@ import org.mockito.ArgumentCaptor;
 class OfficialA2aAgentClientTest {
 
     @Test
+    void knowledgeAgentUsesTheKnowledgeServiceAudience() {
+        var knowledge = new RegisteredAgentDescriptor("knowledge-agent", "http://127.0.0.1:9015",
+                "/.well-known/agent.json", "/a2a", AgentRuntimeType.ALIBABA_A2A,
+                AgentDescriptorSource.STATIC_CONFIG, null, Map.of());
+
+        assertThat(OfficialA2aAgentClient.audienceFor(knowledge)).isEqualTo("knowledge-service");
+    }
+
+    @Test
     void versionedA2aDoesNotUseModelStructuredUserAsAnAuthenticationFallback() {
         A2AClient remote = mock(A2AClient.class);
         var properties = new com.bkanent.agent.config.AgentAuthorizationProperties();

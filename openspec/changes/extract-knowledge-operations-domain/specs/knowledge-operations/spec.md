@@ -8,7 +8,7 @@
 
 ### Requirement: 经营知识具有独立身份和结构化证据
 
-系统 SHALL 为经营案例和打法分配 Knowledge 自有身份及不可变 revision，记录经营问题、情境、前提、动作、来源所述结果、适用边界、未核实项和来源证据。source asset ID、Interview report ID 与 knowledge ID MUST 保持不同语义。
+系统 SHALL 为经营案例及其对应打法分配 Knowledge 自有稳定身份和不可变 revision，记录经营问题、情境、前提、动作、来源所述结果、适用边界、未核实项和来源证据。domain-parallel-v1 中两者构成一个 Knowledge 聚合：案例元数据与打法正文共用 `knowledgeId`，分别存于案例事实和 revision 正文，不另造第二个 Playbook ID。source asset ID、Interview report ID 与 knowledge ID MUST 保持不同语义。
 
 #### Scenario: 同一来源产生新的运营版本
 - **WHEN** 运营人员修订一个已存在的打法
@@ -33,6 +33,8 @@ Knowledge SHALL 独占新经营案例、打法、不可变 revision、审核决�
 ### Requirement: 编辑审核和发布遵循当前权限与版本
 
 知识 SHALL 提供 DRAFT、REVIEW_PENDING、PUBLISHED、WITHDRAWN 状态；编辑创建新 revision，提交、审核、发布、撤回、读取和生成均 SHALL 核验对应精确 Auth 操作、验签 AuthorizationContext/AuthzFreshness 与 expectedVersion，并记录实际 actor 和决定。A2A 能力 a2a:knowledge-agent 仅映射 agent.workflow.invoke.knowledge；Agent invoke 权限 MUST NOT 代替知识生命周期动作权限。审核者分离要求由受管审核策略控制，模型生成不得替代人工审核发布决定。当前 Auth 未提供可信 STORE identity 时，门店范围动作 MUST 失败关闭。
+
+OWN 案例的 review.decide.own MAY 授权非 owner 审核员读取仅处于 REVIEW_PENDING 的当前候选版本；此权限 MUST NOT 授予草稿、已发布、已撤回或搜索读取。审核人 MUST 与 owner 不同。审核批准只记录决定并保持待审状态；owner 在当前 revision 存在有效 APPROVE 后才能发布。
 
 #### Scenario: 两人并发提交或审核
 - **WHEN** 一个请求基于旧 revision 提交审核或发布

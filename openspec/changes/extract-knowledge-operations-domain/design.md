@@ -30,7 +30,7 @@ Interview 当前 playbook_card/commonality_report 和历史报告只盘点并输
 
 ### 1. 新增知识运营微服务，不搬迁旧事实
 
-knowledge-service 维护 KnowledgeCase、Playbook、不可变 KnowledgeRevision、SourceRef、ReviewDecision、OperationReceipt 及持久生成任务。新表和索引只在 bk_knowledge。新模块加入根 Maven 聚合，Compose 按服务 artifact 构建，旧 Interview 模块和服务定义原样保留。generic Dockerfile 已能打包根模块制品；实现时确认即可，不因为新增服务重复改造镜像入口。
+v1 将一个经营案例及其对应打法作为单个 Knowledge 聚合：`knowledge_case.knowledge_id` 是稳定 Knowledge 身份，案例元数据位于 `knowledge_case`，结构化打法/证据位于不可变 `knowledge_revision.body_json`，每次编辑或生成创建新 revision。SourceRef、ReviewDecision、OperationReceipt 和持久生成任务也只在 `bk_knowledge`。本期不再创建第二个 Playbook ID/可变表，避免冻结 v1 的 case/ref/revision 失去一致身份；将来若同一案例拥有多个独立可发布打法，应另行版本化扩展而不是复用 Interview `playbook_card.id`。新表和索引只在 bk_knowledge。新模块加入根 Maven 聚合，Compose 按服务 artifact 构建，旧 Interview 模块和服务定义原样保留。generic Dockerfile 已能打包根模块制品；实现时确认即可，不因为新增服务重复改造镜像入口。
 
 替代方案是把运营编辑继续放入 Interview 或搬迁旧表。本方案将“发生过的访谈事实”和“运营人员审核发布的经营知识”分开，避免双重权威，并使另一并行拆分会话无需改同一 Interview 服务代码。
 
@@ -49,6 +49,8 @@ PUBLISHED 是现有 Interview 可见性发布动作，本期将它作为唯一�
 Knowledge 领域包含草稿、待审、已发布、已撤回；编辑创建新 revision。写操作使用稳定 requestId、expectedVersion、内容 hash 和持久回执。模型生成与人工审核/发布分离。每个 REST、Agent tool 和下游读请求都从本地验签上下文取 actor，并检查 AuthzFreshness、精确动作和 Knowledge 记录所有权；不得从 payload、模型声明、等级、来源发布状态推断授权。来源 PUBLISHED 只控制来源能否被导入，不扩大 Knowledge 的 own/store 发布读取范围。现有 Auth 仅支持 BROKER 身份且未登记 knowledge 权限；可信 STORE 映射及操作授权到位前，真实 store publish/search/read/check 失败关闭。
 
 Auth/权限协调差异仅包括 Agent 能力操作 agent.workflow.invoke.knowledge 与以下 Knowledge 动作码：knowledge.case.create.own、knowledge.case.edit.own、knowledge.case.submit.own、knowledge.case.generate.own、knowledge.case.review.decide.own、knowledge.case.review.decide.store、knowledge.case.publish.own、knowledge.case.publish.store、knowledge.case.withdraw.own、knowledge.case.withdraw.store、knowledge.case.read.own、knowledge.case.read.store。搜索、详情、batch-read 与 check 按目标资源使用对应 read 操作；own 还要验证 Knowledge 所有权，store 需验证 Auth 可信 STORE identity。不得登记 interview.asset.knowledge-use.* 来源授权操作，因为本 change 没有 Interview 授权 API。Auth catalog、角色策略和可信身份登记由协调 Auth 变更合入，不修改 Auth Java。测试 registry 仅用于本域隔离验收，不代表线上授权已启用。
+
+OWN 案例由独立审核员使用 review.decide.own；非 owner 仅凭此权限可读取 REVIEW_PENDING 的当前候选，不可读其他状态或搜索。owner 不能审核自己的案例，审核批准后仍由 owner 发布。建议 Auth 角色映射为 KNOWLEDGE_AUTHOR（own create/edit/submit/generate/read/publish/withdraw）与 KNOWLEDGE_REVIEWER（review.decide.own）；它们是协调建议而非本 change 已注册角色。当前 Auth 的 businessAdmin 授权主体会获得全部 active catalog 操作码，但仍受 Knowledge owner/store 资源校验约束；roleCode=ADMIN 不等于 businessAdmin。store 操作在可信 STORE identity 签发前不分配。
 
 ### 4. knowledge-agent 复用必需 Memory，且不让来源正文进入记忆
 

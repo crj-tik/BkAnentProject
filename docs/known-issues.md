@@ -1622,6 +1622,16 @@
 
 **关联**：LR-153；`AuthAuthorizationRpcServiceImpl`、`RequestBinding`、`AuthzContractTest`、`AuthzSerializationTest`；change `unify-versioned-permission-context`任务4.2/11.5。
 
+## KI-212 [FIXED·本提交·P1] Knowledge OWN审核动作与owner校验冲突
+
+**发现日期与依据**：2026-10-27，审核 Knowledge 生命周期授权路径时发现 OWN 案例 review 使用通用 owner-action 校验，因此即使持有 `knowledge.case.review.decide.own` 的非 owner 审核员也会被拒绝；详情读取同样只允许 owner，使单独配置审核权限无法查看候选。与此同时，简单放宽读取会扩大其对草稿/已发布/已撤回内容的访问范围。
+
+**修复**：review 动作对 OWN 案例只核验精确 review 操作并要求审核人不同于 owner；review 权限只可读取 `REVIEW_PENDING` 的当前 revision，其他状态仍需 owner 的 `knowledge.case.read.own`。APPROVE 仍保持待审，由 owner 单独完成发布。补充 Auth 角色协调矩阵、OpenSpec 权限要求与 LR-119，不在本 change 修改 Auth 授权实现或登记共享权限。
+
+**验证与边界**：Knowledge 生命周期定向6项、Auth fail-closed 3项通过；完整 Knowledge/Agent/Memory 聚焦套件共50项通过。测试覆盖非 owner 可审核待审案例、owner 自审拒绝、审核权限不能读取草稿；真实 Auth 角色/操作登记仍待协调运行态验收。
+
+**关联**：LR-119；`KnowledgeAuthorization`、`KnowledgeLifecycleServiceTest`；change `extract-knowledge-operations-domain`。
+
 ---
 
-**变更历史**：本提交补齐鉴权迁移交付清单与安全回滚边界（KI-208），并修复RAG配置绑定问题（KI-207）、完成全仓Maven回归和Interview凭据边界记录（KI-202/203），持久化A2A请求防重放与任务归属（KI-172）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
+**变更历史**：本提交补齐鉴权迁移交付清单与安全回滚边界（KI-208），并修复RAG配置绑定问题（KI-207）、完成全仓Maven回归和Interview凭据边界记录（KI-202/203），持久化A2A请求防重放与任务归属（KI-172）；知识拆分实现修正 OWN 审核员与 owner 读取边界（KI-212）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。

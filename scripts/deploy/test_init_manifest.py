@@ -28,6 +28,11 @@ EXPECTED_SUPPORT_MIGRATIONS = {
     ("interview-director-command-20260930-v1", "bk_interview", "sql/migrations/20260930_interview_director_command.sql"),
 }
 
+EXPECTED_KNOWLEDGE_MIGRATIONS = {
+    ("knowledge-database-bootstrap-20261027-v1", "bk_auth", "sql/migrations/20261027_knowledge_database_bootstrap.sql"),
+    ("knowledge-domain-20261027-v1", "bk_knowledge", "sql/migrations/20261027_knowledge_domain.sql"),
+}
+
 MIGRATION_TABLES = {
     "sql/migrations/20260930_interview_director_command.sql": (
         "interview_director_command",
@@ -39,6 +44,14 @@ MIGRATION_TABLES = {
         "a2a_request_nonce",
         "a2a_task_owner",
         "a2a_task_execution_reservation",
+    ),
+    "sql/migrations/20261027_knowledge_domain.sql": (
+        "knowledge_case",
+        "knowledge_revision",
+        "knowledge_source_ref",
+        "knowledge_review_decision",
+        "knowledge_operation_receipt",
+        "knowledge_generation_task",
     ),
 }
 
@@ -93,6 +106,9 @@ def main() -> None:
     missing_support = EXPECTED_SUPPORT_MIGRATIONS - observed
     if missing_support:
         fail(f"required upgrade compatibility migrations are missing: {sorted(missing_support)}")
+    missing_knowledge = EXPECTED_KNOWLEDGE_MIGRATIONS - observed
+    if missing_knowledge:
+        fail(f"required Knowledge migrations are missing: {sorted(missing_knowledge)}")
 
     for relative, tables in MIGRATION_TABLES.items():
         migration = (ROOT / relative).read_text(encoding="utf-8")

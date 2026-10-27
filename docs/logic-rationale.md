@@ -1230,7 +1230,7 @@
 
 **根因**：Interview 公开来源工具只有元数据，不能满足知识提炼对正文和精确证据的需要；向 Interview 加 grant/provider 会改动同时拆分的旧服务并产生迁移冲突。只读视图把最小数据面放在 Knowledge 自己的 schema 内，使 Knowledge 主账号没有 Interview 表权限，来源账号也不能读取源表或写入；来源访问仅依赖现有显式发布状态。相比直接授予源表列权限，受限视图能在数据库边界排除未发布正文；代价是 Knowledge 需镜像 Interview 当前表结构与公开资格规则，必须通过版本锁定、SQL/check 和资格对照测试发现漂移。
 
-**代码位置**：interview-service/InterviewAssetMapper.selectPublicAssets、InterviewAssetService.publish/revokePublication/isPubliclyEligible/requireUsableSource、InterviewAssetEntity 和 Sanitizer.VERSION；当前规划在 knowledge-service/InterviewTranscriptSource 及 bk_knowledge 的只读视图 migration/check。现有实现/计划依据不代表新适配器已实现。
+**代码位置**：Interview 权威条件仍在 `interview-service/InterviewAssetMapper.selectPublicAssets`、`InterviewAssetService.publish/revokePublication/isPubliclyEligible/requireUsableSource`、`InterviewAssetEntity` 和 `Sanitizer.VERSION`；本 change 镜像在 `knowledge-service/.../InterviewTranscriptSource`、`sql/migrations/20261027_knowledge_domain.sql` 与 `docker/mysql/checks/knowledge-domain.sql`。SQL view 不投影原文敏感列，Java 双阶段读取绑定精确快照并复核标题/正文凭据形态与正文 hash。该实现通过本地源码与 H2 适配测试，不代表迁移已应用或源库联机验收完成。
 
 **关联**：LR-3/6/8/59/90/115；KI-15；change extract-knowledge-operations-domain。旧 LR-114 所述 Interview 用途 grant 方案已由本条替代，本 change 不增加 Interview grant API 或表。
 
@@ -1240,6 +1240,26 @@
 
 **根因**：Memory 的工作集读取和 A2A 请求归档是 Agent 生命周期的必需部分；只确认 hook 已接入，不能保证来源正文不会沿着通用 tool-call/tool-response 投影写入 Memory。按 agent/domain 隔离并限制消息形状，才能同时复用既有工作集能力与保持逐字稿来源的存储边界。公钥、caller 白名单、Nacos data ID、Compose 环境、.env.example 和 Knowledge 配置模板必须同步；Nacos 仅含密钥占位符，私钥保留在服务独立秘密挂载中。
 
-**代码位置**：common-a2a/A2aMemoryHookFactory、A2aMemoryAgentHook.beforeAgent/afterAgent/project；InterviewOfficialA2aAgent 的 hook 接入方式；nacos/memory-service.yaml 的 trusted-callers；Knowledge Agent、application.yml、knowledge-service Nacos、Compose 与 .env.example 的配置规划。
+**代码位置**：`common-a2a/A2aMemoryHookFactory`、`A2aMemoryAgentHook.beforeAgent/afterAgent/project`；本 change 的 `KnowledgeOfficialA2aAgent`、`KnowledgeInputGuardHook`、`KnowledgeAgentTools`、`nacos/memory-service.yaml` trusted callers、Knowledge `application.yml`/Nacos、Compose 与 `.env.example`。本地输入哨兵测试验证正文/原声不能进入 Agent 用户消息；完整 Memory 实际归档哨兵、密钥登记和 Nacos 运行态仍待协调验收。
 
 **关联**：LR-90/94/97/116/152；change extract-knowledge-operations-domain。Memory service Java 和已有 caller 权限不变；本条记录新增 Knowledge 接入约束，不表示 Knowledge caller/key/config 已部署。
+
+## LR-118 v1 案例与对应打法共用一个 Knowledge 聚合身份
+
+**结论**：domain-parallel-v1 将一个经营案例及其对应结构化打法建模为一个 Knowledge 聚合：稳定 `knowledge_id` 同时标识案例元数据与打法，不额外创建可变 `playbook` 表或第二个 `playbook_id`；结构化打法、证据级别和未核实项保存在不可变 `knowledge_revision.body_json`，每次编辑/生成创建新 revision。编辑 revision 继承前版的 SourceRef 和 dataMode，来源仍须在提交、审核、发布和读取前实时复核；人工编辑内容保持 `UNVERIFIED`，不因已有来源引用而升级为已核验。旧 Interview `playbook_card.id` 不复用。若将来要求一个案例关联多个独立审核/发布的打法，应单独扩展版本化领域契约。
+
+**根因**：当前冻结消费者契约只引用 `knowledgeId + revision`；将案例与其打法拆成两个身份会让搜索引用、审核、发布和撤回到底针对哪个 revision 变得不明确，也会产生重复权限与双重生命周期。将事实元数据与不可变打法正文分层存储，可以维持一个授权/回执/来源边界，同时让每次内容变化可审计。
+
+**代码位置**：`knowledge-service/.../KnowledgeCaseRecord`、`KnowledgeRevisionRecord`、`KnowledgeLifecycleService`；`sql/migrations/20261027_knowledge_domain.sql` 的 `knowledge_case`、`knowledge_revision.body_json`；`docs/contracts/knowledge-domain-parallel-v1.openapi.yaml`。
+
+**关联**：LR-115/116/117；change `extract-knowledge-operations-domain`。该模型为本 change v1 实现范围，不迁移 Interview 旧打法表或其存量 ID。
+
+## LR-119 OWN案例审核权限只开放待审候选并由owner完成发布
+
+**结论**：`knowledge.case.review.decide.own` 代表非 STORE 范围内的审核员权限，不代表案例 owner 权限。审核员可查看并审核 `REVIEW_PENDING` 的当前候选 revision；该权限不能读取草稿、已发布、已撤回内容，也不能用于搜索。审核人必须不同于 owner；APPROVE 只写入审核决定并保持 `REVIEW_PENDING`，owner 再凭 `knowledge.case.publish.own` 和当前 revision 的 APPROVE 执行发布。Auth 角色分配仅作为协调建议：作者使用 own 生命周期操作，审核员只持有 review.decide.own；当前 Auth `businessAdmin=true` 可获得所有 active catalog 权限，但不能由 `roleCode=ADMIN` 推断，且 Knowledge 仍执行资源 owner 检查。
+
+**根因**：若审核操作复用 owner 校验，独立审核员不可能审核；若仅去掉 owner 校验而沿用详情读取，又会把审核许可扩大为全状态读取。将待审候选读取限定在同一精确 review 操作和单一生命周期状态，既满足分离职责也不改变 owner 对草稿、发布和撤回的边界。
+
+**代码位置**：`knowledge-service/KnowledgeAuthorization.requirePendingOwnReviewRead`、`KnowledgeLifecycleService.read/review/publish`；`docs/knowledge-service-operations.md` Auth 操作与角色矩阵；OpenSpec knowledge-operations 权限要求。回归覆盖非 owner 审核、owner 自审拒绝、review 权限仅读待审版本。
+
+**关联**：LR-90/116/117/118；KI-212；change `extract-knowledge-operations-domain`。
