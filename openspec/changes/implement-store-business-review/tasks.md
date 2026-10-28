@@ -56,6 +56,7 @@
 
 ## 7. 合并后兼容性与集成验收
 
-- [x] 7.1 合并共享配置时保留目标分支的 Auth baseline、访谈与房源 capability/路由、权限迁移和推广 Data ID，并合入本服务数据库、Nacos、Compose、Memory、Gateway 与发布配置；复核 manifest 序号唯一递增、旧业务路由不变。
+- [x] 7.1 合并共享配置时保留目标分支的 Auth baseline、访谈与房源 capability/路由、权限迁移和推广 Data ID，并合入本服务数据库、Nacos、Compose、Memory、Gateway 与发布配置；复核 manifest 序号唯一递增、全部 migration/schema-check SHA-256、旧业务路由不变。
 - [ ] 7.2 为原 business-service 月度 KPI、工作量、评估、排行榜/重建、房源流转、看板/大屏 REST 与 TradeTools/TradeMcpTools 增加合并后回归，验证参数、授权范围和指标结果保持原行为。
 - [ ] 7.3 新增 Supervisor 专属复盘技能与动态工具目录，将计划准备和确认拆分为 `prepareBusinessReviewPlan` 与 `confirmBusinessReviewPlan`；将确认 capability 稳定 ID 并入 `approval-capabilities`，覆盖未批准、拒绝、计划过时、门店范围变化和回执重试，确认全部走 business-review-service 且不改写 trade-agent 身份。
+- [ ] 7.4 在 Auth 登记新 Agent capability 和六个 `business.review.*.store` 操作，并完成签名 `STORE` 身份/门店范围映射；生成并登记 Memory trusted caller 公钥，验证 Auth/Memory 真实接线与失败关闭。在此之前保持生产 STORE 授权链路未就绪，不以本地 fixture 声称已接通。
