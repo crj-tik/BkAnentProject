@@ -1,6 +1,7 @@
 package com.bkanent.agent;
 
 import com.bkanent.common.rpc.ListingMasterRpcService;
+import com.bkanent.common.rpc.ListingBusinessSourceRpcService;
 import org.apache.dubbo.config.annotation.DubboReference;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,6 +21,9 @@ public class AgentRpcReferenceConfiguration {
     @DubboReference(check = false, protocol = "dubbo", retries = 0, timeout = 10000)
     private ListingMasterRpcService listingMasterRpcService;
 
+    @DubboReference(check = false, protocol = "dubbo", retries = 0, timeout = 10000)
+    private ListingBusinessSourceRpcService listingBusinessSourceRpcService;
+
     /**
      * 查询ingMasterRpcServiceBridge。
      */
@@ -27,5 +31,10 @@ public class AgentRpcReferenceConfiguration {
     @Primary
     public ListingMasterRpcService listingMasterRpcServiceBridge() {
         return listingMasterRpcService;
+    }
+
+    @Bean
+    public ListingBusinessSourceRpcService listingBusinessSourceRpcServiceBridge() {
+        return listingBusinessSourceRpcService;
     }
 }

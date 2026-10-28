@@ -65,7 +65,7 @@ v1 中一个经营案例和它的结构化打法是同一 Knowledge 聚合：案
 | `nacos/agent-service.yaml` / `nacos/gateway.yaml` | Agent 精确 invoke capability 与动态注册；`/knowledge/**` route 和 audience | 不新增固定 Supervisor Graph 分支，不改变其他路由。 |
 | `nacos/memory-service.yaml` | Knowledge 公钥、trusted caller、`knowledge: [knowledge-agent]` | 不授予 experience publisher、shared grant 或其它 agent 域。 |
 | `scripts/deploy/publish-nacos.py`、`init-environment.sh` | knowledge data ID allowlist/必需分布式模板列表 | 只允许显式 data ID；默认选择为空，不自动发布模板。 |
-| MySQL manifest/schema checks | 450 创建 `bk_knowledge` 和锁定 definer 的 Interview 列权限；460 创建业务表、受限 view 和最小应用/只读 grant | 前向追加版本与 canonical SHA；无 Interview migration 或已应用 hash 改写。账号初始锁定，DBA 密钥注入后再解锁。 |
+| MySQL manifest/schema checks | 510 创建 `bk_knowledge` 和锁定 definer 的 Interview 列权限；520 创建业务表、受限 view 和最小应用/只读 grant | 前向追加版本与 canonical SHA；无 Interview migration 或已应用 hash 改写。账号初始锁定，DBA 密钥注入后再解锁。 |
 | MySQL MCP 白名单/说明 | 只读 allowlist 加 `bk_knowledge`，数据库数同步为 13 | MCP 仍是只读可选入口；不授予业务账号权限。 |
 
 账号准备的安全顺序：运行受审 manifest 后，DBA 从秘密管理器取得 `.env` 中两个独立密码，为 `knowledge_app` 和 `knowledge_source_ro` 设置密码并解锁；保留 `knowledge_source_view_owner` 锁定。核对 `knowledge_app` 仅有六张知识业务表权限，`knowledge_source_ro` 仅有 view SELECT，二者对 `bk_interview` 均无权限。密码应在受控 MySQL 客户端交互中输入，避免进入 shell 历史、SQL 日志或工单。部署前静态 schema check 验证 grant 范围；应用 readiness 验证凭据连通性。
@@ -73,14 +73,14 @@ v1 中一个经营案例和它的结构化打法是同一 Knowledge 聚合：案
 ## 迁移与回滚
 
 - 变更数据库前由部署者在目标仓库根目录核对 manifest 与配置；该 change 未对任何共享数据库执行 DDL，也未运行 Docker。
-- 新迁移只向前追加：450 目标记录位于 `bk_auth.bk_schema_migration`，负责创建 `bk_knowledge` 和受限来源 definer；460 在 `bk_knowledge` 建立业务事实与来源 view。fresh 和 upgrade 均先执行 450 再执行 460。
+- 新迁移只向前追加：510 目标记录位于 `bk_auth.bk_schema_migration`，负责创建 `bk_knowledge` 和受限来源 definer；520 在 `bk_knowledge` 建立业务事实与来源 view。fresh 和 upgrade 均先执行 510 再执行 520。
 - 回滚应用版本时停止 Knowledge 服务、撤下 Gateway 路由和 Agent 注册/能力配置；保留已应用的 Knowledge schema、回执和来源 view，不删除 Interview/Memory 数据，不重放旧 Interview report task。
 - Auth 操作、Memory key/caller 与 STORE identity 未协调/登记前，保持 Auth 总开关关闭或由入口授权失败关闭；不得靠绕过 Auth、Memory 或扩宽 SQL grant 恢复流量。
 - 可选 MySQL MCP 新增 `bk_knowledge` 仅增加只读库名，不影响 Interview 数据库权限或表结构。
 
-## 合并后运行态验收清单（KI-214）
+## 合并后运行态验收清单（KI-218）
 
-以下事项统一由 OpenSpec 任务 5.1–5.3 跟踪，完成后在 KI-214 更新证据并关闭：
+以下事项统一由 OpenSpec 任务 5.1–5.3 跟踪，完成后在 KI-218 更新证据并关闭：
 
 - 数据库迁移、schema/view/grant 检查、两个运行账号凭据与 readiness。
 - 目标环境 Nacos 配置审核、`BK-AGENT/DEFAULT_GROUP` 的 `knowledge-service.yaml` 发布与回读，以及 Gateway、Agent、Memory 配置加载。

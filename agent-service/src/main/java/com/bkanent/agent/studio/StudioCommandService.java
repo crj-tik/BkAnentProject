@@ -1,7 +1,11 @@
 package com.bkanent.agent.studio;
 
 import com.bkanent.common.model.ListingComparisonFacts;
-import com.bkanent.common.model.ListingDTO;
+import com.bkanent.common.listing.ListingDataMode;
+import com.bkanent.common.listing.ListingMoney;
+import com.bkanent.common.listing.ListingRef;
+import com.bkanent.common.listing.ListingSourceSnapshot;
+import com.bkanent.common.listing.ListingSourceVersionRef;
 import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.util.*;
@@ -43,7 +47,7 @@ public class StudioCommandService {
                 var selectedRefs = json.objects(json.read(json.text(work.get("context_json"))).get("refs")).stream()
                         .filter(ref -> "listing".equals(ref.get("type"))).toList();
                 if (selectedRefs.isEmpty() || selectedRefs.size() > 20) throw StudioException.invalid("请先引用 1 至 20 套房源");
-                var current = selectedRefs.stream().map(ref -> listings.read(owner, json.text(ref.get("id")))).toList();
+                var current = listings.readCurrent(owner, selectedRefs.stream().map(StudioListingReader::reference).toList());
                 var ref = artifacts.create(owner, workId, null, null, "listing.candidates", "已选房源", Map.of("items", current.stream().map(listings::publicListing).toList()), current.stream().map(listings::source).toList(), json.number(work.get("context_revision")), "COMMAND");
                 works.recordReceipt(owner, workId, requestId, hash, "LOAD_CONTEXT_LISTINGS", "COMPLETED", Map.of("artifactRefs", List.of(ref)));
                 return receipt(owner, workId, requestId);
@@ -82,22 +86,9 @@ public class StudioCommandService {
             var source = artifacts.get(owner, seriesId, version);
             if (bound.get("revisionId") != null && !bound.get("revisionId").equals(source.get("revisionId"))) throw StudioException.conflict("VERSION_CONFLICT", "成果版本身份不一致");
             var input = json.object(body.get("input"));
-            if (!(input.get("listingIds") instanceof List<?> ids) || ids.size() < 2 || ids.size() > 6 || ids.stream().anyMatch(id -> !(id instanceof String)))
-                throw StudioException.invalid("请选择 2 至 6 套不同房源");
-            List<String> selected = ids.stream().map(Object::toString).distinct().toList();
-            if (selected.size() != ids.size()) throw StudioException.invalid("比较房源不能重复");
             var candidates = json.objects(json.object(source.get("content")).get("items"));
-            var versions = json.objects(input.get("sourceVersions"));
-            List<ListingDTO> current = new ArrayList<>();
-            for (String id : selected) {
-                var candidate = candidates.stream().filter(item -> id.equals(item.get("id"))).findFirst().orElseThrow(StudioException::missing);
-                var expected = versions.stream().filter(item -> id.equals(item.get("id"))).findFirst()
-                        .orElseThrow(() -> StudioException.invalid("缺少房源来源版本"));
-                var listing = listings.read(owner, id);
-                if (!json.hash(listing).equals(candidate.get("sourceRevision")) || !json.hash(listing).equals(expected.get("sourceRevision")))
-                    throw StudioException.conflict("SOURCE_VERSION_CONFLICT", "房源资料已变化，请刷新候选成果后重新比较");
-                current.add(listing);
-            }
+            var selection = comparisonSelection(input, candidates);
+            List<ListingSourceSnapshot> current = listings.readExpected(owner, selection.versions(), selection.contentHashes());
             Map<String, Object> content = comparison(current);
             content.put("baseArtifactRef", Map.of("seriesId", seriesId, "revisionId", source.get("revisionId"), "version", version));
             var ref = artifacts.create(owner, workId, null, null, "listing.comparison", "房源差异比较", content,
@@ -107,30 +98,113 @@ public class StudioCommandService {
         });
     }
 
-    private Map<String, Object> comparison(List<ListingDTO> values) {
+    private record ComparisonSelection(List<ListingSourceVersionRef> versions,
+                                       Map<ListingRef, String> contentHashes) { }
+
+    private ComparisonSelection comparisonSelection(Map<String, Object> input, List<Map<String, Object>> candidates) {
+        List<Map<String, Object>> selected = new ArrayList<>();
+        if (input.get("listingRefs") instanceof List<?> refs) {
+            if (refs.size() < 2 || refs.size() > 6 || refs.stream().anyMatch(value -> !(value instanceof Map<?, ?>)))
+                throw StudioException.invalid("请选择 2 至 6 套不同房源");
+            refs.forEach(value -> selected.add(json.object(value)));
+        } else {
+            if (!(input.get("listingIds") instanceof List<?> ids) || ids.size() < 2 || ids.size() > 6
+                    || ids.stream().anyMatch(id -> !(id instanceof String))) {
+                throw StudioException.invalid("请选择 2 至 6 套不同房源");
+            }
+            var suppliedVersions = json.objects(input.get("sourceVersions"));
+            for (Object id : ids) {
+                List<Map<String, Object>> matching = candidates.stream()
+                        .filter(candidate -> id.equals(candidate.get("id"))).toList();
+                if (matching.size() != 1) throw StudioException.invalid("旧编号无法唯一定位房源来源，请使用稳定来源引用");
+                Map<String, Object> candidate = matching.get(0);
+                var version = suppliedVersions.stream().filter(value -> id.equals(value.get("id"))).findFirst()
+                        .orElseThrow(() -> StudioException.invalid("缺少房源来源版本"));
+                Map<String, Object> migrated = new LinkedHashMap<>(candidate);
+                if (version.get("sourceRevision") instanceof String revision) migrated.put("sourceRevision", revision);
+                selected.add(migrated);
+            }
+        }
+        List<ListingSourceVersionRef> versions = new ArrayList<>();
+        Map<ListingRef, String> hashes = new HashMap<>();
+        Set<ListingRef> unique = new HashSet<>();
+        for (Map<String, Object> item : selected) {
+            ListingRef ref = StudioListingReader.reference(item);
+            if (!unique.add(ref)) throw StudioException.invalid("比较房源不能重复");
+            Map<String, Object> candidate = candidates.stream()
+                    .filter(value -> ref.equals(StudioListingReader.reference(value))).findFirst()
+                    .orElseThrow(StudioException::missing);
+            String revision = item.get("sourceRevision") instanceof String value ? value : null;
+            String contentHash = item.get("contentHash") instanceof String value ? value : null;
+            String candidateRevision = candidate.get("sourceRevision") instanceof String value ? value : null;
+            String candidateHash = candidate.get("contentHash") instanceof String value ? value : null;
+            if (revision == null || contentHash == null || !revision.equals(candidateRevision)
+                    || !contentHash.equals(candidateHash)) throw StudioException.conflict(
+                    "SOURCE_VERSION_CONFLICT", "候选成果缺少稳定来源版本，请重新加载房源");
+            versions.add(new ListingSourceVersionRef(ref, revision));
+            hashes.put(ref, contentHash);
+        }
+        if (versions.size() < 2 || versions.size() > 6) throw StudioException.invalid("请选择 2 至 6 套不同房源");
+        return new ComparisonSelection(List.copyOf(versions), Map.copyOf(hashes));
+    }
+
+    private Map<String, Object> comparison(List<ListingSourceSnapshot> values) {
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("columns", values.stream().map(value -> Map.of("listingId", value.id().toString(), "title", value.title() == null ? "房源" : value.title())).toList());
+        result.put("columns", values.stream().map(value -> Map.of(
+                "listingId", value.listingRef().sourceId(),
+                "sourceKey", sourceKey(value),
+                "sourceSystem", value.listingRef().sourceSystem(),
+                "sourceId", value.listingRef().sourceId(),
+                "sourceRevision", value.revision(),
+                "contentHash", value.contentHash(),
+                "dataMode", value.dataMode().name(),
+                "title", value.facts().title() == null ? "房源" : value.facts().title())).toList());
         List<Map<String, Object>> rows = new ArrayList<>();
-        row(rows, values, "totalPrice", "总价（万元）", value -> decimal(value.totalPrice()));
-        row(rows, values, "area", "面积（㎡）", value -> decimal(value.area()));
-        row(rows, values, "unitPrice", "单价（元/㎡）", value -> decimal(ListingComparisonFacts.unitPriceYuan(value)));
-        row(rows, values, "layout", "户型", ListingDTO::layout);
-        row(rows, values, "floor", "楼层", ListingDTO::floorLevel);
-        row(rows, values, "decoration", "装修", ListingDTO::decoration);
-        row(rows, values, "schoolZone", "学区记录（需核实）", ListingDTO::schoolZone);
-        row(rows, values, "traffic", "交通", ListingDTO::traffic);
-        row(rows, values, "verificationStatus", "核验状态", ListingDTO::verificationStatus);
-        row(rows, values, "status", "房源状态", ListingDTO::status);
+        row(rows, values, "totalPrice", "总价（万元）", snapshot -> amount(snapshot, ListingMoney.Unit.YUAN) == null
+                ? null : decimal(amount(snapshot, ListingMoney.Unit.YUAN).divide(new BigDecimal("10000"), 4, java.math.RoundingMode.HALF_UP)));
+        row(rows, values, "totalPriceCny", "总价（元）", snapshot -> decimal(amount(snapshot, ListingMoney.Unit.YUAN)));
+        row(rows, values, "area", "面积（㎡）", snapshot -> snapshot.facts().areaSquareMetres());
+        row(rows, values, "unitPrice", "单价（元/㎡）", snapshot -> decimal(ListingComparisonFacts.unitPriceYuan(snapshot)));
+        row(rows, values, "layout", "户型", snapshot -> attribute(snapshot, "layout"));
+        row(rows, values, "floor", "楼层", snapshot -> attribute(snapshot, "floorLevel"));
+        row(rows, values, "decoration", "装修", snapshot -> attribute(snapshot, "decoration"));
+        row(rows, values, "schoolZone", "学区记录（需核实）", snapshot -> attribute(snapshot, "schoolZone"));
+        row(rows, values, "traffic", "交通", snapshot -> attribute(snapshot, "traffic"));
+        row(rows, values, "verificationStatus", "核验状态", snapshot -> attribute(snapshot, "verificationStatus"));
+        row(rows, values, "status", "房源状态", snapshot -> attribute(snapshot, "status"));
         result.put("rows", rows); result.put("snapshots", values.stream().map(listings::publicListing).toList());
-        result.put("snapshotHash", ListingComparisonFacts.fingerprint(values, false));
+        result.put("snapshotHash", ListingComparisonFacts.sourceFingerprint(values, false));
+        result.put("dataMode", aggregateDataMode(values).name());
         result.put("analysisMode", "已授权房源字段比较，未调用 AI 推断");
         result.put("generatedAt", json.instant(System.currentTimeMillis()));
         return result;
     }
-    private void row(List<Map<String, Object>> rows, List<ListingDTO> listings, String key, String label, Function<ListingDTO, String> read) {
+
+    private void row(List<Map<String, Object>> rows, List<ListingSourceSnapshot> listings, String key, String label,
+                     java.util.function.Function<ListingSourceSnapshot, String> read) {
         Map<String, String> cells = new LinkedHashMap<>();
-        for (var listing : listings) { String value = read.apply(listing); cells.put(listing.id().toString(), value == null || value.isBlank() ? "未提供" : value); }
+        for (var listing : listings) { String value = read.apply(listing); cells.put(sourceKey(listing), value == null || value.isBlank() ? "未知" : value); }
         rows.add(Map.of("key", key, "label", label, "values", cells));
     }
     private String decimal(BigDecimal value) { return value == null ? null : value.stripTrailingZeros().toPlainString(); }
+
+    private BigDecimal amount(ListingSourceSnapshot snapshot, ListingMoney.Unit unit) {
+        ListingMoney money = snapshot.facts().totalPrice();
+        return money == null || money.unit() != unit || !"CNY".equals(money.currency())
+                ? null : new BigDecimal(money.amount());
+    }
+
+    private String attribute(ListingSourceSnapshot snapshot, String key) {
+        return snapshot.facts().attributes().getOrDefault(key, "未知");
+    }
+
+    private String sourceKey(ListingSourceSnapshot snapshot) {
+        return snapshot.listingRef().sourceSystem() + ":" + snapshot.listingRef().sourceId();
+    }
+
+    private ListingDataMode aggregateDataMode(List<ListingSourceSnapshot> snapshots) {
+        List<ListingDataMode> modes = snapshots.stream().map(ListingSourceSnapshot::dataMode).distinct().toList();
+        if (modes.contains(ListingDataMode.UNKNOWN)) return ListingDataMode.UNKNOWN;
+        return modes.size() == 1 ? modes.get(0) : ListingDataMode.MIXED;
+    }
 }

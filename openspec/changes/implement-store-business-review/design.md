@@ -2,81 +2,141 @@
 
 ## Context
 
-动机见 proposal.md。现有 `BusinessAnalyticsServiceImpl` 汇总月度 KPI、日工作量、排行榜、房源流转和门店看板，尚无经营问题、证据、动作和复盘的事实模型。官方 Agent 当前绑定 `business-service / trade / trade-agent`，其 Memory、技能与公钥映射已经登记，产品职责调整无需同时重命名技术身份。
+当前 business-service 运行在 9010，公开控制器前缀为 /business，使用 bk_business 和 business-service.yaml。Gateway 将 /business/** 路由给 business-service。该服务持有现有 trade/trade-agent，其 A2A Memory 身份固定为 business-service / trade / trade-agent；required Memory Hook、业务技能、拦截器和 trade 历史均已在此服务中使用。上述服务和配置本身不承载门店复盘新业务。
 
-首期业务数据模拟；房源从接口取得，逐字稿归访谈域，已发布经营知识由独立 change 提供。已有 `implement-studio-v2` 仍有 8 项未完成，本 change 不复制其 work/command/文件/发布门面。Auth 在另一会话完善，业务侧仅消费可信身份与门店范围。
+仓库根 Maven POM 显式列出服务模块；Compose 使用服务 artifact 和每服务私钥挂载。Nacos 发布脚本、启动预检、数据库初始化 manifest、MySQL MCP 默认库列表和 ServiceIdentityKeygen 服务名单也包含显式清单，新增微服务必须同步更新，不会因新增目录自动接入。并行知识拆分已将 9015 规划给 knowledge-service；本 change 改用 9016。已扫描当前已登记的其它活动 worktree、服务配置和监听端口，未发现 9016 冲突；合入或部署前仍按身份清单复核。
+
+Agent 的版本化 capability 配置当前只映射本地 Milvus 工具，没有 trade Agent 映射；Auth 侧尚未登记本 change 的 Agent 调用和门店操作权限。签名 businessIdentities 当前只接受 BROKER，生产 STORE 范围必须由 Auth 注册并写入签名上下文，不能由新服务推断。
 
 ## Goals / Non-Goals
 
-**Goals:** 把“带看后停滞”和“房源维护缺口”转为有来源、可确认、可跟进的经营事项；明确效率观察与业绩结果的证据层次。
+**Goals：** 独立部署和回退门店经营复盘能力；保存有来源的事项、证据、假设、计划、动作、回执和观察；隔离现有 trade 服务及 Memory 历史；明确新服务的 Auth、Memory、Gateway、数据库与配置登记边界；让多个服务拆分会话可以并行开发和由协调会话安全合并。
 
-**Non-Goals:** 不做新人培训、自动给员工打绩效分、自动联系客户、调价或付款；不合并房源/客户/知识服务，不在此实现上游业务系统。
+**Non-Goals：** 不改写或移动 business-service；不迁移、复制或双写 bk_business 中的 KPI/交易数据；不修改 trade/trade-agent 的技能、权限映射、私域历史或现有配置；不修改 Auth 通用协议与 Auth 全局目录；不新建 Memory RAG 投影；不替代房源、客户、访谈、知识、合同或结算数据源；不自动发送消息、调价、付款或宣称业绩因果增长。
 
 ## Decisions
 
-### 1. 保留 business-service，增加 review 业务包
+### 1. 新建独立的 business-review-service
 
-新增 ReviewMatter、EvidenceSnapshot、DiagnosisRevision、ActionPlanRevision、ReviewAction、ActionReceipt、OutcomeObservation。业务状态及幂等回执归 `bk_business`，Supervisor/Memory 只引用业务 ID、版本和获准结果，不另存一份可推进业务的权威状态。
+新增 Maven 模块 business-review-service，建议端口 9016，独立 Nacos Data ID business-review-service.yaml、数据库 bk_business_review、服务身份和 Gateway 路径 /business-review/**。公开领域 API 统一使用 /business-review/reviews。新服务以自己的 Spring 应用名、Dubbo 应用名、A2A audience 和容器服务名运行。
 
-相比只扩充看板，这些对象让店长能处理问题并跟踪后续；相比建立完整客户/交易系统，事项只引用上游的客户、房源、带看及机会身份。客户需求、房源价格和成交状态仍由各自来源决定。
+旧 /business/** 继续只指向 business-service。禁止将新代码加入 business-service、修改它的 application.yml 或 business-service.yaml、增加其 API、改写其数据库映射、路由或 trade Agent。新复盘事项不迁移到旧库；两服务不共享可变实体或 Java DTO。本地 API DTO 放在 business-review-service，公共 ApiResponse 可复用。
 
-### 2. 模拟经营输入走可替换的数据端口
+此边界使门店复盘可独立验收、发布和回退，也让另一个并行拆分拥有独立服务名、数据库和配置块。与把复盘功能塞进现有服务相比，新增服务增加一份启动、路由和密钥登记，但减少旧服务回归风险和并行拆分的所有权冲突。
 
-`StoreBusinessEvidencePort` 提供指定门店、时间窗口和 dataset 下的带看事件、跟进事件、议价状态及维护记录。首期实现固定版本 fixture provider，不从 employeeId、记录 ID 或模型文本随机推算业绩。每条记录包含 `sourceSystem/sourceId/revision/observedAt/eventTime/dataMode/datasetId`。房源读取由 `ListingBusinessReadPort`、知识由 `PublishedKnowledgeReadPort` 消费冻结的 `domain-parallel-v1` HTTP契约；本模块拥有 consumer wire DTO/mapper 及 HTTP fixture，不引用另两个 change 新增的 common 类型，不跨域读库或复制逐字稿。
+### 2. 经营域独占复盘状态和来源快照
 
-本地证据快照仅保存获准的有界字段和来源定位。模拟与真实记录按 dataset 和来源标记分开，不能通过更新 dataMode 将旧模拟历史“转正”；任何模拟证据参与输出都继承为 SIMULATED 或 MIXED。真实 feed 的后续接入可替换端口实现，数据结构与本期状态机不改变。
+新库保存 ReviewMatter、EvidenceSnapshot、DiagnosisRevision、ActionPlanRevision、ReviewAction、ActionReceipt 和 OutcomeObservation。Memory、Supervisor 和模型只能引用业务 ID、版本和许可展示的摘要，不能充当可推进业务状态的真源。
 
-来源不明为 UNKNOWN，含此类来源的派生结果也为 UNKNOWN；全部来源为 REAL 才输出 REAL，已知真实/模拟混合为 MIXED。来源模式与指标计算状态独立，仍逐项保留事实缺口及分母问题。
+带看、跟进、议价、维护数据先由固定版本 fixture 输入；房源、知识通过 domain-parallel-v1 HTTP 只读契约消费。逐字稿继续归访谈域。consumer wire DTO、mapper 和 fixture 均位于 business-review-service，不依赖并行会话新增的 common Java 类型，不读其它域数据库。
 
-### 3. 把事实、假设、行动和结果拆开
+每条来源保留来源系统、来源 ID、revision、观察时间、事件时间、dataMode、datasetId 和获准事实字段。未知来源保持 UNKNOWN；全 REAL 才能派生 REAL；混合来源为 MIXED。模拟记录不能通过改标记转为真实历史。
 
-诊断结果包含事实/出处、卡点假设、待核实问题、适用知识 revision、建议动作及其理由。来源不足时先返回缺口；低转化率不自动成为某个原因的证明。规则先计算客观数量和缺口，模型在有界获准材料上解释和建议；禁止模型创造带看、成交或价格事实。
+### 3. 分离事实、假设、动作和结果
 
-知识域返回的已发布版本在装配和输出前复核，撤回或来源失效时停止显示相关正文并标记原建议待复核。知识查询不可用与合法无匹配分开表达；前者不能被伪装成没有案例。
+诊断分开保存已知事实及出处、卡点假设、待核实问题、知识版本和建议动作。数据不足先返回缺口；模型不能编造客户反馈、带看、价格、成交或因果事实。知识或房源版本撤回/变化后，旧计划需复核，不再展示失效正文。
 
-### 4. 动作确认和执行反馈有独立回执
+计划绑定 diagnosisRevision、evidenceVersions、knowledgeRevisionRefs 和规范化参数 hash。确认要求当前 actor/store 权限和 expectedPlanVersion；事务创建动作及幂等回执。同 requestId、同 hash 重试返回原回执；同号异内容冲突；旧确认不能批准新计划。
 
-计划绑定 diagnosisRevision、evidenceVersions、knowledgeRevisionRefs 和 canonical argumentsHash。店长以当前权限确认 expectedPlanVersion 后，事务内创建动作与幂等回执；重复 requestId 同内容返回原结果，不同内容冲突，旧确认不能批准新计划。
+动作状态为 PROPOSED、CONFIRMED、IN_PROGRESS、DONE、CANCELLED。人工完成标记 USER_REPORTED；仅收到可核验来源回执时才标记 SOURCE_CONFIRMED。动作完成不改变房源、客户或成交真源。
 
-动作状态为 `PROPOSED / CONFIRMED / IN_PROGRESS / DONE / CANCELLED`。DONE 需记录执行者、时间和证据级别；只有人工反馈时标记 USER_REPORTED，只有对应来源回执时才能标记 SOURCE_CONFIRMED。动作完成不自动更新房源/客户/成交状态。首期记录的是推进执行过程，外部发送、调价等需其他领域能力和独立后续 change。
+### 4. 指标保留可解释口径且不冒充增长
 
-### 5. 指标采用明确口径，模拟验收不承诺增长
+指标固定定义版本、窗口、Asia/Shanghai 时区、样本集合、聚合单位、分子、分母和观察时间。分母为零、事实缺失或来源不可用均返回 UNKNOWN 和原因。资料整理耗时、重复输入和闭环时间属于效率观察；成交阶段和周期属于经营结果观察。模拟验收、模型自评、工具受理和 USER_REPORTED 完成不得发布成生产 MemoryExperienceOutcome，也不能说明真实业绩或因果增长。
 
-指标定义版本固定时间区间、Asia/Shanghai 时区、聚合单位（事件/客户/机会）、样本集合、分子、分母及观察时间。例：带看后有效下一步率以同一观察窗口内的去重机会为单位；何谓“有效下一步”随定义版本存储，不从生成建议或 DONE 数量推断。分母为零或事实缺失返回 UNKNOWN 及原因，不当作零转化。
+### 5. 使用最新稳定 Auth 能力映射与逐方法门禁
 
-效率指标记录资料整理耗时、重复输入和动作闭环时间；成交推进指标记录来源确认的阶段变化与成交周期。前后对比只表达观察，不能自动声称因果增长。模拟数据和 USER_REPORTED 反馈不发送生产 MemoryExperienceOutcome；模拟验收仅覆盖业务流程，真实增长依赖后续实际业务观察。
+Agent 目录只使用稳定 CapabilityId.a2a(business-review-agent) 映射到一个精确操作 agent.workflow.invoke.business-review。不得按 domain、skill、模型参数或 chat.use 推导授权。此映射只批准调用新 Agent，不替代门店复盘 API 的资源和操作授权。
 
-### 6. 复用现有 Agent、审批与身份契约
+新服务 API 逐项检查以下 Auth 操作，并另外核验事项真实 store owner 属于已签名 STORE 范围：
 
-`trade-agent` 展示和技能描述更新为门店经营复盘，保留当前 `trade` Memory 私域和历史记录。增加经营卡点诊断、方案准备与结果复盘技能，实际写动作仍执行服务端身份、范围、版本与审批要求；领域状态机不成为 Supervisor 的固定业务 DAG。
+- business.review.create.store
+- business.review.read.store
+- business.review.plan.write.store
+- business.review.plan.confirm.store
+- business.review.action.feedback.store
+- business.review.observation.read.store
 
-公开接口拟为 `/business/reviews`、`/business/reviews/{id}/plans`、`/business/reviews/{id}/actions` 与观察查询，输入不接受自授 owner/store 范围。Auth 范围不可用时拒绝受保护操作。首期提供领域 API、版本化 DTO 和安全 Agent artifact；Studio 前端及已有 P3/P4 由其原 change 对接，完成领域接口不宣称浏览器工作台已经落地。
+Auth/协调交接包括登记 agent.workflow.invoke.business-review、上述六个操作、业务角色授予，以及 Auth 对用户与 STORE 关系的验证和签名。当前签名身份类型只支持 BROKER，因此生产 STORE 权限登记完成前，新服务受保护入口保持失败关闭。不能从 userId、brokerId、employeeId、请求 storeId 或 Agent 摘要推断门店范围。
 
-### 7. 无跨 change 等待的独立验收
+A2A 使用当前 D9 请求级 proof。签名上下文绑定 caller、audience、actor 和允许操作；请求 proof 绑定真实 JSON-RPC body、run/task、requestId、nonce 和期限。新服务在持久任务受理前本地验签，再由领域服务核验精确操作和门店资源，不为每个 Agent 内部工具调用 Auth。REST 入口使用自己的 Gateway route audience 并在领域层复核操作与资源范围。
 
-本会话只拥有 business 模块和 `common/business/review/**`，工作区/分支、Maven仓库及测试资源按 [并行总览](../../../docs/business-domain-change-roadmap.md) 隔离。房源和知识两个 HTTP consumer adapter 必须实际实现；路径、字段、批量检查和错误语义采用冻结 v1，使用本会话有界 HTTP服务器返回精确模拟来源/版本/撤回夹具，直接运行本域处理器、状态和数据库验证闭环。
+领域 HTTP 契约沿用 ApiResponse<T>。请求中的 storeId 仅是已签名门店范围内的选择器/一致性断言；cursor 绑定 actor 和 store；缺失或越权范围拒绝而不是返回空列表。
 
-Auth、Memory 的当前协议通过测试配置下的精确服务/用户登记替身覆盖，生产配置缺失仍前置拒绝。peerMode 显式选择 fixture/http，HTTP依赖不可用、版本不支持和拒绝不能自动回退。由此本会话可在没有另外三个实现提交时完成所有本期任务，不留下空实现或等待任务，也不把 fixture 结果声称为真实服务已接通。
+| 方法与路径 | 操作 | 行为 |
+| --- | --- | --- |
+| POST /business-review/reviews | business.review.create.store | 根据 scenario、window、datasetId 创建事项，返回证据和初始诊断；不接受自授 owner/employee。 |
+| GET /business-review/reviews?cursor&limit&storeId | business.review.read.store | 返回签名门店范围内事项和不透明 nextCursor。 |
+| GET /business-review/reviews/{reviewId} | business.review.read.store | 定位事项后检查真实 store owner，通过前不返回正文。 |
+| GET /business-review/reviews/{reviewId}/plans | business.review.read.store | 返回计划版本和依赖状态。 |
+| POST /business-review/reviews/{reviewId}/plans | business.review.plan.write.store | 按 expectedDiagnosisRevision 写入不可变计划并绑定依赖版本和参数 hash。 |
+| POST /business-review/reviews/{reviewId}/plans/confirm | business.review.plan.confirm.store | 按 requestId、expectedPlanVersion 幂等确认，过期版本拒绝。 |
+| GET /business-review/reviews/{reviewId}/actions | business.review.read.store | 返回动作及执行回执。 |
+| POST /business-review/reviews/{reviewId}/actions/{actionId}/feedback | business.review.action.feedback.store | 按 requestId、expectedActionVersion 幂等记录反馈并表达来源等级。 |
+| GET /business-review/reviews/{reviewId}/observations | business.review.observation.read.store | 返回含口径、窗口和来源模式的指标；缺数返回 UNKNOWN。 |
 
-共享根配置只提交本业务必需的最小差异/SQL与check，Auth/Memory全局登记、初始化runner的bk_business allowlist及真实来源接入由协调合并。合并后的生产者互通、组织范围和浏览器联调单独记录，不纳入本 change 的实施完成前置条件。
+新增写操作不发布为 MCP 写工具。Agent skill 可基于允许证据生成不落库草稿；事项创建、计划确认和执行反馈须由用户明确触发领域 API。
 
-## Risks / Trade-offs
+### 6. 接入隔离的必需 Memory 身份
 
-- [模拟样本看起来像真实经营] → dataset、来源模式随 API/结果/导出保留，模拟观察不进入真实增长证明。
-- [重复确认或丢回执导致重复任务] → request hash、expectedVersion、事务唯一键及原回执查询。
-- [知识或房源更新后继续执行旧计划] → 确认与后续使用前复核依赖版本，失效即要求重新确认，已完成执行事实保留。
-- [组织范围尚未有可信映射] → 接口依赖 Auth 适配验证，不用店名、工号或模型字段代替权限。
+新 Agent 通过 A2aMemoryHookFactory 使用固定 caller/domain/agent：business-review-service / business-review / business-review-agent，并以独立 Ed25519 服务身份签名。所有官方 Agent 必需的 Memory 读取、授权核验和归档没有关闭或绕过开关；压缩是唯一可选项，默认关闭。
+
+Memory Nacos 受信调用者必须增加 business-review-service 专属条目：登记 business-review-service-current 公钥、开启 service-delivery，并将 business-review-agent 精确限制在 business-review domain。密钥由 ServiceIdentityKeygen 新服务名单生成；公钥进入生成的 public-keys.env 并由 Compose 提供给 Memory，不手写私钥或将公钥伪装成密钥放进 .env.example。
+
+调用顺序要求先完成当前主体的 Memory 读取和授权核验，再调用模型或业务工具；Memory 服务不可用、身份不匹配或 agent/domain 未登记时，在任何副作用前拒绝 Agent 轮次。归档只表示本轮经过授权的上下文，不证明经营事实；MySQL 新服务记录始终是复盘、动作及效果的唯一业务真源。新服务不共享 business-service 的 trade-agent 私域，也不导入旧历史。
+
+本 change 不为 business-review-agent 增加 Memory RAG domain projection、RAG 空间或 experience outcome publisher。必需私域 Memory 生命周期不依赖新增 RAG 投影；若未来需要跨轮次 RAG 或经验学习，另行定义 owner、来源和授权 change。保留旧 BUSINESS_MEMORY_V2_COMPRESSION_ENABLED 与 BUSINESS_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER，新增服务的配置使用独立名称，不移除或重解释旧键。
+
+### 7. 配置文件按服务身份同步，按共享责任合并
+
+本服务新增与共享文件的差异如下。共享表格必须只做本服务的追加项，不全文件重排；Memory/Auth/密钥注册由协调会话将此 change 的精确片段与其它拆分合并。
+
+| 文件或配置面 | 本 change 的新增项 | 并行责任 |
+| --- | --- | --- |
+| 根 pom.xml | 只追加 business-review-service Maven module。通用 Dockerfile 默认打包全模块，实施时确认新 jar 可进入镜像；只有发现固定模块清单才改 Dockerfile。 | 根模块列表为共享文件，协调合并所有新增服务行。 |
+| business-review-service/application.yml | 新应用名、端口 9016、独立 A2A audience 与 service identity key ID/private-key path；Memory 压缩键默认为 false。 | 只归本服务。 |
+| nacos/business-review-service.yaml | 新库连接、业务服务配置、A2A card、Memory 可选压缩及 readiness 配置；不复用 business-service.yaml。 | 只归本服务；Nacos 发布白名单另按行追加。 |
+| docker-compose.yml | 独立服务块、业务 jar 名、内部 A2A URL http://business-review-service:9016、私钥只读挂载和数据库连接；按实际依赖设置 health/readiness，不因为旧服务依赖 Redis 就默认引入 Redis。 | 只增加本服务块；容器名和端口不得占用其它拆分。 |
+| .env.example 与本机 .env | 模板增加 MYSQL_DB_BUSINESS_REVIEW=bk_business_review 和 BUSINESS_REVIEW_MEMORY_V2_COMPRESSION_ENABLED=false。若本机忽略的 .env 存在，只补缺项，不覆盖已有值或凭据、不提交 .env。 | 环境模板为共享文件；合并时保留别的域键。 |
+| nacos/mysql-common.yaml | 增加 business-review 独立数据库名和 JDBC 别名 MYSQL_DB_BUSINESS_REVIEW。 | 共享数据库映射，协调合并。 |
+| nacos/gateway.yaml | 新增 /business-review/** 到 business-review-service 的路由和该 audience 的授权关联；保留 /business/** 到 business-service。 | 共享路由块，协调合并。 |
+| nacos/agent-service.yaml | 新增稳定 capability 条目 a2a:business-review-agent 到 agent.workflow.invoke.business-review。 | 共享权限映射，Auth 登记完成前保持不可见/不可调用。 |
+| nacos/memory-service.yaml | 新增 business-review-service caller、公钥 key ID、service-delivery 和精确 domain-agent allowlist；不发布经验结果。 | Memory 全局可信调用者清单由协调会话合并。 |
+| scripts/security/ServiceIdentityKeygen.java 与 public-keys.env | 服务名单增加 business-review-service；生成器为其输出独立 key ID 和公钥变量 BUSINESS_REVIEW_SERVICE_IDENTITY_PUBLIC_KEY。 | 全局服务登记表由协调会话合并；私钥只写入 .secrets。 |
+| scripts/verification/RagRuntimeProbe.java | A2A audience 探针纳入 business-review-service；不将 business-review-agent 加进 Memory RAG domain-agent 投影表。 | 只扩展服务 audience 检查，不创建 RAG 空间。 |
+| sql/mysql-init.sql 与 docker/mysql/init-manifest.tsv | 新建 bk_business_review；增加本域 schema、独立校验以及本服务持久 A2A task authorization 表的 migration/check/manifest 行。 | 已应用 manifest 项不改；序号、hash、database allowlist 由协调会话复核。 |
+| scripts/deploy/run-init-manifest.sh | 固定允许集合新增 bk_business_review。 | 共享 allowlist，由协调会话合并。 |
+| scripts/deploy/publish-nacos.py 与 init-environment.sh | 精确发布 ALLOWED 集合和必需 Nacos Data ID 加入 business-review-service.yaml。 | 显式 data ID；NACOS_CONFIG_DATA_IDS 默认仍空。 |
+| .env.example、docker-compose.yml 的 MYSQL_MCP_DATABASES | 默认库列表保持排除 bk_business_review，避免新门店证据自动进入通用只读 MCP。 | 这是有意保留的最小权限配置，不作为漏配修正。 |
+| rag-service.yaml 与 MEMORY_V2_DOMAIN_AGENTS | 不加 business-review RAG 空间或领域投影；业务新域仅接必需私域 Memory Hook。 | 维持现有 Memory/RAG 注册。 |
+
+所有密钥按服务隔离；A2A_PUBLIC_BASE_URL 在 Compose 内固定为服务 DNS 地址，Nacos data ID 通过发布白名单显式选择。NACOS_CONFIG_DATA_IDS 默认空的保护行为保持不变。没有当前已部署的复盘配置项需要废止；本 change 撤销初版计划中的 a2a:trade-agent 新映射设想，但既有 trade 配置不变。新增或废除配置都必须在实施收尾时与上表逐项核对，不能遗留重复、指向旧域或无消费者键。
+
+### 8. 并行拆分的唯一所有权与合并规则
+
+本服务的身份元组为 business-review-service / bk_business_review / 9016 / /business-review/** / business-review-service.yaml / business-review-agent / business-review / business-review-service-current。实现前与其它活动 change 复核该元组无冲突；如冲突先由协调会话分配新值，再一起更新 app、Compose、Gateway、Nacos、密钥、manifest 和测试，不只改其中一份。
+
+各会话在共同基线的独立 worktree、独立 Maven repo 和隔离测试数据库中实现。不得共用暂存区、端口、数据库、密钥或测试输出。共享配置仅追加各自独有的服务块和名称；不改别的服务配置，不在并行会话中发布共享 Nacos、迁移共用数据库、轮换密钥或重启对方服务。协调会话逐项合并 pom、Compose、Gateway、Nacos、.env.example、keygen、SQL manifest 与发布清单，并验证配置集合无遗漏或重复。
+
+旧 business-service 的源文件、application.yml、Nacos 配置、数据库、默认 env 键、Compose 块、Gateway audience 和 trade-agent Memory 登记全部视为本 change 的只读基线。提交前执行路径级差异审查，确认没有对这些旧资产的修改。
+
+### 9. 风险与取舍
+
+- 新服务存在临时 Auth/Memory 登记缺口：测试使用精确 caller、permission 和 STORE 测试身份；生产缺 Auth 签名 STORE 范围或 Memory caller key 时拒绝业务副作用。
+- 拆分可能与其它会话分配到相同端口或共享配置：实施前复核唯一身份元组；服务专属块单独拥有，根注册文件由协调会话合并。
+- 配置添加容易漏掉脚本白名单或数据库清单：按第 7 节矩阵审查 Nacos 发布、启动预检、keygen、SQL manifest、Compose readiness 和 gateway audience。
+- 原有经营分析依赖可能意外被移动：新服务只调用 domain-parallel-v1，不复制旧数据库、旧实体或旧服务源码；旧路由和 trade Agent 保持原样。
+- Memory 可能被误当作事实记录：Memory 仅是获准上下文的读取/归档面，新库是真实复盘状态；模拟和人工反馈不发布为经验结果。
+- 9016 当前未被占用但可能被尚未登记的 change 预留：合并或部署前重新扫描活动 change 与容器端口映射；9015 归 knowledge-service，本 change 不使用。
 
 ## Migration Plan
 
-以下为合并后的共享环境计划；独立会话使用自身 fixture/隔离库验证行为并交付可应用步骤，不操作共享栈。
-
-1. 增量增加 review 表及 schema 检查；原 KPI 表、API 和历史数据保持可读，不把历史看板行改写为已执行动作。
-2. 实现输入、指标和事项/动作状态，以及房源/知识 v1 HTTP适配；独立验收用明确 fixture 运行全链，合并后将显式 HTTP配置指向已实现的生产者核验互通。
-3. 在现有 Agent 身份下发布技能及结果 DTO，验证 Memory 必需接入和写动作确认；不启用外部发送。
-4. 使用固定模拟数据完成带看停滞与房源维护两条功能验收；分别报告功能、效率采样和真实效果未验证状态。
-5. 回退停止创建新复盘事项并撤下新技能，保留已确认动作、回执及观察记录，不清空数据或重放完成动作。
+1. 不迁移或重写 bk_business；新增 bk_business_review 和本服务的业务/A2A 授权持久表，只在隔离数据库演练对应 manifest。
+2. 按并行唯一元组创建新 Maven 模块、服务模板、Nacos Data ID 与 Compose 块；同步 .env.example 的非敏感值，并在本地 .env 只补缺失项。
+3. 交付 Gateway route、Agent capability、Auth permission/STORE 身份、Memory trusted caller/keygen 和初始化 runner 的精确注册差异；协调会话合并共享项后，按真实 key 和签名身份做失败关闭验收。
+4. 先完成新服务本地 fixture、业务 API、持久化、Memory/Auth 拒绝行为，再显式选择新 Nacos Data ID 并部署；不以模拟联机结果声称生产服务已接通。
+5. 回退时先从 Gateway 移除新路由并停止新服务，保留新库中的事项、确认、回执和观察；不删除库、不清除旧 trade 历史或改写业务状态。密钥退役按服务身份登记操作执行。
 
 ## Open Questions
 
-首批 fixture 的具体字段值、门店代号和展示示例可以在实施中替换，但必须满足既定来源、模式、事件时间及版本契约。真实经营 feed 的地址和业务样本不构成本期模拟功能验收的前置条件。
+没有未决的领域契约。实施复核发现知识拆分预留了 9015，因此本服务使用已复核空闲的 9016；Auth 的 STORE 身份签名及全局权限登记和 Memory 全局调用者登记是明确的协调交接，不是可绕过的实现选项。

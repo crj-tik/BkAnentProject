@@ -1,12 +1,16 @@
 package com.bkanent.marketing.tool;
 
 import com.bkanent.common.model.ListingDTO;
+import com.bkanent.common.marketing.campaign.CampaignPlanPrepareRequest;
+import com.bkanent.common.marketing.campaign.CampaignPlanResponse;
+import com.bkanent.common.marketing.campaign.CampaignTargetRequest;
 import com.bkanent.common.rpc.ListingMasterRpcService;
+import com.bkanent.marketing.campaign.CampaignLifecycleService;
+import com.bkanent.marketing.campaign.CampaignDomainException;
 import com.bkanent.marketing.config.MarketingAgentProperties;
 import com.bkanent.marketing.model.MarketingContentDetailResponse;
 import com.bkanent.marketing.model.MarketingContentSearchRequest;
 import com.bkanent.marketing.model.MarketingContentUpsertRequest;
-import com.bkanent.marketing.model.MarketingPublishStatusUpdateRequest;
 import com.bkanent.marketing.service.MarketingAgentService;
 import com.bkanent.marketing.service.MarketingAssetService;
 import org.slf4j.Logger;
@@ -15,10 +19,10 @@ import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.time.LocalDateTime;
 import java.util.List;
-import java.util.UUID;
 
 @Component
 public class MarketingTools {
@@ -29,15 +33,21 @@ public class MarketingTools {
     private final ObjectProvider<MarketingAgentService> marketingAgentServiceProvider;
     private final MarketingAgentProperties properties;
     private final com.bkanent.marketing.service.MarketingListingReadClient listingReadClient;
+    private final CampaignLifecycleService campaignLifecycleService;
+    private final ObjectMapper objectMapper;
 
     public MarketingTools(MarketingAssetService marketingAssetService,
                           ObjectProvider<MarketingAgentService> marketingAgentServiceProvider,
                           MarketingAgentProperties properties,
-                          com.bkanent.marketing.service.MarketingListingReadClient listingReadClient) {
+                          com.bkanent.marketing.service.MarketingListingReadClient listingReadClient,
+                          CampaignLifecycleService campaignLifecycleService,
+                          ObjectMapper objectMapper) {
         this.marketingAssetService = marketingAssetService;
         this.marketingAgentServiceProvider = marketingAgentServiceProvider;
         this.properties = properties;
         this.listingReadClient = listingReadClient;
+        this.campaignLifecycleService = campaignLifecycleService;
+        this.objectMapper = objectMapper;
     }
 
     @Tool(description = "Create marketing content for a listing. Saves the content and returns the detail with content ID. "
@@ -95,15 +105,21 @@ public class MarketingTools {
         return value == null || value.isBlank() ? "待补充" : value;
     }
 
-    @Tool(description = "Publish a marketing content by its ID. Updates the publish status and returns the result.")
-    public MarketingContentDetailResponse publishContent(
-            @ToolParam(description = "Content ID to publish") Long contentId,
-            @ToolParam(description = "Publish status: SUCCESS, FAILED") String publishStatus) {
-        return marketingAssetService.updatePublishStatus(contentId, new MarketingPublishStatusUpdateRequest(
-                publishStatus != null ? publishStatus : "SUCCESS",
-                "Published by marketing-agent",
-                "pub-" + UUID.randomUUID(),
-                LocalDateTime.now()));
+    @Tool(description = "Prepare an authenticated campaign plan for an approved marketing content. This does not publish; a user must confirm the exact plan snapshot.")
+    public CampaignPlanResponse prepareMarketingCampaign(
+            @ToolParam(description = "Approved marketing content ID") Long contentId,
+            @ToolParam(description = "JSON array of targets: platform, accountId, optional arguments") String targetsJson,
+            @ToolParam(description = "Comma-separated brand asset IDs, or empty") String brandAssetIds) {
+        try {
+            List<CampaignTargetRequest> targets = objectMapper.readValue(targetsJson, new TypeReference<>() { });
+            List<Long> assets = brandAssetIds == null || brandAssetIds.isBlank() ? List.of()
+                    : java.util.Arrays.stream(brandAssetIds.split(",")).map(String::trim).map(Long::parseLong).toList();
+            return campaignLifecycleService.prepare(new CampaignPlanPrepareRequest(contentId, assets, targets, null));
+        } catch (CampaignDomainException failure) {
+            throw failure;
+        } catch (Exception failure) {
+            throw new IllegalArgumentException("targetsJson or brandAssetIds is invalid", failure);
+        }
     }
 
     @Tool(description = "Search marketing contents by keyword, listing ID, platform, or content type.")

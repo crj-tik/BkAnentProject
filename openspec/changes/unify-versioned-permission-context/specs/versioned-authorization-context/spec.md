@@ -4,16 +4,20 @@
 
 ## ADDED Requirements
 
-### Requirement: Registered permissions and role-derived user grants
+### Requirement: Restricted operations use registered permissions and role-derived grants
 
-系统 SHALL 使用已登记且唯一的权限码作为操作授权契约。普通用户的有效权限 SHALL 来自其有效角色的权限并集，用户与角色支持多对多关联及有效期。业务管理员 SHALL 不依赖角色取得全部当前登记权限；不存在、停用或未登记权限仍 MUST 被拒绝。业务管理员全权限 MUST NOT 绕过资源范围、个人 Memory owner 规则、业务状态、参数校验、审批或幂等。授权管理操作 MUST 经过独立管理权限及审计，普通用户不得自行变更管理员身份或角色授权。
+系统 SHALL 只为默认不向所有有效登录用户开放、必须显式授予的受限拦截点登记唯一权限码；普遍开放的基础操作不要求权限码，但 MUST 使用有效身份上下文，并在适用时验证资源owner/参与关系和业务状态。`AuthorizationContext.allowedOperations` SHALL 携带当前有效受限权限与固定的基础动作标识以绑定已签名的业务动作；`AuthorizationSnapshot.permissions` SHALL 只包含受限权限，基础动作标识 MUST NOT 被解释为角色授予或权限快照成员。普通用户对受限操作的有效权限 SHALL 来自其有效角色的权限并集，用户与角色支持多对多关联及有效期。业务管理员 SHALL 不依赖角色取得全部当前登记的受限权限；受限拦截点引用不存在、停用或未授予权限 MUST 被拒绝。业务管理员全权限 MUST NOT 绕过资源范围、个人 Memory owner 规则、业务状态、参数校验、审批或幂等。授权管理操作 MUST 经过独立管理权限及审计，普通用户不得自行变更管理员身份或角色授权。
+
+#### Scenario: Universal baseline operation requires identity but no permission code
+- **WHEN** 已认证用户调用产品明确普遍开放的基础操作，且请求上下文有效
+- **THEN** 系统不要求该操作出现在权限码目录或角色授予中；涉及资源时仍验证可信actor与owner/参与关系，涉及状态转换时仍验证业务状态
 
 #### Scenario: User holds two role bundles
 - **WHEN** 普通用户持有两个有效角色，其中部分权限重复且一项角色授予已经到期
 - **THEN** 系统返回当前有效权限的去重并集，不返回到期授予，不赋予业务管理员范围
 
-#### Scenario: Administrator requests an unknown operation
-- **WHEN** 业务管理员请求未登记或停用的权限码
+#### Scenario: Restricted gate references an unknown or inactive permission
+- **WHEN** 受限拦截点引用未登记、停用或未授予的权限码
 - **THEN** 系统拒绝该操作，不根据权限名后缀或通配身份放行
 
 #### Scenario: Administrative privilege does not expose personal memory
@@ -38,7 +42,7 @@ Auth SHALL maintain explicit, typed mappings from a platform actor to business i
 
 ### Requirement: Shared versioned authorization and isolated execution identity
 
-系统 SHALL 为经认证用户提供完整、有界、不可变的有效操作权限快照及单调授权版本；多个同用户同版本运行 SHALL 复用该快照，不按每个运行复制分布式权限副本。运行身份 MUST 绑定真实 actor、认证有效期、原 session/run 和请求政策；身份与权限 MUST 只经专用服务端上下文传播，不从 LLM、普通 metadata、userId 或 checkpoint 恢复凭据。授权版本变化 SHALL 不改变原 actor；角色增加也不得突破原请求政策、已绑定审批或服务委托范围。
+系统 SHALL 为经认证用户提供受限操作的完整有效权限快照及单调授权版本；普遍基础操作不要求进入该权限集合。多个同用户同版本运行 SHALL 复用该快照，不按每个运行复制分布式权限副本。运行身份 MUST 绑定真实 actor、认证有效期、原 session/run 和请求政策；身份与受限权限 MUST 只经专用服务端上下文传播，不从 LLM、普通 metadata、userId 或 checkpoint 恢复凭据。授权版本变化 SHALL 不改变原 actor；角色增加也不得突破原请求政策、已绑定审批或服务委托范围。
 
 #### Scenario: Parallel sessions use one user permission version
 - **WHEN** 同一用户在不同 session 中并行运行，且授权版本相同
@@ -82,7 +86,7 @@ Auth SHALL maintain explicit, typed mappings from a platform actor to business i
 
 ### Requirement: Boundary validation and planning version checks
 
-每个新外部请求 SHALL 在可信入口完成一次认证及完整授权获取，首次规划不重复获取。Supervisor 重新进入业务 Model 规划时 SHALL 核对当前授权和认证状态版本，同版且有效时不重复计算或下载权限。稳定已绑定 Agent run 上的 A2A 和已接入 MCP `tools/call` SHALL 携带 Auth 签名父 context、当前 freshness 和 Agent 服务逐请求 proof；请求proof绑定实际序列化JSON-RPC method/id/body及精确操作码，接收服务 SHALL 在任务/工具分发前本地验证身份、签名、权限、目标和期限，并按本地短期重放保护消费nonce。Auth SHALL 仅在Supervisor规划刷新边界联系，MCP逐工具调用 SHALL 不增加Auth/Redis往返。外部MCP不支持用户委托协议时，仅可通过可信清单显式开放无私有数据能力，且不得接收用户身份字段。任何同一次执行内部节点、工具、模型和流事件 SHALL 使用本地有效上下文判断，不逐节点、逐工具或逐事件远程复验。目标、参数、服务身份和请求重放检查仍 MUST 在相应执行入口进行；跨实例owner/nonce持久化由各协议的具体持久任务要求覆盖。
+每个新外部请求 SHALL 在可信入口完成一次认证及完整身份/受限授权获取，首次规划不重复获取。Supervisor重新进入业务Model规划时 SHALL 核对当前授权和认证状态版本，同版且有效时不重复计算或下载权限。稳定已绑定Agent run上的A2A和已接入MCP `tools/call` SHALL 携带Auth签名父context、当前freshness和Agent服务逐请求proof；请求proof绑定实际序列化JSON-RPC method/id/body及可信配置中的稳定动作标识，受限动作另绑定精确权限码。接收服务SHALL在任务/工具分发前本地验证身份、签名、动作分类、适用的受限权限、目标和期限，并按本地短期重放保护消费nonce；普遍基础动作不要求权限码，但仍须有效用户上下文和目标域owner/状态校验。Auth SHALL 仅在Supervisor规划刷新边界联系，MCP逐工具调用SHALL不增加Auth/Redis往返。外部MCP不支持用户委托协议时，仅可通过可信清单显式开放无私有数据能力，且不得接收用户身份字段。任何同一次执行内部节点、工具、模型和流事件SHALL使用本地有效上下文判断，不逐节点、逐工具或逐事件远程复验。目标、参数、服务身份和请求重放检查仍MUST在相应执行入口进行；跨实例owner/nonce持久化由各协议的具体持久任务要求覆盖。
 
 #### Scenario: A tool result triggers replanning without authorization change
 - **WHEN** Supervisor 获取工具结果后重新进入规划且权限和认证版本未变
@@ -106,7 +110,7 @@ Auth SHALL maintain explicit, typed mappings from a platform actor to business i
 
 ### Requirement: Request-bound service delegation cannot expand authority
 
-跨服务授权 SHALL 同时约束真实用户、受信调用服务、接收服务、操作、请求内容、任务关联和有效期，并防止篡改和重放。业务域 SHALL 独立验证后只接受其获准权限子集；子上下文截止 MUST 不超过父上下文、原run固定截止和当前授予期限，同版刷新或重新签发不得重置原run截止。普通服务身份 MUST NOT 自动取得所有用户权限；缺用户上下文不得自动转换为 SERVICE 模式。后台 SERVICE SHALL 只使用已接受精确任务、许可或域治理职责，不获得通用个人读取权限。授权材料 MUST NOT 出现在模型消息、工具业务参数、URL、SSE、业务结果、长期记忆或日志中。
+跨服务授权 SHALL 同时约束真实用户、受信调用服务、接收服务、稳定动作、请求内容、任务关联和有效期，并防止篡改和重放。受限动作还必须包含并验证显式获准的权限码；基础动作不通过权限码扩权，仍按签名身份、资源关系和状态执行。业务域 SHALL 独立验证后只接受其获准能力和受限权限子集；子上下文截止 MUST 不超过父上下文、原run固定截止和当前授予期限，同版刷新或重新签发不得重置原run截止。普通服务身份 MUST NOT 自动取得所有用户权限；缺用户上下文不得自动转换为 SERVICE 模式。后台 SERVICE SHALL 只使用已接受精确任务、许可或域治理职责，不获得通用个人读取权限。授权材料 MUST NOT 出现在模型消息、工具业务参数、URL、SSE、业务结果、长期记忆或日志中。
 
 #### Scenario: Caller changes a target or tool argument after delegation
 - **WHEN** 有效授权引用被用于不同目标、请求正文或 task

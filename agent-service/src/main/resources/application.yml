@@ -46,8 +46,12 @@ agent:
     max-users: 1000
     max-sessions: 4000
     max-sessions-per-user: 32
+    # Capability ID -> exact Auth operation; baseline operations are signed actions, not role grants.
     capability-permissions:
       "[local:milvusKnowledgeSearch]": agent.rag.search
+      "[a2a:listing-agent]": listing.read
+    # Only exact local capability IDs belong here; every call still needs a signed actor and bound run.
+    baseline-capabilities: ${AGENT_AUTHORIZATION_BASELINE_CAPABILITIES:}
     # Keep user-delegated MCP destinations closed until static streamable-http connections exist.
     mcp-target-audiences: {}
     public-mcp-capabilities: []

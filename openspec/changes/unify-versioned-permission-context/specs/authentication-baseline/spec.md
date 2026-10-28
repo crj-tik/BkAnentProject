@@ -2,7 +2,7 @@
 
 ### Requirement: RPC authorization SHALL verify the account exists and is active
 
-授权RPC SHALL 在建立新外部请求或新业务执行上下文时验证真实凭据、账号存在、活跃且未删除，再提供明确登记权限的版本化授权。普通用户权限来自有效角色并集，业务管理员不依赖角色取得全部已登记有效权限，但不能绕过业务状态或个人Memory owner。普通userId和权限码非空 MUST NOT 代替认证或跨服务受限委托。有效执行上下文可在规定期限和最多30秒失效兼容窗口内本地复用，之后按版本通知和对账失效，而非每节点重查账号；已知失效、硬到期或新入口不能使用旧上下文。
+授权RPC SHALL 在建立新外部请求或新业务执行上下文时验证真实凭据、账号存在、活跃且未删除，再提供包含身份和当前受限操作集合的版本化上下文。普遍基础操作不要求权限码；普通用户的受限权限来自有效角色并集，业务管理员不依赖角色取得全部已登记有效受限权限，但不能绕过业务状态或个人Memory owner。普通userId和权限码非空 MUST NOT 代替认证或跨服务受限委托。有效执行上下文可在规定期限和最多30秒失效兼容窗口内本地复用，之后按版本通知和对账失效，而非每节点重查账号；已知失效、硬到期或新入口不能使用旧上下文。
 
 #### Scenario: Unknown user requests permission
 - **WHEN** 新授权请求引用未知、停用或已删除用户
@@ -20,7 +20,7 @@
 
 ### Requirement: Gateway establishes one trustworthy request authorization
 
-Gateway SHALL 清除客户端伪造身份与授权头，对受保护请求一次向Auth认证并取得签名的请求级完整有效权限上下文；下游验证签名、audience、期限及请求关联，不再重复解析同一Bearer。公开规则 SHALL 使用路径和HTTP方法精确匹配，精确POST /auth/refresh仍由refresh凭据自身验证；直接服务入口没有可信上下文时必须走独立认证，不信固定marker或内网来源。现有签名、到期、注销撤销语义保持，已接受运行失效采用明确兼容窗口，不把权限快照变成长期登录凭据。
+Gateway SHALL 清除客户端伪造身份与授权头，对受保护请求一次向Auth认证并取得签名的请求级身份上下文及完整受限权限集合；基础操作可不要求操作码，但下游仍验证签名、audience、期限及请求关联，不再重复解析同一Bearer。公开规则 SHALL 使用路径和HTTP方法精确匹配，精确POST /auth/refresh仍由refresh凭据自身验证；直接服务入口没有可信上下文时必须走独立认证，不信固定marker或内网来源。现有签名、到期、注销撤销语义保持，已接受运行失效采用明确兼容窗口，不把权限快照变成长期登录凭据。
 
 #### Scenario: Forged client authorization headers
 - **WHEN** 客户端携带伪造actor或管理员上下文头

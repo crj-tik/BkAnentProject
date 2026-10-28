@@ -2,15 +2,23 @@
 
 ### Requirement: 模型获得可实际执行的统一能力目录
 
-系统 SHALL 向模型提供当前已发现、有效且授权可见的 A2A/MCP/本地能力，每项包含稳定身份、无冲突模型名称、description 和输入 schema，并对应真实执行入口。能力权限 MUST 由可信部署配置按稳定CapabilityId映射到Auth已登记的精确操作码；A2A身份使用agentId，MCP身份包含server和tool，本地身份包含tool。不得从首domain、Agent Card声明、模型参数、任意权限名前后缀、chat.use或generic server fallback推断映射。缺失映射的能力不可见且执行时拒绝；管理员只具有Auth当前已登记操作，不获得通配动作。A2A描述保留发布事实，MCP保留实际schema；目录 SHALL 在单轮一致并在后续规划按当前有效完整权限集合刷新。同版不重复下载或远程逐工具查权限，新增且已登记映射并获授的动态能力不得因初始名单冻结而丢失。endpoint更新保留已接受任务关联。
+系统 SHALL 向模型提供当前已发现、有效且授权可见的 A2A/MCP/本地能力，每项包含稳定身份、无冲突模型名称、description 和输入 schema，并对应真实执行入口。可信部署配置 SHALL 按稳定CapabilityId将能力明确分类为普遍基础能力或受限能力；A2A身份使用agentId，MCP身份包含server和tool，本地身份包含tool。受限能力 MUST 映射到Auth已登记的精确权限码并只在当前签名集合获准时可见；基础能力不要求权限码，但仍要求有效用户上下文、逐请求proof及目标域的owner/状态检查。不得从首domain、Agent Card声明、模型参数、任意权限名前后缀、chat.use或generic server fallback推断分类或映射。缺失分类的能力不可见且执行时拒绝；管理员不获得通配动作。A2A描述保留发布事实，MCP保留实际schema；目录 SHALL 在单轮一致并在后续规划按当前签名身份和受限权限集合刷新。同版不重复下载或远程逐工具查权限，新增且分类/映射有效的动态能力不得因初始名单冻结而丢失。endpoint更新保留已接受任务关联。
 
 #### Scenario: 动态新增领域不需要关键词配置或业务节点
-- **WHEN** 新Agent已发现、真实能力和权限映射有效，当前用户集合包含所需权限
+- **WHEN** 新Agent已发现、真实能力分类/映射有效，当前用户上下文满足其基础身份要求或受限能力码已获授
 - **THEN** 后续目录本地交集显示该能力，不新增关键词/领域执行节点，也不逐能力发Auth请求
 
+#### Scenario: Universal MCP capability needs no operation code
+- **WHEN** 可信配置将search标记为普遍基础能力，且用户有有效绑定上下文
+- **THEN** 工具可见和执行而不要求操作码；实际请求仍有独立proof，目标域仍核owner/状态
+
+#### Scenario: Restricted MCP capability requires its own operation grant
+- **WHEN** 可信配置将search标记为受限能力，但当前用户未获对应精确权限码
+- **THEN** 工具不可见且直接调用拒绝，不从同名server或其他工具的权限推导放行
+
 #### Scenario: 两个 MCP 服务拥有同名工具
-- **WHEN** 两个连接声明search且当前用户被授予各自登记操作权限
-- **THEN** 两项以独立稳定身份可见并执行，不将server可读视为其任意私有资源授权
+- **WHEN** 两个连接声明search且各自具有独立稳定身份和基础/受限分类
+- **THEN** 两项按各自分类分别判断是否需精确权限码，不将server级可读视为其任意私有资源授权
 
 #### Scenario: 模型伪造身份或未登记能力操作码
 - **WHEN** 模型在工具参数中提交其他userId、管理员标志、domain权限或未登记CapabilityId

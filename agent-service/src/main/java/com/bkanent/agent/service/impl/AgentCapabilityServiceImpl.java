@@ -5,16 +5,15 @@ import com.bkanent.agent.mcp.AgentMcpNames;
 import com.bkanent.agent.mcp.model.AgentMcpCallResult;
 import com.bkanent.agent.service.AgentCapabilityService;
 import com.bkanent.agent.service.AgentChatService;
-import com.bkanent.common.model.CompareReportDTO;
 import com.bkanent.common.model.KpiSummaryDTO;
-import com.bkanent.common.model.MarketingContentDTO;
+import com.bkanent.common.model.PublishRequest;
+import com.bkanent.common.marketing.campaign.MarketingContentDraftResponse;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * AgentCapabilityServiceImpl 服务实现类。
@@ -24,7 +23,7 @@ public class AgentCapabilityServiceImpl implements AgentCapabilityService {
 
     private static final String MARKETING_COPY_SYSTEM_PROMPT = """
             你是房产营销文案助手。
-            请根据用户提供的需求，生成可以直接发布的中文房源营销文案。
+            请根据用户提供的需求生成中文房源营销文案草稿。只生成内容，不创建发布计划、不确认发布，也不发送通知。
             文案要真实、简洁、有吸引力，不允许夸大承诺。
             """;
 
@@ -32,12 +31,6 @@ public class AgentCapabilityServiceImpl implements AgentCapabilityService {
             你是房产业务分析助手。
             请根据 KPI 数据输出管理层可读的月度总结。
             总结必须包含现状判断、风险提示和建议动作。
-            """;
-
-    private static final String COMPARE_CONCLUSION_SYSTEM_PROMPT = """
-            你是房源对比分析助手。
-            请根据输入的房源对比信息输出中文分析结论。
-            结论需要包含差异总结、性价比判断、适合人群和决策建议。
             """;
 
     /**
@@ -68,21 +61,27 @@ public class AgentCapabilityServiceImpl implements AgentCapabilityService {
      * 发布listingByPrompt。
      */
     @Override
-    public List<MarketingContentDTO> publishListingByPrompt(String rawInput) {
+    public List<MarketingContentDraftResponse> createMarketingDraft(PublishRequest request) {
+        if (request == null || request.listingId() == null || request.listingId() <= 0
+                || request.platforms() == null || request.platforms().isEmpty()
+                || request.platforms().stream().anyMatch(platform -> platform == null || platform.isBlank())
+                || request.prompt() == null || request.prompt().isBlank()) {
+            throw new IllegalArgumentException("listingId, platforms and prompt are required to create a marketing draft");
+        }
         String copywriting = agentChatService.call(
                 MARKETING_COPY_SYSTEM_PROMPT,
-                "请根据以下需求生成一版中文房源营销文案：\n" + rawInput
+                "请根据以下需求生成一版中文房源营销文案草稿：\n" + request.prompt()
         );
         AgentMcpCallResult result = agentMcpClient.callTool(
                 AgentMcpNames.MARKETING_SERVER,
-                AgentMcpNames.PUBLISH_MARKETING_CONTENT,
+                AgentMcpNames.CREATE_MARKETING_CONTENT_DRAFT,
                 Map.of(
-                        "listingId", 1L,
+                        "listingId", request.listingId(),
                         "copywriting", copywriting,
-                        "platforms", "douyin"
+                        "platforms", String.join(",", request.platforms())
                 )
         );
-        return readList(result.payload().get("contents"), new TypeReference<>() {
+        return readList(result.payload().get("contents"), new TypeReference<List<MarketingContentDraftResponse>>() {
         });
     }
 
@@ -98,32 +97,6 @@ public class AgentCapabilityServiceImpl implements AgentCapabilityService {
                 KPI_NARRATIVE_SYSTEM_PROMPT,
                 "请基于以下 KPI 数据生成总结：\n" + formatKpis(source)
         );
-    }
-
-    /**
-     * 分析listings。
-     */
-    @Override
-    public CompareReportDTO analyzeListings(List<Long> listingIds) {
-        String listingIdsText = listingIds == null ? "" : listingIds.stream()
-                .map(String::valueOf)
-                .collect(Collectors.joining(","));
-        AgentMcpCallResult result = agentMcpClient.callTool(
-                AgentMcpNames.COMPARE_SERVER,
-                AgentMcpNames.COMPARE_LISTINGS,
-                Map.of("listingIds", listingIdsText)
-        );
-        String markdown = String.valueOf(result.payload().getOrDefault("comparisonTableMarkdown", ""));
-        String conclusion = String.valueOf(result.payload().getOrDefault("aiConclusion", result.text()));
-        return new CompareReportDTO(List.of(), markdown, conclusion);
-    }
-
-    /**
-     * 生成compareConclusion。
-     */
-    @Override
-    public String generateCompareConclusion(String comparePrompt) {
-        return agentChatService.call(COMPARE_CONCLUSION_SYSTEM_PROMPT, comparePrompt);
     }
 
     /**

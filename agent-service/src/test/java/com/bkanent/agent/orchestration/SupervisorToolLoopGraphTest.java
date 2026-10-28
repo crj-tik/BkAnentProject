@@ -322,6 +322,46 @@ class SupervisorToolLoopGraphTest {
     }
 
     @Test
+    void configuredMarketingConfirmCapabilityWaitsForApprovalAndRejectedConfirmNeverExecutes() {
+        String confirmId = "mcp:marketing-mcp-server:confirmMarketingCampaign";
+        properties.setApprovalCapabilities(Set.of(confirmId));
+        AtomicInteger confirms = new AtomicInteger();
+        ToolCallback confirm = new ToolCallback() {
+            public ToolDefinition getToolDefinition() {
+                return ToolDefinition.builder().name("confirmMarketingCampaign").description("confirm exact plan")
+                        .inputSchema("{\"type\":\"object\"}").build();
+            }
+            public String call(String input) { confirms.incrementAndGet(); return "{\"receiptId\":\"receipt-1\"}"; }
+        };
+        when(catalog.snapshot("1", true)).thenReturn(Map.of(confirmId,
+                new SupervisorCapability(confirmId, "mcp", "marketing-mcp-server", "schema-v1", confirm)));
+        when(model.call(anyList(), anyList())).thenReturn(
+                calls(call("confirm-approved", "confirmMarketingCampaign", "{\"planId\":\"plan-1\",\"expectedPlanVersion\":1}")),
+                new AssistantMessage("receipt-1"),
+                calls(call("confirm-rejected", "confirmMarketingCampaign", "{\"planId\":\"plan-2\",\"expectedPlanVersion\":1}")));
+
+        var waiting = runner.execute(request("marketing-approved", null, null, "发布计划"));
+        assertThat(waiting.status()).isEqualTo("WAITING_USER_APPROVAL");
+        assertThat(confirms).hasValue(0);
+        var pending = state("marketing-approved").pendingApproval;
+        assertThat(pending.payload().get("calls").toString()).contains(confirmId, "confirm-approved");
+        var approved = runner.resume(new com.bkanent.common.agent.ApprovalCallbackRequest(pending.approvalId(),
+                "marketing-approved", "session", com.bkanent.common.agent.ApprovalStatus.APPROVED,
+                "1", null, "trace", pending.subjectVersion()));
+        assertThat(approved.status()).isEqualTo("COMPLETED");
+        assertThat(confirms).hasValue(1);
+
+        var rejectedWaiting = runner.execute(request("marketing-rejected", null, null, "发布另一个计划"));
+        assertThat(rejectedWaiting.status()).isEqualTo("WAITING_USER_APPROVAL");
+        var rejectedPending = state("marketing-rejected").pendingApproval;
+        var rejected = runner.resume(new com.bkanent.common.agent.ApprovalCallbackRequest(rejectedPending.approvalId(),
+                "marketing-rejected", "session", com.bkanent.common.agent.ApprovalStatus.REJECTED,
+                "1", null, "trace", rejectedPending.subjectVersion()));
+        assertThat(rejected.status()).isEqualTo("CANCELED");
+        assertThat(confirms).hasValue(1);
+    }
+
+    @Test
     void failedAndExplicitOnlyGuessedSkillLoadsDoNotActivate() {
         when(skills.getByName("private")).thenReturn(SkillDefinition.builder().name("private").description("private")
                 .domain("supervisor").tools(List.of("search")).explicitOnly(true).systemPrompt("private body").build());

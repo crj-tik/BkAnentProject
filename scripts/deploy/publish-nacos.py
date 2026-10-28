@@ -9,7 +9,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-ALLOWED = frozenset({"auth-service.yaml", "rag-service.yaml", "listing-master-service.yaml", "memory-service.yaml", "agent-service.yaml", "customer-service.yaml", "marketing-content-service.yaml", "interview-service.yaml", "knowledge-service.yaml", "gateway.yaml"})
+ALLOWED = frozenset({"auth-service.yaml", "rag-service.yaml", "listing-master-service.yaml", "memory-service.yaml", "agent-service.yaml", "customer-service.yaml", "marketing-content-service.yaml", "interview-service.yaml", "compare-engine-service.yaml", "knowledge-service.yaml", "gateway.yaml", "business-review-service.yaml"})
 
 def main():
     namespace = os.environ.get("NACOS_NAMESPACE", "")

@@ -31,7 +31,8 @@ import static org.mockito.Mockito.*;
 class AuthAuthorizationRpcServiceImplTest {
     private static final String TOKEN = "synthetic-access";
     private static final String HASH = "a".repeat(64);
-    private static final List<String> PERMISSIONS = List.of("agent.chat.use", "interview.read");
+    private static final List<String> PERMISSIONS = List.of("contract.seal.own", "interview.read");
+    private static final List<String> BASELINE_OPERATIONS = AuthzOperationPolicy.contextOperations(List.of());
 
     @Test
     void entryAuthenticatesOnceAndReturnsRequestBoundSignedAuthority() throws Exception {
@@ -39,7 +40,9 @@ class AuthAuthorizationRpcServiceImplTest {
         var response = f.service.resolveRequestAuthorization(TOKEN, f.request, f.entryProof());
         AuthzSignature.verifyResponse(response, "agent-service", f.request.requestId(),
                 AuthzCanonicalHash.resolveRequestHash(TOKEN, f.request), f.request.nonce(), f.authorityKeys(), f.clock.instant());
-        assertThat(response.snapshot().permissions()).containsExactlyElementsOf(PERMISSIONS);
+        assertThat(response.snapshot().permissions()).containsExactly("contract.seal.own");
+        assertThat(response.context().allowedOperations()).containsAll(BASELINE_OPERATIONS)
+                .contains("contract.seal.own");
         assertThat(response.context().runHardDeadlineEpochSecond()).isLessThanOrEqualTo(f.now + 300);
         verify(f.tokens, times(1)).parse(TOKEN);
         verify(f.repository, times(1)).snapshot(eq(7L), any(Instant.class));
@@ -115,7 +118,7 @@ class AuthAuthorizationRpcServiceImplTest {
         AuthzResponse entry = f.entry();
         AuthorizationSession session = f.session(entry);
         f.clock.advance(10);
-        f.version(2, 1, List.of("interview.read", "memory.read"), null, false);
+        f.version(2, 1, List.of("settlement.batch.create.all", "interview.read", "memory.read"), null, false);
         session.onNotification("7", 2, 1);
         assertThat(session.state()).isEqualTo(AuthorizationLocalState.DIRTY);
         assertThatThrownBy(() -> f.delegate(entry.context(), List.of("interview.read"), 20))
@@ -131,16 +134,16 @@ class AuthAuthorizationRpcServiceImplTest {
         assertThat(session.context().issuedAtEpochSecond()).isEqualTo(f.now + 10);
         assertThat(session.context().runHardDeadlineEpochSecond()).isEqualTo(f.now + 300);
         assertThat(session.context().expiresAtEpochSecond()).isEqualTo(f.now + 300);
-        assertThat(refreshed.snapshot().permissions()).containsExactly("interview.read", "memory.read");
-        assertThat(refreshed.context().allowedOperations()).containsExactly("interview.read");
+        assertThat(refreshed.snapshot().permissions()).containsExactly("settlement.batch.create.all");
+        assertThat(refreshed.context().allowedOperations()).containsExactlyElementsOf(BASELINE_OPERATIONS);
         assertThat(refreshed.freshness().checkedAtEpochSecond()).isEqualTo(f.now + 10);
         assertThat(refreshed.freshness().notAfterEpochSecond()).isEqualTo(f.now + 40);
         var child = f.delegate(session.context(), List.of("interview.read"), 21);
         assertThat(child.context().runHardDeadlineEpochSecond()).isEqualTo(f.now + 300);
         assertThat(child.context().expiresAtEpochSecond()).isLessThanOrEqualTo(session.context().expiresAtEpochSecond());
-        assertThatThrownBy(() -> f.delegate(session.context(), List.of("agent.chat.use"), 22))
+        assertThatThrownBy(() -> f.delegate(session.context(), List.of("contract.seal.own"), 22))
                 .isInstanceOf(AuthzException.class).hasMessage("PERMISSION_DENIED");
-        assertThatThrownBy(() -> session.requirePermission("memory.read"))
+        assertThatThrownBy(() -> session.requirePermission("contract.seal.own"))
                 .isInstanceOf(AuthzException.class).hasMessage("PERMISSION_DENIED");
     }
 
@@ -344,23 +347,23 @@ class AuthAuthorizationRpcServiceImplTest {
         AuthzResponse entry = f.entry();
         AuthorizationSession session = f.session(entry);
         f.clock.advance(10);
-        f.version(2, 1, List.of("interview.read", "memory.read"), null, true);
+        f.version(2, 1, List.of("settlement.batch.create.all", "interview.read", "memory.read"), null, true);
         AuthzResponse restricted = f.refresh(entry.context(), 10);
         session.refresh(restricted, correlation(restricted));
         assertThat(restricted.snapshot().businessAdmin()).isTrue();
-        assertThat(session.allowedOperations()).containsExactly("interview.read");
+        assertThat(session.allowedOperations()).containsExactlyElementsOf(BASELINE_OPERATIONS);
         f.clock.advance(10);
-        f.version(3, 1, List.of("agent.chat.use", "interview.read", "memory.read"), null, true);
+        f.version(3, 1, List.of("contract.seal.own", "interview.read", "memory.read"), null, true);
         AuthzResponse regranted = f.refresh(session.context(), 11);
         session.refresh(regranted, correlation(regranted));
-        assertThat(session.allowedOperations()).containsExactly("interview.read");
+        assertThat(session.allowedOperations()).containsExactlyElementsOf(BASELINE_OPERATIONS);
         f.clock.advance(10);
         f.version(4, 1, List.of("memory.read"), null, false);
         AuthzResponse empty = f.refresh(session.context(), 12);
         session.refresh(empty, correlation(empty));
         assertThat(session.state()).isEqualTo(AuthorizationLocalState.VALID);
-        assertThat(session.allowedOperations()).isEmpty();
-        assertThatThrownBy(() -> session.requirePermission("memory.read"))
+        assertThat(session.allowedOperations()).containsExactlyElementsOf(BASELINE_OPERATIONS);
+        assertThatThrownBy(() -> session.requirePermission("settlement.batch.create.all"))
                 .isInstanceOf(AuthzException.class).hasMessage("PERMISSION_DENIED");
     }
 
@@ -377,7 +380,7 @@ class AuthAuthorizationRpcServiceImplTest {
         AuthzResponse c2 = f.service.refreshAuthorization(TOKEN, c1.context(), revokeBinding,
                 f.refreshProof(TOKEN, c1.context(), revokeBinding));
         session.refresh(c2, revokeCorrelation);
-        assertThat(session.allowedOperations()).containsExactly("interview.read");
+        assertThat(session.allowedOperations()).containsExactlyElementsOf(BASELINE_OPERATIONS);
         f.clock.advance(10);
         f.version(3, 1, PERMISSIONS, null, false);
         session.onNotification("7", 3, 1);
@@ -391,13 +394,14 @@ class AuthAuthorizationRpcServiceImplTest {
                 f.refreshProof(TOKEN, c1.context(), attackBinding));
         AuthzSignature.verifyResponse(c3, "agent-service", attackCorrelation.requestId(), attackCorrelation.requestHash(),
                 attackCorrelation.nonce(), f.authorityKeys(), f.clock.instant());
-        assertThat(c3.context().allowedOperations()).containsExactlyElementsOf(PERMISSIONS);
+        assertThat(c3.context().allowedOperations()).containsExactlyElementsOf(
+                AuthzOperationPolicy.contextOperations(PERMISSIONS));
         assertThatThrownBy(() -> session.refresh(c3, attackCorrelation))
                 .isInstanceOf(AuthzException.class).hasMessage("PERMISSION_DENIED");
         assertThat(session.context()).isSameAs(c2.context());
         assertThat(session.snapshot()).isSameAs(c2.snapshot());
         assertThat(session.freshness()).isSameAs(c2.freshness());
-        assertThat(session.allowedOperations()).containsExactly("interview.read");
+        assertThat(session.allowedOperations()).containsExactlyElementsOf(BASELINE_OPERATIONS);
         assertThat(session.state()).isEqualTo(AuthorizationLocalState.DIRTY);
         RequestBinding safeBinding = f.refreshBinding(session.context(), 12);
         var safeCorrelation = new AuthorizationSession.ResponseCorrelation(safeBinding.requestId(),
@@ -407,9 +411,9 @@ class AuthAuthorizationRpcServiceImplTest {
         session.refresh(limited, safeCorrelation);
         assertThat(session.state()).isEqualTo(AuthorizationLocalState.VALID);
         assertThat(session.context().permissionRevision()).isEqualTo(3);
-        assertThat(session.allowedOperations()).containsExactly("interview.read");
+        assertThat(session.allowedOperations()).containsExactlyElementsOf(BASELINE_OPERATIONS);
         assertThat(session.context().runHardDeadlineEpochSecond()).isEqualTo(f.now + 300);
-        assertThatThrownBy(() -> session.requirePermission("agent.chat.use"))
+        assertThatThrownBy(() -> session.requirePermission("contract.seal.own"))
                 .isInstanceOf(AuthzException.class).hasMessage("PERMISSION_DENIED");
     }
 

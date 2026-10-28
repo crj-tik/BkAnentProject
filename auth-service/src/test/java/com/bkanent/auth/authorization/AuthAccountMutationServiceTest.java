@@ -96,13 +96,13 @@ class AuthAccountMutationServiceTest {
         var ordinary = controller.login(new AuthLoginRequest("broker01", "correct-password", null));
         assertTrue(ordinary.success());
         assertNotNull(rpc.resolvePrincipal(ordinary.data().accessToken()));
-        assertFalse(rpc.hasPermission(1L, "agent.chat.use"));
+        assertTrue(rpc.hasPermission(1L, "agent.chat.use"));
         mvc.perform(get("/auth/roles").header("Authorization", "Bearer " + ordinary.data().accessToken()))
                 .andExpect(status().isForbidden());
-        jdbc.update("INSERT INTO auth_role_permission SELECT id,'memory.read' FROM auth_role WHERE role_code='MANAGER'");
+        jdbc.update("INSERT INTO auth_role_permission SELECT id,'business.kpi.read.all' FROM auth_role WHERE role_code='MANAGER'");
         jdbc.update("INSERT INTO auth_user_role SELECT 1,id,NULL,NULL,1 FROM auth_role WHERE role_code IN ('BROKER','MANAGER')");
         assertEquals(java.util.List.of("BROKER", "MANAGER"), mutations.roles(1));
-        assertTrue(rpc.hasPermission(1L, "memory.read"));
+        assertTrue(rpc.hasPermission(1L, "business.kpi.read.all"));
         assertFalse(rpc.hasPermission(2L, "invented.manage"));
         assertFalse(rpc.hasPermission(2L, "agent.workflow.invoke.invented"));
         assertFalse(rpc.hasPermission(2L, "agent.chat.use.extra"));

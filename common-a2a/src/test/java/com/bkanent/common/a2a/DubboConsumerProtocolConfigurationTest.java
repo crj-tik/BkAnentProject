@@ -73,7 +73,7 @@ class DubboConsumerProtocolConfigurationTest {
     @ParameterizedTest(name = "{0}: application and Nacos overlay bind a pure Dubbo consumer")
     @ValueSource(strings = {"agent-service", "business-service", "compare-engine-service", "contract-service",
             "customer-service", "gateway", "listing-master-service", "marketing-content-service",
-            "media-worker-service", "memory-service", "notification-service", "promotion-service",
+            "media-worker-service", "memory-service", "notification-service",
             "rag-service", "settlement-service"})
     void actualResourceAndHigherPriorityNacosTemplateBindOfficialConsumerProtocol(String service) throws Exception {
         FrameworkModel framework = new FrameworkModel();

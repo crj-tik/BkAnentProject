@@ -1,40 +1,62 @@
 # Tasks
 
-## 0. 独立会话与契约基线
+## 0. 拆分边界与契约基线
 
-- [ ] 0.1 按并行总览记录独立worktree/分支、共同base SHA、.m2repo和测试资源，用git/构建记录验证未导入另外三个实现分支。
-- [ ] 0.2 固定business模块和common/business/review修改范围及本域编号段，用源码引用扫描验证未依赖房源/知识change新增的Java类型，也未修改它们的业务代码。
-- [ ] 0.3 按domain-parallel-v1固定房源/知识HTTP样例和成功/空匹配/拒绝/过时/不可用反例，启动本会话本地fixture验证所需输入全部可独立提供。
+- [x] 0.1 在共同基线的独立 worktree、Maven 仓库和隔离数据库中实施；开始前重新核对 service ID、数据库 bk_business_review、端口 9016、路径 /business-review/**、Data ID business-review-service.yaml、A2A ID、Memory domain 和 key ID 没有被其它活动 change 占用。发现知识拆分预留 9015 后改用 9016，并复核活动 worktree、服务配置和监听端口。
+- [x] 0.2 固定所有权：新增 business-review-service 承接本域实现；逐文件差异检查确认 business-service 的源码、application.yml、business-service.yaml、bk_business、/business/**、Compose 块、trade-agent、Memory 身份与旧 env 键均未修改。
+- [x] 0.3 固定 domain-parallel-v1 房源/知识 HTTP 请求、响应和成功空集、拒绝、版本过期、撤回及不可用 fixture；新 consumer DTO 留在本服务，不引用并行会话新增 Java 类型。
+- [x] 0.4 固定新服务配置身份元组和 Auth/Memory 交接：business-review-service、business-review-agent、business-review、agent.workflow.invoke.business-review、六个 business.review.*.store 操作、唯一公钥 key ID；共享文件由本 change 只追加本服务块，Memory/Auth 全局身份注册由协调会话合并。
 
-## 1. 数据与度量边界
+## 1. 数据与指标边界
 
-- [ ] 1.1 定义复盘输入、来源引用、dataset 和数据模式契约及固定模拟样例，用契约测试验证事件/观察时间、稳定版本和模拟/真实隔离。
-- [ ] 1.2 实现带看、跟进、议价和维护的 fixture 数据端口，用同输入同输出及非法来源测试验证无随机推造经营事实。
-- [ ] 1.3 定义指标版本、窗口/时区、去重机会单位和有效下一步事件，使用零分母、缺反馈、迟到事件及跨窗口测试验证 UNKNOWN 和分子/分母。
-- [ ] 1.4 实现当前Auth主体/门店范围消费适配，以本会话精确测试登记验证伪造storeId/employeeId、跨门店及失联拒绝，验证真实范围未配置不放行且无需等待Auth新提交。
+- [x] 1.1 定义经营输入、来源引用、dataset 和 dataMode；固定样例覆盖带看、跟进、议价和房源维护，验证不从 employeeId、记录 ID 或模型文本推造事实。
+- [x] 1.2 实现 fixture 数据端口，保留 sourceSystem、sourceId、revision、observedAt、eventTime、dataMode 和 datasetId；验证模拟/真实隔离和来源未知传播。
+- [x] 1.3 定义指标版本、观察窗口、时区、去重单位、分子分母及有效下一步口径；覆盖零分母、缺反馈、迟到事件、跨窗口和未知来源，输出 UNKNOWN 及原因。
+- [x] 1.4 定义 TrustedStoreScopePort；测试已验证 actor/store、请求 storeId 一致性、employeeId 伪造、缺失/过期范围和跨店拒绝。测试替身只证明新服务消费可信范围的行为，不冒充 Auth 生产 STORE 支持。
 
-## 2. 复盘事项与依赖
+## 2. 新服务领域状态与来源适配
 
-- [ ] 2.1 增加事项、证据快照、诊断/计划修订、动作和回执表及增量清单，用迁移重复执行和 request 唯一键测试验证可靠记录。
-- [ ] 2.2 实现房源与已发布知识的真实HTTP consumer adapter、消费方本地wire DTO/mapper和显式fixture/http模式；用有界HTTP夹具验证冻结v1的版本、空匹配、拒绝、不可用和禁止静默回退，不能留下空实现。
-- [ ] 2.3 实现带看后停滞和房源维护缺口的事实整理及有界模型解释，用无反馈、无价格依据和未核验知识用例验证不虚构原因或经营事实。
-- [ ] 2.4 在计划确认和结果使用前复核房源/知识/范围版本，用调价、知识撤回和授权变化测试验证相关计划待复核及旧正文停止使用。
+- [x] 2.1 在 bk_business_review 建立事项、证据、诊断/计划修订、动作、幂等回执和观察表；新增独立 schema migration/check、A2A 持久授权 migration/check 和 manifest 记录，不迁移 bk_business。
+- [x] 2.2 实现 ListingBusinessReadPort、PublishedKnowledgeReadPort、本地 wire DTO/mapper 和显式 fixture/http 模式；HTTP fixture 覆盖 domain-parallel-v1 版本、空匹配、拒绝、不可用、过期及撤回，无静默回退或空适配器。
+- [x] 2.3 实现带看后停滞和房源维护缺口的事实整理及有界模型解释；覆盖无客户反馈、无价格依据和知识未核验，确保缺口显式且不虚构事实/原因。
+- [x] 2.4 在计划确认和结果读取前重新检查房源/知识/范围版本；覆盖来源撤回、版本过期、授权变化，验证计划待复核、失效正文不可见而既有执行事实保留。
 
 ## 3. 推进与观察业务
 
-- [ ] 3.1 实现计划版本、负责人、期限和参数 hash 的确认动作，用并发确认、丢回执重试、同号异内容和旧批准测试验证动作不重复。
-- [ ] 3.2 实现动作状态与人工/来源反馈，用 USER_REPORTED、SOURCE_CONFIRMED 及非法状态流转测试验证 DONE 不自动改变上游房源或成交事实。
-- [ ] 3.3 实现效率与经营阶段观察查询，用模拟、混合、未知及真实来源样例验证模式继承和不将前后变化解释为因果增长。
-- [ ] 3.4 约束反馈/结果事件出口，用模拟数据、模型自评和工具受理反例验证不向生产 Memory 发布有效经营结果证据。
+- [x] 3.1 实现不可变计划版本、负责人、期限、参数 hash 和确认动作；覆盖并发确认、回执丢失重试、同 requestId 不同 hash 冲突及旧版本批准拒绝。
+- [x] 3.2 实现动作状态与人工/来源回执；覆盖 USER_REPORTED、SOURCE_CONFIRMED 和非法状态迁移，验证 DONE 不自动改变房源、客户或成交事实。
+- [x] 3.3 实现效率与经营阶段观察查询；覆盖 SIMULATED、MIXED、UNKNOWN 与 REAL 的来源继承，不将前后变化解释为因果增长。
+- [x] 3.4 限制 MemoryExperienceOutcome 出口；验证模拟数据、USER_REPORTED、模型自评、Agent 工具受理和单纯 DONE 均不能发布为生产经营有效结果。
 
-## 4. API 与 Agent 接入
+## 4. API、Auth、Agent 与 Memory
 
-- [ ] 4.1 提供复盘、计划、确认、动作及观察的公开 API/DTO，用 controller/服务契约测试验证授权、幂等回执和分页范围。
-- [ ] 4.2 在现有 trade/trade-agent 身份下增加诊断、方案准备和复盘技能，用装配测试验证 Memory 必需接入、技能范围及写动作审批。
-- [ ] 4.3 输出安全的领域 artifact 和引用契约，用结果投影测试验证 owner/来源/dataMode，保留原 Studio work/command 语义且不勾选其未完成任务。
+- [x] 4.1 实现 /business-review/reviews 下的事项、计划、确认、动作反馈和观察 API；沿用 ApiResponse、有界 cursor 和 /business-review/** route audience，逐路由验证六个精确 business.review.*.store 操作、实际事项 store owner、跨店拒绝及 expected version/hash 语义。
+- [x] 4.2 使用稳定 CapabilityId.a2a(business-review-agent) 到 agent.workflow.invoke.business-review 映射；按 D9 proof 绑定真实 JSON-RPC body、caller/audience、actor、run/task、requestId、nonce 和期限，在任务持久化前本地验签。交付 Auth 六个领域操作和 STORE 签名范围登记片段；未登记时生产调用失败关闭。
+- [x] 4.3 通过 A2aMemoryHookFactory 使用唯一身份 business-review-service / business-review / business-review-agent；在任何模型或业务工具前完成 Memory 读取与授权核验，测试 Memory 不可用、错误公钥、未登记 agent/domain 均无副作用，并验证不读取 trade-agent 历史。
+- [x] 4.4 输出安全领域 artifact 和引用契约；验证 owner、来源、dataMode、授权摘要及门店边界；技能只形成未落库草稿，确认和反馈必须是用户明确触发的领域 API，不加入 MCP 写工具。
 
-## 5. 独立验收与交付
+## 5. 服务配置与共享文件同步
 
-- [ ] 5.1 仅用本会话本地v1 HTTP fixture、Auth/Memory测试登记及真实本域持久处理器，完成模拟带看停滞和维护闭环，验证回执/撤回/重复输入；无需其它三个实现或Auth新提交即可验收完成。
-- [ ] 5.2 在共同基线及本change独立运行business及必要消费契约测试/编译，记录自身Maven仓库、功能与模式证据；跨服务联机/真实增长另列未验证，不作为本期等待任务。
-- [ ] 5.3 更新独立部署回退、口径及本域LR引用，严格校验和diff检查后中文commit/push本会话分支，交付head SHA/配置和迁移差异；不推dev-fix、不关闭KI-114/128/166，合并后联调交协调会话。
+- [x] 5.1 新增根 pom.xml 的 business-review-service 模块项；确认通用 Dockerfile 会构建并复制新 jar，仅在发现固定模块清单时追加本模块。
+- [x] 5.2 新建本服务 application.yml 和 nacos/business-review-service.yaml：配置服务名、9016、独立 A2A audience/key ID、bk_business_review datasource、Memory 可选压缩默认关闭和实际 readiness；不复制或改写 business-service.yaml。
+- [x] 5.3 在 docker-compose.yml 只增加本服务块，使用 business-review-service-1.0.0-SNAPSHOT.jar、http://business-review-service:9016、专属只读私钥挂载、数据库与 Nacos 配置；只声明真实依赖，不因旧 business-service 依赖 Redis 就增加 Redis 依赖。
+- [x] 5.4 在 .env.example 增加 MYSQL_DB_BUSINESS_REVIEW=bk_business_review 与 BUSINESS_REVIEW_MEMORY_V2_COMPRESSION_ENABLED=false；若本地忽略的 .env 存在，只补缺失非敏感项、保留既有值和秘密、不提交该文件；公钥从生成的 public-keys.env 注入。
+- [x] 5.5 在 nacos/mysql-common.yaml 增加独立数据库别名；在 nacos/gateway.yaml 增加 /business-review/** 路由和 audience；在 nacos/agent-service.yaml 增加稳定 a2a:business-review-agent capability 映射，保留旧 /business/** 路由与 trade-agent 配置。
+- [x] 5.6 向 nacos/memory-service.yaml 交付独立 trusted caller 片段：business-review-service-current 公钥、service-delivery=true、business-review: [business-review-agent]；向 ServiceIdentityKeygen 服务名单交付新增项并生成 BUSINESS_REVIEW_SERVICE_IDENTITY_PUBLIC_KEY；将新服务加入 RagRuntimeProbe 的 A2A audience 检查，但不加入 Memory RAG domain-agent 投影。由协调会话合并 Memory 全局 caller 和 keygen 注册，不增加 RAG space 或 experience outcome publisher。
+- [x] 5.7 在 sql/mysql-init.sql 新建 bk_business_review；向 docker/mysql/init-manifest.tsv 增加本域 schema 与 A2A task authorization migration/check；更新 scripts/deploy/run-init-manifest.sh 的数据库 allowlist。按最小权限保持 MYSQL_MCP_DATABASES 默认排除 bk_business_review。
+- [x] 5.8 在 scripts/deploy/publish-nacos.py 的精确 ALLOWED Data ID 和 scripts/deploy/init-environment.sh 的 required config 清单增加 business-review-service.yaml；保持 NACOS_CONFIG_DATA_IDS 默认空，并记录部署时显式选择该 Data ID。
+- [x] 5.9 按配置矩阵逐项核对新增、废除和引用：应用模板、.env.example、本地 .env、Nacos 服务配置、Gateway、Agent、Memory、Compose、SQL/manifest、keygen、发布和启动 allowlist；不删除或复用 BUSINESS_MEMORY_V2_COMPRESSION_ENABLED、BUSINESS_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER 或任何 business-service 配置键。
+
+## 6. 独立验收与交付
+
+- [x] 6.1 仅使用本会话 fixture、Auth/Memory 精确测试登记、TrustedStoreScopePort 测试替身和新服务实际持久处理器，独立完成模拟带看停滞与维护缺口闭环；不依赖其它拆分分支或共享部署。
+- [x] 6.2 在本 change 独立构建 business-review-service 及必要上游模块，运行本域处理器、HTTP consumer、Auth/Memory 拒绝、数据库 manifest 和 Compose/Nacos 配置检查；分别记录模拟证据和未验证的生产互通，不运行 Docker 共享环境操作。
+- [x] 6.3 对根 POM、Compose、Gateway、Nacos、.env.example、keygen、SQL manifest、启动/发布脚本执行共享配置并集审查；确认 business-service 路径级 diff 为空，严格校验 OpenSpec 和 diff。
+- [x] 6.4 在本服务分支使用中文 commit 并 push；记录 head SHA、独立测试结果、配置差异、Auth/Memory 注册交接和未完成的生产 STORE/真实联机门禁；独立实施提交未推 dev-fix、未合并其它会话分支、不关闭 KI-114/128/166。
+
+## 7. 合并后兼容性与集成验收
+
+- [x] 7.1 合并共享配置时保留目标分支的 Auth baseline、访谈与房源 capability/路由、权限迁移和推广 Data ID，并合入本服务数据库、Nacos、Compose、Memory、Gateway 与发布配置；复核 manifest 序号唯一递增、全部 migration/schema-check SHA-256、旧业务路由不变。
+- [ ] 7.2 为原 business-service 月度 KPI、工作量、评估、排行榜/重建、房源流转、看板/大屏 REST 与 TradeTools/TradeMcpTools 增加合并后回归，验证参数、授权范围和指标结果保持原行为。
+- [ ] 7.3 新增 Supervisor 专属复盘技能与动态工具目录，将计划准备和确认拆分为 `prepareBusinessReviewPlan` 与 `confirmBusinessReviewPlan`；将确认 capability 稳定 ID 并入 `approval-capabilities`，覆盖未批准、拒绝、计划过时、门店范围变化和回执重试，确认全部走 business-review-service 且不改写 trade-agent 身份。
+- [ ] 7.4 在 Auth 登记新 Agent capability 和六个 `business.review.*.store` 操作，并完成签名 `STORE` 身份/门店范围映射；生成并登记 Memory trusted caller 公钥，验证 Auth/Memory 真实接线与失败关闭。在此之前保持生产 STORE 授权链路未就绪，不以本地 fixture 声称已接通。

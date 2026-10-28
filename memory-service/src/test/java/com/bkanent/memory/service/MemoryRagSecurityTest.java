@@ -116,8 +116,11 @@ class MemoryRagSecurityTest {
         assertTrue(personal.activeOnly());
         assertEquals("42", personal.ownerId());
         assertEquals(personalPrincipal, personal.authPrincipal());
-        assertThrows(RagException.class, () -> f.security.scope(personalRequest,
-                versionedPrincipal(now, true, List.of(), List.of("rag.space.manage"))));
+        var baselineWithoutPermissionGrant = f.security.scope(personalRequest,
+                versionedPrincipal(now, true, List.of(), List.of("rag.space.manage")));
+        assertEquals("42", baselineWithoutPermissionGrant.ownerId());
+        assertFalse(baselineWithoutPermissionGrant.businessWideRead());
+        assertTrue(baselineWithoutPermissionGrant.activeOnly());
 
         var constraintRequest = RagSearchRequest.defaults("versioned-constraint", "memory.constraint", "q");
         var constraintPrincipal = versionedPrincipal(now, true, List.of(), List.of("memory.constraint.read"));

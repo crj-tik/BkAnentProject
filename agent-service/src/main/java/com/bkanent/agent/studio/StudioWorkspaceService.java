@@ -183,7 +183,22 @@ public class StudioWorkspaceService {
                     if (found.isEmpty()) throw StudioException.missing(); var saved = found.get(0);
                     if (ref.get("revisionId") != null && !ref.get("revisionId").equals(saved.get("revision_id"))) throw StudioException.conflict("VERSION_CONFLICT", "引用成果的版本身份不一致");
                     var sources = json.objects(json.read(json.text(saved.get("sources_json"))).get("refs"));
-                    for (var source : sources) if ("listing".equals(source.get("type"))) listings.read(owner, json.text(source.get("id")));
+                    List<Map<String, Object>> listingSources = sources.stream()
+                            .filter(source -> "listing".equals(source.get("type"))).toList();
+                    if (!listingSources.isEmpty()) {
+                        var current = listings.readCurrent(owner, listingSources.stream()
+                                .map(StudioListingReader::reference).toList());
+                        var byRef = current.stream().collect(java.util.stream.Collectors.toMap(
+                                com.bkanent.common.listing.ListingSourceSnapshot::listingRef, value -> value));
+                        for (var source : listingSources) {
+                            var snapshot = byRef.get(StudioListingReader.reference(source));
+                            if (snapshot == null || !snapshot.revision().equals(source.get("sourceRevision"))
+                                    || !snapshot.contentHash().equals(source.get("contentHash"))) {
+                                throw StudioException.conflict("SOURCE_VERSION_CONFLICT",
+                                        "引用房源已有新版本，请刷新成果后重试");
+                            }
+                        }
+                    }
                     @SuppressWarnings("unchecked") List<Map<String, Object>> snapshots = (List<Map<String, Object>>) context.computeIfAbsent("artifactSnapshots", key -> new ArrayList<Map<String, Object>>());
                     snapshots.add(Map.of("seriesId", series, "revisionId", saved.get("revision_id"), "version", version, "type", saved.get("artifact_type"), "content", json.read(json.text(saved.get("content_json"))), "sourceRefs", sources));
                 }

@@ -60,6 +60,7 @@ class AgentAuthorizationConsumerRefreshTest {
         properties.setAuthorityPublicKeys(Map.of("auth-key",
                 Base64.getEncoder().encodeToString(authorityKey.getPublic().getEncoded())));
         properties.setCapabilityPermissions(Map.of("local:milvusKnowledgeSearch", "agent.rag.search"));
+        properties.setBaselineCapabilities(Set.of("local:freeLocalTool"));
         auth = mock(AuthAuthorizationRpcService.class);
         head = new AtomicReference<>();
         monitor = new AuthorizationVersionMonitor(users -> {
@@ -94,9 +95,14 @@ class AgentAuthorizationConsumerRefreshTest {
         permissions.setAuthorizationProperties(properties);
         try (var scope = AgentAuthorizationScope.open(entry)) {
             assertThat(permissions.canUseLocalTool("42", "milvusKnowledgeSearch")).isTrue();
+            assertThat(permissions.canUseLocalTool("42", "freeLocalTool")).isTrue();
             assertThat(permissions.canUseLocalTool("42", "unknownTool")).isFalse();
             assertThat(permissions.canInvokeMcpTool("42", "business-mcp-server", "search")).isFalse();
             assertThatThrownBy(() -> permissions.canUseLocalTool("43", "milvusKnowledgeSearch"))
+                    .isInstanceOf(AuthzException.class)
+                    .extracting(failure -> ((AuthzException) failure).code())
+                    .isEqualTo(AuthzErrorCode.AUTHENTICATION_FAILED);
+            assertThatThrownBy(() -> permissions.canUseLocalTool("43", "freeLocalTool"))
                     .isInstanceOf(AuthzException.class)
                     .extracting(failure -> ((AuthzException) failure).code())
                     .isEqualTo(AuthzErrorCode.AUTHENTICATION_FAILED);

@@ -13,12 +13,13 @@ class DemonstrationSkillTest {
         var registry = new SkillRegistry(new SkillFileLoader(), "");
         var definition = registry.getByName("listing-compare-marketing-draft");
         assertThat(definition).isNotNull(); assertThat(definition.explicitOnly()).isTrue();
-        var capabilities = Map.of("a2a:listing-agent", "listing", "mcp:compare-mcp-server:compareListings", "compare", "a2a:marketing-agent", "marketing");
+        var capabilities = Map.of("a2a:listing-agent", "listing", "a2a:marketing-agent", "marketing");
         var resolver = new SkillExecutionResolver(registry);
         var selection = new SkillSelection(definition.name(), "1");
         assertThat(resolver.resolve(selection, "supervisor", capabilities, true).capabilityIds()).containsExactlyInAnyOrderElementsOf(capabilities.keySet());
         assertThatThrownBy(() -> resolver.resolve(selection, "supervisor", capabilities, false)).hasMessageContaining("listing-compare-marketing-draft");
         assertThatThrownBy(() -> resolver.resolve(selection, "supervisor", Map.of("a2a:listing-agent", "listing"), true)).hasMessageContaining("unavailable");
-        assertThat(definition.systemPrompt()).contains("listingIds", "marketing-draft", "request_input");
+        assertThat(definition.systemPrompt()).contains("listing-comparison", "listingRef", "revision", "marketing-draft", "request_input")
+                .doesNotContain("compare-mcp-server", "listingIds");
     }
 }

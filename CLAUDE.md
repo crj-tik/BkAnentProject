@@ -53,7 +53,7 @@ This is a **multi-agent real-estate middle-platform** built on Spring Cloud Alib
 | `memory-service` | 9011 | Vector memory (Milvus) RPC |
 | `business-service` | 9010 | Trade feasibility analysis agent (A2A + MCP server) |
 | `compare-engine-service` | 9006 | Listing comparison agent, MCP server |
-| `marketing-content-service` | 9008 | Content generation agent, MCP server |
+| `marketing-content-service` | 9008 | Content, campaign publishing lifecycle and effect provenance agent |
 | `listing-master-service` | — | Listing master data (Dubbo RPC) |
 | `customer-service` | — | Customer/owner management |
 | `contract-service` | — | Contract lifecycle (A2A agent) |
@@ -61,7 +61,6 @@ This is a **multi-agent real-estate middle-platform** built on Spring Cloud Alib
 | `notification-service` | — | Notifications (A2A agent) |
 | `media-worker-service` | — | Async media tasks (A2A agent) |
 | `interview-service` | 9014 | AI deep-interview subAgent — three surfaces: A2A governance (ReactAgent), runtime REST/SSE turn pipeline (no ReAct, code-driven decisions), read-only MCP tools (see `docs/ai-interview-subagent-design.md`) |
-| `promotion-service` | — | Multi-platform publishing |
 | `auth-service` | — | Authentication & authorization |
 
 ### Agent Orchestration (agent-service)

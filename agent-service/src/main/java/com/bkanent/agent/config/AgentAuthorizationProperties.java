@@ -28,6 +28,8 @@ public class AgentAuthorizationProperties {
     private int maxSessions = 4000;
     private int maxSessionsPerUser = 32;
     private Map<String, String> capabilityPermissions = new LinkedHashMap<>();
+    /** Exact local capabilities available to any authenticated actor in a bound run, without a permission code. */
+    private Set<String> baselineCapabilities = new LinkedHashSet<>();
     /** Exact remote MCP services configured to verify user-delegation proofs locally. */
     private Map<String, String> mcpTargetAudiences = new LinkedHashMap<>();
     /** External/no-delegation tools explicitly reviewed as carrying no private data. */
@@ -48,6 +50,11 @@ public class AgentAuthorizationProperties {
             if (permission == null || permission.length() > 128
                     || !permission.matches("[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)+"))
                 throw new IllegalStateException("Invalid Agent capability permission mapping");
+        });
+        getBaselineCapabilities().forEach(capability -> {
+            new com.bkanent.common.agent.CapabilityId(capability);
+            if (!capability.startsWith("local:") || capabilityPermissions.containsKey(capability))
+                throw new IllegalStateException("Invalid baseline Agent capability registration");
         });
         mcpTargetAudiences.forEach((server, audience) -> {
             String expected = com.bkanent.agent.mcp.AgentMcpNames.firstPartyAudience(server);
@@ -129,6 +136,11 @@ public class AgentAuthorizationProperties {
     public String permissionForCapability(String capabilityId) {
         return capabilityPermissions.get(capabilityId);
     }
+    public Set<String> getBaselineCapabilities() { return Set.copyOf(baselineCapabilities); }
+    public void setBaselineCapabilities(Set<String> value) {
+        baselineCapabilities = value == null ? new LinkedHashSet<>() : new LinkedHashSet<>(value);
+    }
+    public boolean isBaselineCapability(String capabilityId) { return baselineCapabilities.contains(capabilityId); }
     public Map<String, String> getMcpTargetAudiences() { return Map.copyOf(mcpTargetAudiences); }
     public void setMcpTargetAudiences(Map<String, String> value) {
         mcpTargetAudiences = value == null ? new LinkedHashMap<>() : new LinkedHashMap<>(value);

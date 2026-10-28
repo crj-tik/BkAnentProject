@@ -41,9 +41,9 @@ public class ListingAgentServiceImpl implements ListingAgentService {
         return new AgentCard(
                 "listing-agent",
                 "Listing Agent",
-                "Responsible for property listing search, recommendation, and summary with LLM-driven insights",
+                "Responsible for authorized property listing search, recommendation, version-bound comparison, and summary",
                 "2.0.0",
-                List.of("listing-search", "listing-recommendation"),
+                List.of("listing-search", "listing-recommendation", "listing-comparison"),
                 List.of("listing"),
                 true,
                 true,

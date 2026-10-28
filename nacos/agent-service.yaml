@@ -37,9 +37,6 @@ spring:
           business-mcp-server:
             url: ${BUSINESS_MCP_ENDPOINT:http://10.117.102.54:9010/mcp}
             type: STREAMABLE
-          compare-mcp-server:
-            url: ${COMPARE_MCP_ENDPOINT:http://10.117.102.54:9006/mcp}
-            type: STREAMABLE
           marketing-mcp-server:
             url: ${MARKETING_MCP_ENDPOINT:http://10.117.102.54:9008/mcp}
             type: STREAMABLE
@@ -129,10 +126,14 @@ agent:
     max-users: 1000
     max-sessions: 4000
     max-sessions-per-user: 32
-    # Capability ID -> exact permission code already registered in Auth; missing mappings hide capabilities.
+    # Capability ID -> exact Auth operation; baseline operations are signed actions, not role grants.
     capability-permissions:
       "[local:milvusKnowledgeSearch]": agent.rag.search
+      "[a2a:listing-agent]": listing.read
       "[a2a:knowledge-agent]": agent.workflow.invoke.knowledge
+      "[a2a:business-review-agent]": agent.workflow.invoke.business-review
+    # Only exact local capability IDs belong here; every call still needs a signed actor and bound run.
+    baseline-capabilities: ${AGENT_AUTHORIZATION_BASELINE_CAPABILITIES:}
     # Keep user-delegated MCP destinations closed until static streamable-http connections exist.
     mcp-target-audiences: {}
     public-mcp-capabilities: []

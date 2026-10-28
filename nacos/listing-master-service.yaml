@@ -24,7 +24,7 @@ spring:
           agent-card-url: /.well-known/agent.json
           card:
             name: listing-agent
-            description: listing search, recommendation and summary agent
+            description: authorized listing search, recommendation, version-bound comparison and summary agent
             version: 1.0.0
             url: ${A2A_PUBLIC_BASE_URL}
             default-input-modes: text,application/json
@@ -99,6 +99,25 @@ agent:
     external-dir: ${AGENT_SKILLS_EXTERNAL_DIR:}
     watch-enabled: ${AGENT_SKILLS_WATCH_ENABLED:true}
 listing:
+  authorization:
+    enabled: ${LISTING_AUTHORIZATION_ENABLED:false}
+    audience: listing-master-service
+    authority-public-keys:
+      auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+  source:
+    provider: ${LISTING_SOURCE_PROVIDER:legacy-local}
+    dataset-id: ${LISTING_SOURCE_DATASET_ID:legacy-local}
+    fixture-broker-id: ${LISTING_SOURCE_FIXTURE_BROKER_ID:1}
+    http:
+      base-url: ${LISTING_SOURCE_HTTP_BASE_URL:}
+      bearer-token: ${LISTING_SOURCE_HTTP_BEARER_TOKEN:}
+      source-system: ${LISTING_SOURCE_HTTP_SYSTEM:upstream}
+      confirmed-data-mode: ${LISTING_SOURCE_HTTP_CONFIRMED_DATA_MODE:UNKNOWN}
+      connect-timeout-ms: ${LISTING_SOURCE_HTTP_CONNECT_TIMEOUT_MS:1000}
+      read-timeout-ms: ${LISTING_SOURCE_HTTP_READ_TIMEOUT_MS:3000}
+  comparison:
+    report:
+      storage-dir: ${LISTING_COMPARISON_STORAGE_DIR:/app/runtime/reports}
   rag:
     versioned-authorization-required: false
     space-id: listing.knowledge
@@ -126,7 +145,7 @@ listing:
     temperature: ${LISTING_AGENT_TEMPERATURE:0.2}
     max-tokens: ${LISTING_AGENT_MAX_TOKENS:4000}
     system-prompt: |
-      You are a property listing search, recommendation, and summary agent for a real estate brokerage platform.
+      You are an authorized property listing search, recommendation, version-bound comparison, and summary agent for a real estate brokerage platform.
       Your responsibilities:
       1. Search and recommend property listings using real data from the platform.
       2. Summarize listing details and explain why recommendations match the request.

@@ -1,5 +1,7 @@
 package com.bkanent.auth.authorization;
 
+import com.bkanent.common.authz.AuthzOperationPolicy;
+
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
@@ -17,6 +19,7 @@ public final class EffectivePermissionService {
                 .max().orElse(0);
         TreeSet<String> registered = new TreeSet<>();
         facts.catalog().stream().filter(AuthorizationFacts.Permission::active)
+                .filter(permission -> !AuthzOperationPolicy.isBaseline(permission.code()))
                 .map(AuthorizationFacts.Permission::code).forEach(registered::add);
         TreeSet<String> permissions = new TreeSet<>();
         Instant deadline = null;

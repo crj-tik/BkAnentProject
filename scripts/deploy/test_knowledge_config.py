@@ -92,9 +92,24 @@ def main() -> None:
     require(init, "fill_secret KNOWLEDGE_MYSQL_PASSWORD", "init-environment.sh")
     require(init, "fill_secret KNOWLEDGE_SOURCE_DB_PASSWORD", "init-environment.sh")
     require(keygen, '"knowledge-service"', "ServiceIdentityKeygen.java")
-    require(keygen, "14 local service identity pairs", "ServiceIdentityKeygen.java")
-    require(env, "NACOS_CONFIG_DATA_IDS=", ".env.example")
-    require(env, "bk_interview,bk_knowledge", ".env.example MySQL MCP list")
+    require(keygen, 'SERVICES.size() + " local service identity pairs', "ServiceIdentityKeygen.java")
+    identity_services = re.search(r"(?s)SERVICES\s*=\s*List\.of\((.*?)\);", keygen)
+    registered_services = set(re.findall(r'"([^"\\]+)"', identity_services.group(1))) if identity_services else set()
+    for service in ("business-review-service", "knowledge-service"):
+        if service not in registered_services:
+            raise SystemExit(f"ServiceIdentityKeygen.java does not register {service}")
+
+    nacos_ids = re.search(r"(?m)^NACOS_CONFIG_DATA_IDS=([^\r\n]*)$", env)
+    if not nacos_ids or nacos_ids.group(1):
+        raise SystemExit(".env.example must leave NACOS_CONFIG_DATA_IDS empty for explicit publication")
+    databases = re.search(r"(?m)^MYSQL_MCP_DATABASES=([^\r\n]*)$", env)
+    if not databases:
+        raise SystemExit(".env.example has no default MySQL MCP database allowlist")
+    allowed_databases = set(databases.group(1).split(","))
+    if not {"bk_interview", "bk_business_review", "bk_knowledge"}.issubset(allowed_databases):
+        raise SystemExit(".env.example MySQL MCP allowlist omits an active business database")
+    if "bk_promotion" in allowed_databases:
+        raise SystemExit(".env.example MySQL MCP allowlist must exclude legacy bk_promotion")
 
     view = read("sql/migrations/20261027_knowledge_domain.sql")
     interview_mapper = read("interview-service/src/main/java/com/bkanent/interview/mapper/InterviewAssetMapper.java")

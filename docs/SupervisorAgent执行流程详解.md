@@ -392,7 +392,7 @@ A2aExecutionService.execute(request, descriptor):
 |-----------|------|-----------|
 | business-mcp-server | localhost:9010 | queryMonthlyKpis |
 | compare-mcp-server | localhost:9006 | compareListings |
-| marketing-mcp-server | localhost:9008 | publishMarketingContent |
+| marketing-mcp-server | localhost:9008 | createMarketingContentDraft, prepareMarketingCampaign, confirmMarketingCampaign, getMarketingCampaignReceipt, reconcileMarketingCampaignAttempt |
 | contract-mcp-server | localhost:9012 | 锛堝悎鍚岀浉鍏冲伐鍏凤級 |
 | settlement-mcp-server | localhost:9013 | 锛堢粨绠楃浉鍏冲伐鍏凤級 |
 | notification-mcp-server | localhost:9003 | 锛堥€氱煡鐩稿叧宸ュ叿锛?|

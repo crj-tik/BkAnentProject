@@ -24,8 +24,12 @@ spring:
             uri: lb://business-service
             predicates:
               - Path=/business/**
-          - id: compare-engine-service
-            uri: lb://compare-engine-service
+          - id: business-review-service
+            uri: lb://business-review-service
+            predicates:
+              - Path=/business-review/**
+          - id: listing-comparison-compatibility
+            uri: lb://listing-master-service
             predicates:
               - Path=/compare/**
           - id: contract-service
@@ -36,8 +40,8 @@ spring:
             uri: lb://settlement-service
             predicates:
               - Path=/settlements/**
-          - id: promotion-service
-            uri: lb://promotion-service
+          - id: marketing-promotion-compat
+            uri: lb://marketing-content-service
             predicates:
               - Path=/promotions/**
           - id: marketing-content-service
@@ -92,6 +96,8 @@ gateway:
       auth-service: auth-service
       agent-service: agent-service
       knowledge-service: knowledge-service
+      interview-service: interview-service
+      business-review-service: business-review-service
   access:
     whitelist-prefixes:
       - /auth/login

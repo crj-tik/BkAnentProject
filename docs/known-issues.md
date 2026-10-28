@@ -240,13 +240,13 @@
 
 **关联**：LR-53、KI-12。源码/compile与实际部署分别报告；现有直写路径的历史权限缺口不能因新门面受控而标为修复。
 
-## KI-115 [FIXED·本提交·P1] 旧比较仍使用已停用房源读取；分享和PDF缺少owner边界
+## KI-115 [FIXED·070891b·P1] 旧比较仍使用已停用房源读取；分享和PDF缺少owner边界
 
-**确认日期**：2026-10-15；2026-10-26复核完成任务10.4。旧CompareAnalysisServiceImpl.loadListings调用ListingMasterRpcService.getListingById，而该provider在RAG身份迁移后主动拒绝无凭据读取；旧compare REST/RPC正向路径因此不可用。另确认totalPrice为万元而原单价未乘10000，且ID-only缓存无法感知来源更新。
+**确认日期**：2026-10-15；2026-10-26复核完成任务10.4。旧 `CompareAnalysisServiceImpl.loadListings` 调用 `ListingMasterRpcService.getListingById`，而该 provider 在 RAG 身份迁移后主动拒绝无凭据读取；旧 compare REST/RPC 正向路径因此不可用。另确认总价以万元存储而旧单价未换算为元，ID-only 缓存不能感知来源更新。
 
-**修复**：Compare改用Listing签名请求级读取；报告缓存按已验签actor隔离，缓存与报告绑定当前Listing快照hash。显式`compare.report.share.public`操作才能发布公开链接；未发布链接的报告/PDF仅owner并持`compare.report.read.own`可读。旧缓存缺owner或source hash时不恢复。既有单位换算与来源指纹逻辑保持。
+**修复**：当前比较、报告和 PDF 路径迁入 `listing-master-service`，从稳定来源引用读取带修订号/hash/数据模式的签名快照。报告按已验签 actor 隔离并绑定当前来源；创建和历史/PDF 分别要求签名上下文中的 `compare.report.create` 与 `compare.report.read.own` 基线操作，并持续核验报告 owner 与来源访问/版本。基线操作不作为角色权限，目录行由迁移停用且清除角色关联。分享码不再单独授予正文或 PDF 权限，旧缺 owner/source hash 的报告不恢复，旧 JSON/PDF 字节保留供受控盘点。单价使用元/平方米。Agent 与 Studio 使用 Listing 来源契约，不再调用 Compare MCP；Supervisor 对 Listing Agent 只映射精确 `listing.read`，Memory 继续沿用 Listing Agent 已有必需 Hook。旧 Compare 的 A2A、MCP、REST、RPC 入口与 Compose profile 均默认关闭；旧 Auth/Memory 身份和报告卷仅为回滚/排空保留，现场排空完成前不删除。
 
-**验证与边界**：Compare/Listing定向回归和共享鉴权测试通过；本地源码验证不代表生产公钥/HMAC密钥、HTTP入口开关或迁移已部署。分享是生成时快照，不跟随房源实时变更。关联LR-54/LR-149；change `unify-versioned-permission-context`任务10.4。
+**验证与边界**：`ListingSourceContractTest`、source/controller/service、versioned/business authorization、comparison/report store/legacy mapper、Agent wiring、Studio signed-reader 和配置矩阵定向回归通过；模拟来源完成搜索、比较、历史、PDF、重试复用与模式保留。源码/隔离测试不证明真实来源、公钥注入、共享 Nacos、Compose 部署或线上路由已切换。`legacy-compare` profile 默认为关闭；主动启用旧匹配制品前仍需按 `docs/listing-comparison-cutover.md` 完成受控回滚/排空检查。关联 LR-54/LR-99/LR-149；change `unify-versioned-permission-context` 任务10.4及 `consolidate-listing-comparison-domain`。
 
 ## KI-1 [OPEN·P0] 表单式 prep 阶段凭据真空（鸡生蛋）
 
@@ -1534,7 +1534,7 @@
 
 **发现日期与依据**：2026-10-26，实施任务8.3/8.4。当前仓库没有 Interview 浏览器应用源码；服务端已实现登录用户的 credentials 领取、`no-store` 响应、`X-Ticket` 请求头和 query-ticket 拒绝，但无法验证真实页面领取后只在内存保存、使用 `fetch`/`ReadableStream` 消费 SSE、票据到期/撤销后重新领取的完整链路。
 
-**当前处置**：契约记录在 `docs/interview-credential-client-contract.md`。服务端权限开关默认关闭；未将服务端单测或文档当作浏览器集成证据。
+**当前处置**：契约记录在 `docs/interview-credential-client-contract.md`。Compose中的 `INTERVIEW_AUTHORIZATION_ENABLED` 默认关闭；2026-10-28本地开发栈显式开启后，真实API流程19项断言通过，覆盖可信actor开台、票据领取/用途隔离/撤销、query拒绝和SSE自定义头。该API流程不包含真实浏览器、成功答题或ReactAgent归档，未将其当作浏览器集成证据。
 
 **后续验收**：前端接入后增加登录态领取、不同用途/关系拒绝、页面刷新重领、query拒绝、fetch SSE自定义头、撤销/过期中止和错误恢复用例，并验证票据不出现在URL、日志、持久化、prompt、Memory、progress或artifact。
 
@@ -1622,40 +1622,126 @@
 
 **关联**：LR-153；`AuthAuthorizationRpcServiceImpl`、`RequestBinding`、`AuthzContractTest`、`AuthzSerializationTest`；change `unify-versioned-permission-context`任务4.2/11.5。
 
-## KI-212 [FIXED·本提交·P1] Knowledge OWN审核动作与owner校验冲突
+## KI-212 [FIXED·本地配置·P2] Nacos配置列表引用仓库不存在且发布器不允许的数据ID
+
+**发现日期与依据**：2026-10-28，按用户要求同步Nacos配置时检查根目录 `.env`，`NACOS_CONFIG_DATA_IDS` 包含 `knowledge-service.yaml`；仓库 `nacos/` 没有该模板，`scripts/deploy/publish-nacos.py` 也没有将其列入受控发布白名单。发布器会在首次写入前校验全部ID，因此该项会使整批 `config-init` 拒绝运行。
+
+**修复**：仅从本地忽略文件 `.env` 的发布列表移除 `knowledge-service.yaml`；保留其他数据ID。没有创建未知内容模板，也没有扩大Nacos发布白名单。
+
+**验证与边界**：Compose配置渲染通过；2026-10-28从修正后的本地发布清单发布 `auth-service.yaml`、`memory-service.yaml`、`agent-service.yaml`、`interview-service.yaml`、`gateway.yaml`，均在 `BK-AGENT/DEFAULT_GROUP` 逐份回读匹配。Knowledge Service若需要发布配置，应在其配置来源及模板纳入仓库后另行登记。
+
+**关联**：LR-152/155；`docker-compose.yml`、`nacos/`、`scripts/deploy/publish-nacos.py`；change `unify-versioned-permission-context`。
+
+## KI-213 [FIXED·本提交·P1] 重复执行迁移会重放被后续迁移取代的历史校验
+
+**发现日期与依据**：2026-10-28，在开发库首次执行 `baseline-permission-retirement-20261028-v1` 成功后，第二次调用受管 upgrade runner 时，runner重放了已登记的 `compare-media-auth-20261026-v1` 并校验其历史schema状态；该状态已由末尾的基线权限退役迁移有意改变，因此重复流程在到达新迁移之前失败。首轮升级已提交，Auth/Gateway/Agent等应用在发现后立即用新镜像恢复。
+
+**修复**：runner先校验账本内migration文件和schema check的精确SHA-256；匹配且已登记的迁移输出 `Verified previously applied` 后跳过SQL重放及历史状态检查。未登记迁移仍执行SQL、运行当前schema check并在成功后写账本；校验不一致仍拒绝执行。静态回归保护“先核哈希、后跳过、跳过必须早于重放”。
+
+**验证与边界**：46项manifest目标和规范哈希、Bash语法及静态迁移检查通过。开发库upgrade首轮成功，第二轮在修复前按历史schema检查失败；修复runner后完整重复upgrade通过，43项已应用upgrade迁移均按校验账本跳过，新基线目录结果为总计147、有效121、停用26、基础角色授予0、退役标记1。此重复验证不代表fresh数据库或制品回滚已完成。
+
+**关联**：LR-156；`scripts/deploy/run-init-manifest.sh`、`scripts/deploy/test_init_manifest.py`、`20261028_baseline_permission_retirement.sql`；change `unify-versioned-permission-context`任务2.6/11.6。
+
+## KI-214 [FIXED·本提交·P1] Interview开台API未填充必需审计和兼容字段
+
+**发现日期与依据**：2026-10-28，使用真实非管理员BROKER账号经Gateway调用Interview开台API时，MySQL拒绝写入：`created_at`没有由MyBatis填充，历史必填列`creator_work_no`未提供；补齐后继续发现prep card的必填JSON列`dynamic_fields`为空。API前序登录、签名actor和授权均已通过，失败发生在业务持久化。
+
+**修复**：新增Interview `MetaObjectHandler`填充创建/更新时间；开台未提供legacy工号时写入空字符串，只满足旧schema非空约束，不用其建立actor或owner；prep card初始化`dynamic_fields`为空JSON对象。owner仍只从已验签的Auth actor写入。
+
+**验证与边界**：Handler与`InterviewPrepService`定向测试3项通过；真实Gateway→Auth→Interview→MySQL Postman API流程19项断言通过，并检查case/session owner均等于签名`/auth/me` actor。成功路径撤销MANAGE/READ票据、logout并删除本次合成case/session；数据库验后匹配计数为0。全仓23模块Surefire共1740项、失败/错误0、跳过14。该修复不代表真实RESPOND答题/报告、浏览器客户端或完整A2A链已验收。
+
+**关联**：`InterviewMetaObjectHandler`、`InterviewPrepService`、`InterviewPrepServiceTest`、`scripts/acceptance/interview-authorization-api-smoke.ps1`；change `unify-versioned-permission-context`任务8.3/8.4/11.4/11.5。
+
+---
+
+**变更历史**：本提交收敛基础操作权限码、同步开发MySQL/Nacos/Compose并修复迁移runner的重复执行（KI-213）、完成权限状态清单（KI-208）和Nacos配置列表修复（KI-212），并修复RAG配置绑定问题（KI-207）、完成全仓Maven回归和Interview凭据边界记录（KI-202/203），持久化A2A请求防重放与任务归属（KI-172）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
+
+**本轮变更**：修复Interview真实API开台持久化缺口（KI-214），并记录API验收及其不替代前端/完整A2A验收的边界。
+
+## KI-195 [FIXED·281f03a·P2] Campaign 品牌素材新增和计划快照在 JDBC 列名映射上不稳定
+
+**发现日期**：2026-10-27。品牌素材闭环集成验收在 H2 MySQL mode 下触发 `GeneratedKeyHolder.getKey()` 的多列结果异常；修正主键读取后又发现 `queryForList` 返回列标签大小写影响从资产快照恢复 ID，导致 confirm 将未变化的素材误判为变化。
+
+**根因**：JDBC insert 请求所有生成键，H2 driver 返回 ID 以及创建/更新时间列；`getKey()` 仅允许单列。资产 `Map` 快照直接依赖 JDBC driver 列标签大小写，生成的 JSON 字段名与读取时 `id` 大小写不稳定。
+
+**修复与防回归**：限定 insert 只请求 `id` 生成键，并用 RowMapper 固定资产快照字段名和类型；品牌素材创建、列表、绑定计划和发布 fixture 在同一 H2 集成测试覆盖。
+
+**关联**：LR-131；`CampaignJdbcRepository.createAsset`、`CampaignLifecycleIntegrationTest`。
+
+## KI-196 [OPEN·P1] 营销内容多协议写入缺少 Auth 操作与内容归属准入
+
+**发现日期**：2026-10-27。营销内容基础服务已接入部分 `VerifiedDomainAuthorization` 操作检查并为新内容写入 owner；但 campaign prepare/confirm/review 仍通过兼容 `AuthPermissionRpcService`，没有证明其消费 Auth v2 签名上下文。Auth v2 的营销操作码尚未登记。
+
+**现象与证据**：`MarketingAssetServiceImpl` 对一般内容创建、变体、查询、素材绑定和审核状态增加精确操作及 broker owner 检查；`marketing_content.owner_broker_id` 迁移只新增可空列，历史记录有意保持无主，待责任人复核。MCP 草稿调用这些基础服务并继承其检查。Campaign lifecycle 的本地 `CampaignActorResolver`/`CampaignAuthorizationService` 仍是旧兼容授权，不等同版本化签名委托；历史 owner 归属、角色授予和 campaign 多协议的 Auth v2 接线仍须准入验收。
+
+**影响**：已登录或服务身份本身不足以证明对目标内容的读取、编辑和发布权。Auth v2 adoption、历史归属核对及 campaign 跨 REST/RPC/MCP owner 隔离未完成前，不得启用或宣称营销内容与 campaign 全入口安全合并完成；发布 provider、审批、业务权限和 owner 检查必须分别通过。
+
+**后续门槛**：由 `unify-versioned-permission-context` task 10.3 与本 change task 7.6 完成精确操作登记、可信身份/归属映射、跨协议正反例和生产启用验收。
+
+**关联**：LR-131/135；`openspec/changes/unify-versioned-permission-context/tasks.md` task 10.3；本 change task 7.6。
+
+## KI-194 [FIXED·2dbd4550·P1] 营销生命周期部署工件与默认访问范围未对齐
+
+**发现日期**：2026-10-28。营销生命周期 SQL/check 已存在，但活动 MySQL manifest 尚无 `bk_marketing` 版本项，runner 的闭合目标白名单也不接受 `upgrade:bk_marketing`；Nacos 模板的房源快照默认地址使用 9003，而 `listing-master-service` 实际监听 9004；Compose 与 `.env.example` 的 MySQL MCP 默认只读清单仍包含合并后保留作历史/回退的 `bk_promotion`。
+
+**影响**：新数据库初始化不会纳入 campaign schema，现有数据库无法通过版本化 runner 升级；真实 campaign 准备会访问错误房源端口；默认 MCP 仍能查询旧库，造成统一域的日常数据入口与存档/回退数据边界不清。
+
+**修复（2dbd4550）**：将营销生命周期 migration/check 以 470 登记到活动 manifest，并扩展 runner 的 `upgrade:bk_marketing` 精确白名单；将 Nacos 房源快照默认端口校正为 9004，保留显式 data ID 发布规则；Compose 与 `.env.example` 默认 MySQL MCP 范围排除旧 `bk_promotion`，旧库和旧 Nacos 数据源仍作为迁移/回退材料保留。
+
+**验证边界**：已完成 manifest dry-run 与哈希核对；未应用数据库迁移、未发布 Nacos 配置、未启动 Compose。
+
+**关联**：LR-157；营销 OpenSpec task 4.4；`docker/mysql/init-manifest.tsv`、`scripts/deploy/run-init-manifest.sh`、`nacos/marketing-content-service.yaml`、`docker-compose.yml`。
+
+## KI-215 [FIXED·本提交·P2] 门店复盘schema check的manifest checksum错误
+
+**发现日期与依据**：2026-10-28，合并门店复盘服务时对 MySQL 初始化清单执行规范 LF SHA-256 核对；第 500 项 `business-review-schema-20261027-v1` 记录值与 `docker/mysql/checks/business-review-schema.sql` 实际摘要不符，受管 runner 会在任何 DDL 执行前拒绝整份清单。
+
+**修复**：将第 500 项 schema-check checksum 更新为文件的实际规范 SHA-256；SQL、迁移版本、目标数据库与既有已应用项均未改动。
+
+**验证与边界**：修正后逐项核对 manifest 顺序、文件存在性及全部 migration/schema-check SHA-256；未连接或修改数据库，未启动 Docker Compose。
+
+**关联**：`docker/mysql/init-manifest.tsv` 第 500 项；change `implement-store-business-review` task 7.1。
+
+## KI-216 [FIXED·本提交·P1] Knowledge OWN审核动作与owner校验冲突
 
 **发现日期与依据**：2026-10-27，审核 Knowledge 生命周期授权路径时发现 OWN 案例 review 使用通用 owner-action 校验，因此即使持有 `knowledge.case.review.decide.own` 的非 owner 审核员也会被拒绝；详情读取同样只允许 owner，使单独配置审核权限无法查看候选。与此同时，简单放宽读取会扩大其对草稿/已发布/已撤回内容的访问范围。
 
 **修复**：review 动作对 OWN 案例只核验精确 review 操作并要求审核人不同于 owner；review 权限只可读取 `REVIEW_PENDING` 的当前 revision，其他状态仍需 owner 的 `knowledge.case.read.own`。APPROVE 仍保持待审，由 owner 单独完成发布。补充 Auth 角色协调矩阵、OpenSpec 权限要求与 LR-119，不在本 change 修改 Auth 授权实现或登记共享权限。
 
-**验证与边界**：Knowledge 生命周期定向6项、Auth fail-closed 3项通过；完整 Knowledge/Agent/Memory 聚焦套件共50项通过。测试覆盖非 owner 可审核待审案例、owner 自审拒绝、审核权限不能读取草稿；真实 Auth 角色/操作登记仍待协调运行态验收。
+**验证与边界**：Knowledge 生命周期定向 6 项、Auth fail-closed 3 项通过；Knowledge/Agent/Memory 聚焦套件共 50 项通过。真实 Auth 角色/操作登记仍待 KI-218 运行态验收。
 
 **关联**：LR-119；`KnowledgeAuthorization`、`KnowledgeLifecycleServiceTest`；change `extract-knowledge-operations-domain`。
 
-## KI-213 [FIXED·本提交·P1] Compose空Knowledge JDBC URL覆盖Spring默认值
+## KI-217 [FIXED·本提交·P1] Compose空Knowledge JDBC URL覆盖Spring默认值
 
-**发现日期与依据**：2026-10-28，继续核对 Knowledge 的实际运行配置时发现 `.env.example` 将 `KNOWLEDGE_PRIMARY_DB_URL` 和 `KNOWLEDGE_SOURCE_DB_URL` 留空，而 Compose 仍显式向容器传入空值。Spring `${KEY:default}` 对已定义的空字符串不会使用默认值，`KnowledgeDataSourceConfiguration` 因 URL 为空拒绝创建两个 DataSource，Knowledge 容器无法启动。
+**发现日期与依据**：2026-10-28，核对 Knowledge 运行配置时发现 `.env.example` 将 `KNOWLEDGE_PRIMARY_DB_URL` 和 `KNOWLEDGE_SOURCE_DB_URL` 留空，而 Compose 仍显式向容器传入空值。Spring `${KEY:default}` 对已定义的空字符串不会使用默认值，`KnowledgeDataSourceConfiguration` 因 URL 为空拒绝创建两个 DataSource，Knowledge 容器无法启动。
 
 **修复**：Compose 将空/缺省 URL 解析为容器网络内 `mysql:3306/bk_knowledge` 的 JDBC URL，保留非空显式覆盖；`.env.example` 增加说明，Knowledge 配置静态测试锁定该默认行为。
 
-**验证与边界**：Knowledge 配置静态检查与 Maven 聚焦测试通过后记录。当前配置中的远端 MySQL `10.117.102.54:3306` 从本机不可达；未执行数据库迁移或 Docker Compose，真实账号密码设置、解锁与连通性仍待部署环境验收。
+**验证与边界**：Knowledge 配置静态检查通过。当前执行环境无法连接远端 MySQL；数据库迁移、运行账号设置/解锁和 readiness 留待 KI-218 验收。
 
 **关联**：LR-120；`docker-compose.yml`、`test_knowledge_config.py`、`KnowledgeDataSourceConfiguration`；change `extract-knowledge-operations-domain`。
 
-## KI-214 [OPEN·P1] Knowledge合并后运行态验收尚未完成
+## KI-218 [OPEN·P1] Knowledge合并后运行态验收尚未完成
 
 **发现日期与依据**：2026-10-28，准备合并 `extract-knowledge-operations-domain` 时核对 OpenSpec 任务，5.1–5.3 尚未完成。代码与部署模板已经交付，但当前执行环境无法连接目标 MySQL，未将 Nacos 模板发布到运行环境，也未完成跨 Auth、Memory 与 Interview 来源的集成闭环。
 
 **残留项统一清单**：
-- 数据库：在目标库按受管 manifest 应用 450/460，执行 schema/view/grant 校验；DBA 使用秘密管理器配置并解锁 `knowledge_app` 与 `knowledge_source_ro`，保持 `knowledge_source_view_owner` 锁定，再验证服务 readiness。
+- 数据库：在目标库按受管 manifest 应用 510/520，执行 schema/view/grant 校验；DBA 使用秘密管理器配置并解锁 `knowledge_app` 与 `knowledge_source_ro`，保持 `knowledge_source_view_owner` 锁定，再验证服务 readiness。
 - Nacos 与服务发现：审核目标环境专属配置后，在 `BK-AGENT/DEFAULT_GROUP` 发布 `knowledge-service.yaml` 并回读校验；确认 Gateway 路由、Agent 注册、Memory 公钥和 caller 在运行态生效。不得直接用开发模板覆盖生产配置。
 - Auth：协调登记 Knowledge 精确操作码及角色映射，并验证 USER/Agent 正反路径。当前 Auth 不签发可信 STORE identity；STORE 操作必须继续失败关闭，直到身份映射另行交付并验收。
 - Memory 与来源：验证未登记/不可用时失败关闭、完整轮次归档及原文 sentinel 不泄漏；使用标记为 SIMULATED 的隔离 Interview 来源完成导入、生成、人工审核、发布、check 和撤回/失效闭环。
 
 **关闭条件**：完成并勾选 OpenSpec 任务 5.1–5.3，保留目标环境、schema/check、Nacos 回读和集成验证证据；不得把模拟来源验收表述为真实效果验证。验收前不得宣称 Knowledge 已具备生产运行条件。
 
-**关联**：KI-212/213；LR-120；`docs/knowledge-service-operations.md`；change `extract-knowledge-operations-domain`。
+**关联**：KI-216/217；LR-120；`docs/knowledge-service-operations.md`；change `extract-knowledge-operations-domain`。
 
----
+## KI-219 [OPEN·P2] 门店复盘数据库创建项的manifest校验摘要误录
 
-**变更历史**：本提交统一记录 Knowledge 合并后运行态验收残项（KI-214）；本提交修复 Knowledge Compose JDBC 空 URL 导致服务无法启动的问题（KI-213）；本提交补齐鉴权迁移交付清单与安全回滚边界（KI-208），并修复RAG配置绑定问题（KI-207）、完成全仓Maven回归和Interview凭据边界记录（KI-202/203），持久化A2A请求防重放与任务归属（KI-172）；知识拆分实现修正 OWN 审核员与 owner 读取边界（KI-212）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
+**发现日期与依据**：2026-10-28，合并 `dev-fix` 后运行初始化清单静态检查发现第 480 项 `business-review-database-20261027-v1` 的 schema-check SHA-256 少录了 3 个十六进制字符；受管 runner 会在执行任何 SQL 前拒绝整份清单。
+
+**代码处置**：已将 480 项校验摘要修正为 `docker/mysql/checks/business-review-database.sql` 的规范 LF SHA-256，未改 SQL、迁移版本或目标库。
+
+**残余与关闭条件**：未连接目标数据库。部署前确认 `bk_auth.bk_schema_migration` 中没有以旧错误摘要登记的手工记录；如存在，DBA 需核对数据库创建结果并修复迁移账本后再运行受管 manifest。完成目标库核对后关闭本项。
+
+**关联**：`docker/mysql/init-manifest.tsv` 第 480 项；`scripts/deploy/test_init_manifest.py`。

@@ -31,7 +31,7 @@ while IFS=$'\t' read -r order phase version db file checksum check check_checksu
     fresh:bk_auth|fresh:bk_interview|\
     upgrade:bk_auth|upgrade:bk_agent|upgrade:bk_rag|upgrade:bk_listing|upgrade:bk_memory|\
     upgrade:bk_interview|upgrade:bk_marketing|upgrade:bk_notification|upgrade:bk_business|\
-    upgrade:bk_contract|upgrade:bk_settlement|upgrade:bk_knowledge) ;;
+    upgrade:bk_contract|upgrade:bk_settlement|upgrade:bk_business_review|upgrade:bk_knowledge) ;;
     *) exit 65 ;;
   esac
   [[ "$file" =~ ^sql/[a-zA-Z0-9_./-]+\.sql$ && "$check" =~ ^docker/mysql/checks/[a-zA-Z0-9_-]+\.sql$ ]] || exit 65
@@ -64,6 +64,13 @@ while IFS=$'\t' read -r order phase version db file checksum check check_checksu
   if [ "$exists" = 1 ]; then
     previous="$(printf "SELECT CONCAT(file_sha256, ':', check_sha256) FROM %s.bk_schema_migration WHERE migration_id='%s';\n" "$db" "$version" | mysql_sql)"
     [ -z "$previous" ] || [ "$previous" = "$checksum:$check_checksum" ] || { printf 'Applied migration checksum changed: %s\n' "$version" >&2; exit 65; }
+  fi
+  # A later migration may deliberately supersede an earlier migration's postcondition.
+  # Once the exact files are recorded, do not replay them or re-check that historical state.
+  if [ -n "${previous:-}" ]; then
+    printf 'Verified previously applied %s\n' "$version"
+    unset previous
+    continue
   fi
   # Fresh-only files never replay historical platform seed rows on an existing volume.
   if [ "$phase" = upgrade ] || [ -z "${previous:-}" ]; then

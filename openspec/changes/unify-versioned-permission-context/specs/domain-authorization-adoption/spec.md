@@ -4,9 +4,9 @@
 
 ## ADDED Requirements
 
-### Requirement: Domain admission requires an explicit operation and subject mapping
+### Requirement: Domain admission classifies operations and verifies subject mapping
 
-每个业务域 SHALL 为真实REST/RPC/A2A/MCP动作登记稳定权限码、执行入口、可信actor来源、业务目标字段、资源真源和状态条件；需要broker范围时，brokerId SHALL 来自Auth维护并签入版本化授权上下文的userId→brokerId映射。不存在的资源主体映射或未落地能力 MUST 明确拒绝，不以工具描述、固定caller名称、模型userId/employeeId/brokerId/recipient或服务公钥登记推断授权。业务管理员全操作权限 SHALL 仅作用于明确的业务资源范围，不扩展个人Memory。
+每个业务域 SHALL 对真实REST/RPC/A2A/MCP动作分类为普遍基础操作或受限拦截点，并记录执行入口、可信actor来源、业务目标字段、资源真源和适用状态条件；只有受限拦截点 SHALL 登记稳定权限码并要求显式授予。普遍基础操作不要求操作码，但 MUST 使用有效身份上下文并在适用时校验资源owner/关系和业务状态。需要broker范围时，brokerId SHALL 来自Auth维护并签入版本化授权上下文的userId→brokerId映射。不存在的资源主体映射或未落地能力 MUST 明确拒绝，不以工具描述、固定caller名称、模型userId/employeeId/brokerId/recipient或服务公钥登记推断授权。业务管理员权限 SHALL 仅作用于明确获准的业务资源范围，不扩展个人Memory。
 
 #### Scenario: Broker mapping is absent or stale
 - **WHEN** Auth上下文没有当前版本的BROKER映射，或本地授权上下文因映射变更已DIRTY
@@ -14,7 +14,7 @@
 
 #### Scenario: Listing public summary and private detail use different resource scopes
 - **WHEN** 经纪人读取房源摘要/RAG候选，或读取完整房源详情、创建和修改房源
-- **THEN** 摘要/RAG保留既有未删除ON_SALE范围并可跨broker浏览；完整详情及创建/修改/删除/状态/附件/核验动作必须使用签名BROKER映射检查归属，管理员全状态范围要求显式`listing.read.all`或对应`.all`操作
+- **THEN** 摘要/RAG保留既有未删除ON_SALE范围并可跨broker浏览；完整详情及创建/修改/删除/状态/附件/核验动作必须使用签名BROKER映射检查归属；只有被产品策略限制的操作需要对应权限码，跨broker全状态范围要求显式`listing.read.all`或对应`.all`操作
 
 #### Scenario: Customer records follow the mapped broker owner
 - **WHEN** 经纪人读取或变更客户档案、跟进、委托、收藏等关联数据
@@ -22,7 +22,7 @@
 
 #### Scenario: Customer delegates one listing read within an authenticated request
 - **WHEN** Customer在已经验签的用户请求中调用Listing读取匹配候选
-- **THEN** Customer转发原Auth签名响应，并用服务请求证明绑定其摘要、actor和精确查询；Listing本地验签并核`listing.read`及公开房源状态，不转发用户Bearer或为该次RPC另调Auth
+- **THEN** Customer转发原Auth签名响应，并用服务请求证明绑定其摘要、actor和精确查询；Listing本地验签并核公开房源范围和状态，基础`listing.read`不要求权限码；若查询被限制则检查对应受限权限，不转发用户Bearer或为该次RPC另调Auth
 
 #### Scenario: A registered agent still lacks a recipient mapping
 - **WHEN** 通知Agent服务身份有效但未能证明当前用户对目标recipient的读取或发送关系
@@ -34,7 +34,7 @@
 
 ### Requirement: One policy applies to every protocol and recovery entry
 
-同一业务动作经REST、RPC、A2A、MCP、回放、结果查询或后台恢复 SHALL 使用一致操作许可与资源检查。模型生成的目标ID可以参与业务请求，但actor与许可仅来自可信上下文。领域入口独立验证本次委托后内部使用本地权限，跨域新执行必须重新验证边界；不存在用户上下文不得退化为服务全权。
+同一业务动作经REST、RPC、A2A、MCP、回放、结果查询或后台恢复 SHALL 使用一致的基础/受限分类、身份、适用权限码与资源检查。模型生成的目标ID可以参与业务请求，但actor与许可仅来自可信上下文。领域入口独立验证本次委托后内部使用本地上下文；仅受限动作核精确权限码；跨域新执行必须重新验证边界；不存在用户上下文不得退化为服务全权。
 
 #### Scenario: Direct RPC claims a permitted user's identifier
 - **WHEN** 请求仅传有权限用户ID而没有可验证身份和调用服务证明
@@ -62,7 +62,7 @@
 
 #### Scenario: Settlement caller supplies an unverified employee or contract identity
 - **WHEN** 结算计算、自动生成、状态变更或批次准备仅取得请求中的employeeId/contractId/payeeEmployeeId，且没有可信关系映射及Contract委托
-- **THEN** 操作在读取或变更结算数据及调用Contract/Business RPC前拒绝；报表读取、规则维护、计算、分账和汇总重建使用彼此独立的精确操作码
+- **THEN** 操作在读取或变更结算数据及调用Contract/Business RPC前拒绝；财务敏感或被限制的报表、规则维护、计算、分账和汇总重建使用精确受限操作码，普遍基础操作不为每个入口重复配码
 
 #### Scenario: Payment confirmation or callback lacks a real provider proof
 - **WHEN** 请求调用旧“标记已付款”接口或提交未经签名的银行回调

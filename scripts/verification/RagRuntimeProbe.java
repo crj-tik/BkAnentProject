@@ -31,7 +31,7 @@ import java.util.function.Consumer;
 /** Private opt-in verification process. No provider, HTTP endpoint, generic RPC, or physical index writes. */
 final class RagRuntimeProbe implements AutoCloseable {
     private static final PrintStream SUMMARY = System.out;
-    private static final Set<String> A2A_AUDIENCES = Set.of("listing-master-service", "business-service",
+    private static final Set<String> A2A_AUDIENCES = Set.of("listing-master-service", "business-service", "business-review-service",
             "marketing-content-service", "compare-engine-service", "contract-service", "settlement-service",
             "notification-service", "media-worker-service", "interview-service");
     private static final Map<String, String> MEMORY_V2_DOMAIN_AGENTS = Map.of(

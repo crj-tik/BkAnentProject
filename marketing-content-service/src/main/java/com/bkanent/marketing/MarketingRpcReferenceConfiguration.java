@@ -1,7 +1,7 @@
 package com.bkanent.marketing;
 
 import com.bkanent.common.rpc.MediaWorkerRpcService;
-import com.bkanent.common.rpc.PromotionRpcService;
+import com.bkanent.common.rpc.AuthPermissionRpcService;
 import org.apache.dubbo.config.annotation.DubboReference;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,7 +16,7 @@ public class MarketingRpcReferenceConfiguration {
     private MediaWorkerRpcService mediaWorkerRpcService;
 
     @DubboReference(check = false)
-    private PromotionRpcService promotionRpcService;
+    private AuthPermissionRpcService authPermissionRpcService;
 
     @Bean
     @Primary
@@ -26,7 +26,7 @@ public class MarketingRpcReferenceConfiguration {
 
     @Bean
     @Primary
-    public PromotionRpcService promotionRpcServiceBridge() {
-        return promotionRpcService;
+    public AuthPermissionRpcService authPermissionRpcServiceBridge() {
+        return authPermissionRpcService;
     }
 }

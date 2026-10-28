@@ -1,0 +1,59 @@
+server:
+  port: 9016
+bk:
+  nacos:
+    server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+    namespace: ${NACOS_NAMESPACE:}
+spring:
+  application:
+    name: business-review-service
+  config:
+    import: nacos:${spring.application.name}.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${bk.nacos.server-addr}
+        namespace: ${bk.nacos.namespace}
+      config:
+        server-addr: ${bk.nacos.server-addr}
+        namespace: ${bk.nacos.namespace}
+        file-extension: yaml
+service:
+  identity:
+    key-id: ${SERVICE_IDENTITY_KEY_ID:business-review-service-current}
+    private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
+a2a:
+  memory:
+    compression-enabled: ${BUSINESS_REVIEW_MEMORY_V2_COMPRESSION_ENABLED:false}
+    key-id: ${SERVICE_IDENTITY_KEY_ID:business-review-service-current}
+    private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
+agent:
+  a2a:
+    authorization:
+      enabled: ${BUSINESS_REVIEW_A2A_AUTHORIZATION_ENABLED:true}
+      authority-public-keys:
+        auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+      trusted-caller-public-keys:
+        agent-service-current: ${AGENT_SERVICE_IDENTITY_PUBLIC_KEY:}
+business-review:
+  authorization:
+    enabled: ${BUSINESS_REVIEW_AUTHORIZATION_ENABLED:true}
+    audience: business-review-service
+    max-body-bytes: 1048576
+    authority-public-keys:
+      auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+  sources:
+    mode: ${BUSINESS_REVIEW_SOURCE_MODE:http}
+    listing-base-url: ${BUSINESS_REVIEW_LISTING_BASE_URL:http://listing-master-service:9003}
+    knowledge-base-url: ${BUSINESS_REVIEW_KNOWLEDGE_BASE_URL:http://knowledge-service:9015}
+dubbo:
+  application:
+    name: business-review-service
+    qos-enable: false
+  protocol:
+    name: dubbo
+    port: -1
+  registry:
+    address: ${DUBBO_REGISTRY_ADDRESS:nacos://${NACOS_SERVER:127.0.0.1:8848}?namespace=${NACOS_NAMESPACE:}}
+  consumer:
+    protocol: dubbo

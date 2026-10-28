@@ -10,11 +10,11 @@ spring:
         completions-path: /chat/completions
         options:
           model: ${COMPARE_AGENT_MODEL:gpt-5.6-terra}
-          temperature: 0.2
+          temperature: ${COMPARE_AGENT_TEMPERATURE:0.2}
     alibaba:
       a2a:
         server:
-          enabled: true
+          enabled: ${COMPARE_A2A_ENABLED:false}
           message-url: /a2a
           agent-card-url: /.well-known/agent.json
           card:
@@ -34,12 +34,12 @@ spring:
           username: ${NACOS_USERNAME:}
           password: ${NACOS_PASSWORD:}
           registry:
-            enabled: true
+            enabled: ${COMPARE_A2A_ENABLED:false}
           discovery:
-            enabled: true
+            enabled: ${COMPARE_A2A_ENABLED:false}
     mcp:
       server:
-        enabled: ${MCP_SERVER_ENABLED:true}
+        enabled: ${COMPARE_MCP_ENABLED:false}
         protocol: ${MCP_SERVER_PROTOCOL:STREAMABLE}
         name: compare-mcp-server
         version: ${MCP_SERVER_VERSION:1.0.0}
@@ -79,6 +79,9 @@ service:
       database: "${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}"
 
 compare:
+  legacy:
+    rest-enabled: ${COMPARE_LEGACY_REST_ENABLED:false}
+    rpc-enabled: ${COMPARE_LEGACY_RPC_ENABLED:false}
   report:
     storage-dir: ${COMPARE_REPORT_STORAGE_DIR:/app/runtime/reports}
   agent:

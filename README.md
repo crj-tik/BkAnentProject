@@ -11,8 +11,7 @@
 - `listing-master-service`：房源主数据
 - `customer-service`：客源与业主管理
 - `notification-service`：统一消息通知
-- `marketing-content-service`：营销内容资产与检索
-- `promotion-service`：多平台发布与效果统计
+- `marketing-content-service`：营销内容、品牌素材、发布计划、平台回执与效果来源统一管理
 - `business-service`：业务分析、KPI、排行榜、门店看板
 - `compare-engine-service`：房源对比与报告生成
 - `contract-service`：合同全生命周期管理
@@ -78,7 +77,7 @@ mvn -pl auth-service "-Dspring-boot.run.profiles=local" spring-boot:run
 
 ## 分布式环境启动
 
-完整系统启动前需要准备 Nacos 3.x、MySQL、Redis、RocketMQ、Milvus、MinIO 和 Elasticsearch，并将 `nacos/` 下以服务名命名的 YAML 导入 Nacos。每个文件名就是 data ID，例如 `auth-service.yaml`、`agent-service.yaml`、`business-service.yaml`、`compare-engine-service.yaml`、`contract-service.yaml`、`listing-master-service.yaml`、`marketing-content-service.yaml`、`media-worker-service.yaml`、`notification-service.yaml` 和 `settlement-service.yaml`。默认分组为 `DEFAULT_GROUP`；namespace 使用 `NACOS_NAMESPACE` 指定，默认值见各服务的 `application.yml`。
+完整系统启动前需要准备 Nacos 3.x、MySQL、Redis、RocketMQ、Milvus、MinIO 和 Elasticsearch，并将 `nacos/` 下以服务名命名的 YAML 导入 Nacos。每个文件名就是 data ID，例如 `auth-service.yaml`、`agent-service.yaml`、`business-service.yaml`、`compare-engine-service.yaml`、`contract-service.yaml`、`listing-master-service.yaml`、`marketing-content-service.yaml`、`media-worker-service.yaml`、`notification-service.yaml` 和 `settlement-service.yaml`。默认分组为 `DEFAULT_GROUP`；namespace 使用 `NACOS_NAMESPACE` 指定，默认值见各服务的 `application.yml`。旧 `promotion-service.yaml` 与 `bk_promotion` DDL 保留作回退和历史迁移材料，不再作为活动服务导入或启动。
 
 Linux 主机推荐直接使用 `scripts/deploy/` 下的初始化脚本完成上述准备与启动：宿主机预检（docker/内核参数/端口）、`.env` 随机密钥引导、已有数据卷迁移、启动/状态/停止均为 bash 脚本，详见 [Linux 部署环境初始化](docs/linux-deployment-init.md)。
 
@@ -96,7 +95,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\local\check-environment.ps1 -
 
 分布式部署时还必须为每个 Agent 设置可被其他服务访问的 `A2A_PUBLIC_BASE_URL`，不能使用其他主机上的 `127.0.0.1`。DeepSeek、DashScope、数据库和基础设施凭据必须通过环境变量或密钥管理系统提供。
 
-合同、通知、媒体和推广服务的集成模式由对应 Nacos data ID 中的 `contract.integration.mode`、`notification.integration.mode`、`media.integration.mode`、`promotion.integration.mode` 管理，不在 `.env` 中设置。仓库模板为保留 Docker 开发行为使用显式 `local`，仅该模式允许模拟 provider。**已实现的真实 provider**：合同 OCR（KE 网关百度通用文字识别 `baidu-general`，real 模式配 `contract.integration.ocr-provider: baidu-general`，服务端下载附件后 base64 上送——百度后端拉不到内网 MinIO 地址）与房源文生图（KE 网关豆包 Seedream `doubao-seedream-4.5-gen`，`media.integration.mode=real` 即启用，每角度一张 2048×2048、约 15s/张由 RocketMQ 异步消费吸收）。**仍为占位**：电子签（esign-cn/fadada）、通知渠道、推广发布平台——生产 `real` 模式须接入真实实现，未实现会明确失败，不能回退模拟成功。生产导入前准备环境专属配置；`config-init` 只发布明确选择的 data ID 到实际 namespace，仍会覆盖所选内容；默认不发布，不要用开发模板覆盖生产设置。
+合同、通知和媒体服务的集成模式由对应 Nacos data ID 中的 `contract.integration.mode`、`notification.integration.mode`、`media.integration.mode` 管理，不在 `.env` 中设置。营销 campaign 由 `marketing.campaign.mode` 明确选择；默认 `REAL`，未接入真实 provider、房源来源或授权时发布明确失败，不回退模拟成功。仅测试/本地显式配置 `SIMULATED` 时允许 fixture provider。推广通过营销域的 prepare/confirm/receipt 流程管理，旧 `/promotions/**` 只保留受权适配路径。**已实现的真实 provider**：合同 OCR（KE 网关百度通用文字识别 `baidu-general`，real 模式配 `contract.integration.ocr-provider: baidu-general`，服务端下载附件后 base64 上送——百度后端拉不到内网 MinIO 地址）与房源文生图（KE 网关豆包 Seedream `doubao-seedream-4.5-gen`，`media.integration.mode=real` 即启用，每角度一张 2048×2048、约 15s/张由 RocketMQ 异步消费吸收）。**仍为占位**：电子签（esign-cn/fadada）、通知渠道、推广发布平台。生产导入前准备环境专属配置；`config-init` 只发布明确选择的 data ID 到实际 namespace，仍会覆盖所选内容；默认不发布，不要用开发模板覆盖生产设置。
 
 分布式服务提供 `/actuator/health/liveness` 和 `/actuator/health/readiness`。一般业务服务的 readiness 检查当前模板中声明的 Nacos、数据库、Redis、RocketMQ 或 MinIO 依赖；独立 RAG 的 `ragBaseReadiness` 检查安全配置、控制 DB 的 `rag_index_event`/`rag_document_state` 两表查询权限及至少三个已导出 RPC provider，不直接探测 Nacos 或检索后端。应用进程存活或基础 readiness 通过不代表空间、检索能力与切流水位已验收。
 

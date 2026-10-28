@@ -45,7 +45,7 @@ public class StudioArtifactsService {
             if ("listing.candidates".equals(type)) {
                 List<Map<String, Object>> ids = json.objects(raw.get("listings"));
                 if (ids.size() > 20) ids = ids.subList(0, 20);
-                var actual = ids.stream().map(item -> listings.read(owner, json.text(item.get("id")))).toList();
+                var actual = listings.readCurrent(owner, ids.stream().map(StudioListingReader::reference).toList());
                 content = Map.of("items", actual.stream().map(listings::publicListing).toList()); sources = actual.stream().map(listings::source).toList();
             }
             Map<String, Object> finalContent = content; List<Map<String, Object>> finalSources = sources;
@@ -94,7 +94,17 @@ public class StudioArtifactsService {
         if (revisions.isEmpty()) throw StudioException.missing(); var revision = revisions.get(0);
         List<Map<String, Object>> sources = json.objects(json.read(json.text(revision.get("sources_json"))).get("refs"));
         boolean staleSource = false;
-        for (var source : sources) if ("listing".equals(source.get("type"))) { var current = listings.read(owner, json.text(source.get("id"))); if (!json.hash(current).equals(source.get("sourceRevision"))) staleSource = true; }
+        List<Map<String, Object>> listingSources = sources.stream().filter(source -> "listing".equals(source.get("type"))).toList();
+        if (!listingSources.isEmpty()) {
+            var current = listings.readCurrent(owner, listingSources.stream().map(StudioListingReader::reference).toList());
+            Map<com.bkanent.common.listing.ListingRef, com.bkanent.common.listing.ListingSourceSnapshot> byRef = current.stream()
+                    .collect(java.util.stream.Collectors.toMap(com.bkanent.common.listing.ListingSourceSnapshot::listingRef, value -> value));
+            for (var source : listingSources) {
+                var snapshot = byRef.get(StudioListingReader.reference(source));
+                if (snapshot == null || !snapshot.revision().equals(source.get("sourceRevision"))
+                        || !snapshot.contentHash().equals(source.get("contentHash"))) staleSource = true;
+            }
+        }
         var content = json.read(json.text(revision.get("content_json")));
         List<Map<String, Object>> dependencies = new ArrayList<>(json.objects(content.get("baseArtifactRefs")));
         if (content.get("baseArtifactRef") instanceof Map<?, ?>) dependencies.add(json.object(content.get("baseArtifactRef")));
