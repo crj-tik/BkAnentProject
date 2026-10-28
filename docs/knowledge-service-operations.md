@@ -78,6 +78,14 @@ v1 中一个经营案例和它的结构化打法是同一 Knowledge 聚合：案
 - Auth 操作、Memory key/caller 与 STORE identity 未协调/登记前，保持 Auth 总开关关闭或由入口授权失败关闭；不得靠绕过 Auth、Memory 或扩宽 SQL grant 恢复流量。
 - 可选 MySQL MCP 新增 `bk_knowledge` 仅增加只读库名，不影响 Interview 数据库权限或表结构。
 
-## 尚需合并后的运行态验收
+## 合并后运行态验收清单（KI-214）
 
-本地代码不能证明真实 Auth 操作/角色已登记、Nacos data ID 已发布、Memory 公钥/caller 已加载、数据库账号已解锁、真实源视图权限有效、STORE identity 已可信映射或下游服务联通。以上均需要协调/部署窗口验收。Auth 未提供 STORE identity 时门店范围始终 fail-closed；模拟夹具通过不代表真实来源或效果得到验证。
+以下事项统一由 OpenSpec 任务 5.1–5.3 跟踪，完成后在 KI-214 更新证据并关闭：
+
+- 数据库迁移、schema/view/grant 检查、两个运行账号凭据与 readiness。
+- 目标环境 Nacos 配置审核、`BK-AGENT/DEFAULT_GROUP` 的 `knowledge-service.yaml` 发布与回读，以及 Gateway、Agent、Memory 配置加载。
+- Auth 操作码/角色映射及 USER/Agent 正反路径；Auth 未提供可信 STORE identity 时，门店范围保持 fail-closed。
+- Memory caller、公钥、完整轮次归档与故障关闭验证。
+- 隔离 SIMULATED 来源的导入、生成、人工审核、发布、check、撤回/失效闭环及 sentinel 泄漏检查。
+
+本地代码和模拟夹具不能证明上述运行态条件成立；验收结果不得推断为真实来源或经营效果验证。

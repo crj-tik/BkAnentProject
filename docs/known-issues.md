@@ -1642,6 +1642,20 @@
 
 **关联**：LR-120；`docker-compose.yml`、`test_knowledge_config.py`、`KnowledgeDataSourceConfiguration`；change `extract-knowledge-operations-domain`。
 
+## KI-214 [OPEN·P1] Knowledge合并后运行态验收尚未完成
+
+**发现日期与依据**：2026-10-28，准备合并 `extract-knowledge-operations-domain` 时核对 OpenSpec 任务，5.1–5.3 尚未完成。代码与部署模板已经交付，但当前执行环境无法连接目标 MySQL，未将 Nacos 模板发布到运行环境，也未完成跨 Auth、Memory 与 Interview 来源的集成闭环。
+
+**残留项统一清单**：
+- 数据库：在目标库按受管 manifest 应用 450/460，执行 schema/view/grant 校验；DBA 使用秘密管理器配置并解锁 `knowledge_app` 与 `knowledge_source_ro`，保持 `knowledge_source_view_owner` 锁定，再验证服务 readiness。
+- Nacos 与服务发现：审核目标环境专属配置后，在 `BK-AGENT/DEFAULT_GROUP` 发布 `knowledge-service.yaml` 并回读校验；确认 Gateway 路由、Agent 注册、Memory 公钥和 caller 在运行态生效。不得直接用开发模板覆盖生产配置。
+- Auth：协调登记 Knowledge 精确操作码及角色映射，并验证 USER/Agent 正反路径。当前 Auth 不签发可信 STORE identity；STORE 操作必须继续失败关闭，直到身份映射另行交付并验收。
+- Memory 与来源：验证未登记/不可用时失败关闭、完整轮次归档及原文 sentinel 不泄漏；使用标记为 SIMULATED 的隔离 Interview 来源完成导入、生成、人工审核、发布、check 和撤回/失效闭环。
+
+**关闭条件**：完成并勾选 OpenSpec 任务 5.1–5.3，保留目标环境、schema/check、Nacos 回读和集成验证证据；不得把模拟来源验收表述为真实效果验证。验收前不得宣称 Knowledge 已具备生产运行条件。
+
+**关联**：KI-212/213；LR-120；`docs/knowledge-service-operations.md`；change `extract-knowledge-operations-domain`。
+
 ---
 
-**变更历史**：本提交修复 Knowledge Compose JDBC 空 URL 导致服务无法启动的问题（KI-213）；本提交补齐鉴权迁移交付清单与安全回滚边界（KI-208），并修复RAG配置绑定问题（KI-207）、完成全仓Maven回归和Interview凭据边界记录（KI-202/203），持久化A2A请求防重放与任务归属（KI-172）；知识拆分实现修正 OWN 审核员与 owner 读取边界（KI-212）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
+**变更历史**：本提交统一记录 Knowledge 合并后运行态验收残项（KI-214）；本提交修复 Knowledge Compose JDBC 空 URL 导致服务无法启动的问题（KI-213）；本提交补齐鉴权迁移交付清单与安全回滚边界（KI-208），并修复RAG配置绑定问题（KI-207）、完成全仓Maven回归和Interview凭据边界记录（KI-202/203），持久化A2A请求防重放与任务归属（KI-172）；知识拆分实现修正 OWN 审核员与 owner 读取边界（KI-212）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
