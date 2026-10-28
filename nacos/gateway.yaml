@@ -83,10 +83,11 @@ gateway:
     private-key-path: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
     authority-public-keys:
       auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
-    # Only the Auth and Agent APIs are enabled for this acceptance; unmapped routes fail closed.
+    # Only explicitly mapped Auth, Agent, and Interview APIs are enabled; unmapped routes fail closed.
     route-audiences:
       auth-service: auth-service
       agent-service: agent-service
+      interview-service: interview-service
   access:
     whitelist-prefixes:
       - /auth/login

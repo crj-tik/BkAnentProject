@@ -1,8 +1,8 @@
 # 基础批次与续批记录
 
-## 当前实施状态（2026-10-27）
+## 当前实施状态（2026-10-28）
 
-OpenSpec `spec-driven` change `unify-versioned-permission-context` 当前完成 **57/63** 项（以`tasks.md`勾选为准）。任务10.1–10.6按Auth/Listing/Customer、Business/Settlement、Contract/Marketing、Compare/Media、Notification模块完成源码与本地定向回归及跨域准入矩阵；任务3.3的专用Redis ACL/连接配置及隔离ACL正反验收已完成；任务11.2的调用计数fixture、11.3跨模块攻击反例和11.5全仓Maven compile/test已完成。11.7所需LR/KI、协议/部署/回滚文档、严格OpenSpec验证与中文提交推送已完成。新授权入口、数据库迁移和真实跨服务密钥仍未在运行环境启用；8.3–8.5、11.1、11.4及11.6真实迁移/回滚验收保持未完成。
+OpenSpec `spec-driven` change `unify-versioned-permission-context` 当前完成 **60/65** 项（以`tasks.md`勾选为准）。任务10.1–10.6按Auth/Listing/Customer、Business/Settlement、Contract/Marketing、Compare/Media、Notification模块完成源码与本地定向回归及跨域准入矩阵；任务3.3专用Redis ACL/连接、11.2调用计数fixture、11.3跨模块攻击反例和11.5全仓Maven回归已完成。11.7所需LR/KI、协议/部署/回滚文档、严格OpenSpec验证与中文提交推送已完成。仍未完成8.3、8.4、11.1、11.4和11.6：8.3/8.4保留前端真实fetch/ReadableStream及ReactAgent归档验收；11.1等待真实权限发布/撤权故障矩阵；11.4缺完整A2A和Interview答题/报告链；11.6缺fresh数据库及同等安全制品回滚演练。新授权模式只在本地已完成接线的Auth/Gateway/Agent/Interview开发栈中启用，不代表全域或生产开放。
 
 Notification、Contract、Customer及依赖模块的定向回归 **16项通过，失败/错误/跳过均0**；Notification REST/MCP授权入口保持默认关闭，SQL迁移未应用，caller公钥和真实跨服务链未部署验收。Contract/Customer提醒因broker recipient绑定缺失保持关闭（KI-206）。Compare/Media与共享鉴权前批定向回归48项通过；Media任务/结果仍为进程内存（KI-117），新owner与permit协议未宣称具备跨重启恢复。域级具体边界及证据见下方10.6矩阵。
 
@@ -270,4 +270,12 @@ Postman通过真实Gateway执行非管理员账号验收共**14项断言**：log
 
 Postman真实API验收通过**14项断言**：登录、`/auth/me`、refresh轮换与重放拒绝、刷新后身份、Agent受保护读取、无凭据伪造401、请求用户替换403、logout与撤销token后401。全仓 `mvn -gs .mvn-settings.xml -s .mvn-settings.xml test` 的23模块reactor成功，Surefire合计**1737项，失败0、错误0、跳过14**；manifest静态检查、Compose配置渲染、`git diff --check`及严格OpenSpec校验通过。
 
-当前任务完成**60/65**。仍未完成8.3、8.4、11.1、11.4、11.6：8.3/8.4等待前端fetch/ReadableStream和真实ReactAgent归档链；11.1的MySQL/Redis并发、撤权、丢通知与超时故障矩阵尚未执行；11.4的真实A2A全生命周期及Interview完整业务链未完成（Listing A2A provider不在当前Compose运行栈）；11.6已完成现有库upgrade与repeat，但fresh数据库及等同安全制品回滚演练未完成，因此保留未勾选。
+当前任务完成**60/65**。仍未完成8.3、8.4、11.1、11.4、11.6：8.3/8.4等待前端fetch/ReadableStream和真实ReactAgent归档链；11.1的MySQL/Redis并发、撤权、丢通知与超时故障矩阵尚未执行；11.4的真实A2A全生命周期及Interview完整业务链未完成；11.6已完成现有库upgrade与repeat，但fresh数据库及等同安全制品回滚演练未完成，因此保留未勾选。
+
+## Interview真实API验收与全仓回归（2026-10-28）
+
+为开发Compose的Interview服务接通 `INTERVIEW_AUTHORIZATION_ENABLED` 环境变量（未设置时默认 `false`），Auth trusted-caller允许 `interview-service`，Gateway只为明确登记的Interview路由附签名受众；Nacos保留环境占位符。真实登录→Gateway→Auth签名上下文→Interview→MySQL API验收发现开台数据模型约束未被满足：MyBatis审计时间没有自动填充，历史非空 `creator_work_no` 和 `dynamic_fields` 没有默认值。新增 `InterviewMetaObjectHandler`，把空工号限定为兼容metadata，并初始化空JSON字段；actor/owner仍从签名Auth上下文取得（KI-214）。
+
+Postman API验收共**19项断言通过**：登录和可信`/auth/me` actor、访谈列表与开台、数据库case/session owner匹配签名actor、问题候选写入和确认、MANAGE/READ票据用途隔离及`no-store`、本人监控、无票/错用途拒绝、query-ticket拒绝、缺少RESPOND证明时在模型处理前拒绝turn、SSE自定义头与心跳、票据撤销、logout。成功路径先完成logout和严格核验临时数据库清理；验后合成case/session及相关票据计数均为0，验收临时凭据文件已清理。定向单测3项通过。
+
+全仓 `mvn -gs .mvn-settings.xml -s .mvn-settings.xml test` 的23模块reactor成功，Surefire **1740项，失败0、错误0、跳过14**；跳过项为既有外部数据库、Docker/Nacos或真实模型验收。`docker compose config --quiet`、PowerShell验收脚本语法及`git diff --check`通过。没有调用模型供应商或真实答题处理。该API证据补充任务8.3/8.4服务端及客户端契约边界，但不替代浏览器验收；没有完成有效RESPOND答题/回复/报告、真实A2A五操作、MySQL/Redis撤权并发故障矩阵，因此8.3/8.4、11.1、11.4、11.6仍未勾选，进度仍为**60/65**。

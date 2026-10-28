@@ -1534,7 +1534,7 @@
 
 **发现日期与依据**：2026-10-26，实施任务8.3/8.4。当前仓库没有 Interview 浏览器应用源码；服务端已实现登录用户的 credentials 领取、`no-store` 响应、`X-Ticket` 请求头和 query-ticket 拒绝，但无法验证真实页面领取后只在内存保存、使用 `fetch`/`ReadableStream` 消费 SSE、票据到期/撤销后重新领取的完整链路。
 
-**当前处置**：契约记录在 `docs/interview-credential-client-contract.md`。服务端权限开关默认关闭；未将服务端单测或文档当作浏览器集成证据。
+**当前处置**：契约记录在 `docs/interview-credential-client-contract.md`。Compose中的 `INTERVIEW_AUTHORIZATION_ENABLED` 默认关闭；2026-10-28本地开发栈显式开启后，真实API流程19项断言通过，覆盖可信actor开台、票据领取/用途隔离/撤销、query拒绝和SSE自定义头。该API流程不包含真实浏览器、成功答题或ReactAgent归档，未将其当作浏览器集成证据。
 
 **后续验收**：前端接入后增加登录态领取、不同用途/关系拒绝、页面刷新重领、query拒绝、fetch SSE自定义头、撤销/过期中止和错误恢复用例，并验证票据不出现在URL、日志、持久化、prompt、Memory、progress或artifact。
 
@@ -1642,6 +1642,18 @@
 
 **关联**：LR-156；`scripts/deploy/run-init-manifest.sh`、`scripts/deploy/test_init_manifest.py`、`20261028_baseline_permission_retirement.sql`；change `unify-versioned-permission-context`任务2.6/11.6。
 
+## KI-214 [FIXED·本提交·P1] Interview开台API未填充必需审计和兼容字段
+
+**发现日期与依据**：2026-10-28，使用真实非管理员BROKER账号经Gateway调用Interview开台API时，MySQL拒绝写入：`created_at`没有由MyBatis填充，历史必填列`creator_work_no`未提供；补齐后继续发现prep card的必填JSON列`dynamic_fields`为空。API前序登录、签名actor和授权均已通过，失败发生在业务持久化。
+
+**修复**：新增Interview `MetaObjectHandler`填充创建/更新时间；开台未提供legacy工号时写入空字符串，只满足旧schema非空约束，不用其建立actor或owner；prep card初始化`dynamic_fields`为空JSON对象。owner仍只从已验签的Auth actor写入。
+
+**验证与边界**：Handler与`InterviewPrepService`定向测试3项通过；真实Gateway→Auth→Interview→MySQL Postman API流程19项断言通过，并检查case/session owner均等于签名`/auth/me` actor。成功路径撤销MANAGE/READ票据、logout并删除本次合成case/session；数据库验后匹配计数为0。全仓23模块Surefire共1740项、失败/错误0、跳过14。该修复不代表真实RESPOND答题/报告、浏览器客户端或完整A2A链已验收。
+
+**关联**：`InterviewMetaObjectHandler`、`InterviewPrepService`、`InterviewPrepServiceTest`、`scripts/acceptance/interview-authorization-api-smoke.ps1`；change `unify-versioned-permission-context`任务8.3/8.4/11.4/11.5。
+
 ---
 
 **变更历史**：本提交收敛基础操作权限码、同步开发MySQL/Nacos/Compose并修复迁移runner的重复执行（KI-213）、完成权限状态清单（KI-208）和Nacos配置列表修复（KI-212），并修复RAG配置绑定问题（KI-207）、完成全仓Maven回归和Interview凭据边界记录（KI-202/203），持久化A2A请求防重放与任务归属（KI-172）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
+
+**本轮变更**：修复Interview真实API开台持久化缺口（KI-214），并记录API验收及其不替代前端/完整A2A验收的边界。
