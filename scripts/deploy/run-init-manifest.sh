@@ -27,7 +27,7 @@ while IFS=$'\t' read -r order phase version db file checksum check check_checksu
   [[ "$order" =~ ^[0-9]{3}$ && "$version" =~ ^[a-z0-9-]+$ ]] || exit 65
   [ "$((10#$order))" -gt "$last" ] || { printf '%s\n' 'Manifest order must be unique and increasing' >&2; exit 65; }
   last="$((10#$order))"
-  case "$phase:$db" in fresh:bk_auth|fresh:bk_interview|upgrade:bk_auth|upgrade:bk_agent|upgrade:bk_rag|upgrade:bk_listing|upgrade:bk_memory) ;; *) exit 65 ;; esac
+  case "$phase:$db" in fresh:bk_auth|fresh:bk_interview|upgrade:bk_auth|upgrade:bk_agent|upgrade:bk_rag|upgrade:bk_listing|upgrade:bk_memory|upgrade:bk_marketing) ;; *) exit 65 ;; esac
   [[ "$file" =~ ^sql/[a-zA-Z0-9_./-]+\.sql$ && "$check" =~ ^docker/mysql/checks/[a-zA-Z0-9_-]+\.sql$ ]] || exit 65
   [[ "$file" != *..* && "$check" != *..* && "$checksum" =~ ^[a-f0-9]{64}$ && "$check_checksum" =~ ^[a-f0-9]{64}$ && -z "${extra:-}" ]] || exit 65
   # Canonical LF checksums survive Git's Windows/Linux checkout conversion.

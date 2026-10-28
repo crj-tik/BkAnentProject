@@ -1125,3 +1125,13 @@
 **代码位置**：`common/authz/ExecutionBinding`、`AuthzSignature.verifyExecutionBinding`、`AuthAuthorizationRpcServiceImpl.bindExecution`、`AuthorizationRepository.bindIngressExecution`、`agent-service/AgentExecutionBindingCoordinator`、`AgentRagCredentialFilter`、`OrchestrationStore.executionHash`。入口原始三签保留在请求scope，绑定context不写入模型输入或checkpoint。
 
 **关联**：LR-104/106；KI-170；change `unify-versioned-permission-context`任务4.4。功能开关默认关闭；Gateway路由/预算、A2A和Graph真实consumer、异步跨实例重启恢复仍需独立验收。
+
+## LR-139 旧 promotion 库保留作迁移回退，不默认开放运行期读取
+
+**结论**：营销生命周期的活动读写只落 `bk_marketing`。旧 `bk_promotion` 库、数据库地址和旧 Nacos 配置在迁移及回退窗口内保留，但不作为有效发布 writer，也不默认授予 MySQL MCP 只读访问；确有迁移审计需要时由运维通过显式、受审配置开放。
+
+**根因**：保留历史数据和可回退制品并不要求把旧服务重新加入日常运行面。默认仍开放旧库会让合并后排查和工具查询继续依赖两套数据口径，且增加误读旧数据的机会；直接删除旧库又会破坏迁移核对和回退能力。
+
+**代码位置**：`docker-compose.yml`、`.env.example` 的 `MYSQL_MCP_DATABASES` 默认值；旧库地址继续保留于 `nacos/mysql-common.yaml`，旧服务配置保留于 `nacos/promotion-service.yaml`。
+
+**关联**：LR-136、LR-131；KI-194。

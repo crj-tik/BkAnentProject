@@ -32,7 +32,7 @@
 
 除营销服务内 A2A、ReAct Agent、MCP 工具外，本 change 还需要一个独立的 Supervisor 发布技能和实际能力目录/审批配置验收；共享 Supervisor 审批能力集合由合并协调阶段并集更新。
 
-主要影响 `marketing-content-service`、`promotion-service`、`common` 的推广契约、部署与网关清单，以及发布调用方。遵循 LR-22/23/53/96/102；承接 KI-167 的效果来源缺口，规划不标记修复。与 `implement-studio-v2` 的发布计划/确认任务按领域执行契约衔接，不重复实现 Studio 命令与审批门面。Auth 与 Memory 是共享基础模块而非本域替代物：营销 A2A 对话沿用必需 Memory 生命周期；营销授权需与 `unify-versioned-permission-context` task 10.3 对齐。当前营销 campaign 代码仍使用 `AuthPermissionRpcService` 兼容接口，且营销权限目录/内容归属尚未登记或验收；本地 fixture 通过不代表 Auth v2 已接通或内容 API 已完成资源准入。
+主要影响 `marketing-content-service`、`promotion-service`、`common` 的推广契约、数据库初始化清单、Nacos/Compose 部署与网关清单，以及发布调用方。营销 lifecycle schema 随本 change 登记到 `bk_marketing` 的版本化初始化 manifest；Compose 不再提供旧 promotion 服务，旧库只保留作迁移/回退来源。遵循 LR-22/23/53/96/102；承接 KI-167 的效果来源缺口，规划不标记修复。与 `implement-studio-v2` 的发布计划/确认任务按领域执行契约衔接，不重复实现 Studio 命令与审批门面。Auth 与 Memory 是共享基础模块而非本域替代物：营销 A2A 对话沿用必需 Memory 生命周期；营销授权需与 `unify-versioned-permission-context` task 10.3 对齐。当前营销 campaign 代码仍使用 `AuthPermissionRpcService` 兼容接口，且营销权限目录/内容归属尚未登记或验收；本地 fixture 通过不代表 Auth v2 已接通或内容 API 已完成资源准入。
 
 执行方式：四会话之一，可与其它三项同时完成本域功能实现和独立 fixture 验收。房源按冻结 wire 契约引用，平台 provider 未接入时真实模式失败关闭。Memory A2A 对话使用共享必需 hook；Auth 本地测试使用精确替身，但生产准入必须完成 `unify-versioned-permission-context` task 10.3 的 Marketing adoption、权限目录和资源关系核验。该准入未完成前，不得声称营销内容 REST/RPC/MCP 及 campaign lifecycle 已具备统一 Auth v2 保护，也不得将 Mock/fixture 视为上线授权证据。共享环境停旧/迁移与真实平台接入另验，见 `docs/business-domain-change-roadmap.md`。
 

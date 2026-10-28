@@ -54,7 +54,7 @@ ContentRevision 不可变；PublishPlan 固定 contentRevision、素材版本、
 
 发布生命周期、回执、持久派发和效果口径是真实实现。渠道 provider 缺失时真实 mode 失败关闭。Marketing A2A 生产路径使用必需 Memory hook；通用 hook 测试验证 Memory/授权不可用时在 Agent 执行前失败。Auth campaign 局部测试使用精确替身，只能证明本域逻辑对拒绝/撤权的反应，不能证明新 Auth 域目录、版本化上下文或内容资源授权已联通。旧业务数据迁移及单writer切换先在私有夹具/库验证，已运行共享实例由协调合并后处理。
 
-独立 worktree/分支、`.m2repo`、端口/数据库按总览执行，只push自己的分支。根POM和配置只提交promotion/marketing的最小语义变化；新增bk_marketing初始化allowlist/manifest差异交协调合并，不改已应用SQL/hash。Auth v2 的域准入由其共享 change task 10.3 所有；本 change 可以完成 fixture 业务闭环，但在营销内容操作码、owner/关系映射和 REST/RPC/A2A/MCP 统一消费版本化授权未通过验收前，不得作为完整生产授权合并或启用。
+独立 worktree/分支、`.m2repo`、端口/数据库按总览执行，只push自己的分支。用户要求本 change 同步维护数据库、Nacos 与 Compose 部署工件，因此营销 migration/check 已登记到版本化 manifest，runner 仅新增精确的 `upgrade:bk_marketing` allowlist；这不会修改已应用的 bootstrap SQL/hash，也不代表 migration 已在任何共享库执行。Compose 继续只部署 `marketing-content-service`，默认 MySQL MCP 只读范围排除保留作迁移/回退材料的 `bk_promotion`；Nacos 保留旧 promotion 配置作为历史制品，营销模板的房源快照地址与 listing 服务实际端口一致。Auth v2 的域准入由其共享 change task 10.3 所有；本 change 可以完成 fixture 业务闭环，但在营销内容操作码、owner/关系映射和 REST/RPC/A2A/MCP 统一消费版本化授权未通过验收前，不得作为完整生产授权合并或启用。
 
 ### 7. Supervisor、A2A、ReAct 与 MCP 分层治理
 

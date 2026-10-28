@@ -1,4 +1,4 @@
-# bk-anent initialization v20261022.1; SHA256 uses canonical LF bytes (CR removed).
+# bk-anent initialization v20261028.1; SHA256 uses canonical LF bytes (CR removed).
 # Append a new version when an applied SQL/check file changes.
 # order	phase	version	target_database	file	sha256	schema_check	check_sha256
 010	fresh	bootstrap-20261013-v1	bk_auth	sql/mysql-init.sql	de273d3f1595410a6e40b1bf91d9978df277b18bc82581f680c50da2b59d7294	docker/mysql/checks/bootstrap.sql	68b9cbaade13edbf19860c0500e871ab5b9cf15f140e83217c152c78d77e00fb
@@ -27,3 +27,4 @@
 240	upgrade	memory-rag-outbox-lease-20261022-v1	bk_memory	sql/migrations/20261021_memory_rag_outbox_lease.sql	7a23188990fb189ae580e1b3b595c292e0615422ef8161f9f38c5ff5bf5740ac	docker/mysql/checks/memory-rag-outbox-lease.sql	a680a5b10dc66a66242a90356052bfe094380196b66ad728f1b813989cb61ec4
 250	upgrade	auth-authorization-20261023-v1	bk_auth	sql/migrations/20261023_versioned_authorization.sql	4091926bb170cc718b8f1bb168f951edfc9c9b7867a152ed9cd5709a90c358c2	docker/mysql/checks/auth-authorization.sql	639a671f2523a7d8d0a0344fdc09734d1a200b1c989c7b416002c096ce3fd0bd
 260	upgrade	auth-account-events-20261025-v1	bk_auth	sql/migrations/20261025_authorization_account_events.sql	0631f398541db2efbde1bc89782f7901e0b90f79471aa30481db5bcf9f85dcd2	docker/mysql/checks/auth-account-events.sql	cd8a8df37f4693c477a82ffc02e8141e6f11dd9962ed01824a105847c31163c1
+470	upgrade	marketing-campaign-lifecycle-20261026-v1	bk_marketing	sql/migrations/20261026_marketing_campaign_lifecycle.sql	a4d316dbca92b48b18b71d4c6284022c63b1e319063616416d26ef9b56c358cb	docker/mysql/checks/marketing-campaign-lifecycle.sql	398e0d546afc0b4c516ce71124bf7a909c900f48812d01fc6a754ed2798f55cb

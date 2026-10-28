@@ -31,6 +31,7 @@
 - [x] 4.1 更新 marketing-agent 技能、工具及旧 /promotions 受权适配，用调用契约测试验证同域状态更新和必需 Memory 语义。
 - [x] 4.2 提供 Studio 可消费的领域发布快照及回执契约，用边界测试验证不复制 Studio work/command/审批存储，也不勾选其 task 4.1/4.2/4.4。
 - [x] 4.3 在本分支实现旧新接收围栏、调用方切换及本域reactor/配置最小差异，用隔离在途/迁移测试验证单writer和历史保留；共享环境停旧与登记由协调执行，不等待其它change。
+- [x] 4.4 将营销生命周期 migration/check 登记到版本化数据库清单并扩展 `bk_marketing` runner allowlist；核对 Nacos 营销配置发布入口及房源快照 endpoint；Compose 默认不再向 MySQL MCP 授予旧 `bk_promotion` 只读范围。只验证仓库部署工件，不执行共享库迁移或发布在线 Nacos。
 
 ## 5. 验收与交付
 

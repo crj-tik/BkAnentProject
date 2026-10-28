@@ -7,13 +7,13 @@
 - 分支：`codex/consolidate-marketing-promotion-domain`
 - Worktree：`C:\Users\User\.codex\worktrees\marketing-promotion-domain\BkAnentProject`
 - Maven 本地仓库：该 worktree 下被忽略的 `.m2repo/`；构建显式设置 `-Dmaven.repo.local=.m2repo`
-- 基线没有依赖房源、知识、经营 change 的实现提交。本 change 未修改 `auth-service/**`、其它业务域的生产实现、公共框架、已应用 `sql/mysql-init.sql`、活动 `docker/mysql/init-manifest.tsv` 或 manifest runner allowlist；只从 `common-a2a` 的服务配置测试枚举移除已退役 promotion 模块。
+- 基线没有依赖房源、知识、经营 change 的实现提交。本 change 未修改 `auth-service/**`、其它业务域的生产实现、公共框架或已应用 `sql/mysql-init.sql`；2026-10-28 按用户要求将营销生命周期 migration/check 登记到活动 `docker/mysql/init-manifest.tsv`，并仅为 `upgrade:bk_marketing` 扩展 manifest runner allowlist。另从 `common-a2a` 的服务配置测试枚举移除已退役 promotion 模块。
 - 未启动 Docker、共享数据库、Nacos 或共享服务；所有数据库验证使用进程内 H2（MySQL mode），房源 HTTP fixture 只绑定 loopback 随机端口。
 
 ## 范围与隔离依赖
 
 - 负责 `marketing-content-service`、`common/marketing/campaign/**`、旧 promotion 的营销域接收适配、最小 gateway/Compose/reactor/Nacos 差异和新 campaign schema。
-- LR-102 已落实；本 change 使用保留段 LR-130–137，并维护已登记问题 KI-167。KI-194–201 仅为并行预留编号，未发现需要新增登记的问题时不创建空条目。实现提交：`1c5fc2da3f064317c597a253d6c233506ea829a2`。
+- LR-102 已落实；本 change 使用保留段 LR-130–137 并维护 KI-167。2026-10-28 新登记 KI-194，记录数据库登记、Nacos 快照地址和 Compose 默认只读范围的对齐问题。实现提交：`1c5fc2da3f064317c597a253d6c233506ea829a2`。
 - 没有修改其它 change 的 Java 类型或依赖其分支制品。营销使用自己的 `CampaignListingSnapshotClient` consumer DTO，测试 fixture 覆盖冻结的 `domain-parallel-v1`。测试中的 Auth RPC 是精确 mock；生产 Auth 缺失或拒绝时 campaign 操作失败关闭。
 - 本期不迁移媒体 Worker、通知服务或 Studio work/command/审批存储；Studio 可以消费营销的 plan snapshot 和 receipt DTO。
 
@@ -48,20 +48,21 @@
 
 应用回退时恢复旧 gateway 配置和旧部署制品，并保持新旧 writer 单一有效；已创建的 campaign attempt 不可交给旧发布服务重放。新增表可以保留用于核对，不能把成功/未知结果转换成旧入口的自动发布任务。
 
-## Schema 和 manifest 协调差异
+## Schema 和 manifest
 
-迁移 `sql/migrations/20261026_marketing_campaign_lifecycle.sql` 新建 13 张 `marketing_campaign_*` 表；对应 check 文件验证表存在。H2 MySQL mode 下重复执行 migration 和 ID 命名空间冲突用例通过。以下是供协调会话审阅后纳入 runner 的**建议**，不是当前活动 manifest：
+迁移 `sql/migrations/20261026_marketing_campaign_lifecycle.sql` 新建 13 张 `marketing_campaign_*` 表；对应 check 文件验证表存在。H2 MySQL mode 下重复执行 migration 和 ID 命名空间冲突用例通过。该 migration 已作为 `upgrade` 项登记到活动 manifest：
 
 ```text
-270	upgrade	marketing-campaign-lifecycle-20261026-v1	bk_marketing	sql/migrations/20261026_marketing_campaign_lifecycle.sql	a4d316dbca92b48b18b71d4c6284022c63b1e319063616416d26ef9b56c358cb	docker/mysql/checks/marketing-campaign-lifecycle.sql	398e0d546afc0b4c516ce71124bf7a909c900f48812d01fc6a754ed2798f55cb
+470	upgrade	marketing-campaign-lifecycle-20261026-v1	bk_marketing	sql/migrations/20261026_marketing_campaign_lifecycle.sql	a4d316dbca92b48b18b71d4c6284022c63b1e319063616416d26ef9b56c358cb	docker/mysql/checks/marketing-campaign-lifecycle.sql	398e0d546afc0b4c516ce71124bf7a909c900f48812d01fc6a754ed2798f55cb
 ```
 
-对应 runner 的受审 allowlist 变更是在 `scripts/deploy/run-init-manifest.sh` 的 `case "$phase:$db"` 中新增 `upgrade:bk_marketing`。本分支没有改当前 `docker/mysql/init-manifest.tsv`、runner allowlist 或数据库初始化脚本；不得直接对共享库执行该 migration。
+`scripts/deploy/run-init-manifest.sh` 的闭合 allowlist 已新增精确目标 `upgrade:bk_marketing`。这只使 migration 成为可审核、可校验的部署工件；本 change 未对共享数据库执行该 migration、历史回填或 writer 切换。空卷按 manifest 初始化；既有卷不会因 Compose 重启自动执行新的 upgrade 项，必须由运维在维护窗口明确应用。
 
 ## 部署与真实联机边界
 
 - 根 Maven reactor 与 `docker-compose.yml` 不再构建/启动 `promotion-service`，旧模块源码从本分支删除；gateway 的 `/promotions/**` 改由 `marketing-content-service` 接收。原配置和 Git 历史保留为回退/历史核对材料。
-- `nacos/marketing-content-service.yaml` 明确设 `marketing.campaign.mode: REAL`、outbox dispatch、rule version、900 秒计划 TTL 和 `LISTING_SNAPSHOT_BASE_URL`。REAL 房源消费要求 `domain-parallel-v1` 响应含正确 source identity、revision、SHA-256、时间、数据集、facts 和 REAL 模式。
+- `nacos/marketing-content-service.yaml` 明确设 `marketing.campaign.mode: REAL`、outbox dispatch、rule version、900 秒计划 TTL 和 `LISTING_SNAPSHOT_BASE_URL`；默认端口已从 9003 校正为 listing 服务实际监听的 9004。Nacos 发布脚本已允许显式发布 `marketing-content-service.yaml`，但仍只上传 `NACOS_CONFIG_DATA_IDS` 选中的 data ID。REAL 房源消费要求 `domain-parallel-v1` 响应含正确 source identity、revision、SHA-256、时间、数据集、facts 和 REAL 模式。
+- Compose 只构建/运行营销服务；MySQL MCP 默认只读数据库范围不再包含旧 `bk_promotion`。该数据库及 `nacos/promotion-service.yaml` 保留作受控历史迁移和回退材料，不能因此启动旧 writer。
 - 当前无真实平台发布/效果 provider，也未接入 Auth 新权限/账号登记。默认 REAL 确认在生成 attempt/outbox 前返回 `PROVIDER_NOT_CONFIGURED`；房源/Auth 依赖异常亦拒绝，不回落模拟。仅显式 SIMULATED 测试/本地配置允许 fixture，其发布/效果都标 `SIMULATED`。
 - 真实房源生产者及共享 Nacos/Auth/数据库登记、旧实例停服和历史回填留给协调会话。本会话未发布或联机验证它们，fixture 成功不代表真实渠道成功或真实 ROI。
 
@@ -83,7 +84,7 @@ mvn -gs .mvn-settings.xml -s .mvn-settings.xml "-Dmaven.repo.local=.m2repo" -Dsk
 
 根工程 22 个模块编译通过。全量 `mvn ... test` 在 `agent-service` 的 `AgentPrincipalContextTest.separateHttpRequestScopesReuseOmittedSessionForAllFourSupervisorSubmissionPaths` 有 1 项错误：Spring test context 缺少 `AgentExecutionBindingCoordinator` Bean；该测试上下文错误不在本 change 的营销草稿/发布路径内，且在本次 Agent 改动前已记录。此次新增的 Agent/Supervisor/技能定向回归 39 项通过。营销模块及其上游依赖完整测试独立通过。
 
-`openspec validate consolidate-marketing-promotion-domain --strict` 通过。SQL 与 check 文件 SHA-256 分别为 `a4d316dbca92b48b18b71d4c6284022c63b1e319063616416d26ef9b56c358cb`、`398e0d546afc0b4c516ce71124bf7a909c900f48812d01fc6a754ed2798f55cb`。尚未纳入活动 manifest/runner allowlist，也未执行共享数据库迁移；对应 runner allowlist 由协调会话审阅后登记。
+`openspec validate consolidate-marketing-promotion-domain --strict` 通过。SQL 与 check 文件 SHA-256 分别为 `a4d316dbca92b48b18b71d4c6284022c63b1e319063616416d26ef9b56c358cb`、`398e0d546afc0b4c516ce71124bf7a909c900f48812d01fc6a754ed2798f55cb`。2026-10-28 将该版本登记到活动 manifest 并扩展 runner allowlist；尚未执行共享数据库迁移，也未发布或联机验证共享 Nacos。fixture 结果不代表真实渠道已接通。
 
 ## 功能合并矩阵与调用方迁移
 
@@ -122,7 +123,7 @@ mvn -gs .mvn-settings.xml -s .mvn-settings.xml "-Dmaven.repo.local=.m2repo" -pl 
 mvn -gs .mvn-settings.xml -s .mvn-settings.xml "-Dmaven.repo.local=.m2repo" -pl agent-service -am "-Dtest=AgentCapabilityServiceImplTest,MarketingCampaignPublishSkillTest,MarketingCampaignApprovalProfileTest,SupervisorToolLoopGraphTest,DemonstrationSkillTest" "-Dsurefire.failIfNoSpecifiedTests=false" test
 ```
 
-完整 `marketing-content-service` reactor 回归 32 项通过，包含 A2A wiring、campaign fixture、MCP 目录/契约、旧 DTO 围栏和 ReAct 伪造 PUBLISHED 反例；Agent/Supervisor/Skill 定向用例 39 项通过。根 reactor 22 个模块编译，OpenSpec strict validation 已通过。全量 Agent suite 目前有 1 项上述既有 Spring test context 错误，其余本次定向覆盖通过。共享数据库迁移、活动 manifest/runner allowlist 登记及真实渠道联机不属于本分支本地验收，仍须协调环境执行；fixture 结果不代表真实渠道已接通。KI-172 修复于 `281f03a`。
+完整 `marketing-content-service` reactor 回归 32 项通过，包含 A2A wiring、campaign fixture、MCP 目录/契约、旧 DTO 围栏和 ReAct 伪造 PUBLISHED 反例；Agent/Supervisor/Skill 定向用例 39 项通过。根 reactor 22 个模块编译，OpenSpec strict validation 已通过。全量 Agent suite 目前有 1 项上述既有 Spring test context 错误，其余本次定向覆盖通过。本轮仅执行 manifest dry-run、OpenSpec strict validation、配置静态核对及 diff 检查，未重跑测试，未运行 Docker、未执行共享数据库 migration、未发布或联机验证共享 Nacos；fixture 结果不代表真实渠道已接通。KI-172 修复于 `281f03a`。
 
 ## Auth 与 Memory 模块边界复核（2026-10-27）
 
