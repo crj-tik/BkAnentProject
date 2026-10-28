@@ -1263,3 +1263,13 @@
 **代码位置**：`knowledge-service/KnowledgeAuthorization.requirePendingOwnReviewRead`、`KnowledgeLifecycleService.read/review/publish`；`docs/knowledge-service-operations.md` Auth 操作与角色矩阵；OpenSpec knowledge-operations 权限要求。回归覆盖非 owner 审核、owner 自审拒绝、review 权限仅读待审版本。
 
 **关联**：LR-90/116/117/118；KI-212；change `extract-knowledge-operations-domain`。
+
+## LR-120 Compose Knowledge数据库URL缺省使用服务网络DNS
+
+**结论**：Knowledge 的主库与来源库在 Compose 内默认连接 `mysql:3306/bk_knowledge`；部署者提供非空 `KNOWLEDGE_PRIMARY_DB_URL` 或 `KNOWLEDGE_SOURCE_DB_URL` 时使用显式值。`.env.example` 保留空 URL 以便 Compose 默认与宿主机/外部数据库配置分开；宿主机直接运行服务必须填写完整 JDBC URL。数据库用户名/密码仍必须非空，空凭据不得回退 root 或 H2。
+
+**根因**：Compose 会显式向服务传递 `.env` 中的空字符串，Spring 的 `${KEY:default}` 不会把已定义的空值当成缺省值。仅在 `application.yml` 写默认 JDBC URL 会因此失效并阻断服务启动。把容器 DNS fallback 放在 Compose 插值层能与 Compose MySQL 服务一致，同时保留显式外部数据库覆盖。
+
+**代码位置**：`docker-compose.yml` 的 Knowledge datasource environment；`knowledge-service/src/main/resources/application.yml` 与 `KnowledgeDataSourceConfiguration`；`scripts/deploy/test_knowledge_config.py`。
+
+**关联**：LR-116/119；KI-213；change `extract-knowledge-operations-domain`。静态配置验证不代表远端数据库可达或账号已解锁。

@@ -1632,6 +1632,16 @@
 
 **关联**：LR-119；`KnowledgeAuthorization`、`KnowledgeLifecycleServiceTest`；change `extract-knowledge-operations-domain`。
 
+## KI-213 [FIXED·本提交·P1] Compose空Knowledge JDBC URL覆盖Spring默认值
+
+**发现日期与依据**：2026-10-28，继续核对 Knowledge 的实际运行配置时发现 `.env.example` 将 `KNOWLEDGE_PRIMARY_DB_URL` 和 `KNOWLEDGE_SOURCE_DB_URL` 留空，而 Compose 仍显式向容器传入空值。Spring `${KEY:default}` 对已定义的空字符串不会使用默认值，`KnowledgeDataSourceConfiguration` 因 URL 为空拒绝创建两个 DataSource，Knowledge 容器无法启动。
+
+**修复**：Compose 将空/缺省 URL 解析为容器网络内 `mysql:3306/bk_knowledge` 的 JDBC URL，保留非空显式覆盖；`.env.example` 增加说明，Knowledge 配置静态测试锁定该默认行为。
+
+**验证与边界**：Knowledge 配置静态检查与 Maven 聚焦测试通过后记录。当前配置中的远端 MySQL `10.117.102.54:3306` 从本机不可达；未执行数据库迁移或 Docker Compose，真实账号密码设置、解锁与连通性仍待部署环境验收。
+
+**关联**：LR-120；`docker-compose.yml`、`test_knowledge_config.py`、`KnowledgeDataSourceConfiguration`；change `extract-knowledge-operations-domain`。
+
 ---
 
-**变更历史**：本提交补齐鉴权迁移交付清单与安全回滚边界（KI-208），并修复RAG配置绑定问题（KI-207）、完成全仓Maven回归和Interview凭据边界记录（KI-202/203），持久化A2A请求防重放与任务归属（KI-172）；知识拆分实现修正 OWN 审核员与 owner 读取边界（KI-212）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
+**变更历史**：本提交修复 Knowledge Compose JDBC 空 URL 导致服务无法启动的问题（KI-213）；本提交补齐鉴权迁移交付清单与安全回滚边界（KI-208），并修复RAG配置绑定问题（KI-207）、完成全仓Maven回归和Interview凭据边界记录（KI-202/203），持久化A2A请求防重放与任务归属（KI-172）；知识拆分实现修正 OWN 审核员与 owner 读取边界（KI-212）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。

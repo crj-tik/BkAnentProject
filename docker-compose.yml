@@ -917,10 +917,10 @@ services:
       MYSQL_USER: ${KNOWLEDGE_MYSQL_USER:-knowledge_app}
       MYSQL_PASSWORD: ${KNOWLEDGE_MYSQL_PASSWORD:-}
       MYSQL_DB_KNOWLEDGE: ${MYSQL_DB_KNOWLEDGE:-bk_knowledge}
-      KNOWLEDGE_PRIMARY_DB_URL: ${KNOWLEDGE_PRIMARY_DB_URL:-}
+      KNOWLEDGE_PRIMARY_DB_URL: "${KNOWLEDGE_PRIMARY_DB_URL:-jdbc:mysql://mysql:3306/${MYSQL_DB_KNOWLEDGE:-bk_knowledge}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}"
       KNOWLEDGE_MYSQL_USER: ${KNOWLEDGE_MYSQL_USER:-knowledge_app}
       KNOWLEDGE_MYSQL_PASSWORD: ${KNOWLEDGE_MYSQL_PASSWORD:-}
-      KNOWLEDGE_SOURCE_DB_URL: ${KNOWLEDGE_SOURCE_DB_URL:-}
+      KNOWLEDGE_SOURCE_DB_URL: "${KNOWLEDGE_SOURCE_DB_URL:-jdbc:mysql://mysql:3306/${MYSQL_DB_KNOWLEDGE:-bk_knowledge}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}"
       KNOWLEDGE_SOURCE_DB_USER: ${KNOWLEDGE_SOURCE_DB_USER:-knowledge_source_ro}
       KNOWLEDGE_SOURCE_DB_PASSWORD: ${KNOWLEDGE_SOURCE_DB_PASSWORD:-}
       SERVICE_ARTIFACT: knowledge-service-1.0.0-SNAPSHOT.jar

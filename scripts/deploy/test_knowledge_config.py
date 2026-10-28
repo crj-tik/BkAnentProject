@@ -71,6 +71,9 @@ def main() -> None:
                   "source: ./.secrets/service-identities/knowledge-service/private-key.pem",
                   "SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,memory"):
         require(block, value, "docker-compose.yml knowledge-service")
+    for key in ("KNOWLEDGE_PRIMARY_DB_URL", "KNOWLEDGE_SOURCE_DB_URL"):
+        require(block, f'{key}: "${{{key}:-jdbc:mysql://mysql:3306/${{MYSQL_DB_KNOWLEDGE:-bk_knowledge}}?',
+                "docker-compose.yml Knowledge datasource defaults")
     if "MYSQL_ROOT_PASSWORD" in block:
         raise SystemExit("knowledge-service must not receive the MySQL root password")
 

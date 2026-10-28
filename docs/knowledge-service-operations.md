@@ -57,7 +57,7 @@ v1 中一个经营案例和它的结构化打法是同一 Knowledge 聚合：案
 
 | 配置面 | 新增/调整 | 密钥及开关 |
 | --- | --- | --- |
-| `.env.example` / Compose 环境 | `MYSQL_DB_KNOWLEDGE`、Knowledge primary/source URL、两个 DB 用户及密码、`KNOWLEDGE_SERVICE_BASE_URL`、Memory compression、Auth 开关 | `scripts/deploy/init-environment.sh` 在 `full` profile 下为两个数据库密码补随机值；部署前仍要由 DBA/数据库初始化流程为锁定账号设置同一秘密并解锁。Auth 默认关闭。 |
+| `.env.example` / Compose 环境 | `MYSQL_DB_KNOWLEDGE`、Knowledge primary/source URL、两个 DB 用户及密码、`KNOWLEDGE_SERVICE_BASE_URL`、Memory compression、Auth 开关 | Compose 的空 URL 默认落到容器网络 `mysql:3306/bk_knowledge`；宿主机运行需显式配置 URL。`scripts/deploy/init-environment.sh` 在 `full` profile 下为两个数据库密码补随机值；部署前仍要由 DBA/数据库初始化流程为锁定账号设置同一秘密并解锁。Auth 默认关闭。 |
 | `application.yml` | 9015、Nacos import、primary/source 双 DataSource、view/sanitizer 版本、Auth ingress 公钥、服务身份、必需 Memory、Dubbo Nacos、readiness | Nacos/环境提供数据库秘密；用户名/密码缺失或为空时 DataSource 建立失败，不回退 root/H2。 |
 | `nacos/knowledge-service.yaml` | 无秘密的服务配置与环境变量占位符、只读视图名/版本、Auth audience、Memory readiness | 不写密码或私钥；`NACOS_CONFIG_DATA_IDS` 仍默认空，发布时必须显式选择。 |
 | `.secrets/service-identities/` | `knowledge-service` 独立 Ed25519 keypair；公钥由既有生成器写到 `public-keys.env` | Compose 只读挂载 Knowledge 私钥；生成公钥由 Memory trusted caller 配置引用。不得将私钥放到 `.env`、Nacos、镜像或仓库。 |
