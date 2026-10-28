@@ -1508,11 +1508,15 @@
 
 **关联**：`openspec/changes/unify-versioned-permission-context/tasks.md` task 10.3；本 change task 7.6；LR-131；`MarketingContentController`、`MarketingContentRpcServiceImpl`、`MarketingMcpTools`、`MarketingContentEntity`。
 
-## KI-194 [OPEN·P1] 营销生命周期部署工件与默认访问范围未对齐
+## KI-194 [FIXED·2dbd4550·P1] 营销生命周期部署工件与默认访问范围未对齐
 
 **发现日期**：2026-10-28。营销生命周期 SQL/check 已存在，但活动 MySQL manifest 尚无 `bk_marketing` 版本项，runner 的闭合目标白名单也不接受 `upgrade:bk_marketing`；Nacos 模板的房源快照默认地址使用 9003，而 `listing-master-service` 实际监听 9004；Compose 与 `.env.example` 的 MySQL MCP 默认只读清单仍包含合并后保留作历史/回退的 `bk_promotion`。
 
 **影响**：新数据库初始化不会纳入 campaign schema，现有数据库无法通过版本化 runner 升级；真实 campaign 准备会访问错误房源端口；默认 MCP 仍能查询旧库，造成统一域的日常数据入口与存档/回退数据边界不清。
+
+**修复（2dbd4550）**：将营销生命周期 migration/check 以 470 登记到活动 manifest，并扩展 runner 的 `upgrade:bk_marketing` 精确白名单；将 Nacos 房源快照默认端口校正为 9004，保留显式 data ID 发布规则；Compose 与 `.env.example` 默认 MySQL MCP 范围排除旧 `bk_promotion`，旧库和旧 Nacos 数据源仍作为迁移/回退材料保留。
+
+**验证边界**：manifest `--mode upgrade --dry-run` 校验通过，含 470 行及 SQL/check SHA-256；OpenSpec strict validation 和 `git diff --check` 通过。本轮未重跑测试、未执行共享数据库 migration、未发布 Nacos，也未启动 Compose 服务。
 
 **关联**：营销 OpenSpec task 4.4；LR-139；`docker/mysql/init-manifest.tsv`、`scripts/deploy/run-init-manifest.sh`、`nacos/marketing-content-service.yaml`、`docker-compose.yml`。
 
