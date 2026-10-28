@@ -1,5 +1,7 @@
 package com.bkanent.common.rag;
 
+import com.bkanent.common.authz.AuthzOperationPolicy;
+
 import java.io.Serializable;
 import java.util.List;
 import java.util.TreeSet;
@@ -58,7 +60,8 @@ public record AuthRagPrincipal(Long userId, String roleCode, boolean accountActi
     }
 
     public boolean hasPermission(String permissionCode) {
-        return versionedAuthorization() && permissionCode != null && permissions.contains(permissionCode);
+        return versionedAuthorization() && permissionCode != null
+                && (permissions.contains(permissionCode) || AuthzOperationPolicy.isBaseline(permissionCode));
     }
 
     public AuthRagPrincipal withAttestation(RagAuthEnvelope value) {

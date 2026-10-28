@@ -48,6 +48,8 @@ agent:
     max-sessions-per-user: 32
     capability-permissions:
       "[local:milvusKnowledgeSearch]": agent.rag.search
+    # Only exact local capability IDs belong here; every call still needs a signed actor and bound run.
+    baseline-capabilities: ${AGENT_AUTHORIZATION_BASELINE_CAPABILITIES:}
     # Keep user-delegated MCP destinations closed until static streamable-http connections exist.
     mcp-target-audiences: {}
     public-mcp-capabilities: []

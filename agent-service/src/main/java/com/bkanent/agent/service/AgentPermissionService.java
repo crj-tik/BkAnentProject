@@ -261,14 +261,25 @@ public class AgentPermissionService {
     private boolean hasMappedCapabilityPermission(Long userId, String capabilityId) {
         if (userId == null || capabilityId == null || !versionedAuthorizationEnabled()) return false;
         String permissionCode = authorizationProperties.permissionForCapability(capabilityId);
+        if (permissionCode == null && authorizationProperties.isBaselineCapability(capabilityId)) {
+            var entry = com.bkanent.agent.authorization.AgentAuthorizationScope.current();
+            if (entry == null) throw new com.bkanent.common.authz.AuthzException(
+                    com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
+            entry.requireActor(Long.toString(userId));
+            entry.requireRunAssociation();
+            return true;
+        }
         return permissionCode != null && hasPermission(userId, permissionCode);
     }
 
     private boolean anyMappedCapabilityPermission(Long userId, String prefix) {
         return userId != null && versionedAuthorizationEnabled()
-                && authorizationProperties.getCapabilityPermissions().entrySet().stream()
+                && (authorizationProperties.getCapabilityPermissions().entrySet().stream()
                 .filter(mapping -> mapping.getKey().startsWith(prefix))
-                .anyMatch(mapping -> hasPermission(userId, mapping.getValue()));
+                .anyMatch(mapping -> hasPermission(userId, mapping.getValue()))
+                || authorizationProperties.getBaselineCapabilities().stream()
+                .filter(capability -> capability.startsWith(prefix))
+                .anyMatch(capability -> hasMappedCapabilityPermission(userId, capability)));
     }
 
     private String capabilityId(java.util.function.Supplier<com.bkanent.common.agent.CapabilityId> supplier) {

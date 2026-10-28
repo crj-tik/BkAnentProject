@@ -1208,6 +1208,26 @@
 
 **根因**：把每个接口操作都登记为权限码会造成目录和角色授予膨胀，并将普通 Graph/subAgent 调用耦合到多余的授权判断；反过来，把“免权限码”理解为免认证会让用户身份与业务数据隔离失守。将精确权限码限定为受限能力，同时保留始终执行的 actor、owner/关系和状态检查，能减小目录且不放松数据和状态边界。
 
-**代码位置**：`docs/auth-authorization-permission-system.md`；OpenSpec delta specs `openspec/changes/unify-versioned-permission-context/specs/versioned-authorization-context/spec.md`、`specs/authentication-baseline/spec.md`、`specs/domain-authorization-adoption/spec.md`。
+**代码位置**：`docs/auth-authorization-permission-system.md`；OpenSpec delta specs `openspec/changes/unify-versioned-permission-context/specs/versioned-authorization-context/spec.md`、`specs/authentication-baseline/spec.md`、`specs/domain-authorization-adoption/spec.md`；本次已完成精确分类与目录退役，见LR-155。
 
-**关联**：LR-139/140/145/146；KI-170；change `unify-versioned-permission-context`。当前 6.1 目录仍是迁移现状，基础操作候选尚需逐项复核并通过后续实现迁移，不代表本次已修改运行时权限。
+**关联**：LR-139/140/145/146/155；KI-170；change `unify-versioned-permission-context`。权限码边界原则与本轮已确认清单分开记录，防止把“普遍基础”误解为免认证。
+
+## LR-155 基础动作签入请求上下文，但不进入权限快照
+
+**结论**：经逐项复核，将现有目录中的26个普遍基础动作标识作为签名 `AuthorizationContext.allowedOperations` 的可路由动作集合；Auth授权 `snapshot.permissions`、角色授予和有效权限并集只保留受限拦截点。共享 `AuthzOperationPolicy` 是唯一精确分类源；消费者必须同时验证签名身份/请求关联，按业务检查owner、参与关系和状态。Agent本地能力只有被明确登记在 `AGENT_AUTHORIZATION_BASELINE_CAPABILITIES` 的精确 `local:<tool>` 才免权限码，并仍要求有效actor和持久run/session；默认空集。目录迁移停用这26条权限、清除精确角色授予并发布所有用户的新revision/outbox，保留目录行供审计。
+
+**根因**：基础动作仍需绑定到签名请求，防止LLM或请求正文替换用户/动作；但把这些动作放在权限快照中会继续把“有效登录即可使用”的功能误建模为角色授予。区分签名动作集合与受限权限集合，既保留业务域身份及数据/状态边界，也使常规Graph/subAgent动作无需逐项授予或对Auth远程查询。受限权限仍须在入口请求、服务ACL、用户角色/管理员快照中全部满足，基础动作不能借此提升为未分类的新操作。
+
+**代码位置**：`common/authz/AuthzOperationPolicy`、`AuthzResponse`、`AuthzRequestScope`、`AuthorizationSession`、`common-a2a/VerifiedDomainAuthorization`、`common/rag/AuthRagPrincipal`；`auth-service/EffectivePermissionService`、`AuthAuthorizationRpcServiceImpl`、`AuthPermissionRpcServiceImpl`；`agent-service/AgentAuthorizationProperties`、`AgentPermissionService`；`sql/migrations/20261028_baseline_permission_retirement.sql`及`docker/mysql/init-manifest.tsv`；`docker-compose.yml`、`nacos/agent-service.yaml`、`docs/auth-authorization-permission-system.md`与OpenSpec delta。
+
+**关联**：LR-154；KI-170/208；change `unify-versioned-permission-context`任务1.4/2.6/11.6。Nacos配置发布与开发MySQL实际应用需分别留存验收证据；不能仅凭源码/清单校验称为数据库已更新。
+
+## LR-156 已应用迁移按账本校验哈希后跳过历史状态复验
+
+**结论**：受管MySQL runner先比较 `bk_schema_migration` 中记录的migration文件及schema check哈希；记录存在且哈希完全匹配时，将该项作为已应用迁移跳过，不重放SQL，也不重复验证其当时的状态断言。只有账本中没有该项时才执行SQL、运行schema check，并在成功后写入哈希账本；哈希变化继续硬拒绝。
+
+**根因**：schema check描述迁移刚执行时的后置条件，不一定是永久不变量。之后的合规迁移可能有意停用权限或改变状态；重放所有旧SQL会引入副作用，复验旧check则会把正确的新状态误判为损坏。最终现状应由最新的领域检查验证，而历史账本负责证明具体迁移制品未变、且该迁移已经完成。
+
+**代码位置**：`scripts/deploy/run-init-manifest.sh` 的manifest哈希与已应用分支；`scripts/deploy/test_init_manifest.py`；`docker/mysql/init-manifest.tsv`及当前迁移的独立schema check。
+
+**关联**：KI-213；change `unify-versioned-permission-context`任务2.6/11.6。此规则不替代fresh数据库验收、末端状态检查或安全制品回滚演练。

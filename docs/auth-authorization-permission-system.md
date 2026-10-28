@@ -2,7 +2,7 @@
 
 本文把当前仓库中的 Auth v2 权限模型、Agent 请求身份传递、业务域授权边界和验收状态放在一处，供后续实现与前端需求复用。它描述当前设计和代码证据，不代表所有业务服务已在生产启用。
 
-状态口径以 `openspec/changes/unify-versioned-permission-context/tasks.md` 的当前勾选和 `implementation-progress.md` 最后追加的 2026-10-27 开发栈验收为准；历史章节可能保留当时的状态。
+状态口径以 `openspec/changes/unify-versioned-permission-context/tasks.md` 的当前勾选和 `implementation-progress.md` 最后追加的 2026-10-28 开发栈验收为准；历史章节可能保留当时的状态。
 
 ## 1. 设计结论
 
@@ -61,7 +61,7 @@ Auth v2 不是把权限名放进普通请求头。下游使用经过签名、绑
 
 | 字段组 | 主要内容 | 校验目的 |
 |---|---|---|
-| actor 与权限 | `actorId`、`allowedOperations`（仅受限操作）、`permissionHash`、`permissionRevision`、`credentialEpoch` | 确认可信主体和受限操作授权范围未被替换或回放成旧版本；基础操作不要求出现在权限集合中 |
+| actor 与权限 | `actorId`、签名执行操作集合 `allowedOperations`、仅含受限授权的 `snapshot.permissions`、`permissionHash`、`permissionRevision`、`credentialEpoch` | 确认可信主体和受限操作授权范围未被替换或回放成旧版本；基础操作标识可绑定请求，但不进入权限快照、不代表角色授予 |
 | 业务身份 | Auth 签入的 `businessIdentities`，如 `BROKER → brokerId` | 服务端从可信映射取得 broker，不从模型/请求正文取值 |
 | 请求关联 | `audience`、`requestId`、run/session、`policyDigest`、请求 hash、nonce | 将授权限定到目标服务、本次执行、请求内容和调用策略 |
 | 时间边界 | 签发、过期时间、run 硬截止；另有 freshness 的 `checkedAt/notAfter` | 硬截止不能由续租延长；过期、失效或 freshness 超窗时拒绝新动作 |
@@ -134,9 +134,9 @@ flowchart LR
 | Notification | `notification.message.read.own`、`notification.message.mark-read.own`、`notification.message.send.own/all`、`notification.email.send.all`、`notification.robot.send.all`、`notification.workflow.events.read.all` | actor 与 recipient 分离；消息 SQL recipient 关系为真源；旧无 proof Dubbo 发送拒绝 | 源码与定向回归完成；Contract/Customer 提醒缺 recipient 映射，保持关闭 |
 | Interview | `interview.initiate/read/respond/assist/end/report.generate/asset.submit/asset.publish/asset.regrade`、`interview.read.all` | session owner、participant relation、purpose ticket、报告/附件状态；短票不替代登录 | 服务端已加目的和 owner 检查；浏览器 fetch/SSE 和真实 ReactAgent 归档链冻结待前端接入 |
 
-### 6.1 当前迁移中登记的精确权限码（现状，不是目标必留清单）
+### 6.1 Auth目录中的147条精确权限码（含停用的历史码）
 
-以下按权限目录迁移中的精确字符串列出。Auth 表同时保存 `domain` 与 `operation`；代码匹配使用完整 `permission_code`，不能把下面的分组标题或省略符当权限。当前迁移登记约 147 个精确码，其中部分本人范围的基础操作应按 6.2 节复核是否撤出权限码门控。此表不授权删除运行中的守卫；须先确认所有调用入口与本域 owner/state 检查，再通过单独迁移调整目录、角色授予和消费者。
+以下按Auth目录中的精确字符串列出。Auth表同时保存 `domain` 与 `operation`；代码匹配使用完整 `permission_code`，不能把下面的分组标题或省略符当权限。当前目录共有147条精确码，其中26条普遍基础动作已由 `20261028_baseline_permission_retirement` 增量迁移停用并清除角色授予，保留目录行供审计；其余121条为当前受限操作码。此表列出历史与当前代码全集，不表示147条都可授予。
 
 **Auth、Agent 与 RAG**
 
@@ -341,7 +341,40 @@ memory.experience.governance.publish
 | 明确限制的能力 | 是 | 跨 owner/全量数据、敏感数据导出、用户/角色/身份映射管理、审批、签章、付款、外部发布/发送、公开分享、批量重建、审计治理等；必须有精确登记码和显式授予 |
 | 高风险本人范围操作 | 视业务风险可要求 | `.own` 不代表天然免码。即使资源属于本人，签章、公开发布、不可逆删除等仍可设为受限拦截点 |
 
-现有细粒度码中，可优先评估是否移出权限码门控的候选包括 `agent.chat.use`、`listing.read/create/update.own`、`customer.create/update.own`、`customer.follow.read.own/write.own`、`compare.report.create/read.own`、`media.task.submit.own/read.own`、`notification.message.read.own/mark-read.own`、`interview.initiate/read/respond/assist/end`、`memory.read/write/search`。这些是待按产品规则和数据敏感性确认的候选，不是本次直接删除清单；若某项并非普遍开放，保留其受限门控并说明限制理由。
+逐项复核当前6.1的147条精确目录码及REST/RPC/A2A/MCP/Graph消费点后，确认以下26条属于有效登录用户可使用的基础动作，退出权限快照和角色码授予。所有操作仍需要有效的Auth签名身份；各业务域继续执行表中资源归属、参与关系和状态校验。
+
+```text
+agent.chat.use
+agent.workflow.read
+agent.workflow.artifact.read
+listing.read
+listing.create
+listing.update.own
+customer.read
+customer.create
+customer.update.own
+customer.follow.read.own
+customer.follow.write.own
+customer.favorite.read.own
+customer.favorite.write.own
+customer.match.own
+compare.report.create
+compare.report.read.own
+media.task.read.own
+notification.message.read.own
+notification.message.mark-read.own
+interview.initiate
+interview.read
+interview.respond
+interview.end
+memory.read
+memory.write
+memory.search
+```
+
+上述26个动作标识仍可由Auth放入签名执行上下文，用来关联本次请求的业务动作；它们不进入 `snapshot.permissions`，也不再代表角色授予。无签名上下文、身份不匹配、资源owner/参与关系不匹配或状态不允许时，仍然拒绝。
+
+当前清单其余121条均分类为受限拦截点，并保留精确权限码；覆盖跨owner/宽业务范围、管理/审计/治理、删除或状态改变、敏感合同/内容/个人数据、文件核验、付费或外部调用、通知发送、审批发布、财务支付等限制。特别是 `media.task.submit.own` 因触发外部生成成本仍受限；`interview.assist` 因创建协助关系和控制运行状态仍受限；`memory.delete/share/revoke` 因不可逆删除或改变他人可见范围仍受限。`.own` 不自动免码，只有产品规则确认普遍开放且独立owner/状态保护完整的操作才移出权限码。
 
 目标保留的门控以明确的限制边界为准：例如 `*.all` 跨 owner 操作、`auth.*.manage`、`contract.seal.own`、`marketing.publish.execute.own`、`settlement.batch.create.all`、`notification.email.send.all`、`compare.report.share.public`。权限码授予始终不能取代资源 owner/关系、参与者资格、审核及状态机检查。
 
@@ -358,7 +391,7 @@ memory.experience.governance.publish
 
 现有码中的 `.own` 表示本人范围，必须映射到已签名的 actor/business identity 并由目标数据核 owner；`.all` 表示显式登记的宽业务范围操作，不是全局通配，也不能绕过该域状态机。后缀不决定是否需要权限码：普遍开放的本人操作可以没有权限码；高风险本人操作仍可以有 `.own` 码。即使没有权限码，不能用请求体中的 `userId` 或 `brokerId` 替代 owner 检查。
 
-当前 SQL 仍显式给 `BROKER` 授予一组 Agent、Interview、Memory、Listing 和 Customer 操作；这是现有实现，不是最终目录规模。后续应按 6.2 节把普遍基础操作移出码门控及其角色授予，只对受限能力保留显式授予。Marketing/Promotion 迁移登记目录码但不自动授予 `BROKER`。Auth 管理员使用独立可信 `businessAdmin` 标记，不依赖 `ADMIN` 角色通配权限；有效业务管理员可取得已登记的受限操作，但本域 owner、个人 Memory 和业务状态约束仍然存在。
+历史基础迁移仍保留原始目录行供审计；开发数据库已应用 `20261028_baseline_permission_retirement.sql`，当前Auth目录147条中121条有效、26条停用，基础码角色授予为0。Auth快照只包含其余受限操作，管理员只取得当前已登记且有效的受限操作。Marketing/Promotion目录不自动授予 `BROKER`；业务管理员不绕过本域owner、个人Memory和业务状态约束。
 
 ### 目录发布与授予检查
 
@@ -387,8 +420,10 @@ memory.experience.governance.publish
 - [x] Auth 用户/角色/权限目录、签名授权上下文、版本状态、业务身份映射和执行绑定有源码及定向回归。
 - [x] 逐域源码清单覆盖 Auth、Agent、RAG、Memory、Listing、Customer、Business、Settlement、Contract、Marketing、Compare、Media、Notification、Interview。
 - [x] Auth→Gateway→Agent 的开发 API 验收记录包含登录、me、refresh、refresh 重放、伪造身份拒绝、logout 和撤销 token；秘密值不进入本文。
-- [x] 最新开发栈记录显示既有数据库的 42 项 upgrade migration 及 schema check 已执行并重复通过；这不是 fresh DB 或生产回滚验收。
-- [x] `implementation-progress.md` 历史记录为 58/63；本次依据目标权限模型新增 1.4（现有码分类）和 2.6（基础操作退出权限码门控）两项未完成工作，因此当前任务清单为 58/65，另有原先未完成项 8.3、8.4、11.1、11.4、11.6。历史进度不代表本次设计调整已落到运行时代码。
+- [x] 权限目录147条中，26条基础动作已退出快照/角色授予，121条受限操作保留；Auth快照与消费者使用共享精确策略，所有操作仍核签名actor及适用的owner/关系/状态。
+- [x] 既有开发数据库的43项upgrade migration已按受管runner执行；重复运行按账本校验精确文件/check哈希后跳过已应用迁移。基线退役验收为目录147、有效121、停用26、基础角色授予0、迁移标记1；manifest共46项（3项fresh、43项upgrade）。这不是fresh DB或安全制品回滚验收。
+- [x] Auth、Memory、Agent、Interview及Gateway的5份Nacos配置已发布至 `BK-AGENT/DEFAULT_GROUP` 并逐份回读；Compose重建的受影响服务镜像已运行。Auth/Gateway healthy，Agent真实API路径通过。
+- [x] Auth→Gateway→Agent开发API流程14项断言通过；全仓23模块Maven测试1737项、失败0、错误0、跳过14。当前完成60/65，未完成8.3、8.4、11.1、11.4、11.6；其中8.3/8.4等待前端，11.6仍缺fresh和回滚演练。
 
 ### 上线前仍需逐域完成
 

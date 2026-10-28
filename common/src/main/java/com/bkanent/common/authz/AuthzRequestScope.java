@@ -58,8 +58,8 @@ public final class AuthzRequestScope {
 
     public static void requireOperation(String operation) {
         AuthzResponse response = requireCurrent();
-        AuthzContract.check(response.context().allowedOperations().contains(operation)
-                && response.snapshot().permissions().contains(operation), AuthzErrorCode.PERMISSION_DENIED);
+        AuthzContract.check(AuthzOperationPolicy.allows(operation, response.context().allowedOperations(),
+                response.snapshot().permissions()), AuthzErrorCode.PERMISSION_DENIED);
     }
 
     /** Admin scope is explicit business-wide; a missing broker mapping never turns into userId-as-brokerId. */

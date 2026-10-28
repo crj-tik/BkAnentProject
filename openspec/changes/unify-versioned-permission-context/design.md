@@ -30,7 +30,9 @@ Interviewer已完整审阅51个main Java、4资源、10测试及3迁移；82项�
 
 权限目录只登记默认不向所有有效登录用户开放、必须显式授予的受限能力；不按接口、CRUD、Graph节点或subAgent拆码。管理API可以调整受限操作的角色组合和用户授予，不能创建未落地工具的任意可执行码。所有关联有审计。管理员可使用全部已登记有效受限操作，但实际资源范围仍由领域决定。Memory self-only不例外，服务调用ACL也不因业务管理员扩大。
 
-受限操作码候选包括 `agent.governance.read/manage`、`agent.audit.read/manage`、受策略限制的 `agent.workflow.invoke.<domain>`、跨资源或高风险 MCP 能力、访谈报告发布/重评、Memory跨用户共享与治理、`auth.users.manage/roles.manage`。标准Agent对话、本人访谈读取/回答、本人Memory读写搜索若对所有有效登录用户开放，则只要求签名身份与owner/参与关系，不登记 `agent.chat.use`、`interview.read/respond`、`memory.read/write/search`。`interview.initiate`、报告生成、本人范围删除等是否受限由产品策略和副作用风险决定；仅受限时才登记码。
+逐项复核当前目录与调用点后，将26个普遍基础动作归入“签名身份+适用资源关系/状态检查”，不再作为权限授予：`agent.chat.use`、`agent.workflow.read`、`agent.workflow.artifact.read`、`listing.read/create/update.own`、`customer.read/create/update.own/follow.read.own/follow.write.own/favorite.read.own/favorite.write.own/match.own`、`compare.report.create/read.own`、`media.task.read.own`、`notification.message.read.own/mark-read.own`、`interview.initiate/read/respond/end`、`memory.read/write/search`。其余121个现有目录码均归为受限拦截点，保留精确码和显式授予。受限示例包括 `agent.governance.read/manage`、`agent.audit.read/manage`、受策略限制的 `agent.workflow.invoke.<domain>`、跨资源或敏感MCP能力、访谈协助/报告/资产发布与重评、Memory跨用户共享/删除/治理、Auth管理、签章、付费媒体生成及通知发送。新增业务码仍须记录限制理由、入口、owner关系和状态规则；`.own` 本身不决定是否免码。
+
+Auth签名 `AuthorizationContext.allowedOperations` 携带当前有效受限权限和固定的26个基础动作标识，供下游将签名请求路由到正确业务动作；`AuthorizationSnapshot.permissions` 只携带受限权限。基础动作标识不代表角色授予，消费端仍须取得有效上下文，并检查actor、资源owner/参与关系、状态和适用业务映射。角色授权表中对应关系在目录迁移中清除，目录行停用保留以便审计。
 
 替代方案：每SubAgent硬编码角色或沿当前前后缀规则更省迁移，但无法精确审计操作；通用策略引擎当前成本高于业务规则规模，因此不选。
 

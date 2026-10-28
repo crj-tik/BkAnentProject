@@ -6,7 +6,7 @@
 
 ### Requirement: Restricted operations use registered permissions and role-derived grants
 
-系统 SHALL 只为默认不向所有有效登录用户开放、必须显式授予的受限拦截点登记唯一权限码；普遍开放的基础操作不要求权限码，但 MUST 使用有效身份上下文，并在适用时验证资源owner/参与关系和业务状态。普通用户对受限操作的有效权限 SHALL 来自其有效角色的权限并集，用户与角色支持多对多关联及有效期。业务管理员 SHALL 不依赖角色取得全部当前登记的受限权限；受限拦截点引用不存在、停用或未授予权限 MUST 被拒绝。业务管理员全权限 MUST NOT 绕过资源范围、个人 Memory owner 规则、业务状态、参数校验、审批或幂等。授权管理操作 MUST 经过独立管理权限及审计，普通用户不得自行变更管理员身份或角色授权。
+系统 SHALL 只为默认不向所有有效登录用户开放、必须显式授予的受限拦截点登记唯一权限码；普遍开放的基础操作不要求权限码，但 MUST 使用有效身份上下文，并在适用时验证资源owner/参与关系和业务状态。`AuthorizationContext.allowedOperations` SHALL 携带当前有效受限权限与固定的基础动作标识以绑定已签名的业务动作；`AuthorizationSnapshot.permissions` SHALL 只包含受限权限，基础动作标识 MUST NOT 被解释为角色授予或权限快照成员。普通用户对受限操作的有效权限 SHALL 来自其有效角色的权限并集，用户与角色支持多对多关联及有效期。业务管理员 SHALL 不依赖角色取得全部当前登记的受限权限；受限拦截点引用不存在、停用或未授予权限 MUST 被拒绝。业务管理员全权限 MUST NOT 绕过资源范围、个人 Memory owner 规则、业务状态、参数校验、审批或幂等。授权管理操作 MUST 经过独立管理权限及审计，普通用户不得自行变更管理员身份或角色授权。
 
 #### Scenario: Universal baseline operation requires identity but no permission code
 - **WHEN** 已认证用户调用产品明确普遍开放的基础操作，且请求上下文有效

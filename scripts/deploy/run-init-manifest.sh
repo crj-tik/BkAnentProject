@@ -65,6 +65,13 @@ while IFS=$'\t' read -r order phase version db file checksum check check_checksu
     previous="$(printf "SELECT CONCAT(file_sha256, ':', check_sha256) FROM %s.bk_schema_migration WHERE migration_id='%s';\n" "$db" "$version" | mysql_sql)"
     [ -z "$previous" ] || [ "$previous" = "$checksum:$check_checksum" ] || { printf 'Applied migration checksum changed: %s\n' "$version" >&2; exit 65; }
   fi
+  # A later migration may deliberately supersede an earlier migration's postcondition.
+  # Once the exact files are recorded, do not replay them or re-check that historical state.
+  if [ -n "${previous:-}" ]; then
+    printf 'Verified previously applied %s\n' "$version"
+    unset previous
+    continue
+  fi
   # Fresh-only files never replay historical platform seed rows on an existing volume.
   if [ "$phase" = upgrade ] || [ -z "${previous:-}" ]; then
     # rag_control creates its own new database; all other targets must already exist.

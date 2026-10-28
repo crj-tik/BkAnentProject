@@ -13,15 +13,18 @@ class EffectivePermissionServiceTest {
     private final EffectivePermissionService service = new EffectivePermissionService();
     private final List<AuthorizationFacts.Permission> catalog = List.of(
             new AuthorizationFacts.Permission("listing.read", "listing", "read", true, 1),
+            new AuthorizationFacts.Permission("listing.read.all", "listing", "read.all", true, 4),
             new AuthorizationFacts.Permission("auth.users.manage", "auth", "users.manage", true, 2),
             new AuthorizationFacts.Permission("disabled.read", "disabled", "read", false, 3));
 
     @Test
     void activeMultiRoleUnionIsExactSortedAndDeduplicated() {
         var result = calculate(user(false), List.of(grant(1, true, false, true, null, now.plusSeconds(90),
-                Set.of("listing.read", "invented.read")), grant(2, true, false, true, null, null,
-                Set.of("listing.read", "auth.users.manage", "disabled.read"))));
-        assertEquals(List.of("auth.users.manage", "listing.read"), result.permissions());
+                Set.of("listing.read", "listing.read.all", "invented.read")), grant(2, true, false, true, null, null,
+                Set.of("listing.read", "listing.read.all", "auth.users.manage", "disabled.read"))));
+        assertEquals(List.of("auth.users.manage", "listing.read.all"), result.permissions());
+        assertFalse(result.hasPermission("listing.read", now));
+        assertTrue(result.hasPermission("listing.read.all", now));
         assertEquals(now.plusSeconds(90), result.grantDeadline());
         assertThrows(UnsupportedOperationException.class, () -> result.permissions().add("new.read"));
     }
@@ -55,7 +58,8 @@ class EffectivePermissionServiceTest {
                 false, true, null, null, Set.of("listing.read", "invented.manage"))));
         assertFalse(result.businessAdmin());
         assertFalse(result.hasPermission("auth.users.manage", now));
-        assertEquals(List.of("listing.read"), result.permissions());
+        assertTrue(result.permissions().isEmpty());
+        assertFalse(result.hasPermission("listing.read", now));
     }
 
     @Test
@@ -72,20 +76,20 @@ class EffectivePermissionServiceTest {
     @Test
     void deadlineFailsClosedAtBoundaryAndFutureStartIsAChangePoint() {
         var result = calculate(user(false), List.of(grant(1, true, false, true, now, now.plusSeconds(30),
-                Set.of("listing.read")), grant(2, true, false, true, now.plusSeconds(10), null,
+                Set.of("listing.read.all")), grant(2, true, false, true, now.plusSeconds(10), null,
                 Set.of("auth.users.manage"))));
         assertEquals(now.plusSeconds(10), result.grantDeadline());
-        assertTrue(result.hasPermission("listing.read", now.plusSeconds(9)));
-        assertFalse(result.hasPermission("listing.read", now.plusSeconds(10)));
+        assertTrue(result.hasPermission("listing.read.all", now.plusSeconds(9)));
+        assertFalse(result.hasPermission("listing.read.all", now.plusSeconds(10)));
         assertFalse(result.hasPermission("auth.users.manage", now));
     }
 
     @Test
     void rebuildSameVersionBeforeChangePointHasStableContent() {
         var facts = new AuthorizationFacts(user(false), catalog,
-                List.of(grant(1, true, false, true, null, now.plusSeconds(90), Set.of("listing.read"))));
+                List.of(grant(1, true, false, true, null, now.plusSeconds(90), Set.of("listing.read.all"))));
         assertEquals(service.calculate(facts, now), service.calculate(facts, now.plusSeconds(10)));
-        assertEquals(3, service.calculate(facts, now).catalogVersion());
+        assertEquals(4, service.calculate(facts, now).catalogVersion());
     }
 
     private EffectivePermissionService.Snapshot calculate(AuthorizationFacts.User user,

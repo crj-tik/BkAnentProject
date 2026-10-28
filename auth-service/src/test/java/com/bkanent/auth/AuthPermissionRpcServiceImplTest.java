@@ -7,8 +7,11 @@ import com.bkanent.auth.service.AuthTokenService;
 import com.bkanent.auth.service.InMemoryTokenRevocationStore;
 import com.bkanent.auth.service.UserAccountService;
 import com.bkanent.auth.service.UserManagementService;
+import com.bkanent.auth.authorization.EffectivePermissionService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -103,5 +106,18 @@ class AuthPermissionRpcServiceImplTest {
         activeAccount.setAccountStatus("DISABLED");
         assertFalse(permissionService.hasPermission(7L, "listing.read"));
         assertFalse(permissionService.hasPermission(404L, "listing.read"));
+    }
+
+    @Test
+    void versionedBaselineActionsNeedAnActiveAuthSnapshotButNoPermissionGrant() {
+        when(userManagementService.isVersionedAuthorization()).thenReturn(true);
+        when(userManagementService.authorization(7L)).thenReturn(new EffectivePermissionService.Snapshot(
+                7, 4, 2, "ACTIVE", false, 1, List.of(), null));
+        assertTrue(permissionService.hasPermission(7L, "listing.read"));
+        assertFalse(permissionService.hasPermission(7L, "listing.delete.all"));
+
+        when(userManagementService.authorization(7L)).thenReturn(new EffectivePermissionService.Snapshot(
+                7, 4, 2, "DISABLED", false, 1, List.of(), null));
+        assertFalse(permissionService.hasPermission(7L, "listing.read"));
     }
 }

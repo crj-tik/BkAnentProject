@@ -6,6 +6,7 @@ import com.bkanent.common.authz.AuthzRequestScope;
 import com.bkanent.common.mcp.authz.McpAuthorizationScope;
 import com.bkanent.common.authz.AuthorizationContext;
 import com.bkanent.common.authz.AuthzFreshness;
+import com.bkanent.common.authz.AuthzOperationPolicy;
 import com.bkanent.common.authz.AuthzResponse;
 
 import java.time.Instant;
@@ -183,7 +184,9 @@ public final class VerifiedDomainAuthorization {
             return false;
         }
         if (AuthzRequestScope.present()) {
-            return AuthzRequestScope.requireCurrent().snapshot().permissions().contains(operation);
+            var response = AuthzRequestScope.requireCurrent();
+            return AuthzOperationPolicy.allows(operation, response.context().allowedOperations(),
+                    response.snapshot().permissions());
         }
         return true;
     }

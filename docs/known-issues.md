@@ -1622,6 +1622,26 @@
 
 **关联**：LR-153；`AuthAuthorizationRpcServiceImpl`、`RequestBinding`、`AuthzContractTest`、`AuthzSerializationTest`；change `unify-versioned-permission-context`任务4.2/11.5。
 
+## KI-212 [FIXED·本地配置·P2] Nacos配置列表引用仓库不存在且发布器不允许的数据ID
+
+**发现日期与依据**：2026-10-28，按用户要求同步Nacos配置时检查根目录 `.env`，`NACOS_CONFIG_DATA_IDS` 包含 `knowledge-service.yaml`；仓库 `nacos/` 没有该模板，`scripts/deploy/publish-nacos.py` 也没有将其列入受控发布白名单。发布器会在首次写入前校验全部ID，因此该项会使整批 `config-init` 拒绝运行。
+
+**修复**：仅从本地忽略文件 `.env` 的发布列表移除 `knowledge-service.yaml`；保留其他数据ID。没有创建未知内容模板，也没有扩大Nacos发布白名单。
+
+**验证与边界**：Compose配置渲染通过；2026-10-28从修正后的本地发布清单发布 `auth-service.yaml`、`memory-service.yaml`、`agent-service.yaml`、`interview-service.yaml`、`gateway.yaml`，均在 `BK-AGENT/DEFAULT_GROUP` 逐份回读匹配。Knowledge Service若需要发布配置，应在其配置来源及模板纳入仓库后另行登记。
+
+**关联**：LR-152/155；`docker-compose.yml`、`nacos/`、`scripts/deploy/publish-nacos.py`；change `unify-versioned-permission-context`。
+
+## KI-213 [FIXED·本提交·P1] 重复执行迁移会重放被后续迁移取代的历史校验
+
+**发现日期与依据**：2026-10-28，在开发库首次执行 `baseline-permission-retirement-20261028-v1` 成功后，第二次调用受管 upgrade runner 时，runner重放了已登记的 `compare-media-auth-20261026-v1` 并校验其历史schema状态；该状态已由末尾的基线权限退役迁移有意改变，因此重复流程在到达新迁移之前失败。首轮升级已提交，Auth/Gateway/Agent等应用在发现后立即用新镜像恢复。
+
+**修复**：runner先校验账本内migration文件和schema check的精确SHA-256；匹配且已登记的迁移输出 `Verified previously applied` 后跳过SQL重放及历史状态检查。未登记迁移仍执行SQL、运行当前schema check并在成功后写账本；校验不一致仍拒绝执行。静态回归保护“先核哈希、后跳过、跳过必须早于重放”。
+
+**验证与边界**：46项manifest目标和规范哈希、Bash语法及静态迁移检查通过。开发库upgrade首轮成功，第二轮在修复前按历史schema检查失败；修复runner后完整重复upgrade通过，43项已应用upgrade迁移均按校验账本跳过，新基线目录结果为总计147、有效121、停用26、基础角色授予0、退役标记1。此重复验证不代表fresh数据库或制品回滚已完成。
+
+**关联**：LR-156；`scripts/deploy/run-init-manifest.sh`、`scripts/deploy/test_init_manifest.py`、`20261028_baseline_permission_retirement.sql`；change `unify-versioned-permission-context`任务2.6/11.6。
+
 ---
 
-**变更历史**：本提交补齐鉴权迁移交付清单与安全回滚边界（KI-208），并修复RAG配置绑定问题（KI-207）、完成全仓Maven回归和Interview凭据边界记录（KI-202/203），持久化A2A请求防重放与任务归属（KI-172）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
+**变更历史**：本提交收敛基础操作权限码、同步开发MySQL/Nacos/Compose并修复迁移runner的重复执行（KI-213）、完成权限状态清单（KI-208）和Nacos配置列表修复（KI-212），并修复RAG配置绑定问题（KI-207）、完成全仓Maven回归和Interview凭据边界记录（KI-202/203），持久化A2A请求防重放与任务归属（KI-172）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
