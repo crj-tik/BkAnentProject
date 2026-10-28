@@ -53,6 +53,8 @@ Studio 保留自己的工作区事务、候选版本、幂等回执和 `listing.
 使用当前 Auth 版本化签名上下文与新鲜度证明。Agent A2A 能力必须在稳定 `CapabilityId` 配置中精确映射；建议将 `a2a:listing-agent` 映射到已有 `listing.read`，不得用 `agent.chat.use` 或 Agent Card domain 推导授权。每次比较创建另行要求 `compare.report.create`，报告本人读取要求 `compare.report.read.own`，每套来源读取按 `listing.read`/`listing.read.all` 复核；这些代码已存在于 Auth 权限目录，但迁移不推定角色已获授，也不自动扩大角色权限。来源读取仍校验 owner、broker映射、资源状态和版本，权限码不能替代资源归属检查。A2A 使用已绑定的 Auth context/freshness 并为请求正文生成逐请求证明，由接收端本地验证；不在每个工具调用中远程请求 Auth。缺少权限、证明或接线时失败关闭。
 
 
+Supervisor 的找房对比技能必须显式选择 `listing-agent` 当前发布的 `listing-comparison` 能力，并通过活动目录与调用记录确认实际目标。迁移后不得再经旧 compare MCP 或无凭据 RPC 绕行；新能力缺失时明确停止。房源比较保持只读，不加入写操作审批清单。
+
 ### 6. 配置项跨文件同步
 
 配置变更以逐键矩阵驱动，记录配置所有者、Spring/Nacos 属性名、环境变量名、当前值/默认值、目标值、涉及文件、阶段、敏感性和退役门槛。矩阵覆盖本地 `.env`、跟踪模板 `.env.example`、服务配置模板、Nacos YAML 与 `docker-compose.yml`；新增 Listing 来源适配和 `listing-agent` Auth 映射必须在各适用层一致，Compose 必须把需要的环境变量实际传入容器。外部接口地址与凭据只经受管配置/秘密注入，不写入仓库。

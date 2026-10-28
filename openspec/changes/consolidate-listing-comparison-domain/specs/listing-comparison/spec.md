@@ -6,6 +6,18 @@
 
 ## ADDED Requirements
 
+### Requirement: Supervisor 通过房源域执行对比
+
+Supervisor 的显式找房对比技能 SHALL 通过 `listing-agent` 当前发布的比较技能执行，并通过活动能力目录验证实际调用目标。新调用 MUST NOT 使用旧 compare MCP 能力或无凭据 RPC；能力缺失时明确停止，不得回退。对比是只读能力，不加入写操作审批清单。
+
+#### Scenario: 显式技能通过房源 Agent 比较
+- **WHEN** 用户选择找房对比技能且已取得获准房源
+- **THEN** Supervisor 通过 `listing-agent` 已发布的比较技能完成调用，记录实际能力 ID 和返回的来源版本，不调用旧 compare MCP/RPC
+
+#### Scenario: 房源比较技能暂不可用
+- **WHEN** 动态目录中没有可用的 `listing-agent` 比较能力
+- **THEN** Supervisor 明确报告比较能力不可用并停止，不回退到旧 compare MCP、旧 RPC 或无凭据路径
+
 ### Requirement: 对比属于房源域内的获准能力
 
 系统 SHALL 通过 `listing-agent` 的 `listing-comparison` 技能提供对比能力，接受 2 至 6 套不同的稳定 `listingRef={sourceSystem,sourceId}` 及预期来源版本，使用同次获准来源快照计算事实指标。创建对比 MUST 要求当前用户具有 `compare.report.create`，并对每套来源分别满足适用的 `listing.read` 或 `listing.read.all`。结果 MUST 绑定每套房源的来源引用、revision/contentHash、数据模式和计算规则版本。新请求 MUST 不依赖独立 compare Agent 或 Long ID-only 比较契约；迁移期旧 Long ID 入口只可解析为 `legacy-local`。
@@ -60,6 +72,14 @@
 #### Scenario: 旧报告曾被显式发布为公开分享
 - **WHEN** 请求者仅持有一份 `publicShare=true` 的旧报告分享码，且没有当前可验证的读取权
 - **THEN** 系统按退役或私有报告处理，不因旧公开标记返回报告正文、下载地址或 PDF 字节；原文件只保留给受控迁移核对
+
+#### Scenario: 合并后保留获准接收人的分享和 PDF 结果
+- **WHEN** 报告所有者通过有效分享流程将报告交给当前仍获准读取全部来源房源的接收人
+- **THEN** 接收人仍可读取相应报告并导出 PDF，系统记录分享范围和报告来源版本
+
+#### Scenario: 分享后接收人失去来源读取权
+- **WHEN** 接收人持有分享链接但已失去报告所涉房源的当前读取权
+- **THEN** 系统拒绝报告正文和 PDF 字节，分享链接本身不得绕过撤权
 
 ### Requirement: 合并保留原执行和私有记忆身份
 

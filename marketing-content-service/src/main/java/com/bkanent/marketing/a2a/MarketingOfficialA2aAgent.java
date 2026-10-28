@@ -42,7 +42,7 @@ public class MarketingOfficialA2aAgent {
         this.executionTools = List.copyOf(tools);
         this.reactAgent = ReactAgent.builder()
                 .name("marketing-agent")
-                .description("Responsible for marketing copy generation, content creation, publish preparation and execution with LLM-driven creativity")
+                .description("Responsible for marketing copy generation, draft creation and authenticated campaign preparation")
                 .model(chatModel)
                 .systemPrompt(properties.getSystemPrompt())
                 .tools(tools)

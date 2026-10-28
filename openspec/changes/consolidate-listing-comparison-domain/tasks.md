@@ -28,12 +28,20 @@
 - [ ] 3.2 复用 `listing-master-service/listing/listing-agent` 的既有必需 Memory Hook 与 trusted-caller 登记，不新增 Listing 比较 Agent/身份；用装配测试验证读取、来源复核、成功归档，以及 Memory 不可用/未授权时模型、来源和报告工具均未执行。旧 Compare Memory 仅按原身份留作受控历史读取。
 - [ ] 3.3 更新 common 稳定来源比较契约、Supervisor 工具/技能配置、Listing ingress Auth 配置和旧 HTTP 兼容入口；Studio 保留工作区工件与回执，改用稳定来源版本和房源域确定性比较逻辑。用契约测试验证当前授权、预期版本和拒绝语义。
 - [ ] 3.4 按配置矩阵同步本地 `.env`、`.env.example`、服务配置模板、Nacos 与 `docker-compose.yml`：新增 Listing 来源 provider/HTTP 配置、`listing.authorization` 开关和公钥注入、Agent capability mapping 与 Memory 可选上下文显式默认；删除或迁移不再使用的 Compare endpoint、服务参数及专属 Memory 参数。保留本地秘密、不提交 `.env`；Compare Auth/Memory 身份仅在排空门禁后移除。
+- [ ] 3.5 更新房源所有的 Supervisor 找房对比技能，使其从显式技能快照调用 `listing-agent` 已发布的比较技能并移除旧 compare MCP 映射；以动态目录和技能装配验收缺失时停止、不绕行旧 MCP/RPC，且不把只读能力加入审批清单。
 
-- [ ] 3.5 编制 REST/MCP/A2A/RPC 入口、调用方/Card/Memory 身份、Auth 权限映射、配置项、Compose 服务/卷的迁移清单；用报告卷及在途任务夹具验证文件、原 taskId、历史记忆和授权范围保留，真实运行清单由合并后门禁现场核对。
-- [ ] 3.6 停止旧 compare 能力接收新委托并完成原身份对账；旧 `/compare/**` 仅保留当前授权的 legacy-local 兼容，匿名公开分享不再可读。仅在消费者和历史读取不再依赖时退役旧 Nacos、Compose、环境变量和 Auth/Memory 信任项；保留报告卷定义并迁挂到 Listing。共享 Nacos 发布及实际停旧交协调执行。
+- [ ] 3.6 编制 REST/MCP/A2A/RPC 入口、调用方/Card/Memory 身份、Auth 权限映射、配置项、Compose 服务/卷的迁移清单；用报告卷及在途任务夹具验证文件、原 taskId、历史记忆和授权范围保留，真实运行清单由合并后门禁现场核对。
+- [ ] 3.7 停止旧 compare 能力接收新委托并完成原身份对账；旧 `/compare/**` 仅保留当前授权的 legacy-local 兼容，匿名公开分享不再可读。仅在消费者和历史读取不再依赖时退役旧 Nacos、Compose、环境变量和 Auth/Memory 信任项；保留报告卷定义并迁挂到 Listing。共享 Nacos 发布及实际停旧交协调执行。
 ## 4. 验收与交付
 
 - [ ] 4.1 在仅有共同基线及本 change 的worktree中运行房源/比较和必要调用方聚焦测试/编译，记录模块与独立Maven仓库，验证无需其它change的新类型或制品。
-- [ ] 4.2 用模拟接口执行查询、对比、报告、PDF及来源失效闭环，验证每个输出保留模拟标记，重试不重复建报告，旧未知调用不被替代重发。
+- [ ] 4.2 用模拟接口执行查询、对比、报告、PDF及来源失效闭环，并经 Supervisor 活动能力目录和显式技能完成一次 A2A fixture 调用；验证输出保留模拟标记、无旧 MCP/RPC 绕行、重试不重复建报告，旧未知调用不被替代重发。
 - [ ] 4.3 在自身隔离库/夹具验证 SQL/check、报告文件保留和回退；逐键核对环境变量、Nacos 占位符、Compose 传递、默认值和敏感项，检查 Compare 残留引用及历史信任/报告卷保留。交付迁移版本、配置矩阵与切流手册；不发布共享 Nacos、不执行容器操作或真实上游联机。
 - [ ] 4.4 同步本域 LR 与独立验收证据；保持 KI-115 的 FIXED 状态并更新迁移后的代码/验证引用，除非新回归证据证明该缺陷复发。运行 OpenSpec 严格校验和 diff 检查后中文 commit 并 push 本会话工作分支，提交中不包含 `.env` 或秘密，交付 head SHA/共享文件差异/未联机项，不推 dev-fix 或代合并其它会话。
+
+## 5. 原有功能完整性与退役门槛
+
+- [ ] 5.1 建立房源与比较源功能矩阵，逐项记录房源 CRUD/搜索/摘要/状态/资产/OCR/核验/RAG，以及比较/历史/分享/PDF、HTTP/RPC/MCP/A2A/Supervisor 入口的目标能力、调用方和验收证据；存在未映射项时不得登记为合并完成。
+- [ ] 5.2 盘点所有已知比较 REST、RPC、MCP、A2A/技能和 Supervisor 调用方并迁移到房源域目标入口；以调用方清单、动态目录和调用记录验证没有遗漏或旧路径绕行。
+- [ ] 5.3 回归验证房源管理与 RAG 原有业务结果、比较历史、授权分享和 PDF 导出；覆盖本地维护与上游事实边界、接收人撤权和裸分享码拒绝。
+- [ ] 5.4 在矩阵全部有目标入口、调用迁移记录及可重复证据后，才启用停止旧接收和 compare 部署退役；真实上游写入/联机未提供时单独标为未验证，不以模拟结果替代。

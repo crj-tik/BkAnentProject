@@ -6,7 +6,7 @@ import com.bkanent.common.rag.RagException;
 import com.bkanent.common.rpc.AuthPermissionRpcService;
 import com.bkanent.common.rpc.ListingMasterRpcService;
 import com.bkanent.common.rpc.MediaWorkerRpcService;
-import com.bkanent.common.rpc.PromotionRpcService;
+import com.bkanent.marketing.campaign.CampaignLifecycleService;
 import com.bkanent.marketing.MarketingContentServiceApplication;
 import com.bkanent.marketing.config.MarketingAgentProperties;
 import com.bkanent.marketing.mcp.MarketingMcpTools;
@@ -43,12 +43,10 @@ class MarketingRpcReferenceConfigurationTest {
     void distributedPackageScanWiresBothConfigurationsAndAuthenticatedListingConsumer() {
         var listing = mock(ListingMasterRpcService.class);
         var media = mock(MediaWorkerRpcService.class);
-        var promotion = mock(PromotionRpcService.class);
         var auth = mock(AuthPermissionRpcService.class);
         Map<Class<?>, Object> references = Map.of(
                 ListingMasterRpcService.class, listing,
                 MediaWorkerRpcService.class, media,
-                PromotionRpcService.class, promotion,
                 AuthPermissionRpcService.class, auth);
 
         try (var context = new AnnotationConfigApplicationContext()) {
@@ -58,6 +56,8 @@ class MarketingRpcReferenceConfigurationTest {
                     "no-credentials", Map.of("marketing.listing-read.signing-secret", "")));
             context.registerBean(MarketingAssetService.class, () -> mock(MarketingAssetService.class));
             context.registerBean(MarketingAgentProperties.class, MarketingAgentProperties::new);
+            context.registerBean(CampaignLifecycleService.class, () -> mock(CampaignLifecycleService.class));
+            context.registerBean(com.fasterxml.jackson.databind.ObjectMapper.class, () -> new com.fasterxml.jackson.databind.ObjectMapper());
             // Replace only reference injection, not production configuration or its @Bean methods.
             // Do not enable Dubbo, Boot auto-configuration, Nacos, or any real transport.
             context.getBeanFactory().addBeanPostProcessor(new BeanPostProcessor() {
@@ -87,9 +87,8 @@ class MarketingRpcReferenceConfigurationTest {
                     .containsOnlyKeys("listingMasterRpcServiceBridge");
             assertThat(context.getBean(ListingMasterRpcService.class)).isSameAs(listing);
             assertThat(context.getBean(MediaWorkerRpcService.class)).isSameAs(media);
-            assertThat(context.getBean(PromotionRpcService.class)).isSameAs(promotion);
             for (String bridge : Set.of("listingMasterRpcServiceBridge", "mediaWorkerRpcServiceBridge",
-                    "promotionRpcServiceBridge")) {
+                    "authPermissionRpcServiceBridge")) {
                 assertThat(context.getBeanFactory().getBeanDefinition(bridge).isPrimary()).isTrue();
             }
 
@@ -101,13 +100,13 @@ class MarketingRpcReferenceConfigurationTest {
                     .isSameAs(client);
             var mcp = context.getBean(MarketingMcpTools.class);
             assertThat(ReflectionTestUtils.getField(mcp, "mediaWorkerRpcService")).isSameAs(media);
-            assertThat(ReflectionTestUtils.getField(mcp, "promotionRpcService")).isSameAs(promotion);
+            assertThat(ReflectionTestUtils.getField(mcp, "campaignLifecycleService")).isNotNull();
 
             RequestContextHolder.resetRequestAttributes();
             assertThat(A2aCredentialContext.snapshot()).isNull();
             assertThatThrownBy(() -> client.get(7L)).isInstanceOfSatisfying(RagException.class,
                     failure -> assertThat(failure.code()).isEqualTo(RagErrorCode.AUTHENTICATION_FAILED));
-            verifyNoInteractions(listing, media, promotion, auth);
+            verifyNoInteractions(listing, media, auth);
         }
     }
 
@@ -122,7 +121,7 @@ class MarketingRpcReferenceConfigurationTest {
             assertThat(context.getBeansOfType(MarketingRpcReferenceConfiguration.class)).isEmpty();
             assertThat(context.getBeansOfType(ListingMasterRpcService.class)).isEmpty();
             assertThat(context.getBeansOfType(MediaWorkerRpcService.class)).isEmpty();
-            assertThat(context.getBeansOfType(PromotionRpcService.class)).isEmpty();
+            assertThat(context.getBeansOfType(AuthPermissionRpcService.class)).isEmpty();
         }
     }
 

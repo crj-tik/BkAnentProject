@@ -56,7 +56,7 @@ import com.bkanent.common.agent.PermissionErrorCodes;
 import com.bkanent.common.model.ApiResponse;
 import com.bkanent.common.model.CompareReportDTO;
 import com.bkanent.common.model.HealthStatusDTO;
-import com.bkanent.common.model.MarketingContentDTO;
+import com.bkanent.common.marketing.campaign.MarketingContentDraftResponse;
 import com.bkanent.common.model.PublishRequest;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -213,12 +213,10 @@ public class AgentController {
         this.supervisorSessionOwnershipService = supervisorSessionOwnershipService;
     }
 
-    /**
-     * 发布preview。
-     */
-    @PostMapping("/publish-preview")
-    public ApiResponse<List<MarketingContentDTO>> publishPreview(@RequestBody PublishRequest request) {
-        return ApiResponse.ok(agentCapabilityService.publishListingByPrompt(request.prompt()));
+    /** Creates persisted marketing drafts; actual publication is handled by the campaign Supervisor flow. */
+    @PostMapping({"/marketing/drafts", "/publish-preview"})
+    public ApiResponse<List<MarketingContentDraftResponse>> createMarketingDraft(@RequestBody PublishRequest request) {
+        return ApiResponse.ok(agentCapabilityService.createMarketingDraft(request));
     }
 
     /**

@@ -32,7 +32,7 @@
 
 ### 3. 单案例运营生命周期与证据质量分开
 
-首期实体包括 KnowledgeCase、Playbook、不可变 KnowledgeRevision、SourceRef、ReviewDecision、OperationReceipt。版本状态为 `DRAFT / REVIEW_PENDING / PUBLISHED / WITHDRAWN`；编辑创建新 revision，提交/审核/撤回使用 expectedVersion、当前操作权限和稳定 requestId，正文、决定与回执同事务。审核要求当前审核权限和明确决定，是否要求编辑与审核由不同人员完成交给受管审核策略；提交者、最后编辑者与审核者均写入审计，不能由模型自行发布。
+首期实体包括 KnowledgeCase、Playbook、不可变 KnowledgeRevision、SourceRef、ReviewDecision、OperationReceipt。版本状态为 `DRAFT / REVIEW_PENDING / PUBLISHED / WITHDRAWN`；编辑创建新 revision，提交/审核/撤回使用 expectedVersion、当前操作权限和稳定 requestId，正文、决定与回执同事务。审核要求当前审核权限、明确决定且审核人与提交者不同；更严格的组织审核策略可继续增加条件，但不能允许自审。提交者、最后编辑者与审核者均写入审计，不能由模型自行发布。
 
 候选至少包含经营问题、情境、前提、行动、来源所述结果、适用边界及未核实项；原声片段由服务器在对应 snapshot 内逐字核验。L2/L3 仅为来源入库质量门，业务结果标记为 `REPORTED / EVIDENCED / UNVERIFIED` 等独立证据状态。多个案例重复出现可形成有来源的候选归纳，样本量不能直接提升为“已验证有效”。
 
@@ -58,6 +58,12 @@
 
 工作区、分支、Maven仓库和数据库按总览独立。新增知识 SQL/check 和唯一版本在自己的隔离库验收；当前初始化 runner 有固定数据库 allowlist，交付新增 bk_knowledge 所需的 manifest/allowlist 差异，由协调合并且不修改已应用 hash。本 change 可以独立完成，不以该共享环境变更已执行为完成条件。
 
+### 7. Supervisor 发布与撤回能力单独暴露
+
+知识专属 Supervisor 技能（agent-service/src/main/resources/skills/supervisor/real-estate-knowledge.md）使用动态目录发现知识 Agent 的提炼、查询和审核准备能力；知识内容的 author/review/publish 状态仍由 knowledge-service 持有。实际发布与撤回分别暴露为可独立审批的能力，例如 MCP 的 publishKnowledgeRevision 与 withdrawKnowledgeRevision，入参绑定不可变 revision、当前范围和 expectedVersion。A2A Agent 不得把发布/撤回藏在一个提炼或审核任务内。内容业务审核是发布前置条件，Supervisor 的能力审批是单次工具调用门禁，两者不能相互替代。
+
+各独立分支只维护自己的 Supervisor 技能文件，并在本地验收 profile 登记实际目录 capabilityId；交付发布/撤回 capabilityId 配置差异，不直接覆盖共享 agent.supervisor.orchestration.approval-capabilities。合并后由协调会话把各域的写能力 ID 并入共享集合。知识域独立验收要经过真实 Supervisor 技能装配和本地工具目录 fixture；真实 Auth/Memory 登记及服务间生产联通仍单独核验。
+
 ## Risks / Trade-offs
 
 - [撤回后旧副本继续被引用] → 依赖记录、输出前复核及失效投影共同约束；保留操作事实但停止正文使用。
@@ -74,3 +80,16 @@
 3. 先发布知识只读契约，再登记新 Agent/技能和精确 Memory 身份；检验 Memory 不可用时模型和业务工具均零执行。
 4. 在模拟材料上验收发布、引用和撤回闭环；之后由独立的门店复盘 change 消费公开契约。
 5. 回退停止知识新动作并取消能力发现，保留新 schema、版本及回执；逐字稿与原访谈运行能力继续由原服务承担，不回写/重建旧报告。
+
+## 功能覆盖矩阵与完成门槛
+
+本 change 的目标是让知识运营拥有完整的新业务生命周期，同时保留访谈域作为会话和逐字稿权威。占位表迁出或新建服务本身不等于能力完整。
+
+| 源能力/运行面 | 目标归属 | 完成证据 |
+| --- | --- | --- |
+| 访谈开案、提问、确认、启动、话轮 SSE、监控、回复/流式交互及导演命令 | 原 `interview-service` REST/MCP 运行面 | 合并前后接口和会话状态机契约回归通过；知识域不得接管或中断这些能力 |
+| 逐字稿提交、检索、评级，报告任务生成/查询/搜索 | 原 `interview-service` | 已有调用方仍能执行，知识域只通过获准的窄读取适配引用精确来源版本 |
+| 知识案例、打法卡及共性报告/候选 | 新 `knowledge-service` | 逐项映射原数据/占位记录，提供完整创建或生成、编辑、非提交者审核、发布、版本检索及撤回能力 |
+| 知识运营 API、A2A/技能、MCP、Supervisor 及未来领域消费 | 新知识域公开契约和治理能力 | 已知调用方迁移清单完整；发布、撤回分别受审批；HTTP v1 可独立验证来源/版本/权限 |
+
+知识功能矩阵零未映射项、原有数据与来源引用可对账、访谈运行面回归通过且知识生命周期端到端可验收后，才能宣称抽取完成。访谈能力保留不代表知识运营仍归访谈域实现。

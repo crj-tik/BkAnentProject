@@ -1042,6 +1042,54 @@
 
 **关联**：LR-22/23/53/59/94/96/97/99/100/101/102；现有KI状态不因并行规划而改变。
 
+## LR-130 发布计划必须绑定不可变内容和目标快照
+
+**结论**：prepare 将内容 revision/hash、房源快照、素材 hash、目标账号 revision、平台参数 hash 和规则版本固化到计划快照；confirm 要求 expectedPlanVersion/hash 匹配，并重新检查内容审核、素材、房源和账号当前版本。计划过期后必须重新 prepare。
+
+**根因**：用户确认的是某一具体内容、素材和发布范围。确认后任一输入变化都不能沿用旧批准，否则回执与用户看到的计划不一致。
+
+## LR-131 发布身份和渠道账号授权由受信服务与登记记录决定
+
+**结论**：当前 campaign 兼容路径从 Auth 解析 actor 并逐动作调用 `AuthPermissionRpcService`；计划只能引用营销库内已登记且 active、平台匹配、模式匹配的账号 grant。调用方不能凭请求里的账号名称授予自己发布权。Auth RPC 缺失或失败时拒绝 campaign 操作。该兼容调用不是 Auth 版本化签名上下文或受限委托的证明；营销内容 CRUD、MCP 和旧 Dubbo 资源授权尚未完成，必须由 `unify-versioned-permission-context` task 10.3 准入后方可声称全域授权完成。
+
+**根因**：账号名和客户端请求字段不构成授权证据；营销域也不能在 Auth 未登记新权限时自行放行。
+
+## LR-132 外部发布走持久 outbox，未知结果只按原 attempt 核对
+
+**结论**：本地事务只生成 ACCEPTED 回执、稳定每目标 attempt 和 outbox；dispatcher 在事务外调 provider，并以 attemptVersion 和 leaseToken 条件回写。租约过期将原 attempt 置为 OUTCOME_UNKNOWN，进入同 attempt 核对，不自动创建第二个发布。
+
+**根因**：数据库事务不能撤销平台已接受的发布；超时或进程中断后重新发送可能造成重复发布，迟到响应也不能覆盖较新的核对结果。
+
+## LR-133 效果观察按来源事件与版本幂等保存
+
+**结论**：每条效果记录包含来源系统、来源事件 ID/version、窗口、采集时刻、来源模式和 payload hash；同版本重放不重复计数，更高版本修订当前观察并追加 revision，较低版本不能回滚新值。缺来源的结果保持 UNKNOWN。
+
+**根因**：渠道可能重复投递或迟到修正；仅按发布记录或日期累计会重复计算，缺字段也不能用样例补齐为真实值。
+
+## LR-134 真实 ROI 需要同币种归属收入、成本和定义版本
+
+**结论**：真实效果报告只有在记录具备可归属收入、成本、相同币种和相同 ROI 定义版本时才计算 ROI；缺收入时可报告已知线索成本，ROI 保持 null。模拟 fixture 不生成收入。
+
+**根因**：线索数不是收入，跨币种或跨口径相加也不是可解释的投资回报；估算值如果进入 REAL 字段会误导经营结论。
+
+## LR-135 内容创建默认草稿，审核和发布状态拥有明确写入口
+
+**结论**：内容创建/变体写入强制 DRAFT；所有文案生成入口只能生成/保存草稿并准备计划，不能确认发布或发送通知。审核状态仅可由同域审核入口写入；该入口必须通过兼容审核授权，并在 Auth v2 准入后核验 `marketing.content.review.own/all` 精确操作和内容 owner；Supervisor 的营销发布技能可调用 campaign confirm，但该 capability 必须经过 `approval-capabilities` 审批；发布状态由 campaign provider 回执维护。旧内容 publish-status HTTP/RPC 写入返回 `LEGACY_WRITE_DISABLED`。
+
+**根因**：内容正文的作者提交不等于审核通过，旧跨域回写也不能继续成为第二个发布状态真源。
+
+## LR-136 旧业务 ID 必须带来源和实体命名空间
+
+**结论**：旧 ID 通过 `(source_system, entity_type, legacy_id)` 映射到新营销目标身份；目标唯一性按实体类型和目标表约束。新 schema 可重复升级，但不直接合并两个库的自增值，也不在本 change 改写已应用初始化清单。
+
+**根因**：不同旧库和实体类型可能有相同数字 ID；未核对旧数据就删除旧表或复用 ID 会破坏历史回执、素材和效果关联。
+
+## LR-137 房源依赖使用固定公开契约，测试 fixture 不作为真实回退
+
+**结论**：营销自有 `CampaignListingSnapshotClient` 按 `domain-parallel-v1` 调用公开 batch-read 路径，并校验来源身份、revision、hash、时间、数据集和 REAL 模式。SIMULATED 时使用显式本地房源 fixture；REAL 来源故障时失败关闭。
+
+**根因**：独立 change 不能依赖房源分支尚未合入的 Java 类型，也不能让真实流量在来源不可用时静默读取测试房源。
+
 ## LR-138 入口授权与持久执行身份分两步绑定
 
 **结论**：Gateway不能预猜Supervisor最终持久化的run/session。Agent消费Gateway签发的未绑定入口后，先用持久owner、request幂等和session事实确定实际执行tuple，再调用独立`BIND_EXECUTION`；Auth将完整入口hash唯一绑定到actor/run/session/operations/policy/executionHash。新nonce重试仅对同tuple幂等，不能换身份、扩大scope或延长入口硬截止。refresh不承担身份绑定，Agent也不重签或覆盖原入口证明。直接Agent HTTP缺少完整入口证明时，以Agent服务身份对token与实际method/path/query/body发起独立Auth resolve；不得从固定marker恢复身份。
@@ -1231,3 +1279,9 @@
 **代码位置**：`scripts/deploy/run-init-manifest.sh` 的manifest哈希与已应用分支；`scripts/deploy/test_init_manifest.py`；`docker/mysql/init-manifest.tsv`及当前迁移的独立schema check。
 
 **关联**：KI-213；change `unify-versioned-permission-context`任务2.6/11.6。此规则不替代fresh数据库验收、末端状态检查或安全制品回滚演练。
+
+## LR-157 旧 promotion 库保留作迁移回退，不默认开放运行期读取
+
+**结论**：营销生命周期的活动读写只落 `bk_marketing`。旧 `bk_promotion` 库、数据库地址和旧 Nacos 配置在迁移及回退窗口内保留，但不作为有效发布 writer，也不默认授予 MySQL MCP 只读访问；确有迁移审计需要时由运维通过显式、受审配置开放。
+
+**根因**：保留历史数据和可回退制品并不要求把旧服务重新加入日常运行面。默认仍开放旧库会让合并后排查和工具查询继续依赖两套数据口径，且增加误读旧数据的机会；直接删除旧库又会破坏迁移核对和回退能力。

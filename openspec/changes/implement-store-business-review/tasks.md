@@ -30,11 +30,19 @@
 ## 4. API 与 Agent 接入
 
 - [ ] 4.1 按design中的HTTP方法/路径/DTO矩阵提供复盘、计划、确认、动作及观察API；沿用ApiResponse和有界cursor，storeId仅作已签范围内的选择器。用controller/服务契约测试逐路由验证精确business.review.*.store操作、真实事项store owner、跨店拒绝、expectedDiagnosisRevision/expectedPlanVersion/expectedActionVersion，并验证确认与反馈的同requestId同hash重放、同号异hash冲突。
-- [ ] 4.2 保留trade/trade-agent、trade Memory及现有拦截器；只在受管Agent配置增加CapabilityId.a2a("trade-agent")→agent.workflow.invoke.trade映射，并交付该调用码及全部business.review.*.store操作的Auth登记清单。按D9请求级proof验证A2A实际body绑定、本地验签和精确领域操作；技能/内部工具只读并形成未落库草稿，确认/反馈不作为A2A或MCP写工具发布，仍由用户显式调用领域API并绑定actor/store/plan版本/hash。
+- [ ] 4.2 保留trade/trade-agent、trade Memory及现有拦截器；只在受管Agent配置增加CapabilityId.a2a("trade-agent")→agent.workflow.invoke.trade映射，并交付该调用码及全部business.review.*.store操作的Auth登记清单。按D9请求级proof验证A2A实际body绑定、本地验签和精确领域操作；trade-agent A2A 与 TradeTools 只读并形成未落库草稿；确认不能藏在同一次 A2A 调用或通用 TradeMcpTools 中。唯一 Supervisor 写入口为独立 `confirmBusinessReviewPlan` capability，经用户审批后携带 actor/store/plan 版本/hash 调用并由服务端再次授权；执行反馈仍由用户显式调用领域 API。
 - [ ] 4.3 输出安全的领域 artifact 和引用契约，用结果投影测试验证 owner/来源/dataMode，保留原 Studio work/command 语义且不勾选其未完成任务。
+- [ ] 4.4 新增门店复盘专属 Supervisor 技能和动态目录映射，将计划准备与确认拆成 `prepareBusinessReviewPlan`、`confirmBusinessReviewPlan` 两个 capability；验证确认不藏在 trade-agent A2A 调用内。
+- [ ] 4.5 在隔离 Supervisor profile 将确认 capability 的稳定 ID 加入 `approval-capabilities` 配置差异，交付共享配置并集说明；覆盖未批准、拒绝、计划过时和当前门店范围失效均不创建动作。
 
 ## 5. 独立验收与交付
 
-- [ ] 5.1 仅用本会话本地v1 HTTP fixture、Auth/Memory精确测试登记、TrustedStoreScopePort测试替身及真实本域持久处理器，完成模拟带看停滞和维护闭环，验证回执/撤回/重复输入；无需其它三个实现或Auth新提交即可验收Business实现，但单独记录生产STORE范围和权限登记尚未启用。
+- [ ] 5.1 仅用本会话本地 v1 HTTP fixture、Auth/Memory 精确测试登记、TrustedStoreScopePort 测试替身及真实本域持久处理器，经 Supervisor 实际技能、目录和审批路径完成模拟带看停滞和维护闭环；验证未批准不创建动作、计划过时拒绝、回执恢复/撤回/重复输入。无需其它 change 新实现即可验收本域，但单独记录生产 STORE 范围和权限登记尚未启用。
 - [ ] 5.2 在共同基线及本change独立运行business及必要消费契约测试/编译，记录自身Maven仓库、功能与模式证据；跨服务联机/真实增长另列未验证，不作为本期等待任务。
 - [ ] 5.3 更新独立部署回退、口径及本域LR引用，严格校验和diff检查后中文commit/push本会话分支；交付head SHA、迁移/最小Agent映射差异及Auth登记交接（agent.workflow.invoke.trade、六个business.review.*.store操作和签名STORE身份范围），不修改Auth代码/全局目录、不推dev-fix、不关闭KI-114/128/166，合并后生产权限登记与联调交协调/Auth会话。
+
+## 6. 既有分析能力兼容验收
+
+- [ ] 6.1 在实现前盘点并固定月度 KPI、每日工作量、KPI 评估、排行榜/重建、房源流转、门店看板/大屏的 REST 路由、TradeTools、TradeMcpTools 和代表性结果基线。
+- [ ] 6.2 为全部既有 API 和工具增加或更新回归验证，覆盖参数、权限范围和原指标口径；证明复盘上线后每个原入口仍可达且结果未被新复盘数据改写。
+- [ ] 6.3 验证既有分析与复盘可在同一门店工作流中并行使用；任何未映射、被隐藏或被替换的既有分析能力都阻止 change 验收完成。

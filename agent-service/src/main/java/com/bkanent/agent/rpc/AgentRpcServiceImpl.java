@@ -3,7 +3,8 @@ package com.bkanent.agent.rpc;
 import com.bkanent.agent.service.AgentCapabilityService;
 import com.bkanent.common.model.CompareReportDTO;
 import com.bkanent.common.model.KpiSummaryDTO;
-import com.bkanent.common.model.MarketingContentDTO;
+import com.bkanent.common.model.PublishRequest;
+import com.bkanent.common.marketing.campaign.MarketingContentDraftResponse;
 import com.bkanent.common.rpc.AgentRpcService;
 import org.apache.dubbo.config.annotation.DubboService;
 
@@ -22,8 +23,8 @@ public class AgentRpcServiceImpl implements AgentRpcService {
     }
 
     @Override
-    public List<MarketingContentDTO> publishListingByPrompt(String rawInput) {
-        return agentCapabilityService.publishListingByPrompt(rawInput);
+    public List<MarketingContentDraftResponse> createMarketingDraft(PublishRequest request) {
+        return agentCapabilityService.createMarketingDraft(request);
     }
 
     @Override

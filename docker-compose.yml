@@ -99,7 +99,8 @@ services:
       MYSQL_PORT: "3306"
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Explicit MYSQL_ROOT_PASSWORD required}
       MYSQL_MCP_PASSWORD: ${MYSQL_MCP_PASSWORD:-}
-      MYSQL_MCP_DATABASES: ${MYSQL_MCP_DATABASES:-bk_auth,bk_listing,bk_customer,bk_notification,bk_marketing,bk_promotion,bk_business,bk_agent,bk_memory,bk_contract,bk_settlement,bk_interview}
+      # bk_promotion remains a legacy migration source and is excluded from the default read-only MCP grant.
+      MYSQL_MCP_DATABASES: ${MYSQL_MCP_DATABASES:-bk_auth,bk_listing,bk_customer,bk_notification,bk_marketing,bk_business,bk_agent,bk_memory,bk_contract,bk_settlement,bk_interview}
     depends_on:
       mysql:
         condition: service_healthy
@@ -116,7 +117,7 @@ services:
       MYSQL_PORT: "3306"
       MYSQL_USER: mcp_ro
       MYSQL_PASSWORD: ${MYSQL_MCP_PASSWORD:-}
-      MYSQL_MCP_DATABASES: ${MYSQL_MCP_DATABASES:-bk_auth,bk_listing,bk_customer,bk_notification,bk_marketing,bk_promotion,bk_business,bk_agent,bk_memory,bk_contract,bk_settlement,bk_interview}
+      MYSQL_MCP_DATABASES: ${MYSQL_MCP_DATABASES:-bk_auth,bk_listing,bk_customer,bk_notification,bk_marketing,bk_business,bk_agent,bk_memory,bk_contract,bk_settlement,bk_interview}
       MYSQL_MCP_TOKEN: ${MYSQL_MCP_TOKEN:-}
       MYSQL_MCP_MAX_ROWS: ${MYSQL_MCP_MAX_ROWS:-200}
       MYSQL_MCP_QUERY_TIMEOUT_MS: ${MYSQL_MCP_QUERY_TIMEOUT_MS:-5000}
@@ -704,14 +705,6 @@ services:
       MARKETING_LISTING_READ_SECRET: ${MARKETING_LISTING_READ_SECRET:-}
       MARKETING_MEMORY_V2_COMPRESSION_ENABLED: ${MARKETING_MEMORY_V2_COMPRESSION_ENABLED:-false}
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,elasticsearch
-
-  promotion-service:
-    <<: *app-service
-    profiles: [full]
-    environment:
-      <<: *app-environment
-      SERVICE_ARTIFACT: promotion-service-1.0.0-SNAPSHOT.jar
-      A2A_PUBLIC_BASE_URL: http://promotion-service:9009
 
   business-service:
     <<: *app-service

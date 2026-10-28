@@ -7,7 +7,8 @@ import com.bkanent.agent.service.AgentCapabilityService;
 import com.bkanent.agent.service.AgentChatService;
 import com.bkanent.common.model.CompareReportDTO;
 import com.bkanent.common.model.KpiSummaryDTO;
-import com.bkanent.common.model.MarketingContentDTO;
+import com.bkanent.common.model.PublishRequest;
+import com.bkanent.common.marketing.campaign.MarketingContentDraftResponse;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
@@ -24,7 +25,7 @@ public class AgentCapabilityServiceImpl implements AgentCapabilityService {
 
     private static final String MARKETING_COPY_SYSTEM_PROMPT = """
             你是房产营销文案助手。
-            请根据用户提供的需求，生成可以直接发布的中文房源营销文案。
+            请根据用户提供的需求生成中文房源营销文案草稿。只生成内容，不创建发布计划、不确认发布，也不发送通知。
             文案要真实、简洁、有吸引力，不允许夸大承诺。
             """;
 
@@ -68,21 +69,27 @@ public class AgentCapabilityServiceImpl implements AgentCapabilityService {
      * 发布listingByPrompt。
      */
     @Override
-    public List<MarketingContentDTO> publishListingByPrompt(String rawInput) {
+    public List<MarketingContentDraftResponse> createMarketingDraft(PublishRequest request) {
+        if (request == null || request.listingId() == null || request.listingId() <= 0
+                || request.platforms() == null || request.platforms().isEmpty()
+                || request.platforms().stream().anyMatch(platform -> platform == null || platform.isBlank())
+                || request.prompt() == null || request.prompt().isBlank()) {
+            throw new IllegalArgumentException("listingId, platforms and prompt are required to create a marketing draft");
+        }
         String copywriting = agentChatService.call(
                 MARKETING_COPY_SYSTEM_PROMPT,
-                "请根据以下需求生成一版中文房源营销文案：\n" + rawInput
+                "请根据以下需求生成一版中文房源营销文案草稿：\n" + request.prompt()
         );
         AgentMcpCallResult result = agentMcpClient.callTool(
                 AgentMcpNames.MARKETING_SERVER,
-                AgentMcpNames.PUBLISH_MARKETING_CONTENT,
+                AgentMcpNames.CREATE_MARKETING_CONTENT_DRAFT,
                 Map.of(
-                        "listingId", 1L,
+                        "listingId", request.listingId(),
                         "copywriting", copywriting,
-                        "platforms", "douyin"
+                        "platforms", String.join(",", request.platforms())
                 )
         );
-        return readList(result.payload().get("contents"), new TypeReference<>() {
+        return readList(result.payload().get("contents"), new TypeReference<List<MarketingContentDraftResponse>>() {
         });
     }
 

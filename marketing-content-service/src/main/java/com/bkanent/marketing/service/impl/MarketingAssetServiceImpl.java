@@ -138,26 +138,25 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
     @Override
     @Transactional(rollbackFor = Exception.class)
     public MarketingContentDetailResponse updatePublishStatus(Long contentId, MarketingPublishStatusUpdateRequest request) {
-        Long ownerBrokerId = VerifiedDomainAuthorization.requireBrokerScope(
+        VerifiedDomainAuthorization.requireBrokerScope(
                 "marketing.publish.status.update.own", "marketing.publish.status.update.all");
-        if (!MarketingPublishStatusEnum.contains(request.publishStatus())) {
-            throw new IllegalArgumentException("发布状态不合法: " + request.publishStatus());
-        }
-        if ("SUCCESS".equalsIgnoreCase(request.publishStatus())) {
-            throw new UnsupportedOperationException("真实发布渠道未接通，不能确认发布成功");
-        }
-        if (StringUtils.hasText(request.externalPublishId()) || request.publishTime() != null) {
-            throw new IllegalArgumentException("发布渠道回执不能由请求字段伪造");
+        throw com.bkanent.marketing.campaign.CampaignDomainException.legacyWriteDisabled(
+                "publish status is owned by marketing campaign receipts; use the campaign confirm and receipt APIs");
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MarketingContentDetailResponse updateAuditStatus(Long contentId, String auditStatus) {
+        Long ownerBrokerId = VerifiedDomainAuthorization.requireBrokerScope(
+                "marketing.content.review.own", "marketing.content.review.all");
+        if (!MarketingAuditStatusEnum.contains(auditStatus)) {
+            throw new IllegalArgumentException("审核状态不合法: " + auditStatus);
         }
         MarketingContentEntity entity = requireContent(contentId,
-                "marketing.publish.status.update.own", "marketing.publish.status.update.all", ownerBrokerId);
-        entity.setStatus(request.publishStatus().toUpperCase());
-        entity.setPublishMessage(request.publishMessage());
-        entity.setExternalPublishId(request.externalPublishId());
-        entity.setPublishTime(request.publishTime());
+                "marketing.content.review.own", "marketing.content.review.all", ownerBrokerId);
+        entity.setAuditStatus(auditStatus.toUpperCase());
         updateById(entity);
         marketingContentSearchService.indexContent(entity);
-        log.info("更新营销内容发布状态成功，contentId={}，status={}", contentId, entity.getStatus());
         return marketingContentConverter.toDetailResponse(entity);
     }
 
@@ -199,6 +198,7 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
         entity.setPlatformVariant(StringUtils.hasText(request.platformVariant()) ? request.platformVariant() : "DEFAULT");
         entity.setTags(marketingContentConverter.joinValues(request.tags()));
         entity.setAuditStatus(MarketingAuditStatusEnum.DRAFT.name());
+        entity.setParentContentId(request.parentContentId());
         entity.setSource(StringUtils.hasText(request.source()) ? request.source() : "manual");
     }
 

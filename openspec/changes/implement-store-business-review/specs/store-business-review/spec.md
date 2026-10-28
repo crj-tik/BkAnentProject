@@ -6,6 +6,26 @@
 
 ## ADDED Requirements
 
+### Requirement: Supervisor 先预览复盘计划再获批创建动作
+
+Supervisor SHALL 先调用只准备计划的能力，并向用户展示 planId、planVersion、动作内容、负责人、期限、来源/知识版本及参数 hash；准备本身不得创建已确认的 ReviewAction。确认 MUST 通过单独的动态目录 capability，并在创建动作前等待用户批准。business-service 仍须独立校验当前主体、门店范围、expectedPlanVersion、依赖版本及 requestId。
+
+#### Scenario: 计划已准备但用户尚未批准
+- **WHEN** Supervisor 已展示计划，confirm capability 尚在等待审批
+- **THEN** 系统不创建已确认的 ReviewAction 或 ActionReceipt，也不触发任何外部动作
+
+#### Scenario: 用户拒绝确认
+- **WHEN** 用户拒绝 Supervisor 对 confirmBusinessReviewPlan 的调用
+- **THEN** 计划保持待确认，动作和回执均未生成，拒绝结果可审计
+
+#### Scenario: 批准后计划过时
+- **WHEN** 用户批准计划后，房源、知识、组织范围或 planVersion 在确认前发生变化
+- **THEN** business-service 拒绝旧确认并要求重新准备展示，不创建动作
+
+#### Scenario: 确认后响应丢失再恢复
+- **WHEN** 同一 requestId、planId 与版本的确认请求在回执丢失后重试
+- **THEN** Supervisor 读取原 ActionReceipt 且不重复创建动作；不同内容复用 requestId 仍被拒绝
+
 ### Requirement: 经营输入使用有来源的独立数据集
 
 系统 SHALL 通过明确的数据契约读取带看、跟进、议价和维护事实，包含稳定来源、版本、事件/观察时间、dataset 及数据模式；房源只通过房源域公开接口引用，知识材料保留访谈来源链。模拟数据必须标记 SIMULATED，未知性质标记 UNKNOWN，包含不同性质证据的结果不得整体标为 REAL。
@@ -89,3 +109,15 @@
 #### Scenario: 已选真实接口但不可连接
 - **WHEN** 经营域已选择真实 HTTP来源且目标不可用
 - **THEN** 系统返回结构化依赖不可用，不转成模拟建议成功、不伪造无匹配，也不将独立模拟验收记录标成真实互通证据
+
+### Requirement: 新增复盘时保留现有经营分析能力
+
+复盘域 SHALL 与既有月度 KPI、每日工作量、KPI 评估、排行榜及重建、房源流转报表、门店看板和大屏能力并存。原 REST API、TradeTools 和 TradeMcpTools 的目标入口、授权范围及业务结果 MUST 在新增复盘后继续可用；复盘不得替代或静默改变原分析口径。
+
+#### Scenario: 复盘上线后查询原经营分析
+- **WHEN** 用户通过原 API、TradeTools 或 TradeMcpTools 查询月度 KPI、工作量、评估、排行榜、房源流转或看板
+- **THEN** 系统仍提供对应原有业务结果和权限检查，复盘事项不会过滤、改写或取代这些数据
+
+#### Scenario: 复盘与既有分析并行使用
+- **WHEN** 店长先查看现有门店大屏，再创建并跟进一条复盘事项
+- **THEN** 两项能力分别返回其原有经营分析与新增复盘状态，新增事项不改变既有报表或 KPI 口径

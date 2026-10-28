@@ -1657,3 +1657,37 @@
 **变更历史**：本提交收敛基础操作权限码、同步开发MySQL/Nacos/Compose并修复迁移runner的重复执行（KI-213）、完成权限状态清单（KI-208）和Nacos配置列表修复（KI-212），并修复RAG配置绑定问题（KI-207）、完成全仓Maven回归和Interview凭据边界记录（KI-202/203），持久化A2A请求防重放与任务归属（KI-172）；e8f64de 强制 Memory 必需接入、Ed25519 身份签名并修复可选偏好配置与后台 Worker 启动缺陷（KI-164/165）；5d655b4 修正服务身份公钥环境变量映射（KI-163）；160ffe7 补齐 Memory v2 分阶段回滚开关与验收边界（KI-161）；6b0a44b 补齐Memory v2迁移与空间运维（KI-160）；7d41023 接通Memory v2的Supervisor caller与领域经验发布开关（KI-159）；f1b3a7f 修复历史缺失提示并完成 ChatClient 入口核验（KI-152）；94fd089 修复 A2A 工具结果记忆归档空值异常（KI-150）并接入 listing/business/contract；684b9c4 修复 A2A lease 认证错误被降级及 Supervisor Bean 注入冲突（KI-148/149）；3560359 修复开发Nacos发布认证模式不匹配（KI-158）；本提交 补齐联合声明 API 缺口（KI-16）；6b5cc0e 报告任务分页/详情；e848923 补齐运行面四缺口（含 KI-9/KI-10 修复）；e85fa93 排查修复 8 处缺陷（KI-2~KI-8）；3b0f8a5 初始实现；4934137 立项规划。
 
 **本轮变更**：修复Interview真实API开台持久化缺口（KI-214），并记录API验收及其不替代前端/完整A2A验收的边界。
+
+## KI-195 [FIXED·281f03a·P2] Campaign 品牌素材新增和计划快照在 JDBC 列名映射上不稳定
+
+**发现日期**：2026-10-27。品牌素材闭环集成验收在 H2 MySQL mode 下触发 `GeneratedKeyHolder.getKey()` 的多列结果异常；修正主键读取后又发现 `queryForList` 返回列标签大小写影响从资产快照恢复 ID，导致 confirm 将未变化的素材误判为变化。
+
+**根因**：JDBC insert 请求所有生成键，H2 driver 返回 ID 以及创建/更新时间列；`getKey()` 仅允许单列。资产 `Map` 快照直接依赖 JDBC driver 列标签大小写，生成的 JSON 字段名与读取时 `id` 大小写不稳定。
+
+**修复与防回归**：限定 insert 只请求 `id` 生成键，并用 RowMapper 固定资产快照字段名和类型；品牌素材创建、列表、绑定计划和发布 fixture 在同一 H2 集成测试覆盖。
+
+**关联**：LR-131；`CampaignJdbcRepository.createAsset`、`CampaignLifecycleIntegrationTest`。
+
+## KI-196 [OPEN·P1] 营销内容多协议写入缺少 Auth 操作与内容归属准入
+
+**发现日期**：2026-10-27。营销内容基础服务已接入部分 `VerifiedDomainAuthorization` 操作检查并为新内容写入 owner；但 campaign prepare/confirm/review 仍通过兼容 `AuthPermissionRpcService`，没有证明其消费 Auth v2 签名上下文。Auth v2 的营销操作码尚未登记。
+
+**现象与证据**：`MarketingAssetServiceImpl` 对一般内容创建、变体、查询、素材绑定和审核状态增加精确操作及 broker owner 检查；`marketing_content.owner_broker_id` 迁移只新增可空列，历史记录有意保持无主，待责任人复核。MCP 草稿调用这些基础服务并继承其检查。Campaign lifecycle 的本地 `CampaignActorResolver`/`CampaignAuthorizationService` 仍是旧兼容授权，不等同版本化签名委托；历史 owner 归属、角色授予和 campaign 多协议的 Auth v2 接线仍须准入验收。
+
+**影响**：已登录或服务身份本身不足以证明对目标内容的读取、编辑和发布权。Auth v2 adoption、历史归属核对及 campaign 跨 REST/RPC/MCP owner 隔离未完成前，不得启用或宣称营销内容与 campaign 全入口安全合并完成；发布 provider、审批、业务权限和 owner 检查必须分别通过。
+
+**后续门槛**：由 `unify-versioned-permission-context` task 10.3 与本 change task 7.6 完成精确操作登记、可信身份/归属映射、跨协议正反例和生产启用验收。
+
+**关联**：LR-131/135；`openspec/changes/unify-versioned-permission-context/tasks.md` task 10.3；本 change task 7.6。
+
+## KI-194 [FIXED·2dbd4550·P1] 营销生命周期部署工件与默认访问范围未对齐
+
+**发现日期**：2026-10-28。营销生命周期 SQL/check 已存在，但活动 MySQL manifest 尚无 `bk_marketing` 版本项，runner 的闭合目标白名单也不接受 `upgrade:bk_marketing`；Nacos 模板的房源快照默认地址使用 9003，而 `listing-master-service` 实际监听 9004；Compose 与 `.env.example` 的 MySQL MCP 默认只读清单仍包含合并后保留作历史/回退的 `bk_promotion`。
+
+**影响**：新数据库初始化不会纳入 campaign schema，现有数据库无法通过版本化 runner 升级；真实 campaign 准备会访问错误房源端口；默认 MCP 仍能查询旧库，造成统一域的日常数据入口与存档/回退数据边界不清。
+
+**修复（2dbd4550）**：将营销生命周期 migration/check 以 470 登记到活动 manifest，并扩展 runner 的 `upgrade:bk_marketing` 精确白名单；将 Nacos 房源快照默认端口校正为 9004，保留显式 data ID 发布规则；Compose 与 `.env.example` 默认 MySQL MCP 范围排除旧 `bk_promotion`，旧库和旧 Nacos 数据源仍作为迁移/回退材料保留。
+
+**验证边界**：已完成 manifest dry-run 与哈希核对；未应用数据库迁移、未发布 Nacos 配置、未启动 Compose。
+
+**关联**：LR-157；营销 OpenSpec task 4.4；`docker/mysql/init-manifest.tsv`、`scripts/deploy/run-init-manifest.sh`、`nacos/marketing-content-service.yaml`、`docker-compose.yml`。

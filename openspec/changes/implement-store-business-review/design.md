@@ -56,7 +56,7 @@ Business 复盘服务逐方法检查以下精确操作，另由 `TrustedStoreSco
 
 STORE 范围是生产启用门槛而不是业务域推断逻辑。当前 `common/authz` 只接受 `BROKER`，本 change 不得把 userId、brokerId、employeeId、店名或请求 `storeId` 翻译成门店身份，也不得扩展 Auth 签名契约。Auth/协调方的明确交接是扩展签名 `businessIdentities` 身份类型以支持 `STORE`，并让 Auth 在签发 context 前核验用户对所选门店的关系；STORE 值进入现有 context/snapshot 的签名和版本失效链。首期每个签名 context 只携带一个已核验门店。Business 只定义可替换的 `TrustedStoreScopePort`：测试实现可提供精确 actor/store 授权夹具；生产实现只读取 Auth 已验签的 STORE 身份。生产适配或签名 STORE 身份缺失时，所有受保护查询和写入前置拒绝。一个请求的 `storeId` 仅可作为已签名 STORE 的选择器/一致性断言，不能扩大范围；多门店集合上下文扩展归 Auth 决策。
 
-经营 Agent 保留 `trade-agent` 身份、`trade` Memory 私域、SkillRegistry 与现有认证/上下文拦截器。`TradeTools` 内部 callback 不是 Supervisor `local:*` capability，不另造本地 capability 映射；新增复盘 callback 只使用 store-scoped review 服务和 `business.review.read.store` 生成不落库的诊断/计划草稿，不复用现有 `business.*.all` KPI 查询作为门店证据。创建复盘、保存计划、确认计划及提交执行反馈只走用户明确触发的领域 API；skill 选择、Agent 调用许可或诊断文字均不构成写授权。确认请求绑定当前 actor/store、`requestId`、`expectedPlanVersion` 和服务端规范化参数 hash。新写操作不加入 `TradeMcpTools`，Business MCP 操作映射和公开能力维持空；未来若单独增加 MCP 只读能力，须另按稳定 `CapabilityId.mcp(server, tool)`、精确 Auth 操作和逐请求 proof 设计。
+经营 Agent 保留 `trade-agent` 身份、`trade` Memory 私域、SkillRegistry 与现有认证/上下文拦截器。`TradeTools` 内部 callback 不是 Supervisor `local:*` capability，不另造本地 capability 映射；新增复盘 callback 只使用 store-scoped review 服务和 `business.review.read.store` 生成不落库的诊断/计划草稿，不复用现有 `business.*.all` KPI 查询作为门店证据。创建复盘、保存计划、确认计划及提交执行反馈只走用户明确触发的领域 API；skill 选择、Agent 调用许可或诊断文字均不构成写授权。确认请求绑定当前 actor/store、`requestId`、`expectedPlanVersion` 和服务端规范化参数 hash。复盘写操作不加入 `TradeTools`、同一次 `trade-agent` A2A 调用或通用 `TradeMcpTools`。唯一的 Supervisor 写入口是独立 `confirmBusinessReviewPlan` capability：必须由用户明确审批后，按稳定 MCP `CapabilityId`、精确 Auth 操作、当前签名门店范围和已展示的计划版本/hash 调用；`prepareBusinessReviewPlan` 只读，反馈仍走用户明确触发的领域 API。Business 既有 KPI MCP 能力保持原样，新增写能力不扩大其授权映射。
 
 本 change 的领域 HTTP 契约固定如下，响应沿用 `ApiResponse<T>`；`storeId` 如出现在查询/创建参数中仅作选择器并必须匹配签名范围，分页 cursor 与 actor/store 绑定，缺省或越权范围均拒绝而非返回空集合：
 
@@ -83,6 +83,16 @@ STORE 范围是生产启用门槛而不是业务域推断逻辑。当前 `common
 Auth/Memory 的当前协议通过测试配置下精确服务/用户登记替身覆盖，但 Auth 测试替身只验证业务边界消费已可信 actor/store 范围的行为，不证明当前生产 Auth 已支持 STORE；生产缺配置或签名范围不支持时仍前置拒绝。`peerMode` 显式选择 fixture/http，HTTP 依赖不可用、版本不支持和拒绝不能自动回退。由此 Business change 可在没有另外三个实现提交时完成自身编译、处理器/持久化和 v1 消费契约验收，不把 fixture 结果说成 Auth/生产服务已经接通。
 
 共享根配置只提交 Business 本域必需的最小差异；`agent-service` 仅增加上述稳定 A2A 映射。Auth/Memory 全局登记、权限授予、STORE 签名身份、初始化 runner 的 `bk_business` allowlist 及真实来源接入由协调/Auth 会话合并。合并后的权限注册核验、生产者互通、组织范围和浏览器联调单独记录，不纳入本 change 的独立实施完成前置条件，但在生产启用前必须通过。
+
+### 8. Supervisor 计划预览和写动作确认分为两次调用
+
+新增门店复盘专属 Supervisor 技能 `agent-service/src/main/resources/skills/supervisor/store-business-review.md`，保留 `trade-agent` 身份与 Memory 范围。动态目录分别暴露只准备计划的 `prepareBusinessReviewPlan` 和独立审批后的 `confirmBusinessReviewPlan` capability。准备结果返回 `planId`、`planVersion`、参数 hash、证据/知识版本、负责人和期限，不创建已确认动作；Supervisor 展示该快照后，确认调用必须提交相同 `planId`、`expectedPlanVersion`、hash 和 `requestId`。确认 capability 的实际稳定 ID 仅加入隔离验收配置的 `approval-capabilities`；用户未批准、拒绝、计划过时或当前范围失效时不得创建 `ReviewAction` 或 `ActionReceipt`。
+
+确认端仍由 `business-service` 复核当前用户、门店范围、证据/知识版本和幂等键；Supervisor 批准不能代替服务端授权。计划变化须重新准备并展示。门店 change 只维护自身 Supervisor 技能文件和隔离配置差异，共享审批列表在合并协调阶段按 capability ID 并集合并。独立 fixture 验收需经过实际 Supervisor 工具目录和审批路径，不等同真实 Auth、Memory 或跨服务生产联调。
+
+### 9. 既有分析能力保持并存
+
+本 change 仅增加复盘业务包，既有分析 API、Agent 工具和 MCP 能力仍须交付：月度 KPI、每日工作量、KPI 评估、排行榜及重建、房源流转报表、门店看板和大屏，以及现有 `TradeTools`/`TradeMcpTools` 入口均保持原参数、范围、指标口径和可调用结果。复盘能力作为增量加入，不替换上述入口。
 
 ## Risks / Trade-offs
 
