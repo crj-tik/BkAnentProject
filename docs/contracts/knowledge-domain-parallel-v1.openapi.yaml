@@ -1,0 +1,292 @@
+openapi: 3.1.0
+info:
+  title: Knowledge published read API
+  version: domain-parallel-v1
+  description: >-
+    Consumer contract for current published Knowledge. Requests must reach Knowledge
+    through the authenticated Gateway or carry the equivalent verified Authz context.
+    Store-scoped operations require a trusted STORE identity in that context; the
+    current Auth service does not issue that identity, so store reads fail closed
+    until its coordinated authorization registration is deployed.
+servers:
+  - url: /knowledge/v1
+paths:
+  /published/search:
+    post:
+      operationId: searchPublishedKnowledge
+      summary: Search current published knowledge in the verified caller scope
+      description: Requires knowledge.case.read.own or knowledge.case.read.store. The latter also requires a verified STORE identity.
+      security:
+        - gatewayBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishedSearchRequest'
+            example:
+              contractVersion: domain-parallel-v1
+              problem: 带看后客户迟迟不反馈
+              scene: 带看
+              tags: [客户跟进]
+              limit: 20
+      responses:
+        '200':
+          description: Current results; a valid no-match query returns an empty items array.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchEnvelope'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /published/batch-read:
+    post:
+      operationId: batchReadPublishedKnowledge
+      summary: Read 1 to 20 exact published revisions
+      description: >-
+        Refs contain knowledgeId and revision; contentHash is optional here and is
+        returned in the response. Every item is rechecked against the current
+        publication and source-view snapshot before its derived body is returned.
+      security:
+        - gatewayBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchReadRequest'
+            example:
+              contractVersion: domain-parallel-v1
+              refs:
+                - knowledgeId: 2f1e0c39-9e7c-4a84-8b7e-8a5943ce2c7d
+                  revision: r3
+      responses:
+        '200':
+          description: Ordered per-reference result. Non-current items contain no body or source details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchReadEnvelope'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+  /published/check:
+    post:
+      operationId: checkPublishedKnowledge
+      summary: Check current status of 1 to 20 exact published references
+      description: Status-only endpoint. Each ref must include knowledgeId, revision, and 64-character lowercase SHA-256 contentHash.
+      security:
+        - gatewayBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckRequest'
+            example:
+              contractVersion: domain-parallel-v1
+              refs:
+                - knowledgeId: 2f1e0c39-9e7c-4a84-8b7e-8a5943ce2c7d
+                  revision: r3
+                  contentHash: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+      responses:
+        '200':
+          description: Per-reference CURRENT, STALE, NOT_ACCESSIBLE, or UNAVAILABLE status only.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckEnvelope'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/DependencyUnavailable'
+components:
+  securitySchemes:
+    gatewayBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: User token consumed by the Gateway; internal callers must use the approved signed-context flow.
+  schemas:
+    Envelope:
+      type: object
+      required: [success, code, message, data]
+      properties:
+        success: { type: boolean }
+        code: { type: string }
+        message: { type: string }
+        data: {}
+    KnowledgeRef:
+      type: object
+      required: [knowledgeId, revision]
+      properties:
+        knowledgeId: { type: string, minLength: 1, maxLength: 64 }
+        revision: { type: string, minLength: 1, maxLength: 64, description: Opaque revision identifier }
+        contentHash: { type: string, pattern: '^[a-f0-9]{64}$' }
+    SourceRef:
+      type: object
+      required: [sourceSystem, sourceId, snapshotHash, contentHash, contentRevision, sanitizationRevision, publicationRevision, dataMode]
+      properties:
+        sourceSystem: { const: interview }
+        sourceId: { type: string }
+        snapshotHash: { type: string, pattern: '^[a-f0-9]{64}$' }
+        contentHash: { type: string, pattern: '^[a-f0-9]{64}$' }
+        contentRevision: { type: integer, minimum: 1 }
+        sanitizationRevision: { type: integer, minimum: 1 }
+        publicationRevision: { type: integer, minimum: 1 }
+        dataMode: { enum: [REAL, SIMULATED, MIXED, UNKNOWN] }
+        quoteHash: { type: [string, 'null'], pattern: '^[a-f0-9]{64}$' }
+        quoteStart: { type: [integer, 'null'], minimum: 0 }
+        quoteEnd: { type: [integer, 'null'], minimum: 1 }
+    KnowledgeBody:
+      type: object
+      required: [problem, scene, preconditions, actions, observedResults, applicability, unverifiedItems, evidenceLevel]
+      properties:
+        problem: { type: string }
+        scene: { type: string }
+        preconditions: { type: array, items: { type: string } }
+        actions: { type: array, items: { type: string } }
+        observedResults: { type: array, items: { type: string } }
+        applicability: { type: array, items: { type: string } }
+        unverifiedItems: { type: array, items: { type: string } }
+        evidenceLevel: { enum: [SELF_REPORTED, VERIFIED, UNVERIFIED] }
+    PublishedSearchRequest:
+      type: object
+      required: [contractVersion]
+      properties:
+        contractVersion: { const: domain-parallel-v1 }
+        problem: { type: [string, 'null'], maxLength: 500 }
+        scene: { type: [string, 'null'], maxLength: 120 }
+        tags: { type: array, maxItems: 20, items: { type: string, maxLength: 48 } }
+        cursor: { type: [string, 'null'], maxLength: 128, description: Opaque pagination cursor }
+        limit: { type: [integer, 'null'], minimum: 1, maximum: 100, default: 20 }
+    BatchReadRequest:
+      type: object
+      required: [contractVersion, refs]
+      properties:
+        contractVersion: { const: domain-parallel-v1 }
+        refs: { type: array, minItems: 1, maxItems: 20, items: { $ref: '#/components/schemas/KnowledgeRef' } }
+    CheckRequest:
+      type: object
+      required: [contractVersion, refs]
+      properties:
+        contractVersion: { const: domain-parallel-v1 }
+        refs:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            allOf:
+              - $ref: '#/components/schemas/KnowledgeRef'
+              - type: object
+                required: [contentHash]
+    SearchEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [contractVersion, items, nextCursor]
+              properties:
+                contractVersion: { const: domain-parallel-v1 }
+                nextCursor: { type: [string, 'null'] }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [knowledgeRef, publicationState, observedAt, dataMode, datasetId, sourceRefs, summary]
+                    properties:
+                      knowledgeRef: { $ref: '#/components/schemas/KnowledgeRef' }
+                      publicationState: { const: PUBLISHED }
+                      observedAt: { type: string, format: date-time }
+                      dataMode: { enum: [REAL, SIMULATED, MIXED, UNKNOWN] }
+                      datasetId: { type: string }
+                      sourceRefs: { type: array, items: { $ref: '#/components/schemas/SourceRef' } }
+                      summary: { type: string, maxLength: 512 }
+    BatchReadEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [contractVersion, items]
+              properties:
+                contractVersion: { const: domain-parallel-v1 }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [knowledgeRef, status]
+                    properties:
+                      knowledgeRef: { $ref: '#/components/schemas/KnowledgeRef' }
+                      status: { enum: [CURRENT, STALE, NOT_ACCESSIBLE, UNAVAILABLE] }
+                      publicationState: { type: [string, 'null'], const: PUBLISHED }
+                      observedAt: { type: [string, 'null'], format: date-time }
+                      dataMode: { type: [string, 'null'], enum: [REAL, SIMULATED, MIXED, UNKNOWN] }
+                      datasetId: { type: [string, 'null'] }
+                      sourceRefs: { type: array, items: { $ref: '#/components/schemas/SourceRef' } }
+                      body: { oneOf: [{ $ref: '#/components/schemas/KnowledgeBody' }, { type: 'null' }] }
+    CheckEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/Envelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [contractVersion, items]
+              properties:
+                contractVersion: { const: domain-parallel-v1 }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [knowledgeRef, status]
+                    properties:
+                      knowledgeRef: { $ref: '#/components/schemas/KnowledgeRef' }
+                      status: { enum: [CURRENT, STALE, NOT_ACCESSIBLE, UNAVAILABLE] }
+    ErrorEnvelope:
+      type: object
+      required: [success, code, message, data]
+      properties:
+        success: { const: false }
+        code: { type: string }
+        message: { type: string }
+        data: { type: 'null' }
+  responses:
+    InvalidRequest:
+      description: Invalid argument or unsupported contract version.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Unauthorized:
+      description: Missing or invalid Auth context.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    Forbidden:
+      description: Authenticated context lacks the exact operation or trusted store identity.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+    DependencyUnavailable:
+      description: Knowledge store or Interview source view is unavailable.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }

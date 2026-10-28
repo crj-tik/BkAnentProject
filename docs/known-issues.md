@@ -1701,3 +1701,67 @@
 **验证与边界**：修正后逐项核对 manifest 顺序、文件存在性及全部 migration/schema-check SHA-256；未连接或修改数据库，未启动 Docker Compose。
 
 **关联**：`docker/mysql/init-manifest.tsv` 第 500 项；change `implement-store-business-review` task 7.1。
+
+## KI-216 [FIXED·本提交·P1] Knowledge OWN审核动作与owner校验冲突
+
+**发现日期与依据**：2026-10-27，审核 Knowledge 生命周期授权路径时发现 OWN 案例 review 使用通用 owner-action 校验，因此即使持有 `knowledge.case.review.decide.own` 的非 owner 审核员也会被拒绝；详情读取同样只允许 owner，使单独配置审核权限无法查看候选。与此同时，简单放宽读取会扩大其对草稿/已发布/已撤回内容的访问范围。
+
+**修复**：review 动作对 OWN 案例只核验精确 review 操作并要求审核人不同于 owner；review 权限只可读取 `REVIEW_PENDING` 的当前 revision，其他状态仍需 owner 的 `knowledge.case.read.own`。APPROVE 仍保持待审，由 owner 单独完成发布。补充 Auth 角色协调矩阵、OpenSpec 权限要求与 LR-119，不在本 change 修改 Auth 授权实现或登记共享权限。
+
+**验证与边界**：Knowledge 生命周期定向 6 项、Auth fail-closed 3 项通过；Knowledge/Agent/Memory 聚焦套件共 50 项通过。真实 Auth 角色/操作登记仍待 KI-218 运行态验收。
+
+**关联**：LR-119；`KnowledgeAuthorization`、`KnowledgeLifecycleServiceTest`；change `extract-knowledge-operations-domain`。
+
+## KI-217 [FIXED·本提交·P1] Compose空Knowledge JDBC URL覆盖Spring默认值
+
+**发现日期与依据**：2026-10-28，核对 Knowledge 运行配置时发现 `.env.example` 将 `KNOWLEDGE_PRIMARY_DB_URL` 和 `KNOWLEDGE_SOURCE_DB_URL` 留空，而 Compose 仍显式向容器传入空值。Spring `${KEY:default}` 对已定义的空字符串不会使用默认值，`KnowledgeDataSourceConfiguration` 因 URL 为空拒绝创建两个 DataSource，Knowledge 容器无法启动。
+
+**修复**：Compose 将空/缺省 URL 解析为容器网络内 `mysql:3306/bk_knowledge` 的 JDBC URL，保留非空显式覆盖；`.env.example` 增加说明，Knowledge 配置静态测试锁定该默认行为。
+
+**验证与边界**：Knowledge 配置静态检查通过。当前执行环境无法连接远端 MySQL；数据库迁移、运行账号设置/解锁和 readiness 留待 KI-218 验收。
+
+**关联**：LR-120；`docker-compose.yml`、`test_knowledge_config.py`、`KnowledgeDataSourceConfiguration`；change `extract-knowledge-operations-domain`。
+
+## KI-218 [OPEN·P1] Knowledge合并后运行态验收尚未完成
+
+**发现日期与依据**：2026-10-28，准备合并 `extract-knowledge-operations-domain` 时核对 OpenSpec 任务，5.1–5.3 尚未完成。代码与部署模板已经交付，但当前执行环境无法连接目标 MySQL，未将 Nacos 模板发布到运行环境，也未完成跨 Auth、Memory 与 Interview 来源的集成闭环。
+
+**残留项统一清单**：
+- 数据库：在目标库按受管 manifest 应用 510/520，执行 schema/view/grant 校验；DBA 使用秘密管理器配置并解锁 `knowledge_app` 与 `knowledge_source_ro`，保持 `knowledge_source_view_owner` 锁定，再验证服务 readiness。
+- Nacos 与服务发现：审核目标环境专属配置后，在 `BK-AGENT/DEFAULT_GROUP` 发布 `knowledge-service.yaml` 并回读校验；确认 Gateway 路由、Agent 注册、Memory 公钥和 caller 在运行态生效。不得直接用开发模板覆盖生产配置。
+- Auth：协调登记 Knowledge 精确操作码及角色映射，并验证 USER/Agent 正反路径。当前 Auth 不签发可信 STORE identity；STORE 操作必须继续失败关闭，直到身份映射另行交付并验收。
+- Memory 与来源：验证未登记/不可用时失败关闭、完整轮次归档及原文 sentinel 不泄漏；使用标记为 SIMULATED 的隔离 Interview 来源完成导入、生成、人工审核、发布、check 和撤回/失效闭环。
+
+**关闭条件**：完成并勾选 OpenSpec 任务 5.1–5.3，保留目标环境、schema/check、Nacos 回读和集成验证证据；不得把模拟来源验收表述为真实效果验证。验收前不得宣称 Knowledge 已具备生产运行条件。
+
+**关联**：KI-216/217；LR-120；`docs/knowledge-service-operations.md`；change `extract-knowledge-operations-domain`。
+
+## KI-219 [OPEN·P2] 门店复盘数据库创建项的manifest校验摘要误录
+
+**发现日期与依据**：2026-10-28，合并 `dev-fix` 后运行初始化清单静态检查发现第 480 项 `business-review-database-20261027-v1` 的 schema-check SHA-256 少录了 3 个十六进制字符；受管 runner 会在执行任何 SQL 前拒绝整份清单。
+
+**代码处置**：已将 480 项校验摘要修正为 `docker/mysql/checks/business-review-database.sql` 的规范 LF SHA-256，未改 SQL、迁移版本或目标库。
+
+**残余与关闭条件**：未连接目标数据库。部署前确认 `bk_auth.bk_schema_migration` 中没有以旧错误摘要登记的手工记录；如存在，DBA 需核对数据库创建结果并修复迁移账本后再运行受管 manifest。完成目标库核对后关闭本项。
+
+**关联**：`docker/mysql/init-manifest.tsv` 第 480 项；`scripts/deploy/test_init_manifest.py`。
+
+## KI-220 [FIXED·本提交·P1] Knowledge修订、幂等回执和数据库授权边界不完整
+
+**发现日期与依据**：2026-10-28，合并前代码评审和本地复核确认三处可复现问题：`knowledge_operation_receipt` 完成回执时执行 UPDATE 但迁移未授权；`knowledge_revision` 对 `(knowledge_id, content_hash)` 的唯一约束会阻止合法的相同正文新修订；同一 actor 复用 request id 与请求体操作另一个 Knowledge 目标时，回执重放未比较 `target_id`。
+
+**修复**：为回执表增加最小 UPDATE 权限并同步 schema check/manifest；移除内容哈希唯一约束，保留 `(knowledge_id, revision_no)` 修订唯一性；回执重放和唯一键竞争重放都验证目标对象，create 则保留对其生成目标的原始回放语义。新增跨目标重放回归检查。
+
+**验证与边界**：迁移清单规范 SHA-256、Knowledge 配置静态检查通过；新增 Knowledge 生命周期回归用例已编译。本机 Surefire 执行受 Java attach 管道拒绝影响而未完成，等待 PR CI 给出运行结果；不代表目标数据库已应用迁移或运行态账号已验收，后者仍由 KI-218 跟踪。
+
+**关联**：LR-158；`KnowledgeLifecycleService`、`20261027_knowledge_domain.sql`、`knowledge-domain.sql`；change `extract-knowledge-operations-domain`。
+
+## KI-221 [FIXED·本提交·P1] 营销草稿在授权检查前触发素材生成
+
+**发现日期与依据**：2026-10-28，合并前 PR CI 暴露 `MarketingAuthorizationBoundaryTest` 仍引用已删除的 `PromotionRpcService` 和旧发布 API。迁移测试到当前草稿流程时确认，`createMarketingContentDraft` 会先调用 Media Worker 生成素材，随后 `MarketingAssetService.saveContents` 才验证操作权限和 broker 身份。
+
+**修复**：MCP 草稿入口现在在任何素材生成前检查精确 `marketing.content.create.own` 操作和可信 broker identity；资产服务仍保留自己的写入授权守卫。回归测试改为验证无用户上下文时草稿调用在 Media Worker 和搜索索引副作用之前失败。
+
+**验证与边界**：`marketing-content-service` 及上游模块 Maven `test-compile` 通过；本次修复后的 PR CI 仍待完成。未调用 Media Worker 或连接数据库。
+
+**关联**：LR-159；`MarketingMcpTools.createMarketingContentDraft`、`MarketingAssetServiceImpl.saveContents`、`MarketingAuthorizationBoundaryTest`。

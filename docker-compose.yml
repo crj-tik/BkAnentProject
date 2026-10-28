@@ -100,7 +100,7 @@ services:
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Explicit MYSQL_ROOT_PASSWORD required}
       MYSQL_MCP_PASSWORD: ${MYSQL_MCP_PASSWORD:-}
       # bk_promotion remains a legacy migration source and is excluded from the default read-only MCP grant.
-      MYSQL_MCP_DATABASES: ${MYSQL_MCP_DATABASES:-bk_auth,bk_listing,bk_customer,bk_notification,bk_marketing,bk_business,bk_agent,bk_memory,bk_contract,bk_settlement,bk_interview}
+      MYSQL_MCP_DATABASES: ${MYSQL_MCP_DATABASES:-bk_auth,bk_listing,bk_customer,bk_notification,bk_marketing,bk_business,bk_business_review,bk_agent,bk_memory,bk_contract,bk_settlement,bk_interview,bk_knowledge}
     depends_on:
       mysql:
         condition: service_healthy
@@ -117,7 +117,7 @@ services:
       MYSQL_PORT: "3306"
       MYSQL_USER: mcp_ro
       MYSQL_PASSWORD: ${MYSQL_MCP_PASSWORD:-}
-      MYSQL_MCP_DATABASES: ${MYSQL_MCP_DATABASES:-bk_auth,bk_listing,bk_customer,bk_notification,bk_marketing,bk_business,bk_agent,bk_memory,bk_contract,bk_settlement,bk_interview}
+      MYSQL_MCP_DATABASES: ${MYSQL_MCP_DATABASES:-bk_auth,bk_listing,bk_customer,bk_notification,bk_marketing,bk_business,bk_business_review,bk_agent,bk_memory,bk_contract,bk_settlement,bk_interview,bk_knowledge}
       MYSQL_MCP_TOKEN: ${MYSQL_MCP_TOKEN:-}
       MYSQL_MCP_MAX_ROWS: ${MYSQL_MCP_MAX_ROWS:-200}
       MYSQL_MCP_QUERY_TIMEOUT_MS: ${MYSQL_MCP_QUERY_TIMEOUT_MS:-5000}
@@ -565,6 +565,7 @@ services:
       AGENT_MEMORY_V2_RECALL_CHARS: ${AGENT_MEMORY_V2_RECALL_CHARS:-8192}
       AGENT_RAG_RPC_SECRET: ${AGENT_RAG_RPC_SECRET:-}
       MEMORY_SERVICE_BASE_URL: http://memory-service:9011
+      KNOWLEDGE_SERVICE_BASE_URL: http://knowledge-service:9015
       BUSINESS_MCP_ENDPOINT: http://business-service:9010/mcp
       MARKETING_MCP_ENDPOINT: http://marketing-content-service:9008/mcp
       CONTRACT_MCP_ENDPOINT: http://contract-service:9012/mcp
@@ -932,6 +933,56 @@ services:
     networks:
       - bk
       - bkanent-rerank-dev
+
+  knowledge-service:
+    <<: *app-service
+    image: bk-anent-knowledge:dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        MAVEN_MODULES: knowledge-service
+    profiles: [full]
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+      memory-service:
+        condition: service_started
+    volumes:
+      - type: bind
+        source: ./.secrets/service-identities/knowledge-service/private-key.pem
+        target: /run/secrets/service-identity.pem
+        read_only: true
+        bind:
+          create_host_path: false
+    environment:
+      <<: *app-environment
+      MYSQL_USER: ${KNOWLEDGE_MYSQL_USER:-knowledge_app}
+      MYSQL_PASSWORD: ${KNOWLEDGE_MYSQL_PASSWORD:-}
+      MYSQL_DB_KNOWLEDGE: ${MYSQL_DB_KNOWLEDGE:-bk_knowledge}
+      KNOWLEDGE_PRIMARY_DB_URL: "${KNOWLEDGE_PRIMARY_DB_URL:-jdbc:mysql://mysql:3306/${MYSQL_DB_KNOWLEDGE:-bk_knowledge}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}"
+      KNOWLEDGE_MYSQL_USER: ${KNOWLEDGE_MYSQL_USER:-knowledge_app}
+      KNOWLEDGE_MYSQL_PASSWORD: ${KNOWLEDGE_MYSQL_PASSWORD:-}
+      KNOWLEDGE_SOURCE_DB_URL: "${KNOWLEDGE_SOURCE_DB_URL:-jdbc:mysql://mysql:3306/${MYSQL_DB_KNOWLEDGE:-bk_knowledge}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}"
+      KNOWLEDGE_SOURCE_DB_USER: ${KNOWLEDGE_SOURCE_DB_USER:-knowledge_source_ro}
+      KNOWLEDGE_SOURCE_DB_PASSWORD: ${KNOWLEDGE_SOURCE_DB_PASSWORD:-}
+      SERVICE_ARTIFACT: knowledge-service-1.0.0-SNAPSHOT.jar
+      SERVICE_IDENTITY_KEY_ID: knowledge-service-current
+      KNOWLEDGE_AUTHORIZATION_ENABLED: ${KNOWLEDGE_AUTHORIZATION_ENABLED:-false}
+      KNOWLEDGE_MEMORY_V2_COMPRESSION_ENABLED: ${KNOWLEDGE_MEMORY_V2_COMPRESSION_ENABLED:-false}
+      DUBBO_REGISTRY_ADDRESS: "nacos://nacos:8848?namespace=${NACOS_NAMESPACE:-BK-AGENT}&group=DEFAULT_GROUP"
+      A2A_PUBLIC_BASE_URL: http://knowledge-service:9015
+      MEMORY_SERVICE_BASE_URL: http://memory-service:9011
+      NACOS_A2A_AGENT_REGISTRY_ENABLED: ${NACOS_A2A_AGENT_REGISTRY_ENABLED:-true}
+      SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,memory
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:9015/actuator/health/readiness | grep -q 'UP'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
 
   interview-service:
     <<: *app-service

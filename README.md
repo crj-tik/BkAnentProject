@@ -149,7 +149,7 @@ powershell -NoProfile -File scripts/start-mysql-mcp.ps1
 
 这条命令只启动 MySQL、一次性账号初始化任务和 MCP，不会启动 Nacos 或业务服务。MCP 地址为 `http://127.0.0.1:18081/mcp`，使用 Streamable HTTP；客户端必须发送 `Authorization: Bearer <MYSQL_MCP_TOKEN>`，Token 取自本机 `.env`。`18080` 已由 Nacos 使用，因此 MCP 默认采用 `18081`。详细工具、验证和维护说明见 [mysql-mcp/README.md](mysql-mcp/README.md)。
 
-账号初始化任务会在已有数据卷上创建或更新专用 `mcp_ro` 用户，只授予 `MYSQL_MCP_DATABASES` 中业务库的 `SELECT`、`SHOW VIEW`，不执行业务初始化 SQL。默认包含 11 个 `bk_*` 业务库，不包含 Nacos 或 MySQL 系统库；按需要在 `.env` 缩小范围。不要删除数据卷来创建 MCP 账号。已有数据卷的 root 密码需通过 `MYSQL_ROOT_PASSWORD` 提供。
+账号初始化任务会在已有数据卷上创建或更新专用 `mcp_ro` 用户，只授予 `MYSQL_MCP_DATABASES` 中业务库的 `SELECT`、`SHOW VIEW`，不执行业务初始化 SQL。默认包含 13 个 `bk_*` 业务库，不包含 Nacos 或 MySQL 系统库；按需要在 `.env` 缩小范围。不要删除数据卷来创建 MCP 账号。已有数据卷的 root 密码需通过 `MYSQL_ROOT_PASSWORD` 提供。
 
 仅在宿主机数据库客户端或本地 Java 服务需要直连 MySQL 时，显式启用端口覆盖配置：
 

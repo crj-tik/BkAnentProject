@@ -56,6 +56,10 @@ spring:
             uri: lb://interview-service
             predicates:
               - Path=/interviews/**
+          - id: knowledge-service
+            uri: lb://knowledge-service
+            predicates:
+              - Path=/knowledge/**
 
 management:
   endpoints:
@@ -87,10 +91,11 @@ gateway:
     private-key-path: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
     authority-public-keys:
       auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
-    # Only explicitly mapped Auth, Agent, and Interview APIs are enabled; unmapped routes fail closed.
+    # Each route maps to its exact signed-service audience; unmapped routes fail closed.
     route-audiences:
       auth-service: auth-service
       agent-service: agent-service
+      knowledge-service: knowledge-service
       interview-service: interview-service
       business-review-service: business-review-service
   access:

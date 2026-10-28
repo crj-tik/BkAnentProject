@@ -1,50 +1,56 @@
 # Tasks
 
-## 0. 独立会话与契约基线
+## 0. 拆分边界与授权基线
 
-- [ ] 0.1 按并行总览记录独立worktree/分支、共同base SHA、.m2repo及测试资源，验证没有引入房源、经营、营销实现提交。
-- [ ] 0.2 固定knowledge、访谈窄适配及两个专属common命名空间，用差异清单验证不改Auth实现和其它业务模块，并按保留LR/KI段维护本域记录。
-- [ ] 0.3 固化domain-parallel-v1的知识三条POST契约和本会话来源/Auth/Memory测试登记，用契约与配置测试验证本域验收不依赖其他会话上线。
+- [x] 0.1 在独立 worktree/分支确认共同 base SHA、Maven 本地仓库和测试资源；登记本 change 只新增 Knowledge 微服务，不改 Interview Java、Interview Spring/Nacos 配置或 bk_interview 表/迁移。
+- [x] 0.2 冻结 domain-parallel-v1 三个 POST 契约和 Knowledge source status；将 Interview 当前 PUBLISHED 资格作为唯一来源准入条件，删除 Interview 用途授权 API、grant 表、wire DTO、操作码和 service proof 计划。
+- [x] 0.3 交付 Auth 操作目录/角色授权协调矩阵：agent.workflow.invoke.knowledge 与全部 knowledge.case.* own/store 操作；store 操作明确依赖可信 STORE identity，登记未完成时真实路径失败关闭。
+- [x] 0.4 建立配置对照表，列明 .env.example、本地 .env（若存在）、Knowledge application.yml、Nacos、Compose、公钥/私钥、MySQL manifest、MCP 白名单和 data ID 的新增/保留/废除项；确认本 change 没有废除仍被 Interview 使用的键。
+- [x] 0.5 与协调会话同步 docs/business-domain-change-roadmap.md 的本 change ownership 行，移除 Interview/common/interview/transcript 实现归属并保留冻结的知识 HTTP 契约；不覆盖其他并行 change 的范围。
 
-## 1. 逐字稿来源边界
+## 1. Interview 来源只读适配
 
-- [ ] 1.1 定义带来源 hash、用途、可信身份及数据模式的逐字稿元数据/正文/当前使用检查契约，用 DTO/wire 测试验证引用完整和请求边界。
-- [ ] 1.2 在interview-service增加只读来源provider及可替换范围消费适配，用本会话精确授权夹具验证正文前授权、评级不授予权限及真实范围未配置时拒绝，不等待Auth新版本。
-- [ ] 1.3 实现知识域来源适配与引用核验，用快照冲突、撤回、来源失联、脱敏引用和模拟来源测试验证失效行为；不得修改访谈运行面 transition。
+- [x] 1.1 在 bk_knowledge 建 knowledge_interview_public_source_v1 版本化只读视图；复刻当前 Interview asset/case/session 发布资格，仅投影脱敏 content 与必要元数据，不投影 rawContent 或敏感映射；不改 bk_interview schema。
+- [x] 1.2 为视图建立受管 DB owner；Knowledge 主账号只获 bk_knowledge 业务表所需读写权限，来源账号仅获视图 SELECT，二者均无 Interview 表权限且 Compose 不向应用注入 root；从部署秘密提供凭据。
+- [x] 1.3 实现 InterviewTranscriptSource 两阶段读取与当前状态检查：仅选 PUBLISHED、L2/L3、未删除、脱敏版本达标、case 未删除且 session/UPLOAD 关系有效的来源；逐项检查标题/正文凭据形态、SHA-256(content)、snapshotHash 和所有绑定修订；未知结构/版本失败关闭。
+- [x] 1.4 按 assetId 精确固定 assetId、snapshotHash、contentHash、contentRevision、sanitizationRevision、publicationRevision 和 dataMode；生成 quoteHash/locator 并验证原声只能在相同脱敏快照内复核。
+- [x] 1.5 测试 PRIVATE/撤回/删除/低评级/旧脱敏版本/无效 case-session/凭据正文/hash 不符/视图不可用；验证正文不进入模型、来源引用不自动换版，分别返回 NOT_ACCESSIBLE、STALE 或 UNAVAILABLE。
+- [x] 1.6 用 Interview 当前 selectPublicAssets/isPubliclyEligible 条件建立对照验收；视图/实现不得比源服务公开资格更宽，Sanitizer.VERSION 未知或变化时停止来源读取。
 
-## 2. 独立知识模块与可靠业务记录
+## 2. 独立 Knowledge 服务和数据事实
 
-- [ ] 2.1 新增 knowledge-service、最小受管配置和构建/部署入口，编译模块并验证依赖不反向引用 interview 实现包。
-- [ ] 2.2 增加知识对象/修订/依赖/审核/回执的SQL与check，在自身隔离库验证新建及重复升级，交付唯一版本和bk_knowledge的manifest/runner allowlist差异；不改已应用hash或运行共享迁移。
-- [ ] 2.3 实现持久生成任务和输入/规则版本身份，用重启、丢回执、同号异内容和已完成结果复用测试验证不重复调用模型。
-- [ ] 2.4 实现单案例和打法候选生成，保留适用条件、未核实项、结果证据级别和引用，用精确原声/错引/无依据有效性断言验证输出规则。
-- [ ] 2.5 盘点旧 playbook_card/commonality_report 和原报告，交付旧来源到新知识身份的映射方案；用样例验证保留旧 ID/结果，不假设空表或重放生成。
+- [x] 2.1 新增 knowledge-service Maven 模块、9015 服务配置、Health/Readiness、Nacos import 和独立 Compose 服务；验证它可单独构建且不依赖 Interview 实现包。
+- [x] 2.2 在 bk_knowledge 创建 Knowledge 表、幂等生成任务和版本化回执；通过版本化 MySQL manifest 与 schema check 创建主 schema/只读视图及两种账号最小授权，不修改已应用 SQL/check/hash，不新增 Interview migration。
+- [x] 2.3 实现 KnowledgeCase、Playbook、不可变 KnowledgeRevision、SourceRef、ReviewDecision、OperationReceipt 和来源状态查询；禁止共用 Interview asset/report ID 或回写旧事实。
+- [x] 2.4 实现持久化生成任务与输入/规则版本 hash；用重启、回执丢失、相同请求重试、同号异内容及已完成结果复用验证不重复调用模型。
+- [x] 2.5 实现单案例/打法候选及证据质量字段；核验适用条件、未核实项、结果证据级别、UNKNOWN/SIMULATED 继承和稳定引用，不将样本数或来源评级提升为效果证明。
+- [x] 2.6 只读盘点 Interview playbook_card/commonality_report 与报告存量，提交旧 ID 到新身份的映射建议；确认旧表、旧报告任务和置信度记录留在 Interview，不读取报告正文、不假设表为空。
 
-## 3. 运营审核发布与公开读取
+## 3. Auth、知识生命周期与只读消费
 
-- [ ] 3.1 实现草稿编辑、提交、审核、发布和撤回的版本流转，用状态权限、并发 expectedVersion、审核策略和回执重试测试验证决定唯一生效。
-- [ ] 3.2 实现知识发布范围与公开读取适配，用跨用户/门店、伪造 scope、权限撤回和未接范围能力测试验证拒绝且不读取正文。
-- [ ] 3.3 实现来源依赖复核及发布后失效处理，用来源撤回、内容 hash 冲突和缓存/导出反例验证旧正文不能继续入模或输出。
-- [ ] 3.4 提供场景/标签/关键词检索及精确 revision 读取契约，用无匹配、依赖故障和撤回版本测试验证区分；首期不以新向量实现替代 RAG。
+- [x] 3.1 接入当前 Auth AuthorizationContext/AuthzFreshness 验签和精确动作校验；actor 只从本地验证上下文读取，requestId/expectedVersion/content hash 贯穿写操作和回执。
+- [x] 3.2 实现 create/edit/submit/generate/review/publish/withdraw/read 操作和 own/store 资源边界；按 design 精确操作矩阵检查每个 REST/Agent/API 入口，缺操作或缺 STORE identity 时拒绝。
+- [x] 3.3 实现来源依赖实时复核：每次 search/detail/export/Agent 输出/published/check 前复核 Interview view 状态与精确修订；验证撤回、重新发布、hash 变化、版本变化和数据库故障不返回旧派生正文。
+- [x] 3.4 实现 domain-parallel-v1 published/search、published/batch-read 和 status-only published/check；按 roadmap 验证 request/response、权限、revision 与 CURRENT/STALE/NOT_ACCESSIBLE/UNAVAILABLE 语义。
+- [x] 3.5 验证真实运营内容只在人工审核决定后发布；发布回执可靠找回，旧 Interview report task 不重放，合法空结果和依赖故障分开表达。
 
-## 4. Agent 与消费契约
+## 4. Agent、Memory 与配置同步
 
-- [ ] 4.1 实现knowledge独立身份接线，交付精确caller/domain/agent的受管配置片段，以测试registry执行装配/签名/ACL测试验证无借用身份及Memory前置拒绝；共享Auth/Memory/RAG登记由协调合并。
-- [ ] 4.2 发布案例提炼、打法运营和知识检索技能，接入现有 common-a2a/common-skill 与动态发现，用显式技能测试验证版本、范围和真实调用审批。
-- [ ] 4.3 实现冻结v1的published/search、batch-read和check HTTP处理器，用真实本域处理器的契约测试验证来源链/revision/可见性及不自动生成Memory grant，无需运行门店消费者。
-- [ ] 4.4 更新知识专属 Supervisor 技能和动态目录映射，使提炼/查询/审核准备与发布/撤回分开；用实际技能装配和目录 fixture 验证 A2A 调用不会隐藏知识写操作。
-- [ ] 4.5 将知识发布与撤回暴露为分别可审批的 MCP capability，隔离 profile 中登记实际 capabilityId 并交付配置差异；测试未审核、自审、用户拒绝、范围或 expectedVersion 变化时均不写入，合并时与其它域审批 ID 取并集。
+- [x] 4.1 新增 official knowledge-agent 并复用 A2aMemoryHookFactory；固定 caller/domain/agent 为 knowledge-service / knowledge / knowledge-agent，在 ReactAgent 和 OfficialA2aAgentExecutor 安装同一 hook。
+- [x] 4.2 验证 Memory beforeAgent 先于模型/工具加载当前工作集，afterAgent 在完整轮次复核来源并归档；缺 caller/key、错误 owner/context、Memory 不可用或归档失败时不执行/不释放结果。
+- [x] 4.3 限制 Agent 消息合同：逐字稿正文与原声只在 Knowledge 内部生成/核验，不作为工具参数、工具响应或 assistant 回显；以唯一哨兵原文检查 Memory 消息、参数、响应和归档均不含原文/quote/rawContent/映射。
+- [x] 4.4 在 nacos/memory-service.yaml 精确登记 Knowledge 公钥、caller 和 knowledge: [knowledge-agent]；不登记 experience publisher、共享经验或 Memory grant；验证撤销登记即拒绝。
+- [x] 4.5 在 OfficialA2aAgentClient.audienceFor 增加 knowledge-agent → knowledge-service；更新 nacos/agent-service.yaml 的精确 capability-permissions 和最小 knowledge-agent 动态注册；不改 Supervisor Graph。
+- [x] 4.6 新增 nacos/knowledge-service.yaml 与 knowledge-service/src/main/resources/application.yml；把主库、只读视图库、Auth 验签、A2A 身份、Dubbo Memory registry、必需 Memory 生命周期和 readiness 配置占位符逐项配对，Nacos 不含密码或私钥。
+- [x] 4.7 更新 .env.example 和存在时部署者本地 .env 键：MYSQL_DB_KNOWLEDGE、Knowledge 主库非 root 账号/密码、source view 只读账号/密码、Knowledge Memory compression、Knowledge service URL；本地秘密值保留且不提交。将 Knowledge 公钥接入现有 public-keys.env 生成/模板流程，私钥独立生成和只读挂载。
+- [x] 4.8 更新 docker-compose.yml 新服务块、制品/Maven模块、独立私钥、Knowledge 非 root 主库与只读源账号、Dubbo Nacos registry、A2A 地址、Memory/Nacos 依赖；同步 bk_knowledge 的可选只读 MySQL MCP 数据库名单与说明数字，Interview service block 保持逐字不变。
+- [x] 4.9 更新 nacos/gateway.yaml 的 /knowledge/** route 和 knowledge-service audience；将 knowledge-service.yaml 加入受管 data ID 清单/部署说明，NACOS_CONFIG_DATA_IDS 默认留空且仍须显式选择。
+- [x] 4.10 扫描所有 .env、Spring、Compose、Nacos、密钥生成、README、data ID、MySQL manifest/MCP 白名单引用；确认新增项命名和默认值一致，废除项清零，Interview 原配置没有误删。
 
-## 5. 验收与交付
+## 5. 验收与交接
 
-- [ ] 5.1 在共同基线及本change的worktree独立运行知识、访谈窄适配的聚焦测试和编译，使用自身Maven仓库，验证原运行面契约且无其它change制品依赖。
-- [ ] 5.2 在模拟逐字稿上经 Supervisor 实际技能/工具目录 fixture 执行引用、提炼、非提交者人工审核、发布、受权使用和撤回闭环，验证未批准无副作用、最终输出无失效正文/映射秘密且保留模拟标记。
-- [ ] 5.3 交付新服务/schema/身份片段的部署回退手册、本域LR/KI-15及独立验收证据，严格校验和diff检查后中文commit/push本会话分支，返回head SHA/共享差异；真实登记、下游互通和索引联机另列未执行项，不阻塞本期独立完成。
-
-## 6. 知识全生命周期与访谈运行面保留
-
-- [ ] 6.1 建立源功能/数据映射表，覆盖知识案例、打法、共性候选、原数据引用及 API/A2A/MCP/Supervisor 调用，逐项标明新知识域入口、迁移方和验收证据；未映射项阻止宣称抽取完成。
-- [ ] 6.2 实现并端到端验证案例/打法/共性候选的生成或创建、编辑、非提交者审核、发布、精确版本查询和撤回；检查原占位记录/来源引用均可追溯。
-- [ ] 6.3 回归访谈开案、提问/确认/启动、话轮 SSE、监控/回复/导演命令、逐字稿提交/搜索/评级、报告任务生成/查询/搜索，证明知识服务上线后原 interview-service 调用方仍可完成原业务。
-- [ ] 6.4 迁移全部已知知识运营消费者并验证 Supervisor、A2A、MCP 与冻结 HTTP v1 目标契约；不改变访谈会话状态机，不跨域复制逐字稿权威数据。
-- [ ] 6.5 只有知识生命周期证据通过、原知识数据和来源对账完成、访谈运行面无回归且调用方迁移清零后，才允许退役被抽取的旧知识实现或表；访谈模块及其运行面继续保留。
+- [ ] 5.1 在本 change 独立 worktree 和本地 Maven 仓库运行 Knowledge 模块编译、聚焦测试、视图/schema check 与配置静态检查，不拉取其它业务 change 制品或写共享数据库。
+- [ ] 5.2 验证 USER/Agent Auth 正反路径、Memory 未登记/不可用失败关闭、PRIVATE/撤回/STALE/UNAVAILABLE 来源、原声定位和 Memory sentinel 不泄漏。
+- [ ] 5.3 在明确标记 SIMULATED 的隔离 Interview 来源完成导入→生成→人工审核→发布→当前 check→来源撤回/失效闭环；全程保留 UNKNOWN/SIMULATED 语义，不声称真实效果。
+- [x] 5.4 交付新服务、只读视图/账号、Auth 操作、Memory caller、公钥、Nacos data ID、.env/Compose 配置和回滚手册；注明本地 .env 未提交、Interview Java/config/schema 未变更、真实 Auth/Memory/STORE/下游运行态仍需协调验收。
+- [x] 5.5 完成 OpenSpec 校验和差异检查后，以中文提交说明提交并推送当前 change 分支，记录最终 SHA；不运行 Docker 部署或改动共享运行环境。

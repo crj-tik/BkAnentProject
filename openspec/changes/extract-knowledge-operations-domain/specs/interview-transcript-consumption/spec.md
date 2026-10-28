@@ -2,46 +2,66 @@
 
 ## Purpose
 
-定义知识运营消费访谈逐字稿时的来源所有权、当前读取范围、快照完整性及失效行为。下游能够以稳定证据构建经营知识，同时让访谈继续拥有会话和逐字稿事实，避免复制原稿、跨库访问或来源评级替代访问授权。
+定义 Knowledge 读取 Interview 已发布脱敏逐字稿时的来源准入、版本完整性、授权边界和失效行为，使知识派生可追溯且不改变 Interview 的事实所有权。
 
 ## ADDED Requirements
 
-### Requirement: 访谈域保有逐字稿权威身份
+### Requirement: Interview 保有逐字稿事实所有权
 
-逐字稿消费 SHALL 使用访谈域公开的只读来源契约和稳定资产引用，包含来源资产 ID、snapshotHash、评级、数据模式及可核验的状态。下游 MUST NOT 通过直读访谈数据库或新增一份可编辑原稿来绕过该契约。
+Interview SHALL 保有会话、话轮、逐字稿原文和脱敏正文、来源版本及发布状态。Knowledge SHALL 只维护来源引用、必要的脱敏派生材料及操作审计，不得创建可编辑的第二份逐字稿，不得写入 Interview 数据。Knowledge 的来源读取 MUST NOT 访问原始正文或敏感映射。
 
-#### Scenario: 知识运营引用现有逐字稿
-- **WHEN** 运营人员选择一份访谈逐字稿作为知识来源
-- **THEN** 下游保存访谈来源引用及派生材料，原逐字稿和会话状态继续由访谈域维护
+#### Scenario: 运营人员引用已发布逐字稿
+- **WHEN** 具有 Knowledge 来源使用权限的运营人员选择一份已发布逐字稿
+- **THEN** Knowledge 记录 Interview asset 引用和精确快照信息，Interview 的源正文、会话和状态保持不变
 
-### Requirement: 授权先于正文读取且评级不授予权限
+#### Scenario: 尝试读取私有或原始内容
+- **WHEN** 来源当前为 PRIVATE、已删除，或请求涉及 rawContent/敏感映射
+- **THEN** 系统不向 Knowledge、模型或调用者返回相应正文
 
-来源元数据、正文及引用使用 SHALL 绑定当前可信用户、调用服务、用途和资源范围。系统 MUST 在读取正文前核验当前范围，L2/L3、已知 assetId、公开工具描述及同 owner 历史均不得自动授予新的跨域读取权。
+### Requirement: 只有当前公开合格快照可用于知识派生
 
-#### Scenario: 已归档但未获准跨域读取
-- **WHEN** 一份 L3 逐字稿存在，但当前知识调用者没有其有效读取范围
-- **THEN** 访问被拒绝且正文未读取，不因评级高或已知 ID 放行
+Knowledge SHALL 仅在来源当前为 PUBLISHED、评级为 L2/L3、资产和关联案例未删除、脱敏修订达到支持版本、正文哈希匹配且来源案例/会话关系有效时读取脱敏 content。PUBLISHED 是本期来源准入信号，不替代当前用户执行 Knowledge 操作所需的 Auth 签名上下文、freshness、精确操作和资源范围。Knowledge MUST 在明确的导入或生成动作中按需读取，不得自动批量导入全部已发布来源。读取失败时 MUST 不将来源内容传入模型或后续工具。
 
-### Requirement: 使用精确快照并核验内容一致性
+#### Scenario: 来源发布后被撤回
+- **WHEN** Interview 将一个已发布来源改为 PRIVATE 或删除来源
+- **THEN** 后续来源读取和依赖检查不返回正文，Knowledge 停止该来源派生内容的使用
 
-正文读取 SHALL 绑定期望 snapshotHash，服务端输出前 SHALL 核验所读内容和当前来源状态一致；下游必须保留实际使用版本及证据定位。来源 hash 冲突 MUST 明确报告，不能自动换用另一份近似材料。
+#### Scenario: 来源评级或脱敏版本不满足门槛
+- **WHEN** 来源评级不是 L2/L3、脱敏修订低于支持版本、案例/会话关系失效或正文哈希不匹配
+- **THEN** 系统拒绝读取或使用正文，并返回可区分的来源状态
 
-#### Scenario: 生成期间来源快照变化
-- **WHEN** 知识任务期望的逐字稿 hash 与当前来源不一致
-- **THEN** 系统拒绝将新正文当作旧来源继续生成，要求按新来源重新受理或核对原任务
+### Requirement: 来源引用绑定不可变快照和证据定位
 
-### Requirement: 来源撤回使派生使用失效
+Knowledge 每项来源依赖 SHALL 记录 assetId、snapshotHash、contentHash、contentRevision、sanitizationRevision、publicationRevision、数据模式及可复核的 quoteHash/定位符。导入和输出前 MUST 对照当前来源元数据及预期版本；内容只允许使用脱敏 content，rawContent MUST NOT 进入 common wire DTO、Knowledge 存储、Memory 或模型。正文哈希冲突或版本变化不得自动替换成另一份近似来源。
 
-来源撤回、删除、授权失效或状态不可核验时 SHALL 阻止新的派生正文读取、入模、引用和输出；原业务操作与审核事实可保留。通知延迟或缓存命中 MUST 不得豁免使用前当前复核。
+#### Scenario: 生成期间来源修订
+- **WHEN** 生成任务绑定的内容、脱敏或发布修订与当前来源不同
+- **THEN** 系统将来源判定为过期，不沿用旧绑定继续生成或发布
 
-#### Scenario: 已发布打法依赖的来源被撤回
-- **WHEN** 店长准备使用的打法来源逐字稿已经撤回
-- **THEN** 系统停止提供该来源及依赖正文，返回来源失效信息，不能因打法曾经发布继续展示
+#### Scenario: 原声引用不能定位到快照
+- **WHEN** 候选中的原声引用无法在已绑定的脱敏快照中精确核验
+- **THEN** 系统拒绝把该引用登记为已核验来源证据
 
-### Requirement: 来源模式与脱敏域贯穿派生内容
+### Requirement: 来源状态不可确认时停止派生和输出
 
-逐字稿消费 SHALL 使用访谈域的脱敏正文，敏感映射和凭据不得进入派生内容。模拟来源 SHALL 标记 SIMULATED，历史性质不明标记 UNKNOWN；派生结果不得自动提升成真实经营效果证据。
+来源当前为 PRIVATE、已删除或不具备知识使用资格时，Knowledge SHALL 返回 NOT_ACCESSIBLE；当前哈希或内容/脱敏/发布版本与绑定值不匹配时 SHALL 返回 STALE；来源数据库不可用或检查无法完成时 SHALL 返回 UNAVAILABLE。上述状态均 MUST 阻止新派生、检索正文、详情、导出和 Agent 输出。缓存、旧发布状态和失效通知不能取代每次使用前的当前检查。
 
-#### Scenario: 用模拟访谈生成打法候选
-- **WHEN** 来源逐字稿来自模拟场景
-- **THEN** 候选和引用均保留模拟标记，原声核验在同一脱敏快照内进行，不输出映射表或真实效果证明
+#### Scenario: 已发布打法依赖的来源撤回
+- **WHEN** 店长查询的已发布打法依赖来源已撤回或失去读取资格
+- **THEN** Knowledge 返回 NOT_ACCESSIBLE 且不返回该依赖的派生正文
+
+#### Scenario: 来源数据库检查失败
+- **WHEN** Knowledge 无法连接 Interview 来源数据库或完成当前状态检查
+- **THEN** Knowledge 返回 UNAVAILABLE，不将故障伪装为空结果或继续输出旧正文
+
+### Requirement: 来源模式来自可信 provenance
+
+来源 dataMode SHALL 只能来自服务端可信 provenance，不能从 AUTO/UPLOAD、L0-L3、PUBLISHED 或用户输入推断。当前 Interview 资产没有持久化 dataMode；没有独立可信 provenance 的存量来源 MUST 标记 UNKNOWN，受控测试夹具可以明确标记 SIMULATED。新增模式描述不得改写 Interview 正文、snapshotHash 或内容修订；派生结果不得自动提升为真实经营效果证据。
+
+#### Scenario: 历史来源只有采集类型和评级
+- **WHEN** 一个旧资产只有 source=UPLOAD 或 AUTO 及 L2/L3 评级，没有可信 provenance
+- **THEN** 来源和派生知识均标记 UNKNOWN，不得作为已证实的真实经营效果
+
+#### Scenario: 模拟来源生成打法候选
+- **WHEN** 受控测试来源明确标记 SIMULATED
+- **THEN** 候选和引用保留 SIMULATED 标记，且不产生真实效果证明

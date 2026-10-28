@@ -14,7 +14,7 @@
 | 会话/change | 主责代码和契约命名空间 | 独立交付内容 | 建议工作分支 |
 | --- | --- | --- | --- |
 | [房源合并](../openspec/changes/consolidate-listing-comparison-domain/proposal.md) | `listing-master-service`、`compare-engine-service`、`common/listing/**`，原比较契约/纯计算及其必要调用方 | 房源接口适配、同域比较/PDF、比较服务退役配置与迁移方案 | `codex/consolidate-listing-comparison-domain` |
-| [知识拆分](../openspec/changes/extract-knowledge-operations-domain/proposal.md) | `knowledge-service`、访谈的窄来源读取适配、`common/knowledge/**`、`common/interview/transcript/**` | 逐字稿消费、知识审核发布、知识 v1 读取接口及独立身份配置片段 | `codex/extract-knowledge-operations-domain` |
+| [知识拆分](../openspec/changes/extract-knowledge-operations-domain/proposal.md) | `knowledge-service`、`bk_knowledge`、`common/knowledge/**`；仅由 Knowledge 受限只读视图消费 `bk_interview`，不归属 Interview Java/config/schema 改动 | 逐字稿消费、知识审核发布、知识 v1 读取接口及独立身份配置片段 | `codex/extract-knowledge-operations-domain` |
 | [门店复盘](../openspec/changes/implement-store-business-review/proposal.md) | 新增 `business-review-service`、独立库 `bk_business_review` | 经营复盘 API/状态/Memory 私域接入；旧 `business-service`、trade Agent 与其配置保持不变 | `codex/implement-store-business-review` |
 | [营销合并](../openspec/changes/consolidate-marketing-promotion-domain/proposal.md) | `marketing-content-service`、`promotion-service`、`common/marketing/campaign/**` | 内容/计划/尝试/效果统一、provider 适配及推广退役方案 | `codex/consolidate-marketing-promotion-domain` |
 

@@ -1,0 +1,131 @@
+server:
+  port: 9015
+
+spring:
+  application:
+    name: knowledge-service
+  config:
+    import: nacos:${spring.application.name}.yaml?group=DEFAULT_GROUP&refreshEnabled=true
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:}
+      config:
+        server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        file-extension: yaml
+  ai:
+    deepseek:
+      api-key: ${DEEPSEEK_API_KEY:${KE_API_KEY:}}
+      base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
+      chat:
+        api-key: ${DEEPSEEK_API_KEY:${KE_API_KEY:}}
+        base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
+        completions-path: /chat/completions
+        options:
+          model: ${KNOWLEDGE_AGENT_MODEL:gpt-5.6-terra}
+          temperature: 0.1
+    alibaba:
+      a2a:
+        server:
+          enabled: true
+          message-url: /a2a
+          agent-card-url: /.well-known/agent.json
+          card:
+            name: knowledge-agent
+            description: Creates and checks knowledge operation task status without exposing transcript content.
+            version: 1.0.0
+            url: ${A2A_PUBLIC_BASE_URL:http://localhost:9015}
+            default-input-modes: text,application/json
+            default-output-modes: text,application/json
+            capabilities:
+              streaming: true
+              push-notifications: false
+              state-transition-history: true
+        nacos:
+          server-addr: ${NACOS_SERVER:127.0.0.1:8848}
+          namespace: ${NACOS_NAMESPACE:}
+          username: ${NACOS_USERNAME:}
+          password: ${NACOS_PASSWORD:}
+          registry:
+            enabled: ${NACOS_A2A_AGENT_REGISTRY_ENABLED:false}
+          discovery:
+            enabled: true
+
+service:
+  identity:
+    key-id: ${SERVICE_IDENTITY_KEY_ID:knowledge-service-current}
+    private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
+  readiness:
+    mode: ${SERVICE_READINESS_MODE:distributed}
+    required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database,memory}
+    endpoints:
+      nacos: ${NACOS_SERVER:127.0.0.1:8848}
+      database: ${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}
+      memory: ${MEMORY_SERVICE_BASE_URL:http://127.0.0.1:9011}
+
+knowledge:
+  datasource:
+    primary:
+      url: ${KNOWLEDGE_PRIMARY_DB_URL:jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_KNOWLEDGE:bk_knowledge}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
+      username: ${KNOWLEDGE_MYSQL_USER:}
+      password: ${KNOWLEDGE_MYSQL_PASSWORD:}
+      driver-class-name: com.mysql.cj.jdbc.Driver
+    source:
+      url: ${KNOWLEDGE_SOURCE_DB_URL:jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3306}/${MYSQL_DB_KNOWLEDGE:bk_knowledge}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
+      username: ${KNOWLEDGE_SOURCE_DB_USER:}
+      password: ${KNOWLEDGE_SOURCE_DB_PASSWORD:}
+      driver-class-name: com.mysql.cj.jdbc.Driver
+  source:
+    view-name: knowledge_interview_public_source_v1
+    view-version: 1
+    supported-sanitization-revision: 1
+    max-content-characters: 2000000
+  authorization:
+    enabled: ${KNOWLEDGE_AUTHORIZATION_ENABLED:false}
+    audience: knowledge-service
+    max-body-bytes: 1048576
+    authority-public-keys:
+      auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+
+a2a:
+  memory:
+    compression-enabled: ${KNOWLEDGE_MEMORY_V2_COMPRESSION_ENABLED:false}
+    key-id: ${SERVICE_IDENTITY_KEY_ID:knowledge-service-current}
+    private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
+  auth:
+    response-key-id: ${AUTH_SERVICE_IDENTITY_KEY_ID:auth-service-current}
+    response-public-key: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+
+dubbo:
+  application:
+    name: knowledge-service
+    qos-enable: true
+    qos-port: 22523
+  protocol:
+    name: dubbo
+    port: 20889
+  registry:
+    address: ${DUBBO_REGISTRY_ADDRESS:nacos://${NACOS_SERVER:127.0.0.1:8848}?namespace=${NACOS_NAMESPACE:}}
+  consumer:
+    protocol: dubbo
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,dependencyReadiness
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      service: ${spring.application.name}

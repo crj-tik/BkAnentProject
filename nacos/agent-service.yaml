@@ -130,6 +130,7 @@ agent:
     capability-permissions:
       "[local:milvusKnowledgeSearch]": agent.rag.search
       "[a2a:listing-agent]": listing.read
+      "[a2a:knowledge-agent]": agent.workflow.invoke.knowledge
       "[a2a:business-review-agent]": agent.workflow.invoke.business-review
     # Only exact local capability IDs belong here; every call still needs a signed actor and bound run.
     baseline-capabilities: ${AGENT_AUTHORIZATION_BASELINE_CAPABILITIES:}
@@ -230,7 +231,23 @@ agent:
         producer-group: ${AGENT_STREAM_ROCKETMQ_PRODUCER_GROUP:agent-service-session-stream-producer}
     discovery-enabled: ${AGENT_DISCOVERY_ENABLED:true}
     agent-card-path: ${AGENT_CARD_PATH:/.well-known/agent.json}
-    agents: {}
+    agents:
+      knowledge-agent:
+        agent-id: knowledge-agent
+        name: knowledge-agent
+        description: Knowledge candidate generation and task-status reporting
+        version: 1.0.0
+        runtime-provider: official
+        service-id: knowledge-service
+        base-url: ${KNOWLEDGE_SERVICE_BASE_URL:http://knowledge-service:9015}
+        agent-card-path: /.well-known/agent.json
+        a2a-path: /a2a
+        supported-skills: [knowledge-generation, knowledge-status]
+        supported-domains: [knowledge]
+        supports-streaming: true
+        supports-async-task: true
+        input-modes: [text, application/json]
+        output-modes: [text, application/json]
 
 rocketmq:
   name-server: ${ROCKETMQ_NAME_SERVER:10.117.102.54:9876}

@@ -131,7 +131,7 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
         }
         if (credentials != null) credentials.credentials(String.valueOf(request.structuredContext().get("userId")));
     }
-    private static String audienceFor(RegisteredAgentDescriptor descriptor) {
+    static String audienceFor(RegisteredAgentDescriptor descriptor) {
         return switch (descriptor.agentId()) {
             case "listing-agent" -> "listing-master-service";
             case "trade-agent" -> "business-service";
@@ -141,6 +141,7 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
             case "notification-agent" -> "notification-service";
             case "media-agent" -> "media-worker-service";
             case "interview-agent" -> "interview-service";
+            case "knowledge-agent" -> "knowledge-service";
             default -> throw new com.bkanent.common.rag.RagException(com.bkanent.common.rag.RagErrorCode.FORBIDDEN);
         };
     }
