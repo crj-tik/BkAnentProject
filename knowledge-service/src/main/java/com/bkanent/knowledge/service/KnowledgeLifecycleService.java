@@ -84,9 +84,10 @@ public class KnowledgeLifecycleService {
         KnowledgeBody body = safeManualBody(request.body(), request.problem(), request.scene());
         String knowledgeId = UUID.randomUUID().toString();
         String hash = requestHash(request);
-        KnowledgeMutationReceipt replay = replay(request.requestId(), KnowledgeOperations.CREATE_OWN, hash, actor);
+        KnowledgeMutationReceipt replay = replay(request.requestId(), KnowledgeOperations.CREATE_OWN, hash, actor, null);
         if (replay != null) return replay;
-        KnowledgeMutationReceipt raced = reserve(request.requestId(), KnowledgeOperations.CREATE_OWN, hash, actor, knowledgeId);
+        KnowledgeMutationReceipt raced = reserve(request.requestId(), KnowledgeOperations.CREATE_OWN, hash, actor,
+                knowledgeId, null);
         if (raced != null) return raced;
         String contentHash = KnowledgeContentIntegrity.contentHash("", body);
         repository.insertCase(knowledgeId, "OWN", actor, null, request.title().trim(), request.problem().trim(),
@@ -106,7 +107,7 @@ public class KnowledgeLifecycleService {
         KnowledgeCaseRecord record = requiredCase(knowledgeId, true);
         String actor = requireCaseOperation(record, KnowledgeOperations.EDIT_OWN, null);
         String hash = requestHash(request);
-        KnowledgeMutationReceipt replay = replay(request.requestId(), KnowledgeOperations.EDIT_OWN, hash, actor);
+        KnowledgeMutationReceipt replay = replay(request.requestId(), KnowledgeOperations.EDIT_OWN, hash, actor, knowledgeId);
         if (replay != null) return replay;
         verifyVersion(record, request.expectedVersion());
         if (record.state() != KnowledgeState.DRAFT && record.state() != KnowledgeState.WITHDRAWN) {
@@ -117,7 +118,8 @@ public class KnowledgeLifecycleService {
         validateText(request.scene(), 120, "INVALID_ARGUMENT");
         validateTags(request.tags());
         KnowledgeBody body = safeManualBody(request.body(), request.problem(), request.scene());
-        KnowledgeMutationReceipt raced = reserve(request.requestId(), KnowledgeOperations.EDIT_OWN, hash, actor, knowledgeId);
+        KnowledgeMutationReceipt raced = reserve(request.requestId(), KnowledgeOperations.EDIT_OWN, hash, actor,
+                knowledgeId, knowledgeId);
         if (raced != null) return raced;
         int nextRevision = record.currentRevision() + 1;
         String contentHash = KnowledgeContentIntegrity.contentHash("", body);
@@ -157,13 +159,13 @@ public class KnowledgeLifecycleService {
             throw failure("NOT_ACCESSIBLE", 404);
         }
         String hash = requestHash(request);
-        KnowledgeMutationReceipt replay = replay(request.requestId(), operation, hash, actor);
+        KnowledgeMutationReceipt replay = replay(request.requestId(), operation, hash, actor, knowledgeId);
         if (replay != null) return replay;
         verifyVersion(record, request.expectedVersion());
         if (record.state() != KnowledgeState.REVIEW_PENDING) throw failure("INVALID_STATE", 409);
         if (actor.equals(record.ownerActorId())) throw failure("REVIEWER_MUST_DIFFER", 403);
         if (request.reason() != null && request.reason().length() > 2000) throw failure("INVALID_ARGUMENT", 400);
-        KnowledgeMutationReceipt raced = reserve(request.requestId(), operation, hash, actor, knowledgeId);
+        KnowledgeMutationReceipt raced = reserve(request.requestId(), operation, hash, actor, knowledgeId, knowledgeId);
         if (raced != null) return raced;
         repository.recordReview(knowledgeId, record.currentRevision(), actor, request.decision(), request.reason());
         KnowledgeState next = "APPROVE".equals(request.decision()) ? KnowledgeState.REVIEW_PENDING : KnowledgeState.DRAFT;
@@ -181,14 +183,14 @@ public class KnowledgeLifecycleService {
         String operation = "STORE".equals(record.scopeType()) ? KnowledgeOperations.PUBLISH_STORE : KnowledgeOperations.PUBLISH_OWN;
         String actor = requireCaseOperation(record, operation, null);
         String hash = requestHash(request);
-        KnowledgeMutationReceipt replay = replay(request.requestId(), operation, hash, actor);
+        KnowledgeMutationReceipt replay = replay(request.requestId(), operation, hash, actor, knowledgeId);
         if (replay != null) return replay;
         verifyVersion(record, request.expectedVersion());
         if (record.state() != KnowledgeState.REVIEW_PENDING || !repository.hasApproval(knowledgeId, record.currentRevision())) {
             throw failure("REVIEW_REQUIRED", 409);
         }
         requireCurrentSources(knowledgeId, record.currentRevision());
-        KnowledgeMutationReceipt raced = reserve(request.requestId(), operation, hash, actor, knowledgeId);
+        KnowledgeMutationReceipt raced = reserve(request.requestId(), operation, hash, actor, knowledgeId, knowledgeId);
         if (raced != null) return raced;
         repository.transition(knowledgeId, request.expectedVersion(), KnowledgeState.REVIEW_PENDING,
                 KnowledgeState.PUBLISHED, record.currentRevision());
@@ -205,11 +207,11 @@ public class KnowledgeLifecycleService {
         String operation = "STORE".equals(record.scopeType()) ? KnowledgeOperations.WITHDRAW_STORE : KnowledgeOperations.WITHDRAW_OWN;
         String actor = requireCaseOperation(record, operation, null);
         String hash = requestHash(request);
-        KnowledgeMutationReceipt replay = replay(request.requestId(), operation, hash, actor);
+        KnowledgeMutationReceipt replay = replay(request.requestId(), operation, hash, actor, knowledgeId);
         if (replay != null) return replay;
         verifyVersion(record, request.expectedVersion());
         if (record.state() != KnowledgeState.PUBLISHED) throw failure("INVALID_STATE", 409);
-        KnowledgeMutationReceipt raced = reserve(request.requestId(), operation, hash, actor, knowledgeId);
+        KnowledgeMutationReceipt raced = reserve(request.requestId(), operation, hash, actor, knowledgeId, knowledgeId);
         if (raced != null) return raced;
         repository.transition(knowledgeId, request.expectedVersion(), KnowledgeState.PUBLISHED,
                 KnowledgeState.WITHDRAWN, record.publishedRevision());
@@ -229,12 +231,12 @@ public class KnowledgeLifecycleService {
         if (operation == null) throw failure("PERMISSION_DENIED", 403);
         String actor = requireCaseOperation(record, operation, null);
         String hash = requestHash(request);
-        KnowledgeMutationReceipt replay = replay(request.requestId(), operation, hash, actor);
+        KnowledgeMutationReceipt replay = replay(request.requestId(), operation, hash, actor, id);
         if (replay != null) return replay;
         verifyVersion(record, request.expectedVersion());
         if (record.state() != expected) throw failure("INVALID_STATE", 409);
         if (requireSources) requireCurrentSources(id, record.currentRevision());
-        KnowledgeMutationReceipt raced = reserve(request.requestId(), operation, hash, actor, id);
+        KnowledgeMutationReceipt raced = reserve(request.requestId(), operation, hash, actor, id, id);
         if (raced != null) return raced;
         repository.transition(id, request.expectedVersion(), expected, next, publicationRevision);
         return complete(request.requestId(), operation, actor,
@@ -277,11 +279,13 @@ public class KnowledgeLifecycleService {
         throw failure("NOT_ACCESSIBLE", 404);
     }
 
-    private KnowledgeMutationReceipt replay(String requestId, String operation, String requestHash, String actor) {
+    private KnowledgeMutationReceipt replay(String requestId, String operation, String requestHash, String actor,
+                                            String expectedTarget) {
         Map<String, Object> receipt = repository.findReceipt(requestId, operation);
         if (receipt == null) return null;
         if (!requestHash.equals(String.valueOf(receipt.get("request_hash")))
-                || !actor.equals(String.valueOf(receipt.get("actor_id")))) {
+                || !actor.equals(String.valueOf(receipt.get("actor_id")))
+                || (expectedTarget != null && !expectedTarget.equals(String.valueOf(receipt.get("target_id"))))) {
             throw failure("IDEMPOTENCY_CONFLICT", 409);
         }
         String json = String.valueOf(receipt.get("response_json"));
@@ -290,10 +294,10 @@ public class KnowledgeLifecycleService {
     }
 
     private KnowledgeMutationReceipt reserve(String requestId, String operation, String requestHash,
-                                             String actor, String target) {
+                                             String actor, String target, String expectedTarget) {
         try { repository.reserveReceipt(requestId, operation, requestHash, actor, target, "{}"); }
         catch (DuplicateKeyException duplicate) {
-            return replay(requestId, operation, requestHash, actor);
+            return replay(requestId, operation, requestHash, actor, expectedTarget);
         }
         return null;
     }

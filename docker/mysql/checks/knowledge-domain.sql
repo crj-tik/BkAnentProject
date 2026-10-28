@@ -16,7 +16,7 @@ SELECT IF(
     AND EXISTS(SELECT 1 FROM mysql.user WHERE user='knowledge_app' AND host='%')
     AND EXISTS(SELECT 1 FROM mysql.user WHERE user='knowledge_source_ro' AND host='%')
     AND (SELECT COUNT(*) FROM information_schema.table_privileges
-        WHERE grantee='''knowledge_app''@''%''' AND table_schema='bk_knowledge')=14
+        WHERE grantee='''knowledge_app''@''%''' AND table_schema='bk_knowledge')=15
     AND NOT EXISTS(SELECT 1 FROM information_schema.schema_privileges
         WHERE grantee='''knowledge_app''@''%''' AND table_schema IN ('bk_knowledge','bk_interview'))
     AND NOT EXISTS(SELECT 1 FROM information_schema.column_privileges

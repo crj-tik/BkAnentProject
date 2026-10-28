@@ -1378,3 +1378,15 @@
 **结论**：营销生命周期的活动读写只落 `bk_marketing`。旧 `bk_promotion` 库、数据库地址和旧 Nacos 配置在迁移及回退窗口内保留，但不作为有效发布 writer，也不默认授予 MySQL MCP 只读访问；确有迁移审计需要时由运维通过显式、受审配置开放。
 
 **根因**：保留历史数据和可回退制品并不要求把旧服务重新加入日常运行面。默认仍开放旧库会让合并后排查和工具查询继续依赖两套数据口径，且增加误读旧数据的机会；直接删除旧库又会破坏迁移核对和回退能力。
+
+**关联**：LR-90/116/117/118；KI-212；change `consolidate-marketing-promotion-domain`。
+
+## LR-158 Knowledge内容摘要不等于修订身份，幂等回执绑定目标
+
+**结论**：Knowledge revision 的身份由 `(knowledge_id, revision_no)` 决定；`content_hash` 仅指正文内容，因此标题/标签变化或正文回滚可在不同 revision 中复用同一摘要。已有 request id 的操作回执，除请求摘要和 actor 外，还必须匹配原 `target_id`；复用 request id 对另一个 Knowledge 目标操作时返回 `IDEMPOTENCY_CONFLICT`。create 尚无调用方目标 ID，重放时按原请求和 actor 返回第一次创建的目标。完成操作回执需要将预留响应从 `{}` 更新为最终 JSON，应用账号因此需要对该表拥有 UPDATE。
+
+**根因**：幂等键 `(request_id, operation)` 并不天然约束请求体之外的目标对象；正文内容哈希也不代表整个聚合修订。把二者混为唯一身份会拒绝合法的元数据修订，忽略回执目标则可能把 A 案例的成功结果错误返回给 B。
+
+**代码位置**：`knowledge_revision` 迁移与 `knowledge_operation_receipt` 最小授权；`KnowledgeLifecycleService.replay/reserve`；Knowledge migration manifest 与静态配置检查。
+
+**关联**：KI-220；change `extract-knowledge-operations-domain`。

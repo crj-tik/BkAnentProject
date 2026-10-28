@@ -111,6 +111,17 @@ def main() -> None:
     if "bk_promotion" in allowed_databases:
         raise SystemExit(".env.example MySQL MCP allowlist must exclude legacy bk_promotion")
 
+    knowledge_migration = read("sql/migrations/20261027_knowledge_domain.sql")
+    knowledge_check = read("docker/mysql/checks/knowledge-domain.sql")
+    require(knowledge_migration, "UNIQUE KEY uk_knowledge_revision_no (knowledge_id, revision_no)",
+            "Knowledge revision identity")
+    if re.search(r"UNIQUE\s+KEY\s+\w+\s*\(\s*knowledge_id\s*,\s*content_hash\s*\)", knowledge_migration, re.I):
+        raise SystemExit("Knowledge content hashes must be reusable across distinct revisions")
+    require(knowledge_migration,
+            "GRANT SELECT, INSERT, UPDATE ON bk_knowledge.knowledge_operation_receipt TO 'knowledge_app'@'%';",
+            "Knowledge operation receipt application grant")
+    require(knowledge_check, "table_schema='bk_knowledge')=15", "Knowledge application privilege schema check")
+
     view = read("sql/migrations/20261027_knowledge_domain.sql")
     interview_mapper = read("interview-service/src/main/java/com/bkanent/interview/mapper/InterviewAssetMapper.java")
     interview_service = read("interview-service/src/main/java/com/bkanent/interview/service/InterviewAssetService.java")

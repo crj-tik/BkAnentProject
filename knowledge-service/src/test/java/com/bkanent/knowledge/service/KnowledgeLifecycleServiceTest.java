@@ -79,6 +79,36 @@ class KnowledgeLifecycleServiceTest {
     }
 
     @Test
+    void editRequestReceiptCannotBeReplayedForAnotherKnowledgeTarget() {
+        KnowledgeRepository repository = mock(KnowledgeRepository.class);
+        InterviewTranscriptSource source = mock(InterviewTranscriptSource.class);
+        KnowledgeLifecycleService service = new KnowledgeLifecycleService(repository, source);
+        KnowledgeCaseRecord other = new KnowledgeCaseRecord("knowledge-2", "OWN", "1", null,
+                "跟进", "客户没反馈", "带看", List.of(), KnowledgeState.WITHDRAWN, 1, null,
+                "UNKNOWN", 0, OffsetDateTime.now(), OffsetDateTime.now());
+        EditKnowledgeRequest request = new EditKnowledgeRequest("request-edit", 0L, "跟进方案",
+                "客户没反馈", "带看", List.of("回访"), new KnowledgeBody("客户没反馈", "带看",
+                List.of("已完成带看"), List.of("约定回访时间"), List.of("结果待核实"),
+                List.of("客户需要时间"), List.of("转化效果未核验"), "SELF_REPORTED"));
+        when(repository.findCase("knowledge-2", true)).thenReturn(other);
+        when(repository.write(request)).thenReturn("request-json");
+        when(repository.findReceipt("request-edit", KnowledgeOperations.EDIT_OWN)).thenReturn(Map.of(
+                "request_hash", com.bkanent.knowledge.source.TranscriptIntegrity.sha256("request-json"),
+                "actor_id", "1", "target_id", "knowledge-1", "response_json", "{}"));
+
+        try (var ignored = VerifiedKnowledgeContext.open(List.of(KnowledgeOperations.EDIT_OWN), Map.of())) {
+            assertThatThrownBy(() -> service.edit("knowledge-2", request))
+                    .isInstanceOfSatisfying(KnowledgeOperationException.class,
+                            failure -> assertThat(failure.code()).isEqualTo("IDEMPOTENCY_CONFLICT"));
+        }
+
+        verify(repository, never()).reserveReceipt(org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
     void ownerCannotApproveTheirOwnCase() {
         KnowledgeRepository repository = mock(KnowledgeRepository.class);
         InterviewTranscriptSource source = mock(InterviewTranscriptSource.class);

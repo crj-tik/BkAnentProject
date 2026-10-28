@@ -41,7 +41,6 @@ CREATE TABLE IF NOT EXISTS knowledge_revision (
     created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     PRIMARY KEY (revision_id),
     UNIQUE KEY uk_knowledge_revision_no (knowledge_id, revision_no),
-    UNIQUE KEY uk_knowledge_revision_hash (knowledge_id, content_hash),
     CONSTRAINT fk_knowledge_revision_case FOREIGN KEY (knowledge_id) REFERENCES knowledge_case (knowledge_id),
     CONSTRAINT chk_knowledge_revision_mode CHECK (data_mode IN ('REAL','SIMULATED','MIXED','UNKNOWN')),
     CONSTRAINT chk_knowledge_revision_evidence CHECK (evidence_level IN ('SELF_REPORTED','VERIFIED','UNVERIFIED'))
@@ -157,6 +156,6 @@ GRANT SELECT, INSERT, UPDATE ON bk_knowledge.knowledge_case TO 'knowledge_app'@'
 GRANT SELECT, INSERT ON bk_knowledge.knowledge_revision TO 'knowledge_app'@'%';
 GRANT SELECT, INSERT ON bk_knowledge.knowledge_source_ref TO 'knowledge_app'@'%';
 GRANT SELECT, INSERT ON bk_knowledge.knowledge_review_decision TO 'knowledge_app'@'%';
-GRANT SELECT, INSERT ON bk_knowledge.knowledge_operation_receipt TO 'knowledge_app'@'%';
+GRANT SELECT, INSERT, UPDATE ON bk_knowledge.knowledge_operation_receipt TO 'knowledge_app'@'%';
 GRANT SELECT, INSERT, UPDATE ON bk_knowledge.knowledge_generation_task TO 'knowledge_app'@'%';
 GRANT SELECT ON bk_knowledge.knowledge_interview_public_source_v1 TO 'knowledge_source_ro'@'%';

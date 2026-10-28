@@ -1745,3 +1745,13 @@
 **残余与关闭条件**：未连接目标数据库。部署前确认 `bk_auth.bk_schema_migration` 中没有以旧错误摘要登记的手工记录；如存在，DBA 需核对数据库创建结果并修复迁移账本后再运行受管 manifest。完成目标库核对后关闭本项。
 
 **关联**：`docker/mysql/init-manifest.tsv` 第 480 项；`scripts/deploy/test_init_manifest.py`。
+
+## KI-220 [FIXED·本提交·P1] Knowledge修订、幂等回执和数据库授权边界不完整
+
+**发现日期与依据**：2026-10-28，合并前代码评审和本地复核确认三处可复现问题：`knowledge_operation_receipt` 完成回执时执行 UPDATE 但迁移未授权；`knowledge_revision` 对 `(knowledge_id, content_hash)` 的唯一约束会阻止合法的相同正文新修订；同一 actor 复用 request id 与请求体操作另一个 Knowledge 目标时，回执重放未比较 `target_id`。
+
+**修复**：为回执表增加最小 UPDATE 权限并同步 schema check/manifest；移除内容哈希唯一约束，保留 `(knowledge_id, revision_no)` 修订唯一性；回执重放和唯一键竞争重放都验证目标对象，create 则保留对其生成目标的原始回放语义。新增跨目标重放回归检查。
+
+**验证与边界**：迁移清单规范 SHA-256、Knowledge 配置静态检查通过；新增 Knowledge 生命周期回归用例已编译。本机 Surefire 执行受 Java attach 管道拒绝影响而未完成，等待 PR CI 给出运行结果；不代表目标数据库已应用迁移或运行态账号已验收，后者仍由 KI-218 跟踪。
+
+**关联**：LR-158；`KnowledgeLifecycleService`、`20261027_knowledge_domain.sql`、`knowledge-domain.sql`；change `extract-knowledge-operations-domain`。
