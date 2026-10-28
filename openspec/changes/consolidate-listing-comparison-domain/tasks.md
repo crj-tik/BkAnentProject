@@ -31,9 +31,11 @@
 
 - [x] 3.5 编制 REST/MCP/A2A/RPC 入口、调用方/Card/Memory 身份、Auth 权限映射、配置项、Compose 服务/卷的迁移清单；用报告卷、legacy ID、A2A 任务关联及身份配置夹具验证文件、taskId、历史记忆和授权范围保留，真实运行清单由合并后门禁现场核对。证据：切换手册、报告卷/legacy mapper 测试、A2A client taskId correlation tests、`LegacyCompareIngressConfigurationTest` 和 Auth/Memory/Compose identity matrix；运行中任务只在原 Compare 身份下对账，不自动迁移或重发。
 - [x] 3.6 停止旧 compare 能力接收新委托并完成原身份对账；旧 `/compare/**` 仅保留当前授权的 legacy-local 兼容，匿名公开分享不再可读。仅在消费者和历史读取不再依赖时退役旧 Nacos、Compose、环境变量和 Auth/Memory 信任项；保留报告卷定义并迁挂到 Listing。代码默认关闭旧 A2A/MCP、旧 Compare REST/RPC 与 profile、移除 Agent endpoint、Gateway 路由改至 Listing；共享 Nacos 发布和线上排空仍交协调人在切换门禁执行。
+- [x] 3.7 同步 Auth 数据库中的比较权限目录归属：保留 `compare.report.create` / `compare.report.read.own` 稳定权限码与现有角色关联，将其目录 domain/operation 迁至 `listing`，递增授权修订号并发布 outbox；不自动新增角色授权。证据：`20261028_listing_comparison_authorization_domain.sql`、`listing-comparison-auth-domain.sql` 与 MySQL 初始化清单 450。
 ## 4. 验收与交付
 
 - [x] 4.1 在仅有共同基线及本 change 的 worktree 中运行房源/比较和必要调用方聚焦测试/编译，记录模块与独立 Maven 仓库，验证无需其它 change 的新类型或制品。证据：common、listing-master-service、agent-service、compare-engine-service 聚焦构建成功；使用独立 `.m2repo/`。
 - [x] 4.2 用模拟接口执行查询、对比、报告、PDF 及来源失效闭环，验证每个输出保留模拟标记，重试不重复建报告，旧未知调用不被替代重发。证据：`simulatedProviderCompletesSearchComparisonHistoryAndPdfWithoutLosingMode`、来源失效与报告缓存测试；A2A correlation fixture保留请求/远端 taskId。
-- [x] 4.3 在自身隔离库/夹具验证 SQL/check、报告文件保留和回退；逐键核对环境变量、Nacos 占位符、Compose 传递、默认值和敏感项，检查 Compare 残留引用及历史信任/报告卷保留。交付迁移版本、配置矩阵与切流手册；不发布共享 Nacos、不执行容器操作或真实上游联机。本 change 无 SQL DDL；以临时报告卷、来源 check、逐键配置矩阵及本地 `.env` 键名审计验证。
+- [x] 4.3 在自身隔离库/夹具验证既有 SQL/check、报告文件保留和回退；逐键核对环境变量、Nacos 占位符、Compose 传递、默认值和敏感项，检查 Compare 残留引用及历史信任/报告卷保留。交付迁移版本、配置矩阵与切流手册；不发布共享 Nacos、不执行容器操作或真实上游联机。新增 Auth 目录迁移无业务表 DDL，现有角色关联不变；报告仍由卷持久化。20261028 迁移/检查的清单引用与 SHA256 已静态核验，见 4.5。
 - [x] 4.4 同步本域 LR 与独立验收证据；保持 KI-115 的 FIXED 状态并更新迁移后的代码/验证引用，除非新回归证据证明该缺陷复发。OpenSpec 严格校验与 diff 检查通过；本 change 将以中文 commit 并 push 本会话分支，仓库提交不含 `.env` 或秘密，不推 dev-fix 或代合并其它会话。
+- [ ] 4.5 在隔离 `bk_auth` 数据库执行 20261028 权限目录迁移及对应 check，并确认迁移前后 `auth_role_permission` 对旧权限码的显式关联集合完全相同。此环境验收未在本会话连接或执行；部署前由数据库协调人完成。

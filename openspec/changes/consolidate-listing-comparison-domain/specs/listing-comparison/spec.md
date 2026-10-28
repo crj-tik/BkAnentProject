@@ -22,6 +22,18 @@
 - **WHEN** 当前用户能够读取房源，但当前授权上下文不含 `compare.report.create`
 - **THEN** 系统拒绝创建报告，不把 `listing.read`、Agent 可调用资格或管理员展示字段当作比较创建权限
 
+### Requirement: 比较权限目录归属随业务域合并
+
+Auth 权限目录 SHALL 将比较创建和本人报告读取动作归入 `listing` domain，并分别登记为 `comparison.report.create` 与 `comparison.report.read.own`。为保持迁移期兼容，现有权限码 `compare.report.create` 与 `compare.report.read.own` MUST 保持稳定；数据库迁移 MUST 保留已有角色关联，不得自动给角色新增权限，并 MUST 递增受影响的授权修订号及写入 Auth outbox。
+
+#### Scenario: 已有角色持有比较权限
+- **WHEN** Auth 数据库应用比较权限目录迁移
+- **THEN** `compare.report.create` 和 `compare.report.read.own` 的权限码与角色关联不变，目录 domain/operation 更新为 `listing` / `comparison.report.*`，既有用户授权随修订号刷新
+
+#### Scenario: 普通角色未获显式比较授权
+- **WHEN** 迁移应用前某角色没有比较报告权限
+- **THEN** 迁移后该角色仍没有比较报告权限，系统不通过房源读取或 Agent 调用权限推导比较创建权限
+
 ### Requirement: 结果明确事实与生成解释
 
 

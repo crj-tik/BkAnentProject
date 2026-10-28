@@ -2,6 +2,17 @@
 
 本文定义 `consolidate-listing-comparison-domain` 的配置真源、迁移动作与合并后切换门禁。仓库模板可先合并；共享 Nacos 发布、Compose 操作、真实来源联机和旧服务排空必须由协调人按实际环境执行。
 
+## 数据库同步
+
+| 数据 | 当前存储/权限 | 合并后的处理 | 迁移与验收 |
+| --- | --- | --- | --- |
+| 房源业务数据 | `bk_listing.listing_info` | 表结构和房源写入职责不变；比较继续读取稳定来源快照 | 不新增房源字段或比较业务表 |
+| 比较报告 | `compare-report-data` 卷中的 JSON/PDF | Listing 写 `.listing.json` 和 PDF；旧 Compare 文件保留只读盘点 | Compose 保留并迁挂原命名卷，不迁进 MySQL，不删除卷 |
+| Auth 比较权限 | `bk_auth.auth_permission` 中 `compare.report.create`、`compare.report.read.own` | 权限码与既有角色关联保持不变；目录 domain/operation 改为 `listing` / `comparison.report.*`，让权限目录反映新归属 | `20261028_listing_comparison_authorization_domain.sql` 通过 MySQL 初始化清单顺序 450 应用；对应 check 验证目录值和 active 状态。迁移递增权限修订号并写 outbox；不自动给角色授权 |
+| 旧公开分享权限 | `bk_auth.auth_permission` 中 `compare.report.share.public` | 不迁入 Listing；新 Listing 不提供匿名分享，该操作只留给受控旧服务排空/回退 | 在旧 Compare 排空签收前保留目录记录；不可通过新 Listing 启用或解释为新的分享能力 |
+
+当前没有 `bk_compare` 业务库或比较报告表，因此不添加业务 DDL。Auth 元数据迁移不改变有效权限码，也不授予新角色；旧 Compare 回退仍能按原权限码校验。数据库脚本已纳入版本化初始化清单，实际应用由部署协调人执行；本 change 不连接共享数据库。迁移的隔离库执行和授权关联前后对账仍是部署前门禁。
+
 ## 入口与身份迁移清单
 
 | 入口/资产 | 当前目标与调用身份 | 本次变更 | 保留或退役门槛 |

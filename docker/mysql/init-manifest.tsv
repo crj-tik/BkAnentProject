@@ -1,4 +1,4 @@
-# bk-anent initialization v20261022.1; SHA256 uses canonical LF bytes (CR removed).
+# bk-anent initialization v20261028.1; SHA256 uses canonical LF bytes (CR removed).
 # Append a new version when an applied SQL/check file changes.
 # order	phase	version	target_database	file	sha256	schema_check	check_sha256
 010	fresh	bootstrap-20261013-v1	bk_auth	sql/mysql-init.sql	de273d3f1595410a6e40b1bf91d9978df277b18bc82581f680c50da2b59d7294	docker/mysql/checks/bootstrap.sql	68b9cbaade13edbf19860c0500e871ab5b9cf15f140e83217c152c78d77e00fb
@@ -46,3 +46,4 @@
 420	upgrade	a2a-task-authorization-business-20261026-v1	bk_business	sql/migrations/20261026_a2a_task_authorization.sql	8946aa62546215fc1c6781dc84cf03cda8ee2ba0ccc6ec5ca321a49cfb5a411c	docker/mysql/checks/a2a-task-authorization.sql	82a67a4233cddd0779117024917fd9efce6002174e1ebe6522dbaa22852d0c84
 430	upgrade	a2a-task-authorization-contract-20261026-v1	bk_contract	sql/migrations/20261026_a2a_task_authorization.sql	8946aa62546215fc1c6781dc84cf03cda8ee2ba0ccc6ec5ca321a49cfb5a411c	docker/mysql/checks/a2a-task-authorization.sql	82a67a4233cddd0779117024917fd9efce6002174e1ebe6522dbaa22852d0c84
 440	upgrade	a2a-task-authorization-settlement-20261026-v1	bk_settlement	sql/migrations/20261026_a2a_task_authorization.sql	8946aa62546215fc1c6781dc84cf03cda8ee2ba0ccc6ec5ca321a49cfb5a411c	docker/mysql/checks/a2a-task-authorization.sql	82a67a4233cddd0779117024917fd9efce6002174e1ebe6522dbaa22852d0c84
+450	upgrade	listing-comparison-auth-domain-20261028-v1	bk_auth	sql/migrations/20261028_listing_comparison_authorization_domain.sql	ac51f927d6766e4459fd1a52c1c02adeb0844c69bae73e9d6a69229912d6792b	docker/mysql/checks/listing-comparison-auth-domain.sql	6be2bb5b972e51acd1f76cf53d3077bfecb44d02619ad7b577f5bd7c30ca8d4a

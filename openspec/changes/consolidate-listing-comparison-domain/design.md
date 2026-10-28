@@ -50,7 +50,7 @@ Studio 保留自己的工作区事务、候选版本、幂等回执和 `listing.
 
 当前显式发布的匿名分享能力不迁入新域；旧分享码只保留为迁移定位符，未通过当前用户及资源检查时不得返回报告或 PDF。Studio 仍由工作区命令维护工件和回执，只迁移来源读取与确定性计算。通用动态目录不增加关键词路由，新增技能不引入顺序检查器。
 
-使用当前 Auth 版本化签名上下文与新鲜度证明。Agent A2A 能力必须在稳定 `CapabilityId` 配置中精确映射；建议将 `a2a:listing-agent` 映射到已有 `listing.read`，不得用 `agent.chat.use` 或 Agent Card domain 推导授权。每次比较创建另行要求 `compare.report.create`，报告本人读取要求 `compare.report.read.own`，每套来源读取按 `listing.read`/`listing.read.all` 复核；这些代码已存在于 Auth 权限目录，但迁移不推定角色已获授，也不自动扩大角色权限。来源读取仍校验 owner、broker映射、资源状态和版本，权限码不能替代资源归属检查。A2A 使用已绑定的 Auth context/freshness 并为请求正文生成逐请求证明，由接收端本地验证；不在每个工具调用中远程请求 Auth。缺少权限、证明或接线时失败关闭。
+使用当前 Auth 版本化签名上下文与新鲜度证明。Agent A2A 能力必须在稳定 `CapabilityId` 配置中精确映射；建议将 `a2a:listing-agent` 映射到已有 `listing.read`，不得用 `agent.chat.use` 或 Agent Card domain 推导授权。每次比较创建另行要求 `compare.report.create`，报告本人读取要求 `compare.report.read.own`，每套来源读取按 `listing.read`/`listing.read.all` 复核；迁移保留两个既有权限码及其角色关联，只把 Auth 目录的 domain/operation 元数据归入 `listing`，不自动扩大角色权限。数据库迁移同步权限修订号和 outbox，令已有签名上下文刷新。报告仍由 `compare-report-data` 卷保存，不新增比较业务表或 `bk_compare` 库。来源读取仍校验 owner、broker映射、资源状态和版本，权限码不能替代资源归属检查。A2A 使用已绑定的 Auth context/freshness 并为请求正文生成逐请求证明，由接收端本地验证；不在每个工具调用中远程请求 Auth。缺少权限、证明或接线时失败关闭。
 
 
 ### 6. 配置项跨文件同步
