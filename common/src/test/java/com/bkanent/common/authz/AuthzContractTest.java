@@ -146,4 +146,29 @@ class AuthzContractTest {
         assertThrows(UnsupportedOperationException.class, () -> rebuilt.snapshot().permissions().clear());
         assertThrows(UnsupportedOperationException.class, () -> rebuilt.context().allowedOperations().clear());
     }
+
+    @Test
+    void responseAllowsBaselineActionsWithoutSnapshotPermissionButRequiresRestrictedGrants() throws Exception {
+        KeyPair key = keyPair();
+        AuthorizationSnapshot snapshot = AuthzSignature.sign(new AuthorizationSnapshot("123", 7, 3, false,
+                List.of("contract.seal.own"), null, AuthzContract.ALGORITHM, KID, null), key.getPrivate());
+        AuthzFreshness freshness = AuthzSignature.sign(freshness(snapshot), key.getPrivate());
+        AuthorizationContext baselineContext = AuthzSignature.sign(new AuthorizationContext("123", 7, 0,
+                AuthzCanonicalHash.snapshotHash(snapshot), List.of("listing.read"), "agent-service", "entry-request",
+                "run-1", "session-1", HASH, HASH, NONCE, NOW, NOW + 300, NOW + 300,
+                AuthzContract.ALGORITHM, KID, null), key.getPrivate());
+        assertDoesNotThrow(() -> new AuthzResponse(snapshot, baselineContext, freshness));
+
+        AuthorizationContext restrictedContext = AuthzSignature.sign(new AuthorizationContext("123", 7, 0,
+                AuthzCanonicalHash.snapshotHash(snapshot), List.of("contract.seal.own"), "agent-service", "entry-request",
+                "run-1", "session-1", HASH, HASH, NONCE, NOW, NOW + 300, NOW + 300,
+                AuthzContract.ALGORITHM, KID, null), key.getPrivate());
+        assertDoesNotThrow(() -> new AuthzResponse(snapshot, restrictedContext, freshness));
+
+        AuthorizationContext missingGrant = AuthzSignature.sign(new AuthorizationContext("123", 7, 0,
+                AuthzCanonicalHash.snapshotHash(snapshot), List.of("contract.payment.execute"), "agent-service", "entry-request",
+                "run-1", "session-1", HASH, HASH, NONCE, NOW, NOW + 300, NOW + 300,
+                AuthzContract.ALGORITHM, KID, null), key.getPrivate());
+        assertThrows(AuthzException.class, () -> new AuthzResponse(snapshot, missingGrant, freshness));
+    }
 }

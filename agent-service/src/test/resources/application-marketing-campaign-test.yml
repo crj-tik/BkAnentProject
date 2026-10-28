@@ -1,0 +1,5 @@
+agent:
+  supervisor:
+    orchestration:
+      approval-capabilities:
+        - "mcp:marketing-mcp-server:confirmMarketingCampaign"

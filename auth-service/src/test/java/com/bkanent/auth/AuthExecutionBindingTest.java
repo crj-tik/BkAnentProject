@@ -34,7 +34,7 @@ import static org.mockito.Mockito.*;
 class AuthExecutionBindingTest {
     private static final long NOW = 1_800_000_000L;
     private static final String HASH = "a".repeat(64);
-    private static final List<String> OPERATIONS = List.of("agent.chat.use", "interview.read");
+    private static final List<String> OPERATIONS = List.of("contract.seal.own", "settlement.batch.create.all");
 
     @Test
     void realProviderBindsUnboundIngressThenCreatesValidLocalRunSessionWithoutSecondAuthentication() throws Exception {
@@ -52,7 +52,7 @@ class AuthExecutionBindingTest {
         assertThat(run.state()).isEqualTo(AuthorizationLocalState.VALID);
         assertThat(run.context().runId()).isEqualTo("run-1");
         assertThat(run.context().sessionId()).isEqualTo("session-1");
-        assertThat(run.context().allowedOperations()).containsExactly("agent.chat.use");
+        assertThat(run.context().allowedOperations()).containsExactly("contract.seal.own");
         assertThat(run.context().permissionHash()).isEqualTo(ingress.context().permissionHash());
         assertThat(run.context().expiresAtEpochSecond()).isEqualTo(NOW + 300);
         assertThat(run.context().runHardDeadlineEpochSecond()).isEqualTo(NOW + 300);
@@ -114,7 +114,7 @@ class AuthExecutionBindingTest {
                 copy(good, "7", "gateway", "run-1", "session-1", good.operations(), good.ingressRequestHash(), HASH, HASH, 4),
                 copy(good, "7", "agent-service", "run-1", "session-1", good.operations(), "b".repeat(64), HASH, HASH, 5),
                 copy(good, "7", "agent-service", "run-1", "session-1", good.operations(), good.ingressRequestHash(), HASH, "b".repeat(64), 6),
-                copy(good, "7", "agent-service", "run-1", "session-1", List.of("memory.read"), good.ingressRequestHash(), HASH, HASH, 7));
+                copy(good, "7", "agent-service", "run-1", "session-1", List.of("contract.payment.execute"), good.ingressRequestHash(), HASH, HASH, 7));
         clearInvocations(f.repository, f.tokens);
         for (ExecutionBinding binding : wrong) {
             assertThatThrownBy(() -> f.bind(ingress, binding)).isInstanceOf(AuthzException.class);
@@ -184,7 +184,7 @@ class AuthExecutionBindingTest {
             AuthzResponse ingress = f.ingress();
             when(f.repository.snapshot(eq(7L), any())).thenReturn(Optional.of(new EffectivePermissionService.Snapshot(
                     7, change == 0 ? 2 : 1, change == 1 ? 2 : 1, change == 2 ? "DISABLED" : "ACTIVE", false,
-                    1, change == 3 ? List.of("agent.chat.use") : OPERATIONS, null)));
+                    1, change == 3 ? List.of("interview.read") : OPERATIONS, null)));
             clearInvocations(f.repository);
             assertThatThrownBy(() -> f.bind(ingress, f.binding(ingress, 2))).isInstanceOf(AuthzException.class);
             verify(f.repository, never()).consumeNonce(anyString(), anyString(), anyString(), any(), any());
@@ -227,7 +227,7 @@ class AuthExecutionBindingTest {
         assertThat(first.context().expiresAtEpochSecond()).isEqualTo(NOW + 20);
         assertThat(retry.context().expiresAtEpochSecond()).isEqualTo(NOW + 20);
         assertThat(retry.context().runHardDeadlineEpochSecond()).isEqualTo(NOW + 300);
-        var tooLong = new ExecutionBinding("agent-service", "7", "run-1", "session-1", List.of("agent.chat.use"),
+        var tooLong = new ExecutionBinding("agent-service", "7", "run-1", "session-1", List.of("contract.seal.own"),
                 c.requestHash(), HASH, HASH, "binding-4", nonce(4), NOW + 5, NOW + 21, AuthzContract.ALGORITHM);
         assertThatThrownBy(() -> f.bind(limited, tooLong)).isInstanceOf(AuthzException.class).hasMessage("CONTEXT_CONFLICT");
     }
@@ -338,7 +338,7 @@ class AuthExecutionBindingTest {
 
         ExecutionBinding binding(AuthzResponse ingress, int id) {
             long now = clock.instant().getEpochSecond();
-            return new ExecutionBinding("agent-service", "7", "run-1", "session-1", List.of("agent.chat.use"),
+            return new ExecutionBinding("agent-service", "7", "run-1", "session-1", List.of("contract.seal.own"),
                     ingress.context().requestHash(), HASH, HASH, "binding-" + id, nonce(id), now,
                     Math.min(now + 60, ingress.context().expiresAtEpochSecond()), AuthzContract.ALGORITHM);
         }

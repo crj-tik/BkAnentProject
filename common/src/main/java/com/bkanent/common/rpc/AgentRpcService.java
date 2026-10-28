@@ -1,7 +1,8 @@
 package com.bkanent.common.rpc;
 
 import com.bkanent.common.model.KpiSummaryDTO;
-import com.bkanent.common.model.MarketingContentDTO;
+import com.bkanent.common.model.PublishRequest;
+import com.bkanent.common.marketing.campaign.MarketingContentDraftResponse;
 
 import java.util.List;
 
@@ -10,10 +11,8 @@ import java.util.List;
  */
 public interface AgentRpcService {
 
-    /**
-     * 业务方法：publishListingByPrompt。
-     */
-    List<MarketingContentDTO> publishListingByPrompt(String rawInput);
+    /** Creates DRAFT marketing content; publication must use the campaign plan and Supervisor approval flow. */
+    List<MarketingContentDraftResponse> createMarketingDraft(PublishRequest request);
 
     /**
      * 业务方法：generateKpiNarrative。

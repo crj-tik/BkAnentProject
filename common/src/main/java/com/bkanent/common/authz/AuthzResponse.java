@@ -19,7 +19,9 @@ public record AuthzResponse(AuthorizationSnapshot snapshot, AuthorizationContext
                 && context.credentialEpoch() == freshness.credentialEpoch()
                 && context.permissionHash().equals(AuthzCanonicalHash.snapshotHash(snapshot))
                 && context.permissionHash().equals(freshness.permissionHash())
-                && snapshot.permissions().containsAll(context.allowedOperations()), AuthzErrorCode.CONTEXT_CONFLICT);
+                && snapshot.permissions().containsAll(
+                        AuthzOperationPolicy.requiredPermissions(context.allowedOperations())),
+                AuthzErrorCode.CONTEXT_CONFLICT);
         AuthzContract.check(freshness.status() == AuthorizationStatus.ACTIVE, AuthzErrorCode.AUTHENTICATION_FAILED);
         AuthzContract.check(snapshot.grantDeadlineEpochSecond() == null
                 || context.expiresAtEpochSecond() <= snapshot.grantDeadlineEpochSecond(), AuthzErrorCode.CONTEXT_CONFLICT);

@@ -26,11 +26,13 @@ Interviewer已完整审阅51个main Java、4资源、10测试及3迁移；82项�
 
 ### D1. 显式目录、业务管理员与角色组合
 
-增加 `auth_permission(permission_code, domain, operation, active, version)`、`auth_role_permission(role_id, permission_code)`、`auth_user_role(user_id, role_id, valid_from, valid_until, active)`，沿用auth_role的active/assignable/deleted。用户增加独立 `business_admin`，不是ADMIN角色隐式通配；普通有效权限为有效角色、有效权限的并集。初始迁移把现有ADMIN映射为business_admin，现有BROKER映射为有明确权限清单的角色，不给未知角色或任意前后缀追加权限。
+增加 `auth_permission(permission_code, domain, operation, active, version)`、`auth_role_permission(role_id, permission_code)`、`auth_user_role(user_id, role_id, valid_from, valid_until, active)`，沿用auth_role的active/assignable/deleted。用户增加独立 `business_admin`，不是ADMIN角色隐式通配；普通用户的受限操作权限为有效角色与显式授权的并集。普遍面向有效登录用户的基础能力不进入权限目录，仍要求可信身份上下文及适用的owner/状态校验。初始迁移把现有ADMIN映射为business_admin，现有BROKER映射为有明确受限操作清单的角色，不给未知角色或任意前后缀追加权限。
 
-权限目录由版本化迁移/登记清单和代码操作契约维护；管理API可以调整角色组合和用户授予，不能创建未落地工具的任意可执行码。所有关联有审计。管理员可使用全部已登记有效操作，但实际资源范围仍由领域决定。Memory self-only不例外，服务调用ACL也不因业务管理员扩大。
+权限目录只登记默认不向所有有效登录用户开放、必须显式授予的受限能力；不按接口、CRUD、Graph节点或subAgent拆码。管理API可以调整受限操作的角色组合和用户授予，不能创建未落地工具的任意可执行码。所有关联有审计。管理员可使用全部已登记有效受限操作，但实际资源范围仍由领域决定。Memory self-only不例外，服务调用ACL也不因业务管理员扩大。
 
-首批明确权限：`agent.chat.use`、`agent.workflow.read`、`agent.workflow.artifact.read`、`agent.governance.read/manage`、`agent.audit.read/manage`、已登记的 `agent.workflow.invoke.<domain>`、MCP逐工具操作码、`interview.initiate/read/assist/end/report.generate/asset.submit/asset.publish/asset.regrade`、`memory.read/write/search/share/revoke/delete`、`memory.constraint.read/manage`、`memory.experience.governance.publish`、`auth.users.manage/roles.manage`。本人访谈读取和回答为参与关系基本能力，可由所有普通用户基础角色的 `interview.read/respond` 表达；撤销发起权限不撤销本人历史基本读取。
+逐项复核当前目录与调用点后，将26个普遍基础动作归入“签名身份+适用资源关系/状态检查”，不再作为权限授予：`agent.chat.use`、`agent.workflow.read`、`agent.workflow.artifact.read`、`listing.read/create/update.own`、`customer.read/create/update.own/follow.read.own/follow.write.own/favorite.read.own/favorite.write.own/match.own`、`compare.report.create/read.own`、`media.task.read.own`、`notification.message.read.own/mark-read.own`、`interview.initiate/read/respond/end`、`memory.read/write/search`。其余121个现有目录码均归为受限拦截点，保留精确码和显式授予。受限示例包括 `agent.governance.read/manage`、`agent.audit.read/manage`、受策略限制的 `agent.workflow.invoke.<domain>`、跨资源或敏感MCP能力、访谈协助/报告/资产发布与重评、Memory跨用户共享/删除/治理、Auth管理、签章、付费媒体生成及通知发送。新增业务码仍须记录限制理由、入口、owner关系和状态规则；`.own` 本身不决定是否免码。
+
+Auth签名 `AuthorizationContext.allowedOperations` 携带当前有效受限权限和固定的26个基础动作标识，供下游将签名请求路由到正确业务动作；`AuthorizationSnapshot.permissions` 只携带受限权限。基础动作标识不代表角色授予，消费端仍须取得有效上下文，并检查actor、资源owner/参与关系、状态和适用业务映射。角色授权表中对应关系在目录迁移中清除，目录行停用保留以便审计。
 
 替代方案：每SubAgent硬编码角色或沿当前前后缀规则更省迁移，但无法精确审计操作；通用策略引擎当前成本高于业务规则规模，因此不选。
 
@@ -82,7 +84,7 @@ Pub/Sub只加速，不作为唯一可靠交付。Auth每5秒对活跃缓存head�
 
 ### D7. 域入口独立验证与请求完整性
 
-新增版本化原生Dubbo授权RPC `validateDelegation(parentContext, binding, callerProof)`，供尚未迁移为本地验证的MCP/业务执行边界使用一次。**Agent-to-Agent A2A 采用请求级本地验证**：Supervisor 入口取得并绑定 Auth 签名的 `AuthorizationContext` 与 `AuthzFreshness`；Agent 对每个实际 JSON-RPC 请求构造窄 `DelegationBinding`（单一稳定操作码、caller/audience、actor、run/task、requestId、精确 bodyHash、policyDigest、nonce、期限），再用 Agent 服务 Ed25519 key 对父 context 与 binding 签署 `CallerProof`。接收端在官方 TaskStore/Queue 前本地验证 Auth 的 context/freshness 签名、Agent caller proof、请求方法/ID/task/body/audience、操作范围、nonce 与期限，不调用 Auth；Agent 只在已存在的 Graph 规划刷新边界发现 DIRTY/过期时调用 Auth refresh，之后新的子调用使用更新后的同 run context。每个流事件只检查已建立的本地 lease 与输出/来源条件，不发 Auth 请求。binding 仅可包含父 context 已允许的稳定操作，不从正文 userId/role/admin 字段构造 actor 或权限。MCP/业务 RPC 仍按原 `validateDelegation` 设计验证一次，完成其独立迁移后才能采用相同的本地协议；不得因 A2A 方案放宽 Memory/RAG owner、来源、grant、业务状态、审批或执行租约检查。
+新增版本化原生Dubbo授权RPC `validateDelegation(parentContext, binding, callerProof)`，供尚未迁移为本地验证的MCP/业务执行边界使用一次。**Agent-to-Agent A2A 采用请求级本地验证**：Supervisor入口取得并绑定Auth签名的`AuthorizationContext`与`AuthzFreshness`；Agent对每个实际JSON-RPC请求构造窄`DelegationBinding`（稳定CapabilityId/动作标识、若命中受限拦截点则带精确权限码、caller/audience、actor、run/task、requestId、精确bodyHash、policyDigest、nonce、期限），再用Agent服务Ed25519 key对父context与binding签署`CallerProof`。接收端在官方TaskStore/Queue前本地验证Auth的context/freshness签名、Agent caller proof、请求方法/ID/task/body/audience、动作分类、受限权限（仅受限时）、nonce与期限，不调用Auth；基础动作仍需验有效身份并由目标域核资源关系/状态。Agent只在已存在的Graph规划刷新边界发现DIRTY/过期时调用Auth refresh，之后新的子调用使用更新后的同run context。每个流事件只检查已建立的本地lease与输出/来源条件，不发Auth请求。binding仅包含可信配置确定的动作分类和必要权限码，不从正文userId/role/admin字段构造actor或权限。MCP/业务RPC完成独立迁移后采用同一分类与请求证明协议；不得因A2A方案放宽Memory/RAG owner、来源、grant、业务状态、审批或执行租约检查。
 
 登录/login、refresh、me及UserManagement的单role准入同步迁至businessAdmin+有效角色集合；旧roleCode仅兼容展示，不决定新授权，也不继续只准ADMIN/BROKER。RAG版本化principal/scope新增permissionRevision/credentialEpoch/businessAdmin及明确操作集合与受权业务范围，保留独立HMAC但两侧同步DTO/算法域版本。businessWideRead/activeOnly由领域根据新授权事实签发，RAG独立验证事实和空间操作交集，不把某个任意角色名字解释成管理员；legacy ADMIN/BROKER只作受控迁移映射，普通用户房源可读仍默认ON_SALE。管理员无role也可正常管理业务空间，个人Memory仍self-only。旧REST的“ADMIN唯一管理”改为受信businessAdmin管理许可，不根据普通user参数扩大。
 
@@ -118,7 +120,7 @@ Auth先验证原context签名及真实actor/audience/期限，不要求原permis
 
 ### D8. MCP第一阶段只开放可验证服务
 
-InterviewMcpTools当前6个普通@Tool无真实provider bean，先完成明确ToolCallbackProvider/官方注册及服务端受限委托入口。**MCP采用请求级签名上下文**：Supervisor从当前有效的已绑定run/session上下文取Auth签名context/freshness；专用客户端transport为每个实际`tools/call`按已登记的server+tool操作码生成新的短期binding和Agent服务proof，精确绑定实际JSON-RPC method/id/body，不让授权材料进入模型可见参数或日志。服务端在工具分发前本地验证Auth签名、Freshness、caller/audience、tool操作、actor/run/body/nonce/期限并做有界一次性重放拦截；同一调用内代码不逐步认证，权限只在Supervisor已有的规划刷新边界联系Auth，工具调用不新增Auth/Redis往返。缺context、映射、签名、服务能力声明或本地验证配置时拒绝用户委托调用。外部MCP不支持该协议时，Supervisor只允许可信清单显式标记为无私有数据的能力，且不向其发送用户身份；绝不从userId业务参数推断actor。MCP admin连接管理权限与用户工具操作/业务资源权限分开。
+InterviewMcpTools当前6个普通@Tool无真实provider bean，先完成明确ToolCallbackProvider/官方注册及服务端受限委托入口。**MCP采用请求级签名上下文**：Supervisor从当前有效的已绑定run/session上下文取Auth签名context/freshness；可信配置先将server+tool分类为基础或受限能力，专用客户端transport为每个实际`tools/call`签发新的短期binding和Agent服务proof，绑定实际JSON-RPC method/id/body及稳定动作标识，受限能力再绑定已登记权限码，不让授权材料进入模型可见参数或日志。服务端在工具分发前本地验证Auth签名、Freshness、caller/audience、tool分类/受限权限、actor/run/body/nonce/期限并做有界一次性重放拦截；基础能力也不得缺少可信用户上下文及目标域owner/状态检查。同一调用内代码不逐步认证，权限只在Supervisor已有的规划刷新边界联系Auth，工具调用不新增Auth/Redis往返。缺context、分类、签名、服务能力声明或本地验证配置时拒绝用户委托调用。外部MCP不支持该协议时，Supervisor只允许可信清单显式标记为无私有数据的能力，且不向其发送用户身份；绝不从userId业务参数推断actor。MCP admin连接管理权限与用户工具操作/业务资源权限分开。
 
 不新增任意HTTP授权回调URL；权限RPC用受管注册中心，版本广播用Redis。涉及新增服务端URL请求时只允许http/https、请求前校验精确host并拒绝localhost、环回、私有和保留地址，同时防重定向和DNS换址；不扩大已有RAG受管网络策略，本次新增HTTP调用不借已有私网例外。内部MCP验收优先原生适配/服务器入口，不新增绕过地址策略的客户端。
 
@@ -126,22 +128,22 @@ InterviewMcpTools当前6个普通@Tool无真实provider bean，先完成明确To
 
 统一chat、sync/async、continuation/approval、SSE、audit、query的持久session owner核查。run幂等注册以actor+session+requestId定位并比较规范化输入/policy hash，重复不同正文/会话返回409。已完成/unknown工具保持原call关联；当前结果读取仍做资源/来源核验，不因先前成功绕过。管理员业务诊断全读走独立管理permission并审计，不允许ordinary audit无筛选查全局，不把诊断权扩至Memory私有正文。
 
-将目录能力->操作许可映射改为可信配置中的稳定CapabilityId->Auth已登记精确操作码映射：A2A按agentId，MCP按server+tool，本地工具按tool；不从首domain、Agent Card声明、模型参数、server.read或chat.use推导新授权。缺映射的能力隐藏，直接调用也拒绝；映射操作只有在Auth当前签名集合中才可见，管理员身份不生成通配操作。动态目录每轮从当前发现结果和本地签名集合交集生成，因此新增能力在登记精确映射并获授后自然可见。技能正文版本和scope继续与能力交集。Graph仅在已有run重新进入业务Model时读一次签名head；同版更新本地freshness后复用会话，版本变化时对原run/session签名refresh并在其后刷新目录，节点/工具/子Agent不逐个请求Auth。审批原call/args hash、run租约/cancel、预算/副作用账本仍实时守卫，新增transition同步KI-2回归。
+将目录能力->授权策略改为可信配置中的稳定CapabilityId分类：A2A按agentId，MCP按server+tool，本地工具按tool；限制明确时再映射到Auth已登记精确权限码。基础能力须显式标记为仅需已绑定身份上下文，并由目标域检查owner/状态；受限能力须具备权限码映射及有效签名授权。不得从首domain、Agent Card声明、模型参数、server.read或chat.use推导分类或权限。缺少分类的能力隐藏，直接调用也拒绝；管理员身份不生成通配操作。动态目录每轮按当前发现结果、本地身份上下文和受限权限集合生成。Graph仅在已有run重新进入业务Model时读一次签名head；同版更新本地freshness后复用会话，版本变化时对原run/session签名refresh并在其后刷新目录，节点/工具/子Agent不逐个请求Auth。审批原call/args hash、run租约/cancel、预算/副作用账本仍实时守卫，新增transition同步KI-2回归。
 
 ### D10. 访谈主体关系与操作矩阵
 
-在case/session增加可信created_by_user_id；新增 `interview_participant(session_id,user_id,relation,confirmed_at,revision,state)`，relation仅CREATE/RESPOND资源关系，不是Auth角色。普通用户创建需interview.initiate，受访绑定通过已认证用户接受邀请确认（邀请引用非认证票，不替代登录）。创建人录入工号只能作为业务metadata，服务端映射需可靠身份来源；没有员工目录时用平台userId明确选择+受访接受，不靠姓名猜测。第一版不支持匿名受访者。
+在case/session增加可信created_by_user_id；新增 `interview_participant(session_id,user_id,relation,confirmed_at,revision,state)`，relation仅CREATE/RESPOND资源关系，不是Auth角色。只有产品策略限制发起资格时才要求 `interview.initiate`；普遍开放的创建及本人参与操作由已认证actor、参与关系和状态控制。受访绑定通过已认证用户接受邀请确认（邀请引用非认证票，不替代登录）。创建人录入工号只能作为业务metadata，服务端映射需可靠身份来源；没有员工目录时用平台userId明确选择+受访接受，不靠姓名猜测。第一版不支持匿名受访者。
 
 | 动作 | 操作条件 | 资源条件 | 业务条件 |
 |---|---|---|---|
-| 发起 | interview.initiate | actor成为created_by | 要素校验，不代建他人owner |
-| 本人列表/详情/结果/回执 | interview.read或基础参与读取 | CREATE或RESPOND；业务管理员全读 | 未删；结果确属于该session |
-| 提交回答 | interview.respond | 已确认RESPOND；创建人自访时明确自受访 | IN_PROGRESS，原幂等键 |
-| 题目创建/确认、启动 | initiate对应受权动作 | CREATE；管理员明确操作 | DRAFT/QUESTIONS_CONFIRMED；禁止运行后写题单 |
-| 协助加问/下一题/收束 | interview.assist | CREATE；管理员明确业务管理 | IN_PROGRESS；不设导演用户 |
-| 主动结束 | interview.end | CREATE；管理员明确业务管理 | 入原运行结束指令，不从工具冒用RUNTIME |
-| 报告生成 | interview.report.generate | CREATE或获准管理员 | case/asset/session同源且源可用 |
-| 上传/发布/重评级 | submit/publish/regrade各自许可 | 自身资料/获准管理 | 脱敏、metadata、grade及发布审查 |
+| 发起 | 普遍开放时无需权限码；若限制发起资格则用`interview.initiate` | actor成为created_by | 要素校验，不代建他人owner |
+| 本人列表/详情/结果/回执 | 基础参与读取无需权限码；跨参与者读取需受限权限 | CREATE或RESPOND；业务管理员显式业务范围 | 未删；结果确属于该session |
+| 提交回答 | 普遍开放给参与者时无需权限码；若限制则用`interview.respond` | 已确认RESPOND；创建人自访时明确自受访 | IN_PROGRESS，原幂等键 |
+| 题目创建/确认、启动 | 普遍开放给创建者时按关系/状态校验；限制时用对应受限码 | CREATE；管理员明确操作 | DRAFT/QUESTIONS_CONFIRMED；禁止运行后写题单 |
+| 协助加问/下一题/收束 | 创建者基础操作按关系/状态校验；限制时才用`interview.assist` | CREATE；管理员明确业务管理 | IN_PROGRESS；不设导演用户 |
+| 主动结束 | 创建者基础操作按关系/状态校验；限制时才用`interview.end` | CREATE；管理员明确业务管理 | 入原运行结束指令，不从工具冒用RUNTIME |
+| 报告生成 | 普遍开放时无需权限码；若被限制则用`interview.report.generate` | CREATE或获准管理员 | case/asset/session同源且源可用 |
+| 上传/发布/重评级 | 敏感发布/重评级使用各自受限权限码；普通上传按关系授权 | 自身资料/获准管理 | 脱敏、metadata、grade及发布审查 |
 
 权限通过不跳状态。`transition`先验组件actor和目标合法性再返回已目标状态的幂等值，不能让重复调用绕过；工具内部mode更新/重签与start分开。题目服务在任何写前核状态及关系，批次原子校验，非法questionIds不能先反确认再报错。协助指令保存actor/permission revision/来源场次并在消费前核当前关系，关闭行为保持纯运行管线。
 

@@ -637,7 +637,8 @@ Supervisor 灞傞潰鐨勫伐鍏峰垎缁勬寜 domain 鍋氳嚜鍔ㄨ矾鐢憋�
 Map<String, List<String>> domainToolGroups = Map.of(
     "trade",     List.of("queryMonthlyKpis", "..."),  // business-mcp-server
     "compare",   List.of("compareListings"),           // compare-mcp-server
-    "marketing", List.of("publishMarketingContent")    // marketing-mcp-server
+    "marketing", List.of("createMarketingContentDraft", "prepareMarketingCampaign",
+        "confirmMarketingCampaign", "getMarketingCampaignReceipt", "reconcileMarketingCampaignAttempt") // marketing-mcp-server
 );
 
 // Planner 鍏堢‘瀹?domain 鈫?鍙姞杞借 domain 鐨?MCP 宸ュ叿

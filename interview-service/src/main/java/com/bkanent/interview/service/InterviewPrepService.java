@@ -112,6 +112,8 @@ public class InterviewPrepService {
         regionName = Sanitizer.redactCredentials(regionName);
         businessDistrict = Sanitizer.redactCredentials(businessDistrict);
         creatorWorkNo = Sanitizer.redactCredentials(creatorWorkNo);
+        // The legacy column remains NOT NULL, but it is never an identity or ownership source.
+        if (creatorWorkNo == null) creatorWorkNo = "";
         OutlineRouter.RouteResult route = OutlineRouter.route(scene, respondentRole, caseStatus);
 
         InterviewCaseEntity caseEntity = new InterviewCaseEntity();
@@ -129,6 +131,7 @@ public class InterviewPrepService {
 
         InterviewPrepCardEntity prepCard = new InterviewPrepCardEntity();
         prepCard.setCaseId(caseEntity.getId());
+        prepCard.setDynamicFields("{}");
         prepCard.setCompleteness("LOW");
         prepCard.setQuestionStrategy("EXPLORE");
         prepCardMapper.insert(prepCard);

@@ -77,7 +77,8 @@ public class AuthAuthorizationRpcServiceImpl implements AuthAuthorizationRpcServ
                     principal.expiresAt(), deadline(facts));
             requireCurrent(facts);
             consume(proof, checkedAt);
-            return registerActive(response(facts, facts.permissions(), binding.audience(), binding.requestId(), binding.runId(),
+            return registerActive(response(facts, AuthzOperationPolicy.contextOperations(facts.permissions()),
+                    binding.audience(), binding.requestId(), binding.runId(),
                     binding.sessionId(), binding.policyDigest(), requestHash, binding.nonce(), checkedAt,
                     hardDeadline, hardDeadline));
         } catch (AuthzException exception) {
@@ -97,7 +98,8 @@ public class AuthAuthorizationRpcServiceImpl implements AuthAuthorizationRpcServ
             var caller = verifyProof(proof, binding.callerService(), AUTH_AUDIENCE, AuthzRpcOperation.BIND_EXECUTION,
                     binding.requestId(), requestHash, binding.nonce(), now);
             require(caller.getAudiences().contains(binding.callerService()), AuthzErrorCode.PERMISSION_DENIED);
-            require(caller.getPermissionCodes().containsAll(binding.operations()), AuthzErrorCode.PERMISSION_DENIED);
+            require(caller.getPermissionCodes().containsAll(
+                    AuthzOperationPolicy.requiredPermissions(binding.operations())), AuthzErrorCode.PERMISSION_DENIED);
             // Nonce admission, immutable ingress fact, version recheck and signing join one writer transaction.
             // No token lookup, publication, network or business-resource operation occurs under this lock.
             AuthzResponse bound = repository.withWriterLock(() -> {
@@ -109,7 +111,8 @@ public class AuthAuthorizationRpcServiceImpl implements AuthAuthorizationRpcServ
                         && facts.credentialEpoch() == original.credentialEpoch()
                         && AuthzCanonicalHash.snapshotHash(snapshot(facts)).equals(original.permissionHash()),
                         AuthzErrorCode.CONTEXT_CONFLICT);
-                require(facts.permissions().containsAll(binding.operations()), AuthzErrorCode.PERMISSION_DENIED);
+                require(facts.permissions().containsAll(
+                        AuthzOperationPolicy.requiredPermissions(binding.operations())), AuthzErrorCode.PERMISSION_DENIED);
                 requireCurrent(facts);
                 long expiry = AuthzDeadlines.contextExpiresAt(checkedAt.getEpochSecond(),
                         original.expiresAtEpochSecond(), original.runHardDeadlineEpochSecond(), deadline(facts));
@@ -167,7 +170,9 @@ public class AuthAuthorizationRpcServiceImpl implements AuthAuthorizationRpcServ
             require(facts.permissionRevision() != original.permissionRevision()
                     || AuthzCanonicalHash.snapshotHash(snapshot(facts)).equals(original.permissionHash()),
                     AuthzErrorCode.CONTEXT_CONFLICT);
-            List<String> operations = original.allowedOperations().stream().filter(facts.permissions()::contains).toList();
+            List<String> operations = original.allowedOperations().stream()
+                    .filter(operation -> AuthzOperationPolicy.isBaseline(operation)
+                            || facts.permissions().contains(operation)).toList();
             long expiry = Math.min(principal.expiresAt(), AuthzDeadlines.contextExpiresAt(checkedAt.getEpochSecond(),
                     original.expiresAtEpochSecond(), original.runHardDeadlineEpochSecond(), deadline(facts)));
             require(expiry > checkedAt.getEpochSecond(), AuthzErrorCode.EXPIRED);
@@ -208,8 +213,9 @@ public class AuthAuthorizationRpcServiceImpl implements AuthAuthorizationRpcServ
                     receiverProof == null ? null : receiverProof.nonce(), checkedAt);
             require(origin.getAudiences().contains(binding.audience())
                     && receiver.getAudiences().contains(binding.audience()), AuthzErrorCode.PERMISSION_DENIED);
-            require(origin.getPermissionCodes().containsAll(binding.operations())
-                    && receiver.getPermissionCodes().containsAll(binding.operations()), AuthzErrorCode.PERMISSION_DENIED);
+            List<String> requiredPermissions = AuthzOperationPolicy.requiredPermissions(binding.operations());
+            require(origin.getPermissionCodes().containsAll(requiredPermissions)
+                    && receiver.getPermissionCodes().containsAll(requiredPermissions), AuthzErrorCode.PERMISSION_DENIED);
             var facts = load(Long.parseLong(parent.actorId()), checkedAt);
             requireCurrent(facts);
             require(facts.permissionRevision() == parent.permissionRevision()
@@ -217,7 +223,7 @@ public class AuthAuthorizationRpcServiceImpl implements AuthAuthorizationRpcServ
             AuthorizationSnapshot snapshot = snapshot(facts);
             require(AuthzCanonicalHash.snapshotHash(snapshot).equals(parent.permissionHash()),
                     AuthzErrorCode.CONTEXT_CONFLICT);
-            require(facts.permissions().containsAll(binding.operations()), AuthzErrorCode.PERMISSION_DENIED);
+            require(facts.permissions().containsAll(requiredPermissions), AuthzErrorCode.PERMISSION_DENIED);
             consume(originProof, checkedAt);
             consume(receiverProof, checkedAt);
             long expiry = AuthzDeadlines.contextExpiresAt(checkedAt.getEpochSecond(),
@@ -304,7 +310,8 @@ public class AuthAuthorizationRpcServiceImpl implements AuthAuthorizationRpcServ
 
     private AuthorizationSnapshot snapshot(EffectivePermissionService.Snapshot facts) {
         return AuthzSignature.sign(new AuthorizationSnapshot(Long.toString(facts.userId()),
-                facts.permissionRevision(), facts.catalogVersion(), facts.businessAdmin(), facts.permissions(),
+                facts.permissionRevision(), facts.catalogVersion(), facts.businessAdmin(),
+                AuthzOperationPolicy.requiredPermissions(facts.permissions()),
                 deadline(facts), facts.businessIdentities(), AuthzContract.ALGORITHM, properties.getResponseKeyId(), null), signingKey);
     }
 

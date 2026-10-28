@@ -6,6 +6,7 @@ import com.bkanent.auth.service.UserManagementService;
 import com.bkanent.auth.service.UserAccountService;
 import com.bkanent.common.rpc.AuthPermissionRpcService;
 import com.bkanent.common.rpc.AuthenticatedPrincipal;
+import com.bkanent.common.authz.AuthzOperationPolicy;
 import org.apache.dubbo.config.annotation.DubboService;
 import org.springframework.util.StringUtils;
 
@@ -52,11 +53,15 @@ public class AuthPermissionRpcServiceImpl implements AuthPermissionRpcService {
         }
         if (userManagementService.isVersionedAuthorization()) {
             try {
-                return userManagementService.authorization(userId).hasPermission(permissionCode, java.time.Instant.now());
+                var authorization = userManagementService.authorization(userId);
+                return "ACTIVE".equals(authorization.status())
+                        && (AuthzOperationPolicy.isBaseline(permissionCode)
+                        || authorization.hasPermission(permissionCode, java.time.Instant.now()));
             } catch (com.bkanent.auth.service.UserManagementException missing) { return false; }
         }
         UserAccountEntity account = userAccountService.getById(userId);
         if (!isActive(account)) return false;
+        if (AuthzOperationPolicy.isBaseline(permissionCode)) return true;
         if (java.util.Set.of("agent.rag.manage", "agent.vector-store.manage", "agent.mcp.vector-store.manage",
                 "rag.space.manage", "memory.constraint.manage", "auth.users.manage").contains(permissionCode)
                 || permissionCode.endsWith(".admin") || permissionCode.endsWith(".manage")

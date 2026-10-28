@@ -28,9 +28,9 @@ public final class AgentMcpNames {
      */
     public static final String QUERY_MONTHLY_KPIS = "queryMonthlyKpis";
     /**
-     * 字段：PUBLISH_MARKETING_CONTENT。
+     * 字段：CREATE_MARKETING_CONTENT_DRAFT。
      */
-    public static final String PUBLISH_MARKETING_CONTENT = "publishMarketingContent";
+    public static final String CREATE_MARKETING_CONTENT_DRAFT = "createMarketingContentDraft";
 
     /** Exact service audience for a reviewed first-party HTTP MCP connection. */
     public static String firstPartyAudience(String serverName) {

@@ -8,7 +8,7 @@
 | --- | --- | --- | --- |
 | 房源业务数据 | `bk_listing.listing_info` | 表结构和房源写入职责不变；比较继续读取稳定来源快照 | 不新增房源字段或比较业务表 |
 | 比较报告 | `compare-report-data` 卷中的 JSON/PDF | Listing 写 `.listing.json` 和 PDF；旧 Compare 文件保留只读盘点 | Compose 保留并迁挂原命名卷，不迁进 MySQL，不删除卷 |
-| Auth 比较权限 | `bk_auth.auth_permission` 中 `compare.report.create`、`compare.report.read.own` | 权限码与既有角色关联保持不变；目录 domain/operation 改为 `listing` / `comparison.report.*`，让权限目录反映新归属 | `20261028_listing_comparison_authorization_domain.sql` 通过 MySQL 初始化清单顺序 450 应用；对应 check 验证目录值和 active 状态。迁移递增权限修订号并写 outbox；不自动给角色授权 |
+| Auth 比较动作目录 | `bk_auth.auth_permission` 中 `compare.report.create`、`compare.report.read.own` | 稳定操作码仍进入签名上下文，但不是角色权限；基线退役先停用目录行并清除角色关联，Listing 迁移只把目录 domain/operation 改为 `listing` / `comparison.report.*` | `20261028_listing_comparison_authorization_domain.sql` 通过 MySQL 初始化清单顺序 460 应用；check 验证目录行保持停用、无角色关联且迁移账本完整。目录元数据变化时递增授权修订号并写 outbox；不重新激活或授予角色 |
 | 旧公开分享权限 | `bk_auth.auth_permission` 中 `compare.report.share.public` | 不迁入 Listing；新 Listing 不提供匿名分享，该操作只留给受控旧服务排空/回退 | 在旧 Compare 排空签收前保留目录记录；不可通过新 Listing 启用或解释为新的分享能力 |
 
 当前没有 `bk_compare` 业务库或比较报告表，因此不添加业务 DDL。Auth 元数据迁移不改变有效权限码，也不授予新角色；旧 Compare 回退仍能按原权限码校验。数据库脚本已纳入版本化初始化清单，实际应用由部署协调人执行；本 change 不连接共享数据库。迁移的隔离库执行和授权关联前后对账仍是部署前门禁。
@@ -19,7 +19,7 @@
 | --- | --- | --- | --- |
 | Listing Business REST：`/listings/business/v1/search`、`/snapshots/batch-read`、`/snapshots/check` | `listing-master-service`；用户当前签名 Auth context，按 `listing.read` / `listing.read.all` 及 broker scope 读取 | 固化 `domain-parallel-v1`；受管 HTTP 来源的 actor/scope header 由已验签上下文生成 | `listing.authorization.enabled` 与 provider 地址/凭据完成部署验收后启用；真实 upstream 验收由现场执行 |
 | 比较 A2A / 技能：`listing-agent` 的 `listing-comparison` | 既有 Listing card、`listing/listing-agent` Memory caller；Supervisor capability 精确映射 `listing.read`，比较与报告操作由 Listing 分别授权 | 新建比较请求、报告、历史与 PDF 均进入房源域；复用原 Listing Memory Hook | Listing Memory caller 不新增；仅在 Auth 签名、来源和报告验收后接收生产流量 |
-| 比较/报告 REST：`/listings/comparisons/**` | `listing-master-service`；创建需 `compare.report.create`，owner history/PDF 需 `compare.report.read.own` 与当前逐套来源读取 | 新增稳定来源 REST API、owner-bound report 和 PDF；不提供匿名公开分享 | 与 Gateway 路由、Auth key 和来源 provider 一同验收 |
+| 比较/报告 REST：`/listings/comparisons/**` | `listing-master-service`；创建和 owner history/PDF 要求签名上下文分别包含 `compare.report.create` / `compare.report.read.own` 基线动作，并核验逐套来源读取与 owner | 新增稳定来源 REST API、owner-bound report 和 PDF；不提供匿名公开分享 | 与 Gateway 路由、Auth key 和来源 provider 一同验收 |
 | 旧 REST：`compare-engine-service` 的 `/compare/**` | 旧 `CompareController`；新 Gateway 路由指向 Listing legacy controller | 旧 Compare REST 默认由 `COMPARE_LEGACY_REST_ENABLED=false` 关闭；Listing 兼容入口只收 Long ID 并解析为 `legacy-local`，按当前授权服务 | 旧 Compare REST 不作为新入口；`/compare/**` 用户流量由 Listing 承接，匿名分享不恢复 |
 | 旧 Compare MCP：`compare-mcp-server:compareListings` | 原 Agent → Compare MCP；旧 Compare MCP 开关保留为 rollback 配置 | Supervisor 中旧 capability 与 `COMPARE_MCP_ENDPOINT` 已移除；Compare MCP 默认关闭 | 等旧服务排空并确认无客户端后删除服务端配置/allowlist |
 | 旧 Compare A2A / RPC：`compare-agent`、`CompareEngineRpcService` | 原 Compare 制品、`compare-engine-service-current` Auth caller 与原请求/taskId | 新 Listing 调用不通过旧 descriptor/RPC；A2A、RPC 默认关闭；Compare 服务留在 `legacy-compare` Compose profile | 已接受/结果未知 task 仍使用原 descriptor/taskId 查询；RPC 仅在受控需要时显式开启；现场排空后再删除 reactor、Nacos 与 Auth trust |
@@ -44,7 +44,7 @@
 | `LISTING_AUTHORIZATION_ENABLED` | 本地值保留；模板新增 | `listing.authorization.enabled` / Listing Nacos / Compose | `false`；非密钥开关 | HTTP 鉴权入口默认关闭；只有 Auth 公钥、入口验签和当前范围验收全部通过才可开启。签名的内部来源 RPC 自身仍失败关闭。 |
 | `AUTH_SERVICE_IDENTITY_PUBLIC_KEY` | 由忽略的 `.secrets/service-identities/public-keys.env` 管理 | Listing 应用及 Nacos 使用占位符；Compose `env_file` 注入 | 空；公钥，不是私钥 | Listing 验证当前 Auth 授权签名。私钥仍只在 Auth 服务。禁止把公钥材料展开写入 Nacos YAML。 |
 | `LISTING_COMPARISON_STORAGE_DIR` | 本地值保留；模板新增 | `listing.comparison.report.storage-dir` / Listing Nacos / Compose | `/app/runtime/reports`；非密钥 | 新 Listing 报告的唯一写目录，Compose 映射到保留卷 `compare-report-data`。 |
-| `[a2a:listing-agent]` capability permission | 不使用环境变量 | `nacos/agent-service.yaml` 精确映射为 `listing.read` | 非密钥授权映射 | Supervisor 只有在当前 Auth 上下文具有 `listing.read` 时才能委托 Listing Agent。比较创建与报告读取仍由房源域分别检查 `compare.report.create` / `compare.report.read.own`；不映射 `agent.chat.use`。 |
+| `[a2a:listing-agent]` capability operation | 不使用环境变量 | `nacos/agent-service.yaml` 精确映射为基线操作 `listing.read` | 非密钥授权映射 | Supervisor 仅在当前 Auth 上下文包含 `listing.read` 时才能委托 Listing Agent。比较创建与报告读取分别校验签名基线操作 `compare.report.create` / `compare.report.read.own`；不映射 `agent.chat.use`，也不要求角色授予这些基线动作。 |
 | `LISTING_RAG_RPC_SECRET` | 保留本地秘密；`.env.example` 留空 | Listing 应用/Nacos 占位符；Compose 只传给 Listing | 空；签名密钥 | 保留既有 A2A/RAG 请求级证明。与 Auth 公钥不同，不能复用或写入 Nacos 明文。 |
 | `COMPARE_A2A_ENABLED` | 新增 `false` 默认 | 旧 Compare Nacos 开关；Compose 仅 `legacy-compare` profile 传递 | `false`；非密钥开关 | 阻止旧 Compare 注册或接受新 A2A 委托。只允许在回滚/受控排空时由协调人显式开启。 |
 | `COMPARE_MCP_ENABLED` | 新增 `false` 默认 | 旧 Compare Nacos 开关；Compose 仅 `legacy-compare` profile 传递 | `false`；非密钥开关 | 关闭独立 Compare MCP server。Agent 的 `COMPARE_MCP_ENDPOINT` 已废除；旧入口不能恢复为 Supervisor 新能力。 |

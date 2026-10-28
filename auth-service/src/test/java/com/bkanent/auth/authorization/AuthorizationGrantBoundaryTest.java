@@ -24,7 +24,7 @@ class AuthorizationGrantBoundaryTest {
         var before=fixture.repository.snapshot(1,now).orElseThrow();
         assertTrue(before.permissions().isEmpty()); assertEquals(1,before.permissionRevision());
         var started=fixture.repository.snapshot(1,now.plusSeconds(10)).orElseThrow();
-        assertEquals(2,started.permissionRevision()); assertEquals(java.util.List.of("listing.read"),started.permissions());
+        assertEquals(2,started.permissionRevision()); assertEquals(java.util.List.of("listing.read.all"),started.permissions());
         assertEquals(started,fixture.repository.snapshot(1,now.plusSeconds(11)).orElseThrow());
         var expired=fixture.repository.snapshot(1,now.plusSeconds(20)).orElseThrow();
         assertEquals(3,expired.permissionRevision()); assertTrue(expired.permissions().isEmpty());

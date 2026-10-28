@@ -23,8 +23,10 @@ class AuthzRequestScopeTest {
         try (var scope = AuthzRequestScope.verifyAndOpen(admission.response(), admission.binding(), TOKEN,
                 "customer-service", "POST", "/customers", null, BODY, Map.of(KID, key.getPublic()), Instant.ofEpochSecond(NOW))) {
             assertTrue(AuthzRequestScope.present());
+            assertTrue(admission.response().snapshot().permissions().isEmpty());
             assertEquals(123, AuthzRequestScope.actorId());
             assertEquals(41L, AuthzRequestScope.requireBrokerIdentity());
+            AuthzRequestScope.requireOperation("customer.read");
             AuthzRequestScope.requireBrokerOwnership(41L, "customer.read", "customer.read.all");
             assertThrows(AuthzException.class, () -> AuthzRequestScope.requireBrokerOwnership(
                     42L, "customer.read", "customer.read.all"));
@@ -54,10 +56,12 @@ class AuthzRequestScopeTest {
                 List.of(), "request-1", null, null, AuthzCanonicalHash.bodyHash(BODY), HASH, NONCE,
                 NOW, NOW + 60);
         String requestHash = AuthzCanonicalHash.resolveRequestHash(TOKEN, binding);
-        var snapshot = AuthzSignature.sign(new AuthorizationSnapshot("123", 1, 1, admin, permissions, null,
+        var snapshotPermissions = AuthzOperationPolicy.requiredPermissions(permissions);
+        var snapshot = AuthzSignature.sign(new AuthorizationSnapshot("123", 1, 1, admin, snapshotPermissions, null,
                 identities, AuthzContract.ALGORITHM, KID, null), key.getPrivate());
         var context = AuthzSignature.sign(new AuthorizationContext("123", 1, 0,
-                AuthzCanonicalHash.snapshotHash(snapshot), permissions, "customer-service", binding.requestId(),
+                AuthzCanonicalHash.snapshotHash(snapshot), AuthzOperationPolicy.contextOperations(permissions),
+                "customer-service", binding.requestId(),
                 null, null, HASH, requestHash, binding.nonce(), NOW, NOW + 60, NOW + 300, identities,
                 AuthzContract.ALGORITHM, KID, null), key.getPrivate());
         var freshness = AuthzSignature.sign(new AuthzFreshness("123", 1, 0, AuthorizationStatus.ACTIVE,

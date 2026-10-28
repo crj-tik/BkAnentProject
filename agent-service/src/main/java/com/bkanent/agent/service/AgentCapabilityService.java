@@ -1,7 +1,8 @@
 package com.bkanent.agent.service;
 
 import com.bkanent.common.model.KpiSummaryDTO;
-import com.bkanent.common.model.MarketingContentDTO;
+import com.bkanent.common.model.PublishRequest;
+import com.bkanent.common.marketing.campaign.MarketingContentDraftResponse;
 
 import java.util.List;
 
@@ -10,7 +11,7 @@ import java.util.List;
  */
 public interface AgentCapabilityService {
 
-    List<MarketingContentDTO> publishListingByPrompt(String rawInput);
+    List<MarketingContentDraftResponse> createMarketingDraft(PublishRequest request);
 
     String generateKpiNarrative(List<KpiSummaryDTO> kpis);
 

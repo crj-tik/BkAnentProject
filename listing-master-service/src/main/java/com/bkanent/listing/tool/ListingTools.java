@@ -85,7 +85,7 @@ public class ListingTools {
                 ListingBusinessResponse.VERSION, keyword, null, limit));
     }
 
-    @Tool(description = "Create an owner-scoped Listing comparison from 2 to 6 stable source references and exact revisions. refsJson must be a JSON array of objects shaped as {\"listingRef\":{\"sourceSystem\":\"...\",\"sourceId\":\"...\"},\"expectedRevision\":\"...\"}. Requires current compare creation and per-listing read permissions; stale, inaccessible, or unavailable sources do not produce a report.")
+    @Tool(description = "Create an owner-scoped Listing comparison from 2 to 6 stable source references and exact revisions. refsJson must be a JSON array of objects shaped as {\"listingRef\":{\"sourceSystem\":\"...\",\"sourceId\":\"...\"},\"expectedRevision\":\"...\"}. Requires the signed compare.report.create action and current read access to every listing; stale, inaccessible, or unavailable sources do not produce a report.")
     public ListingComparisonReportResponse createListingComparison(
             @ToolParam(description = "JSON array of ListingSourceVersionRef objects returned by searchBusinessListings") String refsJson,
             @ToolParam(description = "Whether to include a deterministic factual conclusion") boolean includeConclusion) {
@@ -99,7 +99,7 @@ public class ListingTools {
         }
     }
 
-    @Tool(description = "Read an existing Listing comparison report by its reportId. The current user must own the report, retain compare.report.read.own and current read access to every source revision.")
+    @Tool(description = "Read an existing Listing comparison report by its reportId. The signed Auth context must include compare.report.read.own; the current user must own the report and retain current read access to every source revision.")
     public ListingComparisonReportResponse getListingComparisonReport(
             @ToolParam(description = "reportId returned by createListingComparison") String reportId) {
         return comparisonService.getOwned(reportId);

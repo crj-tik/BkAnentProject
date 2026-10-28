@@ -46,8 +46,8 @@ class AuthorizationRepositoryTest {
         repository = new AuthorizationRepository(jdbc, new DataSourceTransactionManager(dataSource));
         user(1, false); user(2, false); user(3, true);
         jdbc.update("INSERT INTO auth_role(id,role_code,role_name,active,assignable,deleted) VALUES (10,'A','A',1,0,0),(20,'B','B',1,1,0),(30,'OFF','OFF',0,1,0),(40,'GONE','GONE',1,1,1)");
-        jdbc.update("INSERT INTO auth_permission(permission_code,domain,operation,active,version) VALUES ('listing.read','listing','read',1,1),('auth.users.manage','auth','users.manage',1,2),('disabled.read','disabled','read',0,3)");
-        jdbc.update("INSERT INTO auth_role_permission VALUES (10,'listing.read'),(10,'invented.read'),(20,'listing.read'),(20,'auth.users.manage'),(20,'disabled.read'),(30,'auth.users.manage'),(40,'auth.users.manage')");
+        jdbc.update("INSERT INTO auth_permission(permission_code,domain,operation,active,version) VALUES ('listing.read','listing','read',1,1),('listing.read.all','listing','read.all',1,2),('auth.users.manage','auth','users.manage',1,3),('disabled.read','disabled','read',0,4)");
+        jdbc.update("INSERT INTO auth_role_permission VALUES (10,'listing.read'),(10,'listing.read.all'),(10,'invented.read'),(20,'listing.read'),(20,'listing.read.all'),(20,'auth.users.manage'),(20,'disabled.read'),(30,'auth.users.manage'),(40,'auth.users.manage')");
     }
 
     @Test
@@ -57,28 +57,29 @@ class AuthorizationRepositoryTest {
         grant(1, 30, 1, null, null);
         grant(1, 40, 1, null, null);
         var snapshot = repository.snapshot(1, now).orElseThrow();
-        assertEquals(List.of("listing.read"), snapshot.permissions());
+        assertEquals(List.of("listing.read.all"), snapshot.permissions());
         assertEquals(now.plusSeconds(60), snapshot.grantDeadline());
         assertEquals(1, repository.loadFacts(1, now).orElseThrow().grants().size());
         // assignable=0 only forbids new assignments; existing live grants still apply.
-        assertTrue(snapshot.hasPermission("listing.read", now));
+        assertFalse(snapshot.hasPermission("listing.read", now));
+        assertTrue(snapshot.hasPermission("listing.read.all", now));
     }
 
     @Test
     void jdbcMultiRoleAndFutureWindowAndGrantInactiveAreHandled() {
         grant(1, 10, 1, null, null);
         grant(1, 20, 1, now.plusSeconds(30), null);
-        assertEquals(List.of("listing.read"), repository.snapshot(1, now).orElseThrow().permissions());
+        assertEquals(List.of("listing.read.all"), repository.snapshot(1, now).orElseThrow().permissions());
         assertEquals(now.plusSeconds(30), repository.snapshot(1, now).orElseThrow().grantDeadline());
-        assertEquals(List.of("auth.users.manage", "listing.read"),
+        assertEquals(List.of("auth.users.manage", "listing.read.all"),
                 repository.snapshot(1, now.plusSeconds(30)).orElseThrow().permissions());
         jdbc.update("UPDATE auth_user_role SET active=0 WHERE user_id=1 AND role_id=20");
-        assertEquals(List.of("listing.read"), repository.snapshot(1, now.plusSeconds(30)).orElseThrow().permissions());
+        assertEquals(List.of("listing.read.all"), repository.snapshot(1, now.plusSeconds(30)).orElseThrow().permissions());
     }
 
     @Test
     void noRoleAdminWorksButMissingStateDisabledDeletedAndUnknownFailClosed() {
-        assertEquals(List.of("auth.users.manage", "listing.read"), repository.snapshot(3, now).orElseThrow().permissions());
+        assertEquals(List.of("auth.users.manage", "listing.read.all"), repository.snapshot(3, now).orElseThrow().permissions());
         assertFalse(repository.snapshot(3, now).orElseThrow().hasPermission("invented.manage", now));
         jdbc.update("UPDATE user_account SET account_status='DISABLED' WHERE id=3");
         assertTrue(repository.snapshot(3, now).orElseThrow().permissions().isEmpty());
@@ -119,16 +120,16 @@ class AuthorizationRepositoryTest {
         grant(1, 10, 1, null, null);
         grant(2, 10, 0, null, now.minusSeconds(10));
         user(4, false); // No role/admin, but the global catalogVersion still changes its stable snapshot.
-        var changed = repository.mutatePermission("listing.read", "PERMISSION_DISABLED",
-                template -> template.update("UPDATE auth_permission SET active=0,version=version+1 WHERE permission_code='listing.read'"));
+        var changed = repository.mutatePermission("listing.read.all", "PERMISSION_DISABLED",
+                template -> template.update("UPDATE auth_permission SET active=0,version=version+1 WHERE permission_code='listing.read.all'"));
         assertEquals(List.of(1L,2L,3L,4L), changed.versions().stream().map(AuthorizationRepository.UserVersion::userId).toList());
         assertTrue(repository.snapshot(1, now).orElseThrow().permissions().isEmpty());
-        assertFalse(repository.snapshot(3, now).orElseThrow().hasPermission("listing.read", now));
-        assertThrows(IllegalStateException.class, () -> repository.mutatePermission("listing.read", "ROLLBACK", template -> {
-            template.update("UPDATE auth_permission SET active=1 WHERE permission_code='listing.read'");
+        assertFalse(repository.snapshot(3, now).orElseThrow().hasPermission("listing.read.all", now));
+        assertThrows(IllegalStateException.class, () -> repository.mutatePermission("listing.read.all", "ROLLBACK", template -> {
+            template.update("UPDATE auth_permission SET active=1 WHERE permission_code='listing.read.all'");
             throw new IllegalStateException();
         }));
-        assertEquals(0, jdbc.queryForObject("SELECT active FROM auth_permission WHERE permission_code='listing.read'", Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT active FROM auth_permission WHERE permission_code='listing.read.all'", Integer.class));
         assertEquals(2, repository.currentVersion(3).orElseThrow().permissionRevision());
     }
 
@@ -137,7 +138,7 @@ class AuthorizationRepositoryTest {
         grant(1, 10, 1, null, null);
         var role = repository.mutateRole(10, "ROLE_DISABLED", template -> template.update("UPDATE auth_role SET active=0 WHERE id=10"));
         assertEquals(List.of(1L), role.versions().stream().map(AuthorizationRepository.UserVersion::userId).toList());
-        var catalog = repository.mutateCatalog("CATALOG_CHANGED", template -> template.update("UPDATE auth_permission SET version=4 WHERE permission_code='listing.read'"));
+        var catalog = repository.mutateCatalog("CATALOG_CHANGED", template -> template.update("UPDATE auth_permission SET version=5 WHERE permission_code='listing.read.all'"));
         assertEquals(3, catalog.versions().size());
     }
 

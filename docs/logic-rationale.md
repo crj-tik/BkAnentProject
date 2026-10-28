@@ -981,11 +981,11 @@
 **代码位置**：`AgentPrincipalContext.bind`、`AgentController.chat`及各Supervisor入口、`OrchestrationStore.assertRequestIdentity/ownedRunScopes`、`SupervisorToolLoopRunner`、`SupervisorEventAuditQueryService`、`SessionEventAuditService.queryOwned`、`SupervisorGovernanceService`。当前管理许可仍走旧Auth接口，审计明确记录 `legacy-rpc-unversioned`，未伪造新版本接线；新目录consumer迁移和异步入队并发门禁仍待实施。关联KI-168、LR-15/22/23、KI-80；新增真实request-scope/MockMvc重投及H2审计反例。
 ## LR-99 房源与比较共享领域事实，合并保留历史身份
 
-**结论**：`consolidate-listing-comparison-domain` 将当前 Listing 来源查询、快照校验、比较、报告与 PDF 入口收敛到 `listing-master-service`。业务 API 使用 `domain-parallel-v1` 稳定来源引用、来源修订号、内容 hash、单位和 `REAL/SIMULATED/UNKNOWN` 模式；客户端不能把未知来源声明为真实。比较创建前批量读取获准快照，报告缓存、历史与 PDF 读取时再次核对当前来源和当前操作权限。`legacy-local` 历史 ID 只映射到该命名空间，旧 JSON/PDF 保留原字节且不恢复缺少 owner/source hash 的报告。Auth 目录把比较动作归入 `listing`，但保留既有 `compare.report.create` / `compare.report.read.own` 权限码及角色关联以维持调用兼容；迁移只更新目录元数据、修订号和 outbox，不增加默认授权。`compare.report.share.public` 不迁入新域，因为 Listing 明确不提供匿名分享，旧权限仅随旧服务排空。
+**结论**：`consolidate-listing-comparison-domain` 将当前 Listing 来源查询、快照校验、比较、报告与 PDF 入口收敛到 `listing-master-service`。业务 API 使用 `domain-parallel-v1` 稳定来源引用、来源修订号、内容 hash、单位和 `REAL/SIMULATED/UNKNOWN` 模式；客户端不能把未知来源声明为真实。比较创建前批量读取获准快照，报告缓存、历史与 PDF 读取时再次核对当前来源和当前操作。`legacy-local` 历史 ID 只映射到该命名空间，旧 JSON/PDF 保留原字节且不恢复缺少 owner/source hash 的报告。Auth 继续以 `compare.report.create` / `compare.report.read.own` 作为稳定的签名基线动作标识，并把目录元数据归入 `listing`；它们不是角色权限。基线退役迁移会停用目录行并清除对应角色关联，Listing 目录迁移只更新元数据、修订号和 outbox，不重新启用或授予权限。`compare.report.share.public` 不迁入新域，因为 Listing 明确不提供匿名分享，旧权限仅随旧服务排空。
 
 **根因**：拆分的比较服务依赖 Listing 事实，却缺少可跨来源稳定验证的身份与版本；ID-only 缓存不能发现来源更新，也会把服务重构误作授权变化。稳定引用和当前签名 Auth 上下文共同限定每次读取，来源模式作为服务端事实保留；当前 `listing/listing-agent` 继续使用已登记的必需 Memory Hook，旧 `compare/compare-agent` caller/domain/agent 身份与已接受任务只保留用于受控历史读取和排空，不复制 Memory、重命名身份、扩大许可或将未知调用改发成新任务。
 
-**代码位置**：`common/listing` 中的来源与版本契约、`common/model/ListingComparisonFacts` 和 `common/rag/RagCanonicalHash`；`listing-master-service/source` 的 legacy-local、fixture、HTTP provider 与业务来源授权服务；`listing-master-service/comparison` 的比较、版本指纹、报告存储、迁移映射和 PDF；`ListingComparisonAuthorizationIngressFilter`；Auth 目录迁移 `20261028_listing_comparison_authorization_domain.sql` 与 MySQL 初始化清单 450；`agent-service/studio/StudioListingReader` 与 Studio 工件/回执流程；Listing Agent 的既有 Memory Hook 与 `listing-comparison` skill。配置迁移和排空/回退门禁见 `docs/listing-comparison-cutover.md`。
+**代码位置**：`common/listing` 中的来源与版本契约、`common/model/ListingComparisonFacts` 和 `common/rag/RagCanonicalHash`；`listing-master-service/source` 的 legacy-local、fixture、HTTP provider 与业务来源授权服务；`listing-master-service/comparison` 的比较、版本指纹、报告存储、迁移映射和 PDF；`ListingComparisonAuthorizationIngressFilter`；Auth 目录迁移 `20261028_listing_comparison_authorization_domain.sql` 与 MySQL 初始化清单 460（在基线权限退役之后）；`agent-service/studio/StudioListingReader` 与 Studio 工件/回执流程；Listing Agent 的既有 Memory Hook 与 `listing-comparison` skill。配置迁移和排空/回退门禁见 `docs/listing-comparison-cutover.md`。
 
 **关联**：LR-22/23/54/79/96/97/149；KI-115。定向契约、来源、授权、报告、Agent 装配、Studio 授权与配置矩阵测试通过；真实上游联机、共享 Nacos 发布、容器部署和线上切流仍待部署验收。
 
@@ -1041,6 +1041,54 @@
 **代码位置（当前与规划）**：四个change既有proposal/design/specs/tasks及 `docs/business-domain-change-roadmap.md`；规划要求未来实现各自来源/消费适配及隔离测试。本次只修订规划，没有创建四个会话或worktree、实施代码、修改运行配置或执行真实联调。
 
 **关联**：LR-22/23/53/59/94/96/97/99/100/101/102；现有KI状态不因并行规划而改变。
+
+## LR-130 发布计划必须绑定不可变内容和目标快照
+
+**结论**：prepare 将内容 revision/hash、房源快照、素材 hash、目标账号 revision、平台参数 hash 和规则版本固化到计划快照；confirm 要求 expectedPlanVersion/hash 匹配，并重新检查内容审核、素材、房源和账号当前版本。计划过期后必须重新 prepare。
+
+**根因**：用户确认的是某一具体内容、素材和发布范围。确认后任一输入变化都不能沿用旧批准，否则回执与用户看到的计划不一致。
+
+## LR-131 发布身份和渠道账号授权由受信服务与登记记录决定
+
+**结论**：当前 campaign 兼容路径从 Auth 解析 actor 并逐动作调用 `AuthPermissionRpcService`；计划只能引用营销库内已登记且 active、平台匹配、模式匹配的账号 grant。调用方不能凭请求里的账号名称授予自己发布权。Auth RPC 缺失或失败时拒绝 campaign 操作。该兼容调用不是 Auth 版本化签名上下文或受限委托的证明；营销内容 CRUD、MCP 和旧 Dubbo 资源授权尚未完成，必须由 `unify-versioned-permission-context` task 10.3 准入后方可声称全域授权完成。
+
+**根因**：账号名和客户端请求字段不构成授权证据；营销域也不能在 Auth 未登记新权限时自行放行。
+
+## LR-132 外部发布走持久 outbox，未知结果只按原 attempt 核对
+
+**结论**：本地事务只生成 ACCEPTED 回执、稳定每目标 attempt 和 outbox；dispatcher 在事务外调 provider，并以 attemptVersion 和 leaseToken 条件回写。租约过期将原 attempt 置为 OUTCOME_UNKNOWN，进入同 attempt 核对，不自动创建第二个发布。
+
+**根因**：数据库事务不能撤销平台已接受的发布；超时或进程中断后重新发送可能造成重复发布，迟到响应也不能覆盖较新的核对结果。
+
+## LR-133 效果观察按来源事件与版本幂等保存
+
+**结论**：每条效果记录包含来源系统、来源事件 ID/version、窗口、采集时刻、来源模式和 payload hash；同版本重放不重复计数，更高版本修订当前观察并追加 revision，较低版本不能回滚新值。缺来源的结果保持 UNKNOWN。
+
+**根因**：渠道可能重复投递或迟到修正；仅按发布记录或日期累计会重复计算，缺字段也不能用样例补齐为真实值。
+
+## LR-134 真实 ROI 需要同币种归属收入、成本和定义版本
+
+**结论**：真实效果报告只有在记录具备可归属收入、成本、相同币种和相同 ROI 定义版本时才计算 ROI；缺收入时可报告已知线索成本，ROI 保持 null。模拟 fixture 不生成收入。
+
+**根因**：线索数不是收入，跨币种或跨口径相加也不是可解释的投资回报；估算值如果进入 REAL 字段会误导经营结论。
+
+## LR-135 内容创建默认草稿，审核和发布状态拥有明确写入口
+
+**结论**：内容创建/变体写入强制 DRAFT；所有文案生成入口只能生成/保存草稿并准备计划，不能确认发布或发送通知。审核状态仅可由同域审核入口写入；该入口必须通过兼容审核授权，并在 Auth v2 准入后核验 `marketing.content.review.own/all` 精确操作和内容 owner；Supervisor 的营销发布技能可调用 campaign confirm，但该 capability 必须经过 `approval-capabilities` 审批；发布状态由 campaign provider 回执维护。旧内容 publish-status HTTP/RPC 写入返回 `LEGACY_WRITE_DISABLED`。
+
+**根因**：内容正文的作者提交不等于审核通过，旧跨域回写也不能继续成为第二个发布状态真源。
+
+## LR-136 旧业务 ID 必须带来源和实体命名空间
+
+**结论**：旧 ID 通过 `(source_system, entity_type, legacy_id)` 映射到新营销目标身份；目标唯一性按实体类型和目标表约束。新 schema 可重复升级，但不直接合并两个库的自增值，也不在本 change 改写已应用初始化清单。
+
+**根因**：不同旧库和实体类型可能有相同数字 ID；未核对旧数据就删除旧表或复用 ID 会破坏历史回执、素材和效果关联。
+
+## LR-137 房源依赖使用固定公开契约，测试 fixture 不作为真实回退
+
+**结论**：营销自有 `CampaignListingSnapshotClient` 按 `domain-parallel-v1` 调用公开 batch-read 路径，并校验来源身份、revision、hash、时间、数据集和 REAL 模式。SIMULATED 时使用显式本地房源 fixture；REAL 来源故障时失败关闭。
+
+**根因**：独立 change 不能依赖房源分支尚未合入的 Java 类型，也不能让真实流量在来源不可用时静默读取测试房源。
 
 ## LR-138 入口授权与持久执行身份分两步绑定
 
@@ -1154,7 +1202,7 @@
 
 ## LR-149 Compare报告与Media后台生成继承签名身份并继续校验资源owner
 
-**结论**：Compare在每次生成时以已验签Auth actor读取当前Listing快照，再按actor+比较指纹复用缓存；来源版本hash对应报告内的不可变Listing DTO快照。分享默认私有，只有精确`compare.report.share.public`动作能发布；私有分享/PDF要求owner与`compare.report.read.own`，公开读取仅对已发布的固定快照开放。缺owner/source hash的旧缓存不恢复。Media任务在提交前要求`media.task.submit.own/all`、`media.generate.background`及Listing `listing.assets.bind.own/all`，Listing本地验Auth context或response、调用方HMAC和broker映射后核实目标行归属。签名后台permit再绑定taskId、精确请求hash、actor/broker/listing、Auth context/freshness、服务key与截止；worker本地验签、原子领取，过期排队任务终结，不逐节点查询Auth。未建立可验证的Marketing素材关联，因此拒绝`contentId`任务。
+**结论**：原独立 Compare 在每次生成时以已验签 Auth actor 读取当前 Listing 快照，再按 actor+比较指纹复用缓存；来源版本 hash 对应报告内的不可变 Listing DTO 快照。此处的 Compare 分享规则是迁域前背景，当前 Listing 行为见 LR-99：`compare.report.create` / `compare.report.read.own` 是签名基线动作标识，不是角色权限；`compare.report.share.public` 不迁入 Listing。Media 任务在提交前要求 `media.task.submit.own/all`、`media.generate.background` 及 Listing `listing.assets.bind.own/all`，Listing 本地验 Auth context 或 response、调用方 HMAC 和 broker 映射后核实目标行归属。签名后台 permit 再绑定 taskId、精确请求 hash、actor/broker/listing、Auth context/freshness、服务 key 与截止；worker 本地验签、原子领取，过期排队任务终结，不逐节点查询 Auth。未建立可验证的 Marketing 素材关联，因此拒绝 `contentId` 任务。
 
 **根因**：Compare shareCode和Media taskId都是定位符，本身不证明用户；缓存若只按输入ID命中会把其他用户报告或过期来源混给当前请求。后台任务跨越原请求线程后也不能把MQ正文、callerService或任务编号当身份。将用户签名上下文限制到精确资源读取/后台操作，并保留Listing/缓存owner真源，可避免模型字段替换身份且不把每次Graph内部动作变成Auth RPC。公开分享是发布人主动改变范围，必须使用独立许可。
 
@@ -1201,3 +1249,39 @@
 **代码位置**：`auth-service/AuthAuthorizationRpcServiceImpl`；`common/authz/RequestBinding`；`common/serialize/Fastjson2ConstructorSerialization`；`common/authz/AuthzSerializationTest`。
 
 **关联**：KI-211；change `unify-versioned-permission-context`任务4.2/11.5。Dubbo序列化协商取决于provider/export协议声明，见[Apache Dubbo Serialization Protocol Upgrade](https://dubbo.apache.org/en/overview/mannual/java-sdk/reference-manual/serialization/serialization-upgrade/)；全局序列化配置未变。
+
+## LR-154 权限码只保护受限拦截点，基础操作保留身份与资源校验
+
+**结论**：权限码只用于默认不向所有有效登录用户开放、必须显式授予的受限能力；普遍开放的基础功能不要求逐 endpoint、CRUD、Graph 节点或 subAgent 配码。无权限码不表示匿名或无边界访问：所有操作仍验证有效 actor/签名上下文；涉及资源或状态转换时，业务域按可信身份检查 owner/参与关系和业务状态。`.own`/`.all` 是作用范围，不自动决定是否要码；本人范围签章、发布等高风险能力仍可设为受限拦截点。现有目录码和角色授予须逐项核对消费者后再经受控迁移精简，不能直接批量删码或移除守卫。
+
+**根因**：把每个接口操作都登记为权限码会造成目录和角色授予膨胀，并将普通 Graph/subAgent 调用耦合到多余的授权判断；反过来，把“免权限码”理解为免认证会让用户身份与业务数据隔离失守。将精确权限码限定为受限能力，同时保留始终执行的 actor、owner/关系和状态检查，能减小目录且不放松数据和状态边界。
+
+**代码位置**：`docs/auth-authorization-permission-system.md`；OpenSpec delta specs `openspec/changes/unify-versioned-permission-context/specs/versioned-authorization-context/spec.md`、`specs/authentication-baseline/spec.md`、`specs/domain-authorization-adoption/spec.md`；本次已完成精确分类与目录退役，见LR-155。
+
+**关联**：LR-139/140/145/146/155；KI-170；change `unify-versioned-permission-context`。权限码边界原则与本轮已确认清单分开记录，防止把“普遍基础”误解为免认证。
+
+## LR-155 基础动作签入请求上下文，但不进入权限快照
+
+**结论**：经逐项复核，将现有目录中的26个普遍基础动作标识作为签名 `AuthorizationContext.allowedOperations` 的可路由动作集合；Auth授权 `snapshot.permissions`、角色授予和有效权限并集只保留受限拦截点。共享 `AuthzOperationPolicy` 是唯一精确分类源；消费者必须同时验证签名身份/请求关联，按业务检查owner、参与关系和状态。Agent本地能力只有被明确登记在 `AGENT_AUTHORIZATION_BASELINE_CAPABILITIES` 的精确 `local:<tool>` 才免权限码，并仍要求有效actor和持久run/session；默认空集。目录迁移停用这26条权限、清除精确角色授予并发布所有用户的新revision/outbox，保留目录行供审计。
+
+**根因**：基础动作仍需绑定到签名请求，防止LLM或请求正文替换用户/动作；但把这些动作放在权限快照中会继续把“有效登录即可使用”的功能误建模为角色授予。区分签名动作集合与受限权限集合，既保留业务域身份及数据/状态边界，也使常规Graph/subAgent动作无需逐项授予或对Auth远程查询。受限权限仍须在入口请求、服务ACL、用户角色/管理员快照中全部满足，基础动作不能借此提升为未分类的新操作。
+
+**代码位置**：`common/authz/AuthzOperationPolicy`、`AuthzResponse`、`AuthzRequestScope`、`AuthorizationSession`、`common-a2a/VerifiedDomainAuthorization`、`common/rag/AuthRagPrincipal`；`auth-service/EffectivePermissionService`、`AuthAuthorizationRpcServiceImpl`、`AuthPermissionRpcServiceImpl`；`agent-service/AgentAuthorizationProperties`、`AgentPermissionService`；`sql/migrations/20261028_baseline_permission_retirement.sql`及`docker/mysql/init-manifest.tsv`；`docker-compose.yml`、`nacos/agent-service.yaml`、`docs/auth-authorization-permission-system.md`与OpenSpec delta。
+
+**关联**：LR-154；KI-170/208；change `unify-versioned-permission-context`任务1.4/2.6/11.6。Nacos配置发布与开发MySQL实际应用需分别留存验收证据；不能仅凭源码/清单校验称为数据库已更新。
+
+## LR-156 已应用迁移按账本校验哈希后跳过历史状态复验
+
+**结论**：受管MySQL runner先比较 `bk_schema_migration` 中记录的migration文件及schema check哈希；记录存在且哈希完全匹配时，将该项作为已应用迁移跳过，不重放SQL，也不重复验证其当时的状态断言。只有账本中没有该项时才执行SQL、运行schema check，并在成功后写入哈希账本；哈希变化继续硬拒绝。
+
+**根因**：schema check描述迁移刚执行时的后置条件，不一定是永久不变量。之后的合规迁移可能有意停用权限或改变状态；重放所有旧SQL会引入副作用，复验旧check则会把正确的新状态误判为损坏。最终现状应由最新的领域检查验证，而历史账本负责证明具体迁移制品未变、且该迁移已经完成。
+
+**代码位置**：`scripts/deploy/run-init-manifest.sh` 的manifest哈希与已应用分支；`scripts/deploy/test_init_manifest.py`；`docker/mysql/init-manifest.tsv`及当前迁移的独立schema check。
+
+**关联**：KI-213；change `unify-versioned-permission-context`任务2.6/11.6。此规则不替代fresh数据库验收、末端状态检查或安全制品回滚演练。
+
+## LR-157 旧 promotion 库保留作迁移回退，不默认开放运行期读取
+
+**结论**：营销生命周期的活动读写只落 `bk_marketing`。旧 `bk_promotion` 库、数据库地址和旧 Nacos 配置在迁移及回退窗口内保留，但不作为有效发布 writer，也不默认授予 MySQL MCP 只读访问；确有迁移审计需要时由运维通过显式、受审配置开放。
+
+**根因**：保留历史数据和可回退制品并不要求把旧服务重新加入日常运行面。默认仍开放旧库会让合并后排查和工具查询继续依赖两套数据口径，且增加误读旧数据的机会；直接删除旧库又会破坏迁移核对和回退能力。

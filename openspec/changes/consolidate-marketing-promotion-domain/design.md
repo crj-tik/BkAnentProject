@@ -44,15 +44,25 @@ ContentRevision 不可变；PublishPlan 固定 contentRevision、素材版本、
 
 原 `/promotions/**` 可在营销服务内保留受权适配入口，不能继续保留独立写库和远程状态回写。`implement-studio-v2` 继续拥有发布命令/审批门面，本 change 提供领域 prepare/read/confirm/receipt 契约；Studio task 4.1/4.2/4.4 不在这里勾选或复制。
 
-房源仅通过公开来源引用读取，不新增 listing 私有表访问。Auth 由另一会话实现，当前发布动作须消费其账号/组织授权并校验实际计划范围。外部协议变更或不同微服务合并不要求把个人 Memory 改成组织知识。
+保留路径不等于保留旧 wire contract：当前迁移入口使用营销域新的请求/响应 DTO，不兼容旧 `/promotions/**` 负载。方案将这一点标记为 breaking migration，要求清点并迁移已知调用方；旧形状须返回明确的契约不支持错误，不猜测字段或静默套用新语义。若盘点发现必须支持的外部旧调用，需另行定义版本化适配契约。
+
+房源仅通过公开来源引用读取，不新增 listing 私有表访问。营销 A2A 会话使用共享 Memory v2 hook，Memory owner 必须从认证租约解析，Memory 只属于个人会话上下文，不构成角色权限、房源关系或组织共享营销知识。当前 campaign 操作使用 Auth 的 `AuthPermissionRpcService` 兼容入口；这不是 Auth 版本化签名上下文的域内 adoption。Marketing 还没有内容 owner 字段/关系，且 Auth 权限目录当前未登记 campaign/content 操作码；这些必须通过 `unify-versioned-permission-context` task 10.3 补齐后才能启用真实用户操作。外部协议变更或不同微服务合并不要求把个人 Memory 改成组织知识。
 
 ### 6. 并行交付和可替换依赖
 
 本会话只拥有营销/推广模块、`common/marketing/campaign/**` 和本域必要调用方差异；需要房源时按 `domain-parallel-v1` 的公开 HTTP契约实现自己的 consumer wire DTO/mapper和有界 fixture，不依赖房源 change 的新类型，也不引入知识或经营实现。固定路径、字段和错误见 [并行总览](../../../docs/business-domain-change-roadmap.md)。
 
-发布生命周期、回执、持久派发和效果口径是真实实现。外部平台、房源、媒体/通知及 Auth/Memory 依赖由明确测试配置的精确替身隔离，用本会话契约测试完成所有本期验收；真实 mode 未接 provider/授权时拒绝，不暗中转模拟。旧业务数据迁移及单writer切换先在私有夹具/库验证，已运行共享实例由协调合并后处理。
+发布生命周期、回执、持久派发和效果口径是真实实现。渠道 provider 缺失时真实 mode 失败关闭。Marketing A2A 生产路径使用必需 Memory hook；通用 hook 测试验证 Memory/授权不可用时在 Agent 执行前失败。Auth campaign 局部测试使用精确替身，只能证明本域逻辑对拒绝/撤权的反应，不能证明新 Auth 域目录、版本化上下文或内容资源授权已联通。旧业务数据迁移及单writer切换先在私有夹具/库验证，已运行共享实例由协调合并后处理。
 
-独立 worktree/分支、`.m2repo`、端口/数据库按总览执行，只push自己的分支。根POM和配置只提交promotion/marketing的最小语义变化；新增bk_marketing初始化allowlist/manifest差异交协调合并，不改已应用SQL/hash，不等待另外三个change或Auth新版本才完成本期任务。
+独立 worktree/分支、`.m2repo`、端口/数据库按总览执行，只push自己的分支。用户要求本 change 同步维护数据库、Nacos 与 Compose 部署工件，因此营销 migration/check 已登记到版本化 manifest，runner 仅新增精确的 `upgrade:bk_marketing` allowlist；这不会修改已应用的 bootstrap SQL/hash，也不代表 migration 已在任何共享库执行。Compose 继续只部署 `marketing-content-service`，默认 MySQL MCP 只读范围排除保留作迁移/回退材料的 `bk_promotion`；Nacos 保留旧 promotion 配置作为历史制品，营销模板的房源快照地址与 listing 服务实际端口一致。Auth v2 的域准入由其共享 change task 10.3 所有；本 change 可以完成 fixture 业务闭环，但在营销内容操作码、owner/关系映射和 REST/RPC/A2A/MCP 统一消费版本化授权未通过验收前，不得作为完整生产授权合并或启用。
+
+### 7. Supervisor、A2A、ReAct 与 MCP 分层治理
+
+A2A 的 marketing-draft 技能只允许读取既有内容并返回未保存的草稿。营销服务内 ReAct 技能可检索、创建 DRAFT 内容并准备发布计划，但不得调用确认发布/通知能力，也不得仅凭模型输出把状态标为 PUBLISHED；只有真实平台 receipt 可证明发布结果。copy-generation 技能的流程在 prepare 后结束，确切确认由 Supervisor 的独立 marketing-campaign-publish 技能（agent-service/src/main/resources/skills/supervisor/marketing-campaign-publish.md）发起。
+
+Supervisor 发布技能通过动态能力目录逐步调用结构化 MCP：草稿创建返回可复用的 contentId，prepare 返回 planId、planVersion、snapshotHash、内容/素材/渠道/账号快照且不产生外部副作用；用户看到完整计划后，confirmMarketingCampaign 以该 planId、expectedPlanVersion 和 expectedSnapshotHash 调用。Supervisor 的 approvalCapabilities 只配置确认工具的精确目录 capabilityId，不把审批放在不透明的整个 marketing-agent A2A 调用上。confirm 结果返回 receiptId 与每目标 attemptId/status；MCP 还须暴露回执读取和原 attempt reconcile，未知结果只核对原 attempt。
+
+营销 change 维护自己的 Supervisor 发布技能文件，不改由房源 change 维护的找房/对比/草稿组合技能。每个实现分支在隔离 profile 用自己的 capabilityId 验收并交付配置差异；共享 agent.supervisor.orchestration.approval-capabilities 在四项合并协调时按能力 ID 并集合并，不由本 change 覆盖。域内 fixture 验收必须经过实际 Supervisor 目录/审批和 MCP 调用路径；它不代表真实平台、Auth/Memory 登记或生产跨服务联通已完成。
 
 ## Risks / Trade-offs
 
@@ -70,3 +80,18 @@ ContentRevision 不可变；PublishPlan 固定 contentRevision、素材版本、
 3. 上线营销域 prepare/read/confirm/receipt 及旧路径适配，切换调用方；旧服务停止接收新发布，在途结果按原尝试核对。
 4. 确认单 writer、回执可查询、历史记录一致后，退役 promotion 模块、Compose 服务及配置导入入口；原库/回滚制品保留。
 5. 回退恢复匹配路由和消费版本，保持写围栏及原 attemptId，不把已成功发布再次执行，也不把模拟效果转换为真实。
+
+## 功能覆盖矩阵与完成门槛
+
+该 change 合并的是营销内容到推广效果的完整业务链。每个原功能都要落到统一营销域的目标入口，并记录调用方迁移和验收；只搬表或只把旧路径转成“准备计划”不构成完整合并。
+
+| 原有能力/入口 | 统一营销域目标能力 | 完成证据与边界 |
+| --- | --- | --- |
+| 创建内容、创建渠道版本、更新审核/发布状态、按房源列表及多条件搜索 | 内容创建/变体、内容审核与状态机、按房源及条件检索 API | 验证新旧内容和渠道版本可查；发布状态只能由受控审核/有效回执推进，不能手工伪造已发布 |
+| `POST /promotions/publish`、Dubbo `PromotionRpcService.publish` 的单次发布结果 | 创建或选择内容后准备计划、审核、精确展示计划、获批 confirm、查询 receipt/reconcile | 迁移所有调用方；prepare 只代表计划准备，只有 provider 回执才代表发布成功，UNKNOWN 沿原 attempt 核对 |
+| 同步效果、按房源查询效果、ROI 报告 | 有来源和观察窗口的 effect sync/read、ROI 查询 | 覆盖重复同步、修正和缺失归属收入；不得把样例统计或线索数说成真实收入/ROI |
+| 品牌素材创建和列表 | 统一营销域品牌资产管理 API | 既有素材可映射并保持可检索、可被新计划引用，来源与权限不丢失 |
+| BEIKE、DOUYIN、XIAOHONGSHU 本地发布适配器 | 显式 fixture provider 与同目标回执模型 | 三个模拟目标可重复验收并标记 SIMULATED；没有真实 provider 时生产模式明确不可用，不回退模拟成功 |
+| 旧 REST/Dubbo、ReAct、A2A、MCP、Supervisor 与 Studio/其它客户端 | 新营销 REST/DTO、草稿与发布分离的 A2A 技能、结构化 MCP 工具、Supervisor 确认审批能力 | 逐项迁移并验证活动目录和真实调用链；没有已知调用方依赖旧 DTO/旧写入口后才允许退役旧接收 |
+
+若任一行缺少目标业务入口、调用迁移或可重复验收证据，旧推广部署和接收围栏不得按“合并完成”退役。真实平台接入是明确的独立边界，不得以 fixture 成功证明真实平台已接通。

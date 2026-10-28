@@ -1,6 +1,6 @@
--- Move comparison report actions under the consolidated Listing domain.
--- Keep the established permission codes so existing grants and rollback clients remain valid.
--- This migration refreshes authorization revisions after the catalog change but does not grant permissions to any role.
+-- Reclassify the stable comparison action identifiers under the consolidated Listing domain.
+-- The baseline-permission-retirement migration runs first: these catalog rows stay inactive and ungranted.
+-- This migration changes catalog metadata only; the signed baseline action identifiers remain stable.
 USE bk_auth;
 
 SET @listing_comparison_auth_catalog_complete = (
@@ -8,7 +8,13 @@ SET @listing_comparison_auth_catalog_complete = (
     WHERE permission_code IN ('compare.report.create', 'compare.report.read.own')
 );
 
+SET @listing_comparison_baseline_retired = EXISTS (
+    SELECT 1 FROM auth_authorization_migration
+    WHERE migration_id = '20261028_baseline_permission_retirement'
+);
+
 SET @listing_comparison_authorization_domain_migration = @listing_comparison_auth_catalog_complete
+    AND @listing_comparison_baseline_retired
     AND NOT EXISTS (
     SELECT 1 FROM auth_authorization_migration
     WHERE migration_id = '20261028_listing_comparison_authorization_domain'

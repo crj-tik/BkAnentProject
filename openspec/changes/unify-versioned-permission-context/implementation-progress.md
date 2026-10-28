@@ -1,8 +1,8 @@
 # 基础批次与续批记录
 
-## 当前实施状态（2026-10-27）
+## 当前实施状态（2026-10-28）
 
-OpenSpec `spec-driven` change `unify-versioned-permission-context` 当前完成 **57/63** 项（以`tasks.md`勾选为准）。任务10.1–10.6按Auth/Listing/Customer、Business/Settlement、Contract/Marketing、Compare/Media、Notification模块完成源码与本地定向回归及跨域准入矩阵；任务3.3的专用Redis ACL/连接配置及隔离ACL正反验收已完成；任务11.2的调用计数fixture、11.3跨模块攻击反例和11.5全仓Maven compile/test已完成。11.7所需LR/KI、协议/部署/回滚文档、严格OpenSpec验证与中文提交推送已完成。新授权入口、数据库迁移和真实跨服务密钥仍未在运行环境启用；8.3–8.5、11.1、11.4及11.6真实迁移/回滚验收保持未完成。
+OpenSpec `spec-driven` change `unify-versioned-permission-context` 当前完成 **60/65** 项（以`tasks.md`勾选为准）。任务10.1–10.6按Auth/Listing/Customer、Business/Settlement、Contract/Marketing、Compare/Media、Notification模块完成源码与本地定向回归及跨域准入矩阵；任务3.3专用Redis ACL/连接、11.2调用计数fixture、11.3跨模块攻击反例和11.5全仓Maven回归已完成。11.7所需LR/KI、协议/部署/回滚文档、严格OpenSpec验证与中文提交推送已完成。仍未完成8.3、8.4、11.1、11.4和11.6：8.3/8.4保留前端真实fetch/ReadableStream及ReactAgent归档验收；11.1等待真实权限发布/撤权故障矩阵；11.4缺完整A2A和Interview答题/报告链；11.6缺fresh数据库及同等安全制品回滚演练。新授权模式只在本地已完成接线的Auth/Gateway/Agent/Interview开发栈中启用，不代表全域或生产开放。
 
 Notification、Contract、Customer及依赖模块的定向回归 **16项通过，失败/错误/跳过均0**；Notification REST/MCP授权入口保持默认关闭，SQL迁移未应用，caller公钥和真实跨服务链未部署验收。Contract/Customer提醒因broker recipient绑定缺失保持关闭（KI-206）。Compare/Media与共享鉴权前批定向回归48项通过；Media任务/结果仍为进程内存（KI-117），新owner与permit协议未宣称具备跨重启恢复。域级具体边界及证据见下方10.6矩阵。
 
@@ -259,3 +259,23 @@ Postman通过真实Gateway执行非管理员账号验收共**14项断言**：log
 修复了真实Dubbo授权RPC的 `RequestBinding.query` wire类型兼容：Auth provider局部优先选择既有`fastjson2ctor` SPI，查询列表使用普通ArrayList与防御性副本；契约断言同步验证副本修改不影响原签名内容。修正后Common定向8项、Auth授权23项通过，全仓Maven 23模块**1733项通过、失败/错误0、跳过14项既有外部依赖测试**；真实Postman API用例在迁移后再次通过。
 
 本轮没有完成任务11.1要求的权限写入/失效/并发/30秒新鲜度故障矩阵，也没有完成11.4要求的真实A2A send/stream/get/cancel/resubscribe及Interview开台/领取/答题/回执/报告/撤权链。Listing A2A provider当前未运行；现有resubscribe脚本还指向旧容器地址并请求真实房源检索/报告生成，未作为本次无副作用API验收执行。任务11.6已有upgrade/repeat证据，但未做fresh数据库或同等安全制品回滚演练，因此不能勾选。8.3/8.4中浏览器`fetch`/ReadableStream以及真实ReactAgent→prompt/Memory/progress/artifact链在仓库当前无对应前端/现场链路，API单测不替代现场证据。剩余未完成项仍为8.3、8.4、11.1、11.4、11.6，整体**58/63**。
+
+## 基础操作权限分类与开发栈同步验收（2026-10-28）
+
+按权限模型确认完成任务1.4和2.6。逐项复核权限目录及REST/RPC/A2A/MCP/Graph消费者后，26个普遍基础动作由共享 `AuthzOperationPolicy` 精确分类：动作标识仍进入Auth签名执行上下文，但不进入权限快照或角色授予；其余121条保持受限权限码。基础动作仍必须经过签名actor校验，并按资源执行owner/参与关系/业务状态校验。Agent额外的无权限码本地能力仅允许显式登记的精确 `local:<tool>`，仍需绑定actor和run/session，默认列表为空。
+
+已重建并启动Auth/Gateway/Agent/Memory/Interview镜像。Compose解析确认Auth、Gateway、Agent版本化授权开关由根目录忽略文件 `.env` 传入且当前为开启状态；Nacos仍保存占位符，不保存密钥。向 `BK-AGENT/DEFAULT_GROUP` 发布 `auth-service.yaml`、`memory-service.yaml`、`agent-service.yaml`、`interview-service.yaml`、`gateway.yaml`，每个dataId均读回与源模板一致。迁移前停止五个受影响应用；MySQL完成受管manifest首次upgrade。数据库实查为权限目录147条、有效121条、停用26条、26条基础码角色授予0、退役迁移标记1。
+
+重复执行暴露旧runner会重放已登记迁移并复验已经被后续合法迁移替代的历史状态，曾在 `compare-media-auth` 检查处失败；新镜像已及时恢复服务。修复runner为先校验账本文件/check SHA、再跳过已应用项；未应用迁移仍执行并校验，哈希不匹配照旧拒绝。静态回归和Bash语法检查通过，修复后的完整upgrade重复执行通过，manifest 46项（3项fresh、43项upgrade）均得到预期处理。该问题记录为KI-213，规则根因记录为LR-156。
+
+Postman真实API验收通过**14项断言**：登录、`/auth/me`、refresh轮换与重放拒绝、刷新后身份、Agent受保护读取、无凭据伪造401、请求用户替换403、logout与撤销token后401。全仓 `mvn -gs .mvn-settings.xml -s .mvn-settings.xml test` 的23模块reactor成功，Surefire合计**1737项，失败0、错误0、跳过14**；manifest静态检查、Compose配置渲染、`git diff --check`及严格OpenSpec校验通过。
+
+当前任务完成**60/65**。仍未完成8.3、8.4、11.1、11.4、11.6：8.3/8.4等待前端fetch/ReadableStream和真实ReactAgent归档链；11.1的MySQL/Redis并发、撤权、丢通知与超时故障矩阵尚未执行；11.4的真实A2A全生命周期及Interview完整业务链未完成；11.6已完成现有库upgrade与repeat，但fresh数据库及等同安全制品回滚演练未完成，因此保留未勾选。
+
+## Interview真实API验收与全仓回归（2026-10-28）
+
+为开发Compose的Interview服务接通 `INTERVIEW_AUTHORIZATION_ENABLED` 环境变量（未设置时默认 `false`），Auth trusted-caller允许 `interview-service`，Gateway只为明确登记的Interview路由附签名受众；Nacos保留环境占位符。真实登录→Gateway→Auth签名上下文→Interview→MySQL API验收发现开台数据模型约束未被满足：MyBatis审计时间没有自动填充，历史非空 `creator_work_no` 和 `dynamic_fields` 没有默认值。新增 `InterviewMetaObjectHandler`，把空工号限定为兼容metadata，并初始化空JSON字段；actor/owner仍从签名Auth上下文取得（KI-214）。
+
+Postman API验收共**19项断言通过**：登录和可信`/auth/me` actor、访谈列表与开台、数据库case/session owner匹配签名actor、问题候选写入和确认、MANAGE/READ票据用途隔离及`no-store`、本人监控、无票/错用途拒绝、query-ticket拒绝、缺少RESPOND证明时在模型处理前拒绝turn、SSE自定义头与心跳、票据撤销、logout。成功路径先完成logout和严格核验临时数据库清理；验后合成case/session及相关票据计数均为0，验收临时凭据文件已清理。定向单测3项通过。
+
+全仓 `mvn -gs .mvn-settings.xml -s .mvn-settings.xml test` 的23模块reactor成功，Surefire **1740项，失败0、错误0、跳过14**；跳过项为既有外部数据库、Docker/Nacos或真实模型验收。`docker compose config --quiet`、PowerShell验收脚本语法及`git diff --check`通过。没有调用模型供应商或真实答题处理。该API证据补充任务8.3/8.4服务端及客户端契约边界，但不替代浏览器验收；没有完成有效RESPOND答题/回复/报告、真实A2A五操作、MySQL/Redis撤权并发故障矩阵，因此8.3/8.4、11.1、11.4、11.6仍未勾选，进度仍为**60/65**。
