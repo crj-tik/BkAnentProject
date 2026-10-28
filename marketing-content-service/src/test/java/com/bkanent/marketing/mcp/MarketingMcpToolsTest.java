@@ -7,6 +7,13 @@ import com.bkanent.common.marketing.campaign.CampaignPlanResponse;
 import com.bkanent.common.marketing.campaign.CampaignReceiptResponse;
 import com.bkanent.common.marketing.campaign.CampaignTargetRequest;
 import com.bkanent.common.marketing.campaign.MarketingContentDraftResponse;
+import com.bkanent.common.marketing.campaign.MarketingContentDraftsResponse;
+import com.bkanent.common.authz.AuthzFreshness;
+import com.bkanent.common.authz.AuthorizationContext;
+import com.bkanent.common.authz.AuthorizationStatus;
+import com.bkanent.common.authz.DelegationBinding;
+import com.bkanent.common.mcp.authz.McpAuthorizationContract;
+import com.bkanent.common.mcp.authz.McpAuthorizationScope;
 import com.bkanent.common.model.MarketingContentDTO;
 import com.bkanent.common.rpc.MediaWorkerRpcService;
 import com.bkanent.marketing.campaign.CampaignLifecycleService;
@@ -16,7 +23,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 
+import java.time.Instant;
+import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -42,11 +52,14 @@ class MarketingMcpToolsTest {
     }
 
     @Test
-    void draftToolReturnsPersistedIdentityForPrepareAndNeverConfirms() {
+    void draftToolReturnsPersistedIdentityForPrepareAndNeverConfirms() throws Exception {
         when(assets.saveContents(any())).thenReturn(List.of(
                 content(41L, "DOUYIN"), content(42L, "XIAOHONGSHU")));
 
-        var result = tools.createMarketingContentDraft(9L, "DOUYIN,xiaohongshu", "draft text");
+        MarketingContentDraftsResponse result;
+        try (var ignored = McpAuthorizationScope.open(marketingCreateContext())) {
+            result = tools.createMarketingContentDraft(9L, "DOUYIN,xiaohongshu", "draft text");
+        }
 
         assertThat(result.contents()).containsExactly(
                 new MarketingContentDraftResponse(41L, "DOUYIN", "DRAFT"),
@@ -99,5 +112,21 @@ class MarketingMcpToolsTest {
     private CampaignReceiptResponse receipt() {
         return new CampaignReceiptResponse("receipt-1", "plan-1", "request-1", "ACCEPTED",
                 CampaignDataMode.SIMULATED, java.time.LocalDateTime.parse("2026-01-01T00:01:00"), List.of());
+    }
+
+    private McpAuthorizationContract.Verified marketingCreateContext() {
+        long now = Instant.now().getEpochSecond();
+        String operation = "marketing.content.create.own";
+        String nonce = Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]);
+        String hash = "0".repeat(64);
+        var context = new AuthorizationContext("42", 1, 1, hash, List.of(operation),
+                "marketing-content-service", "request-1", "run-1", "session-1", hash, hash, nonce,
+                now - 1, now + 60, now + 60, Map.of("BROKER", 9L), "Ed25519", "auth-current", null);
+        var freshness = new AuthzFreshness("42", 1, 1, AuthorizationStatus.ACTIVE,
+                hash, now - 1, now + 30, nonce, "Ed25519", "auth-current", null);
+        var binding = new DelegationBinding("agent-service", "marketing-content-service", "42",
+                List.of(operation), "run-1", null, "request-1", hash, hash, nonce, now - 1, now + 30);
+        return new McpAuthorizationContract.Verified("42", "agent-service", "marketing-content-service",
+                operation, "request-1", "createMarketingContentDraft", context, freshness, binding);
     }
 }

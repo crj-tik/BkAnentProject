@@ -6,6 +6,12 @@ import com.bkanent.common.marketing.campaign.CampaignPlanPrepareRequest;
 import com.bkanent.common.marketing.campaign.CampaignTargetRequest;
 import com.bkanent.common.marketing.campaign.MarketingContentDraftResponse;
 import com.bkanent.common.marketing.campaign.MarketingContentDraftsResponse;
+import com.bkanent.common.authz.AuthzFreshness;
+import com.bkanent.common.authz.AuthorizationContext;
+import com.bkanent.common.authz.AuthorizationStatus;
+import com.bkanent.common.authz.DelegationBinding;
+import com.bkanent.common.mcp.authz.McpAuthorizationContract;
+import com.bkanent.common.mcp.authz.McpAuthorizationScope;
 import com.bkanent.common.model.MarketingContentDTO;
 import com.bkanent.common.rpc.MediaWorkerRpcService;
 import com.bkanent.common.rag.RagCredentialContext;
@@ -29,6 +35,8 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import com.sun.net.httpserver.HttpServer;
@@ -160,7 +168,7 @@ class CampaignLifecycleIntegrationTest {
     }
 
     @Test
-    void brandAssetAndAllFixtureChannelsCompleteTheUnifiedCampaignFlowAsSimulated() {
+    void brandAssetAndAllFixtureChannelsCompleteTheUnifiedCampaignFlowAsSimulated() throws Exception {
         var brandAsset = campaignAssets.create(new CampaignBrandAssetRequest("LOGO", "营销品牌标识",
                 "https://example.test/brand.svg", "ALL", List.of("brand", "fixture"), "ACTIVE", "acceptance fixture"));
         assertEquals(brandAsset.id(), campaignAssets.list("LOGO", "品牌").get(0).id());
@@ -178,7 +186,10 @@ class CampaignLifecycleIntegrationTest {
         when(mediaProvider.getIfAvailable()).thenReturn(null);
         var marketingMcp = new com.bkanent.marketing.mcp.MarketingMcpTools(marketingAssets, mediaProvider, campaigns,
                 new ObjectMapper().findAndRegisterModules());
-        MarketingContentDraftsResponse drafts = marketingMcp.createMarketingContentDraft(50L, "DOUYIN", "待审核草稿");
+        MarketingContentDraftsResponse drafts;
+        try (var ignored = McpAuthorizationScope.open(marketingCreateContext())) {
+            drafts = marketingMcp.createMarketingContentDraft(50L, "DOUYIN", "待审核草稿");
+        }
         MarketingContentDraftResponse draft = drafts.contents().get(0);
         assertEquals(5L, draft.contentId());
         assertEquals("DRAFT", draft.status());
@@ -460,5 +471,21 @@ class CampaignLifecycleIntegrationTest {
         ObjectProvider<MediaWorkerRpcService> provider = mock(ObjectProvider.class);
         when(provider.getIfAvailable()).thenReturn(null);
         return provider;
+    }
+
+    private McpAuthorizationContract.Verified marketingCreateContext() {
+        long now = Instant.now().getEpochSecond();
+        String operation = "marketing.content.create.own";
+        String nonce = Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]);
+        String hash = "0".repeat(64);
+        var context = new AuthorizationContext("42", 1, 1, hash, List.of(operation),
+                "marketing-content-service", "request-1", "run-1", "session-1", hash, hash, nonce,
+                now - 1, now + 60, now + 60, Map.of("BROKER", 42L), "Ed25519", "auth-current", null);
+        var freshness = new AuthzFreshness("42", 1, 1, AuthorizationStatus.ACTIVE,
+                hash, now - 1, now + 30, nonce, "Ed25519", "auth-current", null);
+        var binding = new DelegationBinding("agent-service", "marketing-content-service", "42",
+                List.of(operation), "run-1", null, "request-1", hash, hash, nonce, now - 1, now + 30);
+        return new McpAuthorizationContract.Verified("42", "agent-service", "marketing-content-service",
+                operation, "request-1", "createMarketingContentDraft", context, freshness, binding);
     }
 }
