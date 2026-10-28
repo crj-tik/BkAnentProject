@@ -15,7 +15,7 @@
 | --- | --- | --- | --- |
 | [房源合并](../openspec/changes/consolidate-listing-comparison-domain/proposal.md) | `listing-master-service`、`compare-engine-service`、`common/listing/**`，原比较契约/纯计算及其必要调用方 | 房源接口适配、同域比较/PDF、比较服务退役配置与迁移方案 | `codex/consolidate-listing-comparison-domain` |
 | [知识拆分](../openspec/changes/extract-knowledge-operations-domain/proposal.md) | `knowledge-service`、访谈的窄来源读取适配、`common/knowledge/**`、`common/interview/transcript/**` | 逐字稿消费、知识审核发布、知识 v1 读取接口及独立身份配置片段 | `codex/extract-knowledge-operations-domain` |
-| [门店复盘](../openspec/changes/implement-store-business-review/proposal.md) | `business-service`、`common/business/review/**` | 本地经营事件、房源/知识 consumer adapter、诊断、动作与反馈闭环 | `codex/implement-store-business-review` |
+| [门店复盘](../openspec/changes/implement-store-business-review/proposal.md) | 新增 `business-review-service`、独立库 `bk_business_review` | 经营复盘 API/状态/Memory 私域接入；旧 `business-service`、trade Agent 与其配置保持不变 | `codex/implement-store-business-review` |
 | [营销合并](../openspec/changes/consolidate-marketing-promotion-domain/proposal.md) | `marketing-content-service`、`promotion-service`、`common/marketing/campaign/**` | 内容/计划/尝试/效果统一、provider 适配及推广退役方案 | `codex/consolidate-marketing-promotion-domain` |
 
 命名空间以上述 common 的 Java 包根 `com/bkanent/common/` 为前缀。各会话只更新本 change 的 tasks；独立 consumer DTO 放在消费模块自己的 integration 包，不导入另一个 change 尚未合入的 Java 类型，也不重写生产者模型。既有 `ListingDTO` 等共享类型默认保持兼容，转换在本域边界完成。
@@ -57,13 +57,16 @@
 
 | 共享位置 | 允许的本分支最小改动与协调责任 |
 | --- | --- |
-| 根 `pom.xml`/Dockerfile | 房源只调整 compare；知识只新增 knowledge；营销只调整 promotion；经营通常无需改模块列表。协调合并保留各方增量 |
-| 根 Compose、Nacos/网关服务列表 | 各会话只维护自己的服务/路由/环境块，独立运行用自身 override；共享环境的真正启停与发布由协调会话执行 |
-| `auth-service/**`、Auth Nacos、共享身份协议 | 四会话只读；需要新增受信调用者时在自身 design/受管配置片段列出 key ID、caller、operation 与范围，由 Auth 会话/协调会话接入，独立测试使用精确登记夹具 |
-| Memory/RAG 全局登记、密钥生成器全局服务表 | 不删历史登记、不向共享环境发布。知识会话交付 knowledge 身份及最小授权片段；其他会话保留既有身份。协调合并并验证登记 |
-| `sql/mysql-init.sql`、初始化 runner/manifest | 已应用 SQL/hash 不改。各会话新增带 listing/knowledge/business/marketing 业务前缀的 SQL/check，交付唯一版本及 manifest 行；在隔离库验证。当前 runner 固定数据库 allowlist，新增 bk_knowledge/bk_business/bk_marketing 由协调合并其 allowlist，不能声称现 runner 已支持任意片段 |
+| 根 `pom.xml`/Dockerfile | 房源只调整 compare；知识只新增 knowledge；营销只调整 promotion；门店复盘只新增 business-review-service。通用 Dockerfile 先核对是否已自动打包全部模块；协调合并根模块列表 |
+| 根 Compose、Nacos/网关、`.env.example` 与部署清单 | 各会话只增加自己的服务块、路由、环境键、Nacos Data ID 和发布/启动 allowlist；本机忽略的 `.env` 只补缺失非敏感键并保留秘密。共享环境启停、Nacos 发布由协调会话执行 |
+| `auth-service/**`、Auth Nacos、共享身份协议 | 各业务会话不改 Auth 代码/全局目录；在 design/task 交付稳定 CapabilityId、精确 operation、caller、签名范围和最小配置片段。Auth/协调会话完成全局登记，独立测试使用精确登记夹具 |
+| Memory/RAG 全局登记、密钥生成器全局服务表 | 不删历史登记、不向共享环境发布。各服务交付唯一 caller/domain/agent、公钥 key ID 和精确 allowlist 片段；协调会话合并 trusted caller、keygen 服务名单及公钥环境映射。门店复盘使用独立必需 Memory Hook，不新增 RAG 投影或经验结果发布 |
+| `nacos/mysql-common.yaml`、MySQL MCP 默认库 | 新服务需要独立数据库别名；合并时保留每个域的唯一别名。业务证据库默认不加入通用只读 MySQL MCP 库列表 |
+| `sql/mysql-init.sql`、初始化 runner/manifest | 已应用 SQL/hash 不改。各会话新增自身业务 schema/check 与持久 A2A task authorization 的唯一 manifest 行；协调合并新增数据库 allowlist、序号和 hash，并在隔离库验证。当前 runner 固定允许集合，新增库不能被假定为自动支持 |
 | `agent-service`、Studio | 只更新本域必要兼容引用和新增能力映射；不改通用 Graph/身份框架，也不执行 `implement-studio-v2` 未完成任务。跨域呈现联调后置 |
 | LR/KI 动态清单 | 本域优先更新对应 LR-99/100/101/102；新增编号使用下方保留段；不得移动或改写别人的条目 |
+
+并行拆分的服务身份须各自唯一：Maven module / 服务名、业务库、端口、Gateway path、Nacos Data ID、A2A agent/domain、服务 key ID 不得跨会话复用。共享文件只追加本域块；根 POM、Compose、Gateway/Nacos、MySQL 映射、keygen、SQL manifest 和发布白名单的最终并集由协调会话审查。门店复盘当前规划为 business-review-service / bk_business_review / 9016 / /business-review/** / business-review-service.yaml / business-review-agent / business-review-service-current；实施前重新核对端口和身份占用。旧 business-service 与 trade/trade-agent 资产为只读边界。
 
 新增编号保留段：房源 LR-106–113/KI-170–177；知识 LR-114–121/KI-178–185；经营 LR-122–129/KI-186–193；营销 LR-130–137/KI-194–201。其它会话本批期间使用 LR-138 起、KI-202 起的未用编号；保留号不复用。已保留 Auth 会话的 LR-103/104 和 KI-168/169；LR-105 记录本次并行规则。若需要超出保留段，先由协调会话分配，不能各自取同一 max+1。KI-115 由房源、KI-15 由知识、KI-167 由营销维护；经营仅引用 KI-114/128/166，不替其他 change 宣布修复。
 

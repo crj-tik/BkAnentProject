@@ -1691,3 +1691,13 @@
 **验证边界**：已完成 manifest dry-run 与哈希核对；未应用数据库迁移、未发布 Nacos 配置、未启动 Compose。
 
 **关联**：LR-157；营销 OpenSpec task 4.4；`docker/mysql/init-manifest.tsv`、`scripts/deploy/run-init-manifest.sh`、`nacos/marketing-content-service.yaml`、`docker-compose.yml`。
+
+## KI-215 [FIXED·本提交·P2] 门店复盘schema check的manifest checksum错误
+
+**发现日期与依据**：2026-10-28，合并门店复盘服务时对 MySQL 初始化清单执行规范 LF SHA-256 核对；第 500 项 `business-review-schema-20261027-v1` 记录值与 `docker/mysql/checks/business-review-schema.sql` 实际摘要不符，受管 runner 会在任何 DDL 执行前拒绝整份清单。
+
+**修复**：将第 500 项 schema-check checksum 更新为文件的实际规范 SHA-256；SQL、迁移版本、目标数据库与既有已应用项均未改动。
+
+**验证与边界**：修正后逐项核对 manifest 顺序、文件存在性及全部 migration/schema-check SHA-256；未连接或修改数据库，未启动 Docker Compose。
+
+**关联**：`docker/mysql/init-manifest.tsv` 第 500 项；change `implement-store-business-review` task 7.1。

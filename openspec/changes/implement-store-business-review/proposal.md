@@ -1,45 +1,40 @@
-# 将经营分析落到门店卡点复盘与推进
+# 新增独立门店经营卡点复盘服务
 
 ## Why
 
-当前 `business-service` 主要查询 KPI、排行榜和看板，缺少将经营问题转成可追踪推进事项的业务流程。首期需要服务知识运营人员和店长，围绕房源维护、带看与成交卡点减少整理和判断成本，并利用实际应用反馈辅助业绩增长。
+现有 business-service 提供经营分析、排行榜和看板能力，并承载 trade/trade-agent。门店复盘需要新增事项、证据、计划、动作回执和观察状态；继续扩充现有服务会混合不同业务域，并与另一会话的服务拆分在共享模块及配置上发生冲突。本 change 以独立服务承接复盘，现有 business-service 的源码、API、数据库和 trade Memory 身份保持不变。
+
+首期仍服务知识运营人员和店长，优先覆盖带看后停滞与房源维护缺口。模拟经营数据用于验收流程，不作为真实业绩或生产经验结论。
 
 ## What Changes
 
-- 在现有 `business-service` 建立经营复盘事项、证据快照、卡点假设、建议动作、确认执行和结果观察；首个完整场景为带看后停滞事项梳理，同时支持房源维护缺口。
-- 以受管模拟数据集提供初期带看、跟进、议价和经营指标输入；房源通过房源域接口接入，逐字稿保持访谈域来源，打法通过知识域读取。
-- 所有事实、计划和结果保留来源、时间、版本及 `SIMULATED/REAL/MIXED` 标记；模拟验收证明流程可用，不形成真实增长结论或生产经验结果证据。
-- 定义指标口径、样本范围、分母和观察窗口；缺失数据表达为未知。区分事实、原因假设、动作完成和经营效果，模型不能自行宣告成交或业绩改善。
-- 店长确认后形成有负责人、期限和版本的推进动作，幂等保存原请求回执；首期记录执行反馈和上游回执，不自动发送消息、调价、改房源状态或触发付款。
-- 保留现有 `trade/trade-agent` 技术身份并新增经营复盘技能，避免将产品命名调整变成 Memory 历史重归属。
-- Agent 工具授权采用当前稳定 `CapabilityId` 方案：只为 `a2a:trade-agent` 增加到精确 Auth 操作的最小映射；经营服务方法仍逐项核验 `business.review.*.store` 操作和可信门店范围。复盘写操作不作为 trade-agent A2A 或通用 TradeMcpTools 发布；唯一 Supervisor 写入口为独立、需用户审批的 `confirmBusinessReviewPlan` capability，并受服务端门店范围、计划版本和幂等复核约束。
-- 本 change 不包含新人带教，不合并其他服务，也不承接 `implement-studio-v2` 中尚未完成的发布、结算和文件操作。
-- 按 `domain-parallel-v1` 实现房源/知识 HTTP consumer adapter 与自有 fixture；消费方 wire DTO 留在本模块，不依赖另外三个 change 新增的 Java 制品。
+- 新增 business-review-service 微服务、独立数据库 bk_business_review、服务端口 9016、Nacos Data ID business-review-service.yaml 与 Gateway 路径 /business-review/**；复盘 API 使用 /business-review/reviews 前缀。旧 /business/** 路由和 business-service 代码不变。
+- 在新服务内保存复盘事项、证据快照、卡点假设、计划修订、确认动作、执行回执与指标观察。房源和知识通过冻结的 domain-parallel-v1 HTTP 契约读取；业务 DTO 留在新服务，不共享或迁移旧 business-service 数据。
+- 按当前稳定授权方案使用 CapabilityId.a2a(business-review-agent) 到 agent.workflow.invoke.business-review 的精确映射；领域 API 继续逐操作检查 business.review.*.store，并要求 Auth 签名的 STORE 身份及门店范围。Auth 全局登记由协调/Auth 会话接入。
+- 新 Agent 使用独立 A2A 服务身份和必需 Memory Hook，caller/domain/agent 固定为 business-review-service / business-review / business-review-agent。Memory 历史与现有 business-service / trade / trade-agent 隔离；Memory 不是经营事实真源，模拟或人工回报不发布为真实经验结果。
+- Supervisor 通过独立的计划准备与确认能力编排复盘：先展示计划版本、参数 hash、来源/知识版本、负责人和期限，再等待用户批准；业务服务仍重新核验当前主体、门店范围和计划版本。
+- 新服务作为增量能力交付，原月度 KPI、每日工作量、KPI 评估、排行榜、房源流转报表、门店看板/大屏及既有 TradeTools/TradeMcpTools 入口保持可用。
+- 同步新增服务涉及的 Maven、服务模板、Nacos、Compose、Gateway、.env.example、服务密钥生成表、数据库初始化、Nacos 发布和部署校验配置。实际 .env 若存在，只补齐所需非敏感变量并保留原值，不提交该忽略文件或任何密钥。
+- 与并行拆分会话共享文件时只增加本服务专属条目；服务 ID、数据库、端口、路径、Nacos Data ID、Agent ID、密钥 ID 均使用独立名称。Memory 全局受信调用者、Agent/Auth 注册和密钥生成全局表交由协调会话合并。
 
 ## Capabilities
 
 ### New Capabilities
 
-- `store-business-review`: 有来源的经营卡点复盘、优先事项、确认推进、执行反馈和指标观察。
+- store-business-review：在可信门店范围内创建和推进有来源的经营复盘事项，保留计划、执行回执和观察口径。
 
 ### Modified Capabilities
 
-无。Supervisor 仍按通用工具循环协调，业务状态由经营域维护；既有审批、技能和 Memory 安全契约继续适用。
+无。既有经营分析、交易 Agent、通用 Agent 编排和 Memory 契约保持原行为。
 
 ## Impact
 
-**本 change 负责**：`business-service` 的复盘领域、`bk_business` 复盘表与迁移、`common/business/review/**` 中必要的业务 DTO、房源/知识 v1 消费适配及本域 fixture、`trade-agent` 现有身份下的技能和安全结果投影。业务事项、证据、计划、动作、回执和观察只由 Business 持久化。
+**本 change 拥有**：新增 business-review-service 的 Java 模块与本地 API/DTO、领域处理器、存储和迁移；bk_business_review 数据库；本服务 Agent/技能及 fixture；服务专属 application 配置、business-review-service.yaml、Compose 服务块、Gateway 路由、环境模板变量和发布/启动清单条目。根 Maven 聚合仅追加本模块。现有 business-service 的 Java、配置、SQL、端口、API、trade Agent 和 trade Memory 身份均不修改。
 
-**仅允许的 Agent 接入差异**：在受管 `agent-service` 配置中增加 `CapabilityId.a2a("trade-agent")` 到精确 Agent 调用操作的单项映射；不改 Supervisor/Graph/Agent 身份框架、通用工具循环或审批实现。当前仓库尚无此映射，也未找到 `agent.workflow.invoke.trade` 的 Auth 权限登记；协调/Auth 交付精确登记后映射才可启用，缺任一项时目录隐藏且直接调用拒绝。
+**共享配置交接**：提交可合并的最小差异片段，用于 agent-service 的稳定 A2A capability 映射、gateway authorization audience、mysql-common 的独立数据库别名、memory-service 的精确 trusted caller、公钥注册和 ServiceIdentityKeygen 服务名单。Auth 负责 agent.workflow.invoke.business-review、六个 business.review.*.store 操作及签名 STORE 身份关系的全局登记。Memory/RAG 全局空间配置不新增 business-review 投影；协调会话合并共享注册并核对与其它拆分的配置并集。
 
-**Auth/协调方负责**：在 Auth 权限目录登记 `agent.workflow.invoke.trade` 及本 change 提交的精确 `business.review.*.store` 操作码；建立并签入可验证的 STORE 主体/门店范围。当前 `AuthorizationContext.businessIdentities` 只允许 `BROKER`，因此业务侧只实现可信门店范围端口和独立测试替身，生产实现缺失时关闭读写；不得在本 change 修改 `common/authz/**`、`auth-service/**`、Auth 全局目录或用 userId、brokerId、员工号、请求 storeId 推导门店权限。
+**并行边界**：本 change 不移动、重命名或修改 business-service 中任何代码和资源，不直接读取或改写 bk_business，不复用 trade-agent 的权限或 Memory 历史。实现会话在独立 worktree、Maven 仓库和隔离数据库中工作；只触碰本服务专属块，协调会话负责共享聚合文件和全局登记的最终合并。
 
-房源与知识 change 只拥有各自生产者、表和接口；本 change 只拥有 `domain-parallel-v1` HTTP consumer/wire DTO，不读其数据库、不引用其新 Java 类型，也不复制访谈逐字稿。Studio 页面、work/command、发布结算和 KI-114/128/166 的问题留在各自 change。实际服务互通及真实增长验证是合并后的门禁，不阻止本 change 在固定 HTTP/Auth/Memory 测试登记下独立完成。变更范围见 `docs/business-domain-change-roadmap.md`。
+**合并后验收**：Supervisor 动态目录/用户审批接入和既有经营分析入口回归仍按 tasks.md 中的未完成项单独验收；新增服务与存量服务配置并集已由合并提交核对。
 
-门店复盘还影响唯一的 Supervisor 专属技能、动态工具目录、计划预览与独立确认审批能力；共享 `approval-capabilities` 在合并协调阶段按稳定 capability ID 并集合并，不由业务域覆盖。
-
-执行方式：四会话之一，在共同基线上以真实本域处理器/持久记录、固定 v1 HTTP fixture 和精确 Auth/Memory 测试登记完成全部本期验收。房源、知识和 Auth 其它会话的交付均不是实施完成前置条件；仍需完成真实 HTTP adapter、拒绝/版本/撤回反例，不能以空接口代替。实际服务互通与真实增长验证在合并后的门禁分别报告，不能把模拟通过写成已联机。范围与隔离要求见 `docs/business-domain-change-roadmap.md`。
-
-## 功能完整性约束
-
-门店经营复盘是对现有 `business-service` 分析能力的增量扩展，不替换原分析业务。月度 KPI、每日工作量、KPI 评估、排行榜及重建、房源流转报表、门店看板和大屏，以及既有 `TradeTools`/`TradeMcpTools` 入口，必须继续可用；所有旧入口都要有目标映射和回归证据，不能因新增复盘而删减、改写或隐藏原有能力。
+具体文件差异、Auth/Memory 交接和合并顺序见 design.md；实施任务保持未完成，需由 $openspec-apply-change implement-store-business-review 执行。

@@ -30,6 +30,7 @@
         <module>media-worker-service</module>
         <module>marketing-content-service</module>
         <module>business-service</module>
+        <module>business-review-service</module>
         <module>contract-service</module>
         <module>settlement-service</module>
         <module>interview-service</module>

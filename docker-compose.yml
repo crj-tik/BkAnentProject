@@ -749,6 +749,37 @@ services:
       BUSINESS_MEMORY_V2_COMPRESSION_ENABLED: ${BUSINESS_MEMORY_V2_COMPRESSION_ENABLED:-false}
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,redis
 
+  business-review-service:
+    <<: *app-service
+    profiles: [full]
+    depends_on:
+      config-init:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+    volumes:
+      - type: bind
+        source: ./.secrets/service-identities/business-review-service/private-key.pem
+        target: /run/secrets/service-identity.pem
+        read_only: true
+        bind:
+          create_host_path: false
+    environment:
+      <<: *app-environment
+      SERVICE_ARTIFACT: business-review-service-1.0.0-SNAPSHOT.jar
+      SERVICE_IDENTITY_KEY_ID: business-review-service-current
+      A2A_PUBLIC_BASE_URL: http://business-review-service:9016
+      DUBBO_REGISTRY_ADDRESS: "nacos://nacos:8848?namespace=${NACOS_NAMESPACE:-BK-AGENT}&group=DEFAULT_GROUP"
+      MYSQL_DB_BUSINESS_REVIEW: ${MYSQL_DB_BUSINESS_REVIEW:-bk_business_review}
+      BUSINESS_REVIEW_MEMORY_V2_COMPRESSION_ENABLED: ${BUSINESS_REVIEW_MEMORY_V2_COMPRESSION_ENABLED:-false}
+      BUSINESS_REVIEW_AGENT_MODEL: ${BUSINESS_REVIEW_AGENT_MODEL:-gpt-5.6-terra}
+      BUSINESS_REVIEW_SOURCE_MODE: ${BUSINESS_REVIEW_SOURCE_MODE:-http}
+      BUSINESS_REVIEW_LISTING_BASE_URL: ${BUSINESS_REVIEW_LISTING_BASE_URL:-http://listing-master-service:9003}
+      BUSINESS_REVIEW_KNOWLEDGE_BASE_URL: ${BUSINESS_REVIEW_KNOWLEDGE_BASE_URL:-http://knowledge-service:9015}
+      BUSINESS_REVIEW_AUTHORIZATION_ENABLED: ${BUSINESS_REVIEW_AUTHORIZATION_ENABLED:-true}
+      BUSINESS_REVIEW_A2A_AUTHORIZATION_ENABLED: ${BUSINESS_REVIEW_A2A_AUTHORIZATION_ENABLED:-true}
+      SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database
+
   memory-service:
     <<: *app-service
     image: bk-anent-memory:dev
