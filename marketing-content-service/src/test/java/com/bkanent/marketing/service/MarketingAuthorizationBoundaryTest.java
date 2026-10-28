@@ -2,16 +2,14 @@ package com.bkanent.marketing.service;
 
 import com.bkanent.common.authz.AuthzErrorCode;
 import com.bkanent.common.authz.AuthzException;
-import com.bkanent.common.model.MarketingContentDTO;
 import com.bkanent.common.rpc.MediaWorkerRpcService;
-import com.bkanent.common.rpc.PromotionRpcService;
+import com.bkanent.marketing.campaign.CampaignLifecycleService;
 import com.bkanent.marketing.converter.MarketingContentConverter;
 import com.bkanent.marketing.service.impl.MarketingAssetServiceImpl;
 import com.bkanent.marketing.mcp.MarketingMcpTools;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
-
-import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -31,18 +29,18 @@ class MarketingAuthorizationBoundaryTest {
     }
 
     @Test
-    void publishRejectsBeforeMediaOrPromotionSideEffectsWithoutUserContext() {
+    void draftCreationRejectsBeforeMediaSideEffectsWithoutUserContext() {
         @SuppressWarnings("unchecked")
         ObjectProvider<MediaWorkerRpcService> media = mock(ObjectProvider.class);
-        @SuppressWarnings("unchecked")
-        ObjectProvider<PromotionRpcService> promotion = mock(ObjectProvider.class);
-        MarketingMcpTools tools = new MarketingMcpTools(assets, media, promotion);
-        clearInvocations(media, promotion);
+        MediaWorkerRpcService mediaService = mock(MediaWorkerRpcService.class);
+        org.mockito.Mockito.when(media.getIfAvailable()).thenReturn(mediaService);
+        MarketingMcpTools tools = new MarketingMcpTools(assets, media, mock(CampaignLifecycleService.class), new ObjectMapper());
+        clearInvocations(media, mediaService);
 
         AuthzException failure = assertThrows(AuthzException.class,
-                () -> tools.publishMarketingContent(8L, "douyin", "copy"));
+                () -> tools.createMarketingContentDraft(8L, "douyin", "copy"));
 
         assertEquals(AuthzErrorCode.AUTHENTICATION_REQUIRED, failure.code());
-        verifyNoInteractions(media, promotion, search);
+        verifyNoInteractions(mediaService, search);
     }
 }

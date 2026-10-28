@@ -1,5 +1,6 @@
 package com.bkanent.marketing.mcp;
 
+import com.bkanent.common.a2a.VerifiedDomainAuthorization;
 import com.bkanent.common.model.MarketingContentDTO;
 import com.bkanent.common.marketing.campaign.CampaignConfirmRequest;
 import com.bkanent.common.marketing.campaign.CampaignPlanPrepareRequest;
@@ -46,6 +47,8 @@ public class MarketingMcpTools implements McpTool {
             @ToolParam(description = "Listing ID") Long listingId,
             @ToolParam(description = "Comma-separated platforms, e.g. 'douyin,wechat,xiaohongshu'") String platforms,
             @ToolParam(description = "Marketing copywriting text") String copywriting) {
+        VerifiedDomainAuthorization.requireOperation("marketing.content.create.own");
+        VerifiedDomainAuthorization.requireBrokerIdentity();
         List<String> platformList = parsePlatforms(platforms);
         List<String> assets = mediaWorkerRpcService == null ? List.of() : mediaWorkerRpcService.generateAssets(listingId, copywriting);
         List<MarketingContentDTO> contents = platformList.stream()

@@ -1390,3 +1390,13 @@
 **代码位置**：`knowledge_revision` 迁移与 `knowledge_operation_receipt` 最小授权；`KnowledgeLifecycleService.replay/reserve`；Knowledge migration manifest 与静态配置检查。
 
 **关联**：KI-220；change `extract-knowledge-operations-domain`。
+
+## LR-159 营销草稿在素材生成前完成授权预检
+
+**结论**：MCP 草稿创建入口在调用素材生成 RPC 前，先校验 `marketing.content.create.own` 与可信 broker identity；底层 `MarketingAssetService.saveContents` 继续保留同一授权校验，作为持久化边界的独立守卫。入口预检不取代服务层授权，也不允许无可信身份的请求触发外部素材生成。
+
+**根因**：MCP 工具会先调用可选的 Media Worker，再进入资产服务。只依赖服务层的写入校验虽然能拒绝未授权持久化，却会让未授权调用先触发外部副作用。将授权检查提前到工具入口可阻止这一副作用，同时保留服务层防绕过保护。
+
+**代码位置**：`marketing-content-service/MarketingMcpTools.createMarketingContentDraft`、`MarketingAssetServiceImpl.saveContents`、`MarketingAuthorizationBoundaryTest`。
+
+**关联**：KI-221；本记录来自修复 CI 暴露的过期授权边界测试，不改变 Knowledge 服务拆分范围或 Interview 源服务边界。

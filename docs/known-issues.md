@@ -1755,3 +1755,13 @@
 **验证与边界**：迁移清单规范 SHA-256、Knowledge 配置静态检查通过；新增 Knowledge 生命周期回归用例已编译。本机 Surefire 执行受 Java attach 管道拒绝影响而未完成，等待 PR CI 给出运行结果；不代表目标数据库已应用迁移或运行态账号已验收，后者仍由 KI-218 跟踪。
 
 **关联**：LR-158；`KnowledgeLifecycleService`、`20261027_knowledge_domain.sql`、`knowledge-domain.sql`；change `extract-knowledge-operations-domain`。
+
+## KI-221 [FIXED·本提交·P1] 营销草稿在授权检查前触发素材生成
+
+**发现日期与依据**：2026-10-28，合并前 PR CI 暴露 `MarketingAuthorizationBoundaryTest` 仍引用已删除的 `PromotionRpcService` 和旧发布 API。迁移测试到当前草稿流程时确认，`createMarketingContentDraft` 会先调用 Media Worker 生成素材，随后 `MarketingAssetService.saveContents` 才验证操作权限和 broker 身份。
+
+**修复**：MCP 草稿入口现在在任何素材生成前检查精确 `marketing.content.create.own` 操作和可信 broker identity；资产服务仍保留自己的写入授权守卫。回归测试改为验证无用户上下文时草稿调用在 Media Worker 和搜索索引副作用之前失败。
+
+**验证与边界**：`marketing-content-service` 及上游模块 Maven `test-compile` 通过；本次修复后的 PR CI 仍待完成。未调用 Media Worker 或连接数据库。
+
+**关联**：LR-159；`MarketingMcpTools.createMarketingContentDraft`、`MarketingAssetServiceImpl.saveContents`、`MarketingAuthorizationBoundaryTest`。
