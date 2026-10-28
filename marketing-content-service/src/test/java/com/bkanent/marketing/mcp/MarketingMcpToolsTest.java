@@ -123,9 +123,9 @@ class MarketingMcpToolsTest {
                 "marketing-content-service", "request-1", "run-1", "session-1", hash, hash, nonce,
                 now - 1, now + 60, now + 60, Map.of("BROKER", 9L), "Ed25519", "auth-current", null);
         var freshness = new AuthzFreshness("42", 1, 1, AuthorizationStatus.ACTIVE,
-                hash, now - 1, now + 30, nonce, "Ed25519", "auth-current", null);
+                hash, now - 1, now + 20, nonce, "Ed25519", "auth-current", null);
         var binding = new DelegationBinding("agent-service", "marketing-content-service", "42",
-                List.of(operation), "run-1", null, "request-1", hash, hash, nonce, now - 1, now + 30);
+                List.of(operation), "run-1", null, "request-1", hash, hash, nonce, now - 1, now + 20);
         return new McpAuthorizationContract.Verified("42", "agent-service", "marketing-content-service",
                 operation, "request-1", "createMarketingContentDraft", context, freshness, binding);
     }
