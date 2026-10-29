@@ -15,3 +15,14 @@
 | 房源比较 0.4、3.4、4.5、5.1–5.4：配置、迁移及源功能验收 | 房源领域保持独立，既有待办继续有效；新任务 2.4、4.2 核验平台经营消费者调用，不代替房源验收。 |
 | 营销 7.6：Auth v2 逐入口准入 | 营销保持独立，原待办继续有效；平台经营域不推断其授权完成。 |
 | Studio 1.3、4.1–4.4、5.2–5.4：身份/审批、发布、结算、访谈、文件与能力目录 | 新任务 4.1 删除已退役的结算能力及其待办对应入口；其余授权、审批、访谈和文件待办保持未完成，平台经营入口同步纳入 2.4–2.5。 |
+
+## 合同与结算退役检查清单
+
+这些项目是待执行清单，不代表已退役。每项须同时核对生产代码、配置和相关维护测试。
+
+- 构建和实现：根 `pom.xml`、两个服务模块及 `common` 的 `ContractRpcService`、`SettlementRpcService`。结算实现依赖合同 RPC，须先确认调用方均被迁除。
+- 流量和能力：`nacos/gateway.yaml` 的 `/contracts/**`、`/settlements/**`；Agent 的 `OfficialA2aAgentClient`、`AgentMcpNames`、`StudioCapabilityService` 以及技能/测试中的旧入口。
+- 身份和检索：Auth 的 `RagPrincipalRpcServiceImpl` 及服务身份公钥模板；Memory 的 caller/domain/agent allowlist；RAG 的两组各五个 Memory v2 空间及 `RagAccessControl`；密钥生成器和运行探针。
+- 部署：`docker-compose.yml` 服务、Agent MCP endpoint 和密钥挂载；`.env.example`、Nacos 两个服务模板、`mysql-common.yaml`、发布清单、初始化脚本及 README。
+- 数据：`sql/mysql-init.sql` 中两个旧库、合同模板/记录/附件和结算规则/记录/批次等；`docker/mysql/init-manifest.tsv`、runner allowlist 和检查。保留已应用历史迁移及其摘要，通过追加迁移完成退役，并检查新库初始化、已有开发库升级和重跑。
+- 验收：扫描活动源码和模板中的 `contract-service`、`settlement-service`、对应 Agent、RPC、路由和数据库名，逐条核对零活动引用；历史迁移、审计与回归中的负向断言单独标注。验证旧路由不可达、剩余服务无需旧配置即可构建和启动，且 Auth/Memory/RAG 对旧身份不再开放。
