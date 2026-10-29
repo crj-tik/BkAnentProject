@@ -35,6 +35,13 @@ a2a:
     key-id: ${SERVICE_IDENTITY_KEY_ID:media-worker-service-current}
     private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
 
+media:
+  listing-authorization:
+    key-id: media-listing-current
+    signing-secret: ${MEDIA_LISTING_AUTH_SECRET:}
+  authorization:
+    enabled: false
+
 dubbo:
   application:
     name: media-worker-service

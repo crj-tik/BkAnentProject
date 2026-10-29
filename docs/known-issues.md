@@ -208,11 +208,13 @@
 
 **处置**：本轮未重建容器、未改 env——钉扎在容器创建时冻结，start 层面无解；已 `docker stop` release agent 结束无效循环，agent-service 角色由 dev 容器承担（public 命名空间，无钉扎）。后续修复需授权下重建 release 容器：恢复钉扎 IP 归属（disconnect/reconnect --ip）或改用 `DUBBO_IP_TO_BIND` 自动探测，重建前逐容器比对 env/网络别名/卷；auth/listing/rag 同批恢复需一并处理。关联 KI-93/109；证据见 `docs/acceptance/domain-agent-memory-foundation-20261016.md`。
 
-## KI-119 [OPEN·P2] dev compare-engine 容器 /app/runtime 不可写导致启动崩溃循环
+## KI-119 [FIXED·2026-10-29·P2] dev compare-engine 容器 /app/runtime 不可写导致启动崩溃循环
 
 **确认日期**：2026-10-16。`bk-anent-dev-compare-engine-service-1` 启动即失败：`compareReportCacheServiceImpl` init 抛 `IllegalStateException: 初始化房源对比报告缓存目录失败`，根因 `java.nio.file.AccessDeniedException: /app/runtime`；compose 挂载 `compare-report-data:/app/runtime`，属主/权限与容器运行用户不匹配（RestartCount 已超 1000，每轮 exit 1，OOMKilled=false）。重启无法自愈，compare-agent 从未到达 Nacos 注册阶段。
 
-**处置**：本轮在授权范围内先 stop 停止循环，再用临时容器对卷根做最小 chown 对齐容器运行用户后 start 复验；保留卷内既有 JSON/PDF 报告文件不动，不改 compose、不重建镜像。若 chown 后仍失败则保留证据待专项处置。历史对比报告缓存语义见验收记录「compare 事实源」行；修复只恢复容器可启动，不证明检索/对比链路恢复。
+**处置**：本轮曾在授权范围内先 stop 停止循环，再用临时容器对卷根做最小 chown 对齐容器运行用户后 start 复验；该操作只恢复容器可启动，不证明检索/对比链路恢复。
+
+**退役结论**：2026-10-29 用户确认项目未上线且无历史资产；旧服务与文件卷定义已移除，当前比较报告由 Listing 持久化。此启动问题不再适用，历史运行日志与验收记录保留作审计。
 
 ## KI-118 [OPEN·P2] 官方 fastjson2 接受名单条目会按类名前缀匹配
 
@@ -244,9 +246,9 @@
 
 **确认日期**：2026-10-15；2026-10-26复核完成任务10.4。旧 `CompareAnalysisServiceImpl.loadListings` 调用 `ListingMasterRpcService.getListingById`，而该 provider 在 RAG 身份迁移后主动拒绝无凭据读取；旧 compare REST/RPC 正向路径因此不可用。另确认总价以万元存储而旧单价未换算为元，ID-only 缓存不能感知来源更新。
 
-**修复**：当前比较、报告和 PDF 路径迁入 `listing-master-service`，从稳定来源引用读取带修订号/hash/数据模式的签名快照。报告按已验签 actor 隔离并绑定当前来源；创建和历史/PDF 分别要求签名上下文中的 `compare.report.create` 与 `compare.report.read.own` 基线操作，并持续核验报告 owner 与来源访问/版本。基线操作不作为角色权限，目录行由迁移停用且清除角色关联。分享码不再单独授予正文或 PDF 权限，旧缺 owner/source hash 的报告不恢复，旧 JSON/PDF 字节保留供受控盘点。单价使用元/平方米。Agent 与 Studio 使用 Listing 来源契约，不再调用 Compare MCP；Supervisor 对 Listing Agent 只映射精确 `listing.read`，Memory 继续沿用 Listing Agent 已有必需 Hook。旧 Compare 的 A2A、MCP、REST、RPC 入口与 Compose profile 均默认关闭；旧 Auth/Memory 身份和报告卷仅为回滚/排空保留，现场排空完成前不删除。
+**修复**：当前比较、报告和 PDF 路径迁入 `listing-master-service`，从稳定来源引用读取带修订号/hash/数据模式的签名快照。报告按已验签 actor 隔离并绑定当前来源；创建和历史/PDF 分别要求签名上下文中的 `compare.report.create` 与 `compare.report.read.own` 基线操作，并持续核验报告 owner 与来源访问/版本。基线操作不作为角色权限，目录行由迁移停用且清除角色关联。分享码不再单独授予正文或 PDF 权限，旧缺 owner/source hash 的报告不恢复，旧 JSON/PDF 字节保留供受控盘点。单价使用元/平方米。Agent 与 Studio 使用 Listing 来源契约，不再调用 Compare MCP；Supervisor 对 Listing Agent 只映射精确 `listing.read`，Memory 继续沿用 Listing Agent 已有必需 Hook。2026-10-29 在确认无历史资产后，Compare A2A/MCP/REST/RPC 入口、Auth/Memory 身份与报告卷定义均退役；仅保留历史记录用于审计。
 
-**验证与边界**：`ListingSourceContractTest`、source/controller/service、versioned/business authorization、comparison/report store/legacy mapper、Agent wiring、Studio signed-reader 和配置矩阵定向回归通过；模拟来源完成搜索、比较、历史、PDF、重试复用与模式保留。源码/隔离测试不证明真实来源、公钥注入、共享 Nacos、Compose 部署或线上路由已切换。`legacy-compare` profile 默认为关闭；主动启用旧匹配制品前仍需按 `docs/listing-comparison-cutover.md` 完成受控回滚/排空检查。关联 LR-54/LR-99/LR-149；change `unify-versioned-permission-context` 任务10.4及 `consolidate-listing-comparison-domain`。
+**验证与边界**：`ListingSourceContractTest`、source/controller/service、versioned/business authorization、comparison/report store/legacy mapper、Agent wiring、Studio signed-reader 和配置矩阵定向回归通过；模拟来源完成搜索、比较、历史、PDF、重试复用与模式保留。源码/隔离测试不证明真实来源、公钥注入、共享 Nacos、Compose 部署或线上路由已切换。`legacy-compare` profile 与旧服务已删除；Listing 的当前边界与回归证据见 `docs/listing-comparison-cutover.md`。关联 LR-54/LR-99/LR-149；change `unify-versioned-permission-context` 任务10.4及 `consolidate-listing-comparison-domain`。
 
 ## KI-1 [OPEN·P0] 表单式 prep 阶段凭据真空（鸡生蛋）
 
@@ -375,13 +377,13 @@
 
 **关联**：KI-49（同类 readiness 误配）。
 
-## KI-49 [OPEN·P2] compare-engine 无数据库却把 database 列为就绪必需
+## KI-49 [FIXED·2026-10-29·P2] compare-engine 无数据库却把 database 列为就绪必需
 
 **确认日期**：2026-10-10（基础组件使用排查）。
 
 **现象与根因**：compare-engine-service 无 datasource、pom 无 mysql/mybatis 依赖（无状态模型计算服务），但 `nacos/compare-engine-service.yaml:76` 的 `required-dependencies` 默认含 database——MySQL 故障时该无状态服务被 readiness（纯 TCP 探活）误判 not ready，被编排层无谓摘流。
 
-**处置方向**：`SERVICE_READINESS_REQUIRED_DEPENDENCIES` 默认改为 `nacos`。
+**修复**：2026-10-29 按未上线、无历史资产决议退役独立 Compare 服务；不再存在需调整 readiness 依赖的 Compare deployment。房源比较由 Listing 服务负责。
 
 **关联**：KI-48；KI-41（检查误报同族）。
 
@@ -1788,7 +1790,7 @@
 
 **发现日期**：2026-10-28。`init-environment.sh` 的 full profile 仍将旧 Compare 和 Promotion 的 Nacos 模板列为必需项，和默认运行面已改由 Listing、Marketing 提供能力的现状不一致。
 
-**修复与验证**：从 full profile 必需文件清单移除两个旧模板；`BusinessReviewConfigurationTest` 检查四个当前服务模板仍被要求，旧模板不再是必需项。历史回退文件和 Compare 报告卷仍按 LR-99/157 的排空条件保留。
+**修复与验证**：从 full profile 必需文件清单移除两个旧模板；`BusinessReviewConfigurationTest` 检查当前服务模板仍被要求。最终退役已移除 Compare 模块/数据卷定义、旧 caller 和 RAG spaces；没有历史回退卷需要保留，历史验收文档仅供审计。
 
 ## KI-225 [FIXED·本提交·P1] 新知识与复盘服务缺少 Auth A2A 信任登记
 
@@ -1801,3 +1803,11 @@
 **发现日期**：2026-10-29。Knowledge 与 Business Review 已写入 Memory Nacos 模板，但 Memory 应用自带配置缺少这两项，导致两个配置面不一致。
 
 **修复**：在应用配置登记各自公钥与精确 domain/agent，并扩展 `MemoryV2DeploymentConfigurationTest`，逐一验证应用和 Nacos 两个配置面。运行态仍须验证 Nacos 已加载及服务间真实签名调用。
+
+## KI-227 [FIXED·P1] 四域合并后运行配置与 Nacos 模板存在漂移
+
+**发现日期**：2026-10-29。Agent 编排上限、Memory 偏好和隐私清理、RAG 并发、Auth 撤权 key prefix、Media→Listing 签名信任等代码配置未完整写入 Nacos 模板或 Compose；退役的 Compare 还残留在当前架构资料和验证说明中。
+
+**修复**：同步应用 YAML、Nacos 模板与 Compose 的当前设置；将 Media/Listing 共用的 `MEDIA_LISTING_AUTH_SECRET` 注入双方容器并仅在忽略的本机 `.env` 生成密钥；显式保持过期的域授权入口关闭。移除 Compare 活动模块/测试、RAG 空间、身份信任和运行说明；受管迁移 540 仅在旧 Promotion schema 为空时删除，并停用 Compare 公开分享权限。
+
+**验证边界**：全仓 23 模块 Maven 回归通过（1,853 项，失败/错误 0，按条件跳过 14 项）；SQL manifest 的 55 个目标、Knowledge 配置核验、Compose 展开及迁移 540 的开发库检查通过。16 份活动 Nacos 模板的 key/prefix 漂移核验均无缺项，Compose 环境占位符在 `.env.example` 中全部有定义。迁移 540 已在获准的开发库执行，旧库不存在、公开分享权限停用且无角色关联、迁移标记恰好一条。此提交修改的是仓库模板，不表示这些新增配置已发布或回读自运行态 Nacos；生产 Nacos 和非开发数据库不在变更范围。验收细节见 `docs/acceptance/four-domain-closeout-20261029.md`。

@@ -70,7 +70,7 @@ def render():
     text(d, (82, 38), '房地产中台多 Agent 系统｜当前代码架构', 46, NAVY, True)
     text(d, (84, 104), '分层视图：访问入口 → Supervisor 编排 → 领域 Agent → 业务服务 → 数据与基础设施', 25, MUTED)
     text(d, (W-90, 48), 'PNG 架构图', 22, BLUE, True, 'ra')
-    text(d, (W-90, 92), '2026-09-20', 18, MUTED, False, 'ra')
+    text(d, (W-90, 92), '2026-10-29', 18, MUTED, False, 'ra')
 
     section(d, 205, 205, '1 访问与接入层', BLUE)
     box(d, 130, 275, 560, 90, '业务前端 / API 调用方', 'HTTP 请求 · SSE 订阅', BLUE, 22)
@@ -92,25 +92,27 @@ def render():
 
     section(d, 800, 305, '3 领域智能体层｜官方 A2A ReactAgent Provider', PURPLE)
     agents = [
-        ('listing-agent', '房源检索与摘要'), ('compare-agent', '房源对比报告'),
+        ('listing-agent', '房源检索、比较与摘要'),
         ('marketing-agent', '内容创建与状态'), ('media-agent', '媒体任务与素材'),
         ('trade-agent', 'KPI / 看板 / 排名'), ('contract-agent', '合同详情与风险'),
         ('settlement-agent', '佣金 / 汇总 / 批次'), ('notification-agent', '站内信 / 邮件'),
+        ('interview-agent', '访谈与报告'), ('knowledge-agent', '知识案例与审核'),
+        ('business-review-agent', '门店经营复盘'),
     ]
-    x0, y0, bw, bh, gap = 125, 875, 670, 80, 35
+    x0, y0, bw, bh, gap = 125, 795, 670, 60, 35
     for i, (name, desc) in enumerate(agents):
         x = x0 + (i % 4) * (bw + gap)
-        y = y0 + (i // 4) * 115
+        y = y0 + (i // 4) * 90
         box(d, x, y, bw, bh, name, desc + ' · ChatModel + @Tool', PURPLE, 18)
-    arrow(d, (1520, 685), (1520, 875), PURPLE)
+    arrow(d, (1520, 685), (1520, 795), PURPLE)
 
     section(d, 1145, 275, '4 业务服务与领域工具层', GREEN)
     services = [
         ('listing-master', '房源主数据 / ES'), ('customer-service', '客源与业主管理'),
-        ('compare-engine', '报告缓存 / PDF'), ('marketing-content', '内容资产 / 检索'),
-        ('promotion-service', '多平台发布 / 效果'), ('business-service', '经营分析 / KPI'),
+        ('marketing-content', '内容与推广生命周期'), ('business-service', '经营分析 / KPI'),
         ('contract-service', '合同生命周期'), ('settlement-service', '结算与分佣'),
         ('notification-service', '通知记录 / 消费'), ('media-worker', 'RocketMQ 媒体 Worker'),
+        ('knowledge-service', '知识案例与审核'), ('business-review-service', '门店经营复盘'),
     ]
     sx, sy, sw, sh, sg = 125, 1215, 540, 75, 35
     for i, (name, desc) in enumerate(services):
@@ -144,7 +146,7 @@ def render():
 
     # Footer notes, kept inside image so it remains self-contained.
     d.rounded_rectangle((70, 1710, W-70, 1775), radius=12, fill='#FFFFFF', outline='#D7E1EC', width=2)
-    text(d, (100, 1727), '实现边界：官方子 Agent 直接绑定领域本地 @Tool；营销 publishContent 当前更新本地状态；媒体 Worker 当前生成图片素材；外部 Provider 是否可用由集成模式与配置决定。', 17, MUTED)
+    text(d, (100, 1727), '实现边界：房源比较属于 Listing；官方子 Agent 直接绑定领域本地 @Tool；营销 publishContent 当前更新本地状态；媒体 Worker 当前生成图片素材；外部 Provider 是否可用由集成模式与配置决定。', 17, MUTED)
     path = OUT / 'architecture-overview.png'
     im.save(path, 'PNG', optimize=True)
     # JPEG copy is useful for systems that preview JPG more reliably than PNG.

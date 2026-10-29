@@ -32,7 +32,7 @@ import java.util.function.Consumer;
 final class RagRuntimeProbe implements AutoCloseable {
     private static final PrintStream SUMMARY = System.out;
     private static final Set<String> A2A_AUDIENCES = Set.of("listing-master-service", "business-service", "business-review-service",
-            "marketing-content-service", "compare-engine-service", "contract-service", "settlement-service",
+            "marketing-content-service", "contract-service", "settlement-service",
             "notification-service", "media-worker-service", "interview-service");
     private static final Map<String, String> MEMORY_V2_DOMAIN_AGENTS = Map.of(
             "marketing", "marketing-agent",
@@ -40,7 +40,6 @@ final class RagRuntimeProbe implements AutoCloseable {
             "listing", "listing-agent",
             "trade", "trade-agent",
             "contract", "contract-agent",
-            "compare", "compare-agent",
             "settlement", "settlement-agent");
     private static final Set<String> MEMORY_V2_SPACE_IDS = memoryV2SpaceIds();
     private final List<ReferenceConfig<?>> references = new ArrayList<>();

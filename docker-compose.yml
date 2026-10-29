@@ -495,6 +495,7 @@ services:
       SERVICE_ARTIFACT: gateway-1.0.0-SNAPSHOT.jar
       GATEWAY_AUTHORIZATION_ENABLED: ${GATEWAY_AUTHORIZATION_ENABLED:-false}
       GATEWAY_AUTHORIZATION_KEY_ID: ${GATEWAY_AUTHORIZATION_KEY_ID:-gateway-current}
+      GATEWAY_AUTHORIZATION_MAX_BODY_BYTES: ${GATEWAY_AUTHORIZATION_MAX_BODY_BYTES:-1048576}
       A2A_PUBLIC_BASE_URL: http://gateway:5010
       AUTH_ROUTE_URI: http://auth-service:9101
     ports:
@@ -600,7 +601,7 @@ services:
     <<: *app-service
     profiles: [full]
     volumes:
-      - compare-report-data:/app/runtime
+      - listing-comparison-data:/app/runtime
       - type: bind
         source: ./.secrets/service-identities/listing-master-service/private-key.pem
         target: /run/secrets/service-identity.pem
@@ -613,6 +614,7 @@ services:
       A2A_PUBLIC_BASE_URL: http://listing-master-service:9004
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database
       LISTING_RAG_RPC_SECRET: ${LISTING_RAG_RPC_SECRET:-}
+      MEDIA_LISTING_AUTH_SECRET: ${MEDIA_LISTING_AUTH_SECRET:-}
       LISTING_AUTHORIZATION_ENABLED: ${LISTING_AUTHORIZATION_ENABLED:-false}
       LISTING_SOURCE_PROVIDER: ${LISTING_SOURCE_PROVIDER:-legacy-local}
       LISTING_SOURCE_DATASET_ID: ${LISTING_SOURCE_DATASET_ID:-legacy-local}
@@ -671,6 +673,7 @@ services:
       SERVICE_ARTIFACT: media-worker-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://media-worker-service:9007
       MEDIA_MEMORY_V2_COMPRESSION_ENABLED: ${MEDIA_MEMORY_V2_COMPRESSION_ENABLED:-false}
+      MEDIA_LISTING_AUTH_SECRET: ${MEDIA_LISTING_AUTH_SECRET:-}
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,rocketmq,minio
 
   marketing-content-service:
@@ -774,6 +777,11 @@ services:
       MEMORY_V2_PREFERENCE_PROCESSING_ENABLED: ${MEMORY_V2_PREFERENCE_PROCESSING_ENABLED:-false}
       MEMORY_V2_PREFERENCE_PROCESSING_MODE: ${MEMORY_V2_PREFERENCE_PROCESSING_MODE:-SHADOW}
       MEMORY_V2_PREFERENCE_MODEL: ${MEMORY_V2_PREFERENCE_MODEL:-}
+      MEMORY_V2_PRIVACY_CLEANUP_POLL_MS: ${MEMORY_V2_PRIVACY_CLEANUP_POLL_MS:-5000}
+      MEMORY_V2_PRIVACY_CLEANUP_BATCH_SIZE: ${MEMORY_V2_PRIVACY_CLEANUP_BATCH_SIZE:-8}
+      MEMORY_V2_PRIVACY_CLEANUP_MAX_ATTEMPTS: ${MEMORY_V2_PRIVACY_CLEANUP_MAX_ATTEMPTS:-8}
+      MEMORY_V2_PRIVACY_CLEANUP_LEASE_SECONDS: ${MEMORY_V2_PRIVACY_CLEANUP_LEASE_SECONDS:-60}
+      MEMORY_V2_PRIVACY_CLEANUP_RETRY_SECONDS: ${MEMORY_V2_PRIVACY_CLEANUP_RETRY_SECONDS:-15}
       MEMORY_V2_EXPERIENCE_ENABLED: ${MEMORY_V2_EXPERIENCE_ENABLED:-false}
       MEMORY_V2_EXPERIENCE_PROCESSING_ENABLED: ${MEMORY_V2_EXPERIENCE_PROCESSING_ENABLED:-false}
       MEMORY_V2_EXPERIENCE_POLL_MS: ${MEMORY_V2_EXPERIENCE_POLL_MS:-5000}
@@ -867,6 +875,7 @@ services:
       MYSQL_USER: ${RAG_MYSQL_USER:-}
       MYSQL_PASSWORD: ${RAG_MYSQL_PASSWORD:-}
       MYSQL_DB_RAG: ${MYSQL_DB_RAG:-bk_rag}
+      RAG_MAX_CONCURRENCY: ${RAG_MAX_CONCURRENCY:-8}
       RAG_ELASTICSEARCH_URIS: ${RAG_ELASTICSEARCH_URIS:-http://elasticsearch:9200}
       RAG_HTTP_MODE: MANAGED_INTERNAL
       RAG_HTTP_ALLOWED_HOSTS: ${RAG_HTTP_ALLOWED_HOSTS:-elasticsearch,host.docker.internal,open-chatgpt.ke.com,bkanent-reranker-dev}
@@ -994,7 +1003,7 @@ volumes:
   milvus-etcd-data:
   milvus-minio-data:
   milvus-data:
-  compare-report-data:
+  listing-comparison-data:
 
 networks:
   bk:

@@ -105,6 +105,7 @@ mybatis-plus:
 
 a2a:
   memory:
+    compression-enabled: ${AGENT_MEMORY_V2_COMPRESSION_ENABLED:false}
     key-id: ${SERVICE_IDENTITY_KEY_ID:agent-service-current}
     private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
   auth:
@@ -148,6 +149,32 @@ agent:
       namespace: authz
       channel: authz:versions
   memory-v2:
+    compression-enabled: ${AGENT_MEMORY_V2_COMPRESSION_ENABLED:false}
+    key-id: ${SERVICE_IDENTITY_KEY_ID:agent-service-current}
+    private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
+    cache-entries: ${AGENT_MEMORY_V2_CACHE_ENTRIES:128}
+    cache-bytes: ${AGENT_MEMORY_V2_CACHE_BYTES:33554432}
+    cache-ttl-ms: ${AGENT_MEMORY_V2_CACHE_TTL_MS:60000}
+    soft-tokens: ${AGENT_MEMORY_V2_SOFT_TOKENS:8000}
+    hard-tokens: ${AGENT_MEMORY_V2_HARD_TOKENS:12000}
+    recent-messages: ${AGENT_MEMORY_V2_RECENT_MESSAGES:12}
+    summary-timeout-ms: ${AGENT_MEMORY_V2_SUMMARY_TIMEOUT_MS:5000}
+    cleanup-ms: ${AGENT_MEMORY_V2_CLEANUP_MS:30000}
+    tool-inline-chars: ${AGENT_MEMORY_V2_TOOL_INLINE_CHARS:4096}
+    recall-chars: ${AGENT_MEMORY_V2_RECALL_CHARS:8192}
+    preference-budget-tokens: ${AGENT_MEMORY_V2_PREFERENCE_BUDGET_TOKENS:800}
+    experience-budget-tokens: ${AGENT_MEMORY_V2_EXPERIENCE_BUDGET_TOKENS:512}
+  supervisor:
+    orchestration:
+      max-rounds: 12
+      max-tool-calls: 24
+      max-concurrency: 4
+      model-retries: 2
+      model-timeout-ms: 30000
+      tool-timeout-ms: 120000
+      max-queued-calls: 128
+      approval-capabilities: []
+      accepting: true
   skills:
     external-dir: ${AGENT_SKILLS_EXTERNAL_DIR:}
     watch-enabled: ${AGENT_SKILLS_WATCH_ENABLED:true}

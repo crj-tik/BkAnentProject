@@ -52,13 +52,13 @@
 <text x="687" y="857" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">各业务模块 *McpTools</text>
 <text x="687" y="883" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">工具能力与本地 Tools 未必相同</text>
 <rect x="1240" y="770" width="470" height="180" rx="16" fill="#fff1dc" stroke="#bd7a19" stroke-width="2"/>
-<text x="1262" y="814" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">尚未接入的辅助类</text>
-<text x="1262" y="857" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">SubAgentSkillSupport 已存在</text>
-<text x="1262" y="883" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">未见 8 个官方 Provider 引用</text>
+<text x="1262" y="814" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">Skills 接入边界</text>
+<text x="1262" y="857" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">Skill 文件由 common-skill 读取</text>
+<text x="1262" y="883" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">子 Agent 是否使用以 Provider 配置为准</text>
 <rect x="90" y="1010" width="1620" height="140" rx="14" fill="#ffffff" stroke="#ffffff" stroke-width="2"/>
 <text x="112" y="1046" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="700">阅读说明 / 实现边界</text>
-<text x="112" y="1080" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400">• 上排是 Supervisor Skills 路径，中排是子 Agent 官方工具路径，底排展示独立能力及未接入边界。</text>
-<text x="112" y="1107" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400">• 不要把 SubAgentSkillSupport 的设计能力视为所有官方子 Agent 已启用的动态 Skills 机制。</text>
-<text x="90" y="1188" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">BK AGENT  /  CURRENT CODE ARCHITECTURE  /  2026-09-20</text>
+<text x="112" y="1080" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400">• 上排是 Supervisor Skills 路径，中排是子 Agent 官方工具路径，底排展示独立 MCP 能力。</text>
+<text x="112" y="1107" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400">• Skill 文件由 common-skill 加载与匹配；官方子 Agent 是否绑定动态 Skills 以实际 Provider 配置为准。</text>
+<text x="90" y="1188" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">BK AGENT  /  CURRENT CODE ARCHITECTURE  /  2026-10-29</text>
 <text x="1475" y="1188" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">15 / 16</text>
 </svg>

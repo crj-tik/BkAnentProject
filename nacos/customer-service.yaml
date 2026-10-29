@@ -44,6 +44,8 @@ a2a:
     response-public-key: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
 
 customer:
+  authorization:
+    enabled: false
   listing-read:
     key-id: customer-read-current
     signing-secret: ${CUSTOMER_LISTING_READ_SECRET:}

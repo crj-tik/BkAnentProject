@@ -13,7 +13,7 @@
 - `notification-service`：统一消息通知
 - `marketing-content-service`：营销内容、品牌素材、发布计划、平台回执与效果来源统一管理
 - `business-service`：业务分析、KPI、排行榜、门店看板
-- `compare-engine-service`：房源对比与报告生成
+- 房源对比与报告生成由 `listing-master-service` 承担
 - `contract-service`：合同全生命周期管理
 - `settlement-service`：分佣与结算
 - `media-worker-service`：异步媒体任务
@@ -77,7 +77,7 @@ mvn -pl auth-service "-Dspring-boot.run.profiles=local" spring-boot:run
 
 ## 分布式环境启动
 
-完整系统启动前需要准备 Nacos 3.x、MySQL、Redis、RocketMQ、Milvus、MinIO 和 Elasticsearch，并将 `nacos/` 下以服务名命名的 YAML 导入 Nacos。每个文件名就是 data ID，例如 `auth-service.yaml`、`agent-service.yaml`、`business-service.yaml`、`compare-engine-service.yaml`、`contract-service.yaml`、`listing-master-service.yaml`、`marketing-content-service.yaml`、`media-worker-service.yaml`、`notification-service.yaml` 和 `settlement-service.yaml`。默认分组为 `DEFAULT_GROUP`；namespace 使用 `NACOS_NAMESPACE` 指定，默认值见各服务的 `application.yml`。旧 `promotion-service.yaml` 与 `bk_promotion` DDL 保留作回退和历史迁移材料，不再作为活动服务导入或启动。
+完整系统启动前需要准备 Nacos 3.x、MySQL、Redis、RocketMQ、Milvus、MinIO 和 Elasticsearch，并将 `nacos/` 下以服务名命名的 YAML 导入 Nacos。当前 data ID 包括 `auth-service.yaml`、`agent-service.yaml`、`business-service.yaml`、`business-review-service.yaml`、`contract-service.yaml`、`customer-service.yaml`、`gateway.yaml`、`interview-service.yaml`、`knowledge-service.yaml`、`listing-master-service.yaml`、`marketing-content-service.yaml`、`media-worker-service.yaml`、`memory-service.yaml`、`notification-service.yaml`、`rag-service.yaml` 和 `settlement-service.yaml`。默认分组为 `DEFAULT_GROUP`；namespace 使用 `NACOS_NAMESPACE` 指定，默认值见各服务的 `application.yml`。Compare 与 Promotion 独立服务配置已从活动模板移除；`bk_promotion` 仅由受管退役迁移检查为空后清理。
 
 Linux 主机推荐直接使用 `scripts/deploy/` 下的初始化脚本完成上述准备与启动：宿主机预检（docker/内核参数/端口）、`.env` 随机密钥引导、已有数据卷迁移、启动/状态/停止均为 bash 脚本，详见 [Linux 部署环境初始化](docs/linux-deployment-init.md)。
 

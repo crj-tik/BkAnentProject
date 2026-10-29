@@ -44,6 +44,9 @@ auth:
         memory-current:
           caller-service: memory-service
           secret: ${MEMORY_RAG_RPC_SECRET:}
+        agent-current:
+          caller-service: agent-service
+          secret: ${AGENT_RAG_RPC_SECRET:}
       response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}
       response-secret: ${AUTH_RAG_RPC_RESPONSE_SECRET:}
   a2a:
@@ -105,6 +108,7 @@ auth:
     allow-random-secret: false
     revocation:
       provider: redis
+      key-prefix: "auth:token:revoked:"
 
 management:
   endpoints:

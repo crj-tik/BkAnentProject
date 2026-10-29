@@ -108,6 +108,8 @@ mybatis-plus:
       logic-not-delete-value: 0
 
 business:
+  authorization:
+    enabled: false
   ranking:
     use-redis: true
   redis:

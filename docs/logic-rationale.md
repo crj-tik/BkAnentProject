@@ -981,11 +981,11 @@
 **代码位置**：`AgentPrincipalContext.bind`、`AgentController.chat`及各Supervisor入口、`OrchestrationStore.assertRequestIdentity/ownedRunScopes`、`SupervisorToolLoopRunner`、`SupervisorEventAuditQueryService`、`SessionEventAuditService.queryOwned`、`SupervisorGovernanceService`。当前管理许可仍走旧Auth接口，审计明确记录 `legacy-rpc-unversioned`，未伪造新版本接线；新目录consumer迁移和异步入队并发门禁仍待实施。关联KI-168、LR-15/22/23、KI-80；新增真实request-scope/MockMvc重投及H2审计反例。
 ## LR-99 房源与比较共享领域事实，合并保留历史身份
 
-**结论**：`consolidate-listing-comparison-domain` 将当前 Listing 来源查询、快照校验、比较、报告与 PDF 入口收敛到 `listing-master-service`。业务 API 使用 `domain-parallel-v1` 稳定来源引用、来源修订号、内容 hash、单位和 `REAL/SIMULATED/UNKNOWN` 模式；客户端不能把未知来源声明为真实。比较创建前批量读取获准快照，报告缓存、历史与 PDF 读取时再次核对当前来源和当前操作。`legacy-local` 历史 ID 只映射到该命名空间，旧 JSON/PDF 保留原字节且不恢复缺少 owner/source hash 的报告。Auth 继续以 `compare.report.create` / `compare.report.read.own` 作为稳定的签名基线动作标识，并把目录元数据归入 `listing`；它们不是角色权限。基线退役迁移会停用目录行并清除对应角色关联，Listing 目录迁移只更新元数据、修订号和 outbox，不重新启用或授予权限。`compare.report.share.public` 不迁入新域，因为 Listing 明确不提供匿名分享，旧权限仅随旧服务排空。
+**结论**：`consolidate-listing-comparison-domain` 将当前 Listing 来源查询、快照校验、比较、报告与 PDF 入口收敛到 `listing-master-service`。业务 API 使用 `domain-parallel-v1` 稳定来源引用、来源修订号、内容 hash、单位和 `REAL/SIMULATED/UNKNOWN` 模式；客户端不能把未知来源声明为真实。比较创建前批量读取获准快照，报告缓存、历史与 PDF 读取时再次核对当前来源和当前操作。`legacy-local` 仅作为当前显式开发来源，不导入旧服务报告或历史身份。Auth 继续以 `compare.report.create` / `compare.report.read.own` 作为签名上下文中的基线动作标识，并把目录元数据归入 `listing`；它们不是角色权限。基线退役迁移会停用目录行并清除对应角色关联，Listing 目录迁移只更新元数据、修订号和 outbox，不重新启用或授予权限。`compare.report.share.public` 不迁入 Listing；在确认项目未上线且没有历史资产后，迁移 540 停用该旧目录码并清理角色关联。
 
-**根因**：拆分的比较服务依赖 Listing 事实，却缺少可跨来源稳定验证的身份与版本；ID-only 缓存不能发现来源更新，也会把服务重构误作授权变化。稳定引用和当前签名 Auth 上下文共同限定每次读取，来源模式作为服务端事实保留；当前 `listing/listing-agent` 继续使用已登记的必需 Memory Hook，旧 `compare/compare-agent` caller/domain/agent 身份与已接受任务只保留用于受控历史读取和排空，不复制 Memory、重命名身份、扩大许可或将未知调用改发成新任务。
+**根因**：拆分的比较服务依赖 Listing 事实，却缺少可跨来源稳定验证的身份与版本；ID-only 缓存不能发现来源更新，也会把服务重构误作授权变化。稳定引用和当前签名 Auth 上下文共同限定每次读取，来源模式作为服务端事实保留。确认没有在途任务或可保留的历史资产后，独立 Compare 服务、RPC/A2A/MCP 信任和 Memory `compare/compare-agent` 空间一并退役；当前 Listing 只使用自身已登记的 Memory 身份。
 
-**代码位置**：`common/listing` 中的来源与版本契约、`common/model/ListingComparisonFacts` 和 `common/rag/RagCanonicalHash`；`listing-master-service/source` 的 legacy-local、fixture、HTTP provider 与业务来源授权服务；`listing-master-service/comparison` 的比较、版本指纹、报告存储、迁移映射和 PDF；`ListingComparisonAuthorizationIngressFilter`；Auth 目录迁移 `20261028_listing_comparison_authorization_domain.sql` 与 MySQL 初始化清单 460（在基线权限退役之后）；`agent-service/studio/StudioListingReader` 与 Studio 工件/回执流程；Listing Agent 的既有 Memory Hook 与 `listing-comparison` skill。配置迁移和排空/回退门禁见 `docs/listing-comparison-cutover.md`。
+**代码位置**：`common/listing` 中的来源与版本契约、`common/model/ListingComparisonFacts` 和 `common/rag/RagCanonicalHash`；`listing-master-service/source` 的 legacy-local、fixture、HTTP provider 与业务来源授权服务；`listing-master-service/comparison` 的比较、版本指纹、报告存储、兼容 JSON 与 PDF；Auth 目录迁移 `20261028_listing_comparison_authorization_domain.sql` 与退役迁移 `20261029_legacy_compare_promotion_retirement.sql`；Listing Agent 的既有 Memory Hook 与 `listing-comparison` skill。最终服务和权限边界见 `docs/listing-comparison-cutover.md`。
 
 **关联**：LR-22/23/54/79/96/97/149；KI-115。定向契约、来源、授权、报告、Agent 装配、Studio 授权与配置矩阵测试通过；真实上游联机、共享 Nacos 发布、容器部署和线上切流仍待部署验收。
 
@@ -1411,15 +1411,15 @@
 
 ## LR-161 未上线环境移除旧比较服务的默认部署
 
-**结论**：用户于 2026-10-29 确认项目没有正式上线或需保留的历史资产，Compare 从默认 Maven reactor 和 Compose 移除，新比较入口归 Listing。
+**结论**：用户于 2026-10-29 确认项目没有正式上线或需保留的历史资产，独立 Compare 模块的源码、维护测试、RPC 契约、Compose 服务、独立 Nacos data ID、Auth/Memory 信任和 Compare Memory 空间均退役；房源比较继续由 Listing 提供，旧 `/compare/**` 响应字段由 Listing 兼容 DTO 承接。
 
-**根因**：不再需要以旧服务作为当前部署的回退入口；保留可复用测试与源文件直至迁移验证，不以环境中无历史数据替代功能回归证据。
+**根因**：项目未正式上线且没有需要迁移的旧报告或在途任务，不再需要保留不可调用的独立服务或身份。Listing 自有回归覆盖来源版本、owner 隔离和兼容响应；数据库迁移只在确认旧 Promotion schema 为空后删除，并停用未迁移的公开分享权限。
 
-**代码位置**：根 `pom.xml`、`docker-compose.yml`、`ListingConfigurationMatrixTest`；关联 LR-99、KI-115。
+**代码位置**：根 `pom.xml`、`docker-compose.yml`、Listing 比较兼容 DTO/测试、Auth/Memory/RAG 配置、受管迁移 540；关联 LR-99、KI-115、KI-224、KI-227。
 
 ## LR-162 新领域服务身份在 Auth 与 Memory 分别登记
 
-**结论**：Knowledge 与 Business Review 在 Auth A2A 中只登记 `RESOLVE_BEACON`，Memory 只登记各自独立的 caller、domain 和 agent；旧 Compare 的默认信任登记已移除。
+**结论**：Knowledge 与 Business Review 在 Auth A2A 中只登记 `RESOLVE_BEACON`，Memory 只登记各自独立的 caller、domain 和 agent；Compare caller 与五类旧 Compare Memory 空间均从 Auth、Memory、RAG 默认配置完整移除。
 
 **根因**：服务公钥、信标操作权限与 Memory 私域分别校验，单独配置某一服务不等于其他验证方已接入；旧服务退出运行后不需要保留默认访问许可。
 

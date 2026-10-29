@@ -32,6 +32,7 @@
 
 - 房源主数据服务
 - 管理房源增删改查与房源详情
+- 同域处理房源比较、报告历史与 PDF
 - 向其他服务提供房源 Dubbo RPC
 
 ### customer-service
@@ -59,13 +60,6 @@
 - KPI、员工日工作量、房源流转效率、门店看板
 - 对 Agent 暴露业务分析类 MCP 工具
 - 对其他内部服务保留 Dubbo RPC
-
-### compare-engine-service
-
-- 房源对比分析
-- 报告缓存与 PDF 生成
-- 对 Agent 暴露对比类 MCP 工具
-- 对其他服务保留 Dubbo RPC
 
 ### contract-service
 
@@ -103,7 +97,7 @@
 
 ### MCP
 
-- `business-service`、`compare-engine-service`、`marketing-content-service` 暴露 MCP 工具
+- `business-service`、`marketing-content-service`、`contract-service`、`settlement-service`、`notification-service`、`media-worker-service` 与 `interview-service` 暴露 MCP 工具；房源比较由 Listing Agent 承担
 - `agent-service` 通过 `HttpAgentMcpClient` 统一调用
 - Agent 的业务工具执行只允许走 MCP
 
@@ -231,8 +225,12 @@
 当前 MCP Server 包括：
 
 - `business-mcp-server`
-- `compare-mcp-server`
 - `marketing-mcp-server`
+- `contract-mcp-server`
+- `settlement-mcp-server`
+- `notification-mcp-server`
+- `media-mcp-server`
+- `interview-mcp-server`
 
 ## 7. 关键数据流
 

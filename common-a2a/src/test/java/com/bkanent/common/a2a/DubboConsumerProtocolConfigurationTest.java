@@ -71,7 +71,7 @@ class DubboConsumerProtocolConfigurationTest {
     }
 
     @ParameterizedTest(name = "{0}: application and Nacos overlay bind a pure Dubbo consumer")
-    @ValueSource(strings = {"agent-service", "business-service", "compare-engine-service", "contract-service",
+    @ValueSource(strings = {"agent-service", "business-service", "contract-service",
             "customer-service", "gateway", "listing-master-service", "marketing-content-service",
             "media-worker-service", "memory-service", "notification-service",
             "rag-service", "settlement-service"})

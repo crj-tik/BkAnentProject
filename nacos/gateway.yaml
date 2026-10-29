@@ -86,6 +86,7 @@ service:
 gateway:
   authorization:
     enabled: ${GATEWAY_AUTHORIZATION_ENABLED:false}
+    max-body-bytes: ${GATEWAY_AUTHORIZATION_MAX_BODY_BYTES:1048576}
     caller-service: gateway
     key-id: ${GATEWAY_AUTHORIZATION_KEY_ID:gateway-current}
     private-key-path: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}

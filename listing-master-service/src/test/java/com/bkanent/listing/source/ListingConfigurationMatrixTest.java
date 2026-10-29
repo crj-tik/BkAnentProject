@@ -64,10 +64,10 @@ class ListingConfigurationMatrixTest {
         assertFalse(envExample.contains("COMPARE_REPORT_STORAGE_DIR="));
         assertFalse(authNacos.contains("compare-engine-service-current:"));
         assertFalse(memoryNacos.contains("compare-engine-service-current:"));
-        assertTrue(cutover.contains("原 `taskId`"));
-        assertTrue(cutover.contains("Memory caller/domain/agent"));
+        assertTrue(cutover.contains("旧 `/compare/**` 用户路径由 Listing 兼容控制器承接"));
+        assertTrue(cutover.contains("Memory 的 caller/domain/agent 映射"));
         assertTrue(cutover.contains("legacy-compare"));
-        assertEquals(1, occurrences(compose, "compare-report-data:/app/runtime"));
+        assertEquals(1, occurrences(compose, "listing-comparison-data:/app/runtime"));
         assertTrue(compose.contains(".secrets/service-identities/public-keys.env"));
     }
 

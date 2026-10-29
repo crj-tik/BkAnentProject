@@ -45,6 +45,8 @@ dubbo:
     protocol: dubbo
 
 customer:
+  authorization:
+    enabled: false
   listing-read:
     key-id: ${CUSTOMER_LISTING_READ_KEY_ID:customer-read-current}
     signing-secret: ${CUSTOMER_LISTING_READ_SECRET:}

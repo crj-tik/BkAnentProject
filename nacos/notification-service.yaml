@@ -115,6 +115,8 @@ agent:
     external-dir: ${AGENT_SKILLS_EXTERNAL_DIR:}
     watch-enabled: ${AGENT_SKILLS_WATCH_ENABLED:true}
 notification:
+  authorization:
+    enabled: false
   integration:
     mode: local # Docker development only; production requires real mode and an implemented real provider.
   workflow-events:
@@ -137,6 +139,9 @@ notification:
       Return only the JSON object without Markdown fences, internal IDs, reasoning, tool arguments, or extra prose.
 a2a:
   memory:
+    compression-enabled: ${NOTIFICATION_MEMORY_V2_COMPRESSION_ENABLED:false}
+    key-id: ${SERVICE_IDENTITY_KEY_ID:notification-service-current}
+    private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
 
 mcp:
   authorization:

@@ -131,6 +131,9 @@ interview:
     max-retries: 3
 a2a:
   memory:
+    compression-enabled: ${INTERVIEW_MEMORY_V2_COMPRESSION_ENABLED:false}
+    key-id: ${SERVICE_IDENTITY_KEY_ID:interview-service-current}
+    private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
 
 mcp:
   authorization:

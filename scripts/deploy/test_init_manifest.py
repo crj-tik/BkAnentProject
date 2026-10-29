@@ -38,6 +38,7 @@ BASELINE_PERMISSION_CODES = {
 }
 
 BASELINE_RETIREMENT_MIGRATION = "sql/migrations/20261028_baseline_permission_retirement.sql"
+LEGACY_RETIREMENT_MIGRATION = "sql/migrations/20261029_legacy_compare_promotion_retirement.sql"
 
 EXPECTED_SUPPORT_MIGRATIONS = {
     ("interview-director-command-20260930-v1", "bk_interview", "sql/migrations/20260930_interview_director_command.sql"),
@@ -47,6 +48,12 @@ EXPECTED_KNOWLEDGE_MIGRATIONS = {
     ("knowledge-database-bootstrap-20261027-v1", "bk_auth", "sql/migrations/20261027_knowledge_database_bootstrap.sql"),
     ("knowledge-domain-20261027-v1", "bk_knowledge", "sql/migrations/20261027_knowledge_domain.sql"),
 }
+
+EXPECTED_LEGACY_RETIREMENT = (
+    "legacy-compare-promotion-retirement-20261029-v1",
+    "bk_auth",
+    LEGACY_RETIREMENT_MIGRATION,
+)
 
 MIGRATION_TABLES = {
     "sql/migrations/20260930_interview_director_command.sql": (
@@ -137,6 +144,12 @@ def main() -> None:
     missing_knowledge = EXPECTED_KNOWLEDGE_MIGRATIONS - observed
     if missing_knowledge:
         fail(f"required Knowledge migrations are missing: {sorted(missing_knowledge)}")
+    if sum((row[2], row[3], row[4]) == EXPECTED_LEGACY_RETIREMENT for row in rows) != 1:
+        fail("legacy Compare/Promotion retirement must be registered exactly once")
+
+    mysql_init = (ROOT / "sql/mysql-init.sql").read_text(encoding="utf-8")
+    if "bk_promotion" in mysql_init:
+        fail("fresh bootstrap must not recreate the retired Promotion database")
 
     baseline_rows = [row for row in rows if row[4] == BASELINE_RETIREMENT_MIGRATION]
     if len(baseline_rows) != 1:
@@ -158,17 +171,36 @@ def main() -> None:
         migration = (ROOT / relative).read_text(encoding="utf-8")
         if re.search(r"(?im)^\s*(DROP TABLE|TRUNCATE)\b", migration):
             fail(f"migration must not drop or truncate data: {relative}")
+        if re.search(r"(?im)^\s*DROP DATABASE\b", migration):
+            if relative != LEGACY_RETIREMENT_MIGRATION or not all(
+                marker in migration for marker in (
+                    "IF @legacy_domain_retirement THEN",
+                    "IF total_rows <> 0 THEN",
+                    "SIGNAL SQLSTATE '45000'",
+                    "DROP DATABASE bk_promotion;",
+                )
+            ):
+                fail(f"unreviewed database retirement or missing empty-database guard: {relative}")
         delete_statements = re.findall(r"(?ims)^\s*DELETE\s+FROM\s+([a-z0-9_]+)(.*?);", migration)
         if delete_statements:
-            if relative != BASELINE_RETIREMENT_MIGRATION or len(delete_statements) != 1:
+            permitted_deletes = {
+                BASELINE_RETIREMENT_MIGRATION: (
+                    "auth_role_permission", "@baseline_permission_retirement", BASELINE_PERMISSION_CODES,
+                ),
+                LEGACY_RETIREMENT_MIGRATION: (
+                    "auth_role_permission", "@legacy_domain_retirement", {"compare.report.share.public"},
+                ),
+            }
+            if relative not in permitted_deletes or len(delete_statements) != 1:
                 fail(f"unreviewed destructive data migration: {relative}")
             table, predicate = delete_statements[0]
             code_list = re.search(r"(?is)BINARY\s+permission_code\s+IN\s*\((.*?)\)", predicate)
             codes = re.findall(r"'([^']+)'", code_list.group(1)) if code_list else []
-            if table != "auth_role_permission" or "@baseline_permission_retirement" not in predicate:
-                fail("baseline retirement must be guarded and limited to auth_role_permission")
-            if set(codes) != BASELINE_PERMISSION_CODES or len(codes) != len(BASELINE_PERMISSION_CODES):
-                fail("baseline retirement delete list differs from the reviewed exact operation set")
+            expected_table, marker, expected_codes = permitted_deletes[relative]
+            if table != expected_table or marker not in predicate:
+                fail(f"permission retirement must be marker-guarded and limited to {expected_table}")
+            if set(codes) != expected_codes or len(codes) != len(expected_codes):
+                fail(f"permission retirement list differs from the reviewed exact set: {relative}")
 
     for relative, tables in MIGRATION_TABLES.items():
         migration = (ROOT / relative).read_text(encoding="utf-8")

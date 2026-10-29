@@ -129,7 +129,7 @@ flowchart LR
 | Settlement | `settlement.rule.*`、`settlement.calculate.all`、`settlement.record.*`、`settlement.split.*`、`settlement.generate.all`、`settlement.batch.*`、`settlement.commission.*` | 缺 user→employee/store/payee 关系、Contract 委托或银行签名回执的副作用拒绝 | 精确操作守卫已做；支付、批次等未证明的能力仍关闭 |
 | Contract | `contract.template.*`、`contract.create.own`、`contract.read.*`、`contract.status.update.*`、`contract.attachment.ocr.*`、`contract.archive.*`、`contract.seal.*`、`contract.risk.*` | 合同 broker owner；附件先授权父合同；签章需真实签章服务和状态门 | 源码/定向回归完成；mock 签章不能标记 SEALED |
 | Marketing/Promotion | `marketing.content.create.own`；`content.read.own/all`；`content.variant.create.own/all`；`assets.bind.own/all`；`publish.status.update.own/all`；`publish.execute.own/all`；`promotion.effect.read.all/sync.all`；`promotion.roi.read.all`；`brand-assets.read.all/write.all`（均带 `marketing.` 前缀） | 新内容 owner 从 Auth broker 映射写入；历史 owner 必须有可靠证据；发布状态仍受审批与外部渠道约束 | 目录 migration 有 16 个营销权限码，但该 migration 不自动授予 BROKER；实际角色授予需单独检查。新内容可限制在 DRAFT，真实发布未接通时拒绝 SUCCESS |
-| Compare / Listing 比较 | `compare.report.create`、`compare.report.read.own` 是签名基线动作标识；`compare.report.share.public` 为旧目录码 | 报告 owner、固定来源快照 hash；Listing 不提供匿名公开分享 | 前两项已从角色权限目录退役但继续进入 Auth 签名上下文；旧公开分享不迁入 Listing，owner/source 检查按切换手册验收 |
+| Compare / Listing 比较 | `compare.report.create`、`compare.report.read.own` 是签名基线动作标识；`compare.report.share.public` 是已停用旧目录码 | 报告 owner、固定来源快照 hash；Listing 不提供匿名公开分享 | 前两项已从角色权限目录退役但继续进入 Auth 签名上下文；公开分享码由退役迁移停用并清除角色关联；owner/source 检查由 Listing 执行 |
 | Media | `media.task.submit.*`、`media.task.read.*`、`media.generate.background` | taskId 只是定位符；后台 permit 绑定 actor、resource、请求 hash 与硬截止 | 许可守卫已实现；当前内存 TaskStore 不保证跨重启恢复，不能当生产耐久任务 |
 | Notification | `notification.message.read.own`、`notification.message.mark-read.own`、`notification.message.send.own/all`、`notification.email.send.all`、`notification.robot.send.all`、`notification.workflow.events.read.all` | actor 与 recipient 分离；消息 SQL recipient 关系为真源；旧无 proof Dubbo 发送拒绝 | 源码与定向回归完成；Contract/Customer 提醒缺 recipient 映射，保持关闭 |
 | Interview | `interview.initiate/read/respond/assist/end/report.generate/asset.submit/asset.publish/asset.regrade`、`interview.read.all` | session owner、participant relation、purpose ticket、报告/附件状态；短票不替代登录 | 服务端已加目的和 owner 检查；浏览器 fetch/SSE 和真实 ReactAgent 归档链冻结待前端接入 |
@@ -376,7 +376,7 @@ memory.search
 
 当前清单其余121条均分类为受限拦截点，并保留精确权限码；覆盖跨owner/宽业务范围、管理/审计/治理、删除或状态改变、敏感合同/内容/个人数据、文件核验、付费或外部调用、通知发送、审批发布、财务支付等限制。特别是 `media.task.submit.own` 因触发外部生成成本仍受限；`interview.assist` 因创建协助关系和控制运行状态仍受限；`memory.delete/share/revoke` 因不可逆删除或改变他人可见范围仍受限。`.own` 不自动免码，只有产品规则确认普遍开放且独立owner/状态保护完整的操作才移出权限码。
 
-目标保留的门控以明确的限制边界为准：例如 `*.all` 跨 owner 操作、`auth.*.manage`、`contract.seal.own`、`marketing.publish.execute.own`、`settlement.batch.create.all`、`notification.email.send.all`、`compare.report.share.public`。权限码授予始终不能取代资源 owner/关系、参与者资格、审核及状态机检查。
+目标保留的门控以明确的限制边界为准：例如 `*.all` 跨 owner 操作、`auth.*.manage`、`contract.seal.own`、`marketing.publish.execute.own`、`settlement.batch.create.all`、`notification.email.send.all`。旧 `compare.report.share.public` 已停用，不作为当前门控。权限码授予始终不能取代资源 owner/关系、参与者资格、审核及状态机检查。
 
 ### 6.3 权限码的命名和授予语义
 

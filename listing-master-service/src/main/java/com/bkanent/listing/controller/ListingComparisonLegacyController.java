@@ -2,9 +2,9 @@ package com.bkanent.listing.controller;
 
 import com.bkanent.common.listing.ListingComparisonCreateRequest;
 import com.bkanent.common.model.ApiResponse;
-import com.bkanent.common.model.CompareReportDTO;
 import com.bkanent.listing.comparison.ListingComparisonService;
 import com.bkanent.listing.comparison.model.ListingComparisonLegacyReportResponse;
+import com.bkanent.listing.comparison.model.ListingComparisonLegacySummaryResponse;
 import com.bkanent.listing.comparison.model.ListingComparisonMetric;
 import com.bkanent.listing.comparison.model.ListingComparisonReportResponse;
 import com.bkanent.listing.comparison.model.ListingComparisonRow;
@@ -24,7 +24,7 @@ public class ListingComparisonLegacyController {
     public ListingComparisonLegacyController(ListingComparisonService service) { this.service = service; }
 
     @GetMapping("/listings")
-    public ApiResponse<CompareReportDTO> compareListings(@RequestParam List<Long> listingIds) {
+    public ApiResponse<ListingComparisonLegacySummaryResponse> compareListings(@RequestParam List<Long> listingIds) {
         return ApiResponse.ok(service.createLegacyDto(listingIds));
     }
 

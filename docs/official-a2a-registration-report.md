@@ -2,16 +2,20 @@
 
 检查范围：`nacos/*-service.yaml` 中的域 Agent 注册元数据，以及 `agent-service` 的静态/动态注册入口。
 
+以下结果反映仓库模板中的静态配置，不代替查询目标 Nacos namespace 或检查服务运行态注册结果。
+
 ## 当前注册结果
 
 | Agent | 服务配置 | provider | Agent Card | A2A endpoint | 流式 | 异步 |
 | --- | --- | --- | --- | --- | --- | --- |
 | listing-agent | `listing-master-service.yaml` | official | `/.well-known/agent.json` | `/a2a` | 是 | 是 |
 | trade-agent | `business-service.yaml` | official | `/.well-known/agent.json` | `/a2a` | 是 | 是 |
+| business-review-agent | `business-review-service.yaml` | official | `/.well-known/agent.json` | `/a2a` | 是 | 是 |
+| knowledge-agent | `knowledge-service.yaml` | official | `/.well-known/agent.json` | `/a2a` | 是 | 是 |
 | marketing-agent | `marketing-content-service.yaml` | official | `/.well-known/agent.json` | `/a2a` | 是 | 是 |
 | media-agent | `media-worker-service.yaml` | official | `/.well-known/agent.json` | `/a2a` | 是 | 是 |
-| compare-agent | `compare-engine-service.yaml` | official | `/.well-known/agent.json` | `/a2a` | 是 | 是 |
 | contract-agent | `contract-service.yaml` | official | `/.well-known/agent.json` | `/a2a` | 是 | 是 |
+| interview-agent | `interview-service.yaml` | official | `/.well-known/agent.json` | `/a2a` | 是 | 是 |
 | settlement-agent | `settlement-service.yaml` | official | `/.well-known/agent.json` | `/a2a` | 是 | 是 |
 | notification-agent | `notification-service.yaml` | official | `/.well-known/agent.json` | `/a2a` | 是 | 是 |
 

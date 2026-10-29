@@ -52,6 +52,9 @@ spring:
           a2a-path: /a2a
 
 service:
+  identity:
+    key-id: ${SERVICE_IDENTITY_KEY_ID:business-review-service-current}
+    private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
   readiness:
     mode: ${SERVICE_READINESS_MODE:distributed}
     required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database}

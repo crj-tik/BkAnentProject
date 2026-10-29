@@ -35,6 +35,10 @@ a2a:
     key-id: ${SERVICE_IDENTITY_KEY_ID:business-service-current}
     private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
 
+business:
+  authorization:
+    enabled: false
+
 dubbo:
   application:
     name: business-service

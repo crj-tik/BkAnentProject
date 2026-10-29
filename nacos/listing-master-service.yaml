@@ -140,6 +140,9 @@ listing:
       marketing-read-current:
         caller-service: marketing-content-service
         secret: ${MARKETING_LISTING_READ_SECRET:}
+      media-listing-current:
+        caller-service: media-worker-service
+        secret: ${MEDIA_LISTING_AUTH_SECRET:}
   agent:
     model: ${LISTING_AGENT_MODEL:gpt-5.6-terra}
     temperature: ${LISTING_AGENT_TEMPERATURE:0.2}

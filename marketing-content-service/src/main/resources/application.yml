@@ -49,6 +49,8 @@ dubbo:
     protocol: dubbo
 
 marketing:
+  authorization:
+    enabled: false
   listing-read:
     key-id: ${MARKETING_LISTING_READ_KEY_ID:marketing-read-current}
     signing-secret: ${MARKETING_LISTING_READ_SECRET:}

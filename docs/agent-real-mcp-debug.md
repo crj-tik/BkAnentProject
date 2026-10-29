@@ -1,95 +1,31 @@
-# Agent 真实 MCP 联调说明
+# Agent MCP 与房源比较联调说明
 
-## 1. 当前架构
+## 当前调用边界
 
-当前系统中：
+`agent-service` 的远程 MCP 连接由 `nacos/agent-service.yaml` 的 `spring.ai.mcp.client.connections` 配置。当前 MCP server 包括：
 
-- `business-service` 暴露真实 MCP Server：`http://host:9010/mcp`
-- `compare-engine-service` 暴露真实 MCP Server：`http://host:9006/mcp`
-- `marketing-content-service` 暴露真实 MCP Server：`http://host:9008/mcp`
-- `agent-service` 通过 `agent.mcp.servers` 配置连接这些远端 MCP Server
+| MCP server | 服务 | 常用地址 |
+| --- | --- | --- |
+| `business-mcp-server` | `business-service` | `http://business-service:9010/mcp` |
+| `marketing-mcp-server` | `marketing-content-service` | `http://marketing-content-service:9008/mcp` |
+| `contract-mcp-server` | `contract-service` | `http://contract-service:9012/mcp` |
+| `settlement-mcp-server` | `settlement-service` | `http://settlement-service:9013/mcp` |
+| `notification-mcp-server` | `notification-service` | `http://notification-service:9003/mcp` |
+| `media-mcp-server` | `media-worker-service` | `http://media-worker-service:9007/mcp` |
+| `interview-mcp-server` | `interview-service` | `http://interview-service:9014/mcp` |
 
-## 2. Agent 侧配置
+房源比较不再走独立 MCP server。Supervisor 通过 `a2a:listing-agent` 调用 Listing 的 `listing-comparison` 能力；Listing 负责来源版本核验、比较报告、owner 隔离和 PDF。
 
-在 `nacos/agent-service.yaml` 中：
+## 联调步骤
 
-```yaml
-agent:
-  mcp:
-    connect-timeout: 5s
-    request-timeout: 15s
-    initialization-timeout: 10s
-    servers:
-      business-mcp-server: http://127.0.0.1:9010/mcp
-      compare-mcp-server: http://127.0.0.1:9006/mcp
-      marketing-mcp-server: http://127.0.0.1:9008/mcp
-```
+1. 在目标 Nacos namespace 核对 `agent-service.yaml` 中 `spring.ai.mcp.client.connections` 的连接名及 URL。
+2. 确认目标服务已启动，并在服务模板中启用了 streamable HTTP MCP endpoint。
+3. 调用 Agent 工具目录接口 `GET /agent/mcp/tools`，确认只返回当前配置中可用的工具。
+4. 单独测试业务 MCP 工具；房源比较则通过 Agent 的 `listing-agent` A2A Card 与 listing-comparison 技能验证。
 
-## 3. 当前服务工具
+## 常见问题
 
-### business-service
-
-- server：`business-mcp-server`
-- tool：`queryMonthlyKpis`
-
-### compare-engine-service
-
-- server：`compare-mcp-server`
-- tool：`compareListings`
-
-### marketing-content-service
-
-- server：`marketing-mcp-server`
-- tool：`publishMarketingContent`
-
-## 4. 快速验证顺序
-
-建议按下面顺序启动：
-
-1. `compare-engine-service`
-2. `business-service`
-3. `marketing-content-service`
-4. `agent-service`
-5. 访问 `GET /agent/mcp/tools`
-
-如果 MCP client 与 server 建连正常，返回结果中应能看到 3 个远端工具。
-
-## 5. 常见排查项
-
-### 5.1 `/agent/mcp/tools` 连接失败
-
-优先检查：
-
-- 目标服务端口是否已启动
-- MCP endpoint 是否可达，例如 `http://127.0.0.1:9006/mcp`
-- `agent.mcp.servers` 是否配置了正确 URL
-
-### 5.2 服务启动正常但 MCP 不可用
-
-检查服务内是否已注册：
-
-- `HttpServletStreamableServerTransportProvider`
-- `McpSyncServer`
-- `ServletRegistrationBean(..., "/mcp", "/mcp/*")`
-
-### 5.3 Planner 中工具调用失败
-
-重点检查动作元数据：
-
-- `executionType=MCP_CLIENT`
-- `mcpServerName`
-- `mcpToolName`
-
-## 6. 当前本地环境限制
-
-当前工作机上，本地完整联调可能受以下环境限制影响：
-
-- Maven 本地仓库写权限问题
-- 离线插件或依赖未完整缓存
-
-常见现象：
-
-- `AccessDeniedException: resolver-status.properties`
-- 离线模式下 `surefire` 等插件依赖缺失
-
-这类问题不影响代码编译通过，但会影响本机直接完整拉起全部服务链路。
+- 工具列表缺服务：检查 Nacos 配置是否已加载、连接名是否拼写一致、服务名能否从 Agent 容器解析。
+- MCP 连接失败：检查目标端口、`/mcp` 路径及服务端 streamable HTTP 配置；本机 `127.0.0.1` 不能代替 Compose 服务间地址。
+- 房源比较不可用：检查 Listing Agent Card、A2A `/a2a` 地址、来源 provider 和当前授权上下文；不要排查或启动已退役的 Compare MCP。
+- 数据源、模型或外部 Provider 未配置时，保持对应功能失败关闭，不用示例结果冒充线上数据。

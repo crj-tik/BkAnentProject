@@ -10,9 +10,18 @@ memory:
     sharing:
       enabled: ${MEMORY_V2_SHARING_ENABLED:false}
       max-export-utf8-bytes: ${MEMORY_V2_SHARING_MAX_EXPORT_UTF8_BYTES:24576}
+    current-user-permission: ${MEMORY_V2_USER_PERMISSION:agent.chat.use}
     authorization-context-enabled: ${MEMORY_V2_AUTHORIZATION_CONTEXT_ENABLED:false}
     authz-authority-public-keys:
       auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+    experience-governance-permission: ${MEMORY_V2_EXPERIENCE_GOVERNANCE_PERMISSION:memory.experience.governance.publish}
+    replay-cleanup-ms: ${MEMORY_V2_REPLAY_CLEANUP_MS:60000}
+    privacy-cleanup:
+      poll-ms: ${MEMORY_V2_PRIVACY_CLEANUP_POLL_MS:5000}
+      batch-size: ${MEMORY_V2_PRIVACY_CLEANUP_BATCH_SIZE:8}
+      max-attempts: ${MEMORY_V2_PRIVACY_CLEANUP_MAX_ATTEMPTS:8}
+      lease-seconds: ${MEMORY_V2_PRIVACY_CLEANUP_LEASE_SECONDS:60}
+      retry-seconds: ${MEMORY_V2_PRIVACY_CLEANUP_RETRY_SECONDS:15}
     # Exact caller/domain/agent grants. Memory v2 requests use verifier-only Ed25519 public keys.
     trusted-callers:
       agent-service:
@@ -26,6 +35,7 @@ memory:
           marketing-content-service-current: ${MARKETING_CONTENT_SERVICE_IDENTITY_PUBLIC_KEY:}
         service-delivery: true
         experience-outcome-publisher: ${MARKETING_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
+        experience-governance-publisher: ${MARKETING_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
         allowed-agents-by-domain:
           marketing: [marketing-agent]
       interview-service:
@@ -33,6 +43,7 @@ memory:
           interview-service-current: ${INTERVIEW_SERVICE_IDENTITY_PUBLIC_KEY:}
         service-delivery: true
         experience-outcome-publisher: ${INTERVIEW_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
+        experience-governance-publisher: ${INTERVIEW_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
         allowed-agents-by-domain:
           interview: [interview-agent]
       knowledge-service:
@@ -46,6 +57,7 @@ memory:
           listing-master-service-current: ${LISTING_MASTER_SERVICE_IDENTITY_PUBLIC_KEY:}
         service-delivery: true
         experience-outcome-publisher: ${LISTING_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
+        experience-governance-publisher: ${LISTING_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
         allowed-agents-by-domain:
           listing: [listing-agent]
       business-service:
@@ -53,6 +65,7 @@ memory:
           business-service-current: ${BUSINESS_SERVICE_IDENTITY_PUBLIC_KEY:}
         service-delivery: true
         experience-outcome-publisher: ${BUSINESS_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
+        experience-governance-publisher: ${BUSINESS_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
         allowed-agents-by-domain:
           trade: [trade-agent]
       business-review-service:
@@ -67,6 +80,7 @@ memory:
           contract-service-current: ${CONTRACT_SERVICE_IDENTITY_PUBLIC_KEY:}
         service-delivery: true
         experience-outcome-publisher: ${CONTRACT_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
+        experience-governance-publisher: ${CONTRACT_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
         allowed-agents-by-domain:
           contract: [contract-agent]
       settlement-service:
@@ -74,6 +88,7 @@ memory:
           settlement-service-current: ${SETTLEMENT_SERVICE_IDENTITY_PUBLIC_KEY:}
         service-delivery: true
         experience-outcome-publisher: ${SETTLEMENT_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
+        experience-governance-publisher: ${SETTLEMENT_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
         allowed-agents-by-domain:
           settlement: [settlement-agent]
       notification-service:
@@ -88,6 +103,29 @@ memory:
         service-delivery: true
         allowed-agents-by-domain:
           media: [media-agent]
+    preference:
+      dimensions: [budget, commute_time, floor, copy_length, bedrooms, area, location, style]
+      half-life-days: 180
+      aliases:
+        budget: ["budget", "price", "price range", "purchase price", "total price", "预算", "总价", "价格", "首付"]
+        commute_time: ["commute", "commute time", "transport", "subway", "通勤", "交通", "地铁", "公交", "距离"]
+        floor: ["floor", "elevator", "楼层", "电梯", "低楼层", "高楼层"]
+        copy_length: ["copy length", "description length", "文案长度", "篇幅"]
+        bedrooms: ["bedrooms", "bedroom", "rooms", "户型", "卧室", "几室"]
+        area: ["area", "floor area", "size", "面积", "平米", "平方米"]
+        location: ["location", "district", "neighborhood", "地段", "区域", "位置", "商圈"]
+        style: ["style", "decoration", "装修风格", "风格", "装修"]
+      processing:
+        enabled: ${MEMORY_V2_PREFERENCE_PROCESSING_ENABLED:false}
+        mode: ${MEMORY_V2_PREFERENCE_PROCESSING_MODE:SHADOW}
+        model: ${MEMORY_V2_PREFERENCE_MODEL:}
+        poll-ms: 5000
+        batch-size: 4
+        max-attempts: 4
+        lease-seconds: 90
+        retry-seconds: 30
+        # Explicit SERVICE processing registration; no domain is implicitly authorized.
+        allowed-agents-by-domain: {}
     experience:
       enabled: ${MEMORY_V2_EXPERIENCE_ENABLED:false}
       processing-enabled: ${MEMORY_V2_EXPERIENCE_PROCESSING_ENABLED:false}

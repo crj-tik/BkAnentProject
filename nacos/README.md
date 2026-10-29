@@ -60,9 +60,9 @@
 - `rag-service.yaml`：独立 bk_rag、受管空间、Milvus/ES/embedding/rerank；`ragBaseReadiness` 仅检查安全配置、控制 DB 的 `rag_index_event`/`rag_document_state` 两表查询权限及至少三个已导出 RPC provider，不直接探测 Nacos 或检索后端。空凭据与 URL、空角色、worker 关闭及未声明评分 profile 均不代表能力已就绪
 - `contract-service.yaml`：技能目录/监听、模型 `gpt-5.6-terra`（可经 `CONTRACT_AGENT_MODEL` 覆盖）、温度 `0.2`、最大 token `4000`、风险审查开关 `true` 及 OCR/电子签 provider 名称
 
-这些默认值保留 Docker 开发编排此前的有效行为。分布式生产部署前必须在 Nacos 显式配置三个服务的 `*.integration.mode=real`，并接入/选择真实 provider（合同须同时选择真实 OCR 与电子签 provider）；营销 campaign 只有在真实发布 provider 和账号授权齐备后才能执行，当前缺 provider 会明确失败。仅写 `real` 或选择尚未实现的厂商占位 provider 不代表集成可用。不得通过 `.env` 切换业务模式，也不得为绕过依赖失败而削弱 readiness。`config-init` 仅上传 `NACOS_CONFIG_DATA_IDS` 显式选择的空格分隔 YAML 文件名，默认空列表拒绝发布；若要发布营销模板，必须显式加入 `marketing-content-service.yaml`，不得把旧 `promotion-service.yaml` 一并导入。使用 `NACOS_NAMESPACE` 的真实 namespace ID 作为 `tenant`，group 固定 `DEFAULT_GROUP` 与应用 import 一致；重复发布仍覆盖所选 data ID。生产导入前应审查环境专属配置，不把开发模板当运行态，不执行全目录覆盖。
+这些默认值保留 Docker 开发编排此前的有效行为。分布式生产部署前必须在 Nacos 显式配置三个服务的 `*.integration.mode=real`，并接入/选择真实 provider（合同须同时选择真实 OCR 与电子签 provider）；营销 campaign 只有在真实发布 provider 和账号授权齐备后才能执行，当前缺 provider 会明确失败。仅写 `real` 或选择尚未实现的厂商占位 provider 不代表集成可用。不得通过 `.env` 切换业务模式，也不得为绕过依赖失败而削弱 readiness。`config-init` 仅上传 `NACOS_CONFIG_DATA_IDS` 显式选择的空格分隔 YAML 文件名，默认空列表拒绝发布；若要发布营销模板，必须显式加入 `marketing-content-service.yaml`。Compare 与 Promotion 独立服务 data ID 已退役，不属于可发布模板。使用 `NACOS_NAMESPACE` 的真实 namespace ID 作为 `tenant`，group 固定 `DEFAULT_GROUP` 与应用 import 一致；重复发布仍覆盖所选 data ID。生产导入前应审查环境专属配置，不把开发模板当运行态，不执行全目录覆盖。
 
-营销生命周期 SQL 已登记为 `bk_marketing` 的 upgrade manifest 项。空 MySQL 卷会按受审 manifest 初始化；已有卷不会因 Compose 重启自动执行新的 upgrade 项，部署时须按版本化 manifest 明确应用并检查 schema。用户确认无历史资产后，开发环境空的 `bk_promotion` 已移除；旧初始化迁移保持既有摘要，其他环境仍需依据实际迁移记录处理。
+营销生命周期 SQL 已登记为 `bk_marketing` 的 upgrade manifest 项。空 MySQL 卷会按受审 manifest 初始化；已有卷不会因 Compose 重启自动执行新的 upgrade 项，部署时须按版本化 manifest 明确应用并检查 schema。用户确认项目未上线且无历史资产后，开发环境旧 `bk_promotion` 已移除；manifest 540 会先逐表核实为空再执行退役，非空时拒绝删除。不可变的早期初始化迁移保留原摘要。
 
 ### 5. 目标命名空间与账号（本机生产化基线，2026-10-10）
 

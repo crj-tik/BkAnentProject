@@ -116,6 +116,10 @@ auth:
         caller-service: interview-service
         public-key: ${INTERVIEW_SERVICE_IDENTITY_PUBLIC_KEY:}
         allowed-operations: [RESOLVE_BEACON]
+  token:
+    revocation:
+      provider: redis
+      key-prefix: "auth:token:revoked:"
 
 dubbo:
   application:

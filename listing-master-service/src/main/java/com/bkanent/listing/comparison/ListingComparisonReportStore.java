@@ -3,10 +3,8 @@ package com.bkanent.listing.comparison;
 import com.bkanent.common.authz.AuthzErrorCode;
 import com.bkanent.common.authz.AuthzException;
 import com.bkanent.listing.comparison.config.ListingComparisonProperties;
-import com.bkanent.listing.comparison.model.ListingComparisonLegacyInventory;
 import com.bkanent.listing.comparison.model.ListingComparisonReportResponse;
 import com.bkanent.listing.comparison.model.ListingComparisonStoredReport;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
@@ -25,7 +23,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Persists new Listing reports separately and inventories legacy Compare files without rewriting them. */
+/** Persists owner-bound Listing comparison reports and their generated PDFs. */
 @Service
 public class ListingComparisonReportStore {
     private static final Logger log = LoggerFactory.getLogger(ListingComparisonReportStore.class);
@@ -35,9 +33,6 @@ public class ListingComparisonReportStore {
     private final ListingComparisonPdfService pdfService;
     private final Map<String, ListingComparisonStoredReport> byOwnerAndKey = new ConcurrentHashMap<>();
     private final Map<String, ListingComparisonStoredReport> byReportId = new ConcurrentHashMap<>();
-    private volatile ListingComparisonLegacyInventory legacyInventory =
-            new ListingComparisonLegacyInventory(0, 0, 0, 0);
-
     public ListingComparisonReportStore(ObjectMapper objectMapper, ListingComparisonProperties properties,
                                         ListingComparisonPdfService pdfService) {
         this.objectMapper = objectMapper;
@@ -50,9 +45,7 @@ public class ListingComparisonReportStore {
         try {
             Files.createDirectories(directory());
             loadListingReports();
-            legacyInventory = inventoryLegacyFiles();
-            log.info("房源比较报告存储已初始化，新报告={}，保留旧 Compare 元数据={}，缺 owner={}",
-                    byReportId.size(), legacyInventory.metadataFiles(), legacyInventory.filesWithoutOwner());
+            log.info("房源比较报告存储已初始化，已加载报告={}", byReportId.size());
         } catch (IOException failure) {
             throw new IllegalStateException("初始化房源比较报告存储失败", failure);
         }
@@ -99,10 +92,6 @@ public class ListingComparisonReportStore {
         return new FileSystemResource(pdf);
     }
 
-    public ListingComparisonLegacyInventory legacyInventory() {
-        return legacyInventory;
-    }
-
     private void loadListingReports() throws IOException {
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(directory(), "*.listing.json")) {
             for (Path file : stream) {
@@ -119,30 +108,6 @@ public class ListingComparisonReportStore {
                 }
             }
         }
-    }
-
-    private ListingComparisonLegacyInventory inventoryLegacyFiles() throws IOException {
-        int metadataFiles = 0;
-        int ownedFiles = 0;
-        int filesWithoutOwner = 0;
-        int pdfFiles = 0;
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(directory(), "*.json")) {
-            for (Path file : stream) {
-                if (file.getFileName().toString().endsWith(".listing.json")) continue;
-                metadataFiles++;
-                try {
-                    JsonNode root = objectMapper.readTree(file.toFile());
-                    String owner = text(root, "ownerActorId");
-                    if (validActor(owner)) ownedFiles++; else filesWithoutOwner++;
-                    String shareCode = text(root, "shareCode");
-                    if (shareCode != null && shareCode.matches("[0-9a-f]{32}")
-                            && Files.isRegularFile(safeResolve(shareCode + ".pdf"))) pdfFiles++;
-                } catch (RuntimeException | IOException malformed) {
-                    filesWithoutOwner++;
-                }
-            }
-        }
-        return new ListingComparisonLegacyInventory(metadataFiles, ownedFiles, filesWithoutOwner, pdfFiles);
     }
 
     private void writeMetadata(ListingComparisonStoredReport stored) {
@@ -179,11 +144,6 @@ public class ListingComparisonReportStore {
         Path target = root.resolve(fileName).normalize();
         if (!target.startsWith(root)) throw new IllegalArgumentException("Invalid report file name");
         return target;
-    }
-
-    private static String text(JsonNode root, String name) {
-        JsonNode value = root == null ? null : root.get(name);
-        return value == null || !value.isTextual() ? null : value.asText();
     }
 
     private static boolean validActor(String actor) { return actor != null && actor.matches("[1-9][0-9]{0,18}"); }

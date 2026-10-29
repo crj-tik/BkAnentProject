@@ -259,7 +259,7 @@ public final class RagAccessControl {
     private boolean spaceCallerMayResolve(String spaceId, String callerService) {
         return Set.of("agent-service", "listing-master-service", "memory-service", "rag-service",
                         "customer-service", "marketing-content-service", "business-service", "contract-service",
-                        "compare-engine-service", "promotion-service", "settlement-service", "interview-service")
+                        "settlement-service", "interview-service")
                 .contains(callerService)
                 && registry.require(spaceId).allowedClients().getOrDefault(callerService, Set.of())
                 .contains(RagOperation.SEARCH);

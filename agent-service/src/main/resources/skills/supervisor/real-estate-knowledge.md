@@ -64,5 +64,5 @@ supervisor_skill: true
 当用户问题涉及上述任何概念时，请在意图识别中优先考虑以下领域映射：
 - 税费计算、贷款评估 → trade（交易可行性分析）
 - 合同签署、过户流程 → contract（合同管理）
-- 房源搜索、价格对比 → listing + compare（房源搜索+对比）
+- 房源搜索、价格对比 → listing（房源搜索与同域对比）
 - 中介费、佣金 → settlement（结算）

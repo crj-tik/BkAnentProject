@@ -3,7 +3,6 @@ CREATE DATABASE IF NOT EXISTS bk_listing DEFAULT CHARACTER SET utf8mb4 COLLATE u
 CREATE DATABASE IF NOT EXISTS bk_customer DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS bk_notification DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS bk_marketing DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE DATABASE IF NOT EXISTS bk_promotion DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS bk_business DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS bk_business_review DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE IF NOT EXISTS bk_agent DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -261,72 +260,6 @@ CREATE TABLE IF NOT EXISTS marketing_content (
     KEY idx_marketing_content_status (status),
     KEY idx_marketing_content_audit_status (audit_status),
     KEY idx_marketing_content_parent_content_id (parent_content_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-USE bk_promotion;
-
-CREATE TABLE IF NOT EXISTS promotion_publish_record (
-    id BIGINT NOT NULL AUTO_INCREMENT,
-    content_id BIGINT NOT NULL,
-    listing_id BIGINT NOT NULL,
-    platform VARCHAR(32) NOT NULL,
-    channel_account VARCHAR(128) NULL,
-    publish_status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
-    external_publish_id VARCHAR(128) NULL,
-    publish_time DATETIME NULL,
-    publish_message VARCHAR(255) NULL,
-    cost_amount DECIMAL(12, 2) NULL,
-    operator_name VARCHAR(64) NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    deleted TINYINT NOT NULL DEFAULT 0,
-    PRIMARY KEY (id),
-    KEY idx_promotion_publish_record_content_id (content_id),
-    KEY idx_promotion_publish_record_listing_id (listing_id),
-    KEY idx_promotion_publish_record_platform (platform),
-    KEY idx_promotion_publish_record_publish_status (publish_status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS promotion_effect_stat (
-    id BIGINT NOT NULL AUTO_INCREMENT,
-    publish_record_id BIGINT NOT NULL,
-    content_id BIGINT NOT NULL,
-    listing_id BIGINT NOT NULL,
-    platform VARCHAR(32) NOT NULL,
-    exposure_count INT NOT NULL DEFAULT 0,
-    click_count INT NOT NULL DEFAULT 0,
-    private_message_count INT NOT NULL DEFAULT 0,
-    lead_count INT NOT NULL DEFAULT 0,
-    ctr_value DECIMAL(10, 4) NULL,
-    conversion_rate DECIMAL(10, 4) NULL,
-    roi_value DECIMAL(10, 4) NULL,
-    stat_date VARCHAR(32) NOT NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    deleted TINYINT NOT NULL DEFAULT 0,
-    PRIMARY KEY (id),
-    KEY idx_promotion_effect_stat_publish_record_id (publish_record_id),
-    KEY idx_promotion_effect_stat_content_id (content_id),
-    KEY idx_promotion_effect_stat_listing_id (listing_id),
-    KEY idx_promotion_effect_stat_platform (platform),
-    KEY idx_promotion_effect_stat_stat_date (stat_date)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE TABLE IF NOT EXISTS brand_asset (
-    id BIGINT NOT NULL AUTO_INCREMENT,
-    asset_type VARCHAR(32) NOT NULL,
-    asset_name VARCHAR(128) NOT NULL,
-    asset_url VARCHAR(255) NOT NULL,
-    platform_scope VARCHAR(64) NULL,
-    tag_names VARCHAR(255) NULL,
-    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
-    remark VARCHAR(255) NULL,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    deleted TINYINT NOT NULL DEFAULT 0,
-    PRIMARY KEY (id),
-    KEY idx_brand_asset_asset_type (asset_type),
-    KEY idx_brand_asset_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 USE bk_business;

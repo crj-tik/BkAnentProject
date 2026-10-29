@@ -52,7 +52,6 @@ This is a **multi-agent real-estate middle-platform** built on Spring Cloud Alib
 | `agent-service` | 9002 | **Supervisor agent** — orchestrates sub-agents via A2A, aggregates MCP tools, manages sessions/workflows |
 | `memory-service` | 9011 | Vector memory (Milvus) RPC |
 | `business-service` | 9010 | Trade feasibility analysis agent (A2A + MCP server) |
-| `compare-engine-service` | 9006 | Listing comparison agent, MCP server |
 | `marketing-content-service` | 9008 | Content, campaign publishing lifecycle and effect provenance agent |
 | `listing-master-service` | — | Listing master data (Dubbo RPC) |
 | `customer-service` | — | Customer/owner management |

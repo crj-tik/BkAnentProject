@@ -15,10 +15,10 @@ import com.bkanent.common.listing.ListingSnapshotCheckRequest;
 import com.bkanent.common.listing.ListingSourceSnapshot;
 import com.bkanent.common.listing.ListingSourceStatus;
 import com.bkanent.common.listing.ListingSourceVersionRef;
-import com.bkanent.common.model.CompareReportDTO;
 import com.bkanent.common.model.ListingDTO;
 import com.bkanent.common.model.ListingComparisonFacts;
 import com.bkanent.listing.comparison.model.ListingComparisonMetric;
+import com.bkanent.listing.comparison.model.ListingComparisonLegacySummaryResponse;
 import com.bkanent.listing.comparison.model.ListingComparisonReportResponse;
 import com.bkanent.listing.comparison.model.ListingComparisonRow;
 import com.bkanent.listing.source.ListingBusinessApiException;
@@ -100,9 +100,10 @@ public class ListingComparisonService {
     }
 
     /** Returns only the old DTO projection for old Long-ID consumers; no share credentials are exposed. */
-    public CompareReportDTO createLegacyDto(List<Long> listingIds) {
+    public ListingComparisonLegacySummaryResponse createLegacyDto(List<Long> listingIds) {
         ListingComparisonReportResponse report = createLegacyLocal(listingIds, true);
-        return new CompareReportDTO(legacyListings(report), report.comparisonTableMarkdown(), report.conclusion());
+        return new ListingComparisonLegacySummaryResponse(
+                legacyListings(report), report.comparisonTableMarkdown(), report.conclusion());
     }
 
     public List<ListingDTO> legacyListings(ListingComparisonReportResponse report) {

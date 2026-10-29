@@ -80,6 +80,17 @@ agent:
     recall-chars: ${AGENT_MEMORY_V2_RECALL_CHARS:8192}
     preference-budget-tokens: ${AGENT_MEMORY_V2_PREFERENCE_BUDGET_TOKENS:800}
     experience-budget-tokens: ${AGENT_MEMORY_V2_EXPERIENCE_BUDGET_TOKENS:512}
+  supervisor:
+    orchestration:
+      max-rounds: 12
+      max-tool-calls: 24
+      max-concurrency: 4
+      model-retries: 2
+      model-timeout-ms: 30000
+      tool-timeout-ms: 120000
+      max-queued-calls: 128
+      approval-capabilities: []
+      accepting: true
 
 dubbo:
   application:

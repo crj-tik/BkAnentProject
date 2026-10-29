@@ -89,6 +89,11 @@ agent:
     external-dir: ${AGENT_SKILLS_EXTERNAL_DIR:}
     watch-enabled: ${AGENT_SKILLS_WATCH_ENABLED:true}
 media:
+  listing-authorization:
+    key-id: media-listing-current
+    signing-secret: ${MEDIA_LISTING_AUTH_SECRET:}
+  authorization:
+    enabled: false
   integration:
     mode: local # Docker development only; production sets real to use the KE gateway image generation below.
     # KE gateway (Bella) Doubao Seedream text-to-image is the implemented real provider
@@ -129,6 +134,9 @@ media:
       Return only the JSON object without Markdown fences, internal IDs, reasoning, tool arguments, or extra prose.
 a2a:
   memory:
+    compression-enabled: ${MEDIA_MEMORY_V2_COMPRESSION_ENABLED:false}
+    key-id: ${SERVICE_IDENTITY_KEY_ID:media-worker-service-current}
+    private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
 
 mcp:
   authorization:

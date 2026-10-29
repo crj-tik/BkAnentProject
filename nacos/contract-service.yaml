@@ -99,6 +99,8 @@ agent:
     watch-enabled: true
 
 contract:
+  authorization:
+    enabled: false
   reminder:
     enabled: true
     pending-sign-days: 3

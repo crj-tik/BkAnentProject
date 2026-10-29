@@ -97,6 +97,17 @@ memory:
         allowed-agents-by-domain:
           media: [media-agent]
     preference:
+      dimensions: [budget, commute_time, floor, copy_length, bedrooms, area, location, style]
+      half-life-days: 180
+      aliases:
+        budget: ["budget", "price", "price range", "purchase price", "total price", "预算", "总价", "价格", "首付"]
+        commute_time: ["commute", "commute time", "transport", "subway", "通勤", "交通", "地铁", "公交", "距离"]
+        floor: ["floor", "elevator", "楼层", "电梯", "低楼层", "高楼层"]
+        copy_length: ["copy length", "description length", "文案长度", "篇幅"]
+        bedrooms: ["bedrooms", "bedroom", "rooms", "户型", "卧室", "几室"]
+        area: ["area", "floor area", "size", "面积", "平米", "平方米"]
+        location: ["location", "district", "neighborhood", "地段", "区域", "位置", "商圈"]
+        style: ["style", "decoration", "装修风格", "风格", "装修"]
       processing:
         enabled: ${MEMORY_V2_PREFERENCE_PROCESSING_ENABLED:false}
         mode: ${MEMORY_V2_PREFERENCE_PROCESSING_MODE:SHADOW}

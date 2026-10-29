@@ -28,27 +28,9 @@ class ListingComparisonReportStoreTest {
     @TempDir Path directory;
 
     @Test
-    void cachesNewOwnerBoundReportsAndPreservesLegacyShareFilesByteForByte() throws Exception {
-        String shareCode = "a".repeat(32);
-        Path legacyShare = directory.resolve("legacy-share.json");
-        Path legacyWithoutOwner = directory.resolve("legacy-no-owner.json");
-        Path legacyPdf = directory.resolve(shareCode + ".pdf");
-        byte[] shareMetadataBytes = ("{\"reportId\":\"legacy-report\",\"ownerActorId\":\"7\","
-                + "\"shareCode\":\"" + shareCode + "\",\"publicShare\":true}").getBytes(StandardCharsets.UTF_8);
-        byte[] noOwnerBytes = "{\"reportId\":\"legacy-orphan\",\"listingIds\":[101,102]}"
-                .getBytes(StandardCharsets.UTF_8);
-        byte[] legacyPdfBytes = "%PDF-legacy-preserved".getBytes(StandardCharsets.UTF_8);
-        Files.write(legacyShare, shareMetadataBytes);
-        Files.write(legacyWithoutOwner, noOwnerBytes);
-        Files.write(legacyPdf, legacyPdfBytes);
-
+    void cachesOwnerBoundReportsAndLoadsThemAfterRestart() throws Exception {
         ListingComparisonReportStore store = store();
         store.initialize();
-        var inventory = store.legacyInventory();
-        assertEquals(2, inventory.metadataFiles());
-        assertEquals(1, inventory.ownedFiles());
-        assertEquals(1, inventory.filesWithoutOwner());
-        assertEquals(1, inventory.pdfFiles());
 
         List<ListingSourceSnapshot> sources = List.of(snapshot("legacy-local", "101", "r1"),
                 snapshot("provider-a", "101", "rev-1"));
@@ -68,20 +50,11 @@ class ListingComparisonReportStoreTest {
                 assertThrows(AuthzException.class, () -> store.findOwned(first.reportId(), "8")).code());
         assertEquals(AuthzErrorCode.PERMISSION_DENIED,
                 assertThrows(AuthzException.class, () -> store.loadPdf(first.reportId(), "8")).code());
-        assertEquals(AuthzErrorCode.PERMISSION_DENIED,
-                assertThrows(AuthzException.class, () -> store.findOwned(shareCode, "7")).code());
-        assertEquals(AuthzErrorCode.PERMISSION_DENIED,
-                assertThrows(AuthzException.class, () -> store.loadPdf(shareCode, "7")).code());
-        assertArrayEquals(shareMetadataBytes, Files.readAllBytes(legacyShare));
-        assertArrayEquals(noOwnerBytes, Files.readAllBytes(legacyWithoutOwner));
-        assertArrayEquals(legacyPdfBytes, Files.readAllBytes(legacyPdf));
-
         ListingComparisonReportStore restarted = store();
         restarted.initialize();
         assertEquals(first.reportId(), restarted.findOwned(first.reportId(), "7").reportId());
-        assertArrayEquals(shareMetadataBytes, Files.readAllBytes(legacyShare));
-        assertArrayEquals(noOwnerBytes, Files.readAllBytes(legacyWithoutOwner));
-        assertArrayEquals(legacyPdfBytes, Files.readAllBytes(legacyPdf));
+        assertEquals(AuthzErrorCode.PERMISSION_DENIED,
+                assertThrows(AuthzException.class, () -> restarted.findOwned(first.reportId(), "8")).code());
     }
 
     private ListingComparisonReportStore store() {
