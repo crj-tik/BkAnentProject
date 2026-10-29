@@ -16,7 +16,7 @@
 4. 用户确认使用一个平台经营 Agent；按经营分析、复盘和知识运营分别隔离工具调用与操作权限，并保留知识逐字稿输入防护及 Memory 正文隔离。服务身份与 Agent 注册切换前盘点现有身份、权限、Memory 与 RAG 使用者。STORE 范围来自可信 Auth 身份；审核人与 owner 分离、来源撤回和 Memory 私域保护不得因合并放宽。身份切换采用清晰的注册与撤销顺序，不把授权目录登记当作角色授权。
 5. 合同与结算退役覆盖模块、RPC、网关、Agent/MCP、Studio、Auth、Memory/RAG 空间、部署模板、脚本、数据库及维护测试。历史迁移和设计记录保留；当前接口和配置不再暴露旧能力。
 6. 用户确认每个用户最多关联一个门店，同一门店可以关联多个用户。Auth 使用独立的用户—门店关系表管理可信映射，保留原 BROKER 身份的唯一性；仅通过受授权管理入口变更，变更纳入 writer lock、授权版本和 outbox。签名上下文携带一个 STORE 身份，缺失、撤销或门店不匹配时失败关闭；不从请求参数或姓名推断门店。
-7. 统一 Agent 对外只发布一张 Agent Card 和一个 A2A 入口。内部按分析、复盘、知识分支选择独立的工具集合和 Memory 上下文；分支选择必须绑定已验证请求并校验该分支的精确操作权限，不能由模型自行越权切换。知识分支必须先执行逐字稿输入防护再进入 Memory。取消任务、审批和身份撤销沿用已有语义；实现须覆盖分支间工具和记忆不可串用。现有固定身份 Memory hook 与单 owner Skill Card 发布器需要适配，不能直接把三个旧 Agent 的 Bean 一起装载。
+7. 统一 Agent 对外只发布一张 Agent Card 和一个 A2A 入口。请求 metadata 的 `platformCapability` 必须精确为 `analytics`、`review` 或 `knowledge`；路由器先校验对应 `agent.workflow.invoke.platform-operations.<分支>` 签名操作，再选择独立工具集合和 Memory 上下文，不能由模型自行越权切换。知识分支必须先执行逐字稿输入防护再进入 Memory。取消任务、审批和身份撤销沿用已有语义；实现须覆盖分支间工具和记忆不可串用。现有固定身份 Memory hook 与单 owner Skill Card 发布器需要适配，不能直接把三个旧 Agent 的 Bean 一起装载。
 
 ## Risks / Trade-offs
 

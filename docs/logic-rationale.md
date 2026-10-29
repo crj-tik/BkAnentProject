@@ -1417,6 +1417,16 @@
 
 **代码位置**：根 `pom.xml`、`docker-compose.yml`、Listing 比较兼容 DTO/测试、Auth/Memory/RAG 配置、受管迁移 540；关联 LR-99、KI-115、KI-224、KI-227。
 
+## LR-165 平台经营单入口先验能力再分支
+
+**结论**：平台经营 Agent 的路由器根据 A2A 请求 metadata 中的精确 `platformCapability` 选择 analytics、review 或 knowledge，先校验对应签名操作，再调用该分支；取消请求委托给持有任务的执行器核验任务凭据。
+
+**根因**：合并成一个外部入口后，模型或请求不能仅凭自报能力取得其他分支的工具和记忆；知识输入防护与各分支的 Memory 生命周期也不能被绕开。请求体完整性由现有 A2A 授权绑定校验，能力路由仍须自行检查具体操作。
+
+**代码位置**：`platform-operations-service/.../PlatformAgentRouter.java` 及其测试。路由器目前尚未注册到运行服务，三个真实分支、Memory 隔离、Auth 操作登记及完整链路仍待实现和验收。
+
+**关联**：LR-117、LR-160、LR-163；change `consolidate-platform-operations` 任务 2.5、4.2。
+
 ## LR-164 平台经营知识来源使用独立锁定的视图所有者
 
 **结论**：平台经营知识来源视图由 `platform_operations_view_owner` 持有，该账号保持锁定且只拥有访谈源的必要列读取权；平台经营应用账号和只读来源账号不能直接读取访谈表。
