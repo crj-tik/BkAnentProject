@@ -1400,3 +1400,11 @@
 **代码位置**：`marketing-content-service/MarketingMcpTools.createMarketingContentDraft`、`MarketingAssetServiceImpl.saveContents`、`MarketingAuthorizationBoundaryTest`。
 
 **关联**：KI-221；本记录来自修复 CI 暴露的过期授权边界测试，不改变 Knowledge 服务拆分范围或 Interview 源服务边界。
+
+## LR-160 四域新操作登记不推断角色与门店身份
+
+**结论**：知识运营与门店复盘的显式操作及 Agent 调用能力登记到 Auth 操作目录，但不自动新增角色授权；STORE 请求仍须 Auth 签发可信用户—门店映射。
+
+**根因**：操作目录是可分配能力，角色授予和业务资源归属是不同事实；根据已有角色名或请求中的 storeId 猜测权限会越过当前授权边界。Auth 对 businessAdmin 使用既有的全有效目录规则，业务资源与审核人分离规则继续生效。
+
+**代码位置**：`sql/migrations/20261028_four_domain_authorization_catalog.sql`、`docker/mysql/checks/four-domain-authorization-catalog.sql`；关联 KI-223、LR-119/122。

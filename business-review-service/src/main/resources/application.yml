@@ -44,7 +44,7 @@ business-review:
       auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
   sources:
     mode: ${BUSINESS_REVIEW_SOURCE_MODE:http}
-    listing-base-url: ${BUSINESS_REVIEW_LISTING_BASE_URL:http://listing-master-service:9003}
+    listing-base-url: ${BUSINESS_REVIEW_LISTING_BASE_URL:http://listing-master-service:9004}
     knowledge-base-url: ${BUSINESS_REVIEW_KNOWLEDGE_BASE_URL:http://knowledge-service:9015}
 dubbo:
   application:

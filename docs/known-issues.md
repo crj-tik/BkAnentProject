@@ -1734,15 +1734,17 @@
 
 **关闭条件**：完成并勾选 OpenSpec 任务 5.1–5.3，保留目标环境、schema/check、Nacos 回读和集成验证证据；不得把模拟来源验收表述为真实效果验证。验收前不得宣称 Knowledge 已具备生产运行条件。
 
+**2026-10-28 开发环境进展**：受管迁移 510/520 已在 `bk-anent-dev` MySQL 应用并通过 schema/view/grant check；`knowledge_app` 和 `knowledge_source_ro` 已用本地独立凭据解锁，验证各自可读所需对象、不能直读 Interview 表；view definer 保持锁定。`knowledge-service.yaml` 已写入开发 Nacos 并回读。真实服务启动、Memory 运行态密钥加载及跨服务闭环尚待验证，本项保持 OPEN。
+
 **关联**：KI-216/217；LR-120；`docs/knowledge-service-operations.md`；change `extract-knowledge-operations-domain`。
 
-## KI-219 [OPEN·P2] 门店复盘数据库创建项的manifest校验摘要误录
+## KI-219 [FIXED·本提交·P2] 门店复盘数据库创建项的manifest校验摘要误录
 
 **发现日期与依据**：2026-10-28，合并 `dev-fix` 后运行初始化清单静态检查发现第 480 项 `business-review-database-20261027-v1` 的 schema-check SHA-256 少录了 3 个十六进制字符；受管 runner 会在执行任何 SQL 前拒绝整份清单。
 
 **代码处置**：已将 480 项校验摘要修正为 `docker/mysql/checks/business-review-database.sql` 的规范 LF SHA-256，未改 SQL、迁移版本或目标库。
 
-**残余与关闭条件**：未连接目标数据库。部署前确认 `bk_auth.bk_schema_migration` 中没有以旧错误摘要登记的手工记录；如存在，DBA 需核对数据库创建结果并修复迁移账本后再运行受管 manifest。完成目标库核对后关闭本项。
+**2026-10-28 验证**：开发库中该版本尚未登记，受管升级已按正确摘要执行 480 项并通过 schema check；再次执行升级时账本摘要一致并跳过重放。其他目标环境仍需按相同门禁检查。
 
 **关联**：`docker/mysql/init-manifest.tsv` 第 480 项；`scripts/deploy/test_init_manifest.py`。
 
@@ -1765,3 +1767,25 @@
 **验证与边界**：`marketing-content-service` 及上游模块 Maven `test-compile` 通过；本次修复后的 PR CI 仍待完成。未调用 Media Worker 或连接数据库。
 
 **关联**：LR-159；`MarketingMcpTools.createMarketingContentDraft`、`MarketingAssetServiceImpl.saveContents`、`MarketingAuthorizationBoundaryTest`。
+
+## KI-222 [FIXED·本提交·P1] 门店复盘默认房源来源端口错误
+
+**发现日期**：2026-10-28。门店复盘的应用配置、Nacos 模板、Compose、`.env.example` 及本机 `.env` 将房源来源指向 `listing-master-service:9003`；实际房源服务监听 9004，9003 为通知服务端口。默认 HTTP 来源无法连接到正确的房源接口。
+
+**修复**：四处受版本管理的默认值与本机对应配置统一为 9004，并增加配置回归检查，按房源服务实际端口核对各配置面。显式设置的其他地址仍由部署者控制。
+
+**验证边界**：配置检查见 `BusinessReviewConfigurationTest`；真实服务之间的 HTTP 调用和目标环境配置加载仍需运行态验证。
+
+## KI-223 [FIXED·本提交·P1] 知识与门店复盘缺少授权操作目录登记
+
+**发现日期**：2026-10-28。开发库的 `auth_permission` 没有 Knowledge、Business Review 精确操作及对应 Agent 调用能力，已有业务守卫无法取得已登记的授权操作。
+
+**修复**：新增受管迁移登记 20 项明确操作，沿用 Auth writer lock、用户权限版本与 outbox，且不为角色自动授予权限。STORE 身份映射尚未实现，登记操作不代表门店链路已接通；现有业务管理员的全量有效目录规则仍适用。
+
+**验证边界**：迁移后的操作、角色关联和重复执行由本次开发数据库验收核对；真实角色分配与 STORE 映射仍需协调。
+
+## KI-224 [FIXED·本提交·P2] 全量开发环境仍强制检查已退役服务配置
+
+**发现日期**：2026-10-28。`init-environment.sh` 的 full profile 仍将旧 Compare 和 Promotion 的 Nacos 模板列为必需项，和默认运行面已改由 Listing、Marketing 提供能力的现状不一致。
+
+**修复与验证**：从 full profile 必需文件清单移除两个旧模板；`BusinessReviewConfigurationTest` 检查四个当前服务模板仍被要求，旧模板不再是必需项。历史回退文件和 Compare 报告卷仍按 LR-99/157 的排空条件保留。

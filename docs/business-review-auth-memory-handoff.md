@@ -94,7 +94,7 @@ business-review-service:
 | `BUSINESS_REVIEW_MEMORY_V2_COMPRESSION_ENABLED` | `false` |
 | `BUSINESS_REVIEW_AGENT_MODEL` | `gpt-5.6-terra` |
 | `BUSINESS_REVIEW_SOURCE_MODE` | `http`；测试或显式演示才选 `fixture` |
-| `BUSINESS_REVIEW_LISTING_BASE_URL` | `http://listing-master-service:9003` |
+| `BUSINESS_REVIEW_LISTING_BASE_URL` | `http://listing-master-service:9004` |
 | `BUSINESS_REVIEW_KNOWLEDGE_BASE_URL` | `http://knowledge-service:9015` |
 | `BUSINESS_REVIEW_AUTHORIZATION_ENABLED` | `true` |
 | `BUSINESS_REVIEW_A2A_AUTHORIZATION_ENABLED` | `true` |
