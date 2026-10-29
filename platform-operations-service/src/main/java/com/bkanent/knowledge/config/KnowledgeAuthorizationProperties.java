@@ -7,11 +7,11 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "knowledge.authorization")
 public class KnowledgeAuthorizationProperties extends AuthzIngressProperties {
     public KnowledgeAuthorizationProperties() {
-        setAudience("knowledge-service");
+        setAudience("platform-operations-service");
     }
 
     @PostConstruct
     public void validateProperties() {
-        validate("knowledge-service");
+        validate("platform-operations-service");
     }
 }

@@ -6,6 +6,6 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(prefix = "business-review.authorization", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class BusinessReviewAuthorizationIngressFilter extends AuthzIngressFilter {
     public BusinessReviewAuthorizationIngressFilter(BusinessReviewAuthorizationProperties properties) {
-        super("/business-review", properties.getAudience(), properties.getMaxBodyBytes(), properties.getAuthorityPublicKeys());
+        super("/platform-operations/reviews", properties.getAudience(), properties.getMaxBodyBytes(), properties.getAuthorityPublicKeys());
     }
 }

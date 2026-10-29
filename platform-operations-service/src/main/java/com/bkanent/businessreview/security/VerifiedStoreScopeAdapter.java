@@ -14,7 +14,7 @@ public class VerifiedStoreScopeAdapter implements TrustedStoreScopePort {
         VerifiedDomainAuthorization.requireOperation(operation);
         VerifiedDomainAuthorization.VerifiedContext verified = VerifiedDomainAuthorization.requireVerifiedContext();
         AuthorizationContext context = verified.context();
-        if (!"business-review-service".equals(context.audience()))
+        if (!"platform-operations-service".equals(context.audience()))
             throw new AuthzException(AuthzErrorCode.PERMISSION_DENIED);
         Long signedStoreId = context.businessIdentities().get("STORE");
         if (signedStoreId == null || requestedStoreId == null || !signedStoreId.equals(requestedStoreId))

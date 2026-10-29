@@ -11,7 +11,7 @@ import java.time.Instant;
 import java.util.List;
 
 @RestController
-@RequestMapping("/business-review/reviews")
+@RequestMapping("/platform-operations/reviews")
 public class ReviewController {
     private final ReviewApplicationService service;
     public ReviewController(ReviewApplicationService service) { this.service = service; }

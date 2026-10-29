@@ -5,7 +5,7 @@ import java.util.Map;
 @ConfigurationProperties(prefix = "business-review.authorization")
 public class BusinessReviewAuthorizationProperties {
     private boolean enabled = true;
-    private String audience = "business-review-service";
+    private String audience = "platform-operations-service";
     private int maxBodyBytes = 1048576;
     private Map<String, String> authorityPublicKeys = new LinkedHashMap<>();
     public boolean isEnabled() { return enabled; }

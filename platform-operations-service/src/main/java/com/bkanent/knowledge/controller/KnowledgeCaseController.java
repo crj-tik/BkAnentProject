@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/knowledge/v1/cases")
+@RequestMapping("/platform-operations/knowledge/v1/cases")
 public class KnowledgeCaseController {
     private final KnowledgeLifecycleService service;
     private final KnowledgeGenerationService generationService;

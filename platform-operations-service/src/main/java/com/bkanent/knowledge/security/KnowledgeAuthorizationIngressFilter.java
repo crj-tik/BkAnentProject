@@ -9,6 +9,6 @@ import org.springframework.stereotype.Component;
 @ConditionalOnProperty(prefix = "knowledge.authorization", name = "enabled", havingValue = "true")
 public class KnowledgeAuthorizationIngressFilter extends AuthzIngressFilter {
     public KnowledgeAuthorizationIngressFilter(KnowledgeAuthorizationProperties properties) {
-        super("/knowledge", properties.getAudience(), properties.getMaxBodyBytes(), properties.getAuthorityPublicKeys());
+        super("/platform-operations/knowledge", properties.getAudience(), properties.getMaxBodyBytes(), properties.getAuthorityPublicKeys());
     }
 }

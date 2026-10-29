@@ -16,6 +16,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class VerifiedStoreScopeAdapterTest {
     @Test
+    void storeIdentityRemainsUnsupportedUntilAuthMappingIsImplemented() {
+        String operation = ReviewApplicationService.READ;
+        assertThatThrownBy(() -> signedRequest(Instant.now().getEpochSecond(), Map.of("STORE", 23L), List.of(operation)))
+                .isInstanceOf(AuthzException.class)
+                .hasFieldOrPropertyWithValue("code", AuthzErrorCode.INVALID_ARGUMENT);
+    }
+    @Test
     void aSignedContextWithoutStoreIdentityFailsClosed() throws Exception {
         long now = Instant.now().getEpochSecond();
         String permission = ReviewApplicationService.READ;
@@ -52,13 +59,13 @@ class VerifiedStoreScopeAdapterTest {
                 permissions, null, identities, AuthzContract.ALGORITHM, keyId, null);
         AuthorizationSnapshot snapshot = AuthzSignature.sign(unsignedSnapshot, keys.getPrivate());
         String permissionHash = AuthzCanonicalHash.snapshotHash(snapshot);
-        RequestBinding binding = new RequestBinding("gateway", "business-review-service", "GET",
-                "/business-review/reviews", "/business-review/reviews",
+        RequestBinding binding = new RequestBinding("gateway", "platform-operations-service", "GET",
+                "/platform-operations/reviews", "/platform-operations/reviews",
                 List.of(new RequestBinding.QueryParameter("storeId", "23")), "request-1", null, null,
                 hash, hash, nonce, now, now + AuthzDeadlines.REQUEST_SECONDS);
         String requestHash = AuthzCanonicalHash.resolveRequestHash(token, binding);
         AuthorizationContext context = AuthzSignature.sign(new AuthorizationContext("17", 3, 0,
-                permissionHash, permissions, "business-review-service", "request-1", null, null,
+                permissionHash, permissions, "platform-operations-service", "request-1", null, null,
                 hash, requestHash, nonce, now, now + AuthzDeadlines.CONTEXT_SECONDS,
                 now + AuthzDeadlines.CONTEXT_SECONDS, identities, AuthzContract.ALGORITHM, keyId, null),
                 keys.getPrivate());
@@ -71,7 +78,7 @@ class VerifiedStoreScopeAdapterTest {
 
     private static AuthzRequestScope.Scope verify(SignedRequest signed, Instant now) {
         return AuthzRequestScope.verifyAndOpen(signed.response(), signed.binding(), signed.token(),
-                "business-review-service", "GET", "/business-review/reviews", "storeId=23", new byte[0],
+                "platform-operations-service", "GET", "/platform-operations/reviews", "storeId=23", new byte[0],
                 signed.authorityKeys(), now);
     }
 

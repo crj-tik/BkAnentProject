@@ -8,6 +8,8 @@
 
 过渡阶段打包显式选择经营分析启动类，避免复制的多个旧启动类使 Spring Boot 打包失败；聚焦 `-DskipTests package` 通过。这不证明服务已经能启动或具备统一能力，统一启动类仍需在 2.2–2.5 中完成。
 
+复盘和知识控制器及入口过滤路径已改为平台经营前缀，受众改为 `platform-operations-service`，但还未接入启动扫描和 Gateway。验证时发现共享 `AuthzContract.businessIdentities` 只允许 `BROKER`，无法构造签名 `STORE` 身份；现有 `auth_user_business_identity` 对 `(identity_type, identity_id)` 唯一，无法让同一门店对应多个用户。此缺口已在 KI-223 和 LR-160 的验证边界记录，不能用请求参数代替可信门店身份；2.5 须补齐权威关系、签发、撤销和真实库回归后才可启用。
+
 ## 既有 change 未完成事项的承接关系（2026-10-29）
 
 本表只记录迁移去向；不改变原任务状态，也不将新方案视为验收通过。
