@@ -48,29 +48,6 @@ class ListingConfigurationMatrixTest {
         assertTrue(compose.contains(optionalMemory + ": ${" + optionalMemory + ":-false}"));
         assertTrue(cutover.contains(optionalMemory));
 
-        for (String key : List.of("COMPARE_A2A_ENABLED", "COMPARE_MCP_ENABLED")) {
-            assertTrue(envExample.contains(key + "=false"));
-            assertTrue(compose.contains(key + ": ${" + key + ":-false}"));
-            assertTrue(compareNacos.contains("${" + key + ":false}"));
-        }
-        for (String key : List.of("COMPARE_LEGACY_REST_ENABLED", "COMPARE_LEGACY_RPC_ENABLED")) {
-            assertTrue(envExample.contains(key + "=false"));
-            assertTrue(compose.contains(key + ": ${" + key + ":-false}"));
-            assertTrue(compareApplication.contains("${" + key + ":false}"));
-            assertTrue(compareNacos.contains("${" + key + ":false}"));
-            assertTrue(cutover.contains(key));
-        }
-        for (String key : List.of("COMPARE_AGENT_MODEL", "COMPARE_AGENT_TEMPERATURE", "COMPARE_AGENT_MAX_TOKENS",
-                "COMPARE_AI_CONCLUSION_ENABLED", "COMPARE_REPORT_STORAGE_DIR")) {
-            assertTrue(envExample.contains(key + "="), "missing rollback value for " + key);
-            assertTrue(compose.contains(key + ": ${" + key + ":-"), "missing legacy profile pass-through for " + key);
-            assertTrue(compareNacos.contains("${" + key + ":"), "missing Compare Nacos placeholder for " + key);
-            assertTrue(cutover.contains(key), "missing rollback config matrix row for " + key);
-        }
-        assertTrue(envExample.contains("COMPARE_MEMORY_V2_COMPRESSION_ENABLED=false"));
-        assertTrue(compose.contains("COMPARE_MEMORY_V2_COMPRESSION_ENABLED: ${COMPARE_MEMORY_V2_COMPRESSION_ENABLED:-false}"));
-        assertTrue(compareApplication.contains("${COMPARE_MEMORY_V2_COMPRESSION_ENABLED:false}"));
-        assertTrue(cutover.contains("COMPARE_MEMORY_V2_COMPRESSION_ENABLED"));
         assertTrue(envExample.contains("COMPARE_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER=false"));
         assertTrue(compose.contains("COMPARE_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER: ${COMPARE_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:-false}"));
         assertTrue(memoryNacos.contains("${COMPARE_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}"));
@@ -84,8 +61,12 @@ class ListingConfigurationMatrixTest {
         assertTrue(gatewayNacos.contains("id: listing-comparison-compatibility\n            uri: lb://listing-master-service"));
         assertTrue(gatewayNacos.contains("Path=/compare/**"));
         assertTrue(publisher.contains("\"compare-engine-service.yaml\""));
-        assertTrue(compose.contains("profiles: [legacy-compare]"));
-        assertTrue(compose.contains(".secrets/service-identities/compare-engine-service/private-key.pem"));
+        assertFalse(compose.contains("profiles: [legacy-compare]"));
+        assertFalse(compose.contains("SERVICE_ARTIFACT: compare-engine-service-1.0.0-SNAPSHOT.jar"));
+        assertFalse(read(root, "pom.xml").contains("<module>compare-engine-service</module>"));
+        assertFalse(envExample.contains("COMPARE_A2A_ENABLED="));
+        assertFalse(envExample.contains("COMPARE_LEGACY_REST_ENABLED="));
+        assertFalse(envExample.contains("COMPARE_REPORT_STORAGE_DIR="));
         assertTrue(compareApplication.contains("compare-engine-service-current"));
         assertTrue(compareNacos.contains("name: compare-agent"));
         assertTrue(authNacos.contains("compare-engine-service-current:\n        caller-service: compare-engine-service"));
@@ -95,7 +76,7 @@ class ListingConfigurationMatrixTest {
         assertTrue(cutover.contains("原 `taskId`"));
         assertTrue(cutover.contains("Memory caller/domain/agent"));
         assertTrue(cutover.contains("legacy-compare"));
-        assertEquals(2, occurrences(compose, "compare-report-data:/app/runtime"));
+        assertEquals(1, occurrences(compose, "compare-report-data:/app/runtime"));
         assertTrue(compose.contains(".secrets/service-identities/public-keys.env"));
     }
 

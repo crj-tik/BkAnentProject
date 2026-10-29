@@ -26,7 +26,6 @@
         <module>notification-service</module>
         <module>listing-master-service</module>
         <module>customer-service</module>
-        <module>compare-engine-service</module>
         <module>media-worker-service</module>
         <module>marketing-content-service</module>
         <module>business-service</module>

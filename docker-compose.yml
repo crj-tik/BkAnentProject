@@ -648,32 +648,6 @@ services:
       A2A_PUBLIC_BASE_URL: http://customer-service:9005
       CUSTOMER_LISTING_READ_SECRET: ${CUSTOMER_LISTING_READ_SECRET:-}
 
-  compare-engine-service:
-    <<: *app-service
-    profiles: [legacy-compare]
-    volumes:
-      - compare-report-data:/app/runtime
-      - type: bind
-        source: ./.secrets/service-identities/compare-engine-service/private-key.pem
-        target: /run/secrets/service-identity.pem
-        read_only: true
-        bind:
-          create_host_path: false
-    environment:
-      <<: *app-environment
-      SERVICE_ARTIFACT: compare-engine-service-1.0.0-SNAPSHOT.jar
-      A2A_PUBLIC_BASE_URL: http://compare-engine-service:9006
-      COMPARE_A2A_ENABLED: ${COMPARE_A2A_ENABLED:-false}
-      COMPARE_MCP_ENABLED: ${COMPARE_MCP_ENABLED:-false}
-      COMPARE_LEGACY_REST_ENABLED: ${COMPARE_LEGACY_REST_ENABLED:-false}
-      COMPARE_LEGACY_RPC_ENABLED: ${COMPARE_LEGACY_RPC_ENABLED:-false}
-      COMPARE_AGENT_MODEL: ${COMPARE_AGENT_MODEL:-gpt-5.6-terra}
-      COMPARE_AGENT_TEMPERATURE: ${COMPARE_AGENT_TEMPERATURE:-0.2}
-      COMPARE_AGENT_MAX_TOKENS: ${COMPARE_AGENT_MAX_TOKENS:-4000}
-      COMPARE_AI_CONCLUSION_ENABLED: ${COMPARE_AI_CONCLUSION_ENABLED:-true}
-      COMPARE_MEMORY_V2_COMPRESSION_ENABLED: ${COMPARE_MEMORY_V2_COMPRESSION_ENABLED:-false}
-      COMPARE_REPORT_STORAGE_DIR: ${COMPARE_REPORT_STORAGE_DIR:-/app/runtime/reports}
-
   media-worker-service:
     <<: *app-service
     profiles: [full]

@@ -1408,3 +1408,11 @@
 **根因**：操作目录是可分配能力，角色授予和业务资源归属是不同事实；根据已有角色名或请求中的 storeId 猜测权限会越过当前授权边界。Auth 对 businessAdmin 使用既有的全有效目录规则，业务资源与审核人分离规则继续生效。
 
 **代码位置**：`sql/migrations/20261028_four_domain_authorization_catalog.sql`、`docker/mysql/checks/four-domain-authorization-catalog.sql`；关联 KI-223、LR-119/122。
+
+## LR-161 未上线环境移除旧比较服务的默认部署
+
+**结论**：用户于 2026-10-29 确认项目没有正式上线或需保留的历史资产，Compare 从默认 Maven reactor 和 Compose 移除，新比较入口归 Listing。
+
+**根因**：不再需要以旧服务作为当前部署的回退入口；保留可复用测试与源文件直至迁移验证，不以环境中无历史数据替代功能回归证据。
+
+**代码位置**：根 `pom.xml`、`docker-compose.yml`、`ListingConfigurationMatrixTest`；关联 LR-99、KI-115。
