@@ -26,6 +26,12 @@ EXPECTED_AUTHZ_MIGRATIONS = {
     ("a2a-task-authorization-settlement-20261026-v1", "bk_settlement", "sql/migrations/20261026_a2a_task_authorization.sql"),
 }
 
+EXPECTED_PLATFORM_MIGRATIONS = {
+    ("platform-operations-database-20261029-v1", "bk_auth", "sql/migrations/20261029_platform_operations_database.sql"),
+    ("platform-operations-schema-20261029-v1", "bk_platform_operations", "sql/migrations/20261029_platform_operations_schema.sql"),
+    ("platform-operations-view-owner-20261029-v1", "bk_platform_operations", "sql/migrations/20261029_platform_operations_view_owner.sql"),
+}
+
 BASELINE_PERMISSION_CODES = {
     "agent.chat.use", "agent.workflow.read", "agent.workflow.artifact.read",
     "listing.read", "listing.create", "listing.update.own",
@@ -139,6 +145,9 @@ def main() -> None:
     missing = EXPECTED_AUTHZ_MIGRATIONS - observed
     if missing:
         fail(f"required auth/A2A migration entries are missing: {sorted(missing)}")
+    missing_platform = EXPECTED_PLATFORM_MIGRATIONS - observed
+    if missing_platform:
+        fail(f"required platform operations migrations are missing: {sorted(missing_platform)}")
     missing_support = EXPECTED_SUPPORT_MIGRATIONS - observed
     if missing_support:
         fail(f"required upgrade compatibility migrations are missing: {sorted(missing_support)}")

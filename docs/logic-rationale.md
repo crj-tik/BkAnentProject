@@ -1417,6 +1417,16 @@
 
 **代码位置**：根 `pom.xml`、`docker-compose.yml`、Listing 比较兼容 DTO/测试、Auth/Memory/RAG 配置、受管迁移 540；关联 LR-99、KI-115、KI-224、KI-227。
 
+## LR-164 平台经营知识来源使用独立锁定的视图所有者
+
+**结论**：平台经营知识来源视图由 `platform_operations_view_owner` 持有，该账号保持锁定且只拥有访谈源的必要列读取权；平台经营应用账号和只读来源账号不能直接读取访谈表。
+
+**根因**：合并服务不能把逐字稿源表权限扩展给经营分析或复盘，也不能在退役旧知识服务后依赖其视图所有者。已应用的 570 迁移不可改，通过 580 前向切换视图所有者；重跑按账本跳过历史状态检查，当前状态使用独立检查验证。
+
+**代码位置**：`sql/migrations/20261029_platform_operations_schema.sql`、`sql/migrations/20261029_platform_operations_view_owner.sql`、`docker/mysql/checks/platform-operations-current.sql`。
+
+**关联**：LR-116、LR-156、LR-163；change `consolidate-platform-operations` 任务 3.1–3.3。账号凭据配置与服务运行态访问仍须单独验收。
+
 ## LR-163 平台经营门店身份由 Auth 维护且允许多人共享门店
 
 **结论**：一个用户最多关联一个可信 STORE 身份，同一门店可关联多个用户。门店关系由有业务身份管理权限的业务管理员在 Auth 中维护，并进入签名授权快照；请求中的门店 ID 不能自行建立授权范围。
