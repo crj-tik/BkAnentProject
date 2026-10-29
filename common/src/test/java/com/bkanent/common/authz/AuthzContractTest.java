@@ -17,6 +17,16 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class AuthzContractTest {
     @Test
+    void storeIdentityIsSignedAuthorityFactAndUnknownIdentityIsRejected() {
+        var first = new AuthorizationSnapshot("123", 7, 3, false, PERMISSIONS, null,
+                Map.of("BROKER", 901L, "STORE", 23L), AuthzContract.ALGORITHM, KID, null);
+        var changed = new AuthorizationSnapshot("123", 7, 3, false, PERMISSIONS, null,
+                Map.of("BROKER", 901L, "STORE", 24L), AuthzContract.ALGORITHM, KID, null);
+        assertNotEquals(AuthzCanonicalHash.snapshotHash(first), AuthzCanonicalHash.snapshotHash(changed));
+        assertThrows(AuthzException.class, () -> AuthzContract.businessIdentities(Map.of("STORE", 0L)));
+        assertThrows(AuthzException.class, () -> AuthzContract.businessIdentities(Map.of("EMPLOYEE", 1L)));
+    }
+    @Test
     void snapshotHashIsStableAcrossOrderingDuplicatesSigningRotationAndCacheRebuild() throws Exception {
         List<String> mutable = new ArrayList<>(List.of("memory.read", "agent.chat.use", "memory.read", "interview.read"));
         AuthorizationSnapshot rebuilt = new AuthorizationSnapshot("123", 7, 3, false, mutable, null,

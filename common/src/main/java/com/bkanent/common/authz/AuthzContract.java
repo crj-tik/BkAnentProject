@@ -92,7 +92,8 @@ public final class AuthzContract {
         require(values != null && values.size() <= MAX_BUSINESS_IDENTITIES);
         TreeMap<String, Long> sorted = new TreeMap<>();
         for (var entry : values.entrySet()) {
-            require("BROKER".equals(entry.getKey()) && entry.getValue() != null && entry.getValue() > 0);
+            require(("BROKER".equals(entry.getKey()) || "STORE".equals(entry.getKey()))
+                    && entry.getValue() != null && entry.getValue() > 0);
             sorted.put(entry.getKey(), entry.getValue());
         }
         return Collections.unmodifiableMap(sorted);

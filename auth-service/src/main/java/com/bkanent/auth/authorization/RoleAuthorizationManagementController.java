@@ -78,6 +78,14 @@ public class RoleAuthorizationManagementController {
         return service.setBrokerIdentity(bearer(header), userId, body.brokerId());
     }
 
+    @PutMapping("/users/{userId}/store-identity")
+    public RoleAuthorizationManagementService.StoreIdentityChange storeIdentity(
+            @RequestHeader(value="Authorization",required=false) String header,
+            @PathVariable("userId") long userId, @RequestBody StoreIdentity body) {
+        if (body == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Identity body required");
+        return service.setStoreIdentity(bearer(header), userId, body.storeId());
+    }
+
     private static String bearer(String header) {
         if (header==null || !header.startsWith("Bearer ") || header.length()<=7 || header.substring(7).contains(" "))
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED,"Bearer access token required");
@@ -87,4 +95,5 @@ public class RoleAuthorizationManagementController {
     public record UserRoles(List<RoleAuthorizationManagementService.UserRoleGrant> grants) { }
     public record BusinessAdmin(boolean enabled) { }
     public record BrokerIdentity(Long brokerId) { }
+    public record StoreIdentity(Long storeId) { }
 }

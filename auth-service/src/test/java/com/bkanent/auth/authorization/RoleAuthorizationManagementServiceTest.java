@@ -133,6 +133,34 @@ class RoleAuthorizationManagementServiceTest {
     }
 
     @Test
+    void storeIdentitySupportsSharedStoreAndRevocationWithVersionedAudit() {
+        var first = service.setStoreIdentity(admin, 1, 23L);
+        var second = service.setStoreIdentity(admin, 2, 23L);
+        assertEquals(2, first.versions().get(0).permissionRevision());
+        assertEquals(2, second.versions().get(0).permissionRevision());
+        assertEquals(java.util.Map.of("STORE", 23L), fixture.repository.snapshot(1, now).orElseThrow().businessIdentities());
+        assertEquals(java.util.Map.of("STORE", 23L), fixture.repository.snapshot(2, now).orElseThrow().businessIdentities());
+        assertEquals(List.of(new RoleAuthorizationManagementService.BusinessIdentity("STORE", 23L)), service.businessIdentities(admin, 1));
+        assertTrue(service.setStoreIdentity(admin, 1, 23L).versions().isEmpty());
+        var revoked = service.setStoreIdentity(admin, 1, null);
+        assertEquals(3, revoked.versions().get(0).permissionRevision());
+        assertTrue(fixture.repository.snapshot(1, now).orElseThrow().businessIdentities().isEmpty());
+        assertEquals(java.util.Map.of("STORE", 23L), fixture.repository.snapshot(2, now).orElseThrow().businessIdentities());
+        status(HttpStatus.FORBIDDEN, () -> service.setStoreIdentity(ordinary, 2, 24L));
+        status(HttpStatus.BAD_REQUEST, () -> service.setStoreIdentity(admin, 2, 0L));
+        assertEquals(3, fixture.jdbc.queryForObject("SELECT COUNT(*) FROM auth_authorization_audit WHERE target_type='STORE'", Integer.class));
+    }
+
+    @Test
+    void storeIdentityMutationRollsBackIfAuditFails() {
+        fixture.jdbc.execute("DROP TABLE auth_authorization_audit");
+        assertThrows(org.springframework.dao.DataAccessException.class, () -> service.setStoreIdentity(admin, 1, 23L));
+        assertEquals(0, fixture.jdbc.queryForObject("SELECT COUNT(*) FROM auth_user_store_identity", Integer.class));
+        assertEquals(1, fixture.repository.currentVersion(1).orElseThrow().permissionRevision());
+        assertEquals(0, fixture.jdbc.queryForObject("SELECT COUNT(*) FROM auth_authorization_outbox", Integer.class));
+    }
+
+    @Test
     void secondTokenParseInsideWriterRejectsRevocationRace() {
         AuthTokenService checked = spy(tokens);
         var principal = tokens.parse(admin);

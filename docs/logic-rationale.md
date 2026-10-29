@@ -1417,6 +1417,16 @@
 
 **代码位置**：根 `pom.xml`、`docker-compose.yml`、Listing 比较兼容 DTO/测试、Auth/Memory/RAG 配置、受管迁移 540；关联 LR-99、KI-115、KI-224、KI-227。
 
+## LR-163 平台经营门店身份由 Auth 维护且允许多人共享门店
+
+**结论**：一个用户最多关联一个可信 STORE 身份，同一门店可关联多个用户。门店关系由有业务身份管理权限的业务管理员在 Auth 中维护，并进入签名授权快照；请求中的门店 ID 不能自行建立授权范围。
+
+**根因**：原业务身份表为 BROKER 设置了 `(identity_type, identity_id)` 唯一约束，直接复用会错误地限制每个门店只能关联一个用户。独立门店关系表保留原 BROKER 唯一性，门店关系变更通过 writer lock、用户授权版本和 outbox 撤销旧上下文。
+
+**代码位置**：`AuthzContract`、`AuthorizationRepository`、`RoleAuthorizationManagementService` 和 `sql/migrations/20261029_auth_store_identity.sql`。
+
+**关联**：LR-160；KI-223；change `consolidate-platform-operations` 任务 2.5。登记门店身份不自动赋予业务操作权限。
+
 ## LR-162 新领域服务身份在 Auth 与 Memory 分别登记
 
 **结论**：Knowledge 与 Business Review 在 Auth A2A 中只登记 `RESOLVE_BEACON`，Memory 只登记各自独立的 caller、domain 和 agent；Compare caller 与五类旧 Compare Memory 空间均从 Auth、Memory、RAG 默认配置完整移除。

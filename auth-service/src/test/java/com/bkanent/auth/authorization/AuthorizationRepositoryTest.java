@@ -42,6 +42,7 @@ class AuthorizationRepositoryTest {
         }
         jdbc.execute("ALTER TABLE user_account ADD COLUMN business_admin TINYINT NOT NULL DEFAULT 0");
         jdbc.execute("CREATE TABLE auth_user_business_identity (user_id BIGINT NOT NULL, identity_type VARCHAR(24) NOT NULL, identity_id BIGINT NOT NULL, PRIMARY KEY(user_id,identity_type), UNIQUE(identity_type,identity_id))");
+        jdbc.execute("CREATE TABLE auth_user_store_identity (user_id BIGINT PRIMARY KEY, store_id BIGINT NOT NULL)");
         jdbc.update("INSERT INTO auth_authorization_writer_lock VALUES (1)");
         repository = new AuthorizationRepository(jdbc, new DataSourceTransactionManager(dataSource));
         user(1, false); user(2, false); user(3, true);

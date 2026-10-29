@@ -13,14 +13,19 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThat;
 
 class VerifiedStoreScopeAdapterTest {
     @Test
-    void storeIdentityRemainsUnsupportedUntilAuthMappingIsImplemented() {
+    void signedPlatformAudienceWithMatchingStoreAllowsAccess() throws Exception {
         String operation = ReviewApplicationService.READ;
-        assertThatThrownBy(() -> signedRequest(Instant.now().getEpochSecond(), Map.of("STORE", 23L), List.of(operation)))
-                .isInstanceOf(AuthzException.class)
-                .hasFieldOrPropertyWithValue("code", AuthzErrorCode.INVALID_ARGUMENT);
+        SignedRequest signed = signedRequest(Instant.now().getEpochSecond(), Map.of("STORE", 23L), List.of(operation));
+        try (AuthzRequestScope.Scope ignored = verify(signed, Instant.now())) {
+            assertThat(new VerifiedStoreScopeAdapter().requireStore(23L, operation).storeId()).isEqualTo(23L);
+            assertThatThrownBy(() -> new VerifiedStoreScopeAdapter().requireStore(24L, operation))
+                    .isInstanceOf(AuthzException.class)
+                    .hasFieldOrPropertyWithValue("code", AuthzErrorCode.PERMISSION_DENIED);
+        }
     }
     @Test
     void aSignedContextWithoutStoreIdentityFailsClosed() throws Exception {

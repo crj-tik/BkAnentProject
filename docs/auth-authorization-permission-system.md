@@ -49,7 +49,7 @@
 | 权限目录 | 保存受限操作的 `permission_code → domain + operation + active + version` | 只为需要明确授权的拦截点登记精确码；该拦截点引用未知码时拒绝；停用/目录变化推动权限版本变化 |
 | 角色权限 | 角色到受限目录操作的显式关联 | 不用 `*`、domain 前缀或工具名称泛化；权限登记不等于角色授予；基础功能不靠批量角色授予“假装免鉴权” |
 | 用户角色授予 | 用户与角色的关联，含 active、`valid_from`、`valid_until` | 只计算当前有效授予；开始/到期边界须推动版本刷新 |
-| 业务身份映射 | Auth 维护 `userId → business identity`，当前已实现 BROKER 映射 | 服务端签入上下文；模型字段和偶然相同的数字 ID 不构成映射 |
+| 业务身份映射 | Auth 维护 `userId → business identity`，支持 BROKER 和 STORE 映射 | 服务端签入上下文；模型字段和偶然相同的数字 ID 不构成映射 |
 | `permissionRevision` | 权限/角色/映射变更版本 | 消费者发现变化后停止旧范围，并在合法边界刷新 |
 | `credentialEpoch` | 用户凭据和账号失效版本 | 注销、停用等使旧执行上下文失效 |
 | Outbox 与审计 | 将 Auth 数据变更与版本通知可靠关联 | 事务提交后发布；失败或状态不新鲜时不续用旧 head |
@@ -62,7 +62,7 @@ Auth v2 不是把权限名放进普通请求头。下游使用经过签名、绑
 | 字段组 | 主要内容 | 校验目的 |
 |---|---|---|
 | actor 与权限 | `actorId`、签名执行操作集合 `allowedOperations`、仅含受限授权的 `snapshot.permissions`、`permissionHash`、`permissionRevision`、`credentialEpoch` | 确认可信主体和受限操作授权范围未被替换或回放成旧版本；基础操作标识可绑定请求，但不进入权限快照、不代表角色授予 |
-| 业务身份 | Auth 签入的 `businessIdentities`，如 `BROKER → brokerId` | 服务端从可信映射取得 broker，不从模型/请求正文取值 |
+| 业务身份 | Auth 签入的 `businessIdentities`，如 `BROKER → brokerId`、`STORE → storeId` | 服务端从可信映射取得身份，不从模型或请求正文取值；用户最多一个门店，同一门店可有多个用户 |
 | 请求关联 | `audience`、`requestId`、run/session、`policyDigest`、请求 hash、nonce | 将授权限定到目标服务、本次执行、请求内容和调用策略 |
 | 时间边界 | 签发、过期时间、run 硬截止；另有 freshness 的 `checkedAt/notAfter` | 硬截止不能由续租延长；过期、失效或 freshness 超窗时拒绝新动作 |
 | 签名信息 | 算法、key id、签名 | 验证 Auth 对上下文的签发；服务间请求仍需验证对应 caller proof |

@@ -35,6 +35,8 @@ CREATE TABLE auth_user_role (user_id BIGINT NOT NULL, role_id BIGINT NOT NULL,
     PRIMARY KEY(user_id,role_id));
 CREATE TABLE auth_user_business_identity (user_id BIGINT NOT NULL, identity_type VARCHAR(24) NOT NULL,
     identity_id BIGINT NOT NULL, PRIMARY KEY(user_id,identity_type), UNIQUE(identity_type,identity_id));
+CREATE TABLE auth_user_store_identity (user_id BIGINT PRIMARY KEY, store_id BIGINT NOT NULL);
+CREATE INDEX idx_auth_store_identity_store_user ON auth_user_store_identity(store_id, user_id);
 CREATE TABLE auth_user_authorization_state (user_id BIGINT PRIMARY KEY,
     permission_revision BIGINT NOT NULL DEFAULT 1, credential_epoch BIGINT NOT NULL DEFAULT 1,
     status VARCHAR(16) NOT NULL, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP);

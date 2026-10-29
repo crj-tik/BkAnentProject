@@ -14,6 +14,7 @@ MANIFEST = ROOT / "docker/mysql/init-manifest.tsv"
 RUNNER = ROOT / "scripts/deploy/run-init-manifest.sh"
 
 EXPECTED_AUTHZ_MIGRATIONS = {
+    ("auth-store-identity-20261029-v1", "bk_auth", "sql/migrations/20261029_auth_store_identity.sql"),
     ("auth-execution-binding-20261026-v1", "bk_auth", "sql/migrations/20261026_authorization_execution_binding.sql"),
     ("baseline-permission-retirement-20261028-v1", "bk_auth", "sql/migrations/20261028_baseline_permission_retirement.sql"),
     ("a2a-task-authorization-interview-20261026-v1", "bk_interview", "sql/migrations/20261026_a2a_task_authorization.sql"),

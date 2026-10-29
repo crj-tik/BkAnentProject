@@ -87,6 +87,8 @@ public final class AuthorizationRepository {
             Map<String, Long> identities = new java.util.TreeMap<>();
             jdbc.query("SELECT identity_type,identity_id FROM auth_user_business_identity WHERE user_id=? ORDER BY identity_type",
                     (org.springframework.jdbc.core.RowCallbackHandler) rs -> identities.put(rs.getString(1), rs.getLong(2)), userId);
+            jdbc.query("SELECT store_id FROM auth_user_store_identity WHERE user_id=?",
+                    (org.springframework.jdbc.core.RowCallbackHandler) rs -> identities.put("STORE", rs.getLong(1)), userId);
             return Optional.of(new AuthorizationFacts(users.get(0), catalog, grants, identities));
         });
     }
@@ -224,6 +226,7 @@ public final class AuthorizationRepository {
             jdbc.queryForList("SELECT token_digest,user_id,event_id,state,expires_at FROM auth_account_logout_event WHERE 1=0");
             jdbc.queryForList("SELECT permission_revision,credential_epoch,status FROM auth_user_authorization_state WHERE 1=0");
             jdbc.queryForList("SELECT user_id,identity_type,identity_id FROM auth_user_business_identity WHERE 1=0");
+            jdbc.queryForList("SELECT user_id,store_id FROM auth_user_store_identity WHERE 1=0");
             jdbc.queryForList("SELECT business_admin FROM user_account WHERE 1=0");
             jdbc.queryForList("SELECT event_id,lease_epoch,status FROM auth_authorization_outbox WHERE 1=0");
             jdbc.queryForList("SELECT role_id,valid_from,valid_until,active FROM auth_user_role WHERE 1=0");

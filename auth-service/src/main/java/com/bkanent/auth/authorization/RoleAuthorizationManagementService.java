@@ -179,15 +179,44 @@ public class RoleAuthorizationManagementService {
         });
     }
 
+    public StoreIdentityChange setStoreIdentity(String accessToken, long userId, Long storeId) {
+        return authenticated(accessToken, "auth.business-identity.manage", actor -> {
+            if (!actor.businessAdmin()) throw error(HttpStatus.FORBIDDEN, "Business administrator required");
+            requireActiveUser(userId);
+            if (storeId != null && storeId <= 0) throw error(HttpStatus.BAD_REQUEST, "Invalid store id");
+            List<Long> current = repository.jdbc().queryForList(
+                    "SELECT store_id FROM auth_user_store_identity WHERE user_id=?", Long.class, userId);
+            Long oldStoreId = current.isEmpty() ? null : current.get(0);
+            if (Objects.equals(oldStoreId, storeId)) return new StoreIdentityChange(userId, storeId, null, List.of());
+            var result = repository.mutateUsers(List.of(userId), "STORE_IDENTITY_CHANGED", false, jdbc -> {
+                jdbc.update("DELETE FROM auth_user_store_identity WHERE user_id=?", userId);
+                if (storeId != null) jdbc.update("INSERT INTO auth_user_store_identity(user_id,store_id) VALUES (?,?)", userId, storeId);
+            });
+            if (oldStoreId != null) auditStoreIdentity(actor, oldStoreId, "STORE_IDENTITY_REMOVED", result.eventId());
+            if (storeId != null) auditStoreIdentity(actor, storeId, "STORE_IDENTITY_ASSIGNED", result.eventId());
+            return new StoreIdentityChange(userId, storeId, result.eventId(), result.versions());
+        });
+    }
+
     public List<BusinessIdentity> businessIdentities(String accessToken, long userId) {
         return authenticated(accessToken, "auth.business-identity.manage", actor -> {
             if (!actor.businessAdmin()) throw error(HttpStatus.FORBIDDEN, "Business administrator required");
             requireActiveUser(userId);
-            return repository.jdbc().query("""
+            var identities = new java.util.ArrayList<>(repository.jdbc().query("""
                     SELECT identity_type,identity_id FROM auth_user_business_identity
                     WHERE user_id=? ORDER BY identity_type
-                    """, (rs, row) -> new BusinessIdentity(rs.getString(1), rs.getLong(2)), userId);
+                    """, (rs, row) -> new BusinessIdentity(rs.getString(1), rs.getLong(2)), userId));
+            repository.jdbc().query("SELECT store_id FROM auth_user_store_identity WHERE user_id=?",
+                    (org.springframework.jdbc.core.RowCallbackHandler) rs -> identities.add(new BusinessIdentity("STORE", rs.getLong(1))), userId);
+            return List.copyOf(identities);
         });
+    }
+
+    private void auditStoreIdentity(EffectivePermissionService.Snapshot actor, long storeId, String action, String eventId) {
+        repository.jdbc().update("""
+                INSERT INTO auth_authorization_audit(audit_id,actor_id,actor_revision,action,target_type,target_id,event_id)
+                VALUES (?,?,?,?,?,?,?)
+                """, UUID.randomUUID().toString(), actor.userId(), actor.permissionRevision(), action, "STORE", storeId, eventId);
     }
 
     private void auditIdentity(EffectivePermissionService.Snapshot actor, long userId, long brokerId,
@@ -274,6 +303,10 @@ public class RoleAuthorizationManagementService {
     public record UserRoleGrant(long roleId,Instant validFrom,Instant validUntil) { }
     public record ManagementResult(long targetId,String eventId,List<AuthorizationRepository.UserVersion> versions,boolean publicationConfirmed) { }
     public record BusinessIdentity(String type, long identityId) { }
+    public record StoreIdentityChange(long userId, Long storeId, String eventId,
+                                      List<AuthorizationRepository.UserVersion> versions) {
+        public StoreIdentityChange { versions = List.copyOf(versions); }
+    }
     public record BusinessIdentityChange(long userId, Long brokerId, String eventId,
                                          List<AuthorizationRepository.UserVersion> versions) {
         public BusinessIdentityChange { versions = List.copyOf(versions); }
