@@ -1804,7 +1804,7 @@
 
 **修复**：在应用配置登记各自公钥与精确 domain/agent，并扩展 `MemoryV2DeploymentConfigurationTest`，逐一验证应用和 Nacos 两个配置面。运行态仍须验证 Nacos 已加载及服务间真实签名调用。
 
-## KI-227 [FIXED·P1] 四域合并后运行配置与 Nacos 模板存在漂移
+## KI-227 [FIXED·95c83c9·P1] 四域合并后运行配置与 Nacos 模板存在漂移
 
 **发现日期**：2026-10-29。Agent 编排上限、Memory 偏好和隐私清理、RAG 并发、Auth 撤权 key prefix、Media→Listing 签名信任等代码配置未完整写入 Nacos 模板或 Compose；退役的 Compare 还残留在当前架构资料和验证说明中。
 

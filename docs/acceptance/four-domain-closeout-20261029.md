@@ -1,5 +1,7 @@
 # 四域后端收尾验收（2026-10-29）
 
+代码提交：`95c83c9`（`dev-fix`）。
+
 ## 收尾范围
 
 - 删除独立 `compare-engine-service` Maven 模块、源码、维护测试和公共 RPC/DTO；Compose、根 Maven 清单、活动 Nacos 服务模板及活动 RAG 空间不再注册此服务。
