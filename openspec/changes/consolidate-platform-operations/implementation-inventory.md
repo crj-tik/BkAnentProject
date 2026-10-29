@@ -4,6 +4,8 @@
 
 已将经营分析源码及维护测试复制到 `platform-operations-service`，加入 Maven reactor，分析 REST 前缀改为 `/platform-operations/analytics`，鉴权过滤路径与 audience 同步为新服务。聚焦 reactor 测试通过，其中新模块 5 项、失败 0。该基底仍携带旧 trade Agent 代码，统一 Agent、数据库、Nacos 和 Compose 尚未迁入，也没有运行态验收；任务 2.1 保持未完成，不能部署或视为业务切换完成。
 
+复盘与知识源码及维护测试已复制到新模块，依赖已纳入模块 POM；聚焦 reactor 的新模块测试 64 项通过。当前启动类仍只扫描经营分析包，复盘与知识尚未接入运行容器，保留的旧 Agent 类尚未合并；任务 2.2、2.3 和 2.5 继续未完成。
+
 ## 既有 change 未完成事项的承接关系（2026-10-29）
 
 本表只记录迁移去向；不改变原任务状态，也不将新方案视为验收通过。
