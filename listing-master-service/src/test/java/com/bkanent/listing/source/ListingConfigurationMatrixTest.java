@@ -22,8 +22,6 @@ class ListingConfigurationMatrixTest {
         String memoryApplication = read(root, "memory-service/src/main/resources/application.yml");
         String memoryNacos = read(root, "nacos/memory-service.yaml");
         String authNacos = read(root, "nacos/auth-service.yaml");
-        String compareNacos = read(root, "nacos/compare-engine-service.yaml");
-        String compareApplication = read(root, "compare-engine-service/src/main/resources/application.yml");
         String publisher = read(root, "scripts/deploy/publish-nacos.py");
         String cutover = read(root, "docs/listing-comparison-cutover.md");
 
@@ -48,10 +46,7 @@ class ListingConfigurationMatrixTest {
         assertTrue(compose.contains(optionalMemory + ": ${" + optionalMemory + ":-false}"));
         assertTrue(cutover.contains(optionalMemory));
 
-        assertTrue(envExample.contains("COMPARE_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER=false"));
-        assertTrue(compose.contains("COMPARE_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER: ${COMPARE_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:-false}"));
-        assertTrue(memoryNacos.contains("${COMPARE_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}"));
-        assertTrue(cutover.contains("COMPARE_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER"));
+        assertFalse(envExample.contains("COMPARE_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER="));
         assertFalse(agentNacos.contains("compare-mcp-server"));
         assertFalse(compose.contains("COMPARE_MCP_ENDPOINT"));
         assertFalse(envExample.contains("COMPARE_MCP_ENDPOINT"));
@@ -60,19 +55,15 @@ class ListingConfigurationMatrixTest {
         assertFalse(agentNacos.contains("[a2a:compare-agent]"));
         assertTrue(gatewayNacos.contains("id: listing-comparison-compatibility\n            uri: lb://listing-master-service"));
         assertTrue(gatewayNacos.contains("Path=/compare/**"));
-        assertTrue(publisher.contains("\"compare-engine-service.yaml\""));
+        assertFalse(publisher.contains("\"compare-engine-service.yaml\""));
         assertFalse(compose.contains("profiles: [legacy-compare]"));
         assertFalse(compose.contains("SERVICE_ARTIFACT: compare-engine-service-1.0.0-SNAPSHOT.jar"));
         assertFalse(read(root, "pom.xml").contains("<module>compare-engine-service</module>"));
         assertFalse(envExample.contains("COMPARE_A2A_ENABLED="));
         assertFalse(envExample.contains("COMPARE_LEGACY_REST_ENABLED="));
         assertFalse(envExample.contains("COMPARE_REPORT_STORAGE_DIR="));
-        assertTrue(compareApplication.contains("compare-engine-service-current"));
-        assertTrue(compareNacos.contains("name: compare-agent"));
-        assertTrue(authNacos.contains("compare-engine-service-current:\n        caller-service: compare-engine-service"));
-        assertTrue(authNacos.contains("${COMPARE_ENGINE_SERVICE_IDENTITY_PUBLIC_KEY:}"));
-        assertTrue(memoryNacos.contains("compare-engine-service-current: ${COMPARE_ENGINE_SERVICE_IDENTITY_PUBLIC_KEY:}"));
-        assertTrue(memoryNacos.contains("compare: [compare-agent]"));
+        assertFalse(authNacos.contains("compare-engine-service-current:"));
+        assertFalse(memoryNacos.contains("compare-engine-service-current:"));
         assertTrue(cutover.contains("原 `taskId`"));
         assertTrue(cutover.contains("Memory caller/domain/agent"));
         assertTrue(cutover.contains("legacy-compare"));

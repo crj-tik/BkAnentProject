@@ -18,8 +18,7 @@ class OfficialA2aProviderConfigurationTest {
                 "media-worker-service/src/main/java/com/bkanent/media/a2a/MediaOfficialA2aAgent.java",
                 "contract-service/src/main/java/com/bkanent/contract/a2a/ContractOfficialA2aAgent.java",
                 "settlement-service/src/main/java/com/bkanent/settlement/a2a/SettlementOfficialA2aAgent.java",
-                "notification-service/src/main/java/com/bkanent/notification/a2a/NotificationOfficialA2aAgent.java",
-                "compare-engine-service/src/main/java/com/bkanent/compare/a2a/CompareOfficialA2aAgent.java"
+                "notification-service/src/main/java/com/bkanent/notification/a2a/NotificationOfficialA2aAgent.java"
         };
 
         Path root = locateProjectRoot();
@@ -43,8 +42,7 @@ class OfficialA2aProviderConfigurationTest {
                 "media-worker-service/src/main/java/com/bkanent/media/a2a/A2aSupervisorContextInterceptor.java",
                 "contract-service/src/main/java/com/bkanent/contract/a2a/A2aSupervisorContextInterceptor.java",
                 "settlement-service/src/main/java/com/bkanent/settlement/a2a/A2aSupervisorContextInterceptor.java",
-                "notification-service/src/main/java/com/bkanent/notification/a2a/A2aSupervisorContextInterceptor.java",
-                "compare-engine-service/src/main/java/com/bkanent/compare/a2a/A2aSupervisorContextInterceptor.java"
+                "notification-service/src/main/java/com/bkanent/notification/a2a/A2aSupervisorContextInterceptor.java"
         };
         Path root = locateProjectRoot();
         for (String interceptor : interceptors) {
@@ -63,8 +61,7 @@ class OfficialA2aProviderConfigurationTest {
                 "nacos/media-worker-service.yaml",
                 "nacos/contract-service.yaml",
                 "nacos/settlement-service.yaml",
-                "nacos/notification-service.yaml",
-                "nacos/compare-engine-service.yaml"
+                "nacos/notification-service.yaml"
         };
         Path root = locateProjectRoot();
         for (String configuration : configurations) {
@@ -93,8 +90,7 @@ class OfficialA2aProviderConfigurationTest {
                 "media-worker-service/pom.xml",
                 "contract-service/pom.xml",
                 "settlement-service/pom.xml",
-                "notification-service/pom.xml",
-                "compare-engine-service/pom.xml"
+                "notification-service/pom.xml"
         };
         Path root = locateProjectRoot();
         for (String pom : poms) {

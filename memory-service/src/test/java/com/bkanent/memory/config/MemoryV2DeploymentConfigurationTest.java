@@ -25,10 +25,11 @@ class MemoryV2DeploymentConfigurationTest {
             Map.entry("agent-service", new CallerIdentity("agent-service-current", "AGENT_SERVICE_IDENTITY_PUBLIC_KEY", "supervisor", "supervisor-agent")),
             Map.entry("marketing-content-service", new CallerIdentity("marketing-content-service-current", "MARKETING_CONTENT_SERVICE_IDENTITY_PUBLIC_KEY", "marketing", "marketing-agent")),
             Map.entry("interview-service", new CallerIdentity("interview-service-current", "INTERVIEW_SERVICE_IDENTITY_PUBLIC_KEY", "interview", "interview-agent")),
+            Map.entry("knowledge-service", new CallerIdentity("knowledge-service-current", "KNOWLEDGE_SERVICE_IDENTITY_PUBLIC_KEY", "knowledge", "knowledge-agent")),
             Map.entry("listing-master-service", new CallerIdentity("listing-master-service-current", "LISTING_MASTER_SERVICE_IDENTITY_PUBLIC_KEY", "listing", "listing-agent")),
             Map.entry("business-service", new CallerIdentity("business-service-current", "BUSINESS_SERVICE_IDENTITY_PUBLIC_KEY", "trade", "trade-agent")),
+            Map.entry("business-review-service", new CallerIdentity("business-review-service-current", "BUSINESS_REVIEW_SERVICE_IDENTITY_PUBLIC_KEY", "business-review", "business-review-agent")),
             Map.entry("contract-service", new CallerIdentity("contract-service-current", "CONTRACT_SERVICE_IDENTITY_PUBLIC_KEY", "contract", "contract-agent")),
-            Map.entry("compare-engine-service", new CallerIdentity("compare-engine-service-current", "COMPARE_ENGINE_SERVICE_IDENTITY_PUBLIC_KEY", "compare", "compare-agent")),
             Map.entry("settlement-service", new CallerIdentity("settlement-service-current", "SETTLEMENT_SERVICE_IDENTITY_PUBLIC_KEY", "settlement", "settlement-agent")),
             Map.entry("notification-service", new CallerIdentity("notification-service-current", "NOTIFICATION_SERVICE_IDENTITY_PUBLIC_KEY", "notification", "notification-agent")),
             Map.entry("media-worker-service", new CallerIdentity("media-worker-service-current", "MEDIA_WORKER_SERVICE_IDENTITY_PUBLIC_KEY", "media", "media-agent")));
@@ -61,7 +62,6 @@ class MemoryV2DeploymentConfigurationTest {
                 "listing-master-service", "LISTING_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER",
                 "business-service", "BUSINESS_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER",
                 "contract-service", "CONTRACT_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER",
-                "compare-engine-service", "COMPARE_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER",
                 "settlement-service", "SETTLEMENT_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER");
 
         for (Resource resource : resources) {

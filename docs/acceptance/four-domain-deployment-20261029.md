@@ -1,5 +1,7 @@
 # 四域开发环境配置与数据库核对
 
+> 2026-10-29 后续：用户确认没有需保留的正式历史资产。开发库 `bk_promotion` 的三张表逐表核对均为 0 条后已移除；旧 Compare 与 Promotion 容器已删除。Auth 与 Memory 的开发 Nacos 已移除旧 Compare caller，并登记 Knowledge 和 Business Review 的精确服务身份；配置回读通过，运行应用是否加载新配置仍待验证。以下此前保留旧库和回滚配置的说明为操作时的历史记录。
+
 ## MySQL
 
 目标为本机 Compose 项目 `bk-anent-dev` 的 `mysql` 服务和原 `bk-anent-dev_mysql-data` 卷。操作前确认容器健康，并对现有 Auth、Listing、Marketing、Promotion 和 Interview 库做逻辑备份；备份保留在本机忽略目录 `.work/2026-10-28/four-domain-closeout/`，文件访问限制为当前用户、SYSTEM 与 Administrators。备份已做压缩流完整读取检查，尚未执行恢复演练。

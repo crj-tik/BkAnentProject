@@ -14,12 +14,12 @@
 .\scripts\security\New-ServiceIdentities.ps1
 ```
 
-脚本用本机 Java 17 为 Auth 和 13 个调用服务各生成一组密钥；再次执行只校验既有密钥对，不覆盖它们。脚本不输出私钥。生成后 Compose 才能找到 `public-keys.env` 与各服务的私钥文件。部署配置中 `SERVICE_IDENTITY_PRIVATE_KEY_FILE` 指向容器内的只读挂载路径；各调用服务默认使用自己的 `<service>-current` key ID，Auth 响应用 `AUTH_SERVICE_IDENTITY_KEY_ID=auth-service-current`。
+脚本用本机 Java 17 为登记的服务各生成一组密钥；再次执行只校验既有密钥对，不覆盖它们。脚本不输出私钥。生成后 Compose 才能找到 `public-keys.env` 与各服务的私钥文件。部署配置中 `SERVICE_IDENTITY_PRIVATE_KEY_FILE` 指向容器内的只读挂载路径；各调用服务默认使用自己的 `<service>-current` key ID，Auth 响应用 `AUTH_SERVICE_IDENTITY_KEY_ID=auth-service-current`。
 
 ## verifier 登记范围
 
 - Auth 登记所有当前需要 A2A/Auth 信标调用的服务公钥；只有 `agent-service` 可执行 `ISSUE_BEACON`，其他已登记调用方仅可执行 `RESOLVE_BEACON`，与 Auth 服务端的签发约束一致。
-- Memory 在此 change 合并后会登记九个精确 caller：agent、marketing、interview、knowledge、listing、business、contract、compare、settlement。Knowledge 仅获 `service-delivery` 和 `knowledge: [knowledge-agent]`；不授予 experience publisher 或共享 grant。其他服务即使有服务身份，也没有 Memory 权限。
+- Memory 按服务分别登记精确 caller、domain 和 agent。Knowledge 仅获 `service-delivery` 和 `knowledge: [knowledge-agent]`；Business Review 仅使用其独立 domain 和 agent，均不因此获得经验发布或共享 grant。
 - 新增服务时只生成一对身份；仅把它的公钥登记到实际 verifier，并在同一变更中审查最小授权。不要为 A2A 与 Memory 各生成一把共享密钥。
 
 ## Memory 请求签名

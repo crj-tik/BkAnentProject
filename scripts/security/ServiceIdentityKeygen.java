@@ -22,7 +22,7 @@ import java.util.Set;
 public final class ServiceIdentityKeygen {
     private static final List<String> SERVICES = List.of(
             "auth-service", "gateway", "agent-service", "listing-master-service", "customer-service",
-            "marketing-content-service", "business-service", "business-review-service", "contract-service", "compare-engine-service",
+            "marketing-content-service", "business-service", "business-review-service", "contract-service",
             "settlement-service", "notification-service", "media-worker-service", "interview-service",
             "knowledge-service");
     private static final Path ROOT = Path.of(".secrets", "service-identities");

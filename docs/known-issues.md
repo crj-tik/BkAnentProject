@@ -1789,3 +1789,15 @@
 **发现日期**：2026-10-28。`init-environment.sh` 的 full profile 仍将旧 Compare 和 Promotion 的 Nacos 模板列为必需项，和默认运行面已改由 Listing、Marketing 提供能力的现状不一致。
 
 **修复与验证**：从 full profile 必需文件清单移除两个旧模板；`BusinessReviewConfigurationTest` 检查四个当前服务模板仍被要求，旧模板不再是必需项。历史回退文件和 Compare 报告卷仍按 LR-99/157 的排空条件保留。
+
+## KI-225 [FIXED·本提交·P1] 新知识与复盘服务缺少 Auth A2A 信任登记
+
+**发现日期**：2026-10-29。Knowledge 与 Business Review 已拥有独立身份和 Memory caller 配置，但 Auth 的应用与 Nacos 模板没有登记其 A2A 公钥，无法按预期解析信标。
+
+**修复**：在两个 Auth 配置面登记对应身份，并仅授予 `RESOLVE_BEACON`；新增 `FourDomainCallerConfigurationTest`。用户确认旧 Compare 无历史资产，因此同步移除旧 caller 的 Auth、Memory 与 Listing 默认信任配置。运行态是否加载新公钥仍须实际验证。
+
+## KI-226 [FIXED·本提交·P1] Memory 本地模板遗漏新领域 caller
+
+**发现日期**：2026-10-29。Knowledge 与 Business Review 已写入 Memory Nacos 模板，但 Memory 应用自带配置缺少这两项，导致两个配置面不一致。
+
+**修复**：在应用配置登记各自公钥与精确 domain/agent，并扩展 `MemoryV2DeploymentConfigurationTest`，逐一验证应用和 Nacos 两个配置面。运行态仍须验证 Nacos 已加载及服务间真实签名调用。

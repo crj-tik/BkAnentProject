@@ -1416,3 +1416,11 @@
 **根因**：不再需要以旧服务作为当前部署的回退入口；保留可复用测试与源文件直至迁移验证，不以环境中无历史数据替代功能回归证据。
 
 **代码位置**：根 `pom.xml`、`docker-compose.yml`、`ListingConfigurationMatrixTest`；关联 LR-99、KI-115。
+
+## LR-162 新领域服务身份在 Auth 与 Memory 分别登记
+
+**结论**：Knowledge 与 Business Review 在 Auth A2A 中只登记 `RESOLVE_BEACON`，Memory 只登记各自独立的 caller、domain 和 agent；旧 Compare 的默认信任登记已移除。
+
+**根因**：服务公钥、信标操作权限与 Memory 私域分别校验，单独配置某一服务不等于其他验证方已接入；旧服务退出运行后不需要保留默认访问许可。
+
+**代码位置**：`nacos/auth-service.yaml`、`nacos/memory-service.yaml` 及对应服务的 `application.yml`；关联 KI-225、KI-226。
