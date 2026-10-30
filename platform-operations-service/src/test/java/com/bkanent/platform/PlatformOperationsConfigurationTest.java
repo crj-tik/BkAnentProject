@@ -52,5 +52,6 @@ class PlatformOperationsConfigurationTest {
         assertThat(knowledge.getAuthorityPublicKeys()).containsEntry("auth-service-current", "test-public-key");
         assertThat(environment.getProperty("spring.ai.alibaba.a2a.server.card.name")).isEqualTo("platform-operations-agent");
         assertThat(environment.getProperty("spring.ai.mcp.server.enabled")).isEqualTo("false");
+        assertThat(environment.getProperty("business-review.sources.knowledge-base-url")).isNull();
     }
 }

@@ -1417,6 +1417,16 @@
 
 **代码位置**：根 `pom.xml`、`docker-compose.yml`、Listing 比较兼容 DTO/测试、Auth/Memory/RAG 配置、受管迁移 540；关联 LR-99、KI-115、KI-224、KI-227。
 
+## LR-167 复盘域内读取知识保留双重授权
+
+**结论**：复盘读取已发布知识时，在同一验证上下文内分别检查复盘操作和知识读取权限，并由知识服务继续检查可信门店、来源版本、摘要和撤回状态。
+
+**根因**：服务合并消除了知识 HTTP 调用，却不应让拥有复盘权限的用户自动取得知识读取权，也不能把被撤回的来源当作当前事实；知识引用的 revision 和 contentHash 实际位于 knowledgeRef 内。
+
+**代码位置**：`platform-operations-service/.../DomainParallelHttpReadAdapter.java`、`LocalKnowledgeSourceTest.java`；真实数据库和跨服务路径仍待验收。
+
+**关联**：LR-156、LR-163；KI-229；change `consolidate-platform-operations` 任务 2.4、4.2。
+
 ## LR-166 统一 Agent Card 同时维护多个内部技能域
 
 **结论**：一张平台经营 Agent Card 可以发布多个内部技能域，并在技能热更新时一起重建；技能仍保留各自 owner、版本和内容摘要。同名技能或重复 owner 直接拒绝发布。

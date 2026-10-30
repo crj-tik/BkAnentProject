@@ -190,7 +190,6 @@ business-review:
   sources:
     mode: ${BUSINESS_REVIEW_SOURCE_MODE:http}
     listing-base-url: ${BUSINESS_REVIEW_LISTING_BASE_URL:http://listing-master-service:9004}
-    knowledge-base-url: ${BUSINESS_REVIEW_KNOWLEDGE_BASE_URL:http://knowledge-service:9015}
     connect-timeout-ms: 2000
     read-timeout-ms: 5000
   agent:

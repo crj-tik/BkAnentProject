@@ -1,6 +1,10 @@
 package com.bkanent.businessreview.domain;
 
 import com.bkanent.businessreview.domain.ReviewDomain.*;
+import com.bkanent.common.knowledge.KnowledgeRef;
+import com.bkanent.common.knowledge.PublishedCheckRequest;
+import com.bkanent.common.knowledge.PublishedSearchRequest;
+import com.bkanent.knowledge.service.PublishedKnowledgeService;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -29,19 +33,28 @@ public class DomainParallelHttpReadAdapter implements ReviewDatasetPort {
     private final DomainParallelProperties properties;
     private final DomainParallelRequestAuthenticator authenticator;
     private final com.fasterxml.jackson.databind.ObjectMapper mapper;
+    private final PublishedKnowledgeService localKnowledge;
 
     @org.springframework.beans.factory.annotation.Autowired
     public DomainParallelHttpReadAdapter(RestClient.Builder builder, DomainParallelProperties properties,
                                          DomainParallelRequestAuthenticator authenticator,
-                                         com.fasterxml.jackson.databind.ObjectMapper mapper) {
-        this(builder, properties, authenticator, mapper, true);
+                                         com.fasterxml.jackson.databind.ObjectMapper mapper,
+                                         PublishedKnowledgeService localKnowledge) {
+        this(builder, properties, authenticator, mapper, true, localKnowledge);
     }
 
     DomainParallelHttpReadAdapter(RestClient.Builder builder, DomainParallelProperties properties,
                                   DomainParallelRequestAuthenticator authenticator,
                                   com.fasterxml.jackson.databind.ObjectMapper mapper, boolean configureTimeouts) {
+        this(builder, properties, authenticator, mapper, configureTimeouts, null);
+    }
+
+    DomainParallelHttpReadAdapter(RestClient.Builder builder, DomainParallelProperties properties,
+                                  DomainParallelRequestAuthenticator authenticator,
+                                  com.fasterxml.jackson.databind.ObjectMapper mapper, boolean configureTimeouts,
+                                  PublishedKnowledgeService localKnowledge) {
         if (properties.getListingBaseUrl() == null || properties.getListingBaseUrl().isBlank()
-                || properties.getKnowledgeBaseUrl() == null || properties.getKnowledgeBaseUrl().isBlank()) {
+                || (localKnowledge == null && (properties.getKnowledgeBaseUrl() == null || properties.getKnowledgeBaseUrl().isBlank()))) {
             throw new IllegalStateException("Both domain-parallel-v1 source URLs are required in HTTP mode");
         }
         if (configureTimeouts && (properties.getConnectTimeoutMs() < 1 || properties.getReadTimeoutMs() < 1
@@ -49,10 +62,11 @@ public class DomainParallelHttpReadAdapter implements ReviewDatasetPort {
             throw new IllegalStateException("Domain source HTTP timeouts must be between 1 and 60000 ms");
         }
         this.listing = createClient(builder, properties.getListingBaseUrl(), properties, configureTimeouts);
-        this.knowledge = createClient(builder, properties.getKnowledgeBaseUrl(), properties, configureTimeouts);
+        this.knowledge = localKnowledge == null ? createClient(builder, properties.getKnowledgeBaseUrl(), properties, configureTimeouts) : null;
         this.properties = properties;
         this.authenticator = authenticator;
         this.mapper = mapper;
+        this.localKnowledge = localKnowledge;
     }
 
     private RestClient createClient(RestClient.Builder builder, String baseUrl,
@@ -76,10 +90,11 @@ public class DomainParallelHttpReadAdapter implements ReviewDatasetPort {
         Instant observedAt = Instant.now();
         JsonNode listingResponse = post(listing, "/listings/business/v1/search", properties.getListingAudience(),
                 authorizationOperation, Map.of("contractVersion", CONTRACT_VERSION, "keyword", "房源维护", "limit", 20));
-        JsonNode knowledgeResponse = post(knowledge, "/knowledge/v1/published/search", properties.getKnowledgeAudience(),
-                authorizationOperation,
-                Map.of("contractVersion", CONTRACT_VERSION, "problem", "带看停滞或房源维护缺口",
-                        "scene", "store-business-review", "tags", List.of("store", "listing"), "limit", 20));
+        JsonNode knowledgeResponse = localKnowledge == null
+                ? post(knowledge, "/knowledge/v1/published/search", properties.getKnowledgeAudience(), authorizationOperation,
+                    Map.of("contractVersion", CONTRACT_VERSION, "problem", "带看停滞或房源维护缺口",
+                            "scene", "store-business-review", "tags", List.of("store", "listing"), "limit", 20))
+                : localSearch(authorizationOperation);
         List<ReviewFact> facts = new ArrayList<>();
         facts.addAll(mapListing(listingResponse, observedAt));
         facts.addAll(mapKnowledge(knowledgeResponse, observedAt));
@@ -112,8 +127,9 @@ public class DomainParallelHttpReadAdapter implements ReviewDatasetPort {
                 ref.put("contentHash", f.source().contentHash());
             return ref;
         }).toList();
-        JsonNode response = post(client, path, audience, operation,
-                Map.of("contractVersion", CONTRACT_VERSION, "refs", refs));
+        JsonNode response = knowledgeSource && localKnowledge != null
+                ? localCheck(facts, operation)
+                : post(client, path, audience, operation, Map.of("contractVersion", CONTRACT_VERSION, "refs", refs));
         JsonNode items = response.path("data").path("items");
         if (!items.isArray() || items.size() != facts.size())
             throw new ReviewDependencyException("DEPENDENCY_UNAVAILABLE", "Source check response does not match request");
@@ -124,7 +140,7 @@ public class DomainParallelHttpReadAdapter implements ReviewDatasetPort {
                     : requiredText(ref, "sourceId");
             String system = knowledgeSource ? "published-knowledge" : requiredText(ref, "sourceSystem");
             String revision = item.path("expectedRevision").asText(
-                    item.path("revision").asText(ref.path("expectedRevision").asText("")));
+                    item.path("revision").asText(ref.path("expectedRevision").asText(ref.path("revision").asText(""))));
             String key = system + ":" + id + "@" + revision;
             if (!checked.add(key))
                 throw new ReviewDependencyException("DEPENDENCY_UNAVAILABLE", "Source check response contains duplicate references");
@@ -140,6 +156,33 @@ public class DomainParallelHttpReadAdapter implements ReviewDatasetPort {
                 throw new ReviewDependencyException("DEPENDENCY_UNAVAILABLE", "Source check returned an unknown status");
         }
         return true;
+    }
+
+    private JsonNode localSearch(String operation) {
+        try {
+            com.bkanent.common.a2a.VerifiedDomainAuthorization.requireOperation(operation);
+            var data = localKnowledge.search(new PublishedSearchRequest(CONTRACT_VERSION, "带看停滞或房源维护缺口",
+                    "store-business-review", List.of("store", "listing"), null, 20));
+            return mapper.valueToTree(com.bkanent.common.model.ApiResponse.ok(data));
+        } catch (com.bkanent.common.authz.AuthzException failure) {
+            throw new ReviewDependencyException("SOURCE_ACCESS_DENIED", "Knowledge source access was denied");
+        } catch (RuntimeException failure) {
+            throw new ReviewDependencyException("DEPENDENCY_UNAVAILABLE", "Knowledge source is unavailable");
+        }
+    }
+
+    private JsonNode localCheck(List<ReviewFact> facts, String operation) {
+        try {
+            com.bkanent.common.a2a.VerifiedDomainAuthorization.requireOperation(operation);
+            var refs = facts.stream().map(f -> new KnowledgeRef(f.source().sourceId(),
+                    f.source().revision(), f.source().contentHash())).toList();
+            var data = localKnowledge.check(new PublishedCheckRequest(CONTRACT_VERSION, refs));
+            return mapper.valueToTree(com.bkanent.common.model.ApiResponse.ok(data));
+        } catch (com.bkanent.common.authz.AuthzException failure) {
+            throw new ReviewDependencyException("SOURCE_ACCESS_DENIED", "Knowledge source access was denied");
+        } catch (RuntimeException failure) {
+            throw new ReviewDependencyException("DEPENDENCY_UNAVAILABLE", "Knowledge source is unavailable");
+        }
     }
 
     private JsonNode post(RestClient client, String path, String audience, String operation, Map<String, ?> request) {
@@ -204,7 +247,8 @@ public class DomainParallelHttpReadAdapter implements ReviewDatasetPort {
 
     private ReviewFact mapFact(FactKind kind, JsonNode item, String sourceSystem,
                                String sourceId, String summary, Instant fallbackObservedAt) {
-        String revision = requiredText(item, "revision");
+        JsonNode sourceRef = kind == FactKind.KNOWLEDGE ? item.path("knowledgeRef") : item;
+        String revision = item.path("revision").isTextual() ? requiredText(item, "revision") : requiredText(sourceRef, "revision");
         Instant observedAt = parseInstant(requiredText(item, "observedAt"));
         String sourceModeText = requiredText(item, "dataMode");
         DataMode mode;
@@ -212,7 +256,8 @@ public class DomainParallelHttpReadAdapter implements ReviewDatasetPort {
         catch (IllegalArgumentException failure) { mode = DataMode.UNKNOWN; }
         String datasetId = requiredText(item, "datasetId");
         String sourceStatus = kind == FactKind.KNOWLEDGE ? item.path("publicationState").asText("PUBLISHED") : "CURRENT";
-        String hash = item.path("contentHash").isTextual() ? item.path("contentHash").asText() : null;
+        String hash = item.path("contentHash").isTextual() ? item.path("contentHash").asText()
+                : sourceRef.path("contentHash").isTextual() ? sourceRef.path("contentHash").asText() : null;
         Instant eventTime = item.path("eventTime").isTextual()
                 ? parseInstant(item.path("eventTime").asText()) : null;
         Map<String, String> attributes = new LinkedHashMap<>();
