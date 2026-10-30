@@ -1,0 +1,214 @@
+spring:
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}/${MYSQL_DB_PLATFORM_OPERATIONS:bk_platform_operations}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    username: ${PLATFORM_OPERATIONS_DB_USER}
+    password: ${PLATFORM_OPERATIONS_DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: ${REDIS_HOST:10.117.102.54}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DB_BUSINESS:1}
+      timeout: ${REDIS_TIMEOUT:3000ms}
+      lettuce:
+        pool:
+          max-active: ${REDIS_POOL_MAX_ACTIVE:8}
+          max-idle: ${REDIS_POOL_MAX_IDLE:8}
+          min-idle: ${REDIS_POOL_MIN_IDLE:1}
+          max-wait: ${REDIS_POOL_MAX_WAIT:3000ms}
+  ai:
+    deepseek:
+      # KE OpenAI-compatible gateway (Bella). DeepSeek starter drives chat traffic.
+      api-key: ${DEEPSEEK_API_KEY:${KE_API_KEY:}}
+      base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
+      chat:
+        api-key: ${DEEPSEEK_API_KEY:${KE_API_KEY:}}
+        base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
+        completions-path: /chat/completions
+        options:
+          model: ${TRADE_AGENT_MODEL:gpt-5.6-terra}
+          temperature: 0.2
+    alibaba:
+      a2a:
+        server:
+          enabled: true
+          message-url: /a2a
+          agent-card-url: /.well-known/agent.json
+          card:
+            name: platform-operations-agent
+            description: 平台经营分析、门店复盘与知识运营
+            version: 1.0.0
+            url: ${A2A_PUBLIC_BASE_URL}
+            default-input-modes: text,application/json
+            default-output-modes: text,application/json
+            capabilities:
+              streaming: true
+              push-notifications: false
+              state-transition-history: true
+        nacos:
+          server-addr: ${NACOS_SERVER:10.117.102.54:8848}
+          namespace: ${NACOS_NAMESPACE:}
+          username: ${NACOS_USERNAME:}
+          password: ${NACOS_PASSWORD:}
+          registry:
+            enabled: true
+          discovery:
+            enabled: true
+    mcp:
+      server:
+        enabled: ${PLATFORM_OPERATIONS_MCP_ENABLED:false}
+        protocol: ${MCP_SERVER_PROTOCOL:STREAMABLE}
+        name: platform-operations-mcp-server
+        version: ${MCP_SERVER_VERSION:1.0.0}
+        streamable-http:
+          mcp-endpoint: ${MCP_SERVER_MCP_ENDPOINT:/mcp}
+  cloud:
+    nacos:
+      discovery:
+        metadata:
+          agent-id: platform-operations-agent
+          agent-domains: platform-operations
+          agent-runtime-provider: official
+          agent-card-path: /.well-known/agent.json
+          a2a-path: /a2a
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,dependencyReadiness
+
+service:
+  readiness:
+    mode: ${SERVICE_READINESS_MODE:distributed}
+    required-dependencies: ${SERVICE_READINESS_REQUIRED_DEPENDENCIES:nacos,database,redis}
+    endpoints:
+      nacos: "${NACOS_SERVER:10.117.102.54:8848}"
+      database: "${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}"
+      redis: "${REDIS_HOST:10.117.102.54}:${REDIS_PORT:6379}"
+
+mybatis-plus:
+  mapper-locations: classpath:/mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+business:
+  authorization:
+    enabled: ${PLATFORM_OPERATIONS_AUTHORIZATION_ENABLED:true}
+    audience: platform-operations-service
+    authority-public-keys:
+      auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+  ranking:
+    use-redis: true
+  redis:
+    enabled: ${BUSINESS_REDIS_ENABLED:true}
+    ranking-key-prefix: ${BUSINESS_RANKING_KEY_PREFIX:business:ranking:}
+    ranking-ttl-hours: ${BUSINESS_RANKING_TTL_HOURS:24}
+
+trade:
+  agent:
+    model: ${TRADE_AGENT_MODEL:gpt-5.6-terra}
+    temperature: ${TRADE_AGENT_TEMPERATURE:0.2}
+    max-tokens: ${TRADE_AGENT_MAX_TOKENS:4000}
+    system-prompt: |
+      You are a trade feasibility and risk analysis agent for a real estate brokerage platform.
+      Your responsibilities:
+      1. Analyze trade requests based on available business data.
+      2. Assess risk levels (low, medium, high) using KPI data, listing turnover, agent workload, and store dashboard metrics.
+      3. Return a structured JSON assessment with: decision (PROCEED / MANUAL_REVIEW / RISK_ALERT / REJECT), riskLevel, riskFactors (list), supportingData (object), recommendedActions (list), and a summary paragraph.
+      Always call available tools to get real data before making a judgment.
+      If you cannot determine the answer with confidence, set decision to MANUAL_REVIEW.
+      The top-level JSON must also include contentType="trade", summary (string), and nextHints (string array; use [] when no next agent is needed).
+      Return only the JSON object without Markdown fences, internal IDs, reasoning, tool arguments, or extra prose.
+
+a2a:
+  auth:
+    response-key-id: ${AUTH_SERVICE_IDENTITY_KEY_ID:auth-service-current}
+    response-public-key: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+  execution:
+    stream-timeout-ms: 300000
+  memory:
+    compression-enabled: ${PLATFORM_OPERATIONS_MEMORY_V2_COMPRESSION_ENABLED:false}
+    key-id: ${SERVICE_IDENTITY_KEY_ID:platform-operations-service-current}
+    private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
+
+agent:
+  a2a:
+    authorization:
+      enabled: ${PLATFORM_OPERATIONS_A2A_AUTHORIZATION_ENABLED:true}
+      authority-public-keys:
+        auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+      trusted-caller-public-keys:
+        agent-service-current: ${AGENT_SERVICE_IDENTITY_PUBLIC_KEY:}
+
+knowledge:
+  datasource:
+    primary:
+      url: jdbc:mysql://${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}/${MYSQL_DB_PLATFORM_OPERATIONS:bk_platform_operations}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+      username: ${PLATFORM_OPERATIONS_DB_USER}
+      password: ${PLATFORM_OPERATIONS_DB_PASSWORD}
+      driver-class-name: com.mysql.cj.jdbc.Driver
+    source:
+      url: jdbc:mysql://${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}/${MYSQL_DB_PLATFORM_OPERATIONS:bk_platform_operations}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+      username: ${PLATFORM_OPERATIONS_SOURCE_DB_USER}
+      password: ${PLATFORM_OPERATIONS_SOURCE_DB_PASSWORD}
+      driver-class-name: com.mysql.cj.jdbc.Driver
+  source:
+    view-name: knowledge_interview_public_source_v1
+    view-version: 1
+    supported-sanitization-revision: 1
+    max-content-characters: 2000000
+  authorization:
+    enabled: ${PLATFORM_OPERATIONS_AUTHORIZATION_ENABLED:true}
+    audience: platform-operations-service
+    max-body-bytes: 1048576
+    authority-public-keys:
+      auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+
+business-review:
+  authorization:
+    enabled: ${PLATFORM_OPERATIONS_AUTHORIZATION_ENABLED:true}
+    audience: platform-operations-service
+    max-body-bytes: 1048576
+    authority-public-keys:
+      auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+  sources:
+    mode: ${BUSINESS_REVIEW_SOURCE_MODE:http}
+    listing-base-url: ${BUSINESS_REVIEW_LISTING_BASE_URL:http://listing-master-service:9004}
+    knowledge-base-url: ${BUSINESS_REVIEW_KNOWLEDGE_BASE_URL:http://knowledge-service:9015}
+    connect-timeout-ms: 2000
+    read-timeout-ms: 5000
+  agent:
+    system-prompt: |
+      你是门店经营复盘助手。只依据 Memory 已授权上下文和明确提供的来源事实形成待审核草稿。
+      将事实、假设、资料缺口和建议动作分开表达；缺少客户反馈或价格依据时明确说明，不得补造。
+      不得确认计划、回写动作、改变房源/客户/成交状态或宣称业绩因果增长。所有动作由用户通过业务 API 明确触发。
+
+mcp:
+  authorization:
+    server:
+      # Keep disabled until both key sets and the exact per-tool allowlist are configured.
+      enabled: false
+      caller-service: agent-service
+      authority-public-keys:
+        auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+      caller-public-keys:
+        agent-service-current: ${AGENT_SERVICE_IDENTITY_PUBLIC_KEY:}
+      # tool name -> registered permission code; no implicit public tools.
+      tool-operations: {}
+      public-tools: []
