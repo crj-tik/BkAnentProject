@@ -19,6 +19,12 @@ import java.util.List;
 /** 一个公开入口，内部执行器和技能域保持独立。 */
 @Configuration(proxyBeanMethods = false)
 public class PlatformAgentConfiguration {
+    /** 框架需要一个 Agent Bean 才会装配 HTTP 处理器；请求执行仍由下方路由器分支处理。 */
+    @Bean
+    public com.alibaba.cloud.ai.graph.agent.ReactAgent platformEntryAgent(TradeOfficialA2aAgent analytics) {
+        return analytics.tradeReactAgent();
+    }
+
     @Bean
     public AgentExecutor platformAgentExecutor(TradeOfficialA2aAgent analytics,
             BusinessReviewOfficialA2aAgent review, KnowledgeOfficialA2aAgent knowledge,

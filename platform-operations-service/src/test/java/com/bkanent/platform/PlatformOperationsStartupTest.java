@@ -46,6 +46,8 @@ class PlatformOperationsStartupTest {
                     assertThat(context).hasSingleBean(AgentExecutor.class);
                     assertThat(context.getBean(AgentExecutor.class)).isInstanceOf(PlatformAgentRouter.class);
                     assertThat(context).hasSingleBean(AgentCard.class);
+                    assertThat(context).hasSingleBean(com.alibaba.cloud.ai.a2a.core.server.JsonRpcA2aRequestHandler.class);
+                    assertThat(context).hasBean("a2aRouterFunction");
                 });
     }
 }

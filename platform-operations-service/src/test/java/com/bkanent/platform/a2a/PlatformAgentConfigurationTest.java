@@ -28,6 +28,7 @@ class PlatformAgentConfigurationTest {
         var analytics = mock(TradeOfficialA2aAgent.class);
         var review = mock(BusinessReviewOfficialA2aAgent.class);
         var knowledge = mock(KnowledgeOfficialA2aAgent.class);
+        when(analytics.tradeReactAgent()).thenReturn(mock(com.alibaba.cloud.ai.graph.agent.ReactAgent.class));
         when(analytics.tradeA2aAgentExecutor(any(), any())).thenReturn(mock(AgentExecutor.class));
         when(review.businessReviewA2aAgentExecutor(any(), any())).thenReturn(mock(AgentExecutor.class));
         when(knowledge.knowledgeA2aAgentExecutor(any(), any())).thenReturn(mock(AgentExecutor.class));

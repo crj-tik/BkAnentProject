@@ -1806,6 +1806,18 @@
 
 **修复**：在应用配置登记各自公钥与精确 domain/agent，并扩展 `MemoryV2DeploymentConfigurationTest`，逐一验证应用和 Nacos 两个配置面。运行态仍须验证 Nacos 已加载及服务间真实签名调用。
 
+## KI-232 [FIXED·本提交·P1] 平台经营 Agent 已注册但 HTTP 路由缺失
+
+**发现日期**：2026-10-30。统一 Agent 装配只提供执行器和 Card，框架自动配置还要求一个 Agent Bean，导致实际容器启动后 Agent Card 与 A2A 路径返回 404。
+
+**修复与验证**：提供唯一入口 Agent Bean 触发框架处理器装配，实际任务仍由统一路由器按权限分支；启动测试检查处理器和路由。开发预览容器重建后，Agent Card 返回 200，卡片名称为 `platform-operations-agent`；无凭据 A2A 请求返回 `AUTHENTICATION_FAILED`。授权请求的真实端到端链路仍待验收。
+
+## KI-231 [FIXED·本提交·P1] 平台经营就绪检查遗漏 Memory 地址
+
+**发现日期**：2026-10-30。平台经营预览容器要求检查 Memory，但 Nacos 模板没有对应 endpoint，导致进程启动后就绪检查返回 DOWN。
+
+**修复与验证**：补充 `service.readiness.endpoints.memory` 并加入配置绑定测试；开发 Nacos 已发布并回读一致，预览容器 readiness 返回 200、状态 UP。
+
 ## KI-230 [FIXED·本提交·P1] 迁入知识能力仍检查旧 Agent 权限
 
 **发现日期**：2026-10-30。平台经营知识工具的授权检查仍使用旧 `agent.workflow.invoke.knowledge`，即使用户具备新知识分支权限仍会被拒绝。

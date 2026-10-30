@@ -53,5 +53,6 @@ class PlatformOperationsConfigurationTest {
         assertThat(environment.getProperty("spring.ai.alibaba.a2a.server.card.name")).isEqualTo("platform-operations-agent");
         assertThat(environment.getProperty("spring.ai.mcp.server.enabled")).isEqualTo("false");
         assertThat(environment.getProperty("business-review.sources.knowledge-base-url")).isNull();
+        assertThat(environment.getProperty("service.readiness.endpoints.memory")).isEqualTo("http://memory-service:9011");
     }
 }

@@ -96,6 +96,7 @@ service:
       nacos: "${NACOS_SERVER:10.117.102.54:8848}"
       database: "${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}"
       redis: "${REDIS_HOST:10.117.102.54}:${REDIS_PORT:6379}"
+      memory: "${MEMORY_SERVICE_BASE_URL:http://memory-service:9011}"
 
 mybatis-plus:
   mapper-locations: classpath:/mapper/*.xml
