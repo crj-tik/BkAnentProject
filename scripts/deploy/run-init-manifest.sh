@@ -68,13 +68,18 @@ while IFS=$'\t' read -r order phase version db file checksum check check_checksu
   case "$db" in
     bk_contract|bk_settlement|bk_business|bk_business_review|bk_knowledge)
       if [ "$retirement_ledger_exists" = 1 ]; then
-        retired="$(printf "SELECT CONCAT(file_sha256, ':', check_sha256) FROM bk_auth.retired_schema_migration WHERE schema_name='%s' AND migration_id='%s';\n" "$db" "$version" | mysql_sql)"
+        retired="$(printf "SELECT CONCAT(file_sha256, ':', check_sha256, ':', retirement_state) FROM bk_auth.retired_schema_migration WHERE schema_name='%s' AND migration_id='%s';\n" "$db" "$version" | mysql_sql)"
         if [ -n "$retired" ]; then
-          [ "$retired" = "$checksum:$check_checksum" ] || { printf 'Retired migration checksum changed: %s\n' "$version" >&2; exit 65; }
+          case "$retired" in
+            "$checksum:$check_checksum:prepared"|"$checksum:$check_checksum:retired") ;;
+            *) printf 'Retired migration checksum or state changed: %s\n' "$version" >&2; exit 65 ;;
+          esac
           schema_present="$(printf "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='%s';\n" "$db" | mysql_sql)"
-          [ "$schema_present" = 0 ] || { printf 'Retired schema unexpectedly exists: %s\n' "$db" >&2; exit 65; }
-          printf 'Verified retired migration %s\n' "$version"
-          continue
+          if [ "$schema_present" = 0 ]; then
+            printf 'Verified retired migration %s\n' "$version"
+            continue
+          fi
+          [ "${retired##*:}" = prepared ] || { printf 'Retired schema unexpectedly exists: %s\n' "$db" >&2; exit 65; }
         fi
       fi
       ;;
