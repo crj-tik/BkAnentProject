@@ -52,6 +52,10 @@ mysql_sql() {
     MYSQL_PWD="${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}" mysql -uroot --batch --skip-column-names --default-character-set=utf8mb4
   fi
 }
+retirement_ledger_exists=0
+if [ "$DRY_RUN" -eq 0 ]; then
+  retirement_ledger_exists="$(printf "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='bk_auth' AND table_name='retired_schema_migration';\n" | mysql_sql)"
+fi
 while IFS=$'\t' read -r order phase version db file checksum check check_checksum extra; do
   check_checksum="${check_checksum%$'\r'}"
   extra="${extra%$'\r'}"
@@ -59,6 +63,22 @@ while IFS=$'\t' read -r order phase version db file checksum check check_checksu
   if [ "$MODE" = upgrade ] && [ "$phase" = fresh ]; then continue; fi
   printf '%s %s -> %s [%s]\n' "$order" "$version" "$db" "$phase"
   [ "$DRY_RUN" -eq 0 ] || continue
+  # A reviewed retirement preserves exact historical per-schema checksums centrally before dropping a schema.
+  # Never silently accept a re-created retired database or an altered historical migration.
+  case "$db" in
+    bk_contract|bk_settlement|bk_business|bk_business_review|bk_knowledge)
+      if [ "$retirement_ledger_exists" = 1 ]; then
+        retired="$(printf "SELECT CONCAT(file_sha256, ':', check_sha256) FROM bk_auth.retired_schema_migration WHERE schema_name='%s' AND migration_id='%s';\n" "$db" "$version" | mysql_sql)"
+        if [ -n "$retired" ]; then
+          [ "$retired" = "$checksum:$check_checksum" ] || { printf 'Retired migration checksum changed: %s\n' "$version" >&2; exit 65; }
+          schema_present="$(printf "SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='%s';\n" "$db" | mysql_sql)"
+          [ "$schema_present" = 0 ] || { printf 'Retired schema unexpectedly exists: %s\n' "$db" >&2; exit 65; }
+          printf 'Verified retired migration %s\n' "$version"
+          continue
+        fi
+      fi
+      ;;
+  esac
   # These literal identifiers come only from the closed, validated manifest above.
   exists="$(printf "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='%s' AND table_name='bk_schema_migration';\n" "$db" | mysql_sql)"
   if [ "$exists" = 1 ]; then
