@@ -1423,7 +1423,7 @@
 
 **根因**：合并成一个外部入口后，模型或请求不能仅凭自报能力取得其他分支的工具和记忆；知识输入防护与各分支的 Memory 生命周期也不能被绕开。请求体完整性由现有 A2A 授权绑定校验，能力路由仍须自行检查具体操作。
 
-**代码位置**：`platform-operations-service/.../PlatformAgentRouter.java` 及其测试。路由器目前尚未注册到运行服务，三个真实分支、Memory 隔离、Auth 操作登记及完整链路仍待实现和验收。
+**代码位置**：`platform-operations-service/.../PlatformAgentRouter.java` 及其测试；`sql/migrations/20261029_platform_operations_authorization.sql` 登记能力操作但不授予角色。路由器目前尚未注册到运行服务，三个真实分支、Memory 隔离及完整链路仍待实现和验收。
 
 **关联**：LR-117、LR-160、LR-163；change `consolidate-platform-operations` 任务 2.5、4.2。
 

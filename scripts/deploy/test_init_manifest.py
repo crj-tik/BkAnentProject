@@ -30,6 +30,7 @@ EXPECTED_PLATFORM_MIGRATIONS = {
     ("platform-operations-database-20261029-v1", "bk_auth", "sql/migrations/20261029_platform_operations_database.sql"),
     ("platform-operations-schema-20261029-v1", "bk_platform_operations", "sql/migrations/20261029_platform_operations_schema.sql"),
     ("platform-operations-view-owner-20261029-v1", "bk_platform_operations", "sql/migrations/20261029_platform_operations_view_owner.sql"),
+    ("platform-operations-authorization-20261029-v1", "bk_auth", "sql/migrations/20261029_platform_operations_authorization.sql"),
 }
 
 BASELINE_PERMISSION_CODES = {
