@@ -4,10 +4,13 @@ import com.bkanent.businessreview.domain.ReviewDomain.DataMode;
 import com.bkanent.common.a2a.VerifiedKnowledgeContext;
 import com.bkanent.knowledge.domain.KnowledgeCaseRecord;
 import com.bkanent.knowledge.domain.KnowledgeRevisionRecord;
+import com.bkanent.knowledge.domain.KnowledgeSourceRecord;
 import com.bkanent.knowledge.domain.KnowledgeState;
 import com.bkanent.knowledge.persistence.KnowledgeRepository;
 import com.bkanent.knowledge.service.PublishedKnowledgeService;
 import com.bkanent.knowledge.source.InterviewTranscriptSource;
+import com.bkanent.knowledge.source.SourceBinding;
+import com.bkanent.knowledge.source.SourceState;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.junit.jupiter.api.Test;
@@ -31,7 +34,8 @@ class LocalKnowledgeSourceTest {
         String hash = "a".repeat(64);
         var now = OffsetDateTime.parse("2026-10-30T00:00:00Z");
         var repository = mock(KnowledgeRepository.class);
-        var service = new PublishedKnowledgeService(repository, mock(InterviewTranscriptSource.class));
+        var interview = mock(InterviewTranscriptSource.class);
+        var service = new PublishedKnowledgeService(repository, interview);
         when(repository.search("STORE", "1", 23L, "带看停滞或房源维护缺口", "store-business-review",
                 List.of("store", "listing"), 0, 21)).thenReturn(List.of(
                 new KnowledgeRepository.KnowledgeSearchRow("case-1", 1, hash, "摘要", "SIMULATED", now)));
@@ -40,7 +44,10 @@ class LocalKnowledgeSourceTest {
         when(repository.findCase("case-1", false)).thenReturn(published);
         when(repository.findRevision("case-1", 1)).thenReturn(new KnowledgeRevisionRecord(1, "case-1", 1,
                 hash, "摘要", null, "SIMULATED", "UNVERIFIED", "b".repeat(64), "rules-v1", "2", now));
-        when(repository.findSources("case-1", 1)).thenReturn(List.of());
+        var binding = new SourceBinding("101", "b".repeat(64), "c".repeat(64), 1, 1, 1, "SIMULATED");
+        when(repository.findSources("case-1", 1)).thenReturn(List.of(new KnowledgeSourceRecord(binding,
+                "d".repeat(64), 0, 3)));
+        when(interview.check("101", binding)).thenReturn(SourceState.CURRENT);
 
         var builder = RestClient.builder();
         var server = MockRestServiceServer.bindTo(builder).build();
@@ -59,6 +66,13 @@ class LocalKnowledgeSourceTest {
                 assertThat(fact.source().contentHash()).isEqualTo(hash);
             });
             assertThat(adapter.sourcesCurrent(dataset, "business.review.read.store")).isTrue();
+            try (var otherStore = VerifiedKnowledgeContext.open(List.of("business.review.read.store", "knowledge.case.read.store"),
+                    Map.of("STORE", 24L))) {
+                assertThat(adapter.sourcesCurrent(dataset, "business.review.read.store")).isFalse();
+            }
+            when(interview.check("101", binding)).thenReturn(SourceState.NOT_ACCESSIBLE);
+            assertThat(adapter.sourcesCurrent(dataset, "business.review.read.store")).isFalse();
+            when(interview.check("101", binding)).thenReturn(SourceState.CURRENT);
             when(repository.findCase("case-1", false)).thenReturn(null);
             assertThat(adapter.sourcesCurrent(dataset, "business.review.read.store")).isFalse();
         }
