@@ -46,6 +46,14 @@ memory:
         experience-governance-publisher: ${INTERVIEW_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
         allowed-agents-by-domain:
           interview: [interview-agent]
+      platform-operations-service:
+        public-keys:
+          platform-operations-service-current: ${PLATFORM_OPERATIONS_SERVICE_IDENTITY_PUBLIC_KEY:}
+        service-delivery: true
+        allowed-agents-by-domain:
+          trade: [platform-operations-analytics]
+          business-review: [platform-operations-review]
+          knowledge: [platform-operations-knowledge]
       knowledge-service:
         public-keys:
           knowledge-service-current: ${KNOWLEDGE_SERVICE_IDENTITY_PUBLIC_KEY:}

@@ -52,6 +52,22 @@ class MemoryV2DeploymentConfigurationTest {
         }
     }
 
+    @Test void platformOperationsHasOnlyItsThreeSeparatedMemoryIdentities() throws Exception {
+        var resources = Set.of(new ClassPathResource("application.yml"),
+                new FileSystemResource(Path.of(System.getProperty("maven.multiModuleProjectDirectory"), "nacos", "memory-service.yaml")));
+        for (Resource resource : resources) {
+            var caller = bindCaller(resource, "platform-operations-service",
+                    Map.of("PLATFORM_OPERATIONS_SERVICE_IDENTITY_PUBLIC_KEY", "fixture-public-key"));
+            assertEquals(Map.of("platform-operations-service-current", "fixture-public-key"), caller.getPublicKeys());
+            assertTrue(caller.isServiceDelivery());
+            assertEquals(Map.of("trade", Set.of("platform-operations-analytics"),
+                    "business-review", Set.of("platform-operations-review"),
+                    "knowledge", Set.of("platform-operations-knowledge")), caller.getAllowedAgentsByDomain());
+            assertFalse(caller.isExperienceOutcomePublisher());
+            assertFalse(caller.isExperienceGovernancePublisher());
+        }
+    }
+
     @Test void domainOutcomePublisherFlagsRemainIndependentAndDefaultOff() throws Exception {
         var resources = Set.of(new ClassPathResource("application.yml"),
                 new FileSystemResource(Path.of(System.getProperty("maven.multiModuleProjectDirectory"),

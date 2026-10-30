@@ -14,7 +14,7 @@ class FourDomainCallerConfigurationTest {
         Path root = Path.of(System.getProperty("maven.multiModuleProjectDirectory"));
         for (String filename : new String[]{"nacos/auth-service.yaml", "auth-service/src/main/resources/application.yml"}) {
             String yaml = Files.readString(root.resolve(filename)).replace("\r\n", "\n");
-            for (String service : new String[]{"knowledge-service", "business-review-service"}) {
+            for (String service : new String[]{"knowledge-service", "business-review-service", "platform-operations-service"}) {
                 String key = service.replace('-', '_').toUpperCase() + "_IDENTITY_PUBLIC_KEY";
                 assertTrue(yaml.contains(service + "-current:\n        caller-service: " + service
                         + "\n        public-key: ${" + key + ":}\n        allowed-operations: [RESOLVE_BEACON]"), filename);
