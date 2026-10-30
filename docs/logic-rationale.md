@@ -1423,7 +1423,7 @@
 
 **根因**：现有迁移账本存放在各业务库中，直接删除数据库会同时删除执行记录，使升级重跑无法识别历史迁移，甚至在空库初始化时重建已退役业务。数据库 DDL 会隐式提交，因此准备与完成之间中断时也必须能继续执行。
 
-**代码位置**：`scripts/deploy/run-init-manifest.sh`、`scripts/deploy/test_retired_migration_runner.py`。退役迁移及账本创建仍待追加和实际验证。
+**代码位置**：`scripts/deploy/run-init-manifest.sh`、`scripts/deploy/test_retired_migration_runner.py`、`sql/migrations/20261030_retire_contract_settlement_databases.sql`。合同与结算的退役迁移已在临时 MySQL 和开发库验证，其他旧库与完整空库初始化仍待验收。
 
 **关联**：change `consolidate-platform-operations` 任务 3.1–3.2、4.1。
 

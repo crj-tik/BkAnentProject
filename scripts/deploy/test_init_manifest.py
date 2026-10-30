@@ -31,6 +31,7 @@ EXPECTED_PLATFORM_MIGRATIONS = {
     ("platform-operations-schema-20261029-v1", "bk_platform_operations", "sql/migrations/20261029_platform_operations_schema.sql"),
     ("platform-operations-view-owner-20261029-v1", "bk_platform_operations", "sql/migrations/20261029_platform_operations_view_owner.sql"),
     ("platform-operations-authorization-20261029-v1", "bk_auth", "sql/migrations/20261029_platform_operations_authorization.sql"),
+    ("retire-contract-settlement-databases-20261030-v1", "bk_auth", "sql/migrations/20261030_retire_contract_settlement_databases.sql"),
 }
 
 BASELINE_PERMISSION_CODES = {
@@ -47,6 +48,7 @@ BASELINE_PERMISSION_CODES = {
 
 BASELINE_RETIREMENT_MIGRATION = "sql/migrations/20261028_baseline_permission_retirement.sql"
 LEGACY_RETIREMENT_MIGRATION = "sql/migrations/20261029_legacy_compare_promotion_retirement.sql"
+CONTRACT_SETTLEMENT_RETIREMENT = "sql/migrations/20261030_retire_contract_settlement_databases.sql"
 
 EXPECTED_SUPPORT_MIGRATIONS = {
     ("interview-director-command-20260930-v1", "bk_interview", "sql/migrations/20260930_interview_director_command.sql"),
@@ -183,14 +185,23 @@ def main() -> None:
         if re.search(r"(?im)^\s*(DROP TABLE|TRUNCATE)\b", migration):
             fail(f"migration must not drop or truncate data: {relative}")
         if re.search(r"(?im)^\s*DROP DATABASE\b", migration):
-            if relative != LEGACY_RETIREMENT_MIGRATION or not all(
+            reviewed_promotion = relative == LEGACY_RETIREMENT_MIGRATION and all(
                 marker in migration for marker in (
                     "IF @legacy_domain_retirement THEN",
                     "IF total_rows <> 0 THEN",
                     "SIGNAL SQLSTATE '45000'",
                     "DROP DATABASE bk_promotion;",
                 )
-            ):
+            )
+            reviewed_contract = relative == CONTRACT_SETTLEMENT_RETIREMENT and all(
+                marker in migration for marker in (
+                    "IF total_business_rows <> 0 THEN", "SIGNAL SQLSTATE '45000'",
+                    "retired_schema_migration", "DROP DATABASE IF EXISTS bk_contract;",
+                    "DROP DATABASE IF EXISTS bk_settlement;",
+                )
+            ) and set(re.findall(r"(?im)^\s*DROP DATABASE IF EXISTS (\w+);", migration)) == {
+                "bk_contract", "bk_settlement"}
+            if not reviewed_promotion and not reviewed_contract:
                 fail(f"unreviewed database retirement or missing empty-database guard: {relative}")
         delete_statements = re.findall(r"(?ims)^\s*DELETE\s+FROM\s+([a-z0-9_]+)(.*?);", migration)
         if delete_statements:
