@@ -1806,6 +1806,12 @@
 
 **修复**：在应用配置登记各自公钥与精确 domain/agent，并扩展 `MemoryV2DeploymentConfigurationTest`，逐一验证应用和 Nacos 两个配置面。运行态仍须验证 Nacos 已加载及服务间真实签名调用。
 
+## KI-230 [FIXED·本提交·P1] 迁入知识能力仍检查旧 Agent 权限
+
+**发现日期**：2026-10-30。平台经营知识工具的授权检查仍使用旧 `agent.workflow.invoke.knowledge`，即使用户具备新知识分支权限仍会被拒绝。
+
+**修复与验证**：改为 `agent.workflow.invoke.platform-operations.knowledge`；测试同时验证旧权限被拒绝和新权限可通过。真实 Agent 调用仍需联合验收。
+
 ## KI-229 [FIXED·本提交·P1] 复盘知识适配器与知识来源引用格式不一致
 
 **发现日期**：2026-10-30。复盘适配器期望知识响应的 revision 和 contentHash 位于顶层，但实际已发布知识契约将它们放在 knowledgeRef 中，导致有效知识无法正确映射和核验。

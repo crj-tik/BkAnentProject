@@ -16,7 +16,7 @@ import java.util.function.Consumer;
 
 /** Routes one public Agent to isolated execution branches after an exact authorization check. */
 public final class PlatformAgentRouter implements AgentExecutor {
-    public static final String METADATA_KEY = "platformCapability";
+    public static final String METADATA_KEY = com.bkanent.common.agent.PlatformCapability.KEY;
     private static final Map<String, String> OPERATIONS = Map.of(
             "analytics", "agent.workflow.invoke.platform-operations.analytics",
             "review", "agent.workflow.invoke.platform-operations.review",

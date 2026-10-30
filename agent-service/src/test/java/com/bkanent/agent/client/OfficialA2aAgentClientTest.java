@@ -46,12 +46,30 @@ import org.mockito.ArgumentCaptor;
 class OfficialA2aAgentClientTest {
 
     @Test
+    void platformCapabilityRequiresItsExactPermissionBeforeTransport() {
+        var session = mock(com.bkanent.common.authz.AuthorizationSession.class);
+        var request = new AgentTaskInvokeRequest("session", "task", "run", "trace", "supervisor-agent",
+                "platform-operations-agent", null, null, "复盘", Map.of("platformCapability", "review"),
+                List.of(), List.of(), "json", "call", false);
+        org.mockito.Mockito.doThrow(new AuthzException(AuthzErrorCode.PERMISSION_DENIED))
+                .when(session).requirePermission("agent.workflow.invoke.platform-operations.review");
+        assertThatThrownBy(() -> OfficialA2aAgentClient.requirePlatformCapability(session, request))
+                .isInstanceOf(AuthzException.class)
+                .satisfies(failure -> assertThat(((AuthzException) failure).code()).isEqualTo(AuthzErrorCode.PERMISSION_DENIED));
+        verify(session).requirePermission("agent.workflow.invoke.platform-operations.review");
+    }
+
+    @Test
     void knowledgeAgentUsesTheKnowledgeServiceAudience() {
         var knowledge = new RegisteredAgentDescriptor("knowledge-agent", "http://127.0.0.1:9015",
                 "/.well-known/agent.json", "/a2a", AgentRuntimeType.ALIBABA_A2A,
                 AgentDescriptorSource.STATIC_CONFIG, null, Map.of());
 
         assertThat(OfficialA2aAgentClient.audienceFor(knowledge)).isEqualTo("knowledge-service");
+        var platform = new RegisteredAgentDescriptor("platform-operations-agent", "http://platform:9010",
+                "/.well-known/agent.json", "/a2a", AgentRuntimeType.ALIBABA_A2A,
+                AgentDescriptorSource.STATIC_CONFIG, null, Map.of());
+        assertThat(OfficialA2aAgentClient.audienceFor(platform)).isEqualTo("platform-operations-service");
     }
 
     @Test

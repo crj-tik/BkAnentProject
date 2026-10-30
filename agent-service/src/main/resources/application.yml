@@ -50,6 +50,7 @@ agent:
     capability-permissions:
       "[local:milvusKnowledgeSearch]": agent.rag.search
       "[a2a:listing-agent]": listing.read
+      "[a2a:platform-operations-agent]": agent.workflow.invoke.platform-operations
     # Only exact local capability IDs belong here; every call still needs a signed actor and bound run.
     baseline-capabilities: ${AGENT_AUTHORIZATION_BASELINE_CAPABILITIES:}
     # Keep user-delegated MCP destinations closed until static streamable-http connections exist.

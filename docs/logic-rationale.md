@@ -1439,7 +1439,7 @@
 
 ## LR-165 平台经营单入口先验能力再分支
 
-**结论**：平台经营 Agent 的路由器根据 A2A 请求 metadata 中的精确 `platformCapability` 选择 analytics、review 或 knowledge，先校验对应签名操作，再调用该分支；取消请求委托给持有任务的执行器核验任务凭据。
+**结论**：平台经营 Agent 的路由器根据 A2A 请求 metadata 中的精确 `platformCapability` 选择 analytics、review 或 knowledge，先校验对应签名操作，再调用该分支；Supervisor 显式选择能力，调用客户端在签名前再次校验对应权限。取消请求委托给持有任务的执行器核验任务凭据。
 
 **根因**：合并成一个外部入口后，模型或请求不能仅凭自报能力取得其他分支的工具和记忆；知识输入防护与各分支的 Memory 生命周期也不能被绕开。请求体完整性由现有 A2A 授权绑定校验，能力路由仍须自行检查具体操作。
 

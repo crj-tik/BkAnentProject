@@ -37,6 +37,10 @@ public class SupervisorCapabilityCatalog {
               "name":{"type":"string"},"version":{"type":"string","description":"仅填已发布版本，不确定时省略"}},"required":["name"],"additionalProperties":false}},
              "required":["instruction"],"additionalProperties":false}
             """;
+    private static final String PLATFORM_A2A_SCHEMA = A2A_SCHEMA
+            .replace("\"context\":{\"type\":\"object\"}",
+                    "\"platformCapability\":{\"type\":\"string\",\"enum\":[\"analytics\",\"review\",\"knowledge\"]},\"context\":{\"type\":\"object\"}")
+            .replace("\"required\":[\"instruction\"]", "\"required\":[\"instruction\",\"platformCapability\"]");
     private final AgentRegistry agents;
     private final AgentMcpClient mcp;
     private final AgentPermissionService permissions;
@@ -59,7 +63,8 @@ public class SupervisorCapabilityCatalog {
             var card = descriptor.agentCard();
             String description = card.description() + "\nTarget: " + descriptor.agentId() + "\nSkills: " + card.skillDescriptors()
                     + "\nExplicit skill publication: " + card.capabilities().getOrDefault("extensions", List.of());
-            var callback = callback(id, description, A2A_SCHEMA, (arguments, context) ->
+            var callback = callback(id, description, com.bkanent.common.agent.PlatformCapability.AGENT_ID.equals(descriptor.agentId())
+                    ? PLATFORM_A2A_SCHEMA : A2A_SCHEMA, (arguments, context) ->
                     invokeAgent(descriptor.agentId(), arguments, context));
             add(result, new SupervisorCapability(id, "a2a", descriptor.agentId(), card.version(), callback));
         }
@@ -142,6 +147,10 @@ public class SupervisorCapabilityCatalog {
         }
         Map<String, Object> structured = new LinkedHashMap<>();
         if (arguments.get("context") instanceof Map<?, ?> raw) raw.forEach((key, value) -> structured.put(String.valueOf(key), value));
+        if (com.bkanent.common.agent.PlatformCapability.AGENT_ID.equals(agentId)) {
+            structured.put(com.bkanent.common.agent.PlatformCapability.KEY,
+                    com.bkanent.common.agent.PlatformCapability.require(arguments.get(com.bkanent.common.agent.PlatformCapability.KEY)));
+        }
         structured.put("userId", actor);
         structured.put("parentSkill", context.getOrDefault("parentSkill", Map.of()));
         SkillSelection skill = resolveChildSkill(descriptor, arguments.get("skill"));
@@ -163,6 +172,9 @@ public class SupervisorCapabilityCatalog {
     public void validateArguments(SupervisorCapability capability, Map<String, Object> arguments) {
         if (!"a2a".equals(capability.protocol())) return;
         var descriptor = agents.getByAgentId(capability.target()).orElseThrow(() -> new IllegalStateException("CAPABILITY_UNAVAILABLE"));
+        if (com.bkanent.common.agent.PlatformCapability.AGENT_ID.equals(descriptor.agentId())) {
+            com.bkanent.common.agent.PlatformCapability.require(arguments.get(com.bkanent.common.agent.PlatformCapability.KEY));
+        }
         resolveChildSkill(descriptor, arguments.get("skill"));
     }
 

@@ -14,6 +14,18 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class KnowledgeAuthorizationFailClosedTest {
     @Test
+    void platformKnowledgeAgentRequiresItsNewCapabilityPermission() {
+        try (var ignored = com.bkanent.common.a2a.VerifiedKnowledgeContext.open(
+                java.util.List.of("agent.workflow.invoke.knowledge"), java.util.Map.of())) {
+            org.assertj.core.api.Assertions.assertThatThrownBy(KnowledgeAuthorization::requireAgentInvocation)
+                    .isInstanceOf(com.bkanent.common.authz.AuthzException.class);
+        }
+        try (var ignored = com.bkanent.common.a2a.VerifiedKnowledgeContext.open(
+                java.util.List.of("agent.workflow.invoke.platform-operations.knowledge"), java.util.Map.of())) {
+            KnowledgeAuthorization.requireAgentInvocation();
+        }
+    }
+    @Test
     void ownActorComesFromVerifiedContextAndRequiresTheExactOperation() {
         try (var ignored = VerifiedKnowledgeContext.open(List.of(KnowledgeOperations.CREATE_OWN), Map.of())) {
             assertThat(KnowledgeAuthorization.requireOwnActor(KnowledgeOperations.CREATE_OWN)).isEqualTo("1");

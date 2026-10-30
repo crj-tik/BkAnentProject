@@ -43,6 +43,12 @@ public final class OfficialA2aMetadataMapper {
             metadata.put(THREAD_ID_KEY, threadId);
         }
         metadata.put(STREAMING_KEY, streaming);
+        if (com.bkanent.common.agent.PlatformCapability.AGENT_ID.equals(request.targetAgentId())) {
+            Object selection = request.structuredContext() == null ? null
+                    : request.structuredContext().get(com.bkanent.common.agent.PlatformCapability.KEY);
+            metadata.put(com.bkanent.common.agent.PlatformCapability.KEY,
+                    com.bkanent.common.agent.PlatformCapability.require(selection));
+        }
 
         Map<String, Object> supervisor = new LinkedHashMap<>();
         supervisor.put("version", VERSION);

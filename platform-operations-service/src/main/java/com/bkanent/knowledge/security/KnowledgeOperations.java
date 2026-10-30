@@ -13,7 +13,7 @@ public final class KnowledgeOperations {
     public static final String WITHDRAW_STORE = "knowledge.case.withdraw.store";
     public static final String READ_OWN = "knowledge.case.read.own";
     public static final String READ_STORE = "knowledge.case.read.store";
-    public static final String AGENT_INVOKE = "agent.workflow.invoke.knowledge";
+    public static final String AGENT_INVOKE = "agent.workflow.invoke.platform-operations.knowledge";
 
     private KnowledgeOperations() { }
 }

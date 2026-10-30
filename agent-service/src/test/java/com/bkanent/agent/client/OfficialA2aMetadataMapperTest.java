@@ -11,8 +11,23 @@ import java.util.Map;
 import java.time.Instant;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class OfficialA2aMetadataMapperTest {
+
+    @Test
+    void platformBranchIsRequiredAndIncludedInSignedRequestMetadata() {
+        var request = new AgentTaskInvokeRequest("session", "task", "run", "trace", "supervisor-agent",
+                "platform-operations-agent", null, null, "分析", Map.of("platformCapability", "analytics"),
+                List.of(), List.of(), "json", "call", false);
+        assertThat(OfficialA2aMetadataMapper.toMetadata(request, false, true))
+                .containsEntry("platformCapability", "analytics");
+        var invalid = new AgentTaskInvokeRequest("session", "task", "run", "trace", "supervisor-agent",
+                "platform-operations-agent", null, null, "分析", Map.of("platformCapability", "other"),
+                List.of(), List.of(), "json", "call", false);
+        assertThatThrownBy(() -> OfficialA2aMetadataMapper.toMetadata(invalid, false, true))
+                .hasMessage("PLATFORM_CAPABILITY_INVALID");
+    }
 
     @Test
     void explicitChildSelectionAndParentFactsRemainSeparateOnTheWire() {

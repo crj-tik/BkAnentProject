@@ -133,6 +133,7 @@ agent:
       "[a2a:listing-agent]": listing.read
       "[a2a:knowledge-agent]": agent.workflow.invoke.knowledge
       "[a2a:business-review-agent]": agent.workflow.invoke.business-review
+      "[a2a:platform-operations-agent]": agent.workflow.invoke.platform-operations
     # Only exact local capability IDs belong here; every call still needs a signed actor and bound run.
     baseline-capabilities: ${AGENT_AUTHORIZATION_BASELINE_CAPABILITIES:}
     # Keep user-delegated MCP destinations closed until static streamable-http connections exist.
@@ -259,6 +260,21 @@ agent:
     discovery-enabled: ${AGENT_DISCOVERY_ENABLED:true}
     agent-card-path: ${AGENT_CARD_PATH:/.well-known/agent.json}
     agents:
+      platform-operations-agent:
+        agent-id: platform-operations-agent
+        name: platform-operations-agent
+        description: 平台经营分析、门店复盘与知识运营
+        version: 1.0.0
+        runtime-provider: official
+        service-id: platform-operations-service
+        base-url: ${PLATFORM_OPERATIONS_SERVICE_BASE_URL:http://platform-operations-service:9010}
+        agent-card-path: /.well-known/agent.json
+        a2a-path: /a2a
+        supported-domains: [platform-operations]
+        supports-streaming: true
+        supports-async-task: true
+        input-modes: [text, application/json]
+        output-modes: [text, application/json]
       knowledge-agent:
         agent-id: knowledge-agent
         name: knowledge-agent

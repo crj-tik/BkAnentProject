@@ -111,6 +111,9 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
             String operation = authorizationProperties.permissionForCapability(capability);
             if (operation == null) throw new AuthzException(AuthzErrorCode.PERMISSION_DENIED);
             entry.session().requirePermission(operation);
+            if (com.bkanent.common.agent.PlatformCapability.AGENT_ID.equals(descriptor.agentId())) {
+                requirePlatformCapability(entry.session(), request);
+            }
             return new TransportScope(com.bkanent.common.a2a.BeaconA2aHttpClient.Identity.versioned(audience,
                     entry.session().context(), entry.session().freshness(), operation,
                     authorizationProperties.getCallerService(), authorizationProperties.getKeyId(),
@@ -121,6 +124,12 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
         String audience = audienceFor(descriptor);
         return new TransportScope(new com.bkanent.common.a2a.BeaconA2aHttpClient.Identity(actor, audience,
                 credentials.credentials(actor), credentials.expiresAtEpochSecond(actor)));
+    }
+    static void requirePlatformCapability(com.bkanent.common.authz.AuthorizationSession session,
+                                          AgentTaskInvokeRequest request) {
+        Object selection = request == null || request.structuredContext() == null ? null
+                : request.structuredContext().get(com.bkanent.common.agent.PlatformCapability.KEY);
+        session.requirePermission(com.bkanent.common.agent.PlatformCapability.operation(selection));
     }
     private void verifyCurrent(AgentTaskInvokeRequest request) {
         if (authorizationProperties != null && authorizationProperties.isEnabled()) {
@@ -142,6 +151,7 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
             case "media-agent" -> "media-worker-service";
             case "interview-agent" -> "interview-service";
             case "knowledge-agent" -> "knowledge-service";
+            case "platform-operations-agent" -> "platform-operations-service";
             default -> throw new com.bkanent.common.rag.RagException(com.bkanent.common.rag.RagErrorCode.FORBIDDEN);
         };
     }

@@ -33,6 +33,32 @@ class SupervisorCapabilityCatalogTest {
             execution, ToolCallbackProvider.from(local), new ObjectMapper());
 
     @Test
+    void platformAgentRequiresExplicitCapabilityAndIgnoresConflictingContext() {
+        var card = new com.bkanent.common.agent.AgentCard("platform-operations-agent", "platform-operations", "平台经营", "1",
+                List.of(), List.of("platform-operations"), false, true, "http://platform/a2a",
+                List.of("text"), List.of("application/json"), List.of(), Map.of(), "JSONRPC", "0.2.5");
+        var descriptor = new com.bkanent.agent.registry.RegisteredAgentDescriptor("platform-operations-agent", "http://platform",
+                "/.well-known/agent.json", "/a2a", com.bkanent.agent.registry.AgentRuntimeType.ALIBABA_A2A,
+                com.bkanent.agent.registry.AgentDescriptorSource.DISCOVERED_CARD, card, Map.of());
+        when(agents.listDescriptors()).thenReturn(List.of(descriptor));
+        when(agents.getByAgentId("platform-operations-agent")).thenReturn(java.util.Optional.of(descriptor));
+        when(permissions.canInvokeChildAgent("1", descriptor)).thenReturn(true);
+        when(execution.execute(eq(descriptor), any(), eq("tool"), anyMap())).thenReturn(
+                new com.bkanent.common.agent.AgentTaskInvokeResponse("session", "task", "platform-operations-agent",
+                        "COMPLETED", Map.of(), List.of(), List.of(), "ok", "trace"));
+        var capability = catalog.snapshot("1", false).get("a2a:platform-operations-agent");
+        assertThat(capability.callback().getToolDefinition().inputSchema()).contains("platformCapability", "analytics", "review", "knowledge");
+        assertThatThrownBy(() -> catalog.validateArguments(capability, Map.of("instruction", "分析")))
+                .hasMessage("PLATFORM_CAPABILITY_INVALID");
+        var context = new ToolContext(Map.of("userId", "1", "runId", "run", "callId", "call",
+                "sessionId", "session", "traceId", "trace"));
+        capability.callback().call("{\"instruction\":\"分析\",\"platformCapability\":\"analytics\",\"context\":{\"platformCapability\":\"knowledge\"}}", context);
+        var capture = org.mockito.ArgumentCaptor.forClass(com.bkanent.common.agent.AgentTaskInvokeRequest.class);
+        verify(execution).execute(eq(descriptor), capture.capture(), eq("tool"), anyMap());
+        assertThat(capture.getValue().structuredContext()).containsEntry("platformCapability", "analytics");
+    }
+
+    @Test
     void a2aBindingUsesStableChildIdentityPublishedSelectionAndAuthenticatedParentContext() {
         var publication = Map.of("cardSkillId", "bk-skill/listing/listing-search", "name", "listing-search", "owner", "listing", "version", "1", "contentHash", "hash");
         var card = new com.bkanent.common.agent.AgentCard("listing-agent", "listing", "actual description", "1", List.of(), List.of("listing"), false, true,
