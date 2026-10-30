@@ -21,7 +21,7 @@ auth:
         service: gateway
         public-key: ${GATEWAY_IDENTITY_PUBLIC_KEY:}
         operations: [RESOLVE_REQUEST_AUTHORIZATION]
-        audiences: [auth-service, agent-service, interview-service]
+        audiences: [auth-service, agent-service, interview-service, platform-operations-service]
     redis:
       enabled: ${AUTH_AUTHORIZATION_REDIS_ENABLED:false}
       protected-writer-configured: ${AUTHZ_REDIS_WRITER_CONFIGURED:false}
