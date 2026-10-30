@@ -16,8 +16,6 @@ class OfficialA2aProviderConfigurationTest {
                 "listing-master-service/src/main/java/com/bkanent/listing/a2a/ListingOfficialA2aAgent.java",
                 "marketing-content-service/src/main/java/com/bkanent/marketing/a2a/MarketingOfficialA2aAgent.java",
                 "media-worker-service/src/main/java/com/bkanent/media/a2a/MediaOfficialA2aAgent.java",
-                "contract-service/src/main/java/com/bkanent/contract/a2a/ContractOfficialA2aAgent.java",
-                "settlement-service/src/main/java/com/bkanent/settlement/a2a/SettlementOfficialA2aAgent.java",
                 "notification-service/src/main/java/com/bkanent/notification/a2a/NotificationOfficialA2aAgent.java"
         };
 
@@ -40,8 +38,6 @@ class OfficialA2aProviderConfigurationTest {
                 "listing-master-service/src/main/java/com/bkanent/listing/a2a/A2aSupervisorContextInterceptor.java",
                 "marketing-content-service/src/main/java/com/bkanent/marketing/a2a/A2aSupervisorContextInterceptor.java",
                 "media-worker-service/src/main/java/com/bkanent/media/a2a/A2aSupervisorContextInterceptor.java",
-                "contract-service/src/main/java/com/bkanent/contract/a2a/A2aSupervisorContextInterceptor.java",
-                "settlement-service/src/main/java/com/bkanent/settlement/a2a/A2aSupervisorContextInterceptor.java",
                 "notification-service/src/main/java/com/bkanent/notification/a2a/A2aSupervisorContextInterceptor.java"
         };
         Path root = locateProjectRoot();
@@ -59,8 +55,6 @@ class OfficialA2aProviderConfigurationTest {
                 "nacos/listing-master-service.yaml",
                 "nacos/marketing-content-service.yaml",
                 "nacos/media-worker-service.yaml",
-                "nacos/contract-service.yaml",
-                "nacos/settlement-service.yaml",
                 "nacos/notification-service.yaml"
         };
         Path root = locateProjectRoot();
@@ -88,8 +82,6 @@ class OfficialA2aProviderConfigurationTest {
                 "listing-master-service/pom.xml",
                 "marketing-content-service/pom.xml",
                 "media-worker-service/pom.xml",
-                "contract-service/pom.xml",
-                "settlement-service/pom.xml",
                 "notification-service/pom.xml"
         };
         Path root = locateProjectRoot();

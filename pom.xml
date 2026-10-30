@@ -31,8 +31,6 @@
         <module>business-service</module>
         <module>platform-operations-service</module>
         <module>business-review-service</module>
-        <module>contract-service</module>
-        <module>settlement-service</module>
         <module>interview-service</module>
         <module>knowledge-service</module>
     </modules>
