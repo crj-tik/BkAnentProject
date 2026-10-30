@@ -25,6 +25,12 @@ class PlatformOperationsRoutingConfigurationTest {
         assertThat(routeKey).isNotNull();
         assertThat(gateway.getProperty(routeKey + ".uri")).isEqualTo("lb://platform-operations-service");
         assertThat(gateway.getProperty(routeKey + ".predicates[0]")).isEqualTo("Path=/platform-operations/**");
+        for (int i = 0; i < 40; i++) {
+            String prefix = "spring.cloud.gateway.server.webflux.routes[" + i + "]";
+            assertThat(gateway.getProperty(prefix + ".id")).isNotEqualTo("contract-service").isNotEqualTo("settlement-service");
+            assertThat(gateway.getProperty(prefix + ".predicates[0]")).isNotEqualTo("Path=/contracts/**")
+                    .isNotEqualTo("Path=/settlements/**");
+        }
         assertThat(String.valueOf(auth.getProperty("auth.authorization.trusted-callers.gateway-current.audiences[3]")))
                 .isEqualTo("platform-operations-service");
     }

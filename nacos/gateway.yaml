@@ -36,14 +36,6 @@ spring:
             uri: lb://listing-master-service
             predicates:
               - Path=/compare/**
-          - id: contract-service
-            uri: lb://contract-service
-            predicates:
-              - Path=/contracts/**
-          - id: settlement-service
-            uri: lb://settlement-service
-            predicates:
-              - Path=/settlements/**
           - id: marketing-promotion-compat
             uri: lb://marketing-content-service
             predicates:
