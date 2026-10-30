@@ -46,7 +46,7 @@ public class LiveSkillAgentCards implements SmartInitializingSingleton, Disposab
 
     void refresh() {
         current.forEach((name, card) -> {
-            AgentCard updated = SkillAgentCardPublisher.publish(card, registry, owner(card));
+            AgentCard updated = SkillAgentCardPublisher.publish(card, registry, owner(card), skillOwners(card));
             if (updated.equals(card)) return;
             current.put(name, updated);
             pending.put(name, updated);
@@ -84,6 +84,17 @@ public class LiveSkillAgentCards implements SmartInitializingSingleton, Disposab
                 .filter(extension -> SkillPublication.EXTENSION_URI.equals(extension.uri()))
                 .map(extension -> extension.params() == null ? null : extension.params().get("owner"))
                 .filter(String.class::isInstance).map(String.class::cast).findFirst().orElse(null);
+    }
+
+    private java.util.List<String> skillOwners(AgentCard card) {
+        return card.capabilities().extensions().stream()
+                .filter(extension -> SkillPublication.EXTENSION_URI.equals(extension.uri()))
+                .map(extension -> extension.params() == null ? null : extension.params().get("skillOwners"))
+                .filter(java.util.List.class::isInstance)
+                .map(value -> (java.util.List<?>) value)
+                .filter(values -> values.stream().allMatch(String.class::isInstance))
+                .map(values -> values.stream().map(String.class::cast).toList())
+                .findFirst().orElseGet(() -> java.util.List.of(owner(card)));
     }
 
     @Override public void destroy() throws Exception {

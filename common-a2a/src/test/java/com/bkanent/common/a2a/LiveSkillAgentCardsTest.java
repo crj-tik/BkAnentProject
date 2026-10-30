@@ -32,6 +32,30 @@ class LiveSkillAgentCardsTest {
     }
 
     @Test
+    void unifiedCardRefreshesEveryInternalSkillOwner() throws Exception {
+        SkillFileLoader loader = mock(SkillFileLoader.class);
+        var trade = SkillDefinition.builder().name("analytics-report").description("analytics").domain("trade").build();
+        var review = SkillDefinition.builder().name("review-draft").description("review").domain("business-review").build();
+        when(loader.loadAll()).thenReturn(List.of(trade, review));
+        SkillRegistry registry = new SkillRegistry(loader, "");
+        AgentCard initial = SkillAgentCardPublisher.publish(base(), registry, "platform-operations",
+                List.of("trade", "business-review", "knowledge"));
+        var beans = new DefaultListableBeanFactory();
+        beans.registerSingleton("card", initial);
+        LiveSkillAgentCards live = new LiveSkillAgentCards(registry, beans.getBeanProvider(AgentCard.class),
+                beans.getBeanProvider(NacosA2aOperationService.class));
+        live.afterSingletonsInstantiated();
+        try {
+            assertThat(live.currentCard(initial).skills()).extracting(AgentSkill::id)
+                    .contains("bk-skill/trade/analytics-report", "bk-skill/business-review/review-draft");
+            when(loader.loadAll()).thenReturn(List.of(review));
+            registry.reload();
+            assertThat(live.currentCard(initial).skills()).extracting(AgentSkill::id)
+                    .doesNotContain("bk-skill/trade/analytics-report").contains("bk-skill/business-review/review-draft");
+        } finally { live.destroy(); }
+    }
+
+    @Test
     void reloadUpdatesHttpAndRetriesOnlyLatestNacosCardIncludingRemoval() throws Exception {
         SkillFileLoader loader = mock(SkillFileLoader.class);
         when(loader.loadAll()).thenReturn(List.of(skill("find", "old")));

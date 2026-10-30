@@ -1417,6 +1417,16 @@
 
 **代码位置**：根 `pom.xml`、`docker-compose.yml`、Listing 比较兼容 DTO/测试、Auth/Memory/RAG 配置、受管迁移 540；关联 LR-99、KI-115、KI-224、KI-227。
 
+## LR-166 统一 Agent Card 同时维护多个内部技能域
+
+**结论**：一张平台经营 Agent Card 可以发布多个内部技能域，并在技能热更新时一起重建；技能仍保留各自 owner、版本和内容摘要。同名技能或重复 owner 直接拒绝发布。
+
+**根因**：对外只有一个 Agent，但现有技能选择与执行校验依赖内部域和精确快照。单 owner 的卡片刷新会丢失其他分支，按名称选择时的同名技能也会产生歧义。
+
+**代码位置**：`common-a2a/.../SkillAgentCardPublisher.java`、`LiveSkillAgentCards.java` 和对应测试；平台经营运行接线仍待完成。
+
+**关联**：LR-28、LR-165；change `consolidate-platform-operations` 任务 2.5。
+
 ## LR-165 平台经营单入口先验能力再分支
 
 **结论**：平台经营 Agent 的路由器根据 A2A 请求 metadata 中的精确 `platformCapability` 选择 analytics、review 或 knowledge，先校验对应签名操作，再调用该分支；取消请求委托给持有任务的执行器核验任务凭据。
