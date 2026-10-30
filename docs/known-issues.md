@@ -1806,6 +1806,12 @@
 
 **修复**：在应用配置登记各自公钥与精确 domain/agent，并扩展 `MemoryV2DeploymentConfigurationTest`，逐一验证应用和 Nacos 两个配置面。运行态仍须验证 Nacos 已加载及服务间真实签名调用。
 
+## KI-233 [OPEN·P1] 开发 Auth 缺少 Agent 执行绑定受信授权
+
+**发现日期**：2026-10-30。开发 Nacos 与仓库 Auth 模板的版本化授权 `trusted-callers` 仅登记 Gateway，未登记 Agent 的 `BIND_EXECUTION`；当前 Agent 执行绑定要求 caller 受信且其精确操作许可覆盖入口签发的全部非基线操作，因此实际 Agent 授权链不能仅靠服务健康或平台权限目录完成。
+
+**待处理**：在退役合同、结算和旧经营能力后，按最终操作目录建立并校验 Agent 最小必要权限清单，同步实际 Nacos、公钥环境与运行服务，验证合法绑定、缺失权限及撤权失败关闭。不要以通配符或关闭授权替代验收。
+
 ## KI-232 [FIXED·本提交·P1] 平台经营 Agent 已注册但 HTTP 路由缺失
 
 **发现日期**：2026-10-30。统一 Agent 装配只提供执行器和 Card，框架自动配置还要求一个 Agent Bean，导致实际容器启动后 Agent Card 与 A2A 路径返回 404。
