@@ -66,9 +66,9 @@ class BusinessReviewMemoryWiringTest {
                 new BusinessReviewAgentProperties(), new ReviewDraftTools(), skills, factory);
 
         A2aMemoryAgentHook hook = (A2aMemoryAgentHook) ReflectionTestUtils.getField(component, "memoryHook");
-        assertThat(ReflectionTestUtils.getField(hook, "caller")).isEqualTo("business-review-service");
+        assertThat(ReflectionTestUtils.getField(hook, "caller")).isEqualTo("platform-operations-service");
         assertThat(ReflectionTestUtils.getField(hook, "domain")).isEqualTo("business-review");
-        assertThat(ReflectionTestUtils.getField(hook, "agentId")).isEqualTo("business-review-agent");
+        assertThat(ReflectionTestUtils.getField(hook, "agentId")).isEqualTo("platform-operations-review");
         AgentExecutor executor = component.businessReviewA2aAgentExecutor(new ObjectMapper(), new A2aExecutionProperties());
         assertThat(executor).isInstanceOf(OfficialA2aAgentExecutor.class);
         assertThat(ReflectionTestUtils.getField(executor, "memoryHook")).isSameAs(hook);
@@ -77,7 +77,7 @@ class BusinessReviewMemoryWiringTest {
         RequestContext context = requestContext(taskId);
         long expiresAt = Instant.now().getEpochSecond() + 60;
         A2aBeaconBinding binding = new A2aBeaconBinding(1, "request-" + taskId, "agent-service",
-                "business-review-service", "17", "message/send", "0".repeat(64), taskId, expiresAt);
+                "platform-operations-service", "17", "message/send", "0".repeat(64), taskId, expiresAt);
         var lease = new A2aCredentialContext.Lease(binding, RagCredentialContext.beacon("memory-wiring-test"),
                 expiresAt, () -> { });
         EventQueue queue = EventQueue.create();

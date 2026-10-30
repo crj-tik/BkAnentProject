@@ -25,7 +25,7 @@ class KnowledgeOfficialA2aAgentTest {
         A2aMemoryHookFactory factory = mock(A2aMemoryHookFactory.class);
         A2aMemoryAgentHook memoryHook = mock(A2aMemoryAgentHook.class);
         ChatModel chatModel = mock(ChatModel.class);
-        when(factory.create("knowledge-service", "knowledge", "knowledge-agent", chatModel)).thenReturn(memoryHook);
+        when(factory.create("platform-operations-service", "knowledge", "platform-operations-knowledge", chatModel)).thenReturn(memoryHook);
         SkillRegistry skills = mock(SkillRegistry.class);
         var component = new KnowledgeOfficialA2aAgent(chatModel,
                 new KnowledgeAgentTools(mock(KnowledgeGenerationService.class)), skills, factory, new ObjectMapper());

@@ -30,7 +30,8 @@ public class KnowledgeOfficialA2aAgent {
     public KnowledgeOfficialA2aAgent(ChatModel chatModel, KnowledgeAgentTools tools, SkillRegistry skillRegistry,
                                      A2aMemoryHookFactory memoryHookFactory, ObjectMapper objectMapper) {
         this.skillRegistry = skillRegistry;
-        this.memoryHook = memoryHookFactory.create("knowledge-service", DOMAIN, "knowledge-agent", chatModel);
+        this.memoryHook = memoryHookFactory.create("platform-operations-service", DOMAIN,
+                "platform-operations-knowledge", chatModel);
         List<ToolCallback> callbacks = new ArrayList<>(List.of(MethodToolCallbackProvider.builder()
                 .toolObjects(tools).build().getToolCallbacks()));
         callbacks.add(new SkillTool(skillRegistry, DOMAIN));

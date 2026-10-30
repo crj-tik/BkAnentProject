@@ -58,7 +58,7 @@ class ExplicitSkillAgentWiringTest {
         assertThat(card.skills()).anySatisfy(skill -> assertThat(skill.name()).isEqualTo(selected.name()));
         var executor = (AgentExecutor) TradeOfficialA2aAgent.class.getMethod("tradeA2aAgentExecutor", ObjectMapper.class, com.bkanent.common.a2a.A2aExecutionProperties.class)
                 .invoke(component, new ObjectMapper(), new com.bkanent.common.a2a.A2aExecutionProperties());
-        assertMemoryHookWiring(component, executor, "business-service", "trade", "trade-agent");
+        assertMemoryHookWiring(component, executor, "platform-operations-service", "trade", "platform-operations-analytics");
         var selection = Map.of("name", selected.name(), "owner", "trade", "version", selected.version(), "contentHash", selected.contentHash(), "mode", "explicit");
         assertThat(A2aCredentialContext.snapshot()).isNull();
         try (QueueScope unauthenticated = new QueueScope()) {

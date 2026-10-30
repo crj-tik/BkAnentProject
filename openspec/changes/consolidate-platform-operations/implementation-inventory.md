@@ -8,6 +8,8 @@
 
 已新增未注册的统一 Agent 路由器，测试覆盖精确能力操作校验、无权拒绝和活动任务取消分支；新模块聚焦回归 69 项通过。受管迁移 590 已登记统一 Agent 及三项精确能力操作，不自动授予角色。真实 Agent 分支、Memory 隔离和运行态接线仍待完成，路由器本身不代表功能可用。
 
+三个迁入的内部 Agent 已使用同一 `platform-operations-service` Memory caller，并分别采用 `platform-operations-analytics`、`platform-operations-review`、`platform-operations-knowledge` 记忆标识；单元测试核对身份与知识输入防护顺序。Memory 信任配置、统一入口接线及跨分支隔离运行态验证尚未完成。
+
 过渡阶段打包显式选择经营分析启动类，避免复制的多个旧启动类使 Spring Boot 打包失败；聚焦 `-DskipTests package` 通过。这不证明服务已经能启动或具备统一能力，统一启动类仍需在 2.2–2.5 中完成。
 
 复盘和知识控制器及入口过滤路径已改为平台经营前缀，受众改为 `platform-operations-service`，但还未接入启动扫描和 Gateway。原共享授权协议只允许 `BROKER`；现增加独立门店关系表、Auth 管理入口及签名 STORE 身份，保留原经纪人唯一性。H2 回归覆盖多人同门店、变更、撤销、授权版本、审计失败回滚及不匹配拒绝；开发 MySQL 迁移 550 已执行并幂等重跑，事务内验证同门店两条关系后回滚，基础表当前为空。真实 Auth 服务加载、管理员配置真实门店关系和跨服务调用仍待验收；不能使用请求参数代替可信门店身份。

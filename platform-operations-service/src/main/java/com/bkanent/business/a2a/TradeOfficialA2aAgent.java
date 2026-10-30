@@ -38,7 +38,8 @@ public class TradeOfficialA2aAgent {
                                    TradeTools tradeTools, SkillRegistry skillRegistry,
                                    A2aMemoryHookFactory memoryHookFactory) {
         this.skillRegistry = skillRegistry;
-        this.memoryHook = memoryHookFactory.create("business-service", DOMAIN, "trade-agent", chatModel);
+        this.memoryHook = memoryHookFactory.create("platform-operations-service", DOMAIN,
+                "platform-operations-analytics", chatModel);
         List<ToolCallback> tools = new ArrayList<>(Arrays.asList(
                 MethodToolCallbackProvider.builder().toolObjects(tradeTools).build().getToolCallbacks()));
         tools.add(new SkillTool(skillRegistry, DOMAIN));

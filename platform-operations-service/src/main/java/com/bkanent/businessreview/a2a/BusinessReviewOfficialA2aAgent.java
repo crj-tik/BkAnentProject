@@ -35,7 +35,8 @@ public class BusinessReviewOfficialA2aAgent {
                                           ReviewDraftTools draftTools, SkillRegistry skills,
                                           A2aMemoryHookFactory memoryHookFactory) {
         this.skills = skills;
-        this.memoryHook = memoryHookFactory.create("business-review-service", DOMAIN, AGENT_ID, chatModel);
+        this.memoryHook = memoryHookFactory.create("platform-operations-service", DOMAIN,
+                "platform-operations-review", chatModel);
         List<ToolCallback> tools = new ArrayList<>(List.of(
                 MethodToolCallbackProvider.builder().toolObjects(draftTools).build().getToolCallbacks()));
         tools.add(new SkillTool(skills, DOMAIN));
