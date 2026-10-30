@@ -8,7 +8,7 @@
 
 统一 Agent 路由器测试覆盖精确能力操作校验、无权拒绝和活动任务取消分支；受管迁移 590 已登记统一 Agent 及三项精确能力操作，不自动授予角色。三个内部执行器已接入统一启动类，真实运行环境的 Memory 隔离和跨服务调用仍待验收。
 
-三个迁入的内部 Agent 已使用同一 `platform-operations-service` Memory caller，并分别采用 `platform-operations-analytics`、`platform-operations-review`、`platform-operations-knowledge` 记忆标识；单元测试核对身份与知识输入防护顺序。Auth 和 Memory 的应用及 Nacos 模板已登记新服务身份和三个精确记忆授权，身份密钥生成清单已扩充；实际密钥、运行配置发布、统一入口接线及跨分支隔离运行态验证尚未完成。
+三个迁入的内部 Agent 已使用同一 `platform-operations-service` Memory caller，并分别采用 `platform-operations-analytics`、`platform-operations-review`、`platform-operations-knowledge` 记忆标识；单元测试核对身份与知识输入防护顺序。Auth 和 Memory 的应用及 Nacos 模板已登记新服务身份和三个精确记忆授权；本机身份密钥已生成并设置文件权限，运行配置发布及跨分支隔离运行态验证尚未完成。
 
 通用 Agent Card 发布与热更新已支持一个外部 owner 聚合多个内部技能域；共同保留技能 owner、版本及摘要，拒绝名称歧义。单卡发布和移除后热更新测试通过；平台经营 Card 已在统一配置中使用该机制。
 
@@ -17,6 +17,8 @@
 统一启动类已取代复制来的三个旧启动类，并作为 Maven 打包入口。真实环境启动和服务接线仍需在 2.2–2.5、3.3 中完成。
 
 已添加平台经营 Nacos 模板和发布白名单，配置两个最小权限数据库账号、三类入口授权和单 Agent；MCP 暂默认关闭。模板解析与属性绑定测试通过，但尚未发布至开发 Nacos。
+
+Compose 已添加独立 `platform-preview` 档位及平台经营服务，展开检查确认业务账号与来源只读账号分离，私钥使用服务专属挂载。该档位尚未启动，原 full 档位服务和路由尚未切换。
 
 复盘运行时的知识查询与版本检查已改为域内调用，保留复盘操作及知识读取两项授权、门店范围、内容摘要和撤回检查。新测试使用真实知识服务与模拟持久层验证当前、撤回及无权限路径；旧 HTTP 兼容构造器和相关维护测试仍待随退役清理，房源跨域签名与真实依赖仍待验收。
 

@@ -1443,7 +1443,7 @@
 
 **根因**：合并成一个外部入口后，模型或请求不能仅凭自报能力取得其他分支的工具和记忆；知识输入防护与各分支的 Memory 生命周期也不能被绕开。请求体完整性由现有 A2A 授权绑定校验，能力路由仍须自行检查具体操作。
 
-**代码位置**：`platform-operations-service/.../PlatformAgentRouter.java`、`PlatformAgentConfiguration.java` 及其测试；三个内部 Agent 以平台经营服务调用 Memory，分别使用 analytics、review、knowledge 的独立记忆标识，Auth 和 Memory 配置模板登记精确身份；`sql/migrations/20261029_platform_operations_authorization.sql` 登记能力操作但不授予角色。统一配置已接入启动类，并经模拟模型和 H2 装配测试；实际身份密钥和运行配置、跨分支隔离及完整链路仍待实现和验收。
+**代码位置**：`platform-operations-service/.../PlatformAgentRouter.java`、`PlatformAgentConfiguration.java` 及其测试；三个内部 Agent 以平台经营服务调用 Memory，分别使用 analytics、review、knowledge 的独立记忆标识，Auth 和 Memory 配置模板登记精确身份；`sql/migrations/20261029_platform_operations_authorization.sql` 登记能力操作但不授予角色。统一配置已接入启动类，并经模拟模型和 H2 装配测试；本机身份密钥已生成，运行配置、跨分支隔离及完整链路仍待验收。
 
 **关联**：LR-117、LR-160、LR-163；change `consolidate-platform-operations` 任务 2.5、4.2。
 
