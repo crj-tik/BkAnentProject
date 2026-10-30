@@ -10,7 +10,9 @@
 
 三个迁入的内部 Agent 已使用同一 `platform-operations-service` Memory caller，并分别采用 `platform-operations-analytics`、`platform-operations-review`、`platform-operations-knowledge` 记忆标识；单元测试核对身份与知识输入防护顺序。Auth 和 Memory 的应用及 Nacos 模板已登记新服务身份和三个精确记忆授权，身份密钥生成清单已扩充；实际密钥、运行配置发布、统一入口接线及跨分支隔离运行态验证尚未完成。
 
-通用 Agent Card 发布与热更新已支持一个外部 owner 聚合多个内部技能域；共同保留技能 owner、版本及摘要，拒绝名称歧义。单卡发布和移除后热更新测试通过；平台经营 Card 尚未接入该机制。
+通用 Agent Card 发布与热更新已支持一个外部 owner 聚合多个内部技能域；共同保留技能 owner、版本及摘要，拒绝名称歧义。单卡发布和移除后热更新测试通过；平台经营 Card 已在统一配置中使用该机制。
+
+已新增统一 Agent 配置，三个内部组件不再各自导出公开执行器或 Card；配置装配测试确认只有一个路由执行器和一张包含三个内部技能域的 Card。此配置尚未加入目前仅扫描经营分析包的过渡启动类，真实服务启动及调用链尚未验证。
 
 过渡阶段打包显式选择经营分析启动类，避免复制的多个旧启动类使 Spring Boot 打包失败；聚焦 `-DskipTests package` 通过。这不证明服务已经能启动或具备统一能力，统一启动类仍需在 2.2–2.5 中完成。
 

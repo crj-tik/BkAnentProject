@@ -19,7 +19,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.a2a.server.agentexecution.AgentExecutor;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
-import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -57,12 +56,10 @@ public class TradeOfficialA2aAgent {
                 .build();
     }
 
-    @Bean
     public ReactAgent tradeReactAgent() {
         return reactAgent;
     }
 
-    @Bean
     public io.a2a.spec.AgentCard tradePublishedAgentCard(
             com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerProperties server,
             com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerAgentCardProperties card) {
@@ -71,7 +68,6 @@ public class TradeOfficialA2aAgent {
                         .agentCard(reactAgent, server, card), skillRegistry, "trade");
     }
 
-    @Bean
     public AgentExecutor tradeA2aAgentExecutor(ObjectMapper objectMapper, com.bkanent.common.a2a.A2aExecutionProperties execution) {
         return new OfficialA2aAgentExecutor(reactAgent, objectMapper, A2aOutputPolicy.structured(DOMAIN),
                 skillRegistry, DOMAIN, executionTools, execution.getStreamTimeoutMs(), memoryHook);

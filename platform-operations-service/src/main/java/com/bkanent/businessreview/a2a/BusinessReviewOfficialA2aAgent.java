@@ -16,7 +16,6 @@ import io.a2a.server.agentexecution.AgentExecutor;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
-import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 import java.util.ArrayList;
 import java.util.List;
@@ -53,8 +52,7 @@ public class BusinessReviewOfficialA2aAgent {
                 .outputKey("output")
                 .build();
     }
-    @Bean public ReactAgent businessReviewReactAgent() { return agent; }
-    @Bean
+    public ReactAgent businessReviewReactAgent() { return agent; }
     public io.a2a.spec.AgentCard businessReviewPublishedAgentCard(
             com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerProperties server,
             com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerAgentCardProperties card) {
@@ -62,7 +60,6 @@ public class BusinessReviewOfficialA2aAgent {
                 new com.alibaba.cloud.ai.a2a.autoconfigure.server.A2aServerAgentCardAutoConfiguration()
                         .agentCard(agent, server, card), skills, DOMAIN);
     }
-    @Bean
     public AgentExecutor businessReviewA2aAgentExecutor(ObjectMapper mapper,
             com.bkanent.common.a2a.A2aExecutionProperties execution) {
         return new OfficialA2aAgentExecutor(agent, mapper, A2aOutputPolicy.structured(DOMAIN),
