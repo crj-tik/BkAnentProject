@@ -98,7 +98,7 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
-                    <mainClass>com.bkanent.business.BusinessServiceApplication</mainClass>
+                    <mainClass>com.bkanent.platform.PlatformOperationsApplication</mainClass>
                 </configuration>
             </plugin>
         </plugins>

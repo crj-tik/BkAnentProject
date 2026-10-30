@@ -18,8 +18,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class DomainParallelAuthorizationSignerTest {
     private static final String AUTH_KEY_ID = "auth-current";
-    private static final String SERVICE_KEY_ID = "business-review-service-current";
-    private static final String AUDIENCE = "business-review-service";
+    private static final String SERVICE_KEY_ID = "platform-operations-service-current";
+    private static final String AUDIENCE = "platform-operations-service";
     private static final String OPERATION = "business.review.read.store";
     private static final String HASH = "a".repeat(64);
 
@@ -44,14 +44,14 @@ class DomainParallelAuthorizationSignerTest {
             DelegatedAuthorizationRequest request = AuthzWireCodec.decodeDelegatedAuthorizationRequest(encoded);
             DelegationBinding binding = request.binding();
 
-            assertThat(binding.callerService()).isEqualTo("business-review-service");
+            assertThat(binding.callerService()).isEqualTo("platform-operations-service");
             assertThat(binding.audience()).isEqualTo("listing-master-service");
             assertThat(binding.operations()).containsExactly(OPERATION);
             assertThat(binding.bodyHash()).isEqualTo(AuthzCanonicalHash.bodyHash(body));
             assertThat(binding.requestId()).startsWith("dp1|POST|/listings/business/v1/search|");
             assertThat(request.context().audience()).isEqualTo(AUDIENCE);
             assertThat(request.callerProof().keyId()).isEqualTo(SERVICE_KEY_ID);
-            AuthzSignature.verifyCallerProof(request.callerProof(), "business-review-service",
+            AuthzSignature.verifyCallerProof(request.callerProof(), "platform-operations-service",
                     "listing-master-service", AuthzRpcOperation.VALIDATE_DELEGATION, binding.requestId(),
                     AuthzCanonicalHash.delegationRequestHash(request.context(), binding), binding.nonce(),
                     java.util.Set.of(AuthzRpcOperation.VALIDATE_DELEGATION),

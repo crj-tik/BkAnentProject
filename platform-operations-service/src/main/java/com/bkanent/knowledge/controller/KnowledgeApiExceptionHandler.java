@@ -11,7 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.bkanent.knowledge.controller")
 public class KnowledgeApiExceptionHandler {
     @ExceptionHandler(KnowledgeOperationException.class)
     public ResponseEntity<ApiResponse<Void>> operation(KnowledgeOperationException failure) {

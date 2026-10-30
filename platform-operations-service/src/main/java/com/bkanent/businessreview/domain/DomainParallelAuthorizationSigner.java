@@ -49,7 +49,7 @@ public class DomainParallelAuthorizationSigner implements DomainParallelRequestA
                     VerifiedDomainAuthorization.requireVerifiedContext();
             AuthorizationContext context = verified.context();
             AuthzFreshness freshness = verified.freshness();
-            String callerService = "business-review-service";
+            String callerService = "platform-operations-service";
             if (!callerService.equals(context.audience()) || !context.allowedOperations().contains(operation)) {
                 throw new AuthzException(AuthzErrorCode.PERMISSION_DENIED);
             }

@@ -1806,6 +1806,12 @@
 
 **修复**：在应用配置登记各自公钥与精确 domain/agent，并扩展 `MemoryV2DeploymentConfigurationTest`，逐一验证应用和 Nacos 两个配置面。运行态仍须验证 Nacos 已加载及服务间真实签名调用。
 
+## KI-228 [FIXED·本提交·P1] 平台经营复盘跨域签名仍使用旧服务身份
+
+**发现日期**：2026-10-30。复盘代码迁入平台经营服务后，跨域请求签名器仍写死 `business-review-service`，与新受众不符，导致调用被拒绝。
+
+**修复与验证**：改用 `platform-operations-service` 签名并更新签名验证测试。测试只验证签名与上下文匹配；房源服务的信任配置和真实跨服务调用仍需随部署同步验收。
+
 ## KI-227 [FIXED·95c83c9·P1] 四域合并后运行配置与 Nacos 模板存在漂移
 
 **发现日期**：2026-10-29。Agent 编排上限、Memory 偏好和隐私清理、RAG 并发、Auth 撤权 key prefix、Media→Listing 签名信任等代码配置未完整写入 Nacos 模板或 Compose；退役的 Compare 还残留在当前架构资料和验证说明中。
