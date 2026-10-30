@@ -59,8 +59,16 @@ class NacosRagTemplateTest {
     @Test void memoryV2SpacesAreRegisteredWithRequiredScopeAndUniquePhysicalTargets() throws java.io.IOException {
         Map<String, Object> spaces = section(section(template(), "rag"), "spaces");
         List<String> keys = spaces.keySet().stream().filter(key -> key.startsWith("[memory.v2.")).toList();
-        assertThat(keys).hasSize(20).noneMatch(key -> key.contains("compare")
+        assertThat(keys).hasSize(35).noneMatch(key -> key.contains("compare")
                 || key.contains(".contract.contract-agent") || key.contains(".settlement.settlement-agent"));
+        for (String[] identity : List.of(
+                new String[]{"trade", "platform-operations-analytics"},
+                new String[]{"business-review", "platform-operations-review"},
+                new String[]{"knowledge", "platform-operations-knowledge"})) {
+            for (MemoryRagRecordType type : MemoryRagRecordType.values()) {
+                assertThat(keys).contains("[" + MemoryRagSpaceIds.spaceId(type, identity[0], identity[1]) + "]");
+            }
+        }
         Set<String> indices = new HashSet<>();
         Set<String> collections = new HashSet<>();
         for (String key : keys) {
