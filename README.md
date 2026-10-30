@@ -14,8 +14,6 @@
 - `marketing-content-service`：营销内容、品牌素材、发布计划、平台回执与效果来源统一管理
 - `business-service`：业务分析、KPI、排行榜、门店看板
 - 房源对比与报告生成由 `listing-master-service` 承担
-- `contract-service`：合同全生命周期管理
-- `settlement-service`：分佣与结算
 - `media-worker-service`：异步媒体任务
 
 ## 当前架构
@@ -77,7 +75,7 @@ mvn -pl auth-service "-Dspring-boot.run.profiles=local" spring-boot:run
 
 ## 分布式环境启动
 
-完整系统启动前需要准备 Nacos 3.x、MySQL、Redis、RocketMQ、Milvus、MinIO 和 Elasticsearch，并将 `nacos/` 下以服务名命名的 YAML 导入 Nacos。当前 data ID 包括 `auth-service.yaml`、`agent-service.yaml`、`business-service.yaml`、`business-review-service.yaml`、`contract-service.yaml`、`customer-service.yaml`、`gateway.yaml`、`interview-service.yaml`、`knowledge-service.yaml`、`listing-master-service.yaml`、`marketing-content-service.yaml`、`media-worker-service.yaml`、`memory-service.yaml`、`notification-service.yaml`、`rag-service.yaml` 和 `settlement-service.yaml`。默认分组为 `DEFAULT_GROUP`；namespace 使用 `NACOS_NAMESPACE` 指定，默认值见各服务的 `application.yml`。Compare 与 Promotion 独立服务配置已从活动模板移除；`bk_promotion` 仅由受管退役迁移检查为空后清理。
+完整系统启动前需要准备 Nacos、MySQL、Redis、RocketMQ、Milvus、MinIO 和 Elasticsearch。开发配置按需从 `nacos/` 发布到指定 namespace；平台经营域使用 `platform-operations-service.yaml`。合同和结算服务、数据库及网关入口已退役；平台经营服务仍处于合并验收阶段。
 
 Linux 主机推荐直接使用 `scripts/deploy/` 下的初始化脚本完成上述准备与启动：宿主机预检（docker/内核参数/端口）、`.env` 随机密钥引导、已有数据卷迁移、启动/状态/停止均为 bash 脚本，详见 [Linux 部署环境初始化](docs/linux-deployment-init.md)。
 
@@ -95,7 +93,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\local\check-environment.ps1 -
 
 分布式部署时还必须为每个 Agent 设置可被其他服务访问的 `A2A_PUBLIC_BASE_URL`，不能使用其他主机上的 `127.0.0.1`。DeepSeek、DashScope、数据库和基础设施凭据必须通过环境变量或密钥管理系统提供。
 
-合同、通知和媒体服务的集成模式由对应 Nacos data ID 中的 `contract.integration.mode`、`notification.integration.mode`、`media.integration.mode` 管理，不在 `.env` 中设置。营销 campaign 由 `marketing.campaign.mode` 明确选择；默认 `REAL`，未接入真实 provider、房源来源或授权时发布明确失败，不回退模拟成功。仅测试/本地显式配置 `SIMULATED` 时允许 fixture provider。推广通过营销域的 prepare/confirm/receipt 流程管理，旧 `/promotions/**` 只保留受权适配路径。**已实现的真实 provider**：合同 OCR（KE 网关百度通用文字识别 `baidu-general`，real 模式配 `contract.integration.ocr-provider: baidu-general`，服务端下载附件后 base64 上送——百度后端拉不到内网 MinIO 地址）与房源文生图（KE 网关豆包 Seedream `doubao-seedream-4.5-gen`，`media.integration.mode=real` 即启用，每角度一张 2048×2048、约 15s/张由 RocketMQ 异步消费吸收）。**仍为占位**：电子签（esign-cn/fadada）、通知渠道、推广发布平台。生产导入前准备环境专属配置；`config-init` 只发布明确选择的 data ID 到实际 namespace，仍会覆盖所选内容；默认不发布，不要用开发模板覆盖生产设置。
+通知和媒体服务的集成模式由对应 Nacos data ID 管理；营销 campaign 的真实模式在缺少 provider、来源或授权时失败关闭，模拟模式仅用于明确标注的测试数据。
 
 分布式服务提供 `/actuator/health/liveness` 和 `/actuator/health/readiness`。一般业务服务的 readiness 检查当前模板中声明的 Nacos、数据库、Redis、RocketMQ 或 MinIO 依赖；独立 RAG 的 `ragBaseReadiness` 检查安全配置、控制 DB 的 `rag_index_event`/`rag_document_state` 两表查询权限及至少三个已导出 RPC provider，不直接探测 Nacos 或检索后端。应用进程存活或基础 readiness 通过不代表空间、检索能力与切流水位已验收。
 
@@ -159,6 +157,6 @@ docker compose -f docker-compose.yml -f docker-compose.mysql-client.yml up -d my
 
 这会把 `3306` 绑定到 `127.0.0.1`（可通过 `MYSQL_EXPOSED_PORT` 调整）。MCP 对外绑定独立使用 `MYSQL_MCP_BIND_ADDRESS`，默认始终为 loopback；远程接入前配置 HTTPS 入口及 `MYSQL_MCP_ALLOWED_HOSTS`，客户端应能提供 Bearer 请求头。
 
-Docker 编排默认只用于开发演示：full profile 配套的 Nacos 模板保留营销 Elasticsearch 搜索、Redis 排行榜、RocketMQ 流式 provider；独立 RAG 模板默认关闭知识/派发、缺少已验证后端与角色/评分能力配置，不能作为真实切流版本，Token TTL 为 3600/604800 秒，四类集成为 `local`；这些业务值不再由 Compose 环境覆盖。应用容器的 `NACOS_USERNAME`、`NACOS_PASSWORD`、`MINIO_PUBLIC_BASE_URL` 可通过 `.env` 覆盖，但 Nacos Admin 账号初始化和目标命名空间 Card 更新授权仍需独立配置，填入密码不等于已授权。MySQL 使用 `sql/mysql-init.sql` 初始化业务库和表，MinIO 创建 `generated-assets` bucket，Elasticsearch 开发初始化只创建 `marketing_content` 索引，RAG 索引/集合由受权管理流程另行 provision。Redis、Elasticsearch、Milvus 开发模式不创建业务表空间或独立账号，MinIO 使用 root 开发账号；生产部署前必须通过环境变量或密钥管理系统提供 `MYSQL_ROOT_PASSWORD`、`AUTH_TOKEN_SECRET`、模型/API 密钥和独立的基础设施凭据，并接入真实 Provider。合同 OCR 已实现 KE 网关百度通用文字识别（`baidu-general`，real 模式配 `contract.integration.ocr-provider: baidu-general`，服务端下载附件后 base64 上送——百度后端拉不到内网 MinIO 地址，不能直接传 image_url）；电子签仍为占位。停止并删除容器（保留数据卷）使用 `docker compose down`，清理数据卷前请确认数据已备份。
+Docker Compose 默认用于开发环境；平台经营服务目前通过 `platform-preview` 档位验证。生产部署需准备环境专属配置、服务凭据及真实 provider，并完成授权和依赖验收。
 
 变量名称清单见 [.env.example](.env.example)。
