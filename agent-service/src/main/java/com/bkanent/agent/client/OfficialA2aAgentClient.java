@@ -145,8 +145,6 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
             case "listing-agent" -> "listing-master-service";
             case "trade-agent" -> "business-service";
             case "marketing-agent" -> "marketing-content-service";
-            case "contract-agent" -> "contract-service";
-            case "settlement-agent" -> "settlement-service";
             case "notification-agent" -> "notification-service";
             case "media-agent" -> "media-worker-service";
             case "interview-agent" -> "interview-service";

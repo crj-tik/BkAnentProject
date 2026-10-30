@@ -20,6 +20,8 @@ class FourDomainCallerConfigurationTest {
                         + "\n        public-key: ${" + key + ":}\n        allowed-operations: [RESOLVE_BEACON]"), filename);
             }
             assertFalse(yaml.contains("compare-engine-service-current:"), filename);
+            assertFalse(yaml.contains("contract-service-current:"), filename);
+            assertFalse(yaml.contains("settlement-service-current:"), filename);
         }
     }
 }

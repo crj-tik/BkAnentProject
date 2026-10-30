@@ -29,8 +29,6 @@ class MemoryV2DeploymentConfigurationTest {
             Map.entry("listing-master-service", new CallerIdentity("listing-master-service-current", "LISTING_MASTER_SERVICE_IDENTITY_PUBLIC_KEY", "listing", "listing-agent")),
             Map.entry("business-service", new CallerIdentity("business-service-current", "BUSINESS_SERVICE_IDENTITY_PUBLIC_KEY", "trade", "trade-agent")),
             Map.entry("business-review-service", new CallerIdentity("business-review-service-current", "BUSINESS_REVIEW_SERVICE_IDENTITY_PUBLIC_KEY", "business-review", "business-review-agent")),
-            Map.entry("contract-service", new CallerIdentity("contract-service-current", "CONTRACT_SERVICE_IDENTITY_PUBLIC_KEY", "contract", "contract-agent")),
-            Map.entry("settlement-service", new CallerIdentity("settlement-service-current", "SETTLEMENT_SERVICE_IDENTITY_PUBLIC_KEY", "settlement", "settlement-agent")),
             Map.entry("notification-service", new CallerIdentity("notification-service-current", "NOTIFICATION_SERVICE_IDENTITY_PUBLIC_KEY", "notification", "notification-agent")),
             Map.entry("media-worker-service", new CallerIdentity("media-worker-service-current", "MEDIA_WORKER_SERVICE_IDENTITY_PUBLIC_KEY", "media", "media-agent")));
 
@@ -41,6 +39,9 @@ class MemoryV2DeploymentConfigurationTest {
         OFFICIAL_CALLERS.values().forEach(identity -> publicKeys.put(identity.environmentKey(), "fixture-public-key"));
 
         for (Resource resource : resources) {
+            var configured = bindProperties(resource, Map.of());
+            assertFalse(configured.getTrustedCallers().containsKey("contract-service"));
+            assertFalse(configured.getTrustedCallers().containsKey("settlement-service"));
             for (var entry : OFFICIAL_CALLERS.entrySet()) {
                 var caller = bindCaller(resource, entry.getKey(), publicKeys);
                 var identity = entry.getValue();
@@ -76,9 +77,7 @@ class MemoryV2DeploymentConfigurationTest {
                 "marketing-content-service", "MARKETING_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER",
                 "interview-service", "INTERVIEW_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER",
                 "listing-master-service", "LISTING_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER",
-                "business-service", "BUSINESS_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER",
-                "contract-service", "CONTRACT_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER",
-                "settlement-service", "SETTLEMENT_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER");
+                "business-service", "BUSINESS_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER");
 
         for (Resource resource : resources) {
             for (String callerName : callerFlags.keySet()) {

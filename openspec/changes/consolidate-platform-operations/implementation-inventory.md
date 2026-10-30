@@ -22,6 +22,8 @@ Gateway 模板和开发 Nacos 已移除合同和结算路由；开发 Gateway �
 
 Compose 已移除合同和结算服务定义及其 Agent MCP 地址，Agent 模板及首方 MCP 受众表不再登记这两个连接，初始化脚本不再要求其 Nacos 文件。开发 Nacos 的 Agent 模板已发布并回读；两个已停止的旧容器已删除。旧模块、权限、服务身份和其他引用仍待清理，运行中的 Agent 镜像尚未重建。
 
+Auth、Memory 的应用和 Nacos 模板已移除合同与结算的服务身份信任，Auth RAG caller 与 Agent A2A 受众映射也已删除，密钥生成清单不再生成这两个身份。Auth 和 Memory 开发 Nacos 已发布并回读；现有容器镜像尚未重建，旧密钥文件、数据库权限、模块和 RAG 空间仍待清理。
+
 统一启动类已取代复制来的三个旧启动类，并作为 Maven 打包入口。真实环境启动和服务接线仍需在 2.2–2.5、3.3 中完成。
 
 已添加平台经营 Nacos 模板和发布白名单，配置两个最小权限数据库账号、三类入口授权和单 Agent；MCP 暂默认关闭。模板解析与属性绑定测试通过，开发 Nacos 中的 `platform-operations-service.yaml` 已发布并回读一致。

@@ -100,14 +100,6 @@ auth:
         caller-service: business-review-service
         public-key: ${BUSINESS_REVIEW_SERVICE_IDENTITY_PUBLIC_KEY:}
         allowed-operations: [RESOLVE_BEACON]
-      contract-service-current:
-        caller-service: contract-service
-        public-key: ${CONTRACT_SERVICE_IDENTITY_PUBLIC_KEY:}
-        allowed-operations: [RESOLVE_BEACON]
-      settlement-service-current:
-        caller-service: settlement-service
-        public-key: ${SETTLEMENT_SERVICE_IDENTITY_PUBLIC_KEY:}
-        allowed-operations: [RESOLVE_BEACON]
       notification-service-current:
         caller-service: notification-service
         public-key: ${NOTIFICATION_SERVICE_IDENTITY_PUBLIC_KEY:}
