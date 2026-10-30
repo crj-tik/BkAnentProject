@@ -1,116 +1,37 @@
-# CLAUDE.md
+# 仓库协作说明
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+开始修改前先阅读 [AGENTS.md](AGENTS.md)，按其中的模块结构、编码、测试、临时文件、逻辑清单和提交/推送规则工作。还需先查阅 [docs/logic-rationale.md](docs/logic-rationale.md) 与 [docs/known-issues.md](docs/known-issues.md)。
 
-## 项目认知清单（AI 必读）
+## 活动模块
 
-改动任何模块前，先查阅两份动态维护的清单（详见 AGENTS.md 同名章节）：
+当前活动服务包括 Gateway、Auth、Agent、Listing、Customer、Marketing Content、Media Worker、Notification、Interview、Platform Operations、Memory 和 RAG。合同、结算及旧的独立经营服务已退役；旧 OpenSpec 和验收文件仅供历史追溯，不作为当前运行指引。
 
-- `docs/logic-rationale.md` — 逻辑释义清单（LR-N）：不显而易见的设计根因（凭据签发时机、状态机权限表、脱敏域自洽、MCP 只读边界等）。修改相关代码前先查条目；做出新的非显然设计决策后必须追加。
-- `docs/known-issues.md` — Bug 与已知问题清单（KI-N）：已修/待修缺陷与设计限制。修 bug 前查重；修复后更新状态与 commit；发现新问题当日追加。
+平台经营域由 `platform-operations-service` 提供一个 A2A Agent 和 `/platform-operations/**` API，覆盖经营分析、门店经营复盘、知识运营。Agent 依据签名授权上下文中的精确 `platformCapability` 路由到 analytics、review 或 knowledge，并分别使用工具、权限及 Memory 身份。门店范围只能来自 Auth 签发的可信用户—门店关系；Knowledge 来源必须通过 Interview 限权视图读取。
 
-## Build Commands
+房源比较属于 Listing 域。营销、媒体、通知和访谈仍各自归属当前服务。平台经营功能、接口及前端缺口见 [功能清单](docs/platform-operations-frontend-function-list.md)，服务职责见 [当前架构](docs/current-architecture.md)。
+
+## 构建与验证
 
 ```bash
-# Full project compile (uses Aliyun mirror through .mvn-settings.xml)
 mvn -gs .mvn-settings.xml -s .mvn-settings.xml compile
-
-# Compile a single module and its dependencies
-mvn -pl agent-service -am compile
-
-# Compile with tests skipped
-mvn -pl agent-service -am -DskipTests compile
-
-# Run the local auth smoke profile (build upstream modules first)
-mvn -pl auth-service -am -DskipTests install
-mvn -pl auth-service "-Dspring-boot.run.profiles=local" spring-boot:run
-
-# Run auth-service against the distributed Nacos profile (requires imported config and secrets)
-mvn -pl auth-service "-Dspring-boot.run.profiles=distributed" spring-boot:run
+mvn -gs .mvn-settings.xml -s .mvn-settings.xml test
 ```
 
-All modules share parent `bk-agent-project:1.0.0-SNAPSHOT` (root `pom.xml`). Version properties are centralized in the root POM's `<properties>`.
+单模块构建示例：
 
-## 测试与临时文件
+```bash
+mvn -pl platform-operations-service -am test
+```
 
-- 可复用、需要长期回归的测试放在所属模块的 `src/test/java` 或 `src/test/resources`，作为项目源码保留。
-- 一次性测试脚本、临时夹具和排查脚本统一放在 `.work/YYYY-MM-DD/<session-id>/`，不得散落在仓库根目录或生产代码目录；`.work/` 仅本地使用并必须加入 Git 忽略。
-- 测试与构建输出使用工具默认目录（Maven 使用各模块 `target/`）；会话日志统一放在 `runtime-logs/sessions/YYYY-MM-DD/<session-id>/`，规则见 `runtime-logs/README.md`。
-- 测试或排查结束后，删除一次性脚本、临时夹具和无保留价值的输出。只有可复现的正式测试、必要输入或有复用价值的诊断记录可以保留；诊断记录按日期归档到 `runtime-logs/diagnostics/`。
-- 清理既有或共享文件前先检查用途和引用。不得把正式测试、OpenSpec 产物、用户数据或其他正在运行会话的文件当垃圾清除。
-- 本规则适用于所有在本仓库工作的助手、Agent 和开发者会话。
+数据库初始化与升级统一使用受检 manifest：`docker/mysql/init-manifest.tsv`。不要单独运行未纳入受管清单的 SQL。
 
-## Architecture
+## 配置
 
-This is a **multi-agent real-estate middle-platform** built on Spring Cloud Alibaba, Spring AI (DeepSeek + DashScope), Dubbo, MCP, and Nacos.
+- `application.yml` 保留本地启动、Nacos 导入和环境连接边界；分布式业务运行值维护在 `nacos/*.yaml`。
+- `.env` 只保存本地连接、密钥和启动参数；真实秘密不得提交。
+- Nacos 发布只允许显式选择受管 Data ID；模板更新后核对目标 namespace 的发布回读和服务 readiness。
+- 本机服务身份私钥放在 Git 忽略的 `.secrets/service-identities/`，只发布公钥。
 
-### Service Map
+## OpenSpec
 
-| Service | Port | Role |
-|---------|------|------|
-| `gateway` | — | API gateway |
-| `agent-service` | 9002 | **Supervisor agent** — orchestrates sub-agents via A2A, aggregates MCP tools, manages sessions/workflows |
-| `memory-service` | 9011 | Vector memory (Milvus) RPC |
-| `business-service` | 9010 | Trade feasibility analysis agent (A2A + MCP server) |
-| `marketing-content-service` | 9008 | Content, campaign publishing lifecycle and effect provenance agent |
-| `listing-master-service` | — | Listing master data (Dubbo RPC) |
-| `customer-service` | — | Customer/owner management |
-| `contract-service` | — | Contract lifecycle (A2A agent) |
-| `settlement-service` | — | Commission & settlement (A2A agent) |
-| `notification-service` | — | Notifications (A2A agent) |
-| `media-worker-service` | — | Async media tasks (A2A agent) |
-| `interview-service` | 9014 | AI deep-interview subAgent — three surfaces: A2A governance (ReactAgent), runtime REST/SSE turn pipeline (no ReAct, code-driven decisions), read-only MCP tools (see `docs/ai-interview-subagent-design.md`) |
-| `auth-service` | — | Authentication & authorization |
-
-### Agent Orchestration (agent-service)
-
-- **Supervisor**: `ReactAgent` (Spring AI Alibaba Graph) with DeepSeek `ChatModel` and aggregated tools
-- **Planning**: `SupervisorGraphPlanner` runs an `OfficialPlanningGraph` (DAG) through nodes: LoadSession → LlmIntentPlan → PlanValidation → ParseIntent → PlanTask → SelectAgent
-- **Execution**: Based on plan output, dispatches to `SingleAgentSubgraph` (one agent) or `ParallelAgentSubgraph` (multiple agents in parallel)
-- **Approval**: If required, transitions state to `WAITING`, waits for external callback, then resumes
-- **Handoff/Resume**: `WorkflowResumeSupport` handles agent switching, regeneration with feedback, parallel-result routing, cancellation, and completion chaining
-- **State**: `SupervisorGraphState` shared across subgraphs with checkpoint persistence via `GraphCheckpointStore`
-
-### A2A Protocol (Agent-to-Agent Communication)
-
-Sub-agents expose themselves as A2A agents in two styles:
-1. **`ReactAgent.builder()`** — Trade agent (`business-service`) uses the framework's ReAct loop with `ChatModel` + `ToolCallbackProvider`
-2. **`BaseAgent` + `StateGraph`** — All other sub-agents define a single-node graph, delegate to a domain `*AgentService`
-
-Agent discovery in `agent-service` follows a priority chain:
-1. `NacosAgentCardProvider.getAgentCard(name)` — queries Nacos 3.x Agent Registry directly (preferred)
-2. `HTTP GET /.well-known/agent.json` — fallback HTTP fetch
-3. Nacos metadata (agent-id, agent-domains, etc.) — final fallback
-
-### MCP (Model Context Protocol)
-
-Seven sub-agents expose MCP tools (business/compare/marketing/contract/settlement/notification/media-worker, plus `interview-mcp-server` with read-only transcript/report tools). `agent-service` connects to each via `McpSyncClient` (HTTP streamable transport), wraps them as `SyncMcpToolCallbackProvider`, and merges them with local tools (`AgentMilvusTool.milvusKnowledgeSearch`) into a single `combinedToolCallbackProvider` for the ChatClient. MCP-dedicated tool classes implement the `McpTool` marker interface in `common/`.
-
-### Common Module (`common/`)
-
-Shared across all services: `AgentCard` record, Dubbo RPC interfaces, base models/constants.
-
-### RPC Layer
-
-Inter-service data access uses Dubbo RPC (Nacos registry). Agent coordination uses A2A protocol. The two are independent — Dubbo handles CRUD data, A2A handles agent task delegation.
-
-## Configuration Conventions
-
-- **Local `application.yml`**: Only `server.port`, `spring.application.name`, `spring.config.import` (pointing to Nacos), `spring.cloud.nacos.*`, Dubbo config
-- **`nacos/*.yaml`**: All runtime config — datasource, Redis, RocketMQ, Milvus, DeepSeek/DashScope, A2A, business parameters. These files mirror what's in the live Nacos server
-- **`@ConfigurationProperties`**: All config classes use this annotation; no hardcoded addresses or keys
-- **Env variables**: Convention is `${VAR_NAME:default}`, using `MYSQL_*`, `REDIS_*`, `NACOS_*`, `DEEPSEEK_*`, `DASHSCOPE_*`, `MILVUS_*`, `ROCKETMQ_*` prefixes
-- **Maven settings**: `.mvn-settings.xml` uses Aliyun mirror for dependency resolution
-
-## Key Dependencies (Managed Versions)
-
-- Spring Boot 3.5.0, Spring Cloud 2025.0.0, Spring Cloud Alibaba 2025.0.0.0
-- Spring AI 1.1.2, Spring AI Alibaba BOM 1.1.2.0
-- Dubbo 3.2.15, MyBatis-Plus 3.5.7
-- Nacos client/api 3.1.0 (explicit override of BOM's 3.0.3)
-- MCP SDK 0.14.0
-- RocketMQ Spring 2.3.3
-
-## Nacos Version Requirement
-
-The A2A agent registry feature requires **Nacos 3.x server**. Nacos 2.x will throw `errCode: 501, errMsg: Request Nacos server version is too low, not support agent registry feature`. When running Nacos 2.x, set `spring.ai.alibaba.a2a.nacos.registry.enabled: false` in sub-agent configs.
+实施或继续变更时按仓库安装的 `openspec-apply-change` 指引读取 change 上下文、更新任务状态并完成验证。已应用迁移不可重写，变更通过新的版本化迁移前向实施。

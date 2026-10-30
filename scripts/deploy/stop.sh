@@ -2,7 +2,7 @@
 # 停止环境。默认只停止容器、保留容器与数据卷；删除容器或数据卷必须显式加参数。
 # 说明：full 档位包含 minimal 全部服务，--profile full 可停止两种档位启动的所有容器。
 #
-# 用法：stop.sh [--profile minimal|full|mcp] [--with-mcp] [--down] [--down-volumes --yes]
+# 用法：stop.sh [--profile minimal|full|mcp|platform-preview] [--with-mcp] [--down] [--down-volumes --yes]
 #   --profile       目标档位（默认 full）
 #   --with-mcp      连同 MySQL MCP 容器一起停止
 #   --down          停止并删除容器（保留数据卷；等价 docker compose down）
@@ -30,7 +30,7 @@ while [ $# -gt 0 ]; do
     *) die "未知参数：$1" ;;
   esac
 done
-case "$PROFILE" in minimal|full|mcp) ;; *) die "--profile 只支持 minimal|full|mcp" ;;
+case "$PROFILE" in minimal|full|mcp|platform-preview) ;; *) die "--profile 只支持 minimal|full|mcp|platform-preview" ;;
 esac
 
 if [ "$DOWN_VOLUMES" -eq 1 ] && [ "$ASSUME_YES" -ne 1 ]; then

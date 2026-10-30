@@ -28,11 +28,8 @@
         <module>customer-service</module>
         <module>media-worker-service</module>
         <module>marketing-content-service</module>
-        <module>business-service</module>
         <module>platform-operations-service</module>
-        <module>business-review-service</module>
         <module>interview-service</module>
-        <module>knowledge-service</module>
     </modules>
 
     <properties>

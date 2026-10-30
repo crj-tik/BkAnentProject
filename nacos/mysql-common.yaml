@@ -13,9 +13,6 @@ mysql:
     customer: ${MYSQL_DB_CUSTOMER:bk_customer}
     notification: ${MYSQL_DB_NOTIFICATION:bk_notification}
     marketing: ${MYSQL_DB_MARKETING:bk_marketing}
-    # Legacy source retained for controlled migration and rollback; not an active marketing writer.
-    business: ${MYSQL_DB_BUSINESS:bk_business}
-    business-review: ${MYSQL_DB_BUSINESS_REVIEW:bk_business_review}
     platform-operations: ${MYSQL_DB_PLATFORM_OPERATIONS:bk_platform_operations}
 
   jdbc:
@@ -26,8 +23,6 @@ mysql:
     customer: jdbc:mysql://${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}/${MYSQL_DB_CUSTOMER:bk_customer}?${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
     notification: jdbc:mysql://${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}/${MYSQL_DB_NOTIFICATION:bk_notification}?${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
     marketing: jdbc:mysql://${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}/${MYSQL_DB_MARKETING:bk_marketing}?${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
-    business: jdbc:mysql://${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}/${MYSQL_DB_BUSINESS:bk_business}?${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
-    business-review: jdbc:mysql://${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}/${MYSQL_DB_BUSINESS_REVIEW:bk_business_review}?${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
     platform-operations: jdbc:mysql://${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}/${MYSQL_DB_PLATFORM_OPERATIONS:bk_platform_operations}?${MYSQL_PARAMS:useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}
 
 spring:

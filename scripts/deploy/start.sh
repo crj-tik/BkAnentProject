@@ -2,7 +2,7 @@
 # 启动指定档位的完整环境，并等待全部容器健康。
 # 首次启动会构建镜像（容器内 Maven 打包，耗时较长）；重复启动可加 --no-build 跳过。
 #
-# 用法：start.sh [--profile minimal|full|mcp|rag] [--with-mcp] [--with-rag] [--service NAME ...] [--no-deps] [--no-build] [--wait-timeout SEC] [--no-wait]
+# 用法：start.sh [--profile minimal|full|mcp|rag|platform-preview] [--with-mcp] [--with-rag] [--service NAME ...] [--no-deps] [--no-build] [--wait-timeout SEC] [--no-wait]
 #   --profile       启动档位（默认 full；minimal 只含 MySQL/Nacos/认证/网关）
 #   --with-mcp      附加启动 MySQL MCP 只读服务（mcp profile）
 #   --no-build      跳过镜像构建，直接使用本地已有镜像
@@ -37,7 +37,7 @@ while [ $# -gt 0 ]; do
     *) die "未知参数：$1" ;;
   esac
 done
-case "$PROFILE" in minimal|full|mcp|rag) ;; *) die "--profile 只支持 minimal|full|mcp|rag" ;;
+case "$PROFILE" in minimal|full|mcp|rag|platform-preview) ;; *) die "--profile 只支持 minimal|full|mcp|rag|platform-preview" ;;
 esac
 case "$WAIT_TIMEOUT" in ''|*[!0-9]*) die "--wait-timeout 需要非负整数秒" ;; esac
 

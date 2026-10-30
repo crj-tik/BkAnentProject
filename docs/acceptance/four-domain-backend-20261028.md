@@ -1,6 +1,6 @@
 # 四域后端检查记录
 
-日期：2026-10-28；代码基线：`39136591`（`dev-fix`）。本次针对合并后的代码进行本机测试，并整理 [前端功能清单](../four-domain-frontend-function-list.md)。
+日期：2026-10-28；代码基线：`39136591`（`dev-fix`）。本次针对当时合并后的代码进行本机测试，并整理前端输入；当前页面与 API 清单见[平台经营域前端功能清单](../platform-operations-frontend-function-list.md)。
 
 ## 执行结果
 

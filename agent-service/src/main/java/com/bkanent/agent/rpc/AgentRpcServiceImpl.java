@@ -1,7 +1,6 @@
 package com.bkanent.agent.rpc;
 
 import com.bkanent.agent.service.AgentCapabilityService;
-import com.bkanent.common.model.KpiSummaryDTO;
 import com.bkanent.common.model.PublishRequest;
 import com.bkanent.common.marketing.campaign.MarketingContentDraftResponse;
 import com.bkanent.common.rpc.AgentRpcService;
@@ -24,11 +23,6 @@ public class AgentRpcServiceImpl implements AgentRpcService {
     @Override
     public List<MarketingContentDraftResponse> createMarketingDraft(PublishRequest request) {
         return agentCapabilityService.createMarketingDraft(request);
-    }
-
-    @Override
-    public String generateKpiNarrative(List<KpiSummaryDTO> kpis) {
-        return agentCapabilityService.generateKpiNarrative(kpis);
     }
 
 }

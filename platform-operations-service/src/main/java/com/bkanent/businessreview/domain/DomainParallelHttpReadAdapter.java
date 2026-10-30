@@ -25,11 +25,10 @@ import java.util.Map;
  * Consumer-local wire adapter for domain-parallel-v1. It never turns a remote error into a fixture.
  */
 @Component
-@ConditionalOnProperty(prefix = "business-review.sources", name = "mode", havingValue = "http")
+@ConditionalOnProperty(prefix = "platform-operations.review.sources", name = "mode", havingValue = "http")
 public class DomainParallelHttpReadAdapter implements ReviewDatasetPort {
     public static final String CONTRACT_VERSION = "domain-parallel-v1";
     private final RestClient listing;
-    private final RestClient knowledge;
     private final DomainParallelProperties properties;
     private final DomainParallelRequestAuthenticator authenticator;
     private final com.fasterxml.jackson.databind.ObjectMapper mapper;
@@ -45,24 +44,17 @@ public class DomainParallelHttpReadAdapter implements ReviewDatasetPort {
 
     DomainParallelHttpReadAdapter(RestClient.Builder builder, DomainParallelProperties properties,
                                   DomainParallelRequestAuthenticator authenticator,
-                                  com.fasterxml.jackson.databind.ObjectMapper mapper, boolean configureTimeouts) {
-        this(builder, properties, authenticator, mapper, configureTimeouts, null);
-    }
-
-    DomainParallelHttpReadAdapter(RestClient.Builder builder, DomainParallelProperties properties,
-                                  DomainParallelRequestAuthenticator authenticator,
                                   com.fasterxml.jackson.databind.ObjectMapper mapper, boolean configureTimeouts,
                                   PublishedKnowledgeService localKnowledge) {
-        if (properties.getListingBaseUrl() == null || properties.getListingBaseUrl().isBlank()
-                || (localKnowledge == null && (properties.getKnowledgeBaseUrl() == null || properties.getKnowledgeBaseUrl().isBlank()))) {
-            throw new IllegalStateException("Both domain-parallel-v1 source URLs are required in HTTP mode");
+        if (properties.getListingBaseUrl() == null || properties.getListingBaseUrl().isBlank()) {
+            throw new IllegalStateException("The Listing source URL is required in HTTP mode");
         }
+        if (localKnowledge == null) throw new IllegalStateException("Platform Operations Knowledge source is required");
         if (configureTimeouts && (properties.getConnectTimeoutMs() < 1 || properties.getReadTimeoutMs() < 1
                 || properties.getConnectTimeoutMs() > 60_000 || properties.getReadTimeoutMs() > 60_000)) {
             throw new IllegalStateException("Domain source HTTP timeouts must be between 1 and 60000 ms");
         }
         this.listing = createClient(builder, properties.getListingBaseUrl(), properties, configureTimeouts);
-        this.knowledge = localKnowledge == null ? createClient(builder, properties.getKnowledgeBaseUrl(), properties, configureTimeouts) : null;
         this.properties = properties;
         this.authenticator = authenticator;
         this.mapper = mapper;
@@ -90,11 +82,7 @@ public class DomainParallelHttpReadAdapter implements ReviewDatasetPort {
         Instant observedAt = Instant.now();
         JsonNode listingResponse = post(listing, "/listings/business/v1/search", properties.getListingAudience(),
                 authorizationOperation, Map.of("contractVersion", CONTRACT_VERSION, "keyword", "房源维护", "limit", 20));
-        JsonNode knowledgeResponse = localKnowledge == null
-                ? post(knowledge, "/knowledge/v1/published/search", properties.getKnowledgeAudience(), authorizationOperation,
-                    Map.of("contractVersion", CONTRACT_VERSION, "problem", "带看停滞或房源维护缺口",
-                            "scene", "store-business-review", "tags", List.of("store", "listing"), "limit", 20))
-                : localSearch(authorizationOperation);
+        JsonNode knowledgeResponse = localSearch(authorizationOperation);
         List<ReviewFact> facts = new ArrayList<>();
         facts.addAll(mapListing(listingResponse, observedAt));
         facts.addAll(mapKnowledge(knowledgeResponse, observedAt));
@@ -110,8 +98,7 @@ public class DomainParallelHttpReadAdapter implements ReviewDatasetPort {
                 .filter(f -> f.kind() == FactKind.KNOWLEDGE).toList();
         return check(listing, "/listings/business/v1/snapshots/check", properties.getListingAudience(),
                 authorizationOperation, listingRefs, false)
-                && check(knowledge, "/knowledge/v1/published/check", properties.getKnowledgeAudience(),
-                authorizationOperation, knowledgeRefs, true);
+                && check(null, null, null, authorizationOperation, knowledgeRefs, true);
     }
 
     private boolean check(RestClient client, String path, String audience, String operation,
@@ -127,7 +114,7 @@ public class DomainParallelHttpReadAdapter implements ReviewDatasetPort {
                 ref.put("contentHash", f.source().contentHash());
             return ref;
         }).toList();
-        JsonNode response = knowledgeSource && localKnowledge != null
+        JsonNode response = knowledgeSource
                 ? localCheck(facts, operation)
                 : post(client, path, audience, operation, Map.of("contractVersion", CONTRACT_VERSION, "refs", refs));
         JsonNode items = response.path("data").path("items");

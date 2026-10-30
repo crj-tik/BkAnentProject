@@ -1,6 +1,6 @@
 # 当前架构图集
 
-2026-10-29，根据当前工作区源码生成。描述实现结构，不表示已部署或端到端验收。
+2026-10-30，根据当前工作区源码生成。描述实现结构，不表示已部署或端到端验收。
 
 打开 [图集浏览页](index.html) 查看全部图片。PNG 适合分享，SVG 适合放大与编辑。
 
@@ -12,10 +12,9 @@
 | 房源比较｜Listing 子能力 | [PNG](04-listing-comparison.png) | [SVG](04-listing-comparison.svg) |
 | 营销内容 Agent｜执行流程 | [PNG](05-marketing-agent.png) | [SVG](05-marketing-agent.svg) |
 | 媒体素材 Agent｜执行流程 | [PNG](06-media-agent.png) | [SVG](06-media-agent.svg) |
-| 经营分析 Agent｜执行流程 | [PNG](07-trade-agent.png) | [SVG](07-trade-agent.svg) |
-| 合同审查 Agent｜执行流程 | [PNG](08-contract-agent.png) | [SVG](08-contract-agent.svg) |
-| 佣金结算 Agent｜执行流程 | [PNG](09-settlement-agent.png) | [SVG](09-settlement-agent.svg) |
-| 消息通知 Agent｜执行流程 | [PNG](10-notification-agent.png) | [SVG](10-notification-agent.svg) |
+| 平台经营域 Agent｜执行流程 | [PNG](07-platform-operations-agent.png) | [SVG](07-platform-operations-agent.svg) |
+| 消息通知 Agent｜执行流程 | [PNG](08-notification-agent.png) | [SVG](08-notification-agent.svg) |
+| 访谈 Agent｜执行流程 | [PNG](09-interview-agent.png) | [SVG](09-interview-agent.svg) |
 | 审批与恢复｜暂停、决策、继续 | [PNG](11-approval-resume.png) | [SVG](11-approval-resume.svg) |
 | 数据流｜请求、上下文、产物与记忆 | [PNG](12-data-flow.png) | [SVG](12-data-flow.svg) |
 | RAG｜房源索引与混合检索 | [PNG](13-rag-flow.png) | [SVG](13-rag-flow.svg) |
@@ -25,13 +24,11 @@
 
 ## 重要实现边界
 
-- 当前模板包含 10 个官方 A2A 子 Agent；各 Provider 直接绑定领域本地 @Tool。
-- 房源比较是 Listing 域子能力，不是独立 Agent；主图并行映射仍按代码中的 7 个领域配置。
+- 平台经营分析、门店复盘和知识运营共用一个 A2A Agent，内部能力与 Memory 标识分开授权。
+- 合同与结算业务域已退役；房源比较仍是 Listing 域能力。
 - 营销 publishContent 仅更新本地发布状态。
 - 媒体消费者实际生成图片，不是完整视频生成链路。
-- 默认规划为 rule-first、LLM 规划关闭；会话流 provider 默认 memory。
-- SubAgentSkillSupport 已存在，但未见官方 Provider 接入。
-- 外部发布、邮件、签章、媒体 Provider 受集成模式约束，不能因本地模拟成功认定真实集成可用。
+- 外部发布、邮件和媒体 Provider 受集成模式约束，不能因本地模拟成功认定真实集成可用。
 
 ## 复现
 
@@ -67,22 +64,23 @@
 - [`media-worker-service/src/main/java/com/bkanent/media/a2a/MediaOfficialA2aAgent.java`](../../media-worker-service/src/main/java/com/bkanent/media/a2a/MediaOfficialA2aAgent.java)
 - [`media-worker-service/src/main/java/com/bkanent/media/a2a/A2aSupervisorContextInterceptor.java`](../../media-worker-service/src/main/java/com/bkanent/media/a2a/A2aSupervisorContextInterceptor.java)
 - [`media-worker-service/src/main/java/com/bkanent/media/tool/MediaTools.java`](../../media-worker-service/src/main/java/com/bkanent/media/tool/MediaTools.java)
-### 经营分析 Agent｜执行流程
-- [`business-service/src/main/java/com/bkanent/business/a2a/TradeOfficialA2aAgent.java`](../../business-service/src/main/java/com/bkanent/business/a2a/TradeOfficialA2aAgent.java)
-- [`business-service/src/main/java/com/bkanent/business/a2a/A2aSupervisorContextInterceptor.java`](../../business-service/src/main/java/com/bkanent/business/a2a/A2aSupervisorContextInterceptor.java)
-- [`business-service/src/main/java/com/bkanent/business/tool/TradeTools.java`](../../business-service/src/main/java/com/bkanent/business/tool/TradeTools.java)
-### 合同审查 Agent｜执行流程
-- [`contract-service/src/main/java/com/bkanent/contract/a2a/ContractOfficialA2aAgent.java`](../../contract-service/src/main/java/com/bkanent/contract/a2a/ContractOfficialA2aAgent.java)
-- [`contract-service/src/main/java/com/bkanent/contract/a2a/A2aSupervisorContextInterceptor.java`](../../contract-service/src/main/java/com/bkanent/contract/a2a/A2aSupervisorContextInterceptor.java)
-- [`contract-service/src/main/java/com/bkanent/contract/tool/ContractTools.java`](../../contract-service/src/main/java/com/bkanent/contract/tool/ContractTools.java)
-### 佣金结算 Agent｜执行流程
-- [`settlement-service/src/main/java/com/bkanent/settlement/a2a/SettlementOfficialA2aAgent.java`](../../settlement-service/src/main/java/com/bkanent/settlement/a2a/SettlementOfficialA2aAgent.java)
-- [`settlement-service/src/main/java/com/bkanent/settlement/a2a/A2aSupervisorContextInterceptor.java`](../../settlement-service/src/main/java/com/bkanent/settlement/a2a/A2aSupervisorContextInterceptor.java)
-- [`settlement-service/src/main/java/com/bkanent/settlement/tool/SettlementTools.java`](../../settlement-service/src/main/java/com/bkanent/settlement/tool/SettlementTools.java)
+### 平台经营域 Agent｜执行流程
+- [`platform-operations-service/src/main/java/com/bkanent/platform/a2a/PlatformAgentConfiguration.java`](../../platform-operations-service/src/main/java/com/bkanent/platform/a2a/PlatformAgentConfiguration.java)
+- [`platform-operations-service/src/main/java/com/bkanent/platform/a2a/PlatformAgentRouter.java`](../../platform-operations-service/src/main/java/com/bkanent/platform/a2a/PlatformAgentRouter.java)
+- [`platform-operations-service/src/main/java/com/bkanent/business/a2a/PlatformAnalyticsAgent.java`](../../platform-operations-service/src/main/java/com/bkanent/business/a2a/PlatformAnalyticsAgent.java)
+- [`platform-operations-service/src/main/java/com/bkanent/businessreview/a2a/PlatformReviewAgent.java`](../../platform-operations-service/src/main/java/com/bkanent/businessreview/a2a/PlatformReviewAgent.java)
+- [`platform-operations-service/src/main/java/com/bkanent/knowledge/a2a/KnowledgeOfficialA2aAgent.java`](../../platform-operations-service/src/main/java/com/bkanent/knowledge/a2a/KnowledgeOfficialA2aAgent.java)
+- [`platform-operations-service/src/main/java/com/bkanent/business/tool/AnalyticsTools.java`](../../platform-operations-service/src/main/java/com/bkanent/business/tool/AnalyticsTools.java)
+- [`platform-operations-service/src/main/java/com/bkanent/businessreview/tool/ReviewDraftTools.java`](../../platform-operations-service/src/main/java/com/bkanent/businessreview/tool/ReviewDraftTools.java)
+- [`platform-operations-service/src/main/java/com/bkanent/knowledge/tool/KnowledgeAgentTools.java`](../../platform-operations-service/src/main/java/com/bkanent/knowledge/tool/KnowledgeAgentTools.java)
 ### 消息通知 Agent｜执行流程
 - [`notification-service/src/main/java/com/bkanent/notification/a2a/NotificationOfficialA2aAgent.java`](../../notification-service/src/main/java/com/bkanent/notification/a2a/NotificationOfficialA2aAgent.java)
 - [`notification-service/src/main/java/com/bkanent/notification/a2a/A2aSupervisorContextInterceptor.java`](../../notification-service/src/main/java/com/bkanent/notification/a2a/A2aSupervisorContextInterceptor.java)
 - [`notification-service/src/main/java/com/bkanent/notification/tool/NotificationTools.java`](../../notification-service/src/main/java/com/bkanent/notification/tool/NotificationTools.java)
+### 访谈 Agent｜执行流程
+- [`interview-service/src/main/java/com/bkanent/interview/a2a/InterviewOfficialA2aAgent.java`](../../interview-service/src/main/java/com/bkanent/interview/a2a/InterviewOfficialA2aAgent.java)
+- [`interview-service/src/main/java/com/bkanent/interview/a2a/A2aSupervisorContextInterceptor.java`](../../interview-service/src/main/java/com/bkanent/interview/a2a/A2aSupervisorContextInterceptor.java)
+- [`interview-service/src/main/java/com/bkanent/interview/tool/InterviewTools.java`](../../interview-service/src/main/java/com/bkanent/interview/tool/InterviewTools.java)
 ### 审批与恢复｜暂停、决策、继续
 - [`agent-service/src/main/java/com/bkanent/agent/orchestration/SupervisorToolLoopGraph.java`](../../agent-service/src/main/java/com/bkanent/agent/orchestration/SupervisorToolLoopGraph.java)
 - [`agent-service/src/main/java/com/bkanent/agent/graph/official/ApprovalResumeClaimStore.java`](../../agent-service/src/main/java/com/bkanent/agent/graph/official/ApprovalResumeClaimStore.java)
@@ -106,7 +104,7 @@
 - [`common-skill/src/main/java/com/bkanent/common/skill/core/SkillMatcher.java`](../../common-skill/src/main/java/com/bkanent/common/skill/core/SkillMatcher.java)
 - [`agent-service/src/main/java/com/bkanent/agent/config/SkillConfiguration.java`](../../agent-service/src/main/java/com/bkanent/agent/config/SkillConfiguration.java)
 - [`agent-service/src/main/java/com/bkanent/agent/skill/SkillAwareToolProvider.java`](../../agent-service/src/main/java/com/bkanent/agent/skill/SkillAwareToolProvider.java)
-- [`contract-service/src/main/java/com/bkanent/contract/a2a/ContractOfficialA2aAgent.java`](../../contract-service/src/main/java/com/bkanent/contract/a2a/ContractOfficialA2aAgent.java)
+- [`platform-operations-service/src/main/java/com/bkanent/platform/a2a/PlatformAgentRouter.java`](../../platform-operations-service/src/main/java/com/bkanent/platform/a2a/PlatformAgentRouter.java)
 ### 全系统总览｜房地产中台多 Agent 系统
 - [`pom.xml`](../../pom.xml)
 - [`agent-service/src/main/java/com/bkanent/agent/orchestration/SupervisorToolLoopGraph.java`](../../agent-service/src/main/java/com/bkanent/agent/orchestration/SupervisorToolLoopGraph.java)

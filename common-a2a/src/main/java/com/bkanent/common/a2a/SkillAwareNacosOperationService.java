@@ -5,6 +5,7 @@ import com.alibaba.cloud.ai.a2a.registry.nacos.properties.NacosA2aProperties;
 import com.alibaba.cloud.ai.a2a.registry.nacos.register.NacosA2aRegistryProperties;
 import com.alibaba.cloud.ai.a2a.registry.nacos.service.NacosA2aOperationService;
 import com.alibaba.nacos.api.ai.A2aService;
+import com.alibaba.nacos.api.ai.constant.AiConstants;
 import com.alibaba.nacos.api.ai.model.a2a.AgentEndpoint;
 import com.alibaba.nacos.api.exception.NacosException;
 import com.alibaba.nacos.api.exception.runtime.NacosRuntimeException;
@@ -45,10 +46,12 @@ public final class SkillAwareNacosOperationService extends NacosA2aOperationServ
     public void republishAgent(AgentCard card) {
         registerAgent(card);
         try {
-            var existing = NacosSkillCardMapper.toOfficial(service.getAgentCard(card.name(), card.version(), "URL"));
+            var existing = NacosSkillCardMapper.toOfficial(service.getAgentCard(
+                    card.name(), card.version(), AiConstants.A2a.A2A_ENDPOINT_TYPE_SERVICE));
             if (java.util.Objects.equals(existing.skills(), card.skills())
                     && java.util.Objects.equals(existing.capabilities(), card.capabilities())) return;
-            if (!maintainer.get().updateAgentCard(NacosSkillCardMapper.toNacos(card), namespace, registry.isRegisterAsLatest(), "SERVICE"))
+            if (!maintainer.get().updateAgentCard(NacosSkillCardMapper.toNacos(card), namespace,
+                    registry.isRegisterAsLatest(), AiConstants.A2a.A2A_ENDPOINT_TYPE_SERVICE))
                 throw new IllegalStateException("NACOS_CARD_UPDATE_REJECTED");
         } catch (NacosException exception) { throw new NacosRuntimeException(exception.getErrCode(), exception.getErrMsg()); }
     }

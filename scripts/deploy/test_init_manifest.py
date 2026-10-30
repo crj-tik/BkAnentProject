@@ -33,6 +33,7 @@ EXPECTED_PLATFORM_MIGRATIONS = {
     ("platform-operations-authorization-20261029-v1", "bk_auth", "sql/migrations/20261029_platform_operations_authorization.sql"),
     ("retire-contract-settlement-databases-20261030-v1", "bk_auth", "sql/migrations/20261030_retire_contract_settlement_databases.sql"),
     ("retire-platform-legacy-authorization-20261030-v1", "bk_auth", "sql/migrations/20261030_retire_platform_legacy_authorization.sql"),
+    ("retire-platform-legacy-schemas-20261030-v1", "bk_auth", "sql/migrations/20261030_retire_platform_legacy_schemas.sql"),
 }
 
 BASELINE_PERMISSION_CODES = {
@@ -161,9 +162,8 @@ def main() -> None:
     if sum((row[2], row[3], row[4]) == EXPECTED_LEGACY_RETIREMENT for row in rows) != 1:
         fail("legacy Compare/Promotion retirement must be registered exactly once")
 
-    mysql_init = (ROOT / "sql/mysql-init.sql").read_text(encoding="utf-8")
-    if "bk_promotion" in mysql_init:
-        fail("fresh bootstrap must not recreate the retired Promotion database")
+    if (ROOT / "sql/mysql-init.sql").exists():
+        fail("unmanaged sql/mysql-init.sql is retired; use the versioned initialization manifest")
 
     baseline_rows = [row for row in rows if row[4] == BASELINE_RETIREMENT_MIGRATION]
     if len(baseline_rows) != 1:
@@ -202,7 +202,17 @@ def main() -> None:
                 )
             ) and set(re.findall(r"(?im)^\s*DROP DATABASE IF EXISTS (\w+);", migration)) == {
                 "bk_contract", "bk_settlement"}
-            if not reviewed_promotion and not reviewed_contract:
+            reviewed_platform_legacy = relative == "sql/migrations/20261030_retire_platform_legacy_schemas.sql" and all(
+                marker in migration for marker in (
+                    "IF total_business_rows <> 0 THEN", "SIGNAL SQLSTATE '45000'",
+                    "retired_schema_migration", "DROP DATABASE IF EXISTS bk_business;",
+                    "DROP DATABASE IF EXISTS bk_business_review;", "DROP DATABASE IF EXISTS bk_knowledge;",
+                    "DROP USER IF EXISTS 'knowledge_app'@'%';",
+                    "DROP USER IF EXISTS 'knowledge_source_ro'@'%';",
+                )
+            ) and set(re.findall(r"(?im)^\s*DROP DATABASE IF EXISTS (\w+);", migration)) == {
+                "bk_business", "bk_business_review", "bk_knowledge"}
+            if not reviewed_promotion and not reviewed_contract and not reviewed_platform_legacy:
                 fail(f"unreviewed database retirement or missing empty-database guard: {relative}")
         delete_statements = re.findall(r"(?ims)^\s*DELETE\s+FROM\s+([a-z0-9_]+)(.*?);", migration)
         if delete_statements:

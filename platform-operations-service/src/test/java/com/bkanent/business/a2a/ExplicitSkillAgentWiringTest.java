@@ -25,12 +25,12 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class ExplicitSkillAgentWiringTest {
-    private static final String AUDIENCE = "business-service";
+    private static final String AUDIENCE = "platform-operations-service";
 
     @Test
     void actualServicePublishesAndExecutesExplicitAndDefaultContracts() throws Exception {
         var registry = new SkillRegistry(new SkillFileLoader(), "");
-        var selected = registry.findOperationalSkills("trade").stream().filter(skill -> !skill.tools().isEmpty()).findFirst().orElseThrow();
+        var selected = registry.findOperationalSkills("analytics").stream().filter(skill -> !skill.tools().isEmpty()).findFirst().orElseThrow();
         ChatModel model = mock(ChatModel.class); AtomicInteger turns = new AtomicInteger();
         when(model.call(any(Prompt.class))).thenAnswer(invocation -> {
             Prompt prompt = invocation.getArgument(0);
@@ -42,7 +42,7 @@ class ExplicitSkillAgentWiringTest {
             if (turns.getAndIncrement() == 0) assertThat(prompt.getSystemMessage().getText()).contains(selected.systemPrompt(), "验收原始需求");
             return new ChatResponse(List.of(new Generation(new AssistantMessage("{\"decision\":\"SUCCESS\",\"summary\":\"完成\"}"))));
         });
-        var constructor = TradeOfficialA2aAgent.class.getConstructors()[0];
+        var constructor = PlatformAnalyticsAgent.class.getConstructors()[0];
         Object[] args = new Object[constructor.getParameterCount()];
         var types = constructor.getParameterTypes();
         args[0] = model; args[1] = types[1].getConstructor().newInstance(); args[3] = registry;
@@ -51,15 +51,15 @@ class ExplicitSkillAgentWiringTest {
                 : mock(types[2]);
         args[4] = requiredMemoryHookFactory();
         Object component = constructor.newInstance(args);
-        var card = (AgentCard) TradeOfficialA2aAgent.class.getMethod("tradePublishedAgentCard",
+        var card = (AgentCard) PlatformAnalyticsAgent.class.getMethod("analyticsPublishedAgentCard",
                 com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerProperties.class, com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerAgentCardProperties.class)
                 .invoke(component, new com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerProperties(), new com.alibaba.cloud.ai.a2a.autoconfigure.A2aServerAgentCardProperties());
         assertThat(card.capabilities().extensions()).anySatisfy(extension -> assertThat(extension.uri()).isEqualTo(SkillPublication.EXTENSION_URI));
         assertThat(card.skills()).anySatisfy(skill -> assertThat(skill.name()).isEqualTo(selected.name()));
-        var executor = (AgentExecutor) TradeOfficialA2aAgent.class.getMethod("tradeA2aAgentExecutor", ObjectMapper.class, com.bkanent.common.a2a.A2aExecutionProperties.class)
+        var executor = (AgentExecutor) PlatformAnalyticsAgent.class.getMethod("analyticsA2aAgentExecutor", ObjectMapper.class, com.bkanent.common.a2a.A2aExecutionProperties.class)
                 .invoke(component, new ObjectMapper(), new com.bkanent.common.a2a.A2aExecutionProperties());
-        assertMemoryHookWiring(component, executor, "platform-operations-service", "trade", "platform-operations-analytics");
-        var selection = Map.of("name", selected.name(), "owner", "trade", "version", selected.version(), "contentHash", selected.contentHash(), "mode", "explicit");
+        assertMemoryHookWiring(component, executor, "platform-operations-service", "analytics", "platform-operations-analytics");
+        var selection = Map.of("name", selected.name(), "owner", "analytics", "version", selected.version(), "contentHash", selected.contentHash(), "mode", "explicit");
         assertThat(A2aCredentialContext.snapshot()).isNull();
         try (QueueScope unauthenticated = new QueueScope()) {
             assertThatThrownBy(() -> executor.execute(context("no-lease", Map.of("supervisor", Map.of("skillSelection", selection))), unauthenticated.queue))

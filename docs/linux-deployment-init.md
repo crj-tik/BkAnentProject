@@ -94,8 +94,9 @@ KI-42 的等待/状态成功误报、KI-48 的 Redis readiness 与真实客户�
 - Compose 默认只绑定 `127.0.0.1`；`--bind 0.0.0.0` 对外开放前确认防火墙/安全组，并同步复查 `A2A_PUBLIC_BASE_URL`、`MINIO_PUBLIC_BASE_URL`（不能用对端不可达的 loopback 地址）。
 - 真实模型调用前须核验 `DEEPSEEK_API_KEY`（chat）、`RAG_EMBEDDING_API_KEY`（embedding）和 `RAG_RERANK_API_KEY`（独立 RAG 重排）；占位值不证明模型能力。旧 `AGENT_RAG_RERANK_API_KEY` 不再有应用消费者，已有 `.env` 值无需盲删，也不会自动注入新变量；不得擅用其他 reranker 项目的凭据。
 - `.env` 只放端口、基础设施连接、密钥及启动引导参数；集成模式、Token TTL、模型参数、Redis 排行榜、流式 provider 和 Milvus/ES 搜索开关均在对应 Nacos data ID 中维护，不再放入 `.env`。
-- 分布式生产部署必须在 Nacos 将 `contract.integration.mode`、`notification.integration.mode`、`media.integration.mode`、`promotion.integration.mode` 显式设为 `real`，并接入/选择真实 provider（合同同时配置真实 OCR/电子签 provider）；仅改 `real` 而没有真实实现仍会报告未实现，不会伪造成功。仓库 YAML 默认保持 Docker 开发模式 `local`，导入前准备环境专属配置；`config-init` 只发布显式选择的 data ID 到实际 namespace，默认不发布；它仍会覆盖所选配置，不能用开发模板覆盖生产设置。依赖 readiness 保持不变。
-- Compose 已允许 `.env` 中的 `NACOS_USERNAME`、`NACOS_PASSWORD`、`MINIO_PUBLIC_BASE_URL` 覆盖应用容器取值。Nacos Admin 账号初始化及目标命名空间 Card 更新权限须另行配置，设置或生成密码并不代表已有授权（LR-28）。
+- 部署时以当前活动 Nacos Data ID 和目标环境的配置清单为准；仓库模板用于 Docker 开发，不应覆盖生产环境配置。`config-init` 只发布显式选择的 Data ID 到指定 namespace，发布前需审核所选模板与回滚快照。
+- Compose 仅向 A2A 提供方与 Agent 注册发现客户端传递 `NACOS_USERNAME`、`NACOS_PASSWORD`；Nacos 配置/普通服务发现使用独立的 `NACOS_CLIENT_USERNAME`、`NACOS_CLIENT_PASSWORD`，配置发布与退役仅由一次性 `config-init` 使用 Admin 凭据。`NACOS_AUTH_ENABLE` 控制客户端鉴权，Admin API 另由 `NACOS_AUTH_ADMIN_ENABLE` 控制；必须通过受管初始化授予 AgentCard 命名空间读写权限（LR-28、LR-171）。
+- 开发 Compose 将 Nacos Derby 数据保存在 `nacos-data` named volume 中。普通容器重建会保留配置、账号和注册资料；执行 `docker compose down -v` 会一并删除开发数据。
 - 旧库 `user_account.password_hash` 为明文的，先按 README 完成 BCrypt 迁移再开放认证。
 - 初始化随机生成的 `MYSQL_MCP_PASSWORD`/`MYSQL_MCP_TOKEN` 已就位，启用 MCP 只读服务：`docker compose --profile mcp run --rm mysql-mcp-init` 后 `./scripts/deploy/start.sh --profile mcp`。
 

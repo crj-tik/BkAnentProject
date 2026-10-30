@@ -1724,7 +1724,7 @@
 
 **关联**：LR-120；`docker-compose.yml`、`test_knowledge_config.py`、`KnowledgeDataSourceConfiguration`；change `extract-knowledge-operations-domain`。
 
-## KI-218 [OPEN·P1] Knowledge合并后运行态验收尚未完成
+## KI-218 [SUPERSEDED·2026-10-30·P1] 独立 Knowledge 服务运行态验收被平台经营域合并取代
 
 **发现日期与依据**：2026-10-28，准备合并 `extract-knowledge-operations-domain` 时核对 OpenSpec 任务，5.1–5.3 尚未完成。代码与部署模板已经交付，但当前执行环境无法连接目标 MySQL，未将 Nacos 模板发布到运行环境，也未完成跨 Auth、Memory 与 Interview 来源的集成闭环。
 
@@ -1739,6 +1739,10 @@
 **2026-10-28 开发环境进展**：受管迁移 510/520 已在 `bk-anent-dev` MySQL 应用并通过 schema/view/grant check；`knowledge_app` 和 `knowledge_source_ro` 已用本地独立凭据解锁，验证各自可读所需对象、不能直读 Interview 表；view definer 保持锁定。`knowledge-service.yaml` 已写入开发 Nacos 并回读。真实服务启动、Memory 运行态密钥加载及跨服务闭环尚待验证，本项保持 OPEN。
 
 **关联**：KI-216/217；LR-120；`docs/knowledge-service-operations.md`；change `extract-knowledge-operations-domain`。
+
+**处置**：独立 `knowledge-service` 已由 `consolidate-platform-operations` 退役，知识创建、审核、发布、检索和撤回归入 `platform-operations-service`；原 Knowledge 专属 Nacos ID、Auth/Memory caller 和运行入口不再作为当前验收目标。平台经营库、受限访谈来源视图/owner、应用与来源账号、当前迁移账本及幂等升级已按现态检查，12 个活动 Nacos Data ID 已发布并回读。新统一服务的授权 Agent 绑定和可信 STORE 范围仍由 KI-233 跟踪；此处置不表示真实 Agent 端到端链路已关闭。
+
+**替代依据**：LR-170；`docs/platform-operations-frontend-function-list.md`；`openspec/changes/consolidate-platform-operations`。
 
 ## KI-219 [FIXED·本提交·P2] 门店复盘数据库创建项的manifest校验摘要误录
 
@@ -1806,13 +1810,13 @@
 
 **修复**：在应用配置登记各自公钥与精确 domain/agent，并扩展 `MemoryV2DeploymentConfigurationTest`，逐一验证应用和 Nacos 两个配置面。运行态仍须验证 Nacos 已加载及服务间真实签名调用。
 
-## KI-233 [OPEN·P1] 开发 Auth 缺少 Agent 执行绑定受信授权
+## KI-233 [FIXED·本提交·P1] 开发 Auth 缺少 Agent 执行绑定受信授权
 
 **发现日期**：2026-10-30。开发 Nacos 与仓库 Auth 模板的版本化授权 `trusted-callers` 仅登记 Gateway，未登记 Agent 的 `BIND_EXECUTION`；当前 Agent 执行绑定要求 caller 受信且其精确操作许可覆盖入口签发的全部非基线操作，因此实际 Agent 授权链不能仅靠服务健康或平台权限目录完成。
 
-**进展**：开发库确认目标旧权限没有角色关联。受管迁移 610 已应用并幂等重跑：合同、结算及旧知识/复盘/平台统一入口权限均停用、关联清除，用户授权版本已推进；迁移后仍活动的权限目录为 111 项，Auth Nacos `BIND_EXECUTION` ACL 与其逐项一致。Agent 到平台经营的通用入口使用基线 `agent.chat.use`，三类分支仍按各自操作校验。开发 `.env` 显式启用 Auth/Agent 版本化授权和 Redis，Nacos 模板已同步发布，Auth、Agent 使用新镜像重启。经网关实测：匿名平台请求 401，admin 登录后分析健康及月度 KPI 返回 200，broker 对分析和复盘列表返回 403 `PERMISSION_DENIED`；签名上下文请求头超限和月度参数绑定故障已修复。
+**修复与验证**：受管迁移 610 已应用并幂等重跑：合同、结算及旧知识/复盘/平台统一入口权限均停用、关联清除，用户授权版本已推进；迁移后仍活动的权限目录为 111 项，Auth Nacos `BIND_EXECUTION` ACL 与其逐项一致。本地 H2 Auth 初始目录也已同步当前分析/复盘/知识分支权限及复盘、知识操作，不再种入结算权限，且不自动授予角色。Agent 到平台经营的通用入口使用基线 `agent.chat.use`，三类分支仍按各自操作校验。实际 Gateway→Auth→Agent API 验收通过 15 项断言：Agent 受保护读取 200、普通 broker 的平台经营越权 403、无 token 伪造身份 401、请求替换用户 403、登出后 token 401。定向 Maven 验收 73 项通过：Auth 执行绑定覆盖有效 analytics/review 权限、缺失权限、操作扩张、冲突与撤权失败关闭；Auth 门店身份共享、版本审计与撤销通过；平台经营签名 STORE 身份匹配、缺失身份、跨门店拒绝、来源撤回、模拟数据、复盘计划反馈和知识审核发布通过。开发库没有 KPI 事实数据，未填造经营数据。
 
-**待处理**：继续验证真实 Agent `BIND_EXECUTION` 合法分支绑定、缺失权限及撤权失败关闭，并检查 STORE 关系的跨门店拒绝。当前开发库没有经营 KPI 记录，月度 KPI 成功返回空列表；不以虚构业绩数据填充。
+**边界**：本项验证范围是受管代码回归与获准的本地开发 API/数据库/Nacos；未使用真实门店 KPI 填充测试库。门店范围由 Auth 签名 STORE 身份决定，未将请求参数当作身份来源。
 
 ## KI-232 [FIXED·本提交·P1] 平台经营 Agent 已注册但 HTTP 路由缺失
 
@@ -1844,10 +1848,26 @@
 
 **修复与验证**：改用 `platform-operations-service` 签名并更新签名验证测试。测试只验证签名与上下文匹配；房源服务的信任配置和真实跨服务调用仍需随部署同步验收。
 
-## KI-227 [FIXED·95c83c9·P1] 四域合并后运行配置与 Nacos 模板存在漂移
+## KI-227 [FIXED·本提交·P1] 四域合并后运行配置与 Nacos 模板存在漂移
 
 **发现日期**：2026-10-29。Agent 编排上限、Memory 偏好和隐私清理、RAG 并发、Auth 撤权 key prefix、Media→Listing 签名信任等代码配置未完整写入 Nacos 模板或 Compose；退役的 Compare 还残留在当前架构资料和验证说明中。
 
 **修复**：同步应用 YAML、Nacos 模板与 Compose 的当前设置；将 Media/Listing 共用的 `MEDIA_LISTING_AUTH_SECRET` 注入双方容器并仅在忽略的本机 `.env` 生成密钥；显式保持过期的域授权入口关闭。移除 Compare 活动模块/测试、RAG 空间、身份信任和运行说明；受管迁移 540 仅在旧 Promotion schema 为空时删除，并停用 Compare 公开分享权限。
 
-**验证边界**：全仓 23 模块 Maven 回归通过（1,853 项，失败/错误 0，按条件跳过 14 项）；SQL manifest 的 55 个目标、Knowledge 配置核验、Compose 展开及迁移 540 的开发库检查通过。16 份活动 Nacos 模板的 key/prefix 漂移核验均无缺项，Compose 环境占位符在 `.env.example` 中全部有定义。迁移 540 已在获准的开发库执行，旧库不存在、公开分享权限停用且无角色关联、迁移标记恰好一条。此提交修改的是仓库模板，不表示这些新增配置已发布或回读自运行态 Nacos；生产 Nacos 和非开发数据库不在变更范围。验收细节见 `docs/acceptance/four-domain-closeout-20261029.md`。
+**2026-10-30 复核与补齐**：发现 full profile、Nacos 活动发布白名单以及平台经营 RAG 物理名仍有合并后的遗漏；补入平台经营全量运行面，并同步遗漏的 Media/Notification 模板，修正 YAML 冒号键前缀，统一复盘物理索引/集合名称。`config-init` 发布并逐一回读 12 个活动 Data ID；两个已退役经营 Data ID 删除并验证不存在。Compare、合同、结算、旧经营四组各五个空 ES 索引和 Milvus 集合，均先按精确清单核实文档数/rowCount 为 0 再删除，删除后回读确认不存在。开发库受管迁移已幂等重跑，当前 schema、视图 definer 和权限边界检查通过。
+
+**验证边界**：全仓 Maven 结果与模块/用例统计见本次验收记录；SQL manifest 全部目标与摘要、平台经营配置静态校验、Compose 展开、受管迁移和 OpenAPI lint 已核验。活动 Nacos 模板已发布并回读；开发 Compose 运行态重建/接口核验及生产外环境仍按验收记录区分。此处不代表真实 STORE 分支授权已完成；见 KI-233。验收细节见 `docs/acceptance/platform-operations-closeout-20261030.md`。
+
+## KI-234 [FIXED·本提交·P1] Nacos AgentCard 授权与持久化配置不完整
+
+**发现日期**：2026-10-30。开发 Nacos 开启 Admin API 鉴权时，`NACOS_AUTH_ENABLE=false` 仍不代表 Admin API 免认证；原 `bkagent` 角色只有 `ai/*` 写权限，真实 Admin API 查询卡片返回 403。另一个 Compose 漂移把 A2A 凭据放入全部应用环境，RAG 还复用了 A2A 变量作为配置中心客户端凭据；Nacos 未挂数据卷，重建容器后配置、账号和 AgentCard 状态消失。
+
+**修复**：受管初始化幂等创建 Admin 与独立 A2A 账号，并只授予 `BK-AGENT:DEFAULT_GROUP:ai/*` 读/写；仅 A2A 服务和 Agent 注册发现客户端接收该账号。配置发布和退役在客户端鉴权开启时改用一次性 `config-init` Admin 身份，RAG 使用独立 `NACOS_CLIENT_USERNAME/PASSWORD`。Compose 将 Derby 数据持久化到 `nacos-data` named volume。
+
+**验证**：开发环境挂载持久卷后初始化 Nacos，12 个活动 Data ID 逐项与仓库模板一致，两个退役 Data ID 不存在。Admin 与服务账号均可登录；`bkagent` 用受限读权限可读 `platform-operations-agent` 与 `listing-agent`；平台卡片的 3 项技能完整。平台经营 readiness 为 UP，Nacos 与 Compose 均健康。Python 初始化/发布/Compose 配置回归和 Compose 展开通过。Nacos 3.1 权限/API 依据见官方 [Admin API](https://nacos.io/en/docs/latest/manual/admin/admin-api/) 与[鉴权说明](https://nacos.io/en/docs/v3.1/manual/admin/auth/)；数据卷路径见 [Nacos Docker 部署](https://github.com/nacos-group/nacos-docker)。
+
+## KI-235 [FIXED·本提交·P2] RAG 累计时限阶段顺序测试余量过窄
+
+**发现日期**：2026-10-30。`ManagedRagSpaceRegistryTest.fixedStageOrderAndCumulativeDeadlineIncludeEveryStageWithoutRefreshingBudget` 把总预算设为 260ms，并让前两阶段各睡眠 110ms；线程调度和任务提交的开销会用尽第三阶段前仅剩的约 40ms，偶发地只执行两个阶段，导致顺序断言不稳定。
+
+**修复与验证**：将总预算提高到 800ms，前两阶段各运行 200ms，第三阶段主动超过共享总截止时间；断言前三阶段按序启动、末阶段因同一总预算到期未启动。相关 RAG 定向测试 18 项通过；全仓 Maven 结果见本次验收记录。

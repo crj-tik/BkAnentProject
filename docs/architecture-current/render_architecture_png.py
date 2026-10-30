@@ -70,7 +70,7 @@ def render():
     text(d, (82, 38), '房地产中台多 Agent 系统｜当前代码架构', 46, NAVY, True)
     text(d, (84, 104), '分层视图：访问入口 → Supervisor 编排 → 领域 Agent → 业务服务 → 数据与基础设施', 25, MUTED)
     text(d, (W-90, 48), 'PNG 架构图', 22, BLUE, True, 'ra')
-    text(d, (W-90, 92), '2026-10-29', 18, MUTED, False, 'ra')
+    text(d, (W-90, 92), '2026-10-30', 18, MUTED, False, 'ra')
 
     section(d, 205, 205, '1 访问与接入层', BLUE)
     box(d, 130, 275, 560, 90, '业务前端 / API 调用方', 'HTTP 请求 · SSE 订阅', BLUE, 22)
@@ -94,10 +94,8 @@ def render():
     agents = [
         ('listing-agent', '房源检索、比较与摘要'),
         ('marketing-agent', '内容创建与状态'), ('media-agent', '媒体任务与素材'),
-        ('trade-agent', 'KPI / 看板 / 排名'), ('contract-agent', '合同详情与风险'),
-        ('settlement-agent', '佣金 / 汇总 / 批次'), ('notification-agent', '站内信 / 邮件'),
-        ('interview-agent', '访谈与报告'), ('knowledge-agent', '知识案例与审核'),
-        ('business-review-agent', '门店经营复盘'),
+        ('platform-operations-agent', '经营分析 / 门店复盘 / 知识运营'),
+        ('notification-agent', '站内信 / 邮件'), ('interview-agent', '访谈与报告'),
     ]
     x0, y0, bw, bh, gap = 125, 795, 670, 60, 35
     for i, (name, desc) in enumerate(agents):
@@ -109,10 +107,9 @@ def render():
     section(d, 1145, 275, '4 业务服务与领域工具层', GREEN)
     services = [
         ('listing-master', '房源主数据 / ES'), ('customer-service', '客源与业主管理'),
-        ('marketing-content', '内容与推广生命周期'), ('business-service', '经营分析 / KPI'),
-        ('contract-service', '合同生命周期'), ('settlement-service', '结算与分佣'),
+        ('marketing-content', '内容与推广生命周期'), ('platform-operations', '分析 / 复盘 / 知识运营'),
         ('notification-service', '通知记录 / 消费'), ('media-worker', 'RocketMQ 媒体 Worker'),
-        ('knowledge-service', '知识案例与审核'), ('business-review-service', '门店经营复盘'),
+        ('interview-service', '访谈与报告'),
     ]
     sx, sy, sw, sh, sg = 125, 1215, 540, 75, 35
     for i, (name, desc) in enumerate(services):

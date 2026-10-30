@@ -1,290 +1,43 @@
-# 当前系统架构说明
-
-## 1. 总览
-
-当前仓库是一套面向房产中台场景的多服务系统，核心交互方式有四类：
-
-- HTTP：对外 API 与前端入口
-- Dubbo：服务间同步 RPC
-- MCP：Agent 工具调用协议
-- DeepSeek：大模型推理、工具决策、Planner 生成与总结
-
-当前 Agent 主链路已经稳定为：
-
-- `DeepSeek` 负责回答、工具决策和 Planner 生成
-- `agent-service` 通过 `MCP` 调用业务工具
-- `Dubbo` 只保留正常业务 RPC，不再承担模拟 MCP 的职责
-
-## 2. 服务职责
-
-### gateway
-
-- 系统统一入口
-- 做鉴权过滤、请求转发、网关级路由
-
-### auth-service
-
-- 用户账号与权限管理
-- 提供认证相关 HTTP 接口
-- 通过 Dubbo 向网关和内部服务提供权限能力
-
-### listing-master-service
-
-- 房源主数据服务
-- 管理房源增删改查与房源详情
-- 同域处理房源比较、报告历史与 PDF
-- 向其他服务提供房源 Dubbo RPC
-
-### customer-service
-
-- 客源、业主档案、跟进记录、收藏关系管理
-- 负责客户提醒等业务逻辑
-- 在需要跨服务数据时使用 Dubbo
-
-### notification-service
-
-- 统一消息通知记录管理
-- 管理通知发送状态、已读状态
-- 提供通知 Dubbo RPC
-
-### marketing-content-service
-
-- 营销内容、品牌素材、发布计划、每目标发布尝试及效果来源统一在营销域管理
-- 发布确认绑定内容 revision、素材、房源快照、受权账号与规则版本；平台回执异步写入稳定 attempt
-- 模拟来源显式标记；真实 ROI 需要可归属收入和成本
-- 对 Agent 暴露 MCP 工具
-- 仍保留面向其他内部服务的 Dubbo RPC
-
-### business-service
-
-- KPI、员工日工作量、房源流转效率、门店看板
-- 对 Agent 暴露业务分析类 MCP 工具
-- 对其他内部服务保留 Dubbo RPC
-
-### contract-service
-
-- 合同模板、合同主记录、附件、OCR、签章、归档、提醒
-- 通过 provider dispatcher 管理 OCR 与电子签集成
-- 提供合同 Dubbo RPC
-
-### settlement-service
-
-- 结算主记录、分佣明细、月汇总、规则、发放批次、打款记录
-- 管理佣金与结算流程
-- 通过 Dubbo 获取上游业务数据
-
-### media-worker-service
-
-- 异步媒体任务执行
-- 接入 RocketMQ 与对象存储
-- 提供内部 Worker RPC
-
-### common
-
-- 共享 DTO、RPC 契约、基础实体模型
-
-## 3. 核心交互方式
-
-### HTTP
-
-- 外部请求通过 `gateway` 进入系统
-- 各业务服务通过 controller 提供业务接口
-
-### Dubbo
-
-- 用于正常的服务间同步调用
-- 当前不再作为 Agent 模拟工具调用通道
-
-### MCP
-
-- `business-service`、`marketing-content-service`、`contract-service`、`settlement-service`、`notification-service`、`media-worker-service` 与 `interview-service` 暴露 MCP 工具；房源比较由 Listing Agent 承担
-- `agent-service` 通过 `HttpAgentMcpClient` 统一调用
-- Agent 的业务工具执行只允许走 MCP
-
-### DeepSeek
-
-- `agent-service` 使用 Spring AI 官方 DeepSeek 接入
-- 在 `TOOL` 模式下负责直接回答与工具调用判断
-- 在 `PLANNER` 模式下负责生成计划、修复计划、总结执行结果
-
-## 4. Agent 服务
-
-### 4.1 核心职责
-
-- 聊天入口与执行模式分发
-- Milvus 知识检索
-- MCP 工具发现与调用
-- Planner 计划生成、执行、重规划、日志记录
-
-### 4.2 核心组件
-
-- `AgentController`
-  - `/agent/chat`
-  - `/agent/mcp/tools`
-  - `/agent/planner/sessions/{sessionNo}`
-  - RAG / Milvus 管理接口
-- `AgentOrchestratorService`
-  - 根据请求选择 `TOOL` 或 `PLANNER`
-- `DeepSeekChatService`
-  - 对 `ChatClient + DeepSeekChatOptions` 做封装
-- `HttpAgentMcpClient`
-  - 通过 HTTP 调用远端 MCP Server
-- `AgentPlanExecutorServiceImpl`
-  - 串行执行 Planner 步骤，维护上下文与重规划
-- `AgentPlannerServiceImpl`
-  - 生成 Planner JSON、自动修复非法计划、生成最终总结
-- `AgentPlanActionRegistry`
-  - 注册 Planner 动作并决定走本地执行还是 MCP 执行
-- `AgentPlannerLogPersistenceService`
-  - 持久化 Planner 会话和步骤日志
-
-## 5. Agent 的两种执行模式
-
-### 5.1 TOOL 模式
-
-这条链路可以理解为当前系统里的 ReAct 风格执行，但不是手写 ReAct Loop，而是：
-
-- 模型自行判断是否要调用工具
-- 工具通过 Spring AI Tool callback 注册
-- 执行结果再回到模型生成最终回答
-
-执行流程：
-
-1. `AgentController` 接收 `/agent/chat`
-2. `AgentOrchestratorService` 默认把未显式指定的请求视为 `TOOL`
-3. 初始化 `AgentToolContextHolder`
-4. `DeepSeekChatService` 发送：
-   - 系统提示词
-   - 用户问题
-   - 工具上下文
-   - 默认工具回调
-5. DeepSeek 在推理中自行判断是否需要工具
-6. 如果需要：
-   - 本地知识工具可访问 Milvus
-   - 业务工具通过 MCP 调用远端服务
-7. 工具轨迹被记录到 `AgentToolContextHolder`
-8. 最终回答返回，并附带 `AgentToolDecision`
-
-特点：
-
-- 没有旧的 Dubbo fallback
-- 是否调用工具完全由模型决定
-- 更适合单轮、低开销、反应快的请求
-
-### 5.2 PLANNER 模式
-
-这条链路用于多步骤、强依赖链式上下文、允许失败后重规划的任务。
-
-执行流程：
-
-1. 请求携带 `executionMode=PLANNER`
-2. `AgentOrchestratorService` 调用 `agentPlanExecutorService.execute(message)`
-3. `AgentPlannerServiceImpl` 让 DeepSeek 输出严格 JSON Planner
-4. 返回结果会先做：
-   - JSON 解析
-   - 步骤归一化
-   - 串行链路合法性校验
-5. `AgentPlanExecutorServiceImpl` 开始按步骤串行执行
-6. 每一步执行前：
-   - 从上一步输出解析 `inputKey`
-   - 解析 `${outputKey.fieldPath}` 模板
-   - 构造执行上下文
-7. `AgentPlanActionRegistry` 根据动作定义决定：
-   - 本地方法执行
-   - MCP 客户端执行
-8. 成功结果写回：
-   - 文本输出上下文
-   - payload 上下文
-   - completed step 列表
-9. 如果某一步失败：
-   - 记录失败结果
-   - 若还有预算，触发 DeepSeek 重新规划剩余步骤
-   - 已成功执行的步骤不会重复执行
-10. 全部执行结束后，再让 DeepSeek 基于真实结果生成最终总结
-11. Planner 会话和步骤日志落库到 `bk_agent`
-
-特点：
-
-- 严格串行
-- 下一步必须消费上一步输出
-- 有限次重规划
-- 非法 Planner JSON 支持自动修复
-
-## 6. Agent 中的 MCP 调用路径
-
-当前 Agent 的 MCP 路径是：
-
-1. 在 `agent.mcp.servers` 中配置远端 MCP 地址
-2. `HttpAgentMcpClient` 为每个服务建立 `McpSyncClient`
-3. `listTools()` 拉取远端工具元数据
-4. `callTool(server, tool, arguments)` 发起远程工具调用
-5. Planner 和 Tool 模式都消费返回的：
-   - `text`
-   - `payload`
-
-当前 MCP Server 包括：
-
-- `business-mcp-server`
-- `marketing-mcp-server`
-- `contract-mcp-server`
-- `settlement-mcp-server`
-- `notification-mcp-server`
-- `media-mcp-server`
-- `interview-mcp-server`
-
-## 7. 关键数据流
-
-### 7.1 Agent 问答 -> 工具回答
-
-1. Client -> `gateway`
-2. `gateway` -> `agent-service`
-3. `agent-service` -> DeepSeek
-4. DeepSeek 视情况调用：
-   - Milvus 本地知识工具
-   - business / compare / marketing MCP 工具
-5. `agent-service` 汇总工具结果
-6. 返回最终回答
-
-### 7.2 Agent 规划 -> 多步骤执行
-
-1. Client -> `gateway`
-2. `gateway` -> `agent-service`
-3. `agent-service` -> DeepSeek 生成 Planner
-4. `agent-service` 串行执行步骤
-5. 步骤内部调用本地工具或 MCP 工具
-6. 失败时 -> DeepSeek 重规划
-7. 完成后 -> DeepSeek 生成最终总结
-8. 会话日志落到 `bk_agent`
-
-### 7.3 合同 OCR 流程
-
-1. 调用合同附件 OCR 接口
-2. `ContractManagementServiceImpl` 读取 `contract.integration.ocr-provider`
-3. `ContractOcrExtractorDispatcher` 选择匹配 Provider
-4. OCR 结果写入 `contract_attachment`
-5. 合同主记录更新 `ocrSummary`
-
-### 7.4 合同签章流程
-
-1. 调用合同签章接口
-2. `ContractManagementServiceImpl` 读取电子签 provider
-3. `ContractEsignClientDispatcher` 选择具体适配器
-4. 签章结果更新：
-   - `seal_provider`
-   - `seal_time`
-   - `external_seal_no`
-   - `signed_document_url`
-
-## 8. 存储边界
-
-- 每个业务服务拥有自己的 MySQL 库
-- `agent-service` 将 Planner 日志持久化到 `bk_agent`
-- 启用向量检索时，RAG 数据存储在 Milvus
-- 营销搜索启用时，可落 Elasticsearch
-
-## 9. 当前架构边界结论
-
-- Agent 业务工具执行：只走 MCP
-- 多步骤复杂任务：只走 Planner
-- 大模型底层：只走 DeepSeek
-- 内部同步业务调用：Dubbo 继续保留并正常使用
+# 当前系统架构
+
+本文按当前仓库源码和活动部署模板整理。仓库中保留的旧 OpenSpec、迁移与验收记录属于历史审计资料，不是当前运行配置。
+
+## 活动业务域
+
+| 业务域 | 服务 | 主要职责 |
+| --- | --- | --- |
+| 房源 | `listing-master-service` | 房源主数据、检索、比较报告和 PDF |
+| 客户 | `customer-service` | 客户/业主资料、跟进和收藏 |
+| 营销内容 | `marketing-content-service` | 内容、素材、发布流程和效果来源 |
+| 媒体 | `media-worker-service` | 异步图片素材任务 |
+| 消息通知 | `notification-service` | 站内信、邮件和工作流事件 |
+| 访谈 | `interview-service` | 访谈采集、归档、脱敏、逐字稿与发布来源 |
+| 平台经营 | `platform-operations-service` | 经营分析、门店复盘和知识运营 |
+
+合同、结算和旧的独立经营服务已退役。平台经营使用 `bk_platform_operations`；访谈仍由 `bk_interview` 管理事实数据，并通过受限版本化视图向平台经营提供符合条件的脱敏来源。平台经营应用和来源账号均不能直接读取访谈基础表。
+
+## 请求与 Agent
+
+- 外部业务 API 经过 `gateway` 和 `auth-service`；各服务入口再次验证签名授权上下文与当前授权版本。
+- `agent-service` 的 Supervisor 负责规划、A2A 调度、并行执行、审批/恢复、异步任务、会话事件和工作流审计。
+- Listing、Marketing、Media、Notification、Interview 通过官方 A2A 提供各自能力。平台经营只发布一张 `platform-operations-agent` Agent Card，按签名请求中的 `platformCapability=analytics|review|knowledge` 选择独立工具、操作权限及 Memory 身份。
+- 复盘与知识案例的状态变更由业务 API 显式执行；Agent 只能按分支能力读取资料或起草内容，不代替用户确认计划、审核或发布。
+- MCP 仅作为配置启用的工具接入通道；房源比较属于 Listing，不再依赖 Compare 服务或 Compare MCP。
+
+## 数据和基础设施
+
+- Auth、Agent、业务服务、Interview、Memory 和 RAG 使用各自受管数据库及 migration ledger。数据库初始化和升级必须经 `docker/mysql/init-manifest.tsv`。
+- Memory 保存签名调用者可访问的会话、偏好、摘要和经验，不是真实经营事实来源；平台经营的 analytics、review、knowledge 使用独立 domain/agent 空间。
+- RAG 管理检索索引、向量集合、embedding 和 rerank；是否可用取决于已配置空间和后端实际状态。
+- Nacos 管理分布式运行配置与服务发现；Docker Compose 的服务地址使用 Compose DNS。`.env.example` 维护连接凭据和启动变量，不重复承载业务策略。
+- Redis、RocketMQ、Elasticsearch、Milvus、MinIO 由 Compose profile 按开发需要启动；配置存在或容器健康不能单独证明业务来源和权限链已验收。
+
+## 主要入口
+
+- 平台经营 HTTP：`/platform-operations/**`
+- 平台经营 A2A：`/.well-known/agent.json` 与 `/a2a`
+- Listing：`/listings/**`；兼容旧比较入口时仍由 Listing Controller 验证来源与 owner
+- Supervisor：`/agent/**`
+- Nacos 活动配置清单：`nacos/README.md`
+- 前端设计输入：[平台经营域前端功能清单](platform-operations-frontend-function-list.md)
+- 服务图与源码依据：[当前架构图集](architecture-current/README.md)

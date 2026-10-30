@@ -20,18 +20,10 @@ spring:
             uri: lb://customer-service
             predicates:
               - Path=/customers/**
-          - id: business-service
-            uri: lb://business-service
-            predicates:
-              - Path=/business/**
           - id: platform-operations-service
             uri: lb://platform-operations-service
             predicates:
               - Path=/platform-operations/**
-          - id: business-review-service
-            uri: lb://business-review-service
-            predicates:
-              - Path=/business-review/**
           - id: listing-comparison-compatibility
             uri: lb://listing-master-service
             predicates:
@@ -52,10 +44,6 @@ spring:
             uri: lb://interview-service
             predicates:
               - Path=/interviews/**
-          - id: knowledge-service
-            uri: lb://knowledge-service
-            predicates:
-              - Path=/knowledge/**
 
 management:
   endpoints:
@@ -92,9 +80,7 @@ gateway:
     route-audiences:
       auth-service: auth-service
       agent-service: agent-service
-      knowledge-service: knowledge-service
       interview-service: interview-service
-      business-review-service: business-review-service
       platform-operations-service: platform-operations-service
   access:
     whitelist-prefixes:

@@ -22,7 +22,7 @@
 
 - `RAG_PROBE_RAG_DUBBO_URL`：真实 RAG 服务直连 Dubbo URL。
 - RAG 接口按服务端契约使用 `fastjson2ctor` 序列化；Auth 直连仍使用其既有 `fastjson2` 配置。
-- `RAG_PROBE_SPACE_ID`：`listing.knowledge` / `memory.preference` / `memory.constraint`，或已登记的 Memory v2 逻辑空间。Memory v2 仅接受 `session`、`summary`、`preference-history`、`experience`、`collaboration` 五类和 `marketing/marketing-agent`、`interview/interview-agent`、`listing/listing-agent`、`trade/trade-agent`、`contract/contract-agent`、`settlement/settlement-agent` 七组精确映射；它们全部由 `memory-service` 管理，不能传入物理索引或集合名。
+- `RAG_PROBE_SPACE_ID`：`listing.knowledge` / `memory.preference` / `memory.constraint`，或已登记的 Memory v2 逻辑空间。Memory v2 仅接受 `session`、`summary`、`preference-history`、`experience`、`collaboration` 五类和 `marketing/marketing-agent`、`interview/interview-agent`、`listing/listing-agent`、`analytics/platform-operations-analytics`、`review/platform-operations-review`、`knowledge/platform-operations-knowledge` 六组精确映射；它们全部由 `memory-service` 管理，不能传入物理索引或集合名。
 - `RAG_PROBE_DOMAIN_KEY_ID`：当前运行配置已信任的 owner keyId；listing 使用 `LISTING_RAG_RPC_SECRET`，memory 使用 `MEMORY_RAG_RPC_SECRET`，不新增 key、不扩大 allowedClients/operation。
 - 全部操作要求真实当前 **ADMIN**（执行前与返回前验签/复核）。INSPECT/PROVISION/REPLAY 使用 USER envelope + 专用 token 参数。现有 GET_STATUS 契约无 credential 参数，严格按 owner-domain SERVICE envelope 调用，但探针另外先后验证真实 ADMIN，不新增 SERVICE READ/管理 fallback。
 - PROVISION 必须设置 `RAG_PROBE_ALLOW_MUTATIONS=true`、`RAG_PROBE_SCHEMA_VERSION`、`RAG_PROBE_DIMENSION`，仅调用已配置逻辑空间 provision，不提供物理集合/index 定义。Memory v2 当前模板的 schema version 为 `memory-v2.1`、dimension 为 `1024`；运行前仍须与 RAG readiness/实际配置及 embedding 模型响应核对，受管注册表不匹配时拒绝 provision。

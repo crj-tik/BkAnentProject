@@ -301,9 +301,6 @@ public class AgentPermissionService {
     }
 
     private String resolveMcpServerPermission(String serverName) {
-        if (AgentMcpNames.BUSINESS_SERVER.equalsIgnoreCase(serverName)) {
-            return "agent.mcp.server.business.read";
-        }
         if (AgentMcpNames.MARKETING_SERVER.equalsIgnoreCase(serverName)) {
             return "agent.mcp.server.marketing.read";
         }

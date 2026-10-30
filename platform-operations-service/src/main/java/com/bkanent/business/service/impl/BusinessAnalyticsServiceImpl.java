@@ -1,7 +1,7 @@
 package com.bkanent.business.service.impl;
 
-import com.bkanent.business.config.BusinessRankingProperties;
-import com.bkanent.business.config.BusinessRedisProperties;
+import com.bkanent.business.config.AnalyticsRankingProperties;
+import com.bkanent.business.config.AnalyticsRedisProperties;
 import com.bkanent.business.converter.BusinessConverter;
 import com.bkanent.business.entity.EmployeeKpiStatEntity;
 import com.bkanent.business.entity.StoreDashboardSnapshotEntity;
@@ -52,8 +52,8 @@ public class BusinessAnalyticsServiceImpl implements BusinessAnalyticsService {
     private final ListingTurnoverStatService listingTurnoverStatService;
     private final StoreDashboardSnapshotService storeDashboardSnapshotService;
     private final BusinessConverter businessConverter;
-    private final BusinessRankingProperties businessRankingProperties;
-    private final BusinessRedisProperties businessRedisProperties;
+    private final AnalyticsRankingProperties businessRankingProperties;
+    private final AnalyticsRedisProperties businessRedisProperties;
     private final Optional<StringRedisTemplate> stringRedisTemplate;
 
     public BusinessAnalyticsServiceImpl(KpiStatService kpiStatService,
@@ -61,8 +61,8 @@ public class BusinessAnalyticsServiceImpl implements BusinessAnalyticsService {
                                         ListingTurnoverStatService listingTurnoverStatService,
                                         StoreDashboardSnapshotService storeDashboardSnapshotService,
                                         BusinessConverter businessConverter,
-                                        BusinessRankingProperties businessRankingProperties,
-                                        BusinessRedisProperties businessRedisProperties,
+                                        AnalyticsRankingProperties businessRankingProperties,
+                                        AnalyticsRedisProperties businessRedisProperties,
                                         Optional<StringRedisTemplate> stringRedisTemplate) {
         this.kpiStatService = kpiStatService;
         this.employeeDailyWorkloadService = employeeDailyWorkloadService;

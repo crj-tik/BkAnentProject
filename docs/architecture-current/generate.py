@@ -25,14 +25,14 @@ def graph(slug, title, subtitle, nodes, notes, sources, edges=None, loop=False):
 def n(title, body, color='blue'):
     return [title,body,color]
 
-graph('01-service-architecture','服务架构｜模块与职责','当前 Maven 服务与共享模块 · 10 个官方 A2A 子 Agent · 以当前工作区源码为准',[
+graph('01-service-architecture','服务架构｜模块与职责','当前 Maven 服务与共享模块 · 以当前工作区源码为准',[
  n('访问入口','业务前端 / API 调用方\nHTTP 请求与 SSE 订阅'),
  n('gateway + auth-service','统一路由与认证权限\n业务 API / Agent API'),
  n('agent-service','Supervisor · 官方 Graph\nA2A 客户端 / MCP / RAG','purple'),
- n('10 个官方 A2A 子 Agent','listing / marketing / media / trade / contract\nsettlement / notification / interview / knowledge / business-review','purple'),
+ n('官方 A2A Provider','Listing / Marketing / Media / Notification / Interview\n平台经营域：分析、复盘、知识运营由一个 Agent 路由','purple'),
  n('本地工具与领域服务','ReactAgent → 本地 @Tool\nREST / MCP / Dubbo 为其他入口'),
  n('业务存储与外部接口','MySQL · ES · MinIO\n媒体 / 邮件 / 签章 / 发布 Provider','green'),
- n('其他业务与共享模块','customer-service / knowledge-service\nbusiness-review-service / common'),
+ n('其他业务与共享模块','customer-service / interview-service\nplatform-operations-service / common'),
  n('状态与公共配置','memory-service：共享记忆\ncommon-config-manager：配置支持','green'),
  n('基础设施与模型','Nacos / Redis / RocketMQ / Milvus\nDeepSeek / DashScope','green')],
  ['箭头表示主调用方向；底部为配套能力，基础设施按各服务实际配置接入。',
@@ -50,7 +50,7 @@ graph('02-supervisor-flow','Supervisor｜规划、路由与执行','官方 Sprin
  n('ROUTE_AFTER_EXECUTION','handoff / complete / fail\n由图决定后续执行','purple'),
  n('HANDOFF 或 COMPLETE','交接后再次路由；完成则汇总\n更新记忆、产物与事件'),
  n('最终状态','COMPLETED / FAILED / CANCELED\n审批暂停时返回等待状态','green')],
- ['官方并行节点覆盖 7 个领域：listing、marketing、media、trade、contract、settlement、notification。',
+ ['平台经营域以一个 A2A Agent 承载经营分析、门店复盘和知识运营，并在域内隔离能力与记忆。',
   '房源比较是 Listing Agent 的同域能力；单次路由能力与并行节点映射应区分。'],
  ['agent-service/src/main/java/com/bkanent/agent/orchestration/SupervisorToolLoopGraph.java','agent-service/src/main/java/com/bkanent/agent/service/A2aExecutionService.java','agent-service/src/main/java/com/bkanent/agent/graph/official/OfficialSupervisorGraphSchema.java','nacos/agent-service.yaml'])
 
@@ -76,53 +76,58 @@ AGENTS = [
   '消费者 → 图片生成 Provider\n上传 MinIO → 记录成功 / 失败\ncontentId 存在时 Dubbo 回写素材',
   '查询任务状态与 assetUrls\n未完成时不等同于素材已生成',
   '当前消费者调用 generateListingImages，成功结果 videoUrl 为 null；不能画成已实现的视频流水线。'),
- ('trade','经营分析','business-service','business','Trade',
-  '月份 / 门店 / 日期 / 排名范围\n经营问题与分析目标',
-  '月度 KPI / 周转 / 门店看板\nKPI 考核 / 业绩排名 / 日工作量\n共 6 个本地工具',
-  'BusinessAnalyticsService\n读取业务统计并执行指标计算',
-  'MySQL：KPI 与员工工作量\n房源周转、门店快照等统计数据',
-  '统计 DTO / 看板 / 排名\nReactAgent 生成经营分析回答',
-  'trade-agent 的当前官方工具是经营统计；旧 AgentService 的交易可行性逻辑并非官方 Provider 入口。'),
- ('contract','合同审查','contract-service','contract','Contract',
-  'contractId 或类型 / 状态\n合同审查问题与约束',
-  'getContractDetail / listContracts\nreviewContractRisks\n读取合同与规则风险检查',
-  'ContractManagementService\n获取状态、附件、OCR 摘要\n工具层检查盖章、归档等风险',
-  'MySQL：合同与附件记录\n风险依据：印章 / 归档 / OCR\n以及附件数量',
-  '风险标记与合同详情\nReactAgent 给出解释与建议',
-  '官方 ContractTools 没有签章工具；电子签章 Provider 属于合同管理 API 的其他业务能力。'),
- ('settlement','佣金结算','settlement-service','settlement','Settlement',
-  '员工 / 合同 / 房源 / 成交金额\n月份与汇总范围',
-  'getSettlementDetail\ncalculateSettlement / getMonthlySummary\ncreatePayoutBatch',
-  'SettlementManagementService\n佣金计算、分佣、月度汇总\n或创建发放批次',
-  'MySQL：规则与阶梯\n结算、分佣、月汇总、发放批次',
-  '结算明细 / 汇总 / 批次结果\n模型解释计算与处理结果',
-  '创建发放批次不等于完成真实银行付款；审批由 Supervisor 的规划与审批路径负责。'),
+ ('platform-operations','平台经营域','platform-operations-service','business','PlatformAnalytics',
+  '经营指标与门店范围\n复盘目标或知识案例操作',
+  '经营分析 / 门店复盘 / 知识运营\n由单一 Agent 按授权能力路由',
+  '平台经营服务统一承载\n三个内部执行器共享服务身份',
+  'bk_platform_operations\nAnalysis / Review / Knowledge\n共享库内按权限隔离',
+  '统一 Agent 响应\n身份、权限、来源与 Memory 分支隔离',
+  'API 与数据库能力仍按具体分支授权；知识来源只读受限 Interview 投影。'),
  ('notification','消息通知','notification-service','notification','Notification',
   '收件用户 / 标题 / 内容\n邮件还需要 receiverAddress',
   'sendStationMessage / sendEmailMessage\nlistUserMessages / countUnreadMessages\n发送、查询或统计',
   'NotificationManagementService\n按站内信 / 邮件通道分发\n返回消息 ID 或查询结果',
   'MySQL 通知记录\n邮件：按集成模式选择 Provider\n真实发送依赖外部接口配置',
   '消息 ID / 消息列表 / 未读数\n由 ReactAgent 回传结果',
-  '另有独立 RocketMQ 工作流事件消费者：筛选、去重、重试、死信；这条链不经过 ReactAgent。')
+  '另有独立 RocketMQ 工作流事件消费者：筛选、去重、重试、死信；这条链不经过 ReactAgent。'),
+ ('interview','访谈','interview-service','interview','Interview',
+  '已授权访谈案例、执行指令\n访谈 session 与报告任务',
+  '开案、题目确认、启动与控制\n查询进度、报告和归档来源',
+  'InterviewTools\n治理生命周期与逐字稿处理',
+  'bk_interview\n会话、turn、asset 与报告任务',
+  '访谈进度 / 报告任务状态\n受限来源按发布和分级筛选',
+  '访谈域继续负责逐字稿与报告；知识运营只通过受限视图读取合格来源。')
 ]
 
-FLOW_NUMBERS = {'listing': 3, 'marketing': 5, 'media': 6, 'trade': 7,
-                'contract': 8, 'settlement': 9, 'notification': 10}
+FLOW_NUMBERS = {'listing': 3, 'marketing': 5, 'media': 6, 'platform-operations': 7,
+                'notification': 8, 'interview': 9}
 for key,cn,module,pkg,cls,inp,tool,svc,data,result,note in AGENTS:
     i = FLOW_NUMBERS[key]
     base=f'{module}/src/main/java/com/bkanent/{pkg}'
+    sources = [f'{base}/a2a/{cls}OfficialA2aAgent.java',
+               f'{base}/a2a/A2aSupervisorContextInterceptor.java', f'{base}/tool/{cls}Tools.java']
+    if key == 'platform-operations':
+        sources = [
+            'platform-operations-service/src/main/java/com/bkanent/platform/a2a/PlatformAgentConfiguration.java',
+            'platform-operations-service/src/main/java/com/bkanent/platform/a2a/PlatformAgentRouter.java',
+            'platform-operations-service/src/main/java/com/bkanent/business/a2a/PlatformAnalyticsAgent.java',
+            'platform-operations-service/src/main/java/com/bkanent/businessreview/a2a/PlatformReviewAgent.java',
+            'platform-operations-service/src/main/java/com/bkanent/knowledge/a2a/KnowledgeOfficialA2aAgent.java',
+            'platform-operations-service/src/main/java/com/bkanent/business/tool/AnalyticsTools.java',
+            'platform-operations-service/src/main/java/com/bkanent/businessreview/tool/ReviewDraftTools.java',
+            'platform-operations-service/src/main/java/com/bkanent/knowledge/tool/KnowledgeAgentTools.java']
     graph(f'{i:02d}-{key}-agent',f'{cn} Agent｜执行流程',f'{key}-agent  ·  {module}  ·  官方 A2A Provider',[
-      n('01  接收子任务',inp),
-      n('02  A2A 上下文注入','Supervisor metadata → 模型上下文\n任务 / 会话 / 追踪 / 约束 / 预期输出'),
-      n('03  ReactAgent 推理','ChatModel + 领域 systemPrompt\n决定直接回答或调用本地工具','purple'),
-      n('04  选择工具',tool,'purple'),
-      n('05  领域服务',svc),
-      n('06  数据与执行',data,'green'),
-      n('07  工具结果返回',result,'green'),
-      n('08  整理最终输出','工具结果回填模型，可继续调用\n满足任务要求后生成 output'),
-      n('09  返回 Supervisor','官方 A2A 响应 / 任务 / 流\n客户端适配后合并工作流状态')],
-      [note,'虚线表示可多轮工具推理；模型也可直接回答。图中工具是可选分支，不代表每次全部执行。'],
-      [f'{base}/a2a/{cls}OfficialA2aAgent.java',f'{base}/a2a/A2aSupervisorContextInterceptor.java',f'{base}/tool/{cls}Tools.java'],loop=True)
+        n('01  接收子任务',inp),
+        n('02  A2A 上下文注入','Supervisor metadata → 模型上下文\n任务 / 会话 / 追踪 / 约束 / 预期输出'),
+        n('03  ReactAgent 推理','ChatModel + 领域 systemPrompt\n决定直接回答或调用本地工具','purple'),
+        n('04  选择工具',tool,'purple'),
+        n('05  领域服务',svc),
+        n('06  数据与执行',data,'green'),
+        n('07  工具结果返回',result,'green'),
+        n('08  整理最终输出','工具结果回填模型，可继续调用\n满足任务要求后生成 output'),
+        n('09  返回 Supervisor','官方 A2A 响应 / 任务 / 流\n客户端适配后合并工作流状态')],
+        [note,'虚线表示可多轮工具推理；模型也可直接回答。图中工具是可选分支，不代表每次全部执行。'],
+        sources,loop=True)
 
 graph('04-listing-comparison','房源比较｜Listing 子能力','listing-master-service · Listing Agent 的版本化比较能力',[
  n('01  接收比较请求','稳定 listingRef、预期 revision\n及签名 actor / 操作上下文'),
@@ -214,21 +219,22 @@ graph('15-skills-tools','Skills 与工具｜当前接入边界','区分已接入
  n('Skills 接入边界','Skill 文件由 common-skill 读取\n子 Agent 是否使用以 Provider 配置为准','orange')],
  ['上排是 Supervisor Skills 路径，中排是子 Agent 官方工具路径，底排展示独立 MCP 能力。',
   'Skill 文件由 common-skill 加载与匹配；官方子 Agent 是否绑定动态 Skills 以实际 Provider 配置为准。'],
- ['common-skill/src/main/java/com/bkanent/common/skill/core/SkillFileLoader.java','common-skill/src/main/java/com/bkanent/common/skill/core/SkillMatcher.java','agent-service/src/main/java/com/bkanent/agent/config/SkillConfiguration.java','agent-service/src/main/java/com/bkanent/agent/skill/SkillAwareToolProvider.java','contract-service/src/main/java/com/bkanent/contract/a2a/ContractOfficialA2aAgent.java'],
+ ['common-skill/src/main/java/com/bkanent/common/skill/core/SkillFileLoader.java','common-skill/src/main/java/com/bkanent/common/skill/core/SkillMatcher.java','agent-service/src/main/java/com/bkanent/agent/config/SkillConfiguration.java','agent-service/src/main/java/com/bkanent/agent/skill/SkillAwareToolProvider.java','platform-operations-service/src/main/java/com/bkanent/platform/a2a/PlatformAgentRouter.java'],
  [(0,1,''),(1,2,''),(3,4,'绑定'),(4,5,'调用'),(6,7,'MCP')])
 
 graph('16-system-overview','全系统总览｜房地产中台多 Agent 系统','入口 → 编排 → 领域智能体 → 业务执行；共享状态、检索与事件提供支撑',[
  n('用户与统一入口','前端 / HTTP / SSE\ngateway → auth-service'),
  n('Supervisor · agent-service','Graph：规划、路由、并行、交接\n审批恢复、异步调度、权限治理','purple'),
- n('A2A · 10 个官方子 Agent','listing / marketing / media / trade / contract\nsettlement / notification / interview / knowledge / business-review','purple'),
+ n('官方 A2A Agent','Listing / Marketing / Media / Notification / Interview\n平台经营域：一个 Agent 路由三类隔离能力','purple'),
  n('领域工具与业务服务','本地 @Tool → 领域 Service\n另有 REST、MCP、Dubbo 入口'),
- n('数据与业务集成','MySQL / Elasticsearch / MinIO\ncustomer / knowledge / business-review\n签章、媒体、邮件、平台 Provider','green'),
+ n('数据与业务集成','MySQL / Elasticsearch / MinIO\ncustomer / platform-operations / interview\n媒体、邮件与营销 Provider','green'),
  n('共享状态与记忆','memory-service：会话 / 产物 / 交接\nagent DB：检查点 / 异步 / 审计\nHTTP 共享记忆访问','green'),
  n('检索与模型','RAG：关键词 + Milvus + 重排\nDeepSeek ChatModel / Embedding\n模型与 Provider 均受配置控制','purple'),
  n('事件与反馈','SSE + 可选 RocketMQ 会话总线\n通知消费 / 独立媒体生成队列\nRedis：可选限流等基础能力','green'),
  n('配置与公共基础','Nacos：配置与服务发现\ncommon：公共 DTO / RPC 契约\ncommon-config-manager：配置支持')],
  ['实线为主要业务调用，虚线为支撑关系；下方与左侧是配套能力，不代表顺序执行。',
-  '当前实现边界：发布状态更新 ≠ 外部发布；媒体 Worker 生成图片；图基于源码而非运行环境验收。'],
+  '合同与结算业务域已退役；平台经营分析、复盘和知识运营由统一服务承载。',
+  '当前实现边界：发布状态更新不等于外部发布；媒体 Worker 生成图片；图基于源码而非运行环境验收。'],
  ['pom.xml','agent-service/src/main/java/com/bkanent/agent/orchestration/SupervisorToolLoopGraph.java','nacos/agent-service.yaml','memory-service/src/main/java/com/bkanent/memory/controller/MemoryController.java'],
  [(0,1,'HTTP'),(1,2,'官方 A2A'),(2,3,'本地工具'),(3,4,'读写 / 集成')])
 
@@ -306,24 +312,29 @@ def render(g):
     for note in g['notes']:
         for t in wrap('• '+note,font(20),1570):txt(112,y,t,20,MUTED);y+=27
     assert y<=1152,(g['slug'],'note overflow',y)
-    txt(90,1171,'BK AGENT  /  CURRENT CODE ARCHITECTURE  /  2026-10-29',17,MUTED)
-    txt(1475,1171,g['slug'].split('-')[0]+' / 16',17,MUTED)
+    txt(90,1171,'BK AGENT  /  CURRENT CODE ARCHITECTURE  /  2026-10-30',17,MUTED)
+    txt(1475,1171,g['slug'].split('-')[0]+f' / {len(GRAPHS)}',17,MUTED)
     svg.append('</svg>')
     im.save(OUT/(g['slug']+'.png'))
     (OUT/(g['slug']+'.svg')).write_text('\n'.join(svg),encoding='utf-8')
 
 def main():
     GRAPHS.sort(key=lambda g: int(g['slug'].split('-',1)[0]))
+    current_slugs = {g['slug'] for g in GRAPHS}
+    for pattern in ('[0-9][0-9]-*.png', '[0-9][0-9]-*.svg'):
+        for stale in OUT.glob(pattern):
+            if stale.stem not in current_slugs:
+                stale.unlink()
     for g in GRAPHS:render(g)
     manifest={'basis':'Current working tree, including pre-existing uncommitted source changes; static code review, not deployment verification.',
               'head':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(), 'diagrams':GRAPHS,
               'source_sha256':{p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for g in GRAPHS for p in g['sources']}}
     (OUT/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
     cards='<article><h2>高清分层架构图｜PNG</h2><a href="architecture-overview.png"><img loading="lazy" src="architecture-overview.png" alt="房地产中台多 Agent 系统当前代码架构"></a><p><a href="architecture-overview.png">PNG</a> · <a href="architecture-overview.jpg">JPG</a></p></article>'+''.join(f'<article><h2>{escape(g["title"])}</h2><a href="{g["slug"]}.svg"><img loading="lazy" src="{g["slug"]}.png" alt="{escape(g["title"])}"></a><p><a href="{g["slug"]}.png">PNG</a> · <a href="{g["slug"]}.svg">SVG 可缩放</a></p></article>' for g in GRAPHS)
-    (OUT/'index.html').write_text('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>房地产中台架构图集</title><style>body{margin:40px auto;max-width:1440px;padding:0 24px;background:#f3f6fa;color:#142b45;font-family:Microsoft YaHei,sans-serif}article{margin:40px 0}img{width:100%;border-radius:14px}a{color:#336ddd}p{line-height:1.8}</style><h1>房地产中台 · 当前架构图集</h1><p>2026-10-29 · 高清 PNG 架构图 + 16 张流程图 · 根据当前工作区源码梳理。架构图可直接打开或下载；流程图同时提供 PNG 与 SVG。此图集不代表部署验收结果。</p>'+cards+'</html>',encoding='utf-8')
+    (OUT/'index.html').write_text('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>房地产中台架构图集</title><style>body{margin:40px auto;max-width:1440px;padding:0 24px;background:#f3f6fa;color:#142b45;font-family:Microsoft YaHei,sans-serif}article{margin:40px 0}img{width:100%;border-radius:14px}a{color:#336ddd}p{line-height:1.8}</style><h1>房地产中台 · 当前架构图集</h1><p>2026-10-30 · 高清 PNG 架构图 + '+str(len(GRAPHS))+' 张流程图 · 根据当前工作区源码梳理。架构图可直接打开或下载；流程图同时提供 PNG 与 SVG。此图集不代表部署验收结果。</p>'+cards+'</html>',encoding='utf-8')
     rows='\n'.join(f'| {g["title"]} | [PNG]({g["slug"]}.png) | [SVG]({g["slug"]}.svg) |' for g in GRAPHS)
     sources='\n'.join(f'### {g["title"]}\n'+ '\n'.join(f'- [`{p}`](../../{p})' for p in g['sources']) for g in GRAPHS)
-    (OUT/'README.md').write_text('# 当前架构图集\n\n2026-10-29，根据当前工作区源码生成。描述实现结构，不表示已部署或端到端验收。\n\n打开 [图集浏览页](index.html) 查看全部图片。PNG 适合分享，SVG 适合放大与编辑。\n\n| 图 | 位图 | 矢量图 |\n|---|---|---|\n'+rows+'\n\n## 重要实现边界\n\n- 当前模板包含 10 个官方 A2A 子 Agent；各 Provider 直接绑定领域本地 @Tool。\n- 房源比较是 Listing 域子能力，不是独立 Agent；主图并行映射仍按代码中的 7 个领域配置。\n- 营销 publishContent 仅更新本地发布状态。\n- 媒体消费者实际生成图片，不是完整视频生成链路。\n- 默认规划为 rule-first、LLM 规划关闭；会话流 provider 默认 memory。\n- SubAgentSkillSupport 已存在，但未见官方 Provider 接入。\n- 外部发布、邮件、签章、媒体 Provider 受集成模式约束，不能因本地模拟成功认定真实集成可用。\n\n## 复现\n\n使用安装 Pillow 的 Python 运行 `python docs/architecture-current/generate.py`。脚本使用 Windows 微软雅黑字体，并检查文本是否溢出。`manifest.json` 记录图内容、参考文件 SHA-256 及生成时 HEAD；HEAD 不代表工作区没有未提交修改。\n\n## 源码依据\n\n'+sources+'\n',encoding='utf-8')
+    (OUT/'README.md').write_text('# 当前架构图集\n\n2026-10-30，根据当前工作区源码生成。描述实现结构，不表示已部署或端到端验收。\n\n打开 [图集浏览页](index.html) 查看全部图片。PNG 适合分享，SVG 适合放大与编辑。\n\n| 图 | 位图 | 矢量图 |\n|---|---|---|\n'+rows+'\n\n## 重要实现边界\n\n- 平台经营分析、门店复盘和知识运营共用一个 A2A Agent，内部能力与 Memory 标识分开授权。\n- 合同与结算业务域已退役；房源比较仍是 Listing 域能力。\n- 营销 publishContent 仅更新本地发布状态。\n- 媒体消费者实际生成图片，不是完整视频生成链路。\n- 外部发布、邮件和媒体 Provider 受集成模式约束，不能因本地模拟成功认定真实集成可用。\n\n## 复现\n\n使用安装 Pillow 的 Python 运行 `python docs/architecture-current/generate.py`。脚本使用 Windows 微软雅黑字体，并检查文本是否溢出。`manifest.json` 记录图内容、参考文件 SHA-256 及生成时 HEAD；HEAD 不代表工作区没有未提交修改。\n\n## 源码依据\n\n'+sources+'\n',encoding='utf-8')
     print(f'Generated {len(GRAPHS)} PNG + {len(GRAPHS)} SVG diagrams, index and source manifest.')
 
 if __name__=='__main__':main()

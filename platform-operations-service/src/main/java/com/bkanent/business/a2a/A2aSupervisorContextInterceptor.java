@@ -10,13 +10,13 @@ import org.springframework.ai.chat.messages.SystemMessage;
 import java.util.Map;
 
 /**
- * 将官方 A2A Message metadata 中的 Supervisor 上下文注入交易 Agent 的模型上下文。
+ * 将官方 A2A Message metadata 中的 Supervisor 上下文注入平台经营分析 Agent 的模型上下文。
  */
 public final class A2aSupervisorContextInterceptor extends ModelInterceptor {
 
     @Override
     public String getName() {
-        return "trade-a2a-supervisor-context";
+        return "platform-operations-analytics-a2a-context";
     }
 
     @Override

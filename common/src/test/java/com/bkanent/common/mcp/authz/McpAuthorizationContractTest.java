@@ -65,7 +65,7 @@ class McpAuthorizationContractTest {
                 "search_transcripts", "interview.asset.read", Map.of("auth-key", authority.getPublic()),
                 Map.of("agent-key", agent.getPublic()), Instant.ofEpochSecond(NOW + 1)))
                 .isInstanceOf(AuthzException.class);
-        assertThatThrownBy(() -> McpAuthorizationContract.verify(proof, body, "agent-service", "business-service",
+        assertThatThrownBy(() -> McpAuthorizationContract.verify(proof, body, "agent-service", "platform-operations-service",
                 "search_transcripts", "interview.asset.read", Map.of("auth-key", authority.getPublic()),
                 Map.of("agent-key", agent.getPublic()), Instant.ofEpochSecond(NOW + 1)))
                 .isInstanceOf(AuthzException.class);

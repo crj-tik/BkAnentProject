@@ -230,15 +230,16 @@ class ManagedRagSpaceRegistryTest {
     }
     @Test void fixedStageOrderAndCumulativeDeadlineIncludeEveryStageWithoutRefreshingBudget() {
         var order = new java.util.concurrent.CopyOnWriteArrayList<RagStage>();
-        var s = budget("a", 260, 200);
+        var s = budget("a", 800, 600);
         var registry = new ManagedRagSpaceRegistry(new RagProperties(Map.of("a", s)), () -> actions((stage, space) -> {
             order.add(stage);
-            try { Thread.sleep(110); } catch (InterruptedException failure) { Thread.currentThread().interrupt(); }
+            try { Thread.sleep(stage == RagStage.EMBEDDING ? 1_500 : 200); }
+            catch (InterruptedException failure) { Thread.currentThread().interrupt(); }
         }), CLOCK);
         try {
             long start = System.nanoTime();
             var result = registry.inspect("req", "a");
-            assertThat(java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)).isLessThan(850);
+            assertThat(java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)).isLessThan(1_300);
             assertThat(order).containsExactly(RagStage.KEYWORD, RagStage.VECTOR, RagStage.EMBEDDING);
             assertThat(result.ready()).isFalse();
             assertThat(result.failedStages()).contains(new RagStageFailure(RagStage.RERANK, RagErrorCode.TIMEOUT));

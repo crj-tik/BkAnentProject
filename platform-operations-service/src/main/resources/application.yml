@@ -32,13 +32,14 @@ a2a:
     response-key-id: ${AUTH_SERVICE_IDENTITY_KEY_ID:auth-service-current}
     response-public-key: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
   memory:
-    compression-enabled: ${BUSINESS_MEMORY_V2_COMPRESSION_ENABLED:false}
+    compression-enabled: ${PLATFORM_OPERATIONS_MEMORY_V2_COMPRESSION_ENABLED:false}
     key-id: ${SERVICE_IDENTITY_KEY_ID:platform-operations-service-current}
     private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}
 
-business:
-  authorization:
-    enabled: false
+platform-operations:
+  analytics:
+    authorization:
+      enabled: false
 
 dubbo:
   application:

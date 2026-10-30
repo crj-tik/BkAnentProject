@@ -70,7 +70,11 @@ public class LiveSkillAgentCards implements SmartInitializingSingleton, Disposab
                     pending.remove(name, card);
                 }
                 catch (RuntimeException exception) {
-                    org.slf4j.LoggerFactory.getLogger(getClass()).warn("Skill Card publication pending for {}; retrying", name);
+                    String failure = exception instanceof com.alibaba.nacos.api.exception.runtime.NacosRuntimeException nacosFailure
+                            ? "Nacos error " + nacosFailure.getErrCode()
+                            : exception.getClass().getSimpleName();
+                    org.slf4j.LoggerFactory.getLogger(getClass()).warn(
+                            "Skill Card publication pending for {}; retrying ({})", name, failure);
                 }
             });
         } catch (RuntimeException exception) {

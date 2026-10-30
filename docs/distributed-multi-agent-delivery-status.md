@@ -1,5 +1,7 @@
 # Distributed Multi-Agent Delivery Status
 
+> Historical snapshot. The active service map has changed since this report; use `docs/current-architecture.md` and the current OpenSpec change for implementation status.
+
 ## 1. Scope
 
 This document summarizes current implementation status against:

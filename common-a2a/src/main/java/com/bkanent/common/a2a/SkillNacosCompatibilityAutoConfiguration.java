@@ -10,6 +10,9 @@ import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.context.annotation.Bean;
+import org.springframework.core.env.Environment;
+
+import java.util.Properties;
 
 /** Reuses enabled Starter registration; the separate official update client is lazy and shares its configuration. */
 @AutoConfiguration
@@ -18,9 +21,28 @@ public class SkillNacosCompatibilityAutoConfiguration {
     @Bean
     @org.springframework.context.annotation.Lazy
     @org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean(com.alibaba.nacos.maintainer.client.ai.AiMaintainerService.class)
-    com.alibaba.nacos.maintainer.client.ai.AiMaintainerService skillCardMaintainer(NacosA2aProperties properties)
+    com.alibaba.nacos.maintainer.client.ai.AiMaintainerService skillCardMaintainer(
+            NacosA2aProperties properties, Environment environment)
             throws com.alibaba.nacos.api.exception.NacosException {
-        return com.alibaba.nacos.maintainer.client.ai.AiMaintainerFactory.createAiMaintainerService(properties.getNacosProperties());
+        return com.alibaba.nacos.maintainer.client.ai.AiMaintainerFactory.createAiMaintainerService(
+                resolveMaintainerProperties(properties, environment));
+    }
+
+    static Properties resolveMaintainerProperties(NacosA2aProperties properties, Environment environment) {
+        Properties resolved = properties.getNacosProperties();
+        overrideIfConfigured(resolved, environment, "NACOS_SERVER", com.alibaba.nacos.api.PropertyKeyConst.SERVER_ADDR);
+        overrideIfConfigured(resolved, environment, "NACOS_NAMESPACE", com.alibaba.nacos.api.PropertyKeyConst.NAMESPACE);
+        overrideIfConfigured(resolved, environment, "NACOS_USERNAME", com.alibaba.nacos.api.PropertyKeyConst.USERNAME);
+        overrideIfConfigured(resolved, environment, "NACOS_PASSWORD", com.alibaba.nacos.api.PropertyKeyConst.PASSWORD);
+        return resolved;
+    }
+
+    private static void overrideIfConfigured(Properties properties, Environment environment,
+                                             String environmentKey, String nacosProperty) {
+        String value = environment.getProperty(environmentKey);
+        if (org.springframework.util.StringUtils.hasText(value)) {
+            properties.setProperty(nacosProperty, value);
+        }
     }
 
     @Bean

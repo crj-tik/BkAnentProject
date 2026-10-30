@@ -1,5 +1,7 @@
 # Business Review Auth 与 Memory 注册交接
 
+> 历史交接材料。独立 `business-review-service` 已合并退役，当前门店复盘由 `platform-operations-service` 承载。旧服务身份、Memory domain、数据库与路由值不可用于部署；现行接口见[平台经营域前端功能清单](platform-operations-frontend-function-list.md)和[OpenAPI 契约](contracts/platform-operations-v1.openapi.yaml)。
+
 适用分支：`codex/implement-store-business-review`。本文件供协调会话合并 Auth、Memory 和房源/知识来源生产者登记。本服务不修改 `auth-service/**`、`common/**` 或 `business-service/**`。
 
 ## 服务身份

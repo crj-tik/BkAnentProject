@@ -179,9 +179,9 @@ class SessionEventAuditServiceTest {
                 "jdbc:h2:mem:" + java.util.UUID.randomUUID() + ";MODE=MySQL;DB_CLOSE_DELAY=-1", "sa", "");
         var jdbc = new org.springframework.jdbc.core.JdbcTemplate(datasource);
         java.nio.file.Path root = java.nio.file.Path.of("").toAbsolutePath();
-        while (!java.nio.file.Files.exists(root.resolve("sql/mysql-init.sql"))) root = root.getParent();
+        while (!java.nio.file.Files.exists(root.resolve("sql/migrations/20261013_mysql_init_bootstrap.sql"))) root = root.getParent();
         var ddl = java.util.regex.Pattern.compile("(?s)CREATE TABLE IF NOT EXISTS agent_event_audit \\(.*?;")
-                .matcher(java.nio.file.Files.readString(root.resolve("sql/mysql-init.sql")));
+                .matcher(java.nio.file.Files.readString(root.resolve("sql/migrations/20261013_mysql_init_bootstrap.sql")));
         assertThat(ddl.find()).isTrue();
         jdbc.execute(ddl.group()); // Real checked-in audit schema, not hand-copied table columns.
         var bean = new com.baomidou.mybatisplus.extension.spring.MybatisSqlSessionFactoryBean();

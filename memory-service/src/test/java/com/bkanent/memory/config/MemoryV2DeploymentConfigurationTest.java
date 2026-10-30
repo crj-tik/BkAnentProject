@@ -25,10 +25,7 @@ class MemoryV2DeploymentConfigurationTest {
             Map.entry("agent-service", new CallerIdentity("agent-service-current", "AGENT_SERVICE_IDENTITY_PUBLIC_KEY", "supervisor", "supervisor-agent")),
             Map.entry("marketing-content-service", new CallerIdentity("marketing-content-service-current", "MARKETING_CONTENT_SERVICE_IDENTITY_PUBLIC_KEY", "marketing", "marketing-agent")),
             Map.entry("interview-service", new CallerIdentity("interview-service-current", "INTERVIEW_SERVICE_IDENTITY_PUBLIC_KEY", "interview", "interview-agent")),
-            Map.entry("knowledge-service", new CallerIdentity("knowledge-service-current", "KNOWLEDGE_SERVICE_IDENTITY_PUBLIC_KEY", "knowledge", "knowledge-agent")),
             Map.entry("listing-master-service", new CallerIdentity("listing-master-service-current", "LISTING_MASTER_SERVICE_IDENTITY_PUBLIC_KEY", "listing", "listing-agent")),
-            Map.entry("business-service", new CallerIdentity("business-service-current", "BUSINESS_SERVICE_IDENTITY_PUBLIC_KEY", "trade", "trade-agent")),
-            Map.entry("business-review-service", new CallerIdentity("business-review-service-current", "BUSINESS_REVIEW_SERVICE_IDENTITY_PUBLIC_KEY", "business-review", "business-review-agent")),
             Map.entry("notification-service", new CallerIdentity("notification-service-current", "NOTIFICATION_SERVICE_IDENTITY_PUBLIC_KEY", "notification", "notification-agent")),
             Map.entry("media-worker-service", new CallerIdentity("media-worker-service-current", "MEDIA_WORKER_SERVICE_IDENTITY_PUBLIC_KEY", "media", "media-agent")));
 
@@ -42,6 +39,9 @@ class MemoryV2DeploymentConfigurationTest {
             var configured = bindProperties(resource, Map.of());
             assertFalse(configured.getTrustedCallers().containsKey("contract-service"));
             assertFalse(configured.getTrustedCallers().containsKey("settlement-service"));
+            assertFalse(configured.getTrustedCallers().containsKey("business-service"));
+            assertFalse(configured.getTrustedCallers().containsKey("business-review-service"));
+            assertFalse(configured.getTrustedCallers().containsKey("knowledge-service"));
             for (var entry : OFFICIAL_CALLERS.entrySet()) {
                 var caller = bindCaller(resource, entry.getKey(), publicKeys);
                 var identity = entry.getValue();
@@ -61,8 +61,8 @@ class MemoryV2DeploymentConfigurationTest {
                     Map.of("PLATFORM_OPERATIONS_SERVICE_IDENTITY_PUBLIC_KEY", "fixture-public-key"));
             assertEquals(Map.of("platform-operations-service-current", "fixture-public-key"), caller.getPublicKeys());
             assertTrue(caller.isServiceDelivery());
-            assertEquals(Map.of("trade", Set.of("platform-operations-analytics"),
-                    "business-review", Set.of("platform-operations-review"),
+            assertEquals(Map.of("analytics", Set.of("platform-operations-analytics"),
+                    "review", Set.of("platform-operations-review"),
                     "knowledge", Set.of("platform-operations-knowledge")), caller.getAllowedAgentsByDomain());
             assertFalse(caller.isExperienceOutcomePublisher());
             assertFalse(caller.isExperienceGovernancePublisher());
@@ -76,8 +76,7 @@ class MemoryV2DeploymentConfigurationTest {
         Map<String, String> callerFlags = Map.of(
                 "marketing-content-service", "MARKETING_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER",
                 "interview-service", "INTERVIEW_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER",
-                "listing-master-service", "LISTING_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER",
-                "business-service", "BUSINESS_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER");
+                "listing-master-service", "LISTING_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER");
 
         for (Resource resource : resources) {
             for (String callerName : callerFlags.keySet()) {

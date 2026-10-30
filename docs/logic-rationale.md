@@ -1477,13 +1477,15 @@
 
 **关联**：LR-160；KI-223；change `consolidate-platform-operations` 任务 2.5。登记门店身份不自动赋予业务操作权限。
 
-## LR-162 新领域服务身份在 Auth 与 Memory 分别登记
+## LR-162 新领域服务身份在 Auth 与 Memory 分别登记（合并前阶段）
 
 **结论**：Knowledge 与 Business Review 在 Auth A2A 中只登记 `RESOLVE_BEACON`，Memory 只登记各自独立的 caller、domain 和 agent；Compare caller 与五类旧 Compare Memory 空间均从 Auth、Memory、RAG 默认配置完整移除。
 
 **根因**：服务公钥、信标操作权限与 Memory 私域分别校验，单独配置某一服务不等于其他验证方已接入；旧服务退出运行后不需要保留默认访问许可。
 
 **代码位置**：`nacos/auth-service.yaml`、`nacos/memory-service.yaml` 及对应服务的 `application.yml`；关联 KI-225、KI-226。
+
+**演进状态（2026-10-30）**：Knowledge 与 Business Review 独立服务身份已由平台经营统一服务身份取代；Memory 仍按 analytics、review、knowledge 三组精确 caller/domain/agent 隔离。Compare caller 和五类旧 Compare Memory 空间已从活动配置移除；物理索引与集合的清理规则见 LR-170。
 
 ## LR-169 平台经营 A2A 使用基线入口与分支权限分层
 
@@ -1494,3 +1496,23 @@
 **代码位置**：`agent-service/src/main/resources/application.yml`、`nacos/agent-service.yaml`、`nacos/auth-service.yaml`、`OfficialA2aAgentClient`、`PlatformAgentRouter`；迁移 `20261030_retire_platform_legacy_authorization.sql` 退役旧入口权限。
 
 **关联**：LR-160、LR-165；KI-233；change `consolidate-platform-operations` 任务 2.5、3.3、4.1。
+
+## LR-170 平台经营 Memory 标识与物理 RAG 空间统一收敛
+
+**结论**：合并后的三个 Agent 分支继续各自使用 `analytics/platform-operations-analytics`、`review/platform-operations-review`、`knowledge/platform-operations-knowledge` Memory 身份；RAG 配置中的复盘物理索引和集合以 `review_...` 为唯一前缀。Compare、合同、结算和旧 trade 的五类 RAG 空间只在确认精确清单、ES 文档数为 0、无别名且 Milvus rowCount 为 0 后删除；已验证当前活动模板不再声明这些空间。
+
+**根因**：服务合并只改变服务边界，不应合并不同能力的记忆授权；逻辑身份变更后若遗留物理集合和旧配置，运行探针、运维工具与真实集合会产生不一致。删除前逐项检查空数据，避免将旧业务资产误当无用配置。
+
+**代码位置**：`nacos/memory-service.yaml`、`nacos/rag-service.yaml`、`scripts/verification/RagRuntimeProbe.java`、`rag-service/.../NacosRagTemplateTest.java`；旧模块源码和维护测试已从活动 Maven 聚合退役。Compare、合同、结算及旧经营空间各 5 个索引和 5 个集合已按受控清单完成开发环境清理。
+
+**关联**：LR-162、LR-165、LR-169；KI-227；change `consolidate-platform-operations` 任务 3.3、4.1。
+
+## LR-171 Nacos 管理、配置客户端与 A2A 身份分权
+
+**结论**：Nacos Client API 鉴权、Admin API/控制台鉴权和应用配置/服务发现客户端身份分别配置。配置发布/退役只由一次性 `config-init` 使用 Admin 凭据；A2A AgentCard 提供方与 Agent 发现客户端使用独立 `bkagent` 账号，权限只授予 `BK-AGENT:DEFAULT_GROUP:ai/*` 的读和写。普通应用不接收该 A2A 凭据，RAG 使用 `NACOS_CLIENT_USERNAME/PASSWORD`。开发 Nacos 嵌入式数据挂载 `nacos-data`，容器重建不丢配置、账号和 AgentCard。
+
+**根因**：`NACOS_AUTH_ENABLE=false` 只关闭 Nacos 普通客户端鉴权，不会关闭默认启用的 Admin API/控制台鉴权；Card 读与写也分别需要 namespace 权限。把 A2A 账号塞进共享应用环境会扩大凭据可见范围，而把它用于配置导入又缺少配置资源授权。嵌入式 Derby 位于容器数据目录，未挂卷时重建容器会丢失配置与注册状态。
+
+**代码位置**：`docker-compose.yml` 的 `config-init`、`x-a2a-agent-environment` 与 `nacos-data`；`scripts/deploy/init-nacos-a2a-auth.py`、`publish-nacos.py`、`retire-nacos-configs.py`；RAG Nacos 客户端绑定。回归见部署脚本测试与 `NacosRagTemplateTest`。
+
+**关联**：LR-28、LR-170；KI-234；change `consolidate-platform-operations` 任务 3.3、4.3。

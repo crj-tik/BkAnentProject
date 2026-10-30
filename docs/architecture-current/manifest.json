@@ -1,11 +1,11 @@
 {
   "basis": "Current working tree, including pre-existing uncommitted source changes; static code review, not deployment verification.",
-  "head": "6a06e331a74fe689375bda71bd21cef2b0590783",
+  "head": "cc4ba9c7ae408713b10c99bf220d6f5210de66dc",
   "diagrams": [
     {
       "slug": "01-service-architecture",
       "title": "服务架构｜模块与职责",
-      "subtitle": "当前 Maven 服务与共享模块 · 10 个官方 A2A 子 Agent · 以当前工作区源码为准",
+      "subtitle": "当前 Maven 服务与共享模块 · 以当前工作区源码为准",
       "nodes": [
         [
           "访问入口",
@@ -23,8 +23,8 @@
           "purple"
         ],
         [
-          "10 个官方 A2A 子 Agent",
-          "listing / marketing / media / trade / contract\nsettlement / notification / interview / knowledge / business-review",
+          "官方 A2A Provider",
+          "Listing / Marketing / Media / Notification / Interview\n平台经营域：分析、复盘、知识运营由一个 Agent 路由",
           "purple"
         ],
         [
@@ -39,7 +39,7 @@
         ],
         [
           "其他业务与共享模块",
-          "customer-service / knowledge-service\nbusiness-review-service / common",
+          "customer-service / interview-service\nplatform-operations-service / common",
           "blue"
         ],
         [
@@ -153,7 +153,7 @@
         ]
       ],
       "notes": [
-        "官方并行节点覆盖 7 个领域：listing、marketing、media、trade、contract、settlement、notification。",
+        "平台经营域以一个 A2A Agent 承载经营分析、门店复盘和知识运营，并在域内隔离能力与记忆。",
         "房源比较是 Listing Agent 的同域能力；单次路由能力与并行节点映射应区分。"
       ],
       "sources": [
@@ -626,13 +626,13 @@
       "loop": true
     },
     {
-      "slug": "07-trade-agent",
-      "title": "经营分析 Agent｜执行流程",
-      "subtitle": "trade-agent  ·  business-service  ·  官方 A2A Provider",
+      "slug": "07-platform-operations-agent",
+      "title": "平台经营域 Agent｜执行流程",
+      "subtitle": "platform-operations-agent  ·  platform-operations-service  ·  官方 A2A Provider",
       "nodes": [
         [
           "01  接收子任务",
-          "月份 / 门店 / 日期 / 排名范围\n经营问题与分析目标",
+          "经营指标与门店范围\n复盘目标或知识案例操作",
           "blue"
         ],
         [
@@ -647,22 +647,22 @@
         ],
         [
           "04  选择工具",
-          "月度 KPI / 周转 / 门店看板\nKPI 考核 / 业绩排名 / 日工作量\n共 6 个本地工具",
+          "经营分析 / 门店复盘 / 知识运营\n由单一 Agent 按授权能力路由",
           "purple"
         ],
         [
           "05  领域服务",
-          "BusinessAnalyticsService\n读取业务统计并执行指标计算",
+          "平台经营服务统一承载\n三个内部执行器共享服务身份",
           "blue"
         ],
         [
           "06  数据与执行",
-          "MySQL：KPI 与员工工作量\n房源周转、门店快照等统计数据",
+          "bk_platform_operations\nAnalysis / Review / Knowledge\n共享库内按权限隔离",
           "green"
         ],
         [
           "07  工具结果返回",
-          "统计 DTO / 看板 / 排名\nReactAgent 生成经营分析回答",
+          "统一 Agent 响应\n身份、权限、来源与 Memory 分支隔离",
           "green"
         ],
         [
@@ -677,13 +677,18 @@
         ]
       ],
       "notes": [
-        "trade-agent 的当前官方工具是经营统计；旧 AgentService 的交易可行性逻辑并非官方 Provider 入口。",
+        "API 与数据库能力仍按具体分支授权；知识来源只读受限 Interview 投影。",
         "虚线表示可多轮工具推理；模型也可直接回答。图中工具是可选分支，不代表每次全部执行。"
       ],
       "sources": [
-        "business-service/src/main/java/com/bkanent/business/a2a/TradeOfficialA2aAgent.java",
-        "business-service/src/main/java/com/bkanent/business/a2a/A2aSupervisorContextInterceptor.java",
-        "business-service/src/main/java/com/bkanent/business/tool/TradeTools.java"
+        "platform-operations-service/src/main/java/com/bkanent/platform/a2a/PlatformAgentConfiguration.java",
+        "platform-operations-service/src/main/java/com/bkanent/platform/a2a/PlatformAgentRouter.java",
+        "platform-operations-service/src/main/java/com/bkanent/business/a2a/PlatformAnalyticsAgent.java",
+        "platform-operations-service/src/main/java/com/bkanent/businessreview/a2a/PlatformReviewAgent.java",
+        "platform-operations-service/src/main/java/com/bkanent/knowledge/a2a/KnowledgeOfficialA2aAgent.java",
+        "platform-operations-service/src/main/java/com/bkanent/business/tool/AnalyticsTools.java",
+        "platform-operations-service/src/main/java/com/bkanent/businessreview/tool/ReviewDraftTools.java",
+        "platform-operations-service/src/main/java/com/bkanent/knowledge/tool/KnowledgeAgentTools.java"
       ],
       "edges": [
         [
@@ -730,215 +735,7 @@
       "loop": true
     },
     {
-      "slug": "08-contract-agent",
-      "title": "合同审查 Agent｜执行流程",
-      "subtitle": "contract-agent  ·  contract-service  ·  官方 A2A Provider",
-      "nodes": [
-        [
-          "01  接收子任务",
-          "contractId 或类型 / 状态\n合同审查问题与约束",
-          "blue"
-        ],
-        [
-          "02  A2A 上下文注入",
-          "Supervisor metadata → 模型上下文\n任务 / 会话 / 追踪 / 约束 / 预期输出",
-          "blue"
-        ],
-        [
-          "03  ReactAgent 推理",
-          "ChatModel + 领域 systemPrompt\n决定直接回答或调用本地工具",
-          "purple"
-        ],
-        [
-          "04  选择工具",
-          "getContractDetail / listContracts\nreviewContractRisks\n读取合同与规则风险检查",
-          "purple"
-        ],
-        [
-          "05  领域服务",
-          "ContractManagementService\n获取状态、附件、OCR 摘要\n工具层检查盖章、归档等风险",
-          "blue"
-        ],
-        [
-          "06  数据与执行",
-          "MySQL：合同与附件记录\n风险依据：印章 / 归档 / OCR\n以及附件数量",
-          "green"
-        ],
-        [
-          "07  工具结果返回",
-          "风险标记与合同详情\nReactAgent 给出解释与建议",
-          "green"
-        ],
-        [
-          "08  整理最终输出",
-          "工具结果回填模型，可继续调用\n满足任务要求后生成 output",
-          "blue"
-        ],
-        [
-          "09  返回 Supervisor",
-          "官方 A2A 响应 / 任务 / 流\n客户端适配后合并工作流状态",
-          "blue"
-        ]
-      ],
-      "notes": [
-        "官方 ContractTools 没有签章工具；电子签章 Provider 属于合同管理 API 的其他业务能力。",
-        "虚线表示可多轮工具推理；模型也可直接回答。图中工具是可选分支，不代表每次全部执行。"
-      ],
-      "sources": [
-        "contract-service/src/main/java/com/bkanent/contract/a2a/ContractOfficialA2aAgent.java",
-        "contract-service/src/main/java/com/bkanent/contract/a2a/A2aSupervisorContextInterceptor.java",
-        "contract-service/src/main/java/com/bkanent/contract/tool/ContractTools.java"
-      ],
-      "edges": [
-        [
-          0,
-          1,
-          ""
-        ],
-        [
-          1,
-          2,
-          ""
-        ],
-        [
-          2,
-          3,
-          ""
-        ],
-        [
-          3,
-          4,
-          ""
-        ],
-        [
-          4,
-          5,
-          ""
-        ],
-        [
-          5,
-          6,
-          ""
-        ],
-        [
-          6,
-          7,
-          ""
-        ],
-        [
-          7,
-          8,
-          ""
-        ]
-      ],
-      "loop": true
-    },
-    {
-      "slug": "09-settlement-agent",
-      "title": "佣金结算 Agent｜执行流程",
-      "subtitle": "settlement-agent  ·  settlement-service  ·  官方 A2A Provider",
-      "nodes": [
-        [
-          "01  接收子任务",
-          "员工 / 合同 / 房源 / 成交金额\n月份与汇总范围",
-          "blue"
-        ],
-        [
-          "02  A2A 上下文注入",
-          "Supervisor metadata → 模型上下文\n任务 / 会话 / 追踪 / 约束 / 预期输出",
-          "blue"
-        ],
-        [
-          "03  ReactAgent 推理",
-          "ChatModel + 领域 systemPrompt\n决定直接回答或调用本地工具",
-          "purple"
-        ],
-        [
-          "04  选择工具",
-          "getSettlementDetail\ncalculateSettlement / getMonthlySummary\ncreatePayoutBatch",
-          "purple"
-        ],
-        [
-          "05  领域服务",
-          "SettlementManagementService\n佣金计算、分佣、月度汇总\n或创建发放批次",
-          "blue"
-        ],
-        [
-          "06  数据与执行",
-          "MySQL：规则与阶梯\n结算、分佣、月汇总、发放批次",
-          "green"
-        ],
-        [
-          "07  工具结果返回",
-          "结算明细 / 汇总 / 批次结果\n模型解释计算与处理结果",
-          "green"
-        ],
-        [
-          "08  整理最终输出",
-          "工具结果回填模型，可继续调用\n满足任务要求后生成 output",
-          "blue"
-        ],
-        [
-          "09  返回 Supervisor",
-          "官方 A2A 响应 / 任务 / 流\n客户端适配后合并工作流状态",
-          "blue"
-        ]
-      ],
-      "notes": [
-        "创建发放批次不等于完成真实银行付款；审批由 Supervisor 的规划与审批路径负责。",
-        "虚线表示可多轮工具推理；模型也可直接回答。图中工具是可选分支，不代表每次全部执行。"
-      ],
-      "sources": [
-        "settlement-service/src/main/java/com/bkanent/settlement/a2a/SettlementOfficialA2aAgent.java",
-        "settlement-service/src/main/java/com/bkanent/settlement/a2a/A2aSupervisorContextInterceptor.java",
-        "settlement-service/src/main/java/com/bkanent/settlement/tool/SettlementTools.java"
-      ],
-      "edges": [
-        [
-          0,
-          1,
-          ""
-        ],
-        [
-          1,
-          2,
-          ""
-        ],
-        [
-          2,
-          3,
-          ""
-        ],
-        [
-          3,
-          4,
-          ""
-        ],
-        [
-          4,
-          5,
-          ""
-        ],
-        [
-          5,
-          6,
-          ""
-        ],
-        [
-          6,
-          7,
-          ""
-        ],
-        [
-          7,
-          8,
-          ""
-        ]
-      ],
-      "loop": true
-    },
-    {
-      "slug": "10-notification-agent",
+      "slug": "08-notification-agent",
       "title": "消息通知 Agent｜执行流程",
       "subtitle": "notification-agent  ·  notification-service  ·  官方 A2A Provider",
       "nodes": [
@@ -996,6 +793,110 @@
         "notification-service/src/main/java/com/bkanent/notification/a2a/NotificationOfficialA2aAgent.java",
         "notification-service/src/main/java/com/bkanent/notification/a2a/A2aSupervisorContextInterceptor.java",
         "notification-service/src/main/java/com/bkanent/notification/tool/NotificationTools.java"
+      ],
+      "edges": [
+        [
+          0,
+          1,
+          ""
+        ],
+        [
+          1,
+          2,
+          ""
+        ],
+        [
+          2,
+          3,
+          ""
+        ],
+        [
+          3,
+          4,
+          ""
+        ],
+        [
+          4,
+          5,
+          ""
+        ],
+        [
+          5,
+          6,
+          ""
+        ],
+        [
+          6,
+          7,
+          ""
+        ],
+        [
+          7,
+          8,
+          ""
+        ]
+      ],
+      "loop": true
+    },
+    {
+      "slug": "09-interview-agent",
+      "title": "访谈 Agent｜执行流程",
+      "subtitle": "interview-agent  ·  interview-service  ·  官方 A2A Provider",
+      "nodes": [
+        [
+          "01  接收子任务",
+          "已授权访谈案例、执行指令\n访谈 session 与报告任务",
+          "blue"
+        ],
+        [
+          "02  A2A 上下文注入",
+          "Supervisor metadata → 模型上下文\n任务 / 会话 / 追踪 / 约束 / 预期输出",
+          "blue"
+        ],
+        [
+          "03  ReactAgent 推理",
+          "ChatModel + 领域 systemPrompt\n决定直接回答或调用本地工具",
+          "purple"
+        ],
+        [
+          "04  选择工具",
+          "开案、题目确认、启动与控制\n查询进度、报告和归档来源",
+          "purple"
+        ],
+        [
+          "05  领域服务",
+          "InterviewTools\n治理生命周期与逐字稿处理",
+          "blue"
+        ],
+        [
+          "06  数据与执行",
+          "bk_interview\n会话、turn、asset 与报告任务",
+          "green"
+        ],
+        [
+          "07  工具结果返回",
+          "访谈进度 / 报告任务状态\n受限来源按发布和分级筛选",
+          "green"
+        ],
+        [
+          "08  整理最终输出",
+          "工具结果回填模型，可继续调用\n满足任务要求后生成 output",
+          "blue"
+        ],
+        [
+          "09  返回 Supervisor",
+          "官方 A2A 响应 / 任务 / 流\n客户端适配后合并工作流状态",
+          "blue"
+        ]
+      ],
+      "notes": [
+        "访谈域继续负责逐字稿与报告；知识运营只通过受限视图读取合格来源。",
+        "虚线表示可多轮工具推理；模型也可直接回答。图中工具是可选分支，不代表每次全部执行。"
+      ],
+      "sources": [
+        "interview-service/src/main/java/com/bkanent/interview/a2a/InterviewOfficialA2aAgent.java",
+        "interview-service/src/main/java/com/bkanent/interview/a2a/A2aSupervisorContextInterceptor.java",
+        "interview-service/src/main/java/com/bkanent/interview/tool/InterviewTools.java"
       ],
       "edges": [
         [
@@ -1509,7 +1410,7 @@
         "common-skill/src/main/java/com/bkanent/common/skill/core/SkillMatcher.java",
         "agent-service/src/main/java/com/bkanent/agent/config/SkillConfiguration.java",
         "agent-service/src/main/java/com/bkanent/agent/skill/SkillAwareToolProvider.java",
-        "contract-service/src/main/java/com/bkanent/contract/a2a/ContractOfficialA2aAgent.java"
+        "platform-operations-service/src/main/java/com/bkanent/platform/a2a/PlatformAgentRouter.java"
       ],
       "edges": [
         [
@@ -1556,8 +1457,8 @@
           "purple"
         ],
         [
-          "A2A · 10 个官方子 Agent",
-          "listing / marketing / media / trade / contract\nsettlement / notification / interview / knowledge / business-review",
+          "官方 A2A Agent",
+          "Listing / Marketing / Media / Notification / Interview\n平台经营域：一个 Agent 路由三类隔离能力",
           "purple"
         ],
         [
@@ -1567,7 +1468,7 @@
         ],
         [
           "数据与业务集成",
-          "MySQL / Elasticsearch / MinIO\ncustomer / knowledge / business-review\n签章、媒体、邮件、平台 Provider",
+          "MySQL / Elasticsearch / MinIO\ncustomer / platform-operations / interview\n媒体、邮件与营销 Provider",
           "green"
         ],
         [
@@ -1593,7 +1494,8 @@
       ],
       "notes": [
         "实线为主要业务调用，虚线为支撑关系；下方与左侧是配套能力，不代表顺序执行。",
-        "当前实现边界：发布状态更新 ≠ 外部发布；媒体 Worker 生成图片；图基于源码而非运行环境验收。"
+        "合同与结算业务域已退役；平台经营分析、复盘和知识运营由统一服务承载。",
+        "当前实现边界：发布状态更新不等于外部发布；媒体 Worker 生成图片；图基于源码而非运行环境验收。"
       ],
       "sources": [
         "pom.xml",
@@ -1627,9 +1529,9 @@
     }
   ],
   "source_sha256": {
-    "pom.xml": "75e1f20284bd269a58d5b884ec5b5da0ba8138f1d48c339c64346efce1951876",
+    "pom.xml": "aea6ddced2e2b39ebdbe804384af2261b70dd220b241347c262e910438e7048e",
     "gateway/src/main/resources/application.yml": "9b095c4c3312b2f7e48b587c03d384303bab53ef1f0bdfb8419b8f4ee988c1d5",
-    "nacos/agent-service.yaml": "76b8bb7f6d0398b228d072baa6e38bb7734a6ac649d0a5ecca9f215780d66725",
+    "nacos/agent-service.yaml": "8476f17473dfede7dab7e052a2f3cccb798f87645fab41f2e059561a44386986",
     "agent-service/src/main/java/com/bkanent/agent/orchestration/SupervisorToolLoopGraph.java": "a2cb4991347d08d1b38a878e17539a24676cb021dc298b7fd729609f58439349",
     "agent-service/src/main/java/com/bkanent/agent/service/A2aExecutionService.java": "4596e81356042ca8db21c4c8c6fd234d364ab20aae28f7f719c15f49dc2ffc68",
     "agent-service/src/main/java/com/bkanent/agent/graph/official/OfficialSupervisorGraphSchema.java": "7b1d1cc00e1ea2e73939994e2c37f9412e02ecce619afe8c748f890dc3679853",
@@ -1646,22 +1548,24 @@
     "media-worker-service/src/main/java/com/bkanent/media/a2a/MediaOfficialA2aAgent.java": "fb4a8ad0850969b290e53029caccc283f181bfa49c1ba0637d47e71ad24d7722",
     "media-worker-service/src/main/java/com/bkanent/media/a2a/A2aSupervisorContextInterceptor.java": "ab4bf37d9259e9e1c21c1e3119ddba002143f244e9f4aaef04e244205da80a84",
     "media-worker-service/src/main/java/com/bkanent/media/tool/MediaTools.java": "d10bff422c6714f607e3b171d63073ed49a0b14b4c8c9b054f4e94d11a7861b9",
-    "business-service/src/main/java/com/bkanent/business/a2a/TradeOfficialA2aAgent.java": "36a6b973a2ef139c2a8e6a4c871b01bd984fe1453ece49f56804724ecf4e4b5e",
-    "business-service/src/main/java/com/bkanent/business/a2a/A2aSupervisorContextInterceptor.java": "f322e3d04669cb6f90b1cc87881f9f25253b14730eec94fc45ae217321eb35e6",
-    "business-service/src/main/java/com/bkanent/business/tool/TradeTools.java": "cf60012d89b0565f6a1f55bfae44a342fba4c958cd99f126468309e55a2cd6e6",
-    "contract-service/src/main/java/com/bkanent/contract/a2a/ContractOfficialA2aAgent.java": "8fbd7cce2508b9847bf2cc84ee48c3bcfa22b3399d256a307b508d96380643f4",
-    "contract-service/src/main/java/com/bkanent/contract/a2a/A2aSupervisorContextInterceptor.java": "65e3e8943e8c7406985246c6445e88a568394dbc93a90880f3d0df53bf53c1c0",
-    "contract-service/src/main/java/com/bkanent/contract/tool/ContractTools.java": "194efa3a3a2bd00d8ccacbc12de1cd54946a992068fcb10b8266acaf1ba575ce",
-    "settlement-service/src/main/java/com/bkanent/settlement/a2a/SettlementOfficialA2aAgent.java": "66bbfd5662e3593593be5d0c7434c394c4b610e256bcc41c3fa04a288f01ce76",
-    "settlement-service/src/main/java/com/bkanent/settlement/a2a/A2aSupervisorContextInterceptor.java": "907679943b62529c777af74f953c07159286d9ef706445cfcf0df87b5507bdc8",
-    "settlement-service/src/main/java/com/bkanent/settlement/tool/SettlementTools.java": "d14a4c92b4c5bc773ceb721828e955278c5264190480f116404fb7ff41c72145",
+    "platform-operations-service/src/main/java/com/bkanent/platform/a2a/PlatformAgentConfiguration.java": "72c9cd10d0e25091fd507caea7ba1c3bbf83fb337187ceafa627397b74aa3948",
+    "platform-operations-service/src/main/java/com/bkanent/platform/a2a/PlatformAgentRouter.java": "b484c38d1af3b20ae988fdc812620a8a511571c7501c5be0870e2678f7893c65",
+    "platform-operations-service/src/main/java/com/bkanent/business/a2a/PlatformAnalyticsAgent.java": "03906668db4b86142bcb72550156bfe9d636eed984d775279da4600de475caf3",
+    "platform-operations-service/src/main/java/com/bkanent/businessreview/a2a/PlatformReviewAgent.java": "ad2be8312b28523cae4c5dfce6026d09575ff70857cdc56341f7ba584dbd4ff1",
+    "platform-operations-service/src/main/java/com/bkanent/knowledge/a2a/KnowledgeOfficialA2aAgent.java": "6c72883bd975bb6e235d0e0117154aa1359787b335f7843ae616161637cefc74",
+    "platform-operations-service/src/main/java/com/bkanent/business/tool/AnalyticsTools.java": "303018299c026465cbda62fe20f4572375cde5848d2c5eae634b05bd9db52ac6",
+    "platform-operations-service/src/main/java/com/bkanent/businessreview/tool/ReviewDraftTools.java": "249f70b794705184a3728a4472adbd2aca128a9fa194bf123aa3dafaf2397e96",
+    "platform-operations-service/src/main/java/com/bkanent/knowledge/tool/KnowledgeAgentTools.java": "54f9ccd91b29b4f70b9a71b636ef5161f5cc0928567d5391e97057c23086730a",
     "notification-service/src/main/java/com/bkanent/notification/a2a/NotificationOfficialA2aAgent.java": "3ccc74d18c9135fec7b5126863a95fbec90bc404fd8462a55aba099165927ed4",
     "notification-service/src/main/java/com/bkanent/notification/a2a/A2aSupervisorContextInterceptor.java": "00d36f70298ef240f514f5e665e9163b638ccc221d6b9a6c213bd87d46dbe6b6",
     "notification-service/src/main/java/com/bkanent/notification/tool/NotificationTools.java": "c5351c514dfe06c9332325c108c16e8555d74070a1371ef4d9117ad26b75dc67",
+    "interview-service/src/main/java/com/bkanent/interview/a2a/InterviewOfficialA2aAgent.java": "007ab21b04bdc8223e1d74f38f204334cea7fd3ef3cc6be510f752521630befd",
+    "interview-service/src/main/java/com/bkanent/interview/a2a/A2aSupervisorContextInterceptor.java": "2d2639c5ffdcab8814f92cab9cb1b15f81427f0514ba11e9dc17b7a65246a3c7",
+    "interview-service/src/main/java/com/bkanent/interview/tool/InterviewTools.java": "81d70d22c12e04e12cfe0d5c984d9ac87625e3949150032c0e5bbdab5112d84a",
     "agent-service/src/main/java/com/bkanent/agent/graph/official/ApprovalResumeClaimStore.java": "d82b119f094e5e89b96156295cf540c7cf0b5d293488d6bb037df7d42f3ed4a9",
     "agent-service/src/main/java/com/bkanent/agent/graph/official/OfficialSupervisorGraphKeys.java": "83a0a100d456933c07c7cc1f575a2f08ca572dcb30b364a0cee41d6e8123091c",
     "sql/migrations/20260918_agent_workflow_approval_claim.sql": "4b3c76d2fcde0d9dbcaa0cf346b7cc7d0a276d13e2e908f244b77ebfde76af0f",
-    "agent-service/src/main/java/com/bkanent/agent/client/OfficialA2aAgentClient.java": "8f41e0427c96ea5bd078dda9eb4f27648fd0febaaa2188dcc5b64caa5369bcd6",
+    "agent-service/src/main/java/com/bkanent/agent/client/OfficialA2aAgentClient.java": "741bf3b9c185855cc6c0b313000665cdc86ac98fa2b3cf1db2a705b3e540b887",
     "agent-service/src/main/java/com/bkanent/agent/memory/HttpMemoryStoreClient.java": "09883c159624e23d7f5774710cf03591b7a9e46f22f9a0af889b466de3d798c1",
     "memory-service/src/main/java/com/bkanent/memory/controller/MemoryController.java": "8997fce67b7b32342a8c0870718802d21bd7819abfc3ef84b4b64b82de73aeae",
     "agent-service/src/main/java/com/bkanent/agent/milvus/listing/ListingMilvusService.java": "c804f7bc4c974c13f69c54ea0fb2c83729be546ea5e8188145a447ce13e69c42",

@@ -30,4 +30,4 @@ Auth 基础记录为：账号 9、角色 3、权限 167（活动 140）、角色
 
 ## 前端交付基线
 
-页面与接口能力、当前缺口、鉴权和数据状态提示见 [四域前端功能清单](../four-domain-frontend-function-list.md)。Listing 比较切换与旧入口限制见 [Listing 比较切换清单](../listing-comparison-cutover.md)。
+平台经营域当前页面/API 能力及缺口见[平台经营域前端功能清单](../platform-operations-frontend-function-list.md)。本验收仍保留 2026-10-29 的四域快照；Listing 比较切换与旧入口限制见 [Listing 比较切换清单](../listing-comparison-cutover.md)。

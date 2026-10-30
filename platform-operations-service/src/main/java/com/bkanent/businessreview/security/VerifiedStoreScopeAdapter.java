@@ -6,7 +6,7 @@ import com.bkanent.common.authz.AuthorizationContext;
 import org.springframework.stereotype.Component;
 import java.util.Set;
 
-/** Auth currently signs BROKER identities only; STORE remains fail-closed until Auth registers it. */
+/** Uses the Auth-signed STORE identity as the only trusted store scope. */
 @Component
 public class VerifiedStoreScopeAdapter implements TrustedStoreScopePort {
     @Override

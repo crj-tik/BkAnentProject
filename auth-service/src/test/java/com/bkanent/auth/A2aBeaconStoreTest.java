@@ -50,7 +50,7 @@ class A2aBeaconStoreTest {
         var credentials = RagCredentialContext.beacon(store.issue(binding("marketing-content-service"), new RagCredentialContext(token)).value());
         for (String consumer : java.util.List.of("listing-master-service", "memory-service", "rag-service"))
             assertThat(store.principal(credentials, consumer).userId()).isEqualTo(7L);
-        for (String consumer : java.util.List.of("auth-service", "business-service", "notification-service", "customer-service"))
+        for (String consumer : java.util.List.of("auth-service", "platform-operations-service", "notification-service", "customer-service"))
             assertThatThrownBy(() -> store.principal(credentials, consumer)).isInstanceOf(RagException.class);
         var trade = RagCredentialContext.beacon(store.issue(binding("business-service"), new RagCredentialContext(token)).value());
         assertThatThrownBy(() -> store.principal(trade, "rag-service")).isInstanceOf(RagException.class);

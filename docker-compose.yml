@@ -39,6 +39,11 @@ x-app-environment: &app-environment
   SERVICE_READINESS_MODE: distributed
   # Business modes, token TTLs, stream and search switches are owned by Nacos.
 
+x-a2a-agent-environment: &a2a-agent-environment
+  # Only A2A producers and the registry consumer receive this scoped account.
+  NACOS_USERNAME: ${NACOS_USERNAME:-bkagent}
+  NACOS_PASSWORD: ${NACOS_PASSWORD:-}
+
 x-app-service: &app-service
   image: bk-anent-services:dev
   build:
@@ -100,7 +105,7 @@ services:
       MYSQL_PORT: "3306"
       MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Explicit MYSQL_ROOT_PASSWORD required}
       MYSQL_MCP_PASSWORD: ${MYSQL_MCP_PASSWORD:-}
-      MYSQL_MCP_DATABASES: ${MYSQL_MCP_DATABASES:-bk_auth,bk_listing,bk_customer,bk_notification,bk_marketing,bk_business,bk_business_review,bk_agent,bk_memory,bk_interview,bk_knowledge,bk_platform_operations}
+      MYSQL_MCP_DATABASES: ${MYSQL_MCP_DATABASES:-bk_auth,bk_listing,bk_customer,bk_notification,bk_marketing,bk_agent,bk_memory,bk_interview,bk_platform_operations}
     depends_on:
       mysql:
         condition: service_healthy
@@ -117,7 +122,7 @@ services:
       MYSQL_PORT: "3306"
       MYSQL_USER: mcp_ro
       MYSQL_PASSWORD: ${MYSQL_MCP_PASSWORD:-}
-      MYSQL_MCP_DATABASES: ${MYSQL_MCP_DATABASES:-bk_auth,bk_listing,bk_customer,bk_notification,bk_marketing,bk_business,bk_business_review,bk_agent,bk_memory,bk_interview,bk_knowledge,bk_platform_operations}
+      MYSQL_MCP_DATABASES: ${MYSQL_MCP_DATABASES:-bk_auth,bk_listing,bk_customer,bk_notification,bk_marketing,bk_agent,bk_memory,bk_interview,bk_platform_operations}
       MYSQL_MCP_TOKEN: ${MYSQL_MCP_TOKEN:-}
       MYSQL_MCP_MAX_ROWS: ${MYSQL_MCP_MAX_ROWS:-200}
       MYSQL_MCP_QUERY_TIMEOUT_MS: ${MYSQL_MCP_QUERY_TIMEOUT_MS:-5000}
@@ -146,15 +151,18 @@ services:
     restart: unless-stopped
     environment:
       MODE: standalone
-      # Server-to-server auth stays off in dev (identity header short-circuit); the
-      # console/admin user store still applies (bkagent/BK-AGENT namespace, see .env).
+      # Client auth stays off in dev; Admin API and console auth remain enabled.
       # Production: set NACOS_AUTH_ENABLE=true and rotate NACOS_AUTH_TOKEN.
       NACOS_AUTH_ENABLE: ${NACOS_AUTH_ENABLE:-false}
+      NACOS_AUTH_ADMIN_ENABLE: ${NACOS_AUTH_ADMIN_ENABLE:-true}
+      NACOS_AUTH_CONSOLE_ENABLE: ${NACOS_AUTH_CONSOLE_ENABLE:-true}
       NACOS_AUTH_TOKEN: ${NACOS_AUTH_TOKEN:-}
       NACOS_AUTH_IDENTITY_KEY: ${NACOS_AUTH_IDENTITY_KEY:-}
       NACOS_AUTH_IDENTITY_VALUE: ${NACOS_AUTH_IDENTITY_VALUE:-}
       PREFER_HOST_MODE: hostname
       TZ: Asia/Shanghai
+    volumes:
+      - nacos-data:/home/nacos/data
     ports:
       - "${HOST_BIND_ADDRESS:-127.0.0.1}:${NACOS_EXPOSED_PORT:-8848}:8848"
       - "${HOST_BIND_ADDRESS:-127.0.0.1}:${NACOS_CONSOLE_EXPOSED_PORT:-18080}:8080"
@@ -174,16 +182,21 @@ services:
       nacos:
         condition: service_healthy
     environment:
+      NACOS_SERVER: nacos:8848
       NACOS_NAMESPACE: ${NACOS_NAMESPACE:-BK-AGENT}
       NACOS_CONFIG_GROUP: DEFAULT_GROUP
       NACOS_CONFIG_DATA_IDS: ${NACOS_CONFIG_DATA_IDS:-}
       NACOS_AUTH_ENABLE: ${NACOS_AUTH_ENABLE:-false}
+      NACOS_ADMIN_USERNAME: ${NACOS_ADMIN_USERNAME:-nacos}
+      NACOS_ADMIN_PASSWORD: ${NACOS_ADMIN_PASSWORD:-}
       NACOS_USERNAME: ${NACOS_USERNAME:-bkagent}
       NACOS_PASSWORD: ${NACOS_PASSWORD:-}
-    entrypoint: ["python", "/scripts/publish-nacos.py"]
+    entrypoint: ["sh", "-c", "python /scripts/init-nacos-a2a-auth.py && python /scripts/publish-nacos.py"]
     volumes:
       - ./nacos:/config:ro
+      - ./scripts/deploy/init-nacos-a2a-auth.py:/scripts/init-nacos-a2a-auth.py:ro
       - ./scripts/deploy/publish-nacos.py:/scripts/publish-nacos.py:ro
+      - ./scripts/deploy/retire-nacos-configs.py:/scripts/retire-nacos-configs.py:ro
     read_only: true
     tmpfs: [/tmp]
     networks: [bk]
@@ -536,7 +549,7 @@ services:
         bind:
           create_host_path: false
     environment:
-      <<: *app-environment
+      <<: [*app-environment, *a2a-agent-environment]
       SERVICE_ARTIFACT: agent-service-1.0.0-SNAPSHOT.jar
       AGENT_AUTHORIZATION_ENABLED: ${AGENT_AUTHORIZATION_ENABLED:-false}
       AGENT_AUTHORIZATION_BASELINE_CAPABILITIES: ${AGENT_AUTHORIZATION_BASELINE_CAPABILITIES:-}
@@ -566,11 +579,10 @@ services:
       AGENT_MEMORY_V2_RECALL_CHARS: ${AGENT_MEMORY_V2_RECALL_CHARS:-8192}
       AGENT_RAG_RPC_SECRET: ${AGENT_RAG_RPC_SECRET:-}
       MEMORY_SERVICE_BASE_URL: http://memory-service:9011
-      KNOWLEDGE_SERVICE_BASE_URL: http://knowledge-service:9015
-      BUSINESS_MCP_ENDPOINT: http://business-service:9010/mcp
       MARKETING_MCP_ENDPOINT: http://marketing-content-service:9008/mcp
       NOTIFICATION_MCP_ENDPOINT: http://notification-service:9003/mcp
       MEDIA_MCP_ENDPOINT: http://media-worker-service:9007/mcp
+      INTERVIEW_MCP_ENDPOINT: http://interview-service:9014/mcp
 
   notification-service:
     <<: *app-service
@@ -590,7 +602,7 @@ services:
         bind:
           create_host_path: false
     environment:
-      <<: *app-environment
+      <<: [*app-environment, *a2a-agent-environment]
       SERVICE_ARTIFACT: notification-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://notification-service:9003
       NOTIFICATION_MEMORY_V2_COMPRESSION_ENABLED: ${NOTIFICATION_MEMORY_V2_COMPRESSION_ENABLED:-false}
@@ -598,7 +610,7 @@ services:
 
   listing-master-service:
     <<: *app-service
-    profiles: [full]
+    profiles: [full, platform-preview]
     volumes:
       - listing-comparison-data:/app/runtime
       - type: bind
@@ -608,7 +620,7 @@ services:
         bind:
           create_host_path: false
     environment:
-      <<: *app-environment
+      <<: [*app-environment, *a2a-agent-environment]
       SERVICE_ARTIFACT: listing-master-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://listing-master-service:9004
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database
@@ -668,7 +680,7 @@ services:
         bind:
           create_host_path: false
     environment:
-      <<: *app-environment
+      <<: [*app-environment, *a2a-agent-environment]
       SERVICE_ARTIFACT: media-worker-service-1.0.0-SNAPSHOT.jar
       A2A_PUBLIC_BASE_URL: http://media-worker-service:9007
       MEDIA_MEMORY_V2_COMPRESSION_ENABLED: ${MEDIA_MEMORY_V2_COMPRESSION_ENABLED:-false}
@@ -693,7 +705,7 @@ services:
         bind:
           create_host_path: false
     environment:
-      <<: *app-environment
+      <<: [*app-environment, *a2a-agent-environment]
       SERVICE_ARTIFACT: marketing-content-service-1.0.0-SNAPSHOT.jar
       MARKETING_ELASTICSEARCH_URIS: ${MARKETING_ELASTICSEARCH_URIS:-http://elasticsearch:9200}
       A2A_PUBLIC_BASE_URL: http://marketing-content-service:9008
@@ -709,7 +721,7 @@ services:
       dockerfile: Dockerfile
       args:
         MAVEN_MODULES: platform-operations-service
-    profiles: [platform-preview]
+    profiles: [full, platform-preview]
     depends_on:
       config-init:
         condition: service_completed_successfully
@@ -719,6 +731,8 @@ services:
         condition: service_healthy
       memory-service:
         condition: service_started
+      listing-master-service:
+        condition: service_started
     volumes:
       - type: bind
         source: ./.secrets/service-identities/platform-operations-service/private-key.pem
@@ -727,7 +741,7 @@ services:
         bind:
           create_host_path: false
     environment:
-      <<: *app-environment
+      <<: [*app-environment, *a2a-agent-environment]
       MYSQL_USER: ${PLATFORM_OPERATIONS_DB_USER:-platform_operations_app}
       MYSQL_PASSWORD: ${PLATFORM_OPERATIONS_DB_PASSWORD:-}
       MYSQL_DB_PLATFORM_OPERATIONS: ${MYSQL_DB_PLATFORM_OPERATIONS:-bk_platform_operations}
@@ -742,8 +756,8 @@ services:
       SERVICE_ARTIFACT: platform-operations-service-1.0.0-SNAPSHOT.jar
       SERVICE_IDENTITY_KEY_ID: platform-operations-service-current
       A2A_PUBLIC_BASE_URL: http://platform-operations-service:9010
-      BUSINESS_REVIEW_SOURCE_MODE: ${BUSINESS_REVIEW_SOURCE_MODE:-http}
-      BUSINESS_REVIEW_LISTING_BASE_URL: ${BUSINESS_REVIEW_LISTING_BASE_URL:-http://listing-master-service:9004}
+      PLATFORM_OPERATIONS_SOURCE_MODE: ${PLATFORM_OPERATIONS_SOURCE_MODE:-http}
+      PLATFORM_OPERATIONS_LISTING_BASE_URL: ${PLATFORM_OPERATIONS_LISTING_BASE_URL:-http://listing-master-service:9004}
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,redis,memory
       MEMORY_SERVICE_BASE_URL: http://memory-service:9011
     healthcheck:
@@ -752,61 +766,6 @@ services:
       timeout: 5s
       retries: 30
       start_period: 30s
-
-  business-service:
-    <<: *app-service
-    profiles: [full]
-    depends_on:
-      config-init:
-        condition: service_completed_successfully
-      mysql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - type: bind
-        source: ./.secrets/service-identities/business-service/private-key.pem
-        target: /run/secrets/service-identity.pem
-        read_only: true
-        bind:
-          create_host_path: false
-    environment:
-      <<: *app-environment
-      SERVICE_ARTIFACT: business-service-1.0.0-SNAPSHOT.jar
-      A2A_PUBLIC_BASE_URL: http://business-service:9010
-      BUSINESS_MEMORY_V2_COMPRESSION_ENABLED: ${BUSINESS_MEMORY_V2_COMPRESSION_ENABLED:-false}
-      SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,redis
-
-  business-review-service:
-    <<: *app-service
-    profiles: [full]
-    depends_on:
-      config-init:
-        condition: service_completed_successfully
-      mysql:
-        condition: service_healthy
-    volumes:
-      - type: bind
-        source: ./.secrets/service-identities/business-review-service/private-key.pem
-        target: /run/secrets/service-identity.pem
-        read_only: true
-        bind:
-          create_host_path: false
-    environment:
-      <<: *app-environment
-      SERVICE_ARTIFACT: business-review-service-1.0.0-SNAPSHOT.jar
-      SERVICE_IDENTITY_KEY_ID: business-review-service-current
-      A2A_PUBLIC_BASE_URL: http://business-review-service:9016
-      DUBBO_REGISTRY_ADDRESS: "nacos://nacos:8848?namespace=${NACOS_NAMESPACE:-BK-AGENT}&group=DEFAULT_GROUP"
-      MYSQL_DB_BUSINESS_REVIEW: ${MYSQL_DB_BUSINESS_REVIEW:-bk_business_review}
-      BUSINESS_REVIEW_MEMORY_V2_COMPRESSION_ENABLED: ${BUSINESS_REVIEW_MEMORY_V2_COMPRESSION_ENABLED:-false}
-      BUSINESS_REVIEW_AGENT_MODEL: ${BUSINESS_REVIEW_AGENT_MODEL:-gpt-5.6-terra}
-      BUSINESS_REVIEW_SOURCE_MODE: ${BUSINESS_REVIEW_SOURCE_MODE:-http}
-      BUSINESS_REVIEW_LISTING_BASE_URL: ${BUSINESS_REVIEW_LISTING_BASE_URL:-http://listing-master-service:9004}
-      BUSINESS_REVIEW_KNOWLEDGE_BASE_URL: ${BUSINESS_REVIEW_KNOWLEDGE_BASE_URL:-http://knowledge-service:9015}
-      BUSINESS_REVIEW_AUTHORIZATION_ENABLED: ${BUSINESS_REVIEW_AUTHORIZATION_ENABLED:-true}
-      BUSINESS_REVIEW_A2A_AUTHORIZATION_ENABLED: ${BUSINESS_REVIEW_A2A_AUTHORIZATION_ENABLED:-true}
-      SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database
 
   memory-service:
     <<: *app-service
@@ -846,7 +805,6 @@ services:
       MARKETING_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER: ${MARKETING_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:-false}
       INTERVIEW_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER: ${INTERVIEW_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:-false}
       LISTING_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER: ${LISTING_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:-false}
-      BUSINESS_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER: ${BUSINESS_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:-false}
       # Exact verified semantic profile registration only; unset/empty remains fail-closed.
       MEMORY_RAG_SEMANTIC_SCORING_VERSIONS: ${MEMORY_RAG_SEMANTIC_SCORING_VERSIONS:-}
       MEMORY_RAG_DOMAIN_PROJECTION_ENABLED: ${MEMORY_RAG_DOMAIN_PROJECTION_ENABLED:-false}
@@ -882,8 +840,8 @@ services:
       NACOS_NAMESPACE: ${NACOS_NAMESPACE:-BK-AGENT}
       NACOS_GROUP: DEFAULT_GROUP
       RAG_DUBBO_REGISTRY_ADDRESS: "nacos://nacos:8848?namespace=${NACOS_NAMESPACE:-BK-AGENT}&group=DEFAULT_GROUP"
-      NACOS_USERNAME: ${NACOS_USERNAME:-bkagent}
-      NACOS_PASSWORD: ${NACOS_PASSWORD:-}
+      SPRING_CLOUD_NACOS_USERNAME: ${NACOS_CLIENT_USERNAME:-}
+      SPRING_CLOUD_NACOS_PASSWORD: ${NACOS_CLIENT_PASSWORD:-}
       SERVICE_ARTIFACT: rag-service-1.0.0-SNAPSHOT.jar
       SERVICE_READINESS_MODE: distributed
       SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database
@@ -932,56 +890,6 @@ services:
       - bk
       - bkanent-rerank-dev
 
-  knowledge-service:
-    <<: *app-service
-    image: bk-anent-knowledge:dev
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        MAVEN_MODULES: knowledge-service
-    profiles: [full]
-    depends_on:
-      config-init:
-        condition: service_completed_successfully
-      mysql:
-        condition: service_healthy
-      memory-service:
-        condition: service_started
-    volumes:
-      - type: bind
-        source: ./.secrets/service-identities/knowledge-service/private-key.pem
-        target: /run/secrets/service-identity.pem
-        read_only: true
-        bind:
-          create_host_path: false
-    environment:
-      <<: *app-environment
-      MYSQL_USER: ${KNOWLEDGE_MYSQL_USER:-knowledge_app}
-      MYSQL_PASSWORD: ${KNOWLEDGE_MYSQL_PASSWORD:-}
-      MYSQL_DB_KNOWLEDGE: ${MYSQL_DB_KNOWLEDGE:-bk_knowledge}
-      KNOWLEDGE_PRIMARY_DB_URL: "${KNOWLEDGE_PRIMARY_DB_URL:-jdbc:mysql://mysql:3306/${MYSQL_DB_KNOWLEDGE:-bk_knowledge}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}"
-      KNOWLEDGE_MYSQL_USER: ${KNOWLEDGE_MYSQL_USER:-knowledge_app}
-      KNOWLEDGE_MYSQL_PASSWORD: ${KNOWLEDGE_MYSQL_PASSWORD:-}
-      KNOWLEDGE_SOURCE_DB_URL: "${KNOWLEDGE_SOURCE_DB_URL:-jdbc:mysql://mysql:3306/${MYSQL_DB_KNOWLEDGE:-bk_knowledge}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai}"
-      KNOWLEDGE_SOURCE_DB_USER: ${KNOWLEDGE_SOURCE_DB_USER:-knowledge_source_ro}
-      KNOWLEDGE_SOURCE_DB_PASSWORD: ${KNOWLEDGE_SOURCE_DB_PASSWORD:-}
-      SERVICE_ARTIFACT: knowledge-service-1.0.0-SNAPSHOT.jar
-      SERVICE_IDENTITY_KEY_ID: knowledge-service-current
-      KNOWLEDGE_AUTHORIZATION_ENABLED: ${KNOWLEDGE_AUTHORIZATION_ENABLED:-false}
-      KNOWLEDGE_MEMORY_V2_COMPRESSION_ENABLED: ${KNOWLEDGE_MEMORY_V2_COMPRESSION_ENABLED:-false}
-      DUBBO_REGISTRY_ADDRESS: "nacos://nacos:8848?namespace=${NACOS_NAMESPACE:-BK-AGENT}&group=DEFAULT_GROUP"
-      A2A_PUBLIC_BASE_URL: http://knowledge-service:9015
-      MEMORY_SERVICE_BASE_URL: http://memory-service:9011
-      NACOS_A2A_AGENT_REGISTRY_ENABLED: ${NACOS_A2A_AGENT_REGISTRY_ENABLED:-true}
-      SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,memory
-    healthcheck:
-      test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:9015/actuator/health/readiness | grep -q 'UP'"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 30s
-
   interview-service:
     <<: *app-service
     image: bk-anent-interview:dev
@@ -999,7 +907,7 @@ services:
         bind:
           create_host_path: false
     environment:
-      <<: *app-environment
+      <<: [*app-environment, *a2a-agent-environment]
       SERVICE_ARTIFACT: interview-service-1.0.0-SNAPSHOT.jar
       DUBBO_REGISTRY_ADDRESS: "nacos://nacos:8848?namespace=${NACOS_NAMESPACE:-BK-AGENT}&group=DEFAULT_GROUP"
       A2A_PUBLIC_BASE_URL: http://interview-service:9014
@@ -1013,6 +921,7 @@ services:
 
 volumes:
   mysql-data:
+  nacos-data:
   redis-data:
   rocketmq-broker-data:
   minio-data:

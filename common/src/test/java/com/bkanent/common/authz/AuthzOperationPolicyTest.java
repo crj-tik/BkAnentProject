@@ -14,19 +14,22 @@ class AuthzOperationPolicyTest {
         assertThat(AuthzOperationPolicy.isBaseline("customer.follow.write.own")).isTrue();
         assertThat(AuthzOperationPolicy.isBaseline("customer.delete.own")).isFalse();
 
-        var contextOperations = AuthzOperationPolicy.contextOperations(Set.of("contract.seal.own"));
-        assertThat(contextOperations).contains("customer.follow.write.own", "contract.seal.own");
+        var contextOperations = AuthzOperationPolicy.contextOperations(
+                Set.of("agent.workflow.invoke.platform-operations.analytics"));
+        assertThat(contextOperations).contains("customer.follow.write.own", "agent.workflow.invoke.platform-operations.analytics");
         assertThat(AuthzOperationPolicy.requiredPermissions(contextOperations))
-                .containsExactly("contract.seal.own");
+                .containsExactly("agent.workflow.invoke.platform-operations.analytics");
     }
 
     @Test
     void baselineActionRequiresSignedExecutionContextButNotSnapshotGrant() {
         assertThat(AuthzOperationPolicy.allows("listing.read", List.of("listing.read"), List.of())).isTrue();
         assertThat(AuthzOperationPolicy.allows("listing.read", List.of(), List.of())).isFalse();
-        assertThat(AuthzOperationPolicy.allows("contract.seal.own", List.of("contract.seal.own"), List.of())).isFalse();
-        assertThat(AuthzOperationPolicy.allows("contract.seal.own", List.of("contract.seal.own"),
-                List.of("contract.seal.own"))).isTrue();
+        assertThat(AuthzOperationPolicy.allows("agent.workflow.invoke.platform-operations.analytics",
+                List.of("agent.workflow.invoke.platform-operations.analytics"), List.of())).isFalse();
+        assertThat(AuthzOperationPolicy.allows("agent.workflow.invoke.platform-operations.analytics",
+                List.of("agent.workflow.invoke.platform-operations.analytics"),
+                List.of("agent.workflow.invoke.platform-operations.analytics"))).isTrue();
         assertThat(AuthzOperationPolicy.allows("invented.action", List.of("invented.action"),
                 List.of())).isFalse();
     }

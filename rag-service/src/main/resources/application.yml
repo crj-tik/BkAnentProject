@@ -8,8 +8,8 @@ spring:
   cloud:
     nacos:
       server-addr: ${NACOS_SERVER_ADDR:}
-      username: ${NACOS_USERNAME:}
-      password: ${NACOS_PASSWORD:}
+      username: ${NACOS_CLIENT_USERNAME:}
+      password: ${NACOS_CLIENT_PASSWORD:}
       config:
         namespace: ${NACOS_NAMESPACE:}
         group: ${NACOS_GROUP:DEFAULT_GROUP}

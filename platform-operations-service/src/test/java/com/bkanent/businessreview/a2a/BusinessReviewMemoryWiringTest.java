@@ -56,20 +56,20 @@ class BusinessReviewMemoryWiringTest {
         MemoryV2RpcService memory = mock(MemoryV2RpcService.class);
         when(memory.manageWriter(any(), any())).thenThrow(memoryFailure);
         A2aMemoryProperties memoryProperties = new A2aMemoryProperties();
-        memoryProperties.setKeyId("business-review-test-current");
+        memoryProperties.setKeyId("platform-operations-review-test-current");
         memoryProperties.setPrivateKeyFile(privateKeyFile());
         A2aMemoryHookFactory factory = new A2aMemoryHookFactory(memoryProperties, () -> memory,
                 new MemoryWorkingSetCache(8, 1024 * 1024, 60_000, Clock.systemUTC()), new ObjectMapper());
         ChatModel model = mock(ChatModel.class);
         SkillRegistry skills = new SkillRegistry(new SkillFileLoader(), "");
-        BusinessReviewOfficialA2aAgent component = new BusinessReviewOfficialA2aAgent(model,
-                new BusinessReviewAgentProperties(), new ReviewDraftTools(), skills, factory);
+        PlatformReviewAgent component = new PlatformReviewAgent(model,
+                new PlatformOperationsReviewAgentProperties(), new ReviewDraftTools(), skills, factory);
 
         A2aMemoryAgentHook hook = (A2aMemoryAgentHook) ReflectionTestUtils.getField(component, "memoryHook");
         assertThat(ReflectionTestUtils.getField(hook, "caller")).isEqualTo("platform-operations-service");
-        assertThat(ReflectionTestUtils.getField(hook, "domain")).isEqualTo("business-review");
+        assertThat(ReflectionTestUtils.getField(hook, "domain")).isEqualTo("review");
         assertThat(ReflectionTestUtils.getField(hook, "agentId")).isEqualTo("platform-operations-review");
-        AgentExecutor executor = component.businessReviewA2aAgentExecutor(new ObjectMapper(), new A2aExecutionProperties());
+        AgentExecutor executor = component.reviewA2aAgentExecutor(new ObjectMapper(), new A2aExecutionProperties());
         assertThat(executor).isInstanceOf(OfficialA2aAgentExecutor.class);
         assertThat(ReflectionTestUtils.getField(executor, "memoryHook")).isSameAs(hook);
 

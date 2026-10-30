@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  */
 class NacosRagTemplateTest {
     private static final Path TEMPLATE = Path.of("..", "nacos", "rag-service.yaml");
+    private static final Path APPLICATION = Path.of("src", "main", "resources", "application.yml");
 
     private static Map<String, Object> template() throws java.io.IOException {
         assumeTrue(Files.exists(TEMPLATE), "nacos template not present in this checkout");
@@ -44,6 +45,14 @@ class NacosRagTemplateTest {
         }
     }
 
+    @Test void nacosConfigClientUsesItsOwnCredentialPair() throws java.io.IOException {
+        Map<String, Object> spring = section(new Yaml().load(Files.readString(APPLICATION)), "spring");
+        Map<String, Object> cloud = section(spring, "cloud");
+        Map<String, Object> nacos = section(cloud, "nacos");
+        assertThat(nacos.get("username")).isEqualTo("${NACOS_CLIENT_USERNAME:}");
+        assertThat(nacos.get("password")).isEqualTo("${NACOS_CLIENT_PASSWORD:}");
+    }
+
     @Test void rerankerHostHasOwnManagedCidrAndIdentityPins() throws java.io.IOException {
         Map<String, Object> rag = section(template(), "rag");
         Map<String, Object> rerank = section(rag, "rerank");
@@ -59,11 +68,12 @@ class NacosRagTemplateTest {
     @Test void memoryV2SpacesAreRegisteredWithRequiredScopeAndUniquePhysicalTargets() throws java.io.IOException {
         Map<String, Object> spaces = section(section(template(), "rag"), "spaces");
         List<String> keys = spaces.keySet().stream().filter(key -> key.startsWith("[memory.v2.")).toList();
-        assertThat(keys).hasSize(35).noneMatch(key -> key.contains("compare")
-                || key.contains(".contract.contract-agent") || key.contains(".settlement.settlement-agent"));
+        assertThat(keys).hasSize(30).noneMatch(key -> key.contains("compare")
+                || key.contains(".contract.contract-agent") || key.contains(".settlement.settlement-agent")
+                || key.contains(".trade.trade-agent"));
         for (String[] identity : List.of(
-                new String[]{"trade", "platform-operations-analytics"},
-                new String[]{"business-review", "platform-operations-review"},
+                new String[]{"analytics", "platform-operations-analytics"},
+                new String[]{"review", "platform-operations-review"},
                 new String[]{"knowledge", "platform-operations-knowledge"})) {
             for (MemoryRagRecordType type : MemoryRagRecordType.values()) {
                 assertThat(keys).contains("[" + MemoryRagSpaceIds.spaceId(type, identity[0], identity[1]) + "]");
@@ -84,6 +94,8 @@ class NacosRagTemplateTest {
             assertThat(definition.get("candidate-authorization-required")).isEqualTo(true);
             assertThat(indices.add((String) definition.get("elasticsearch-index"))).isTrue();
             Map<String, Object> vector = section(definition, "vector-schema");
+            assertThat((String) definition.get("elasticsearch-index")).doesNotContain("business_review", "trade");
+            assertThat((String) vector.get("collection")).doesNotContain("business_review", "trade");
             assertThat(collections.add((String) vector.get("collection"))).isTrue();
 
             Map<String, Object> fields = section(definition, "fields");

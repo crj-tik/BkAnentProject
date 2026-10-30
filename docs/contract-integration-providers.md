@@ -1,5 +1,7 @@
 # Contract 集成 Provider 规范
 
+> 历史方案。独立合同业务域和 `contract-service` 已退役；本文件中的合同 OCR/电子签步骤不用于当前部署。媒体 Worker 的图像生成说明仍可参考其对应章节，当前服务边界见[当前架构](current-architecture.md)。
+
 ## 1. 目的
 
 本文档定义 `contract-service` 当前使用的 OCR 与电子签 provider 名称规范。

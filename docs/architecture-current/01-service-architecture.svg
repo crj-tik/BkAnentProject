@@ -2,7 +2,7 @@
 <rect width="1800" height="1220" fill="#f3f6fa"/>
 <rect x="60" y="48" width="8" height="98" rx="3" fill="#336ddd" stroke="#336ddd" stroke-width="2"/>
 <text x="90" y="91" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="43" font-weight="700">服务架构｜模块与职责</text>
-<text x="90" y="140" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400">当前 Maven 服务与共享模块 · 10 个官方 A2A 子 Agent · 以当前工作区源码为准</text>
+<text x="90" y="140" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="23" font-weight="400">当前 Maven 服务与共享模块 · 以当前工作区源码为准</text>
 <polyline points="560,320 665,320" fill="none" stroke="#52677d" stroke-width="3"/>
 <polygon points="665,320 653.2941876694152,325.654551943446 653.2941876694152,314.345448056554" fill="#52677d"/>
 <rect x="585.0" y="293.0" width="55.0" height="26.0" rx="3" fill="#f3f6fa" stroke="#f3f6fa" stroke-width="2"/>
@@ -44,10 +44,10 @@
 <text x="1262" y="317" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">Supervisor · 官方 Graph</text>
 <text x="1262" y="343" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">A2A 客户端 / MCP / RAG</text>
 <rect x="1240" y="500" width="470" height="180" rx="16" fill="#f1eaff" stroke="#8652be" stroke-width="2"/>
-<text x="1262" y="544" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">10 个官方 A2A 子 Agent</text>
-<text x="1262" y="583" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">listing / marketing / media / trade / contract</text>
-<text x="1262" y="609" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">settlement / notification / interview / knowledge / b</text>
-<text x="1262" y="635" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">usiness-review</text>
+<text x="1262" y="544" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">官方 A2A Provider</text>
+<text x="1262" y="583" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">Listing / Marketing / Media / Notification / Intervie</text>
+<text x="1262" y="609" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">w</text>
+<text x="1262" y="635" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">平台经营域：分析、复盘、知识运营由一个 Agent 路由</text>
 <rect x="665" y="500" width="470" height="180" rx="16" fill="#eaf1ff" stroke="#336ddd" stroke-width="2"/>
 <text x="687" y="544" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">本地工具与领域服务</text>
 <text x="687" y="587" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">ReactAgent → 本地 @Tool</text>
@@ -58,8 +58,8 @@
 <text x="112" y="613" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">媒体 / 邮件 / 签章 / 发布 Provider</text>
 <rect x="90" y="770" width="470" height="180" rx="16" fill="#eaf1ff" stroke="#336ddd" stroke-width="2"/>
 <text x="112" y="814" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">其他业务与共享模块</text>
-<text x="112" y="857" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">customer-service / knowledge-service</text>
-<text x="112" y="883" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">business-review-service / common</text>
+<text x="112" y="857" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">customer-service / interview-service</text>
+<text x="112" y="883" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">platform-operations-service / common</text>
 <rect x="665" y="770" width="470" height="180" rx="16" fill="#e5f5ef" stroke="#168568" stroke-width="2"/>
 <text x="687" y="814" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="27" font-weight="700">状态与公共配置</text>
 <text x="687" y="857" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="400">memory-service：共享记忆</text>
@@ -72,6 +72,6 @@
 <text x="112" y="1046" fill="#142b45" font-family="Microsoft YaHei, sans-serif" font-size="21" font-weight="700">阅读说明 / 实现边界</text>
 <text x="112" y="1080" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400">• 箭头表示主调用方向；底部为配套能力，基础设施按各服务实际配置接入。</text>
 <text x="112" y="1107" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="20" font-weight="400">• 图表示代码结构，不表示所有服务已启动；外部 Provider 是否可用取决于集成模式。</text>
-<text x="90" y="1188" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">BK AGENT  /  CURRENT CODE ARCHITECTURE  /  2026-10-29</text>
-<text x="1475" y="1188" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">01 / 16</text>
+<text x="90" y="1188" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">BK AGENT  /  CURRENT CODE ARCHITECTURE  /  2026-10-30</text>
+<text x="1475" y="1188" fill="#52677d" font-family="Microsoft YaHei, sans-serif" font-size="17" font-weight="400">01 / 15</text>
 </svg>

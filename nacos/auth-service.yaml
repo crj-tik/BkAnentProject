@@ -191,18 +191,6 @@ auth:
         caller-service: platform-operations-service
         public-key: ${PLATFORM_OPERATIONS_SERVICE_IDENTITY_PUBLIC_KEY:}
         allowed-operations: [RESOLVE_BEACON]
-      business-service-current:
-        caller-service: business-service
-        public-key: ${BUSINESS_SERVICE_IDENTITY_PUBLIC_KEY:}
-        allowed-operations: [RESOLVE_BEACON]
-      knowledge-service-current:
-        caller-service: knowledge-service
-        public-key: ${KNOWLEDGE_SERVICE_IDENTITY_PUBLIC_KEY:}
-        allowed-operations: [RESOLVE_BEACON]
-      business-review-service-current:
-        caller-service: business-review-service
-        public-key: ${BUSINESS_REVIEW_SERVICE_IDENTITY_PUBLIC_KEY:}
-        allowed-operations: [RESOLVE_BEACON]
       notification-service-current:
         caller-service: notification-service
         public-key: ${NOTIFICATION_SERVICE_IDENTITY_PUBLIC_KEY:}

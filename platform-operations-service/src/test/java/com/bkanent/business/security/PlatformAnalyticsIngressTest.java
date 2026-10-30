@@ -1,6 +1,6 @@
 package com.bkanent.business.security;
 
-import com.bkanent.business.config.BusinessAuthorizationProperties;
+import com.bkanent.business.config.AnalyticsAuthorizationProperties;
 import com.bkanent.common.security.ServiceIdentityCrypto;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;
@@ -15,7 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PlatformAnalyticsIngressTest {
     @Test
     void newAnalyticsPathRequiresSignedIdentityAndHealthRemainsReachable() throws Exception {
-        var properties = new BusinessAuthorizationProperties();
+        var properties = new AnalyticsAuthorizationProperties();
         var key = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
         properties.setAuthorityPublicKeys(Map.of("auth-current", ServiceIdentityCrypto.encodePublicKey(key.getPublic())));
         var filter = new BusinessAuthorizationIngressFilter(properties);

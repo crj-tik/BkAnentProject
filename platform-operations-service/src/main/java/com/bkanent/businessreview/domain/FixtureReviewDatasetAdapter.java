@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 @Component
-@ConditionalOnProperty(prefix = "business-review.sources", name = "mode", havingValue = "fixture")
+@ConditionalOnProperty(prefix = "platform-operations.review.sources", name = "mode", havingValue = "fixture")
 public class FixtureReviewDatasetAdapter implements ReviewDatasetPort {
     private static final String FIXTURE_ID = "store-review-demo-v1";
     @Override

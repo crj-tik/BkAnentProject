@@ -35,7 +35,7 @@ public class RagPrincipalRpcServiceImpl implements RagPrincipalRpcService {
 
     private static final String AUTH_SERVICE = "auth-service";
     private static final Set<String> ALLOWED_CALLERS = Set.of("rag-service", "listing-master-service", "memory-service",
-            "agent-service", "customer-service", "marketing-content-service", "business-service", "interview-service");
+            "agent-service", "customer-service", "marketing-content-service", "platform-operations-service", "interview-service");
 
     private com.bkanent.auth.service.A2aBeaconStore beacons;
     @org.springframework.beans.factory.annotation.Autowired

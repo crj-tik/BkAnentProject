@@ -12,7 +12,7 @@
 - `customer-service`：客源与业主管理
 - `notification-service`：统一消息通知
 - `marketing-content-service`：营销内容、品牌素材、发布计划、平台回执与效果来源统一管理
-- `business-service`：业务分析、KPI、排行榜、门店看板
+- `platform-operations-service`：经营分析、门店复盘、知识运营（单一 Agent 入口，三类隔离能力）
 - 房源对比与报告生成由 `listing-master-service` 承担
 - `media-worker-service`：异步媒体任务
 
@@ -45,8 +45,8 @@
   [AgentMcpProperties.java](/D:/project/BkAnentProject/BkAnentProject/agent-service/src/main/java/com/bkanent/agent/config/AgentMcpProperties.java:1)
 - Agent Nacos 配置：
   [agent-service.yaml](/D:/project/BkAnentProject/BkAnentProject/nacos/agent-service.yaml:1)
-- 数据库初始化脚本：
-  [mysql-init.sql](/D:/project/BkAnentProject/BkAnentProject/sql/mysql-init.sql:1)
+- 数据库初始化与升级统一使用受检清单：
+  [init-manifest.tsv](/D:/project/BkAnentProject/docker/mysql/init-manifest.tsv)
 
 ## 构建
 
@@ -71,11 +71,11 @@ mvn -pl auth-service "-Dspring-boot.run.profiles=local" spring-boot:run
 
 用户管理由 `auth-service` 提供，账号写入 `user_account`，可分配角色写入 `auth_role`。管理员可通过 `GET /auth/users`、`GET /auth/roles`、`POST /auth/users`、`PUT /auth/users/{userId}`、`PUT /auth/users/{userId}/password` 和 `DELETE /auth/users/{userId}` 管理账号；`GET /auth/me` 返回当前登录用户信息。管理接口要求有效的管理员访问令牌，删除采用逻辑删除，服务端会阻止删除或停用最后一个启用的管理员。
 
-给已有 MySQL 开发库升级时，执行 [20260930_auth_user_management.sql](/D:/project/BkAnentProject/sql/migrations/20260930_auth_user_management.sql:1)。新建开发库可由 `sql/mysql-init.sql` 创建用户和角色表。
+给已有 MySQL 开发库升级时，先运行 `./scripts/deploy/apply-migrations.sh --dry-run` 审核受管升级清单，再运行 `./scripts/deploy/apply-migrations.sh`。新建和已有库统一由 Compose 挂载的受管清单初始化；不要单独执行未纳入清单的 SQL。
 
 ## 分布式环境启动
 
-完整系统启动前需要准备 Nacos、MySQL、Redis、RocketMQ、Milvus、MinIO 和 Elasticsearch。开发配置按需从 `nacos/` 发布到指定 namespace；平台经营域使用 `platform-operations-service.yaml`。合同和结算服务、数据库及网关入口已退役；平台经营服务仍处于合并验收阶段。
+完整系统启动前需要准备 Nacos、MySQL、Redis、RocketMQ、Milvus、MinIO 和 Elasticsearch。`full` 档位包含平台经营服务；开发配置按需从 `nacos/` 发布到指定 namespace，平台经营配置使用 `platform-operations-service.yaml`。合同和结算业务域及独立知识运营、门店复盘服务已退役；知识运营、门店复盘与经营分析统一由平台经营域承载。
 
 Linux 主机推荐直接使用 `scripts/deploy/` 下的初始化脚本完成上述准备与启动：宿主机预检（docker/内核参数/端口）、`.env` 随机密钥引导、已有数据卷迁移、启动/状态/停止均为 bash 脚本，详见 [Linux 部署环境初始化](docs/linux-deployment-init.md)。
 
@@ -116,7 +116,7 @@ mvn -pl auth-service "-Dspring-boot.run.profiles=distributed" spring-boot:run
 
 ### Docker 开发部署
 
-仓库提供了 Docker Compose 开发编排。`minimal` profile 只启动 MySQL、Nacos、配置导入、认证服务和网关，并使用 `bk-anent-services:minimal` 镜像，只编译 `common`、`gateway`、`auth-service` 三个模块，适合接口、认证和基础链路测试；`full` profile 会额外启动 Redis、RocketMQ、MinIO、Elasticsearch、Milvus（含 etcd 和内部 MinIO）及其余业务服务，并使用包含全部模块的 `bk-anent-services:dev` 镜像。配置发布必须显式设置 `NACOS_CONFIG_DATA_IDS` 为此次授权的空格分隔 YAML data ID 列表；默认空列表拒绝发布，不再全目录上传 public。`NACOS_NAMESPACE` 使用实际 namespace ID（Compose 默认 `BK-AGENT`），group 固定 `DEFAULT_GROUP`。MinIO bucket 与营销 `marketing_content` 索引保留初始化；房源 RAG 索引仅经受权 provision 创建。独立 `rag` profile 不由 full 隐式启动，使用 `--profile rag` 或 `start.sh --with-rag` 显式选择，基础 readiness 不代表默认双路/重排能力或切流水位通过，完整门禁见 [RAG 部署与迁移](docs/linux-deployment-init.md)。
+仓库提供了 Docker Compose 开发编排。`minimal` profile 只启动 MySQL、Nacos、配置导入、认证服务和网关，并使用 `bk-anent-services:minimal` 镜像，只编译 `common`、`gateway`、`auth-service` 三个模块，适合接口、认证和基础链路测试；`full` profile 会额外启动 Redis、RocketMQ、MinIO、Elasticsearch、Milvus（含 etcd 和内部 MinIO）及全部当前业务服务，包括平台经营服务。核心服务使用 `bk-anent-services:dev` 镜像，平台经营单独构建 `bk-anent-platform-operations:dev`。配置发布必须显式设置 `NACOS_CONFIG_DATA_IDS` 为此次授权的空格分隔 YAML data ID 列表；默认空列表拒绝发布，不再全目录上传 public。当前活动模板 ID 为 `auth-service.yaml gateway.yaml agent-service.yaml listing-master-service.yaml customer-service.yaml marketing-content-service.yaml media-worker-service.yaml notification-service.yaml interview-service.yaml memory-service.yaml rag-service.yaml platform-operations-service.yaml`；`mysql-common.yaml` 是参考模板，不发布。`NACOS_NAMESPACE` 使用实际 namespace ID（Compose 默认 `BK-AGENT`），group 固定 `DEFAULT_GROUP`。Nacos Derby 使用 `nacos-data` named volume；普通容器重建保留配置与注册状态，`docker compose down -v` 会删除该开发数据。MinIO bucket 与营销 `marketing_content` 索引保留初始化；房源 RAG 索引仅经受权 provision 创建。独立 `rag` profile 不由 full 隐式启动，使用 `--profile rag` 或 `start.sh --with-rag` 显式选择，基础 readiness 不代表默认双路/重排能力或切流水位通过，完整门禁见 [RAG 部署与迁移](docs/linux-deployment-init.md)。
 
 ```powershell
 docker compose --profile minimal up -d --build
@@ -147,7 +147,7 @@ powershell -NoProfile -File scripts/start-mysql-mcp.ps1
 
 这条命令只启动 MySQL、一次性账号初始化任务和 MCP，不会启动 Nacos 或业务服务。MCP 地址为 `http://127.0.0.1:18081/mcp`，使用 Streamable HTTP；客户端必须发送 `Authorization: Bearer <MYSQL_MCP_TOKEN>`，Token 取自本机 `.env`。`18080` 已由 Nacos 使用，因此 MCP 默认采用 `18081`。详细工具、验证和维护说明见 [mysql-mcp/README.md](mysql-mcp/README.md)。
 
-账号初始化任务会在已有数据卷上创建或更新专用 `mcp_ro` 用户，只授予 `MYSQL_MCP_DATABASES` 中业务库的 `SELECT`、`SHOW VIEW`，不执行业务初始化 SQL。默认包含 13 个 `bk_*` 业务库，不包含 Nacos 或 MySQL 系统库；按需要在 `.env` 缩小范围。不要删除数据卷来创建 MCP 账号。已有数据卷的 root 密码需通过 `MYSQL_ROOT_PASSWORD` 提供。
+账号初始化任务会在已有数据卷上创建或更新专用 `mcp_ro` 用户，只授予 `MYSQL_MCP_DATABASES` 中业务库的 `SELECT`、`SHOW VIEW`，不执行业务初始化 SQL。默认包含 9 个当前 `bk_*` 业务库，不包含 Nacos 或 MySQL 系统库；按需要在 `.env` 缩小范围。不要删除数据卷来创建 MCP 账号。已有数据卷的 root 密码需通过 `MYSQL_ROOT_PASSWORD` 提供。
 
 仅在宿主机数据库客户端或本地 Java 服务需要直连 MySQL 时，显式启用端口覆盖配置：
 
@@ -157,6 +157,6 @@ docker compose -f docker-compose.yml -f docker-compose.mysql-client.yml up -d my
 
 这会把 `3306` 绑定到 `127.0.0.1`（可通过 `MYSQL_EXPOSED_PORT` 调整）。MCP 对外绑定独立使用 `MYSQL_MCP_BIND_ADDRESS`，默认始终为 loopback；远程接入前配置 HTTPS 入口及 `MYSQL_MCP_ALLOWED_HOSTS`，客户端应能提供 Bearer 请求头。
 
-Docker Compose 默认用于开发环境；平台经营服务目前通过 `platform-preview` 档位验证。生产部署需准备环境专属配置、服务凭据及真实 provider，并完成授权和依赖验收。
+Docker Compose 默认用于开发环境；平台经营服务随 `full` 档位启动，也可单独使用 `platform-preview` 档位联调。生产部署需准备环境专属配置、服务凭据及真实 provider，并完成授权和依赖验收。
 
 变量名称清单见 [.env.example](.env.example)。

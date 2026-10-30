@@ -1,5 +1,7 @@
 # 分布式多 Agent 中期改造方案
 
+> 历史规划。当前服务边界和平台经营统一入口已随实施变化；不要按本文的旧 Agent/服务拆分拓扑直接新增或部署模块。现行结构见[当前架构](current-architecture.md)与[平台经营域前端功能清单](platform-operations-frontend-function-list.md)。
+
 ## 1. 目标
 
 基于当前已经完成的分布式多 Agent、Spring AI Alibaba Graph、A2A、Memory Service、RocketMQ 事件流和审批子图骨架，本阶段目标不再是继续快速扩能力，而是把现有实现从“能跑”提升到“可长期维护、可治理、可扩展”。

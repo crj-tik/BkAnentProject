@@ -18,7 +18,7 @@ MySQL 使用原有官方镜像与数据卷。MCP 使用独立 Python 镜像，�
 powershell -NoProfile -File scripts/start-mysql-mcp.ps1
 ```
 
-该脚本不会输出密钥，只在缺失时向被 Git 忽略的 `.env` 写入随机 `MYSQL_MCP_PASSWORD`、`MYSQL_MCP_TOKEN`。已有环境变量或 `.env` 中的非空值会保留。已有 MySQL 数据卷必须配置正确的 `MYSQL_ROOT_PASSWORD`；空白开发环境沿用现有 Compose 的开发 root 密码。不会重建数据库、清空数据或重复执行 `sql/mysql-init.sql`。
+该脚本不会输出密钥，只在缺失时向被 Git 忽略的 `.env` 写入随机 `MYSQL_MCP_PASSWORD`、`MYSQL_MCP_TOKEN`。已有环境变量或 `.env` 中的非空值会保留。已有 MySQL 数据卷必须配置正确的 `MYSQL_ROOT_PASSWORD`；空白开发环境沿用现有 Compose 的开发 root 密码。不会重建数据库、清空数据或绕过 `docker/mysql/init-manifest.tsv` 重放迁移。
 
 手动管理凭据时，先在 `.env` 设置 `MYSQL_MCP_PASSWORD` 和不少于 32 字节的 `MYSQL_MCP_TOKEN`，然后运行：
 
@@ -27,7 +27,7 @@ docker compose --profile mcp up -d --build --wait mysql-mcp
 docker compose --profile mcp ps -a mysql mysql-mcp-init mysql-mcp
 ```
 
-`MYSQL_MCP_DATABASES` 使用逗号分隔的数据库白名单（不要加空格）。默认配置包含项目的 13 个业务库；授权前会确认这些库已经存在，不包含 Nacos。专用账号 `mcp_ro` 由初始化任务管理，会撤销旧权限后重新授予白名单库的 `SELECT`、`SHOW VIEW`。不要将它复用为其他应用账号。MCP 容器只持有该只读账号，root 凭据仅用于一次性初始化任务。
+`MYSQL_MCP_DATABASES` 使用逗号分隔的数据库白名单（不要加空格）。默认配置包含当前 9 个业务库：`bk_auth`、`bk_listing`、`bk_customer`、`bk_notification`、`bk_marketing`、`bk_agent`、`bk_memory`、`bk_interview`、`bk_platform_operations`；授权前会确认这些库已经存在，不包含 Nacos。专用账号 `mcp_ro` 由初始化任务管理，会撤销旧权限后重新授予白名单库的 `SELECT`、`SHOW VIEW`。不要将它复用为其他应用账号。MCP 容器只持有该只读账号，root 凭据仅用于一次性初始化任务。
 
 ## 客户端接入
 

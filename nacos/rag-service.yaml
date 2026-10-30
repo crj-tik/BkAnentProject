@@ -1447,15 +1447,15 @@ rag:
       memory-domain-id: listing
       memory-agent-id: listing-agent
       candidate-authorization-required: true
-    '[memory.v2.session.trade.trade-agent]':
-      space-id: memory.v2.session.trade.trade-agent
+    '[memory.v2.session.analytics.platform-operations-analytics]':
+      space-id: memory.v2.session.analytics.platform-operations-analytics
       owner-domain: memory-service
       policy-version: memory-v2
       schema-version: memory-v2.1
-      elasticsearch-index: rag_memory_v2_session_trade_trade_agent_v1
+      elasticsearch-index: rag_memory_v2_session_analytics_platform_operations_analytics_v1
       vector-schema:
         database: default
-        collection: rag_memory_v2_session_trade_trade_agent_v1
+        collection: rag_memory_v2_session_analytics_platform_operations_analytics_v1
         model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
@@ -1521,18 +1521,18 @@ rag:
         scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
         scale: LOGIT
       memory-record-type: session
-      memory-domain-id: trade
-      memory-agent-id: trade-agent
+      memory-domain-id: analytics
+      memory-agent-id: platform-operations-analytics
       candidate-authorization-required: true
-    '[memory.v2.summary.trade.trade-agent]':
-      space-id: memory.v2.summary.trade.trade-agent
+    '[memory.v2.summary.analytics.platform-operations-analytics]':
+      space-id: memory.v2.summary.analytics.platform-operations-analytics
       owner-domain: memory-service
       policy-version: memory-v2
       schema-version: memory-v2.1
-      elasticsearch-index: rag_memory_v2_summary_trade_trade_agent_v1
+      elasticsearch-index: rag_memory_v2_summary_analytics_platform_operations_analytics_v1
       vector-schema:
         database: default
-        collection: rag_memory_v2_summary_trade_trade_agent_v1
+        collection: rag_memory_v2_summary_analytics_platform_operations_analytics_v1
         model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
@@ -1598,18 +1598,18 @@ rag:
         scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
         scale: LOGIT
       memory-record-type: summary
-      memory-domain-id: trade
-      memory-agent-id: trade-agent
+      memory-domain-id: analytics
+      memory-agent-id: platform-operations-analytics
       candidate-authorization-required: true
-    '[memory.v2.preference-history.trade.trade-agent]':
-      space-id: memory.v2.preference-history.trade.trade-agent
+    '[memory.v2.preference-history.analytics.platform-operations-analytics]':
+      space-id: memory.v2.preference-history.analytics.platform-operations-analytics
       owner-domain: memory-service
       policy-version: memory-v2
       schema-version: memory-v2.1
-      elasticsearch-index: rag_memory_v2_preference_history_trade_trade_agent_v1
+      elasticsearch-index: rag_memory_v2_preference_history_analytics_platform_operations_analytics_v1
       vector-schema:
         database: default
-        collection: rag_memory_v2_preference_history_trade_trade_agent_v1
+        collection: rag_memory_v2_preference_history_analytics_platform_operations_analytics_v1
         model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
@@ -1683,18 +1683,18 @@ rag:
         scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
         scale: LOGIT
       memory-record-type: preference-history
-      memory-domain-id: trade
-      memory-agent-id: trade-agent
+      memory-domain-id: analytics
+      memory-agent-id: platform-operations-analytics
       candidate-authorization-required: true
-    '[memory.v2.experience.trade.trade-agent]':
-      space-id: memory.v2.experience.trade.trade-agent
+    '[memory.v2.experience.analytics.platform-operations-analytics]':
+      space-id: memory.v2.experience.analytics.platform-operations-analytics
       owner-domain: memory-service
       policy-version: memory-v2
       schema-version: memory-v2.1
-      elasticsearch-index: rag_memory_v2_experience_trade_trade_agent_v1
+      elasticsearch-index: rag_memory_v2_experience_analytics_platform_operations_analytics_v1
       vector-schema:
         database: default
-        collection: rag_memory_v2_experience_trade_trade_agent_v1
+        collection: rag_memory_v2_experience_analytics_platform_operations_analytics_v1
         model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
@@ -1756,18 +1756,18 @@ rag:
         scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
         scale: LOGIT
       memory-record-type: experience
-      memory-domain-id: trade
-      memory-agent-id: trade-agent
+      memory-domain-id: analytics
+      memory-agent-id: platform-operations-analytics
       candidate-authorization-required: true
-    '[memory.v2.collaboration.trade.trade-agent]':
-      space-id: memory.v2.collaboration.trade.trade-agent
+    '[memory.v2.collaboration.analytics.platform-operations-analytics]':
+      space-id: memory.v2.collaboration.analytics.platform-operations-analytics
       owner-domain: memory-service
       policy-version: memory-v2
       schema-version: memory-v2.1
-      elasticsearch-index: rag_memory_v2_collaboration_trade_trade_agent_v1
+      elasticsearch-index: rag_memory_v2_collaboration_analytics_platform_operations_analytics_v1
       vector-schema:
         database: default
-        collection: rag_memory_v2_collaboration_trade_trade_agent_v1
+        collection: rag_memory_v2_collaboration_analytics_platform_operations_analytics_v1
         model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
@@ -1845,18 +1845,18 @@ rag:
         scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
         scale: LOGIT
       memory-record-type: collaboration
-      memory-domain-id: trade
-      memory-agent-id: trade-agent
+      memory-domain-id: analytics
+      memory-agent-id: platform-operations-analytics
       candidate-authorization-required: true
-    '[memory.v2.session.trade.platform-operations-analytics]':
-      space-id: memory.v2.session.trade.platform-operations-analytics
+    '[memory.v2.session.review.platform-operations-review]':
+      space-id: memory.v2.session.review.platform-operations-review
       owner-domain: memory-service
       policy-version: memory-v2
       schema-version: memory-v2.1
-      elasticsearch-index: rag_memory_v2_session_trade_platform_operations_analytics_v1
+      elasticsearch-index: rag_memory_v2_session_review_platform_operations_review_v1
       vector-schema:
         database: default
-        collection: rag_memory_v2_session_trade_platform_operations_analytics_v1
+        collection: rag_memory_v2_session_review_platform_operations_review_v1
         model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
@@ -1922,18 +1922,18 @@ rag:
         scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
         scale: LOGIT
       memory-record-type: session
-      memory-domain-id: trade
-      memory-agent-id: platform-operations-analytics
+      memory-domain-id: review
+      memory-agent-id: platform-operations-review
       candidate-authorization-required: true
-    '[memory.v2.summary.trade.platform-operations-analytics]':
-      space-id: memory.v2.summary.trade.platform-operations-analytics
+    '[memory.v2.summary.review.platform-operations-review]':
+      space-id: memory.v2.summary.review.platform-operations-review
       owner-domain: memory-service
       policy-version: memory-v2
       schema-version: memory-v2.1
-      elasticsearch-index: rag_memory_v2_summary_trade_platform_operations_analytics_v1
+      elasticsearch-index: rag_memory_v2_summary_review_platform_operations_review_v1
       vector-schema:
         database: default
-        collection: rag_memory_v2_summary_trade_platform_operations_analytics_v1
+        collection: rag_memory_v2_summary_review_platform_operations_review_v1
         model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
@@ -1999,18 +1999,18 @@ rag:
         scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
         scale: LOGIT
       memory-record-type: summary
-      memory-domain-id: trade
-      memory-agent-id: platform-operations-analytics
+      memory-domain-id: review
+      memory-agent-id: platform-operations-review
       candidate-authorization-required: true
-    '[memory.v2.preference-history.trade.platform-operations-analytics]':
-      space-id: memory.v2.preference-history.trade.platform-operations-analytics
+    '[memory.v2.preference-history.review.platform-operations-review]':
+      space-id: memory.v2.preference-history.review.platform-operations-review
       owner-domain: memory-service
       policy-version: memory-v2
       schema-version: memory-v2.1
-      elasticsearch-index: rag_memory_v2_preference_history_trade_platform_operations_analytics_v1
+      elasticsearch-index: rag_memory_v2_preference_history_review_platform_operations_review_v1
       vector-schema:
         database: default
-        collection: rag_memory_v2_preference_history_trade_platform_operations_analytics_v1
+        collection: rag_memory_v2_preference_history_review_platform_operations_review_v1
         model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
@@ -2084,18 +2084,18 @@ rag:
         scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
         scale: LOGIT
       memory-record-type: preference-history
-      memory-domain-id: trade
-      memory-agent-id: platform-operations-analytics
+      memory-domain-id: review
+      memory-agent-id: platform-operations-review
       candidate-authorization-required: true
-    '[memory.v2.experience.trade.platform-operations-analytics]':
-      space-id: memory.v2.experience.trade.platform-operations-analytics
+    '[memory.v2.experience.review.platform-operations-review]':
+      space-id: memory.v2.experience.review.platform-operations-review
       owner-domain: memory-service
       policy-version: memory-v2
       schema-version: memory-v2.1
-      elasticsearch-index: rag_memory_v2_experience_trade_platform_operations_analytics_v1
+      elasticsearch-index: rag_memory_v2_experience_review_platform_operations_review_v1
       vector-schema:
         database: default
-        collection: rag_memory_v2_experience_trade_platform_operations_analytics_v1
+        collection: rag_memory_v2_experience_review_platform_operations_review_v1
         model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
@@ -2157,18 +2157,18 @@ rag:
         scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
         scale: LOGIT
       memory-record-type: experience
-      memory-domain-id: trade
-      memory-agent-id: platform-operations-analytics
+      memory-domain-id: review
+      memory-agent-id: platform-operations-review
       candidate-authorization-required: true
-    '[memory.v2.collaboration.trade.platform-operations-analytics]':
-      space-id: memory.v2.collaboration.trade.platform-operations-analytics
+    '[memory.v2.collaboration.review.platform-operations-review]':
+      space-id: memory.v2.collaboration.review.platform-operations-review
       owner-domain: memory-service
       policy-version: memory-v2
       schema-version: memory-v2.1
-      elasticsearch-index: rag_memory_v2_collaboration_trade_platform_operations_analytics_v1
+      elasticsearch-index: rag_memory_v2_collaboration_review_platform_operations_review_v1
       vector-schema:
         database: default
-        collection: rag_memory_v2_collaboration_trade_platform_operations_analytics_v1
+        collection: rag_memory_v2_collaboration_review_platform_operations_review_v1
         model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
@@ -2246,408 +2246,7 @@ rag:
         scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
         scale: LOGIT
       memory-record-type: collaboration
-      memory-domain-id: trade
-      memory-agent-id: platform-operations-analytics
-      candidate-authorization-required: true
-    '[memory.v2.session.business-review.platform-operations-review]':
-      space-id: memory.v2.session.business-review.platform-operations-review
-      owner-domain: memory-service
-      policy-version: memory-v2
-      schema-version: memory-v2.1
-      elasticsearch-index: rag_memory_v2_session_business_review_platform_operations_review_v1
-      vector-schema:
-        database: default
-        collection: rag_memory_v2_session_business_review_platform_operations_review_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
-        dimension: 1024
-        id-field: doc_id
-        content-field: content
-        metadata-field: metadata
-        vector-field: embedding
-        source-type-field: source_type
-        source-id-field: source_id
-        metric-type: COSINE
-        index-type: IVF_FLAT
-        index-parameters: '{"nlist":1024}'
-      fields:
-        ownerId:
-          type: STRING
-          operators: [EQ]
-          required: true
-        domainId:
-          type: STRING
-          operators: [EQ]
-          required: true
-        agentId:
-          type: STRING
-          operators: [EQ]
-          required: true
-        active:
-          type: BOOLEAN
-          operators: [EQ]
-          required: true
-        sourceVersion:
-          type: NUMBER
-          operators: []
-          required: true
-        sourceHash:
-          type: STRING
-          operators: []
-          required: true
-        sessionId:
-          type: STRING
-          operators: [EQ]
-          required: true
-        summaryId:
-          type: STRING
-          operators: [EQ]
-          required: true
-      return-fields: [active, sessionId, summaryId]
-      search-roles: [ADMIN, BROKER]
-      admin-roles: [ADMIN]
-      allowed-clients:
-        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
-      limits:
-        max-recall-candidates: 500
-        max-rerank-candidates: 500
-        max-candidate-limit: 200
-        max-document-utf8-bytes: 32768
-        max-recall-utf8-bytes: 1048576
-        max-rerank-utf8-bytes: 524288
-        overall-timeout-millis: 20000
-        recall-timeout-millis: 5000
-        rerank-timeout-millis: 8000
-      rerank-profile:
-        provider: governed
-        model-version: bge-reranker-v2-m3-v1
-        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
-        scale: LOGIT
-      memory-record-type: session
-      memory-domain-id: business-review
-      memory-agent-id: platform-operations-review
-      candidate-authorization-required: true
-    '[memory.v2.summary.business-review.platform-operations-review]':
-      space-id: memory.v2.summary.business-review.platform-operations-review
-      owner-domain: memory-service
-      policy-version: memory-v2
-      schema-version: memory-v2.1
-      elasticsearch-index: rag_memory_v2_summary_business_review_platform_operations_review_v1
-      vector-schema:
-        database: default
-        collection: rag_memory_v2_summary_business_review_platform_operations_review_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
-        dimension: 1024
-        id-field: doc_id
-        content-field: content
-        metadata-field: metadata
-        vector-field: embedding
-        source-type-field: source_type
-        source-id-field: source_id
-        metric-type: COSINE
-        index-type: IVF_FLAT
-        index-parameters: '{"nlist":1024}'
-      fields:
-        ownerId:
-          type: STRING
-          operators: [EQ]
-          required: true
-        domainId:
-          type: STRING
-          operators: [EQ]
-          required: true
-        agentId:
-          type: STRING
-          operators: [EQ]
-          required: true
-        active:
-          type: BOOLEAN
-          operators: [EQ]
-          required: true
-        sourceVersion:
-          type: NUMBER
-          operators: []
-          required: true
-        sourceHash:
-          type: STRING
-          operators: []
-          required: true
-        summaryId:
-          type: STRING
-          operators: [EQ]
-          required: true
-        sessionId:
-          type: STRING
-          operators: [EQ]
-          required: true
-      return-fields: [active, summaryId, sessionId]
-      search-roles: [ADMIN, BROKER]
-      admin-roles: [ADMIN]
-      allowed-clients:
-        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
-      limits:
-        max-recall-candidates: 500
-        max-rerank-candidates: 500
-        max-candidate-limit: 200
-        max-document-utf8-bytes: 32768
-        max-recall-utf8-bytes: 1048576
-        max-rerank-utf8-bytes: 524288
-        overall-timeout-millis: 20000
-        recall-timeout-millis: 5000
-        rerank-timeout-millis: 8000
-      rerank-profile:
-        provider: governed
-        model-version: bge-reranker-v2-m3-v1
-        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
-        scale: LOGIT
-      memory-record-type: summary
-      memory-domain-id: business-review
-      memory-agent-id: platform-operations-review
-      candidate-authorization-required: true
-    '[memory.v2.preference-history.business-review.platform-operations-review]':
-      space-id: memory.v2.preference-history.business-review.platform-operations-review
-      owner-domain: memory-service
-      policy-version: memory-v2
-      schema-version: memory-v2.1
-      elasticsearch-index: rag_memory_v2_preference_history_business_review_platform_operations_review_v1
-      vector-schema:
-        database: default
-        collection: rag_memory_v2_preference_history_business_review_platform_operations_review_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
-        dimension: 1024
-        id-field: doc_id
-        content-field: content
-        metadata-field: metadata
-        vector-field: embedding
-        source-type-field: source_type
-        source-id-field: source_id
-        metric-type: COSINE
-        index-type: IVF_FLAT
-        index-parameters: '{"nlist":1024}'
-      fields:
-        ownerId:
-          type: STRING
-          operators: [EQ]
-          required: true
-        domainId:
-          type: STRING
-          operators: [EQ]
-          required: true
-        agentId:
-          type: STRING
-          operators: [EQ]
-          required: true
-        active:
-          type: BOOLEAN
-          operators: [EQ]
-          required: true
-        sourceVersion:
-          type: NUMBER
-          operators: []
-          required: true
-        sourceHash:
-          type: STRING
-          operators: []
-          required: true
-        blockId:
-          type: STRING
-          operators: [EQ]
-          required: true
-        dimensionId:
-          type: STRING
-          operators: [EQ, IN]
-          required: true
-        fragmentIndex:
-          type: NUMBER
-          operators: []
-          required: true
-        fragmentCount:
-          type: NUMBER
-          operators: []
-          required: true
-      return-fields: [active, blockId, dimensionId, fragmentIndex, fragmentCount]
-      search-roles: [ADMIN, BROKER]
-      admin-roles: [ADMIN]
-      allowed-clients:
-        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
-      limits:
-        max-recall-candidates: 500
-        max-rerank-candidates: 500
-        max-candidate-limit: 200
-        max-document-utf8-bytes: 32768
-        max-recall-utf8-bytes: 1048576
-        max-rerank-utf8-bytes: 524288
-        overall-timeout-millis: 20000
-        recall-timeout-millis: 5000
-        rerank-timeout-millis: 8000
-      rerank-profile:
-        provider: governed
-        model-version: bge-reranker-v2-m3-v1
-        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
-        scale: LOGIT
-      memory-record-type: preference-history
-      memory-domain-id: business-review
-      memory-agent-id: platform-operations-review
-      candidate-authorization-required: true
-    '[memory.v2.experience.business-review.platform-operations-review]':
-      space-id: memory.v2.experience.business-review.platform-operations-review
-      owner-domain: memory-service
-      policy-version: memory-v2
-      schema-version: memory-v2.1
-      elasticsearch-index: rag_memory_v2_experience_business_review_platform_operations_review_v1
-      vector-schema:
-        database: default
-        collection: rag_memory_v2_experience_business_review_platform_operations_review_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
-        dimension: 1024
-        id-field: doc_id
-        content-field: content
-        metadata-field: metadata
-        vector-field: embedding
-        source-type-field: source_type
-        source-id-field: source_id
-        metric-type: COSINE
-        index-type: IVF_FLAT
-        index-parameters: '{"nlist":1024}'
-      fields:
-        ownerId:
-          type: STRING
-          operators: [EQ]
-          required: true
-        domainId:
-          type: STRING
-          operators: [EQ]
-          required: true
-        agentId:
-          type: STRING
-          operators: [EQ]
-          required: true
-        active:
-          type: BOOLEAN
-          operators: [EQ]
-          required: true
-        sourceVersion:
-          type: NUMBER
-          operators: []
-          required: true
-        sourceHash:
-          type: STRING
-          operators: []
-          required: true
-        experienceId:
-          type: STRING
-          operators: [EQ]
-          required: true
-      return-fields: [active, experienceId]
-      search-roles: [ADMIN, BROKER]
-      admin-roles: [ADMIN]
-      allowed-clients:
-        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
-      limits:
-        max-recall-candidates: 500
-        max-rerank-candidates: 500
-        max-candidate-limit: 200
-        max-document-utf8-bytes: 32768
-        max-recall-utf8-bytes: 1048576
-        max-rerank-utf8-bytes: 524288
-        overall-timeout-millis: 20000
-        recall-timeout-millis: 5000
-        rerank-timeout-millis: 8000
-      rerank-profile:
-        provider: governed
-        model-version: bge-reranker-v2-m3-v1
-        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
-        scale: LOGIT
-      memory-record-type: experience
-      memory-domain-id: business-review
-      memory-agent-id: platform-operations-review
-      candidate-authorization-required: true
-    '[memory.v2.collaboration.business-review.platform-operations-review]':
-      space-id: memory.v2.collaboration.business-review.platform-operations-review
-      owner-domain: memory-service
-      policy-version: memory-v2
-      schema-version: memory-v2.1
-      elasticsearch-index: rag_memory_v2_collaboration_business_review_platform_operations_review_v1
-      vector-schema:
-        database: default
-        collection: rag_memory_v2_collaboration_business_review_platform_operations_review_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
-        dimension: 1024
-        id-field: doc_id
-        content-field: content
-        metadata-field: metadata
-        vector-field: embedding
-        source-type-field: source_type
-        source-id-field: source_id
-        metric-type: COSINE
-        index-type: IVF_FLAT
-        index-parameters: '{"nlist":1024}'
-      fields:
-        ownerId:
-          type: STRING
-          operators: [EQ]
-          required: true
-        active:
-          type: BOOLEAN
-          operators: [EQ]
-          required: true
-        sourceVersion:
-          type: NUMBER
-          operators: []
-          required: true
-        sourceHash:
-          type: STRING
-          operators: []
-          required: true
-        recipientDomainId:
-          type: STRING
-          operators: [EQ]
-          required: true
-        recipientAgentId:
-          type: STRING
-          operators: [EQ]
-          required: true
-        recipientConversationId:
-          type: STRING
-          operators: [EQ]
-          required: true
-        grantId:
-          type: STRING
-          operators: [EQ, IN]
-          required: true
-        exportId:
-          type: STRING
-          operators: [EQ]
-          required: true
-        sourceDomainId:
-          type: STRING
-          operators: [EQ]
-          required: true
-        sourceAgentId:
-          type: STRING
-          operators: [EQ]
-          required: true
-      return-fields: [active, exportId, sourceDomainId, sourceAgentId, recipientDomainId, recipientAgentId, recipientConversationId, grantId]
-      search-roles: [ADMIN, BROKER]
-      admin-roles: [ADMIN]
-      allowed-clients:
-        memory-service: [MEMORY_SEARCH, SUBMIT, GET_STATUS, INSPECT, PROVISION, REPLAY]
-      limits:
-        max-recall-candidates: 500
-        max-rerank-candidates: 500
-        max-candidate-limit: 200
-        max-document-utf8-bytes: 32768
-        max-recall-utf8-bytes: 1048576
-        max-rerank-utf8-bytes: 524288
-        overall-timeout-millis: 20000
-        recall-timeout-millis: 5000
-        rerank-timeout-millis: 8000
-      rerank-profile:
-        provider: governed
-        model-version: bge-reranker-v2-m3-v1
-        scoring-version: 12ab2575eb91fb134ec2d616b872f37578457fe88258ce2906609bcdc63db88b
-        scale: LOGIT
-      memory-record-type: collaboration
-      memory-domain-id: business-review
+      memory-domain-id: review
       memory-agent-id: platform-operations-review
       candidate-authorization-required: true
     '[memory.v2.session.knowledge.platform-operations-knowledge]':

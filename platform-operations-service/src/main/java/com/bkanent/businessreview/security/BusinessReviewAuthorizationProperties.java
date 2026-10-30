@@ -2,7 +2,7 @@ package com.bkanent.businessreview.security;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.util.LinkedHashMap;
 import java.util.Map;
-@ConfigurationProperties(prefix = "business-review.authorization")
+@ConfigurationProperties(prefix = "platform-operations.review.authorization")
 public class BusinessReviewAuthorizationProperties {
     private boolean enabled = true;
     private String audience = "platform-operations-service";

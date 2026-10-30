@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-This repository is a multi-module Maven project for a real-estate middle-platform system. The root [`pom.xml`](/D:/project/BkAnentProject/BkAnentProject/pom.xml:1) manages shared versions and all service modules. Shared DTOs, RPC contracts, and base models live in `common/src/main/java`. Each microservice follows the same layout: `src/main/java` for code and `src/main/resources` for configuration. Current core modules include `gateway`, `agent-service`, `auth-service`, `listing-master-service`, `customer-service`, `business-service`, `contract-service`, `settlement-service`, and support services such as `marketing-content-service`. SQL bootstrap scripts belong in `sql/`.
+This repository is a multi-module Maven project for a real-estate middle-platform system. The root `pom.xml` manages shared versions and service modules. Shared DTOs, RPC contracts, and base models live in `common/src/main/java`. Each microservice follows the same layout: `src/main/java` for code and `src/main/resources` for configuration. Current modules include `gateway`, `agent-service`, `auth-service`, `listing-master-service`, `customer-service`, `platform-operations-service`, `interview-service`, and supporting services such as `marketing-content-service`. Versioned SQL migrations and checks live under `sql/migrations/` and `docker/mysql/`; initialization must use `docker/mysql/init-manifest.tsv` and its managed runner.
 
 ## Build, Test, and Development Commands
 - `mvn -gs .mvn-settings.xml -s .mvn-settings.xml compile`
@@ -44,4 +44,4 @@ The repository has no commit history yet, so adopt short imperative commit messa
 两份清单与代码同仓同提交维护，是项目设计决策与已知问题的唯一权威来源；条目编号稳定不复用，代码注释与 commit message 中引用时写 `LR-N` / `KI-N`。
 
 ## Security & Configuration Tips
-Do not hardcode secrets. Supply MySQL, Nacos, DeepSeek, DashScope, token, and Milvus values through environment variables or a secret manager. Review `sql/mysql-init.sql` before applying it to shared environments; existing plaintext auth rows require a BCrypt migration.
+Do not hardcode secrets. Supply MySQL, Nacos, DeepSeek, DashScope, token, and Milvus values through environment variables or a secret manager. Apply database changes only through the checksummed initialization manifest; existing plaintext auth rows require a BCrypt migration.

@@ -32,7 +32,7 @@ fresh volume 初始化使用同一 manifest，但会运行 `fresh` 标记的 boo
 
 ## ES / Milvus 受管空间
 
-Memory v2 的逻辑空间由 `nacos/rag-service.yaml` 注册，覆盖五类记录（session、summary、preference-history、experience、collaboration）与七个精确 domain/agent 组合（marketing、interview、listing、trade、contract、compare、settlement）。每个组合有独立 ES index 和 Milvus collection；物理目标只由受管配置定义。`docs/acceptance/` 中的历史迁移盘点只描述旧 RAG 代际，不能证明这些 v2 目标已经 provision 或可用。
+Memory v2 的逻辑空间由 `nacos/rag-service.yaml` 注册，覆盖五类记录（session、summary、preference-history、experience、collaboration）与六个精确 domain/agent 组合：`marketing/marketing-agent`、`interview/interview-agent`、`listing/listing-agent`、`analytics/platform-operations-analytics`、`review/platform-operations-review`、`knowledge/platform-operations-knowledge`。每个组合有独立 ES index 和 Milvus collection；物理目标只由受管配置定义。合同、结算、交易、Compare 和已退役的旧记忆空间不属于当前注册面；`docs/acceptance/` 中的历史盘点不能证明当前目标已经 provision 或可用。
 
 逐项操作使用 [私有 RAG / A2A 运行探针](../scripts/verification/README.md)：先以 `DOMAIN / INSPECT` 查询具体逻辑空间，再按获批的目标清单执行 `DOMAIN / PROVISION`。探针要求真实当前 ADMIN token、Memory RAG 的受信 key、现有项目私有 Docker 网络、已 package 的服务 jar 和本机已存在的 JDK 镜像；它不启动 RAG、ES、Milvus 或新的服务容器。对每次 provision 只能传配置所列 schema version 和维度，不接受物理名称。`ready=false` 需要按失败 stage 排查，不得打开 dispatcher 或把未就绪标为成功。
 

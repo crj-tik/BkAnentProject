@@ -1,6 +1,6 @@
-# 平台经营接口迁移盘点（草案）
+# 平台经营接口迁移映射（历史对照）
 
-以下目标路径用于实施，不代表已上线。除路径和服务身份外，输入、响应、状态机与权限应沿用原契约；实现时同步维护 OpenAPI 并验收每个调用方。
+本表记录旧业务入口到平台经营域的迁移关系，旧路径仅作历史对照。最终接口、输入输出、错误码和安全约束以[平台经营 OpenAPI 契约](../../../docs/contracts/platform-operations-v1.openapi.yaml)为准；供前端设计页面的功能说明见[平台经营域前端功能清单](../../../docs/platform-operations-frontend-function-list.md)。
 
 | 原接口 | 目标接口 | 功能 |
 | --- | --- | --- |
@@ -26,7 +26,7 @@
 | GET `/knowledge/v1/cases/{knowledgeId}/generation/{taskId}` | GET `/platform-operations/knowledge/v1/cases/{knowledgeId}/generation/{taskId}` | 生成任务状态 |
 | POST `/knowledge/v1/published/{action}` | POST `/platform-operations/knowledge/v1/published/{action}` | action 分别为 search、batch-read、check |
 
-复盘请求/响应和操作码以 `business-review-service/src/main/resources/openapi/business-review-api.yaml` 为迁移基线；知识发布接口以 `docs/contracts/knowledge-domain-parallel-v1.openapi.yaml` 为基线；知识案例 DTO 与经营分析参数以对应控制器及 DTO 为基线。新接口 OpenAPI、错误码和鉴权示例须随实现生成，不能把本表当作已完成的前端契约。
+迁移时复盘请求/响应和操作码参考已退役服务的原契约，知识发布接口参考知识域并行契约；这些旧文件不再是当前服务的运行依赖。平台经营 OpenAPI 与前端功能清单已随实现交付，本表不代替当前接口契约。
 
 已识别调用方：复盘的 `DomainParallelHttpReadAdapter` 调用知识 search/check，合并后迁入域内调用并保留当前来源校验；`settlement-service` 使用 `BusinessRpcService.getMonthlyKpis`，随结算退役；Gateway、Supervisor 和 MCP/Agent 调用方须切到新身份与路径。仓库外调用方未核实。
 

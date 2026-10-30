@@ -9,7 +9,12 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-ALLOWED = frozenset({"auth-service.yaml", "rag-service.yaml", "listing-master-service.yaml", "memory-service.yaml", "agent-service.yaml", "customer-service.yaml", "marketing-content-service.yaml", "interview-service.yaml", "knowledge-service.yaml", "gateway.yaml", "business-review-service.yaml", "platform-operations-service.yaml"})
+ALLOWED = frozenset({
+    "auth-service.yaml", "gateway.yaml", "agent-service.yaml", "listing-master-service.yaml",
+    "customer-service.yaml", "marketing-content-service.yaml", "media-worker-service.yaml",
+    "notification-service.yaml", "interview-service.yaml",
+    "memory-service.yaml", "rag-service.yaml", "platform-operations-service.yaml",
+})
 
 def main():
     namespace = os.environ.get("NACOS_NAMESPACE", "")
@@ -40,10 +45,10 @@ def main():
             return response.read()
     token = None
     if auth_setting == "true":
-        username = os.environ.get("NACOS_USERNAME", "")
-        password = os.environ.get("NACOS_PASSWORD", "")
+        username = os.environ.get("NACOS_ADMIN_USERNAME", "")
+        password = os.environ.get("NACOS_ADMIN_PASSWORD", "")
         if not username or not password:
-            raise ValueError("Explicit Nacos login credentials required")
+            raise ValueError("Explicit Nacos Admin publication credentials required")
         login = json.loads(request("/nacos/v3/auth/user/login", {"username": username, "password": password}))
         payload = login.get("data", login) if isinstance(login, dict) else None
         token = payload.get("accessToken") if isinstance(payload, dict) else None

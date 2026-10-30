@@ -12,7 +12,6 @@ class OfficialA2aProviderConfigurationTest {
     @Test
     void allDomainOfficialA2aProvidersRemainPresent() throws Exception {
         String[] providers = {
-                "business-service/src/main/java/com/bkanent/business/a2a/TradeOfficialA2aAgent.java",
                 "listing-master-service/src/main/java/com/bkanent/listing/a2a/ListingOfficialA2aAgent.java",
                 "marketing-content-service/src/main/java/com/bkanent/marketing/a2a/MarketingOfficialA2aAgent.java",
                 "media-worker-service/src/main/java/com/bkanent/media/a2a/MediaOfficialA2aAgent.java",
@@ -34,7 +33,6 @@ class OfficialA2aProviderConfigurationTest {
     @Test
     void everyProviderHasSupervisorContextInterceptor() {
         String[] interceptors = {
-                "business-service/src/main/java/com/bkanent/business/a2a/A2aSupervisorContextInterceptor.java",
                 "listing-master-service/src/main/java/com/bkanent/listing/a2a/A2aSupervisorContextInterceptor.java",
                 "marketing-content-service/src/main/java/com/bkanent/marketing/a2a/A2aSupervisorContextInterceptor.java",
                 "media-worker-service/src/main/java/com/bkanent/media/a2a/A2aSupervisorContextInterceptor.java",
@@ -51,7 +49,6 @@ class OfficialA2aProviderConfigurationTest {
     @Test
     void everyProviderAdvertisesOfficialCardAndEndpoint() throws Exception {
         String[] configurations = {
-                "nacos/business-service.yaml",
                 "nacos/listing-master-service.yaml",
                 "nacos/marketing-content-service.yaml",
                 "nacos/media-worker-service.yaml",
@@ -78,8 +75,8 @@ class OfficialA2aProviderConfigurationTest {
     @Test
     void everyDomainServiceDependsOnSharedA2aExecutorModule() throws Exception {
         String[] poms = {
-                "business-service/pom.xml",
                 "listing-master-service/pom.xml",
+                "platform-operations-service/pom.xml",
                 "marketing-content-service/pom.xml",
                 "media-worker-service/pom.xml",
                 "notification-service/pom.xml"
@@ -89,6 +86,20 @@ class OfficialA2aProviderConfigurationTest {
             assertThat(Files.readString(root.resolve(pom)))
                     .withFailMessage("missing common-a2a dependency: " + pom)
                     .contains("<artifactId>common-a2a</artifactId>");
+        }
+    }
+
+    @Test
+    void preConsolidationServiceSourcesAndTemplatesAreRetired() {
+        Path root = locateProjectRoot();
+        for (String retired : new String[]{"business-service", "business-review-service", "knowledge-service",
+                "compare-engine-service", "contract-service", "settlement-service"}) {
+            assertThat(Files.exists(root.resolve(retired).resolve("pom.xml")))
+                    .as("legacy Maven module %s", retired).isFalse();
+            assertThat(Files.exists(root.resolve(retired).resolve("src")))
+                    .as("legacy source tree %s", retired).isFalse();
+            assertThat(Files.exists(root.resolve("nacos/" + retired + ".yaml")))
+                    .as("legacy Nacos template %s", retired).isFalse();
         }
     }
 

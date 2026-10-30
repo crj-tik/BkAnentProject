@@ -4,7 +4,7 @@
 #       .env 引导（缺失密钥用随机值补齐，绝不覆盖已有值）、Nacos 配置完整性检查。
 # 只做宿主机与配置层初始化，不启动任何容器；启动用 scripts/deploy/start.sh。
 #
-# 用法：init-environment.sh [--profile minimal|full|mcp|rag] [--bind ADDR] [--fix-kernel] [--skip-docker]
+# 用法：init-environment.sh [--profile minimal|full|mcp|rag|platform-preview] [--bind ADDR] [--fix-kernel] [--skip-docker]
 #   --profile      目标部署档位，决定资源/端口/配置检查范围（默认 full）
 #   --bind ADDR    将 .env 的 HOST_BIND_ADDRESS 设置为 ADDR（如 0.0.0.0，向局域网开放端口）
 #   --fix-kernel   vm.max_map_count 不达标时通过 sudo 直接修正并持久化
@@ -35,7 +35,7 @@ while [ $# -gt 0 ]; do
     *) die "未知参数：$1（-h 查看用法）" ;;
   esac
 done
-case "$PROFILE" in minimal|full|mcp|rag) ;; *) die "--profile 只支持 minimal|full|mcp|rag" ;; esac
+case "$PROFILE" in minimal|full|mcp|rag|platform-preview) ;; *) die "--profile 只支持 minimal|full|mcp|rag|platform-preview" ;; esac
 
 cd "$BK_REPO_ROOT"
 
@@ -123,6 +123,8 @@ fill_secret() { # $1=KEY $2=固定值或空；空则生成随机密钥
 }
 fill_secret MYSQL_ROOT_PASSWORD
 fill_secret AUTH_TOKEN_SECRET
+fill_secret NACOS_PASSWORD
+fill_secret NACOS_ADMIN_PASSWORD
 fill_secret NACOS_AUTH_TOKEN
 fill_secret NACOS_AUTH_IDENTITY_KEY
 fill_secret NACOS_AUTH_IDENTITY_VALUE
@@ -134,8 +136,6 @@ fill_secret MYSQL_MCP_PASSWORD
 fill_secret MYSQL_MCP_TOKEN
 if [ "$PROFILE" = rag ] || [ "$PROFILE" = full ]; then
   fill_secret RAG_MYSQL_PASSWORD
-  fill_secret KNOWLEDGE_MYSQL_PASSWORD
-  fill_secret KNOWLEDGE_SOURCE_DB_PASSWORD
   fill_secret RAG_AUTH_RPC_SECRET
   fill_secret LISTING_RAG_RPC_SECRET
   fill_secret MEMORY_RAG_RPC_SECRET
@@ -143,6 +143,10 @@ if [ "$PROFILE" = rag ] || [ "$PROFILE" = full ]; then
   fill_secret AUTH_RAG_RPC_RESPONSE_SECRET
   fill_secret CUSTOMER_LISTING_READ_SECRET
   fill_secret MARKETING_LISTING_READ_SECRET
+fi
+if [ "$PROFILE" = full ] || [ "$PROFILE" = platform-preview ]; then
+  fill_secret PLATFORM_OPERATIONS_DB_PASSWORD
+  fill_secret PLATFORM_OPERATIONS_SOURCE_DB_PASSWORD
 fi
 [ "$generated" -gt 0 ] && log_info "共补齐 ${generated} 个缺失配置项" || log_info ".env 密钥项均已配置，无需补齐"
 chmod 600 "$BK_ENV_FILE" 2>/dev/null || log_warn "无法将 .env 权限调整为 600，请手工执行 chmod 600 .env"
@@ -208,7 +212,10 @@ if [ "$PROFILE" = rag ]; then
   required_configs="auth-service.yaml rag-service.yaml listing-master-service.yaml memory-service.yaml agent-service.yaml customer-service.yaml marketing-content-service.yaml"
 fi
 if [ "$PROFILE" = "full" ]; then
-  required_configs="$required_configs agent-service.yaml business-service.yaml business-review-service.yaml customer-service.yaml interview-service.yaml knowledge-service.yaml listing-master-service.yaml marketing-content-service.yaml media-worker-service.yaml memory-service.yaml notification-service.yaml"
+  required_configs="$required_configs agent-service.yaml customer-service.yaml interview-service.yaml listing-master-service.yaml marketing-content-service.yaml media-worker-service.yaml memory-service.yaml notification-service.yaml platform-operations-service.yaml"
+fi
+if [ "$PROFILE" = "platform-preview" ]; then
+  required_configs="$required_configs platform-operations-service.yaml listing-master-service.yaml memory-service.yaml"
 fi
 config_missing=0
 for cfg in $required_configs; do
@@ -226,7 +233,7 @@ fi
 log_info "  - .env 只放端口/连接/密钥/启动参数；Token TTL、模型、排行榜、流式和搜索开关在 Nacos 维护"
 log_info "  - 分布式生产必须在 Nacos 显式配置 notification/media 的真实集成和营销 campaign REAL 模式；未接入真实推广 provider 时发布会失败关闭，不能削弱 readiness"
 log_info "  - nacos/*.yaml 默认为 Docker 开发配置；生产导入前准备环境专属配置，避免 config-init 覆盖生产 data ID"
-log_info "  - NACOS_USERNAME / NACOS_PASSWORD 可从 .env 传入应用容器；Admin 账号初始化与目标命名空间 Card 更新授权仍需另行完成"
+log_info "  - config-init 初始化 Nacos 管理员与 BK-AGENT A2A 受限服务账号；管理员凭据只提供给一次性初始化容器"
 if [ "$SKIP_DOCKER" -eq 0 ]; then
   log_info "下一步："
   log_info "  - 全新数据卷：直接 ./scripts/deploy/start.sh --profile ${PROFILE}"

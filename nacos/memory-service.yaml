@@ -51,15 +51,9 @@ memory:
           platform-operations-service-current: ${PLATFORM_OPERATIONS_SERVICE_IDENTITY_PUBLIC_KEY:}
         service-delivery: true
         allowed-agents-by-domain:
-          trade: [platform-operations-analytics]
-          business-review: [platform-operations-review]
+          analytics: [platform-operations-analytics]
+          review: [platform-operations-review]
           knowledge: [platform-operations-knowledge]
-      knowledge-service:
-        public-keys:
-          knowledge-service-current: ${KNOWLEDGE_SERVICE_IDENTITY_PUBLIC_KEY:}
-        service-delivery: true
-        allowed-agents-by-domain:
-          knowledge: [knowledge-agent]
       listing-master-service:
         public-keys:
           listing-master-service-current: ${LISTING_MASTER_SERVICE_IDENTITY_PUBLIC_KEY:}
@@ -68,21 +62,6 @@ memory:
         experience-governance-publisher: ${LISTING_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
         allowed-agents-by-domain:
           listing: [listing-agent]
-      business-service:
-        public-keys:
-          business-service-current: ${BUSINESS_SERVICE_IDENTITY_PUBLIC_KEY:}
-        service-delivery: true
-        experience-outcome-publisher: ${BUSINESS_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER:false}
-        experience-governance-publisher: ${BUSINESS_MEMORY_EXPERIENCE_GOVERNANCE_PUBLISHER:false}
-        allowed-agents-by-domain:
-          trade: [trade-agent]
-      business-review-service:
-        public-keys:
-          business-review-service-current: ${BUSINESS_REVIEW_SERVICE_IDENTITY_PUBLIC_KEY:}
-        service-delivery: true
-        experience-outcome-publisher: false
-        allowed-agents-by-domain:
-          business-review: [business-review-agent]
       notification-service:
         public-keys:
           notification-service-current: ${NOTIFICATION_SERVICE_IDENTITY_PUBLIC_KEY:}

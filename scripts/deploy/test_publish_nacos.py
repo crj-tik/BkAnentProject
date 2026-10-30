@@ -61,7 +61,7 @@ class PublishNacosTest(unittest.TestCase):
                 "NACOS_TEMPLATE_DIR": temp_dir,
             }
             if include_credentials:
-                environment.update({"NACOS_USERNAME": "fixture-user", "NACOS_PASSWORD": "fixture-password"})
+                environment.update({"NACOS_ADMIN_USERNAME": "fixture-admin", "NACOS_ADMIN_PASSWORD": "fixture-password"})
             output = io.StringIO()
             with patch.dict(os.environ, environment, clear=True), \
                     patch.object(publish_nacos.urllib.request, "build_opener", return_value=opener), \
@@ -94,13 +94,15 @@ class PublishNacosTest(unittest.TestCase):
                 self.assertTrue(all(values.get("dataId") == [data_id] for _, _, values, _ in config_calls))
                 self.assertNotIn("fixture-token", output)
 
-    def test_auth_enabled_logs_in_and_sends_token_without_printing_it(self):
+    def test_auth_enabled_uses_admin_and_sends_token_without_printing_it(self):
         content = "spring:\n  application:\n    name: memory-service\n"
         opener = FakeOpener(content)
 
         output = self.run_publish("true", opener, include_credentials=True)
 
         self.assertEqual(1, sum(path.endswith("/auth/user/login") for path, *_ in opener.calls))
+        login_call = next(call for call in opener.calls if call[0].endswith("/auth/user/login"))
+        self.assertEqual(["fixture-admin"], login_call[2]["username"])
         config_calls = [call for call in opener.calls if call[0] == "/nacos/v1/cs/configs"]
         self.assertEqual(2, len(config_calls))
         self.assertTrue(all(values.get("accessToken") == ["fixture-token"] for _, _, values, _ in config_calls))
@@ -110,6 +112,10 @@ class PublishNacosTest(unittest.TestCase):
     def test_auth_mode_must_be_explicit(self):
         with self.assertRaisesRegex(ValueError, "Explicit Nacos authentication mode"):
             self.run_publish("", FakeOpener(""))
+
+    def test_auth_enabled_requires_admin_credentials(self):
+        with self.assertRaisesRegex(ValueError, "Explicit Nacos Admin publication credentials"):
+            self.run_publish("true", FakeOpener(""))
 
 
 if __name__ == "__main__":

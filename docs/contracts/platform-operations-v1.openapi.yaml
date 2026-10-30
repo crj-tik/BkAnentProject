@@ -1,0 +1,657 @@
+openapi: 3.1.0
+info:
+  title: 平台经营域 API
+  version: 1.0.0
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+  description: >-
+    统一承载经营分析、门店复盘和知识运营。所有业务写入按登录用户、签名授权上下文、
+    精确操作权限及资源版本校验。客户端不得自行设置 actorId 或将请求 storeId 当作授权来源。
+servers:
+  - url: /
+security:
+  - gatewayBearer: []
+paths:
+  /platform-operations/analytics/kpis/monthly:
+    get:
+      operationId: listMonthlyKpis
+      summary: 查询月度 KPI
+      parameters:
+        - $ref: '#/components/parameters/month'
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /platform-operations/analytics/workloads/daily:
+    get:
+      operationId: listDailyWorkloads
+      summary: 查询员工日工作量
+      parameters:
+        - name: statDate
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /platform-operations/analytics/kpis/assessments:
+    get:
+      operationId: calculateKpiAssessments
+      summary: 查询月度 KPI 考核指标
+      parameters:
+        - $ref: '#/components/parameters/month'
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /platform-operations/analytics/rankings:
+    get:
+      operationId: listRankings
+      summary: 查询经营排行榜
+      parameters:
+        - $ref: '#/components/parameters/month'
+        - name: scope
+          in: query
+          required: true
+          schema: { type: string, enum: [PERSONAL, STORE, REGION] }
+        - name: topN
+          in: query
+          required: false
+          schema: { type: integer, default: 10, minimum: 1 }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /platform-operations/analytics/rankings/rebuild:
+    post:
+      operationId: rebuildRankings
+      summary: 重建指定月份排行榜
+      parameters:
+        - $ref: '#/components/parameters/month'
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /platform-operations/analytics/listing-turnover-report:
+    get:
+      operationId: listListingTurnoverReports
+      summary: 查询房源流转效率
+      parameters:
+        - $ref: '#/components/parameters/month'
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /platform-operations/analytics/store-dashboard:
+    get:
+      operationId: getStoreDashboard
+      summary: 查询门店经营看板
+      parameters:
+        - name: storeName
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /platform-operations/analytics/big-dashboard:
+    get:
+      operationId: getBigDashboard
+      summary: 查询经营汇总看板
+      parameters:
+        - $ref: '#/components/parameters/month'
+        - name: startDate
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: endDate
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: regionName
+          in: query
+          required: false
+          schema: { type: string }
+        - name: topN
+          in: query
+          required: false
+          schema: { type: integer, default: 5, minimum: 1 }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /platform-operations/reviews:
+    get:
+      operationId: listReviews
+      summary: 游标分页查询门店复盘
+      description: storeId 是筛选值，服务还会与 Auth 签发的可信门店身份核对。
+      parameters:
+        - name: storeId
+          in: query
+          required: true
+          schema: { type: integer, format: int64 }
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: string }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    post:
+      operationId: createReview
+      summary: 创建门店复盘
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [storeId, datasetId]
+              properties:
+                storeId: { type: integer, format: int64 }
+                datasetId: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /platform-operations/reviews/{reviewId}:
+    get:
+      operationId: getReview
+      summary: 获取复盘事项与来源事实
+      parameters:
+        - $ref: '#/components/parameters/reviewId'
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /platform-operations/reviews/{reviewId}/plans:
+    get:
+      operationId: listReviewPlans
+      summary: 查询复盘行动计划
+      parameters:
+        - $ref: '#/components/parameters/reviewId'
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      operationId: writeReviewPlan
+      summary: 创建或更新待确认计划
+      parameters:
+        - $ref: '#/components/parameters/reviewId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedMatterVersion, expectedDiagnosisRevision, actions]
+              properties:
+                expectedMatterVersion: { type: integer, format: int64 }
+                expectedDiagnosisRevision: { type: integer, minimum: 1 }
+                dueAt: { type: [string, 'null'], format: date-time }
+                actions: { type: array, items: { type: string }, minItems: 1 }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /platform-operations/reviews/{reviewId}/plans/confirm:
+    post:
+      operationId: confirmReviewPlan
+      summary: 确认复盘计划并生成行动
+      parameters:
+        - $ref: '#/components/parameters/reviewId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedPlanVersion, requestId, parameterHash]
+              properties:
+                expectedPlanVersion: { type: integer, minimum: 1 }
+                requestId: { type: string, minLength: 1 }
+                parameterHash: { type: string, pattern: '^[a-f0-9]{64}$' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /platform-operations/reviews/{reviewId}/actions:
+    get:
+      operationId: listReviewActions
+      summary: 查询复盘行动与反馈
+      parameters:
+        - $ref: '#/components/parameters/reviewId'
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /platform-operations/reviews/{reviewId}/actions/{actionId}/feedback:
+    post:
+      operationId: submitReviewActionFeedback
+      summary: 提交行动执行反馈
+      parameters:
+        - $ref: '#/components/parameters/reviewId'
+        - name: actionId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [requestId, expectedActionVersion, status, evidenceLevel]
+              properties:
+                requestId: { type: string, minLength: 1 }
+                expectedActionVersion: { type: integer, format: int64 }
+                status: { type: string, enum: [IN_PROGRESS, DONE, CANCELLED] }
+                evidenceLevel: { type: string, enum: [USER_REPORTED, SOURCE_CONFIRMED] }
+                note: { type: [string, 'null'] }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /platform-operations/reviews/{reviewId}/observations:
+    get:
+      operationId: getReviewObservations
+      summary: 查询复盘后的指标观察
+      parameters:
+        - $ref: '#/components/parameters/reviewId'
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /platform-operations/knowledge/v1/cases:
+    post:
+      operationId: createKnowledgeCase
+      summary: 创建知识案例草稿
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateKnowledgeRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /platform-operations/knowledge/v1/cases/{knowledgeId}:
+    get:
+      operationId: getKnowledgeCase
+      summary: 获取有权访问的知识案例
+      parameters:
+        - $ref: '#/components/parameters/knowledgeId'
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /platform-operations/knowledge/v1/cases/{knowledgeId}/edit:
+    post:
+      operationId: editKnowledgeCase
+      summary: 编辑草稿并创建新修订
+      parameters:
+        - $ref: '#/components/parameters/knowledgeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EditKnowledgeRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /platform-operations/knowledge/v1/cases/{knowledgeId}/submit:
+    post:
+      operationId: submitKnowledgeCase
+      summary: 提交案例审核
+      parameters:
+        - $ref: '#/components/parameters/knowledgeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/KnowledgeOperationRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /platform-operations/knowledge/v1/cases/{knowledgeId}/generate:
+    post:
+      operationId: generateKnowledgeCandidate
+      summary: 基于授权来源生成案例候选
+      parameters:
+        - $ref: '#/components/parameters/knowledgeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GenerateKnowledgeRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /platform-operations/knowledge/v1/cases/{knowledgeId}/generation/{taskId}:
+    get:
+      operationId: getKnowledgeGenerationStatus
+      summary: 查询候选生成任务状态
+      parameters:
+        - $ref: '#/components/parameters/knowledgeId'
+        - name: taskId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /platform-operations/knowledge/v1/cases/{knowledgeId}/review:
+    post:
+      operationId: reviewKnowledgeCase
+      summary: 审核待审案例
+      parameters:
+        - $ref: '#/components/parameters/knowledgeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [requestId, expectedVersion, decision]
+              properties:
+                requestId: { type: string }
+                expectedVersion: { type: integer, format: int64 }
+                decision: { type: string, enum: [APPROVE, REJECT] }
+                reason: { type: [string, 'null'] }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /platform-operations/knowledge/v1/cases/{knowledgeId}/publish:
+    post:
+      operationId: publishKnowledgeCase
+      summary: 发布已获批修订
+      parameters:
+        - $ref: '#/components/parameters/knowledgeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/KnowledgeOperationRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /platform-operations/knowledge/v1/cases/{knowledgeId}/withdraw:
+    post:
+      operationId: withdrawKnowledgeCase
+      summary: 撤回当前发布修订
+      parameters:
+        - $ref: '#/components/parameters/knowledgeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/KnowledgeOperationRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /platform-operations/knowledge/v1/published/search:
+    post:
+      operationId: searchPublishedKnowledge
+      summary: 检索当前发布且对调用者可见的知识
+      description: 详细的契约版本、来源校验和响应结构见同目录 Platform Operations published-knowledge contract。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contractVersion]
+              properties:
+                contractVersion: { type: string, const: domain-parallel-v1 }
+                problem: { type: [string, 'null'] }
+                scene: { type: [string, 'null'] }
+                tags: { type: array, items: { type: string } }
+                cursor: { type: [string, 'null'] }
+                limit: { type: integer, default: 20 }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /platform-operations/knowledge/v1/published/batch-read:
+    post:
+      operationId: batchReadPublishedKnowledge
+      summary: 按精确修订批量读取当前发布知识
+      description: 完整响应与失效规则见同目录 platform-operations-published-knowledge-v1.openapi.yaml。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contractVersion, refs]
+              properties:
+                contractVersion: { type: string, const: domain-parallel-v1 }
+                refs:
+                  type: array
+                  minItems: 1
+                  maxItems: 20
+                  items:
+                    type: object
+                    required: [knowledgeId, revision]
+                    properties:
+                      knowledgeId: { type: string }
+                      revision: { type: string }
+                      contentHash: { type: string, pattern: '^[a-f0-9]{64}$' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /platform-operations/knowledge/v1/published/check:
+    post:
+      operationId: checkPublishedKnowledge
+      summary: 检查发布知识修订是否仍有效
+      description: 仅返回状态，不返回案例正文；完整契约见同目录 platform-operations-published-knowledge-v1.openapi.yaml。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contractVersion, refs]
+              properties:
+                contractVersion: { type: string, const: domain-parallel-v1 }
+                refs:
+                  type: array
+                  minItems: 1
+                  maxItems: 20
+                  items:
+                    type: object
+                    required: [knowledgeId, revision, contentHash]
+                    properties:
+                      knowledgeId: { type: string }
+                      revision: { type: string }
+                      contentHash: { type: string, pattern: '^[a-f0-9]{64}$' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/InvalidRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+components:
+  securitySchemes:
+    gatewayBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Auth 登录签发的访问令牌，由 Gateway 校验；不要提交内部签名授权头。
+  parameters:
+    month:
+      name: month
+      in: query
+      required: true
+      schema: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$' }
+    reviewId:
+      name: reviewId
+      in: path
+      required: true
+      schema: { type: string }
+    knowledgeId:
+      name: knowledgeId
+      in: path
+      required: true
+      schema: { type: string }
+  schemas:
+    ApiResponse:
+      type: object
+      required: [success, code, message, data]
+      properties:
+        success: { type: boolean }
+        code: { type: string, description: 成功为 0；失败为稳定错误码 }
+        message: { type: string }
+        data: { description: 按操作返回对应对象、数组、分页或 null }
+    CreateKnowledgeRequest:
+      type: object
+      required: [requestId, scopeType, title, problem, scene, body]
+      properties:
+        requestId: { type: string }
+        scopeType: { type: string, enum: [OWN, STORE] }
+        storeId: { type: [integer, 'null'], format: int64 }
+        title: { type: string }
+        problem: { type: string }
+        scene: { type: string }
+        tags: { type: array, items: { type: string } }
+        body: { $ref: '#/components/schemas/KnowledgeBody' }
+    EditKnowledgeRequest:
+      type: object
+      required: [requestId, expectedVersion, title, problem, scene, body]
+      properties:
+        requestId: { type: string }
+        expectedVersion: { type: integer, format: int64 }
+        title: { type: string }
+        problem: { type: string }
+        scene: { type: string }
+        tags: { type: array, items: { type: string } }
+        body: { $ref: '#/components/schemas/KnowledgeBody' }
+    KnowledgeBody:
+      type: object
+      properties:
+        problem: { type: string }
+        scene: { type: string }
+        preconditions: { type: array, items: { type: string } }
+        actions: { type: array, items: { type: string } }
+        observedResults: { type: array, items: { type: string } }
+        applicability: { type: array, items: { type: string } }
+        unverifiedItems: { type: array, items: { type: string } }
+        evidenceLevel: { type: string }
+    GenerateKnowledgeRequest:
+      type: object
+      required: [requestId, expectedVersion, sourceAssetIds, rulesVersion]
+      properties:
+        requestId: { type: string }
+        expectedVersion: { type: integer, format: int64 }
+        sourceAssetIds: { type: array, items: { type: string } }
+        rulesVersion: { type: string }
+    KnowledgeOperationRequest:
+      type: object
+      required: [requestId, expectedVersion]
+      properties:
+        requestId: { type: string }
+        expectedVersion: { type: integer, format: int64 }
+  responses:
+    Success:
+      description: 请求成功；业务结果位于统一 ApiResponse.data。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiResponse' }
+    InvalidRequest:
+      description: 请求字段、参数、状态或契约版本无效。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiResponse' }
+    Unauthorized:
+      description: 未登录、内部签名上下文缺失或失效。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiResponse' }
+    Forbidden:
+      description: 未获精确操作权限或可信资源范围不匹配。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiResponse' }
+    NotFound:
+      description: 资源不存在或调用者无权读取该资源。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiResponse' }
+    Conflict:
+      description: expectedVersion 冲突、状态冲突或来源修订已变化。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiResponse' }
+    Unavailable:
+      description: 数据库或授权来源不可用；客户端可提示稍后重试。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiResponse' }

@@ -97,7 +97,7 @@ class AgentAuthorizationConsumerRefreshTest {
             assertThat(permissions.canUseLocalTool("42", "milvusKnowledgeSearch")).isTrue();
             assertThat(permissions.canUseLocalTool("42", "freeLocalTool")).isTrue();
             assertThat(permissions.canUseLocalTool("42", "unknownTool")).isFalse();
-            assertThat(permissions.canInvokeMcpTool("42", "business-mcp-server", "search")).isFalse();
+            assertThat(permissions.canInvokeMcpTool("42", "marketing-mcp-server", "createMarketingContentDraft")).isFalse();
             assertThatThrownBy(() -> permissions.canUseLocalTool("43", "milvusKnowledgeSearch"))
                     .isInstanceOf(AuthzException.class)
                     .extracting(failure -> ((AuthzException) failure).code())

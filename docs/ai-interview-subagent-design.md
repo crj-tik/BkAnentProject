@@ -1,7 +1,9 @@
 # AI 深访 subAgent 设计方案（interview-service）
 
+> 历史设计材料。`interview-service` 已实施并继续保留，逐字稿、访谈 session 和报告仍归访谈域；知识运营已合并至平台经营域，通过受限来源视图消费合格资产。当前服务与 API 以 `docs/current-architecture.md` 和 Nacos 活动模板为准。
+
 > 来源：S²访谈台（贝壳广州 AI 深访工作台 v12.0）功能提炼。
-> 落位：按本仓库「common-skill 技能基建 + A2A 子 Agent」架构设计，接入姿势对齐 `contract-service` 样板。
+> 落位：按本仓库「common-skill 技能基建 + A2A 子 Agent」架构设计；当前访谈实现与 `interview-service` 自身配置为准。
 > 实施追踪：openspec change [create-interview-subagent](../openspec/changes/archive/2026-10-10-create-interview-subagent/proposal.md)（P1 已实施）。
 > 范围：只提炼访谈业务功能。CAS 单点登录、签名会话、邀请码、IP 限速、花名册权限树等鉴权能力**不在本设计内**（由平台统一承担，身份经 A2A 可信传递）。
 

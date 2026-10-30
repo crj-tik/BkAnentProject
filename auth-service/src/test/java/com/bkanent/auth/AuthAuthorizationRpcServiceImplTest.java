@@ -31,7 +31,8 @@ import static org.mockito.Mockito.*;
 class AuthAuthorizationRpcServiceImplTest {
     private static final String TOKEN = "synthetic-access";
     private static final String HASH = "a".repeat(64);
-    private static final List<String> PERMISSIONS = List.of("contract.seal.own", "interview.read");
+    private static final List<String> PERMISSIONS = List.of(
+            "agent.workflow.invoke.platform-operations.analytics", "interview.read");
     private static final List<String> BASELINE_OPERATIONS = AuthzOperationPolicy.contextOperations(List.of());
 
     @Test
@@ -40,9 +41,9 @@ class AuthAuthorizationRpcServiceImplTest {
         var response = f.service.resolveRequestAuthorization(TOKEN, f.request, f.entryProof());
         AuthzSignature.verifyResponse(response, "agent-service", f.request.requestId(),
                 AuthzCanonicalHash.resolveRequestHash(TOKEN, f.request), f.request.nonce(), f.authorityKeys(), f.clock.instant());
-        assertThat(response.snapshot().permissions()).containsExactly("contract.seal.own");
+        assertThat(response.snapshot().permissions()).containsExactly("agent.workflow.invoke.platform-operations.analytics");
         assertThat(response.context().allowedOperations()).containsAll(BASELINE_OPERATIONS)
-                .contains("contract.seal.own");
+                .contains("agent.workflow.invoke.platform-operations.analytics");
         assertThat(response.context().runHardDeadlineEpochSecond()).isLessThanOrEqualTo(f.now + 300);
         verify(f.tokens, times(1)).parse(TOKEN);
         verify(f.repository, times(1)).snapshot(eq(7L), any(Instant.class));
@@ -118,7 +119,7 @@ class AuthAuthorizationRpcServiceImplTest {
         AuthzResponse entry = f.entry();
         AuthorizationSession session = f.session(entry);
         f.clock.advance(10);
-        f.version(2, 1, List.of("settlement.batch.create.all", "interview.read", "memory.read"), null, false);
+        f.version(2, 1, List.of("agent.workflow.invoke.platform-operations.review", "interview.read", "memory.read"), null, false);
         session.onNotification("7", 2, 1);
         assertThat(session.state()).isEqualTo(AuthorizationLocalState.DIRTY);
         assertThatThrownBy(() -> f.delegate(entry.context(), List.of("interview.read"), 20))
@@ -134,16 +135,16 @@ class AuthAuthorizationRpcServiceImplTest {
         assertThat(session.context().issuedAtEpochSecond()).isEqualTo(f.now + 10);
         assertThat(session.context().runHardDeadlineEpochSecond()).isEqualTo(f.now + 300);
         assertThat(session.context().expiresAtEpochSecond()).isEqualTo(f.now + 300);
-        assertThat(refreshed.snapshot().permissions()).containsExactly("settlement.batch.create.all");
+        assertThat(refreshed.snapshot().permissions()).containsExactly("agent.workflow.invoke.platform-operations.review");
         assertThat(refreshed.context().allowedOperations()).containsExactlyElementsOf(BASELINE_OPERATIONS);
         assertThat(refreshed.freshness().checkedAtEpochSecond()).isEqualTo(f.now + 10);
         assertThat(refreshed.freshness().notAfterEpochSecond()).isEqualTo(f.now + 40);
         var child = f.delegate(session.context(), List.of("interview.read"), 21);
         assertThat(child.context().runHardDeadlineEpochSecond()).isEqualTo(f.now + 300);
         assertThat(child.context().expiresAtEpochSecond()).isLessThanOrEqualTo(session.context().expiresAtEpochSecond());
-        assertThatThrownBy(() -> f.delegate(session.context(), List.of("contract.seal.own"), 22))
+        assertThatThrownBy(() -> f.delegate(session.context(), List.of("agent.workflow.invoke.platform-operations.analytics"), 22))
                 .isInstanceOf(AuthzException.class).hasMessage("PERMISSION_DENIED");
-        assertThatThrownBy(() -> session.requirePermission("contract.seal.own"))
+        assertThatThrownBy(() -> session.requirePermission("agent.workflow.invoke.platform-operations.analytics"))
                 .isInstanceOf(AuthzException.class).hasMessage("PERMISSION_DENIED");
     }
 
@@ -347,13 +348,13 @@ class AuthAuthorizationRpcServiceImplTest {
         AuthzResponse entry = f.entry();
         AuthorizationSession session = f.session(entry);
         f.clock.advance(10);
-        f.version(2, 1, List.of("settlement.batch.create.all", "interview.read", "memory.read"), null, true);
+        f.version(2, 1, List.of("agent.workflow.invoke.platform-operations.review", "interview.read", "memory.read"), null, true);
         AuthzResponse restricted = f.refresh(entry.context(), 10);
         session.refresh(restricted, correlation(restricted));
         assertThat(restricted.snapshot().businessAdmin()).isTrue();
         assertThat(session.allowedOperations()).containsExactlyElementsOf(BASELINE_OPERATIONS);
         f.clock.advance(10);
-        f.version(3, 1, List.of("contract.seal.own", "interview.read", "memory.read"), null, true);
+        f.version(3, 1, List.of("agent.workflow.invoke.platform-operations.analytics", "interview.read", "memory.read"), null, true);
         AuthzResponse regranted = f.refresh(session.context(), 11);
         session.refresh(regranted, correlation(regranted));
         assertThat(session.allowedOperations()).containsExactlyElementsOf(BASELINE_OPERATIONS);
@@ -363,7 +364,7 @@ class AuthAuthorizationRpcServiceImplTest {
         session.refresh(empty, correlation(empty));
         assertThat(session.state()).isEqualTo(AuthorizationLocalState.VALID);
         assertThat(session.allowedOperations()).containsExactlyElementsOf(BASELINE_OPERATIONS);
-        assertThatThrownBy(() -> session.requirePermission("settlement.batch.create.all"))
+        assertThatThrownBy(() -> session.requirePermission("agent.workflow.invoke.platform-operations.review"))
                 .isInstanceOf(AuthzException.class).hasMessage("PERMISSION_DENIED");
     }
 
@@ -413,7 +414,7 @@ class AuthAuthorizationRpcServiceImplTest {
         assertThat(session.context().permissionRevision()).isEqualTo(3);
         assertThat(session.allowedOperations()).containsExactlyElementsOf(BASELINE_OPERATIONS);
         assertThat(session.context().runHardDeadlineEpochSecond()).isEqualTo(f.now + 300);
-        assertThatThrownBy(() -> session.requirePermission("contract.seal.own"))
+        assertThatThrownBy(() -> session.requirePermission("agent.workflow.invoke.platform-operations.analytics"))
                 .isInstanceOf(AuthzException.class).hasMessage("PERMISSION_DENIED");
     }
 

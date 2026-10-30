@@ -26,7 +26,7 @@ class NacosSkillCardMapperTest {
         var adapter = new SkillAwareNacosOperationService(service, nacos, server, registry, () -> maintainer);
         var raw = new com.fasterxml.jackson.databind.ObjectMapper().convertValue(NacosSkillCardMapper.toNacos(card()),
                 com.alibaba.nacos.api.ai.model.a2a.AgentCardDetailInfo.class);
-        when(service.getAgentCard("listing-agent", "1", "URL")).thenReturn(raw);
+        when(service.getAgentCard("listing-agent", "1", "SERVICE")).thenReturn(raw);
         adapter.republishAgent(card());
         verifyNoInteractions(maintainer);
         raw.setSkills(List.of());

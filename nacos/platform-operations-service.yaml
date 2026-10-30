@@ -30,7 +30,7 @@ spring:
         base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
         completions-path: /chat/completions
         options:
-          model: ${TRADE_AGENT_MODEL:gpt-5.6-terra}
+          model: gpt-5.6-terra
           temperature: 0.2
     alibaba:
       a2a:
@@ -111,35 +111,6 @@ mybatis-plus:
       logic-delete-value: 1
       logic-not-delete-value: 0
 
-business:
-  authorization:
-    enabled: ${PLATFORM_OPERATIONS_AUTHORIZATION_ENABLED:true}
-    audience: platform-operations-service
-    authority-public-keys:
-      auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
-  ranking:
-    use-redis: true
-  redis:
-    enabled: ${BUSINESS_REDIS_ENABLED:true}
-    ranking-key-prefix: ${BUSINESS_RANKING_KEY_PREFIX:business:ranking:}
-    ranking-ttl-hours: ${BUSINESS_RANKING_TTL_HOURS:24}
-
-trade:
-  agent:
-    model: ${TRADE_AGENT_MODEL:gpt-5.6-terra}
-    temperature: ${TRADE_AGENT_TEMPERATURE:0.2}
-    max-tokens: ${TRADE_AGENT_MAX_TOKENS:4000}
-    system-prompt: |
-      You are a trade feasibility and risk analysis agent for a real estate brokerage platform.
-      Your responsibilities:
-      1. Analyze trade requests based on available business data.
-      2. Assess risk levels (low, medium, high) using KPI data, listing turnover, agent workload, and store dashboard metrics.
-      3. Return a structured JSON assessment with: decision (PROCEED / MANUAL_REVIEW / RISK_ALERT / REJECT), riskLevel, riskFactors (list), supportingData (object), recommendedActions (list), and a summary paragraph.
-      Always call available tools to get real data before making a judgment.
-      If you cannot determine the answer with confidence, set decision to MANUAL_REVIEW.
-      The top-level JSON must also include contentType="trade", summary (string), and nextHints (string array; use [] when no next agent is needed).
-      Return only the JSON object without Markdown fences, internal IDs, reasoning, tool arguments, or extra prose.
-
 a2a:
   auth:
     response-key-id: ${AUTH_SERVICE_IDENTITY_KEY_ID:auth-service-current}
@@ -184,23 +155,46 @@ knowledge:
     authority-public-keys:
       auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
 
-business-review:
-  authorization:
-    enabled: ${PLATFORM_OPERATIONS_AUTHORIZATION_ENABLED:true}
-    audience: platform-operations-service
-    max-body-bytes: 1048576
-    authority-public-keys:
-      auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
-  sources:
-    mode: ${BUSINESS_REVIEW_SOURCE_MODE:http}
-    listing-base-url: ${BUSINESS_REVIEW_LISTING_BASE_URL:http://listing-master-service:9004}
-    connect-timeout-ms: 2000
-    read-timeout-ms: 5000
-  agent:
-    system-prompt: |
-      你是门店经营复盘助手。只依据 Memory 已授权上下文和明确提供的来源事实形成待审核草稿。
-      将事实、假设、资料缺口和建议动作分开表达；缺少客户反馈或价格依据时明确说明，不得补造。
-      不得确认计划、回写动作、改变房源/客户/成交状态或宣称业绩因果增长。所有动作由用户通过业务 API 明确触发。
+platform-operations:
+  analytics:
+    authorization:
+      enabled: ${PLATFORM_OPERATIONS_AUTHORIZATION_ENABLED:true}
+      audience: platform-operations-service
+      authority-public-keys:
+        auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+    ranking:
+      use-redis: true
+      key-prefix: "platform-operations:ranking:"
+    redis:
+      enabled: true
+      ranking-key-prefix: "platform-operations:ranking:"
+      ranking-ttl-hours: 24
+    agent:
+      model: gpt-5.6-terra
+      temperature: 0.2
+      max-tokens: 4000
+      system-prompt: |
+        你是平台经营分析助手。使用可用的经营工具获取指定月份或日期的实际记录，再总结 KPI、员工日工作量、门店仪表盘、房源流转效率和排行榜。
+        仅陈述工具返回的字段与统计口径，不虚构同比、环比、目标、原因或未提供的指标。数据为空时明确说明当前没有记录。
+        storeName、scope 等筛选值必须来自已验证的授权上下文或用户明确授权的查询范围，不得把用户输入当成身份授权。
+        返回简洁、可核验的结构化结论，并区分数据事实与建议。
+  review:
+    authorization:
+      enabled: ${PLATFORM_OPERATIONS_AUTHORIZATION_ENABLED:true}
+      audience: platform-operations-service
+      max-body-bytes: 1048576
+      authority-public-keys:
+        auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+    sources:
+      mode: ${PLATFORM_OPERATIONS_SOURCE_MODE:http}
+      listing-base-url: ${PLATFORM_OPERATIONS_LISTING_BASE_URL:http://listing-master-service:9004}
+      connect-timeout-ms: 2000
+      read-timeout-ms: 5000
+    agent:
+      system-prompt: |
+        你是门店经营复盘助手。只依据 Memory 已授权上下文和明确提供的来源事实形成待审核草稿。
+        将事实、假设、资料缺口和建议动作分开表达；缺少客户反馈或价格依据时明确说明，不得补造。
+        不得确认计划、回写动作、改变房源/客户/成交状态或宣称业绩因果增长。所有动作由用户通过业务 API 明确触发。
 
 mcp:
   authorization:

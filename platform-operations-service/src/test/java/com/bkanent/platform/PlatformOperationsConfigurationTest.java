@@ -1,6 +1,6 @@
 package com.bkanent.platform;
 
-import com.bkanent.business.config.BusinessAuthorizationProperties;
+import com.bkanent.business.config.AnalyticsAuthorizationProperties;
 import com.bkanent.businessreview.security.BusinessReviewAuthorizationProperties;
 import com.bkanent.knowledge.config.KnowledgeAuthorizationProperties;
 import com.bkanent.knowledge.config.KnowledgeDataSourceProperties;
@@ -38,21 +38,39 @@ class PlatformOperationsConfigurationTest {
         assertThat(databases.getSource().getUsername()).isEqualTo("source-test");
         assertThat(databases.getPrimary().getUrl()).contains("/bk_platform_operations?");
         assertThat(databases.getSource().getUrl()).contains("/bk_platform_operations?");
-        var business = binder.bind("business.authorization", Bindable.of(BusinessAuthorizationProperties.class)).orElseThrow(IllegalStateException::new);
-        var review = binder.bind("business-review.authorization", Bindable.of(BusinessReviewAuthorizationProperties.class)).orElseThrow(IllegalStateException::new);
+        var analytics = binder.bind("platform-operations.analytics.authorization", Bindable.of(AnalyticsAuthorizationProperties.class)).orElseThrow(IllegalStateException::new);
+        var review = binder.bind("platform-operations.review.authorization", Bindable.of(BusinessReviewAuthorizationProperties.class)).orElseThrow(IllegalStateException::new);
         var knowledge = binder.bind("knowledge.authorization", Bindable.of(KnowledgeAuthorizationProperties.class)).orElseThrow(IllegalStateException::new);
-        assertThat(business.isEnabled()).isTrue();
+        assertThat(analytics.isEnabled()).isTrue();
         assertThat(review.isEnabled()).isTrue();
         assertThat(knowledge.isEnabled()).isTrue();
-        assertThat(business.getAudience()).isEqualTo("platform-operations-service");
+        assertThat(analytics.getAudience()).isEqualTo("platform-operations-service");
         assertThat(review.getAudience()).isEqualTo("platform-operations-service");
         assertThat(knowledge.getAudience()).isEqualTo("platform-operations-service");
-        assertThat(business.getAuthorityPublicKeys()).containsEntry("auth-service-current", "test-public-key");
+        assertThat(analytics.getAuthorityPublicKeys()).containsEntry("auth-service-current", "test-public-key");
         assertThat(review.getAuthorityPublicKeys()).containsEntry("auth-service-current", "test-public-key");
         assertThat(knowledge.getAuthorityPublicKeys()).containsEntry("auth-service-current", "test-public-key");
         assertThat(environment.getProperty("spring.ai.alibaba.a2a.server.card.name")).isEqualTo("platform-operations-agent");
         assertThat(environment.getProperty("spring.ai.mcp.server.enabled")).isEqualTo("false");
-        assertThat(environment.getProperty("business-review.sources.knowledge-base-url")).isNull();
+        assertThat(environment.getProperty("platform-operations.review.sources.mode")).isEqualTo("http");
+        assertThat(environment.getProperty("platform-operations.review.sources.listing-base-url"))
+                .isEqualTo("http://listing-master-service:9004");
+        assertThat(environment.getProperty("business-review.sources.mode")).isNull();
+        assertThat(environment.getProperty("platform-operations.review.sources.knowledge-base-url")).isNull();
         assertThat(environment.getProperty("service.readiness.endpoints.memory")).isEqualTo("http://memory-service:9011");
+    }
+
+    @Test
+    void deploymentNoLongerRequiresSeparateBusinessReviewOrKnowledgeServices() throws Exception {
+        var root = Path.of(System.getProperty("maven.multiModuleProjectDirectory"));
+        var initialization = java.nio.file.Files.readString(root.resolve("scripts/deploy/init-environment.sh"));
+        assertThat(initialization).contains("platform-operations-service.yaml")
+                .doesNotContain("business-service.yaml", "business-review-service.yaml", "knowledge-service.yaml");
+        var publish = java.nio.file.Files.readString(root.resolve("scripts/deploy/publish-nacos.py"));
+        assertThat(publish).contains("platform-operations-service.yaml")
+                .doesNotContain("business-review-service.yaml", "knowledge-service.yaml");
+        var compose = java.nio.file.Files.readString(root.resolve("docker-compose.yml"));
+        assertThat(compose).contains("platform-operations-service:")
+                .doesNotContain("  business-service:", "  business-review-service:", "  knowledge-service:");
     }
 }

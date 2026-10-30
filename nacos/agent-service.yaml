@@ -37,20 +37,17 @@ spring:
         request-timeout: ${AGENT_MCP_REQUEST_TIMEOUT:30s}
         initialization-timeout: ${AGENT_MCP_INITIALIZATION_TIMEOUT:20s}
         connections:
-          business-mcp-server:
-            url: ${BUSINESS_MCP_ENDPOINT:http://10.117.102.54:9010/mcp}
-            type: STREAMABLE
           marketing-mcp-server:
-            url: ${MARKETING_MCP_ENDPOINT:http://10.117.102.54:9008/mcp}
+            url: ${MARKETING_MCP_ENDPOINT:http://marketing-content-service:9008/mcp}
             type: STREAMABLE
           notification-mcp-server:
-            url: ${NOTIFICATION_MCP_ENDPOINT:http://10.117.102.54:9003/mcp}
+            url: ${NOTIFICATION_MCP_ENDPOINT:http://notification-service:9003/mcp}
             type: STREAMABLE
           media-mcp-server:
-            url: ${MEDIA_MCP_ENDPOINT:http://10.117.102.54:9007/mcp}
+            url: ${MEDIA_MCP_ENDPOINT:http://media-worker-service:9007/mcp}
             type: STREAMABLE
           interview-mcp-server:
-            url: ${INTERVIEW_MCP_ENDPOINT:http://10.117.102.54:9014/mcp}
+            url: ${INTERVIEW_MCP_ENDPOINT:http://interview-service:9014/mcp}
             type: STREAMABLE
 
 management:
@@ -270,23 +267,6 @@ agent:
         supports-async-task: true
         input-modes: [text, application/json]
         output-modes: [text, application/json]
-      knowledge-agent:
-        agent-id: knowledge-agent
-        name: knowledge-agent
-        description: Knowledge candidate generation and task-status reporting
-        version: 1.0.0
-        runtime-provider: official
-        service-id: knowledge-service
-        base-url: ${KNOWLEDGE_SERVICE_BASE_URL:http://knowledge-service:9015}
-        agent-card-path: /.well-known/agent.json
-        a2a-path: /a2a
-        supported-skills: [knowledge-generation, knowledge-status]
-        supported-domains: [knowledge]
-        supports-streaming: true
-        supports-async-task: true
-        input-modes: [text, application/json]
-        output-modes: [text, application/json]
-
 rocketmq:
   name-server: ${ROCKETMQ_NAME_SERVER:10.117.102.54:9876}
   producer:

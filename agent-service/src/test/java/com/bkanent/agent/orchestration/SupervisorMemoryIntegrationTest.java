@@ -631,7 +631,7 @@ class SupervisorMemoryIntegrationTest {
 
         @SuppressWarnings("unchecked") Fixture() throws Exception {
             Path root = Path.of(System.getProperty("maven.multiModuleProjectDirectory"));
-            String bootstrap = Files.readString(root.resolve("sql/mysql-init.sql"));
+            String bootstrap = Files.readString(root.resolve("sql/migrations/20261013_mysql_init_bootstrap.sql"));
             int start = bootstrap.indexOf("CREATE TABLE IF NOT EXISTS agent_workflow_checkpoint (");
             int end = bootstrap.indexOf(";", start);
             String checkpointDdl = bootstrap.substring(start, end + 1).replace("ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", "");

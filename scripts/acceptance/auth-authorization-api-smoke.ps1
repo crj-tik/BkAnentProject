@@ -220,6 +220,20 @@ pm.test('refreshed access token authenticates the same actor', function () {
     $refreshedMe = Invoke-PostmanRequest 'GET' "$BaseUrl/auth/me" @($bearerHeader) $null $postmanEnvironmentPath $refreshedMeAssertion
     Assert-PostmanResult $refreshedMe 200 'refreshed /auth/me'
 
+    $platformOperationsAssertion = @'
+pm.test('broker without platform analytics permission is forbidden', function () {
+  const body = pm.response.json();
+  pm.expect(pm.response.code).to.eql(403);
+  pm.expect(body.success).to.eql(false);
+  pm.expect(body.code).to.eql('PERMISSION_DENIED');
+});
+'@ -replace "`r|`n", ' '
+    $platformOperations = Invoke-PostmanRequest 'GET' "$BaseUrl/platform-operations/analytics/kpis/monthly?month=2026-10" @($bearerHeader) $null $postmanEnvironmentPath $platformOperationsAssertion
+    Assert-PostmanResult $platformOperations 403 'broker platform analytics denial'
+    if ($platformOperations.ApiCode -ne 'PERMISSION_DENIED') {
+        throw 'Platform Operations did not reject the broker with the expected permission error.'
+    }
+
     $agentAssertion = @'
 pm.test('Agent accepts a signed broker request with workflow read permission', function () {
   const body = pm.response.json();
@@ -265,9 +279,9 @@ pm.test('logout revokes the access token for subsequent requests', function () {
     $revoked = Invoke-PostmanRequest 'GET' "$BaseUrl/auth/me" @($bearerHeader) $null $postmanEnvironmentPath $revokedAssertion
     Assert-PostmanResult $revoked 401 'revoked access token'
 
-    $assertionTotal = $login.Total + $me.Total + $refresh.Total + $oldRefresh.Total + $refreshedMe.Total +
+    $assertionTotal = $login.Total + $me.Total + $refresh.Total + $oldRefresh.Total + $refreshedMe.Total + $platformOperations.Total +
             $agent.Total + $anonymous.Total + $substitution.Total + $logout.Total + $revoked.Total
-    Write-Output "Postman API acceptance passed: login $($login.Status), initial/refreshed /auth/me $($me.Status)/$($refreshedMe.Status), refresh/reuse $($refresh.Status)/$($oldRefresh.Status), Agent read $($agent.Status), spoof/substitution $($anonymous.Status)/$($substitution.Status), logout/revoked token $($logout.Status)/$($revoked.Status); $assertionTotal assertions passed."
+    Write-Output "Postman API acceptance passed: login $($login.Status), initial/refreshed /auth/me $($me.Status)/$($refreshedMe.Status), refresh/reuse $($refresh.Status)/$($oldRefresh.Status), Platform Operations broker denial $($platformOperations.Status), Agent read $($agent.Status), spoof/substitution $($anonymous.Status)/$($substitution.Status), logout/revoked token $($logout.Status)/$($revoked.Status); $assertionTotal assertions passed."
 }
 finally {
     foreach ($path in @($responsePath, $postmanEnvironmentPath, (Join-Path $privateDir 'nonsecret-probe.json'))) {
@@ -286,6 +300,7 @@ finally {
     $refresh = $null
     $oldRefresh = $null
     $refreshedMe = $null
+    $platformOperations = $null
     $agent = $null
     $anonymous = $null
     $substitution = $null

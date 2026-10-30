@@ -27,14 +27,14 @@ public final class VerifiedKnowledgeContext {
         String nonce = Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]);
         String hash = "0".repeat(64);
         var context = new AuthorizationContext(actorId, 1, 1, hash, operations,
-                "knowledge-service", "req-1", "run-1", "session-1", hash, hash, nonce,
+                "platform-operations-service", "req-1", "run-1", "session-1", hash, hash, nonce,
                 now - 1, now + 20, now + 21, identities, "Ed25519", "auth-current", null);
         var freshness = new AuthzFreshness(actorId, 1, 1, AuthorizationStatus.ACTIVE,
                 hash, now - 1, now + 10, nonce, "Ed25519", "auth-current", null);
-        var binding = new DelegationBinding("agent-service", "knowledge-service", actorId,
-                List.of("agent.workflow.invoke.knowledge"), "run-1", "task-1", "req-1", hash,
+        var binding = new DelegationBinding("agent-service", "platform-operations-service", actorId,
+                List.of("agent.workflow.invoke.platform-operations.knowledge"), "run-1", "task-1", "req-1", hash,
                 hash, nonce, now - 1, now + 10);
-        var proof = new CallerProof("agent-service", "knowledge-service", AuthzRpcOperation.VALIDATE_DELEGATION,
+        var proof = new CallerProof("agent-service", "platform-operations-service", AuthzRpcOperation.VALIDATE_DELEGATION,
                 "req-1", hash, nonce, now - 1, now + 10, "Ed25519", "agent-current", null);
         var request = new DelegatedAuthorizationRequest(context, freshness, binding, proof);
         return A2aCredentialContext.open(A2aCredentialContext.Lease.versioned(request, "message/send", null));

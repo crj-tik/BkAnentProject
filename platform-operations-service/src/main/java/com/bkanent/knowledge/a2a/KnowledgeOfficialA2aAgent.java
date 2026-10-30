@@ -36,8 +36,8 @@ public class KnowledgeOfficialA2aAgent {
         callbacks.add(new SkillTool(skillRegistry, DOMAIN));
         this.executionTools = List.copyOf(callbacks);
         this.reactAgent = ReactAgent.builder()
-                .name("knowledge-agent")
-                .description("Generates reviewed Knowledge candidates from permitted source IDs and reports task status only")
+                .name("platform-operations-knowledge")
+                .description("知识案例生成、审核、发布和撤回")
                 .model(chatModel)
                 .systemPrompt("Operate only on Knowledge case IDs, Interview asset IDs, revisions and task statuses. Never request, quote, repeat, summarize verbatim, or return transcript text. A tool response contains status only. Do not claim simulated or unknown evidence is real or verified. Knowledge publication always requires human review and a separately authorized publish action.")
                 .tools(callbacks)

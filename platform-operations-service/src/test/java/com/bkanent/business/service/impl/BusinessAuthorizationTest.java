@@ -1,7 +1,7 @@
 package com.bkanent.business.service.impl;
 
-import com.bkanent.business.config.BusinessRankingProperties;
-import com.bkanent.business.config.BusinessRedisProperties;
+import com.bkanent.business.config.AnalyticsRankingProperties;
+import com.bkanent.business.config.AnalyticsRedisProperties;
 import com.bkanent.business.converter.BusinessConverter;
 import com.bkanent.business.service.EmployeeDailyWorkloadService;
 import com.bkanent.business.service.KpiStatService;
@@ -42,7 +42,7 @@ class BusinessAuthorizationTest {
         service = new BusinessAnalyticsServiceImpl(kpiStatService,
                 mock(EmployeeDailyWorkloadService.class), mock(ListingTurnoverStatService.class),
                 mock(StoreDashboardSnapshotService.class), mock(BusinessConverter.class),
-                new BusinessRankingProperties(), new BusinessRedisProperties(), Optional.empty());
+                new AnalyticsRankingProperties(), new AnalyticsRedisProperties(), Optional.empty());
     }
 
     @Test
@@ -80,13 +80,13 @@ class BusinessAuthorizationTest {
         String nonce = Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]);
         String hash = "0".repeat(64);
         var context = new AuthorizationContext("1", 1, 1, hash, permissions,
-                "business-service", "req-1", "run-1", "session-1", hash, hash, nonce,
+                "platform-operations-service", "req-1", "run-1", "session-1", hash, hash, nonce,
                 now - 1, now + 20, now + 21, Map.of(), "Ed25519", "auth-current", null);
         var freshness = new AuthzFreshness("1", 1, 1, AuthorizationStatus.ACTIVE,
                 hash, now - 1, now + 10, nonce, "Ed25519", "auth-current", null);
-        var binding = new DelegationBinding("agent-service", "business-service", "1",
+        var binding = new DelegationBinding("agent-service", "platform-operations-service", "1",
                 List.of(operation), "run-1", null, "req-1", hash, hash, nonce, now - 1, now + 10);
-        return new McpAuthorizationContract.Verified("1", "agent-service", "business-service",
+        return new McpAuthorizationContract.Verified("1", "agent-service", "platform-operations-service",
                 operation, "req-1", "queryMonthlyKpis", context, freshness, binding);
     }
 }

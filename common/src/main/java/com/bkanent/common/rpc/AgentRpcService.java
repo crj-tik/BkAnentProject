@@ -1,6 +1,5 @@
 package com.bkanent.common.rpc;
 
-import com.bkanent.common.model.KpiSummaryDTO;
 import com.bkanent.common.model.PublishRequest;
 import com.bkanent.common.marketing.campaign.MarketingContentDraftResponse;
 
@@ -13,10 +12,5 @@ public interface AgentRpcService {
 
     /** Creates DRAFT marketing content; publication must use the campaign plan and Supervisor approval flow. */
     List<MarketingContentDraftResponse> createMarketingDraft(PublishRequest request);
-
-    /**
-     * 业务方法：generateKpiNarrative。
-     */
-    String generateKpiNarrative(List<KpiSummaryDTO> kpis);
 
 }

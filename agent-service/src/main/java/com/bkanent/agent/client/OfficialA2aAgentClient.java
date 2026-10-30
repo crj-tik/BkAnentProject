@@ -143,12 +143,10 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
     static String audienceFor(RegisteredAgentDescriptor descriptor) {
         return switch (descriptor.agentId()) {
             case "listing-agent" -> "listing-master-service";
-            case "trade-agent" -> "business-service";
             case "marketing-agent" -> "marketing-content-service";
             case "notification-agent" -> "notification-service";
             case "media-agent" -> "media-worker-service";
             case "interview-agent" -> "interview-service";
-            case "knowledge-agent" -> "knowledge-service";
             case "platform-operations-agent" -> "platform-operations-service";
             default -> throw new com.bkanent.common.rag.RagException(com.bkanent.common.rag.RagErrorCode.FORBIDDEN);
         };
