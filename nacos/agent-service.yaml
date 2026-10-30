@@ -1,3 +1,6 @@
+server:
+  max-http-request-header-size: 64KB
+
 spring:
   datasource:
     url: jdbc:mysql://${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}/${MYSQL_DB_AGENT:bk_agent}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
@@ -125,9 +128,7 @@ agent:
     capability-permissions:
       "[local:milvusKnowledgeSearch]": agent.rag.search
       "[a2a:listing-agent]": listing.read
-      "[a2a:knowledge-agent]": agent.workflow.invoke.knowledge
-      "[a2a:business-review-agent]": agent.workflow.invoke.business-review
-      "[a2a:platform-operations-agent]": agent.workflow.invoke.platform-operations
+      "[a2a:platform-operations-agent]": agent.chat.use
     # Only exact local capability IDs belong here; every call still needs a signed actor and bound run.
     baseline-capabilities: ${AGENT_AUTHORIZATION_BASELINE_CAPABILITIES:}
     # Keep user-delegated MCP destinations closed until static streamable-http connections exist.

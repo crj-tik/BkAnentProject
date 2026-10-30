@@ -32,49 +32,49 @@ public class BusinessController {
     }
 
     @GetMapping("/kpis/monthly")
-    public ApiResponse<List<KpiSummaryDTO>> monthlyKpis(@RequestParam String month) {
+    public ApiResponse<List<KpiSummaryDTO>> monthlyKpis(@RequestParam("month") String month) {
         return ApiResponse.ok(businessAnalyticsService.listMonthlyKpis(month));
     }
 
     @GetMapping("/workloads/daily")
-    public ApiResponse<List<EmployeeDailyWorkloadResponse>> dailyWorkloads(@RequestParam String statDate) {
+    public ApiResponse<List<EmployeeDailyWorkloadResponse>> dailyWorkloads(@RequestParam("statDate") String statDate) {
         return ApiResponse.ok(businessAnalyticsService.listDailyWorkloads(statDate));
     }
 
     @GetMapping("/kpis/assessments")
-    public ApiResponse<List<KpiAssessmentResponse>> assessments(@RequestParam String month) {
+    public ApiResponse<List<KpiAssessmentResponse>> assessments(@RequestParam("month") String month) {
         return ApiResponse.ok(businessAnalyticsService.calculateKpiAssessments(month));
     }
 
     @GetMapping("/rankings")
-    public ApiResponse<List<RankingItemResponse>> rankings(@RequestParam String month,
-                                                           @RequestParam String scope,
-                                                           @RequestParam(defaultValue = "10") int topN) {
+    public ApiResponse<List<RankingItemResponse>> rankings(@RequestParam("month") String month,
+                                                           @RequestParam("scope") String scope,
+                                                           @RequestParam(name = "topN", defaultValue = "10") int topN) {
         return ApiResponse.ok(businessAnalyticsService.listRankings(month, scope, topN));
     }
 
     @PostMapping("/rankings/rebuild")
-    public ApiResponse<Void> rebuildRankings(@RequestParam String month) {
+    public ApiResponse<Void> rebuildRankings(@RequestParam("month") String month) {
         businessAnalyticsService.rebuildRanking(month);
         return ApiResponse.ok(null);
     }
 
     @GetMapping("/listing-turnover-report")
-    public ApiResponse<List<ListingTurnoverReportResponse>> turnoverReports(@RequestParam String month) {
+    public ApiResponse<List<ListingTurnoverReportResponse>> turnoverReports(@RequestParam("month") String month) {
         return ApiResponse.ok(businessAnalyticsService.listTurnoverReports(month));
     }
 
     @GetMapping("/store-dashboard")
-    public ApiResponse<StoreDashboardResponse> storeDashboard(@RequestParam String storeName) {
+    public ApiResponse<StoreDashboardResponse> storeDashboard(@RequestParam("storeName") String storeName) {
         return ApiResponse.ok(businessAnalyticsService.getStoreDashboard(storeName));
     }
 
     @GetMapping("/big-dashboard")
-    public ApiResponse<BigDataDashboardResponse> bigDashboard(@RequestParam String month,
-                                                              @RequestParam String startDate,
-                                                              @RequestParam String endDate,
-                                                              @RequestParam(required = false) String regionName,
-                                                              @RequestParam(defaultValue = "5") int topN) {
+    public ApiResponse<BigDataDashboardResponse> bigDashboard(@RequestParam("month") String month,
+                                                              @RequestParam("startDate") String startDate,
+                                                              @RequestParam("endDate") String endDate,
+                                                              @RequestParam(name = "regionName", required = false) String regionName,
+                                                              @RequestParam(name = "topN", defaultValue = "5") int topN) {
         return ApiResponse.ok(businessAnalyticsService.getBigDataDashboard(month, startDate, endDate, regionName, topN));
     }
 

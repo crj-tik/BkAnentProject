@@ -1,3 +1,6 @@
+server:
+  max-http-request-header-size: 64KB
+
 spring:
   datasource:
     url: jdbc:mysql://${MYSQL_HOST:10.117.102.54}:${MYSQL_PORT:3306}/${MYSQL_DB_PLATFORM_OPERATIONS:bk_platform_operations}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai

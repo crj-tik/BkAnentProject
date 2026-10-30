@@ -1,5 +1,6 @@
 server:
   port: 9010
+  max-http-request-header-size: 64KB
 
 bk:
   nacos:

@@ -1484,3 +1484,13 @@
 **根因**：服务公钥、信标操作权限与 Memory 私域分别校验，单独配置某一服务不等于其他验证方已接入；旧服务退出运行后不需要保留默认访问许可。
 
 **代码位置**：`nacos/auth-service.yaml`、`nacos/memory-service.yaml` 及对应服务的 `application.yml`；关联 KI-225、KI-226。
+
+## LR-169 平台经营 A2A 使用基线入口与分支权限分层
+
+**结论**：Agent 到平台经营 A2A 的通用调用标识使用基线 `agent.chat.use`；分析、复盘、知识仍由请求选择的精确 `platformCapability` 映射为三个独立的非基线操作，并在 Agent 发起前与平台经营路由器内分别校验。Auth 的 Agent `BIND_EXECUTION` ACL 显式登记当前活动权限目录，入口权限仍由 Auth 的原始签名上下文确定。
+
+**根因**：单一 Agent 的 transport capability 只有一个静态映射；若将其映射到某个业务分支权限，其他分支会被错误要求同时拥有该权限。用基线操作表达“允许进入统一 Agent”后，分支检查仍必须绑定到 Auth 签发的用户 scope，不能把 metadata 当授权来源。Auth 执行绑定 caller ACL 又需覆盖入口中实际存在的操作集合，因此使用可审阅的逐项权限目录而不是通配符。
+
+**代码位置**：`agent-service/src/main/resources/application.yml`、`nacos/agent-service.yaml`、`nacos/auth-service.yaml`、`OfficialA2aAgentClient`、`PlatformAgentRouter`；迁移 `20261030_retire_platform_legacy_authorization.sql` 退役旧入口权限。
+
+**关联**：LR-160、LR-165；KI-233；change `consolidate-platform-operations` 任务 2.5、3.3、4.1。

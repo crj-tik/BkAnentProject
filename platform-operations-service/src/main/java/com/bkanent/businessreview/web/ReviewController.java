@@ -22,9 +22,9 @@ public class ReviewController {
     }
 
     @GetMapping
-    public ApiResponse<CursorPage<ReviewMatter>> list(@RequestParam Long storeId,
-                                                       @RequestParam(required = false) String cursor,
-                                                       @RequestParam(defaultValue = "20") int limit) {
+    public ApiResponse<CursorPage<ReviewMatter>> list(@RequestParam("storeId") Long storeId,
+                                                       @RequestParam(name = "cursor", required = false) String cursor,
+                                                       @RequestParam(name = "limit", defaultValue = "20") int limit) {
         return ApiResponse.ok(service.list(storeId, cursor, limit));
     }
 

@@ -32,6 +32,7 @@ EXPECTED_PLATFORM_MIGRATIONS = {
     ("platform-operations-view-owner-20261029-v1", "bk_platform_operations", "sql/migrations/20261029_platform_operations_view_owner.sql"),
     ("platform-operations-authorization-20261029-v1", "bk_auth", "sql/migrations/20261029_platform_operations_authorization.sql"),
     ("retire-contract-settlement-databases-20261030-v1", "bk_auth", "sql/migrations/20261030_retire_contract_settlement_databases.sql"),
+    ("retire-platform-legacy-authorization-20261030-v1", "bk_auth", "sql/migrations/20261030_retire_platform_legacy_authorization.sql"),
 }
 
 BASELINE_PERMISSION_CODES = {
