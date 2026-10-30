@@ -8,8 +8,6 @@ public final class AgentMcpNames {
     private static final java.util.Map<String, String> FIRST_PARTY_AUDIENCES = java.util.Map.of(
             "business-mcp-server", "business-service",
             "marketing-mcp-server", "marketing-content-service",
-            "contract-mcp-server", "contract-service",
-            "settlement-mcp-server", "settlement-service",
             "notification-mcp-server", "notification-service",
             "media-mcp-server", "media-worker-service",
             "interview-mcp-server", "interview-service");

@@ -40,12 +40,6 @@ spring:
           marketing-mcp-server:
             url: ${MARKETING_MCP_ENDPOINT:http://10.117.102.54:9008/mcp}
             type: STREAMABLE
-          contract-mcp-server:
-            url: ${CONTRACT_MCP_ENDPOINT:http://10.117.102.54:9012/mcp}
-            type: STREAMABLE
-          settlement-mcp-server:
-            url: ${SETTLEMENT_MCP_ENDPOINT:http://10.117.102.54:9013/mcp}
-            type: STREAMABLE
           notification-mcp-server:
             url: ${NOTIFICATION_MCP_ENDPOINT:http://10.117.102.54:9003/mcp}
             type: STREAMABLE

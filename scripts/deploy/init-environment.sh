@@ -208,7 +208,7 @@ if [ "$PROFILE" = rag ]; then
   required_configs="auth-service.yaml rag-service.yaml listing-master-service.yaml memory-service.yaml agent-service.yaml customer-service.yaml marketing-content-service.yaml"
 fi
 if [ "$PROFILE" = "full" ]; then
-  required_configs="$required_configs agent-service.yaml business-service.yaml business-review-service.yaml contract-service.yaml customer-service.yaml interview-service.yaml knowledge-service.yaml listing-master-service.yaml marketing-content-service.yaml media-worker-service.yaml memory-service.yaml notification-service.yaml settlement-service.yaml"
+  required_configs="$required_configs agent-service.yaml business-service.yaml business-review-service.yaml customer-service.yaml interview-service.yaml knowledge-service.yaml listing-master-service.yaml marketing-content-service.yaml media-worker-service.yaml memory-service.yaml notification-service.yaml"
 fi
 config_missing=0
 for cfg in $required_configs; do

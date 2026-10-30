@@ -568,8 +568,6 @@ services:
       KNOWLEDGE_SERVICE_BASE_URL: http://knowledge-service:9015
       BUSINESS_MCP_ENDPOINT: http://business-service:9010/mcp
       MARKETING_MCP_ENDPOINT: http://marketing-content-service:9008/mcp
-      CONTRACT_MCP_ENDPOINT: http://contract-service:9012/mcp
-      SETTLEMENT_MCP_ENDPOINT: http://settlement-service:9013/mcp
       NOTIFICATION_MCP_ENDPOINT: http://notification-service:9003/mcp
       MEDIA_MCP_ENDPOINT: http://media-worker-service:9007/mcp
 
@@ -862,38 +860,6 @@ services:
       AUTH_RAG_RPC_RESPONSE_KEY_ID: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:-auth-current}
       AUTH_RAG_RPC_RESPONSE_SECRET: ${AUTH_RAG_RPC_RESPONSE_SECRET:-}
       A2A_PUBLIC_BASE_URL: http://memory-service:9011
-
-  contract-service:
-    <<: *app-service
-    profiles: [full]
-    volumes:
-      - type: bind
-        source: ./.secrets/service-identities/contract-service/private-key.pem
-        target: /run/secrets/service-identity.pem
-        read_only: true
-        bind:
-          create_host_path: false
-    environment:
-      <<: *app-environment
-      SERVICE_ARTIFACT: contract-service-1.0.0-SNAPSHOT.jar
-      A2A_PUBLIC_BASE_URL: http://contract-service:9012
-      CONTRACT_MEMORY_V2_COMPRESSION_ENABLED: ${CONTRACT_MEMORY_V2_COMPRESSION_ENABLED:-false}
-
-  settlement-service:
-    <<: *app-service
-    profiles: [full]
-    volumes:
-      - type: bind
-        source: ./.secrets/service-identities/settlement-service/private-key.pem
-        target: /run/secrets/service-identity.pem
-        read_only: true
-        bind:
-          create_host_path: false
-    environment:
-      <<: *app-environment
-      SERVICE_ARTIFACT: settlement-service-1.0.0-SNAPSHOT.jar
-      A2A_PUBLIC_BASE_URL: http://settlement-service:9013
-      SETTLEMENT_MEMORY_V2_COMPRESSION_ENABLED: ${SETTLEMENT_MEMORY_V2_COMPRESSION_ENABLED:-false}
 
   # Opt-in deployment structure only: no backend is provisioned or authorized by this definition.
   rag-service:
