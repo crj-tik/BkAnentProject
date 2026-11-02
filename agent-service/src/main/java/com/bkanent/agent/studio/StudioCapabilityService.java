@@ -19,8 +19,6 @@ public class StudioCapabilityService {
         result.add(capability("customers", "客户与跟进", "核对需求、跟进、收藏和业主委托。", "找房与客户", "/tools/customers", false, "客户档案与业务经纪人"));
         result.add(capability("marketing", "营销内容", "基于真实房源创作、编辑和保存内容。", "内容与推广", "/tools/marketing", domains.contains("marketing"), "房源、平台与内容要求"));
         result.add(capability("media", "媒体与素材", "提交生成要求，跟踪真实任务和输出。", "内容与推广", "/tools/media", domains.contains("media"), "素材、生成类型与要求"));
-        result.add(capability("contracts", "合同与办理", "区分办理状态与有原文证据的条款审查。", "交易与结算", "/tools/contracts", domains.contains("contract"), "合同及已授权附件"));
-        result.add(capability("settlements", "佣金与结算", "核对规则、结算明细和选定归集范围。", "交易与结算", "/tools/settlements", domains.contains("settlement"), "月份、结算记录与范围"));
         result.add(capability("business", "经营分析", "查看经营周期、门店指标和实际明细。", "经营与知识", "/business", domains.contains("business"), "周期、组织与指标口径"));
         result.add(capability("interviews", "访谈与复盘", "准备提纲、确认问题并整理复盘资产。", "经营与知识", "/interviews", domains.contains("interview"), "场景、角色与目标"));
         result.add(capability("knowledge", "知识与工作上下文", "在授权资料中检索并核对引用。", "经营与知识", "/tools/knowledge", false, "问题与资料范围"));

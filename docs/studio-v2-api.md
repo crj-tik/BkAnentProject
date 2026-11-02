@@ -16,7 +16,7 @@
 
 | 方法 | 路径（相对 Studio 根路径） | 语义 |
 | --- | --- | --- |
-| GET | /capabilities | 受控业务目录；发现不代表健康；当前 directOperations=[] |
+| GET | /capabilities | 受控业务目录；发现不代表健康或直接操作授权；当前 directOperations=[]，不返回已退役的合同和结算能力 |
 | POST | /works | 幂等保存工作草稿；不会自动启动 |
 | GET | /works?keyword=&cursor=&limit=20 | 本人工作，更新时间/ID倒序，最多100条；status/needsDecision 当前返回400，不静默忽略 |
 | GET | /works/{id} | 上下文、最新执行、待输入/审批、首100成果摘要及状态读取前的事件水位 |
