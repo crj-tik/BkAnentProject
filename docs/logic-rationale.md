@@ -1516,3 +1516,13 @@
 **代码位置**：`docker-compose.yml` 的 `config-init`、`x-a2a-agent-environment` 与 `nacos-data`；`scripts/deploy/init-nacos-a2a-auth.py`、`publish-nacos.py`、`retire-nacos-configs.py`；RAG Nacos 客户端绑定。回归见部署脚本测试与 `NacosRagTemplateTest`。
 
 **关联**：LR-28、LR-170；KI-234；change `consolidate-platform-operations` 任务 3.3、4.3。
+
+## LR-172 复盘诊断修订读取复用来源与门店校验
+
+**结论**：诊断版本入口先执行复盘详情的可信门店、读取权限及来源时效校验，待复核或缺失修订时失败关闭；返回的事项版本与诊断修订仅用于后续乐观并发校验，不保证来源之后不变。
+
+**根因**：诊断修订是计划写入前置条件，但仅查询数据库最大修订会绕过来源撤回约束，且客户端获取版本后仍可能发生并发变更。
+
+**代码位置**：`ReviewApplicationService.diagnosisVersion`、`ReviewController.diagnosisVersion`、`ReviewApplicationService.writePlan`。
+
+**关联**：LR-160、LR-163、LR-167；KI-237。

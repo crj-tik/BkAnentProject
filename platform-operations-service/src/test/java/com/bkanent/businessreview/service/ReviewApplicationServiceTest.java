@@ -149,6 +149,22 @@ class ReviewApplicationServiceTest {
         assertThat(masked.diagnosis().suggestedActions()).isEmpty();
         assertThat(masked.diagnosis().evidenceGaps()).containsExactly("来源版本已变化或撤回，原始建议正文待重新复核。");
         verify(repository).markPendingReview(created.reviewId());
+        assertThatThrownBy(() -> service.diagnosisVersion(created.reviewId()))
+                .isInstanceOf(JdbcReviewRepository.ReviewConflictException.class)
+                .hasMessage("REVIEW_REQUIRES_REFRESH");
+        org.mockito.Mockito.verify(repository, org.mockito.Mockito.never()).latestDiagnosisRevision(any());
+    }
+
+    @Test
+    void diagnosisVersionRequiresMatchingStoreAndReadPermission() {
+        ReviewRepository repository = mock(ReviewRepository.class);
+        org.mockito.Mockito.when(repository.findMatter("review-1")).thenReturn(Optional.of(emptyMatter("review-1", 23L, 17L)));
+        TrustedStoreScopePort otherStore = (requestedStoreId, operation) ->
+                new TrustedStoreScopePort.StoreScope(18L, 99L, Set.of(operation), 1L);
+        ReviewApplicationService service = new ReviewApplicationService(repository,
+                new FixtureReviewDatasetAdapter(), otherStore, new ObservationCalculator(), new ObjectMapper());
+        assertThatThrownBy(() -> service.diagnosisVersion("review-1")).isInstanceOf(AuthzException.class);
+        org.mockito.Mockito.verify(repository, org.mockito.Mockito.never()).latestDiagnosisRevision(any());
     }
 
     @Test
@@ -175,6 +191,8 @@ class ReviewApplicationServiceTest {
                 new ObjectMapper().findAndRegisterModules());
 
         ReviewMatter matter = transaction.execute(status -> service.create(23L, "store-review-demo-v1"));
+        assertThat(service.diagnosisVersion(matter.reviewId()))
+                .isEqualTo(new ReviewApplicationService.DiagnosisVersion(matter.reviewId(), matter.version(), 1));
         ReviewPlan stalePlan = transaction.execute(status -> service.writePlan(matter.reviewId(), matter.version(), 1,
                 Instant.now().plusSeconds(3 * 24 * 60 * 60L), matter.diagnosis().suggestedActions()));
         ReviewPlan plan = transaction.execute(status -> service.writePlan(matter.reviewId(), matter.version() + 1, 1,

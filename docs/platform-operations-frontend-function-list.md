@@ -19,7 +19,7 @@
 | 复盘列表 | 查看可信门店范围内的复盘事项，游标分页 | `GET /platform-operations/reviews?storeId&cursor&limit` | 返回下一游标与复盘事项；门店 ID 必须来自当前 Auth 身份允许的范围，不能通过任意输入绕过后端门店校验 |
 | 创建复盘 | 选择有效数据集并创建复盘事项 | `POST /platform-operations/reviews`，正文 `{storeId, datasetId}` | 现有后端没有独立的数据集目录接口；数据集选项需由前后端另行约定，不应在页面里伪造 ID |
 | 复盘详情 | 查看诊断、来源事实、来源修订、模拟/真实模式、计划、动作和观察值 | `GET /reviews/{reviewId}`、`GET /reviews/{reviewId}/plans`、`GET /reviews/{reviewId}/actions`、`GET /reviews/{reviewId}/observations` | 对假设和证据缺口做视觉区分；来源修订过期时显示冲突并要求刷新，不呈现失效正文 |
-| 复盘计划 | 创建或更新计划，确认计划并生成行动项 | `POST /reviews/{reviewId}/plans`、`POST /reviews/{reviewId}/plans/confirm` | 携带 `expectedMatterVersion`、`expectedDiagnosisRevision`、`expectedPlanVersion`；确认操作显示动作清单和到期时间，使用 `requestId` 幂等提交 |
+| 复盘计划 | 创建或更新计划，确认计划并生成行动项 | `GET /reviews/{reviewId}/diagnosis-version`、`POST /reviews/{reviewId}/plans`、`POST /reviews/{reviewId}/plans/confirm` | 先获取可信事项版本与诊断修订，写入仍会复核版本和来源；确认操作显示动作清单和到期时间，使用 `requestId` 幂等提交 |
 | 行动反馈 | 更新行动执行状态并记录证据等级和说明 | `POST /reviews/{reviewId}/actions/{actionId}/feedback` | 状态为 `IN_PROGRESS`、`DONE`、`CANCELLED`；证据为 `USER_REPORTED` 或 `SOURCE_CONFIRMED`；不能把人工反馈自动展示成已验证业绩 |
 | 知识案例 | 创建、查看和编辑案例修订 | `POST /knowledge/v1/cases`、`GET /knowledge/v1/cases/{knowledgeId}`、`POST /{knowledgeId}/edit` | 正文包含问题、场景、前提、动作、观察结果、适用条件、未验证项和证据等级；提交编辑时传 `expectedVersion` |
 | 知识候选生成 | 提供访谈资产 ID 和规则版本，生成异步候选并查看任务状态 | `POST /{knowledgeId}/generate`、`GET /{knowledgeId}/generation/{taskId}` | Agent 只接触获准的来源 ID、修订和任务状态；界面不展示逐字稿原文。来源撤回、版本过期或服务不可用时显示可识别状态 |

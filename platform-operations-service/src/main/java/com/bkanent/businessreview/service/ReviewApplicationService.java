@@ -68,6 +68,17 @@ public class ReviewApplicationService {
         return matter;
     }
 
+    public DiagnosisVersion diagnosisVersion(String reviewId) {
+        ReviewMatter matter = get(reviewId);
+        if (matter.status() == MatterStatus.PLAN_PENDING_REVIEW)
+            throw new ReviewConflictException("REVIEW_REQUIRES_REFRESH");
+        int revision = repository.latestDiagnosisRevision(reviewId);
+        if (revision < 1) throw new ReviewConflictException("DIAGNOSIS_REVISION_UNAVAILABLE");
+        return new DiagnosisVersion(matter.reviewId(), matter.version(), revision);
+    }
+
+    public record DiagnosisVersion(String reviewId, long matterVersion, int diagnosisRevision) { }
+
     public CursorPage<ReviewMatter> list(Long requestedStoreId, String cursor, int limit) {
         if (limit < 1 || limit > 100) throw new ReviewConflictException("INVALID_ARGUMENT");
         TrustedStoreScopePort.StoreScope scope = requireStore(requestedStoreId, READ);

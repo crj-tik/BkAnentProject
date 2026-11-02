@@ -179,6 +179,37 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '503': { $ref: '#/components/responses/Unavailable' }
+  /platform-operations/reviews/{reviewId}/diagnosis-version:
+    get:
+      operationId: getReviewDiagnosisVersion
+      summary: 获取可用于创建计划的事项版本与诊断修订
+      description: 需要 business.review.read.store 和可信门店身份。来源已失效或事项待复核时返回 409；版本可能随后变化，创建计划时仍需服务端重新校验。
+      parameters:
+        - $ref: '#/components/parameters/reviewId'
+      responses:
+        '200':
+          description: 版本信息，使用标准 ApiResponse 包装
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, code, message, data]
+                properties:
+                  success: { type: boolean }
+                  code: { type: string }
+                  message: { type: string }
+                  data:
+                    type: object
+                    required: [reviewId, matterVersion, diagnosisRevision]
+                    properties:
+                      reviewId: { type: string }
+                      matterVersion: { type: integer, format: int64, minimum: 1 }
+                      diagnosisRevision: { type: integer, minimum: 1 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '503': { $ref: '#/components/responses/Unavailable' }
   /platform-operations/reviews/{reviewId}/plans:
     get:
       operationId: listReviewPlans

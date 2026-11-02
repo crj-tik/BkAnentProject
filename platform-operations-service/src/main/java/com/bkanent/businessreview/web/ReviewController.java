@@ -33,6 +33,11 @@ public class ReviewController {
         return ApiResponse.ok(service.get(reviewId));
     }
 
+    @GetMapping("/{reviewId}/diagnosis-version")
+    public ApiResponse<ReviewApplicationService.DiagnosisVersion> diagnosisVersion(@PathVariable String reviewId) {
+        return ApiResponse.ok(service.diagnosisVersion(reviewId));
+    }
+
     @GetMapping("/{reviewId}/plans")
     public ApiResponse<List<ReviewPlan>> plans(@PathVariable String reviewId) {
         return ApiResponse.ok(service.listPlans(reviewId));
