@@ -38,6 +38,9 @@ a2a:
 notification:
   authorization:
     enabled: ${NOTIFICATION_AUTHORIZATION_ENABLED:false}
+    audience: notification-service
+    authority-public-keys:
+      auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
 
 dubbo:
   application:

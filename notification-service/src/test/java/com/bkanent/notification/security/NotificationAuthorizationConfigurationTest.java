@@ -32,6 +32,9 @@ class NotificationAuthorizationConfigurationTest {
             PropertySource<?> config = load(loader, path);
             assertThat(config.getProperty("notification.authorization.enabled"))
                     .isEqualTo("${NOTIFICATION_AUTHORIZATION_ENABLED:false}");
+            assertThat(config.getProperty("notification.authorization.audience")).isEqualTo("notification-service");
+            assertThat(config.getProperty("notification.authorization.authority-public-keys.auth-service-current"))
+                    .isEqualTo("${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}");
             assertThat(config.getProperty("mcp.authorization.server.enabled"))
                     .isEqualTo("${NOTIFICATION_MCP_AUTHORIZATION_ENABLED:false}");
             tools.forEach((tool, operation) -> assertThat(config.getProperty(

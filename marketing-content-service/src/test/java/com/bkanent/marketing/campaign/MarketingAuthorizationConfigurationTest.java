@@ -32,6 +32,9 @@ class MarketingAuthorizationConfigurationTest {
             PropertySource<?> config = load(loader, path);
             assertThat(config.getProperty("marketing.authorization.enabled"))
                     .isEqualTo("${MARKETING_AUTHORIZATION_ENABLED:false}");
+            assertThat(config.getProperty("marketing.authorization.audience")).isEqualTo("marketing-content-service");
+            assertThat(config.getProperty("marketing.authorization.authority-public-keys.auth-service-current"))
+                    .isEqualTo("${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}");
             assertThat(config.getProperty("mcp.authorization.server.enabled"))
                     .isEqualTo("${MARKETING_MCP_AUTHORIZATION_ENABLED:false}");
             tools.forEach((tool, operation) -> assertThat(config.getProperty(

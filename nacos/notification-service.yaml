@@ -117,6 +117,9 @@ agent:
 notification:
   authorization:
     enabled: ${NOTIFICATION_AUTHORIZATION_ENABLED:false}
+    audience: notification-service
+    authority-public-keys:
+      auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
   integration:
     mode: local # Docker development only; production requires real mode and an implemented real provider.
   workflow-events:

@@ -108,6 +108,9 @@ a2a:
 marketing:
   authorization:
     enabled: ${MARKETING_AUTHORIZATION_ENABLED:false}
+    audience: marketing-content-service
+    authority-public-keys:
+      auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
   campaign:
     mode: REAL
     dispatch-enabled: true

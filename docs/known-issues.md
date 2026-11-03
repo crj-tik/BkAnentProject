@@ -1935,3 +1935,11 @@
 **修复**：为 Elasticsearch 增加独立 `ELASTICSEARCH_BIND_ADDRESS`，默认及当前环境值均为 `127.0.0.1`；其他基础设施仍使用原 `HOST_BIND_ADDRESS`。容器间访问继续走 Compose 网络中的 `elasticsearch:9200`。
 
 **待验证边界**：本地 Compose 重建后须确认主机端口仅绑定 loopback，且通过非 loopback 接口无法访问。X-Pack security 仍关闭，因此同一 Compose 网络内仍是无认证访问；该边界依赖受控的 Compose 网络成员。
+
+## KI-245 [OPEN·P1] Marketing 与 Notification 开启版本化入口时缺少 Auth 验签公钥
+
+**发现日期**：2026-11-03。`.env` 开启 Marketing、Notification 版本化授权后，Nacos 与应用默认模板只传递 `enabled`，没有入口受众和 Auth 公钥；`AuthzIngressProperties` 因验签公钥为空拒绝启动。重建后 Notification 已进入重启循环，Marketing 同模板配置也有相同启动风险。
+
+**修复**：两域的 Nacos 与应用模板均登记固定服务受众及 `AUTH_SERVICE_IDENTITY_PUBLIC_KEY`，相应配置回归断言已补齐。Compose 通过受限 public-keys env 文件向应用容器注入公钥。
+
+**未闭环**：配置已修复，须在新镜像重建后确认两个容器稳定运行并通过 readiness；启用真实业务调用仍需验证其签名上下文及精确操作权限。关联 KI-196、KI-243。
