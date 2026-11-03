@@ -1696,7 +1696,9 @@
 
 **2026-11-03 代码处置**：Campaign actor/permission 检查改为消费已验证的 Auth 签名上下文；受管迁移 630 仅登记 Campaign 和内容审核的精确操作，不自动授予角色；MCP 工具逐项映射操作码；Marketing→Listing 改走调用方签名的内部 RPC，携带 Auth 签名上下文与 freshness，并由 Listing 校验房源访问范围，不转发用户 Bearer。Marketing、Listing 单测覆盖允许/拒绝与跨服务签名边界。历史 `marketing_content.owner_broker_id` 仍可空，保留待责任人核对。
 
-**未闭环**：迁移 630 尚未应用到运行库，Marketing/Notification 实际配置和账号权限尚未运行态验收；开发库没有活动 Campaign 渠道账号，因此不能据此宣称真实发布/渠道归属可用。历史内容归属需责任人核对；HTTP、RPC、MCP 全链路及发布 provider 仍需运行态逐项验收。
+**2026-11-03 运行态**：受管迁移 630/640 已应用，Campaign、审核和 BEIKE/DOUYIN/XIAOHONGSHU 渠道权限已进入 Auth 活动目录；两次目录变更共 18 条授权 outbox 均为 `PUBLISHED`。管理 API 读回确认 `BROKER` 有 50 项授权，其中本次新增 23 项全域读取、审核、Campaign、渠道、素材和邮件权限；现有 7 个 BROKER 成员继承该角色变更，角色更新 outbox 为 `PUBLISHED`。相关 `.env` 版本化开关已开启，12 个活动 Nacos Data ID 发布并回读；12 个应用容器及 MySQL MCP 已使用提交 `a97fe64c9cff7eb96c1ec8f5339c9ce98f3d19d1` 的统一镜像标签，Marketing 与 Notification readiness 为 UP。
+
+**未闭环**：开发库 `marketing_campaign_account` 仍为 0 行，没有可执行的真实 Campaign 渠道账号/provider 配置；Auth 经纪人身份映射也为 0，故不能宣称渠道发布、经纪人自有范围及真实内容归属可用。历史 `marketing_content.owner_broker_id` 仍可能为空；HTTP、RPC、MCP 正反例与发布 provider 仍需逐项验收。
 
 **后续门槛**：由 `unify-versioned-permission-context` task 10.3 与本 change task 7.6 完成受管迁移应用、有效账号/内容归属核对、跨协议正反例和目标环境启用验收。
 
@@ -1928,18 +1930,18 @@
 
 **未闭环**：需在目标 Auth 运行版本上通过管理 API 创建经纪人账号并登记经确认的开发经纪人身份，再验证房源/客户自有范围与跨用户拒绝。当前没有权威经纪人主数据映射，运行态业务请求仍可能因缺少身份被正确拒绝。关联 KI-55。
 
-## KI-244 [OPEN·P1] Elasticsearch 主机发布端口未启用认证且绑定业务网卡
+## KI-244 [FIXED·ebe5049b·P1] Elasticsearch 主机发布端口未启用认证且绑定业务网卡
 
 **发现日期**：2026-11-03。Compose 中 Elasticsearch 关闭 X-Pack security，主机发布端口继承 `HOST_BIND_ADDRESS`。当前 `.env` 将其设为 `10.117.102.54`；从该主机接口访问 Elasticsearch 根端点无需凭据即可得到 HTTP 200，说明数据服务端口暴露到非 loopback 接口。
 
 **修复**：为 Elasticsearch 增加独立 `ELASTICSEARCH_BIND_ADDRESS`，默认及当前环境值均为 `127.0.0.1`；其他基础设施仍使用原 `HOST_BIND_ADDRESS`。容器间访问继续走 Compose 网络中的 `elasticsearch:9200`。
 
-**待验证边界**：本地 Compose 重建后须确认主机端口仅绑定 loopback，且通过非 loopback 接口无法访问。X-Pack security 仍关闭，因此同一 Compose 网络内仍是无认证访问；该边界依赖受控的 Compose 网络成员。
+**运行态验证**：`docker inspect` 显示 9200 仅发布到 `127.0.0.1`；loopback HTTP 返回 200，使用原主机业务网卡地址访问失败。X-Pack security 仍关闭，因此宿主机本地进程和同一 Compose 网络内仍可无认证访问；该边界依赖受控的 Compose 网络成员。
 
-## KI-245 [OPEN·P1] Marketing 与 Notification 开启版本化入口时缺少 Auth 验签公钥
+## KI-245 [FIXED·a97fe64c·P1] Marketing 与 Notification 开启版本化入口时缺少 Auth 验签公钥
 
 **发现日期**：2026-11-03。`.env` 开启 Marketing、Notification 版本化授权后，Nacos 与应用默认模板只传递 `enabled`，没有入口受众和 Auth 公钥；`AuthzIngressProperties` 因验签公钥为空拒绝启动。重建后 Notification 已进入重启循环，Marketing 同模板配置也有相同启动风险。
 
 **修复**：两域的 Nacos 与应用模板均登记固定服务受众及 `AUTH_SERVICE_IDENTITY_PUBLIC_KEY`，相应配置回归断言已补齐。Compose 通过受限 public-keys env 文件向应用容器注入公钥。
 
-**未闭环**：配置已修复，须在新镜像重建后确认两个容器稳定运行并通过 readiness；启用真实业务调用仍需验证其签名上下文及精确操作权限。关联 KI-196、KI-243。
+**运行态验证**：新 Nacos Data ID 已发布并回读；两个容器中 Auth 与 Agent 公钥变量均有配置，Marketing 和 Notification 的 readiness 均 HTTP 200/UP，重启计数均为 0。真实业务调用的签名上下文和精确操作权限仍需端到端验证。关联 KI-196、KI-243。
