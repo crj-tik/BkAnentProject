@@ -5,7 +5,8 @@
 .mvn-local
 runtime-logs
 .work
-**/target
+**/target/**
+!**/target/*.jar
 *.iml
 .codex-temp-*
 .env

@@ -43,7 +43,7 @@ log_info "BkAgent Linux 部署初始化开始（profile=${PROFILE}，仓库根�
 
 # 1) 仓库部署工件完整性：compose 挂载的 SQL、Dockerfile、Nacos 配置目录必须就位。
 missing_artifacts=0
-for f in docker-compose.yml Dockerfile .env.example docker/mysql/001-manifest.sh docker/mysql/init-manifest.tsv scripts/deploy/run-init-manifest.sh; do
+for f in docker-compose.yml Dockerfile Dockerfile.prebuilt .env.example docker/mysql/001-manifest.sh docker/mysql/init-manifest.tsv scripts/deploy/run-init-manifest.sh; do
   if [ ! -f "$f" ]; then log_error "缺少部署工件：$f"; missing_artifacts=1; fi
 done
 [ -d nacos ] || { log_error "缺少 nacos/ 配置目录"; missing_artifacts=1; }
@@ -111,6 +111,8 @@ if [ ! -f "$BK_ENV_FILE" ]; then
 else
   log_info "检测到已有 .env，保留全部现有取值"
 fi
+app_version="$(git -C "$BK_REPO_ROOT" rev-parse --verify HEAD)" || die "无法读取当前源码提交 SHA。"
+env_set "$BK_ENV_FILE" APP_VERSION "$app_version" || die "写入 APP_VERSION 失败。"
 
 generated=0
 fill_secret() { # $1=KEY $2=固定值或空；空则生成随机密钥

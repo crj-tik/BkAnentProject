@@ -1,6 +1,7 @@
 package com.bkanent.media.client;
 
 import com.bkanent.media.config.MediaIntegrationProperties;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import javax.imageio.ImageIO;
@@ -18,6 +19,7 @@ import java.util.List;
  * 模拟 Stable Diffusion 图片生成客户端。
  */
 @Component
+@ConditionalOnProperty(prefix = "media.integration", name = "mode", havingValue = "local", matchIfMissing = true)
 public class MockStableDiffusionClient implements MediaImageGenerationClient {
 
     private final MediaIntegrationProperties integrationProperties;

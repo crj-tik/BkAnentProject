@@ -1,0 +1,22 @@
+ARG JAVA_RUNTIME_IMAGE=eclipse-temurin:17-jre-jammy@sha256:ec72ba5962b45ae4e7f96bfb5ebf6eeb34a488b967f937c8e14f0aaec688954f
+FROM ${JAVA_RUNTIME_IMAGE}
+
+ARG APP_VERSION
+LABEL org.opencontainers.image.version="${APP_VERSION}" \
+      org.opencontainers.image.revision="${APP_VERSION}"
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --create-home --uid 10001 app
+
+WORKDIR /app
+COPY */target/*.jar /app/
+
+RUN mkdir -p /run/secrets /app/runtime && chown -R app:app /app/runtime
+
+USER app
+ENV JAVA_OPTS=""
+ENV SERVICE_ARTIFACT=""
+
+ENTRYPOINT ["sh", "-c", "test -n \"$SERVICE_ARTIFACT\" || { echo 'SERVICE_ARTIFACT is required' >&2; exit 64; }; exec java $JAVA_OPTS -jar /app/$SERVICE_ARTIFACT"]

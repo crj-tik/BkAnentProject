@@ -1,5 +1,9 @@
 name: bk-anent-dev
 
+x-app-build-args: &app-build-args
+  APP_VERSION: ${APP_VERSION:?Explicit APP_VERSION required}
+  JAVA_RUNTIME_IMAGE: ${JAVA_RUNTIME_IMAGE:?Explicit JAVA_RUNTIME_IMAGE required}
+
 x-app-environment: &app-environment
   SPRING_PROFILES_ACTIVE: distributed
   SERVER_MAX_HTTP_REQUEST_HEADER_SIZE: ${SERVER_MAX_HTTP_REQUEST_HEADER_SIZE:-64KB}
@@ -45,10 +49,11 @@ x-a2a-agent-environment: &a2a-agent-environment
   NACOS_PASSWORD: ${NACOS_PASSWORD:-}
 
 x-app-service: &app-service
-  image: bk-anent-services:dev
+  image: bk-anent-services:${APP_VERSION:?Explicit APP_VERSION required}
   build:
     context: .
-    dockerfile: Dockerfile
+    dockerfile: Dockerfile.prebuilt
+    args: *app-build-args
   restart: unless-stopped
   env_file:
     - ./.secrets/service-identities/public-keys.env
@@ -61,16 +66,10 @@ x-app-service: &app-service
 
 x-minimal-app-service: &minimal-app-service
   <<: *app-service
-  image: bk-anent-services:minimal
-  build:
-    context: .
-    dockerfile: Dockerfile
-    args:
-      MAVEN_MODULES: common,gateway,auth-service
 
 services:
   mysql:
-    image: mysql:8.4
+    image: ${MYSQL_IMAGE:?Explicit MYSQL_IMAGE required}
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Explicit MYSQL_ROOT_PASSWORD required}
@@ -94,9 +93,12 @@ services:
 
   # This short-lived job also provisions the account on existing data volumes.
   mysql-mcp-init:
-    image: bk-anent-mysql-mcp:dev
+    image: bk-anent-mysql-mcp:${APP_VERSION:?Explicit APP_VERSION required}
     build:
       context: ./mysql-mcp
+      args:
+        APP_VERSION: ${APP_VERSION:?Explicit APP_VERSION required}
+        PYTHON_IMAGE: ${MYSQL_MCP_PYTHON_IMAGE:?Explicit MYSQL_MCP_PYTHON_IMAGE required}
     profiles: [mcp]
     restart: "no"
     command: ["python", "init_account.py"]
@@ -112,9 +114,12 @@ services:
     networks: [bk]
 
   mysql-mcp:
-    image: bk-anent-mysql-mcp:dev
+    image: bk-anent-mysql-mcp:${APP_VERSION:?Explicit APP_VERSION required}
     build:
       context: ./mysql-mcp
+      args:
+        APP_VERSION: ${APP_VERSION:?Explicit APP_VERSION required}
+        PYTHON_IMAGE: ${MYSQL_MCP_PYTHON_IMAGE:?Explicit MYSQL_MCP_PYTHON_IMAGE required}
     profiles: [mcp]
     restart: unless-stopped
     environment:
@@ -147,7 +152,7 @@ services:
     networks: [bk]
 
   nacos:
-    image: nacos/nacos-server:v3.1.0
+    image: ${NACOS_IMAGE:?Explicit NACOS_IMAGE required}
     restart: unless-stopped
     environment:
       MODE: standalone
@@ -177,7 +182,7 @@ services:
     networks: [bk]
 
   config-init:
-    image: python:3.12-alpine
+    image: ${PYTHON_ALPINE_IMAGE:?Explicit PYTHON_ALPINE_IMAGE required}
     depends_on:
       nacos:
         condition: service_healthy
@@ -203,7 +208,7 @@ services:
     restart: "no"
 
   redis:
-    image: redis:7.4-alpine
+    image: ${REDIS_IMAGE:?Explicit REDIS_IMAGE required}
     profiles: [minimal, full, platform-preview]
     restart: unless-stopped
     command:
@@ -260,7 +265,7 @@ services:
     networks: [bk]
 
   rocketmq-namesrv:
-    image: apache/rocketmq:5.3.1
+    image: ${ROCKETMQ_IMAGE:?Explicit ROCKETMQ_IMAGE required}
     profiles: [full]
     restart: unless-stopped
     command: ["sh", "mqnamesrv"]
@@ -269,7 +274,7 @@ services:
     networks: [bk]
 
   rocketmq-broker:
-    image: apache/rocketmq:5.3.1
+    image: ${ROCKETMQ_IMAGE:?Explicit ROCKETMQ_IMAGE required}
     profiles: [full]
     restart: unless-stopped
     depends_on:
@@ -285,7 +290,7 @@ services:
     networks: [bk]
 
   minio:
-    image: minio/minio:latest
+    image: ${MINIO_IMAGE:?Explicit MINIO_IMAGE required}
     profiles: [full]
     restart: unless-stopped
     command: ["server", "/data", "--console-address", ":9001"]
@@ -305,7 +310,7 @@ services:
     networks: [bk]
 
   minio-init:
-    image: minio/mc:latest
+    image: ${MINIO_MC_IMAGE:?Explicit MINIO_MC_IMAGE required}
     profiles: [full]
     depends_on:
       minio:
@@ -324,7 +329,7 @@ services:
     restart: "no"
 
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    image: ${ELASTICSEARCH_IMAGE:?Explicit ELASTICSEARCH_IMAGE required}
     profiles: [full]
     restart: unless-stopped
     environment:
@@ -346,7 +351,7 @@ services:
     networks: [bk]
 
   elasticsearch-init:
-    image: curlimages/curl:8.10.1
+    image: ${CURL_IMAGE:?Explicit CURL_IMAGE required}
     profiles: [full]
     depends_on:
       elasticsearch:
@@ -369,7 +374,7 @@ services:
     restart: "no"
 
   milvus-etcd:
-    image: quay.io/coreos/etcd:v3.5.5
+    image: ${ETCD_IMAGE:?Explicit ETCD_IMAGE required}
     profiles: [full]
     restart: unless-stopped
     environment:
@@ -394,7 +399,7 @@ services:
     networks: [bk]
 
   milvus-minio:
-    image: minio/minio:latest
+    image: ${MINIO_IMAGE:?Explicit MINIO_IMAGE required}
     profiles: [full]
     restart: unless-stopped
     command: ["server", "/data"]
@@ -411,7 +416,7 @@ services:
     networks: [bk]
 
   milvus:
-    image: milvusdb/milvus:v2.4.17
+    image: ${MILVUS_IMAGE:?Explicit MILVUS_IMAGE required}
     profiles: [full]
     restart: unless-stopped
     command: ["milvus", "run", "standalone"]
@@ -715,12 +720,6 @@ services:
 
   platform-operations-service:
     <<: *app-service
-    image: bk-anent-platform-operations:dev
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        MAVEN_MODULES: platform-operations-service
     profiles: [full, platform-preview]
     depends_on:
       config-init:
@@ -769,12 +768,6 @@ services:
 
   memory-service:
     <<: *app-service
-    image: bk-anent-memory:dev
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        MAVEN_MODULES: memory-service
     profiles: [full, platform-preview]
     environment:
       <<: *app-environment
@@ -820,12 +813,11 @@ services:
 
   # Opt-in deployment structure only: no backend is provisioned or authorized by this definition.
   rag-service:
-    image: bk-anent-rag:dev
+    image: bk-anent-services:${APP_VERSION:?Explicit APP_VERSION required}
     build:
       context: .
-      dockerfile: Dockerfile
-      args:
-        MAVEN_MODULES: rag-service
+      dockerfile: Dockerfile.prebuilt
+      args: *app-build-args
     profiles: [rag]
     restart: unless-stopped
     depends_on:
@@ -892,12 +884,6 @@ services:
 
   interview-service:
     <<: *app-service
-    image: bk-anent-interview:dev
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        MAVEN_MODULES: interview-service
     profiles: [full]
     volumes:
       - type: bind

@@ -1526,3 +1526,23 @@
 **代码位置**：`ReviewApplicationService.diagnosisVersion`、`ReviewController.diagnosisVersion`、`ReviewApplicationService.writePlan`。
 
 **关联**：LR-160、LR-163、LR-167；KI-237。
+
+## LR-173 Compose 应用镜像以源码提交 SHA 标识并从宿主机打包
+
+**结论**：Java 业务容器统一使用 `bk-anent-services:${APP_VERSION}`，`APP_VERSION` 是应用源码提交 SHA；镜像以 `SERVICE_ARTIFACT` 选择要运行的服务 JAR。Compose 只从宿主 Maven `target/` 复制已打包工件，不在 Docker Desktop/WSL 内启动 Maven。MySQL MCP 代码使用独立镜像仓库，但共用同一源码版本号。
+
+**根因**：`dev`、`minimal` 等可变标签不能证明运行容器所含源码；重复在容器内 Maven 构建会增加 Docker Desktop/WSL 资源压力。统一 SHA 标签可直接对照构建源码，宿主机 package 再制作运行镜像则避免该多 JVM 构建路径。
+
+**代码位置**：`docker-compose.yml`、`Dockerfile.prebuilt`、`mysql-mcp/Dockerfile`、`.env.example`、`scripts/deploy/start.sh`。
+
+**关联**：KI-124、KI-238。
+
+## LR-174 媒体图片提供方由显式集成模式互斥选择
+
+**结论**：`media.integration.mode=local` 只注册模拟图片提供方，`real` 只注册 KE Seedream 提供方；消费任务时必须恰有一个 `MediaImageGenerationClient`。
+
+**根因**：两个实现服务同一接口，单靠实现内部拒绝错误模式仍会让 Spring 注入点看到两个候选 Bean；将模式判定放在 Bean 注册阶段，同时保留本地模式不调用真实模型 API 的边界。
+
+**代码位置**：`media-worker-service/client/MockStableDiffusionClient`、`KeSeedreamImageGenerationClient`；`nacos/media-worker-service.yaml`。
+
+**关联**：KI-240。

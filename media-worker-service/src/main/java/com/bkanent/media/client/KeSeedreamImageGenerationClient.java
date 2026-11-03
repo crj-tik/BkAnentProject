@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -24,6 +25,7 @@ import java.util.Map;
  * 每个 angle 独立成图，延迟约 8–14s/张，由 RocketMQ 异步消费吸收。</p>
  */
 @Component
+@ConditionalOnProperty(prefix = "media.integration", name = "mode", havingValue = "real")
 public class KeSeedreamImageGenerationClient implements MediaImageGenerationClient {
 
     private static final Logger log = LoggerFactory.getLogger(KeSeedreamImageGenerationClient.class);

@@ -116,9 +116,11 @@ mvn -pl auth-service "-Dspring-boot.run.profiles=distributed" spring-boot:run
 
 ### Docker 开发部署
 
-仓库提供了 Docker Compose 开发编排。`minimal` profile 只启动 MySQL、Nacos、配置导入、认证服务和网关，并使用 `bk-anent-services:minimal` 镜像，只编译 `common`、`gateway`、`auth-service` 三个模块，适合接口、认证和基础链路测试；`full` profile 会额外启动 Redis、RocketMQ、MinIO、Elasticsearch、Milvus（含 etcd 和内部 MinIO）及全部当前业务服务，包括平台经营服务。核心服务使用 `bk-anent-services:dev` 镜像，平台经营单独构建 `bk-anent-platform-operations:dev`。配置发布必须显式设置 `NACOS_CONFIG_DATA_IDS` 为此次授权的空格分隔 YAML data ID 列表；默认空列表拒绝发布，不再全目录上传 public。当前活动模板 ID 为 `auth-service.yaml gateway.yaml agent-service.yaml listing-master-service.yaml customer-service.yaml marketing-content-service.yaml media-worker-service.yaml notification-service.yaml interview-service.yaml memory-service.yaml rag-service.yaml platform-operations-service.yaml`；`mysql-common.yaml` 是参考模板，不发布。`NACOS_NAMESPACE` 使用实际 namespace ID（Compose 默认 `BK-AGENT`），group 固定 `DEFAULT_GROUP`。Nacos Derby 使用 `nacos-data` named volume；普通容器重建保留配置与注册状态，`docker compose down -v` 会删除该开发数据。MinIO bucket 与营销 `marketing_content` 索引保留初始化；房源 RAG 索引仅经受权 provision 创建。独立 `rag` profile 不由 full 隐式启动，使用 `--profile rag` 或 `start.sh --with-rag` 显式选择，基础 readiness 不代表默认双路/重排能力或切流水位通过，完整门禁见 [RAG 部署与迁移](docs/linux-deployment-init.md)。
+仓库提供了 Docker Compose 开发编排。所有 Java 业务服务共用 `bk-anent-services:${APP_VERSION}` 镜像；`APP_VERSION` 使用当前源码提交 SHA，镜像内包含服务 JAR，并通过 `SERVICE_ARTIFACT` 选择运行模块。应用镜像从宿主机 Maven `target/` 构建，先运行一次 `mvn -gs .mvn-settings.xml -s .mvn-settings.xml -DskipTests package`，再执行 Compose 构建。`minimal` profile 只启动 MySQL、Nacos、配置导入、认证服务和网关；`full` profile 会额外启动 Redis、RocketMQ、MinIO、Elasticsearch、Milvus（含 etcd 和内部 MinIO）及全部当前业务服务，包括平台经营服务。MySQL MCP 使用相同源码版本号的独立镜像。第三方运行镜像以及 Python/Java 运行基础镜像以固定标签和摘要统一在 `.env` 与 `.env.example` 中维护；MinIO 目前使用本机已缓存摘要，跨主机拉取仍见 KI-239。配置发布必须显式设置 `NACOS_CONFIG_DATA_IDS` 为此次授权的空格分隔 YAML data ID 列表；默认空列表拒绝发布，不再全目录上传 public。当前活动模板 ID 为 `auth-service.yaml gateway.yaml agent-service.yaml listing-master-service.yaml customer-service.yaml marketing-content-service.yaml media-worker-service.yaml notification-service.yaml interview-service.yaml memory-service.yaml rag-service.yaml platform-operations-service.yaml`；`mysql-common.yaml` 是参考模板，不发布。`NACOS_NAMESPACE` 使用实际 namespace ID（Compose 默认 `BK-AGENT`），group 固定 `DEFAULT_GROUP`。Nacos Derby 使用 `nacos-data` named volume；普通容器重建保留配置与注册状态，`docker compose down -v` 会删除该开发数据。MinIO bucket 与营销 `marketing_content` 索引保留初始化；房源 RAG 索引仅经受权 provision 创建。独立 `rag` profile 不由 full 隐式启动，使用 `--profile rag` 或 `start.sh --with-rag` 显式选择，基础 readiness 不代表默认双路/重排能力或切流水位通过，完整门禁见 [RAG 部署与迁移](docs/linux-deployment-init.md)。
 
 ```powershell
+.\scripts\deploy\sync-compose-version.ps1
+mvn -gs .mvn-settings.xml -s .mvn-settings.xml -DskipTests package
 docker compose --profile minimal up -d --build
 docker compose --profile minimal ps
 ```
@@ -126,6 +128,8 @@ docker compose --profile minimal ps
 验证入口：`http://127.0.0.1:5010/gateway/health`；认证服务直连地址为 `http://127.0.0.1:9101/auth/health`。启动全部业务服务：
 
 ```powershell
+.\scripts\deploy\sync-compose-version.ps1
+mvn -gs .mvn-settings.xml -s .mvn-settings.xml -DskipTests package
 docker compose --profile full up -d --build
 ```
 

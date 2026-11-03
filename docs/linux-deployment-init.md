@@ -17,7 +17,7 @@
 
 该脚本依次执行：
 
-1. **工件完整性**：确认 `docker-compose.yml`、`Dockerfile`、`docker/mysql/001-manifest.sh`、`docker/mysql/init-manifest.tsv`、对应 SQL/schema checks 和 `nacos/` 就位。版本清单由共享 runner 验证，不扫描历史迁移目录。
+1. **工件完整性**：确认 `docker-compose.yml`、`Dockerfile`、`Dockerfile.prebuilt`、`docker/mysql/001-manifest.sh`、`docker/mysql/init-manifest.tsv`、对应 SQL/schema checks 和 `nacos/` 就位。版本清单由共享 runner 验证，不扫描历史迁移目录。
 2. **Docker/Compose 校验**（`--skip-docker` 可跳过，用于在无 docker 的中转机上预生成配置）。
 3. **内核参数**：`vm.max_map_count` 不达标时给出修复命令；加 `--fix-kernel` 则通过 sudo 修正并持久化到 `/etc/sysctl.d/99-bkagent.conf`。
 4. **资源预检**：内存与磁盘只告警不阻断。
@@ -27,7 +27,7 @@
 
 ## RAG 迁移部署与发布门禁
 
-按本项目现有 Dockerfile 模块构建约定执行：`bk-anent-rag:dev` 使用 `MAVEN_MODULES=rag-service` 与 `SERVICE_ARTIFACT=rag-service-1.0.0-SNAPSHOT.jar`。这是沿用开发固定 tag 的规则，不是不可变发布版本；切流前须另行保存实际镜像 ID/digest 与配置版本，禁止套用外部 reranker 项目的镜像规则。
+Compose 应用镜像统一使用 `.env` 中的 `APP_VERSION`（当前源码提交 SHA），所有 Java 服务从宿主机完成 Maven package 后的 `target/` 目录构建，避免在 Docker Desktop/WSL 内并发运行 Maven。RAG 与其他业务服务共用 `bk-anent-services:${APP_VERSION}`，通过 `SERVICE_ARTIFACT=rag-service-1.0.0-SNAPSHOT.jar` 选择工件。切流前仍须核对运行镜像的版本标签与 SHA，并记录镜像 ID/digest 和配置版本；禁止套用外部 reranker 项目的镜像规则。
 
 - RAG 是显式 `rag` profile，`start.sh --profile full --with-rag` 才加入；不默认为 full 启动，避免尚未建立的 RAG 控制 DB 阻断结构化业务。RAG 依赖 config-init/MySQL，消费者不依赖 RAG 的 `service_healthy`，agent 不再依赖 Milvus、listing 不再依赖 ES 初始化/readiness；营销保留自身 ES。
 - HTTP 管理端口 9018 仅绑定 loopback，Dubbo 20898 仅容器网络发现，QoS 关闭；实施前未发现仓库旧声明冲突，但仍需部署时核对实际宿主/容器占用。本轮无搜索公网发布。

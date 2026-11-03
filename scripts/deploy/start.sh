@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 启动指定档位的完整环境，并等待全部容器健康。
-# 首次启动会构建镜像（容器内 Maven 打包，耗时较长）；重复启动可加 --no-build 跳过。
+# 构建镜像前先在宿主机完成 Maven package，避免 Docker Desktop/WSL 内运行 Maven。
 #
 # 用法：start.sh [--profile minimal|full|mcp|rag|platform-preview] [--with-mcp] [--with-rag] [--service NAME ...] [--no-deps] [--no-build] [--wait-timeout SEC] [--no-wait]
 #   --profile       启动档位（默认 full；minimal 只含 MySQL/Nacos/认证/网关）
@@ -45,6 +45,13 @@ cd "$BK_REPO_ROOT"
 require_docker
 
 [ -f "$BK_ENV_FILE" ] || die "缺少启动 env；先初始化或通过 BK_ENV_FILE 指定受限外部 env。"
+
+if [ "$NO_BUILD" -eq 0 ]; then
+  app_version="$(git rev-parse --verify HEAD)" || die "无法读取当前源码提交 SHA。"
+  env_set "$BK_ENV_FILE" APP_VERSION "$app_version" || die "无法同步 APP_VERSION 到启动 env。"
+  command -v mvn >/dev/null 2>&1 || die "构建镜像需要宿主机 Maven；请先安装 Maven 3.9+，或用 --no-build 复用已有镜像。"
+  mvn -gs .mvn-settings.xml -s .mvn-settings.xml -DskipTests package || die "宿主机 Maven package 失败，未开始 Docker 镜像构建。"
+fi
 
 profile_flags=(--profile "$PROFILE")
 [ "$WITH_MCP" -eq 1 ] && profile_flags+=(--profile mcp)

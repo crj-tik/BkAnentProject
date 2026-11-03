@@ -96,13 +96,15 @@ def main() -> None:
         raise SystemExit("docker-compose.yml has no platform-operations-service block")
     block = block_match.group(1)
     for value in (
-        "profiles: [full, platform-preview]", "MAVEN_MODULES: platform-operations-service",
+        "profiles: [full, platform-preview]",
         "SERVICE_ARTIFACT: platform-operations-service-1.0.0-SNAPSHOT.jar",
         "source: ./.secrets/service-identities/platform-operations-service/private-key.pem",
         "PLATFORM_OPERATIONS_SOURCE_MODE:", "PLATFORM_OPERATIONS_LISTING_BASE_URL:",
         "SERVICE_READINESS_REQUIRED_DEPENDENCIES: nacos,database,redis,memory",
     ):
         require(block, value, "docker-compose.yml platform-operations-service")
+    require(compose, "image: bk-anent-services:${APP_VERSION", "shared source-versioned app image")
+    require(compose, "dockerfile: Dockerfile.prebuilt", "host-packaged app image")
     listing_block_match = re.search(r"(?ms)^  listing-master-service:\n(.*?)(?=^  [a-zA-Z0-9_-]+:\n|^volumes:)", compose)
     if not listing_block_match:
         raise SystemExit("docker-compose.yml has no listing-master-service block")
