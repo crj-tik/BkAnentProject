@@ -1927,3 +1927,11 @@
 **代码与配置处置**：客户入口开关可由 Compose 注入，Auth 公钥和签名请求回归已补；本机 `.env` 已开启 Customer 版本化授权。只读核对确认当前 Auth 账号都没有经纪人映射；`admin01` 的业务管理员权限不构成经纪人身份，不能据此推断现存房源/客户归属。
 
 **未闭环**：需在目标 Auth 运行版本上通过管理 API 创建经纪人账号并登记经确认的开发经纪人身份，再验证房源/客户自有范围与跨用户拒绝。当前没有权威经纪人主数据映射，运行态业务请求仍可能因缺少身份被正确拒绝。关联 KI-55。
+
+## KI-244 [OPEN·P1] Elasticsearch 主机发布端口未启用认证且绑定业务网卡
+
+**发现日期**：2026-11-03。Compose 中 Elasticsearch 关闭 X-Pack security，主机发布端口继承 `HOST_BIND_ADDRESS`。当前 `.env` 将其设为 `10.117.102.54`；从该主机接口访问 Elasticsearch 根端点无需凭据即可得到 HTTP 200，说明数据服务端口暴露到非 loopback 接口。
+
+**修复**：为 Elasticsearch 增加独立 `ELASTICSEARCH_BIND_ADDRESS`，默认及当前环境值均为 `127.0.0.1`；其他基础设施仍使用原 `HOST_BIND_ADDRESS`。容器间访问继续走 Compose 网络中的 `elasticsearch:9200`。
+
+**待验证边界**：本地 Compose 重建后须确认主机端口仅绑定 loopback，且通过非 loopback 接口无法访问。X-Pack security 仍关闭，因此同一 Compose 网络内仍是无认证访问；该边界依赖受控的 Compose 网络成员。

@@ -341,7 +341,7 @@ services:
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
     ports:
-      - "${HOST_BIND_ADDRESS:-127.0.0.1}:${ELASTICSEARCH_EXPOSED_PORT:-9200}:9200"
+      - "${ELASTICSEARCH_BIND_ADDRESS:-127.0.0.1}:${ELASTICSEARCH_EXPOSED_PORT:-9200}:9200"
     healthcheck:
       test: ["CMD-SHELL", "curl --fail --silent http://127.0.0.1:9200/_cluster/health?wait_for_status=yellow >/dev/null"]
       interval: 10s
