@@ -6,13 +6,13 @@
 
 **修复与边界**：新增受复盘读取权限和可信门店约束的诊断版本入口，复用详情来源校验；来源失效或修订缺失返回冲突。写入时仍复核事项版本、诊断修订及来源；实际部署与前端联调待验收。关联 LR-172。
 
-## KI-238 [OPEN·P2] 开发 Compose 容器标签不能证明应用源码版本
+## KI-238 [FIXED·dfcc8be·P2] 开发 Compose 容器标签不能证明应用源码版本
 
 **发现日期**：2026-11-03。Compose 中 Java 服务镜像使用 `dev`、`minimal` 等可变标签，MySQL/Redis 使用浮动小版本，MinIO 使用 `latest`；容器元数据没有应用源码 revision。运行面核对还发现停止中的业务容器镜像 ID 与本地同标签镜像不同，客户服务有一个无重启策略的一次性容器。
 
 **根因**：镜像标签、构建源码和运行容器之间缺少统一、不可变的版本标识，Compose 与本机 `.env` 也没有共同的应用版本值。
 
-**处置**：统一镜像版本与固定第三方版本已进入本次配置改动；待完成容器重建、镜像 revision/容器状态核对后更新为 FIXED，并在本提交记录修复版本。关联 LR-173。
+**处置**：以源码提交 `dfcc8be07f8a04a0c94a41acf6730073502713d5` 构建统一 Java 镜像；12 个 Java 服务共用同一 image ID，运行容器的镜像标签及 OCI version/revision 均对应该 SHA，readiness 均为 HTTP 200。MySQL MCP 服务及初始化容器也使用同一源码 SHA。第三方镜像均按摘要固定；12 份 Nacos 配置已重新发布并核验。旧版一次性客户容器已移除。RAG readiness 不代表检索或重排能力已验证。关联 LR-173。
 
 ## KI-239 [OPEN·P2] MinIO 官方容器镜像无法从当前配置的仓库重新拉取
 
@@ -1892,10 +1892,10 @@
 
 **修复与验证**：将总预算提高到 800ms，前两阶段各运行 200ms，第三阶段主动超过共享总截止时间；断言前三阶段按序启动、末阶段因同一总预算到期未启动。相关 RAG 定向测试 18 项通过；全仓 Maven 结果见本次验收记录。
 
-## KI-240 [OPEN·P1] 媒体图片生成器同时注册两个互斥提供方
+## KI-240 [FIXED·dfcc8be·P1] 媒体图片生成器同时注册两个互斥提供方
 
 **发现日期**：2026-11-03。重建停止的 `media-worker-service` 后，Spring 在创建 `MediaGenerateTaskConsumer` 时发现两个 `MediaImageGenerationClient` Bean（KE Seedream 与本地模拟），上下文初始化失败并进入重启循环。
 
 **根因**：两种实现只在调用方法内检查 `media.integration.mode`，组件本身始终注册；模式选择没有约束 Bean 注册。
 
-**处置**：按 `media.integration.mode` 对实现增加互斥条件注册；待重新构建后确认本地模式 readiness 为 UP，再更新为 FIXED。关联 LR-174。
+**处置**：按 `media.integration.mode` 对实现增加互斥条件注册；新源码镜像重建后，媒体服务 readiness 返回 HTTP 200，容器保持运行且未进入重启循环。修复提交 `dfcc8be07f8a04a0c94a41acf6730073502713d5`。关联 LR-174。
