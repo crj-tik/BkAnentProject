@@ -9,6 +9,7 @@ import com.bkanent.common.rag.RagAuthEnvelope;
 import com.bkanent.common.rag.RagAuthorizedListingBusinessBatchReadRequest;
 import com.bkanent.common.rag.RagAuthorizedListingBusinessCheckRequest;
 import com.bkanent.common.rag.RagAuthorizedListingBusinessSearchRequest;
+import com.bkanent.common.rag.RagContextAuthorizedListingBusinessBatchReadRequest;
 
 /** User-authorized internal transport for the stable Listing source API. */
 public interface ListingBusinessSourceRpcService {
@@ -16,6 +17,8 @@ public interface ListingBusinessSourceRpcService {
             RagAuthorizedListingBusinessSearchRequest request, RagAuthEnvelope authentication, AuthzResponse authorization);
     ListingBusinessResponse<ListingSnapshotBatchReadItem> batchRead(
             RagAuthorizedListingBusinessBatchReadRequest request, RagAuthEnvelope authentication, AuthzResponse authorization);
+    ListingBusinessResponse<ListingSnapshotBatchReadItem> batchReadContext(
+            RagContextAuthorizedListingBusinessBatchReadRequest request, RagAuthEnvelope authentication);
     ListingBusinessResponse<ListingSnapshotCheckItem> check(
             RagAuthorizedListingBusinessCheckRequest request, RagAuthEnvelope authentication, AuthzResponse authorization);
 }

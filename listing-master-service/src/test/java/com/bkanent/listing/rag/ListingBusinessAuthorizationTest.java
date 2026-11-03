@@ -39,7 +39,7 @@ class ListingBusinessAuthorizationTest {
         when(domain.getById(11L)).thenReturn(row("OFFLINE", 0));
         when(identity.requireReader(any())).thenReturn(principal("BROKER"));
         try (var ignored = ListingRagCredentialContext.open(new RagCredentialContext("dedicated-access"))) {
-            assertThrows(RagException.class, () -> tools.getListingDetail(11L));
+            assertThrows(com.bkanent.common.authz.AuthzException.class, () -> tools.getListingDetail(11L));
             assertThrows(RagException.class, () -> tools.getListingSummary(11L));
             when(identity.requireReader(any())).thenReturn(principal("ADMIN"));
             assertEquals("OFFLINE", tools.getListingSummary(11L).status());
@@ -119,7 +119,8 @@ class ListingBusinessAuthorizationTest {
         try (var ignored = ListingRagCredentialContext.open(new RagCredentialContext("dedicated-access"))) {
             assertEquals(1, service.searchListingSummaries("region").size());
             verify(domain).search(argThat(r -> "ON_SALE".equals(r.status()) && "region".equals(r.keyword())));
-            assertTrue(service.searchListings(new ListingQueryRequest(null,"OFFLINE",null,null,null,null,null,null)).isEmpty());
+            assertThrows(com.bkanent.common.authz.AuthzException.class,
+                    () -> service.searchListings(new ListingQueryRequest(null,"OFFLINE",null,null,null,null,null,null)));
         }
     }
 }

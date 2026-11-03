@@ -107,13 +107,12 @@ a2a:
 
 marketing:
   authorization:
-    enabled: false
+    enabled: ${MARKETING_AUTHORIZATION_ENABLED:false}
   campaign:
     mode: REAL
     dispatch-enabled: true
     rule-version: campaign-rules-v1
     plan-ttl-seconds: 900
-    listing-snapshot-base-url: ${LISTING_SNAPSHOT_BASE_URL:http://listing-master-service:9004}
   listing-read:
     key-id: marketing-read-current
     signing-secret: ${MARKETING_LISTING_READ_SECRET:}
@@ -142,13 +141,17 @@ marketing:
 mcp:
   authorization:
     server:
-      # Keep disabled until both key sets and the exact per-tool allowlist are configured.
-      enabled: false
+      enabled: ${MARKETING_MCP_AUTHORIZATION_ENABLED:false}
       caller-service: agent-service
       authority-public-keys:
         auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
       caller-public-keys:
         agent-service-current: ${AGENT_SERVICE_IDENTITY_PUBLIC_KEY:}
-      # tool name -> registered permission code; no implicit public tools.
-      tool-operations: {}
+      # 工具名到权限码精确映射；无隐式公开工具。
+      tool-operations:
+        createMarketingContentDraft: marketing.content.create.own
+        prepareMarketingCampaign: marketing.campaign.prepare
+        confirmMarketingCampaign: marketing.campaign.publish
+        getMarketingCampaignReceipt: marketing.campaign.read
+        reconcileMarketingCampaignAttempt: marketing.campaign.effects.read
       public-tools: []

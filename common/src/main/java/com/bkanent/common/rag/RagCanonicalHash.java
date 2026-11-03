@@ -29,6 +29,7 @@ public final class RagCanonicalHash {
             RagStatusRequest.class, RagInspectRequest.class, RagProvisionRequest.class, RagReplayRequest.class,
             RagListingSearchRequest.class, RagListingReadRequest.class, RagAuthorizedListingReadRequest.class,
             RagAuthorizedListingBusinessSearchRequest.class, RagAuthorizedListingBusinessBatchReadRequest.class,
+            RagContextAuthorizedListingBusinessBatchReadRequest.class,
             RagAuthorizedListingBusinessCheckRequest.class,
             RagContextAuthorizedListingReadRequest.class, RagAuthorizedListingAssetWriteRequest.class,
             RagContextAuthorizedListingAssetWriteRequest.class,
@@ -68,6 +69,13 @@ public final class RagCanonicalHash {
             return hash(encode("rag.authorized-listing-business-batch-read.v1", Arrays.asList(
                     authorizedRead.contractVersion(), authorizedRead.requestId(), authorizedRead.request(),
                     authorizedRead.authorizationEvidenceHash()), false));
+        }
+        if (request instanceof RagContextAuthorizedListingBusinessBatchReadRequest authorizedRead) {
+            return hash(encode("rag.context-authorized-listing-business-batch-read.v1", Arrays.asList(
+                    authorizedRead.contractVersion(), authorizedRead.requestId(), authorizedRead.request(),
+                    com.bkanent.common.authz.AuthzCanonicalHash.signedContextHash(
+                            authorizedRead.authorizationContext()),
+                    com.bkanent.common.authz.AuthzCanonicalHash.signedFreshnessHash(authorizedRead.freshness())), false));
         }
         if (request instanceof RagAuthorizedListingBusinessCheckRequest authorizedCheck) {
             return hash(encode("rag.authorized-listing-business-check.v1", Arrays.asList(

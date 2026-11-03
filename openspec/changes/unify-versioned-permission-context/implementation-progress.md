@@ -279,3 +279,11 @@ Postman真实API验收通过**14项断言**：登录、`/auth/me`、refresh轮�
 Postman API验收共**19项断言通过**：登录和可信`/auth/me` actor、访谈列表与开台、数据库case/session owner匹配签名actor、问题候选写入和确认、MANAGE/READ票据用途隔离及`no-store`、本人监控、无票/错用途拒绝、query-ticket拒绝、缺少RESPOND证明时在模型处理前拒绝turn、SSE自定义头与心跳、票据撤销、logout。成功路径先完成logout和严格核验临时数据库清理；验后合成case/session及相关票据计数均为0，验收临时凭据文件已清理。定向单测3项通过。
 
 全仓 `mvn -gs .mvn-settings.xml -s .mvn-settings.xml test` 的23模块reactor成功，Surefire **1740项，失败0、错误0、跳过14**；跳过项为既有外部数据库、Docker/Nacos或真实模型验收。`docker compose config --quiet`、PowerShell验收脚本语法及`git diff --check`通过。没有调用模型供应商或真实答题处理。该API证据补充任务8.3/8.4服务端及客户端契约边界，但不替代浏览器验收；没有完成有效RESPOND答题/回复/报告、真实A2A五操作、MySQL/Redis撤权并发故障矩阵，因此8.3/8.4、11.1、11.4、11.6仍未勾选，进度仍为**60/65**。
+
+## 业务域版本化授权补齐（2026-11-03）
+
+补齐Gateway到Listing、Customer、Marketing、Notification等受保护路由的精确授权受众映射，并将Gateway/Auth刷新调用登记到Auth trusted-caller ACL。Marketing内容审核、campaign读写与发布改为消费当前签名scope和业务owner范围；Marketing读取房源快照改为带Auth签名context/freshness及服务间签名的Listing Dubbo调用，不再转发用户Bearer。Customer、Listing、Marketing、Notification及MCP精确工具开关贯通application/Nacos/Compose，RAG主开关传给RAG和Agent/Listing/Memory消费者；Memory v2 context仍是独立可选开关，当前保持关闭。
+
+新增受管Marketing授权目录迁移630及schema check，注册权限目录项但不向全体BROKER或全渠道发布授权自动授予高风险操作。根目录 `.env` 中本次统一授权主开关及Authz Redis writer/reader门禁已配置为开启；此配置尚未由Compose实际装载到容器，`.env` 保持本机忽略文件。应用 `APP_VERSION` 将在源代码提交后同步为新commit SHA。
+
+验证：全仓 `mvn -gs .mvn-settings.xml -s .mvn-settings.xml test` 成功；`python scripts/deploy/test_init_manifest.py` 通过（64项清单的目标与规范SHA-256）；`openspec validate unify-versioned-permission-context --strict` 通过；`git diff --check` 通过。未运行Docker、未对运行数据库应用迁移，也没有执行Postman/live API或真实跨服务验收。8.3/8.4、11.1、11.4、11.6仍保持未完成；新Broker账号及身份映射须在更新后的Auth服务可用且取得权威Broker身份后创建，不能用猜测ID代替。

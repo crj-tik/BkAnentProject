@@ -119,7 +119,7 @@ listing:
     report:
       storage-dir: ${LISTING_COMPARISON_STORAGE_DIR:/app/runtime/reports}
   rag:
-    versioned-authorization-required: false
+    versioned-authorization-required: ${LISTING_RAG_VERSIONED_AUTHORIZATION_REQUIRED:false}
     space-id: listing.knowledge
     schema-version: "1"
     policy-version: listing-v2

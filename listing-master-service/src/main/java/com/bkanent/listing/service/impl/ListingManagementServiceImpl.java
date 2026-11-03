@@ -136,6 +136,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
      */
     @Override
     public ListingDetailResponse getListingDetail(Long listingId) {
+        com.bkanent.common.authz.AuthzRequestScope.requireCurrent();
         requireReadPermission();
         ListingEntity entity = requireListing(listingId);
         requireOwner(entity, "listing.read", "listing.read.all");
@@ -163,7 +164,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
         var current = principal;
         List<ListingDetailResponse> result = new java.util.ArrayList<>();
         for (ListingEntity row : rows) {
-            if (com.bkanent.common.authz.AuthzRequestScope.present()) requireOwner(row, "listing.read", "listing.read.all");
+            requireOwner(row, "listing.read", "listing.read.all");
             if (com.bkanent.listing.rag.ListingRagIdentity.canRead(current, row)) result.add(listingConverter.toDetailResponse(row));
         }
         return List.copyOf(result);
@@ -375,7 +376,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     }
 
     private ListingQueryRequest authorizedQuery(ListingQueryRequest request, String ownOperation, String allOperation) {
-        if (!com.bkanent.common.authz.AuthzRequestScope.present()) return request;
+        com.bkanent.common.authz.AuthzRequestScope.requireCurrent();
         if (com.bkanent.common.authz.AuthzRequestScope.businessAdmin()) {
             com.bkanent.common.authz.AuthzRequestScope.requireOperation(allOperation);
             return request;
@@ -402,9 +403,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     }
 
     private void requireOwner(ListingEntity entity, String ownOperation, String allOperation) {
-        if (com.bkanent.common.authz.AuthzRequestScope.present()) {
-            com.bkanent.common.authz.AuthzRequestScope.requireBrokerOwnership(entity.getBrokerId(), ownOperation, allOperation);
-        }
+        com.bkanent.common.authz.AuthzRequestScope.requireBrokerOwnership(entity.getBrokerId(), ownOperation, allOperation);
     }
 
     private void requireSubmittedBroker(Long submittedBrokerId, long trustedBrokerId) {

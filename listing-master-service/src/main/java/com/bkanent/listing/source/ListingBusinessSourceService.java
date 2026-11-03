@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Supplier;
 
 @Service
 public class ListingBusinessSourceService {
@@ -47,11 +48,18 @@ public class ListingBusinessSourceService {
     }
 
     public ListingBusinessResponse<ListingSnapshotBatchReadItem> batchRead(ListingSnapshotBatchReadRequest request) {
+        return batchRead(request, this::requireReadScope);
+    }
+
+    /** Context-only internal RPC path; the supplied proof is reverified after source access. */
+    public ListingBusinessResponse<ListingSnapshotBatchReadItem> batchRead(
+            ListingSnapshotBatchReadRequest request, Supplier<ListingAccessScope> verifiedScope) {
         validateRefs(request == null ? null : request.contractVersion(), request == null ? null : request.refs(), false);
-        ListingAccessScope scope = requireReadScope();
+        if (verifiedScope == null) throw ListingBusinessApiException.authenticationRequired();
+        ListingAccessScope scope = verifiedScope.get();
         List<ListingSnapshotBatchReadItem> items = call(() -> source.batchRead(request, scope));
         validateBatchReadResult(request.refs(), items);
-        recheckReadScope();
+        if (!scope.equals(verifiedScope.get())) throw ListingBusinessApiException.authenticationRequired();
         return new ListingBusinessResponse<>(CONTRACT, items, null);
     }
 

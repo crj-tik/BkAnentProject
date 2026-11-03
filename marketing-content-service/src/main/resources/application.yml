@@ -50,20 +50,25 @@ dubbo:
 
 marketing:
   authorization:
-    enabled: false
+    enabled: ${MARKETING_AUTHORIZATION_ENABLED:false}
   listing-read:
     key-id: ${MARKETING_LISTING_READ_KEY_ID:marketing-read-current}
     signing-secret: ${MARKETING_LISTING_READ_SECRET:}
 
-# Disabled until Auth and this MCP service have reviewed keys and per-tool permissions.
+# Explicitly gated: callers require an Auth-signed per-tool authorization context.
 mcp:
   authorization:
     server:
-      enabled: false
+      enabled: ${MARKETING_MCP_AUTHORIZATION_ENABLED:false}
       caller-service: agent-service
       authority-public-keys:
         auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
       caller-public-keys:
         agent-service-current: ${AGENT_SERVICE_IDENTITY_PUBLIC_KEY:}
-      tool-operations: {}
+      tool-operations:
+        createMarketingContentDraft: marketing.content.create.own
+        prepareMarketingCampaign: marketing.campaign.prepare
+        confirmMarketingCampaign: marketing.campaign.publish
+        getMarketingCampaignReceipt: marketing.campaign.read
+        reconcileMarketingCampaignAttempt: marketing.campaign.effects.read
       public-tools: []

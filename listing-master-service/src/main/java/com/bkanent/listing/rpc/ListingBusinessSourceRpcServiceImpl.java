@@ -50,6 +50,15 @@ public class ListingBusinessSourceRpcServiceImpl implements ListingBusinessSourc
     }
 
     @Override
+    public ListingBusinessResponse<ListingSnapshotBatchReadItem> batchReadContext(
+            com.bkanent.common.rag.RagContextAuthorizedListingBusinessBatchReadRequest request,
+            RagAuthEnvelope authentication) {
+        if (request == null) throw com.bkanent.listing.source.ListingBusinessApiException.invalidArgument();
+        return source.batchRead(request.request(), () -> identity.verifyAuthorizedBusinessSourceContext(
+                request, authentication, authorizationProperties.decodedAuthorityPublicKeys()));
+    }
+
+    @Override
     public ListingBusinessResponse<ListingSnapshotCheckItem> check(
             RagAuthorizedListingBusinessCheckRequest request, RagAuthEnvelope authentication,
             AuthzResponse authorization) {

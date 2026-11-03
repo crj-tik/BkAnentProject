@@ -50,6 +50,22 @@ class AuthAuthorizationRpcServiceImplTest {
     }
 
     @Test
+    void agentRefreshRequiresTheExactConfiguredOperationAndAudience() throws Exception {
+        Fixture f = new Fixture();
+        var agentCaller = f.properties.getTrustedCallers().get("agent-key");
+        agentCaller.setOperations(Set.of("BIND_EXECUTION", "REFRESH_AUTHORIZATION"));
+        agentCaller.setAudiences(Set.of("agent-service"));
+        var entry = f.entry();
+        var refreshed = f.refresh(entry.context(), 2);
+        assertThat(refreshed.context().audience()).isEqualTo("agent-service");
+        assertThat(refreshed.context().actorId()).isEqualTo(entry.context().actorId());
+
+        agentCaller.setAudiences(Set.of("interview-service"));
+        assertThatThrownBy(() -> f.refresh(entry.context(), 3))
+                .isInstanceOf(AuthzException.class).hasMessage("PERMISSION_DENIED");
+    }
+
+    @Test
     void changedBodyFailsBeforeUserLookup() throws Exception {
         Fixture f = new Fixture();
         var proof = f.entryProof();

@@ -46,7 +46,9 @@ dubbo:
 
 customer:
   authorization:
-    enabled: false
+    enabled: ${CUSTOMER_AUTHORIZATION_ENABLED:false}
+    authority-public-keys:
+      auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
   listing-read:
     key-id: ${CUSTOMER_LISTING_READ_KEY_ID:customer-read-current}
     signing-secret: ${CUSTOMER_LISTING_READ_SECRET:}

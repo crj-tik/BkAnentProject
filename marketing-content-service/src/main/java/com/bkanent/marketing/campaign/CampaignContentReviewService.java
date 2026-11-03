@@ -20,7 +20,6 @@ public class CampaignContentReviewService {
 
     public MarketingContentDetailResponse review(long contentId, CampaignContentReviewRequest request) {
         long actorId = actorResolver.currentActorId();
-        authorization.require(actorId, CampaignAuthorizationService.CONTENT_REVIEW);
         if (request == null || request.auditStatus() == null || !REVIEW_STATES.contains(request.auditStatus().toUpperCase())) {
             throw CampaignDomainException.invalid("review decision must be APPROVED, REJECTED, or REVIEWING");
         }

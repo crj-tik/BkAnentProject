@@ -7,6 +7,8 @@ import com.bkanent.common.marketing.campaign.CampaignTargetRequest;
 import com.bkanent.common.marketing.campaign.MarketingContentDraftResponse;
 import com.bkanent.common.marketing.campaign.MarketingContentDraftsResponse;
 import com.bkanent.common.authz.AuthzFreshness;
+import com.bkanent.common.authz.AuthzErrorCode;
+import com.bkanent.common.authz.AuthzException;
 import com.bkanent.common.authz.AuthorizationContext;
 import com.bkanent.common.authz.AuthorizationStatus;
 import com.bkanent.common.authz.DelegationBinding;
@@ -39,20 +41,14 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import com.sun.net.httpserver.HttpServer;
-import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class CampaignLifecycleIntegrationTest {
     private JdbcDataSource dataSource;
     private JdbcTemplate jdbc;
     private MarketingAssetService marketingAssets;
-    private AuthPermissionRpcService auth;
     private CampaignRuntimeProperties properties;
     private CampaignJdbcRepository repository;
     private CampaignLifecycleService campaigns;
@@ -60,7 +56,7 @@ class CampaignLifecycleIntegrationTest {
     private CampaignActorResolver actorResolver;
     private CampaignAuthorizationService authorization;
     private MockHttpServletRequest request;
-    private HttpServer listingFixture;
+    private AutoCloseable authorizationScope;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -82,28 +78,11 @@ class CampaignLifecycleIntegrationTest {
         content.setAssetUrls(""); content.setVersionNo(1); content.setAuditStatus("APPROVED"); content.setStatus("DRAFT");
         when(marketingAssets.getById(5L)).thenReturn(content);
 
-        auth = mock(AuthPermissionRpcService.class);
-        when(auth.resolvePrincipal("test-token")).thenReturn(new AuthenticatedPrincipal(42L));
-        when(auth.hasPermission(eq(42L), anyString())).thenReturn(true);
         @SuppressWarnings("unchecked") ObjectProvider<AuthPermissionRpcService> provider = mock(ObjectProvider.class);
-        when(provider.getIfAvailable()).thenReturn(auth);
         actorResolver = new CampaignActorResolver(provider);
         authorization = new CampaignAuthorizationService(provider);
         properties = new CampaignRuntimeProperties();
         properties.setMode(CampaignRuntimeProperties.Mode.SIMULATED);
-        listingFixture = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        listingFixture.createContext("/listings/business/v1/snapshots/batch-read", exchange -> {
-            byte[] response = ("{\"success\":true,\"code\":\"0\",\"message\":\"OK\",\"data\":{\"contractVersion\":\"domain-parallel-v1\",\"items\":[{" +
-                    "\"listingRef\":{\"sourceSystem\":\"listing-master-service\",\"sourceId\":\"50\"}," +
-                    "\"revision\":\"revision-1\",\"contentHash\":\"" + "a".repeat(64) + "\",\"observedAt\":\"2026-01-01T00:00:00Z\"," +
-                    "\"dataMode\":\"REAL\",\"datasetId\":\"listing-fixture-v1\",\"facts\":{\"title\":\"Fixture Listing\"}}]}}")
-                    .getBytes(StandardCharsets.UTF_8);
-            exchange.getResponseHeaders().add("Content-Type", "application/json");
-            exchange.sendResponseHeaders(200, response.length);
-            try (var body = exchange.getResponseBody()) { body.write(response); }
-        });
-        listingFixture.start();
-        properties.setListingSnapshotBaseUrl("http://127.0.0.1:" + listingFixture.getAddress().getPort());
         ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
         repository = new CampaignJdbcRepository(jdbc, mapper);
         campaignAssets = new CampaignAssetAdminService(repository, actorResolver, authorization);
@@ -112,11 +91,44 @@ class CampaignLifecycleIntegrationTest {
                 marketingAssets, mapper, List.of(new SimulatedCampaignPlatformProvider()));
 
         request = new MockHttpServletRequest();
-        request.addHeader("Authorization", "Bearer test-token");
         RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+        authorizationScope = McpAuthorizationScope.open(verifiedMarketingContext());
     }
 
-    @AfterEach void cleanRequest() { RequestContextHolder.resetRequestAttributes(); if (listingFixture != null) listingFixture.stop(0); }
+    @AfterEach void cleanRequest() throws Exception {
+        RequestContextHolder.resetRequestAttributes();
+        if (authorizationScope != null) authorizationScope.close();
+    }
+
+    private McpAuthorizationContract.Verified verifiedMarketingContext() {
+        return verifiedMarketingContext(verifiedMarketingOperations());
+    }
+
+    private List<String> verifiedMarketingOperations() {
+        return List.of("marketing.campaign.prepare", "marketing.campaign.read", "marketing.campaign.publish",
+                "marketing.campaign.effects.read", "marketing.campaign.assets.manage",
+                "marketing.content.read.own", "marketing.content.read.all",
+                "marketing.content.review.own", "marketing.content.review.all", "listing.read.all",
+                "marketing.channel.douyin.publish", "marketing.channel.beike.publish",
+                "marketing.channel.xiaohongshu.publish");
+    }
+
+    private McpAuthorizationContract.Verified verifiedMarketingContext(List<String> operations) {
+        long now = Instant.now().getEpochSecond();
+        String hash = "0".repeat(64);
+        String nonce = Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]);
+        String operation = operations.contains("marketing.campaign.prepare")
+                ? "marketing.campaign.prepare" : "marketing.campaign.read";
+        var context = new AuthorizationContext("42", 1, 1, hash, operations, "agent-service",
+                "req-campaign", "run-campaign", "session-campaign", hash, hash, nonce,
+                now - 1, now + 90, now + 90, Map.of("BROKER", 7L), "Ed25519", "auth-current", null);
+        var freshness = new AuthzFreshness("42", 1, 1, AuthorizationStatus.ACTIVE, hash,
+                now - 1, now + 29, nonce, "Ed25519", "auth-current", null);
+        var binding = new DelegationBinding("agent-service", "marketing-content-service", "42", List.of(operation),
+                "run-campaign", null, "req-campaign", hash, hash, nonce, now - 1, now + 59);
+        return new McpAuthorizationContract.Verified("42", "agent-service", "marketing-content-service", operation,
+                "req-campaign", "prepareMarketingCampaign", context, freshness, binding);
+    }
 
     @Test
     void prepareConfirmDispatchReconcileEffectAndRoiKeepStableSimulatedIdentity() {
@@ -247,16 +259,12 @@ class CampaignLifecycleIntegrationTest {
     }
 
     @Test
-    void realModeWithoutProviderFailsBeforeCreatingReceiptOrOutbox() {
+    void realModeWithoutListingSourceFailsBeforeCreatingReceiptOrOutbox() {
         properties.setMode(CampaignRuntimeProperties.Mode.REAL);
         jdbc.update("UPDATE marketing_campaign_account SET data_mode='REAL'");
-        var prepared = campaigns.prepare(new CampaignPlanPrepareRequest(5L, List.of(),
-                List.of(new CampaignTargetRequest("BEIKE", accountId("BEIKE"), Map.of()),
-                        new CampaignTargetRequest("DOUYIN", accountId("DOUYIN"), Map.of()),
-                        new CampaignTargetRequest("XIAOHONGSHU", accountId("XIAOHONGSHU"), Map.of())), null));
-        var failure = assertThrows(CampaignDomainException.class, () -> campaigns.confirm(prepared.planId(),
-                new CampaignConfirmRequest("confirm-real", 1, prepared.snapshotHash())));
-        assertEquals(com.bkanent.common.marketing.campaign.CampaignErrorCode.PROVIDER_NOT_CONFIGURED, failure.code());
+        var failure = assertThrows(CampaignDomainException.class, () -> campaigns.prepare(new CampaignPlanPrepareRequest(5L,
+                List.of(), List.of(new CampaignTargetRequest("BEIKE", accountId("BEIKE"), Map.of())), null)));
+        assertEquals(com.bkanent.common.marketing.campaign.CampaignErrorCode.DEPENDENCY_UNAVAILABLE, failure.code());
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM marketing_campaign_publish_attempt", Integer.class));
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM marketing_campaign_outbox", Integer.class));
     }
@@ -354,27 +362,31 @@ class CampaignLifecycleIntegrationTest {
     }
 
     @Test
-    void deniedScopeAndRequestIdReuseWithDifferentBodyAreRejected() {
-        when(auth.hasPermission(42L, "marketing.campaign.prepare")).thenReturn(false);
-        var denied = assertThrows(CampaignDomainException.class, () -> campaigns.prepare(new CampaignPlanPrepareRequest(5L,
-                List.of(), List.of(new CampaignTargetRequest("douyin", 1L, Map.of())), null)));
-        assertEquals(com.bkanent.common.marketing.campaign.CampaignErrorCode.PERMISSION_DENIED, denied.code());
-        when(auth.hasPermission(42L, "marketing.campaign.prepare")).thenReturn(true);
+    void deniedScopeAndRequestIdReuseWithDifferentBodyAreRejected() throws Exception {
+        List<String> withoutPrepare = new java.util.ArrayList<>(verifiedMarketingOperations());
+        withoutPrepare.remove("marketing.campaign.prepare");
+        try (var ignored = McpAuthorizationScope.open(verifiedMarketingContext(withoutPrepare))) {
+            AuthzException denied = assertThrows(AuthzException.class, () -> campaigns.prepare(new CampaignPlanPrepareRequest(5L,
+                    List.of(), List.of(new CampaignTargetRequest("douyin", 1L, Map.of())), null)));
+            assertEquals(AuthzErrorCode.PERMISSION_DENIED, denied.code());
+        }
 
-        when(auth.hasPermission(42L, "marketing.channel.douyin.publish")).thenReturn(false);
-        var deniedTarget = assertThrows(CampaignDomainException.class, () -> campaigns.prepare(new CampaignPlanPrepareRequest(5L,
-                List.of(), List.of(new CampaignTargetRequest("douyin", 1L, Map.of())), null)));
-        assertEquals(com.bkanent.common.marketing.campaign.CampaignErrorCode.PERMISSION_DENIED, deniedTarget.code());
-        when(auth.hasPermission(42L, "marketing.channel.douyin.publish")).thenReturn(true);
+        List<String> withoutChannelPublish = new java.util.ArrayList<>(verifiedMarketingOperations());
+        withoutChannelPublish.remove("marketing.channel.douyin.publish");
+        try (var ignored = McpAuthorizationScope.open(verifiedMarketingContext(withoutChannelPublish))) {
+            AuthzException deniedTarget = assertThrows(AuthzException.class, () -> campaigns.prepare(new CampaignPlanPrepareRequest(5L,
+                    List.of(), List.of(new CampaignTargetRequest("douyin", 1L, Map.of())), null)));
+            assertEquals(AuthzErrorCode.PERMISSION_DENIED, deniedTarget.code());
+        }
 
         var preparedBeforeRevocation = campaigns.prepare(new CampaignPlanPrepareRequest(5L, List.of(),
                 List.of(new CampaignTargetRequest("douyin", 1L, Map.of())), null));
-        when(auth.hasPermission(42L, "marketing.channel.douyin.publish")).thenReturn(false);
-        var revoked = assertThrows(CampaignDomainException.class, () -> campaigns.confirm(preparedBeforeRevocation.planId(),
-                new CampaignConfirmRequest("revoked-target", 1, preparedBeforeRevocation.snapshotHash())));
-        assertEquals(com.bkanent.common.marketing.campaign.CampaignErrorCode.PERMISSION_DENIED, revoked.code());
-        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM marketing_campaign_publish_attempt", Integer.class));
-        when(auth.hasPermission(42L, "marketing.channel.douyin.publish")).thenReturn(true);
+        try (var ignored = McpAuthorizationScope.open(verifiedMarketingContext(withoutChannelPublish))) {
+            AuthzException revoked = assertThrows(AuthzException.class, () -> campaigns.confirm(preparedBeforeRevocation.planId(),
+                    new CampaignConfirmRequest("revoked-target", 1, preparedBeforeRevocation.snapshotHash())));
+            assertEquals(AuthzErrorCode.PERMISSION_DENIED, revoked.code());
+            assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM marketing_campaign_publish_attempt", Integer.class));
+        }
 
         var first = campaigns.prepare(new CampaignPlanPrepareRequest(5L, List.of(),
                 List.of(new CampaignTargetRequest("douyin", 1L, Map.of())), null));

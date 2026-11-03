@@ -156,6 +156,58 @@ public class ListingRagIdentity {
                 authorization, authorityKeys, "listing.read", "listing.read.all");
     }
 
+    /** Verifies an Auth-signed context carried by Marketing/MCP without forwarding a user bearer token. */
+    public com.bkanent.listing.source.ListingAccessScope verifyAuthorizedBusinessSourceContext(
+            com.bkanent.common.rag.RagContextAuthorizedListingBusinessBatchReadRequest request,
+            RagAuthEnvelope envelope, java.util.Map<String, java.security.PublicKey> authorityKeys) {
+        try {
+            if (request == null || envelope == null || authorityKeys == null || authorityKeys.isEmpty()) {
+                throw new com.bkanent.common.authz.AuthzException(
+                        com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
+            }
+            String caller = "marketing-content-service";
+            verifyCaller(request, request.requestId(), RagOperation.READ, envelope, null);
+            var context = request.authorizationContext();
+            var freshness = request.freshness();
+            long now = Instant.now().getEpochSecond();
+            if (envelope.actorMode() != RagActorMode.USER
+                    || !caller.equals(envelope.callerService())
+                    || !(caller.equals(context.audience()) || A2A_PARENT_SERVICE.equals(context.audience()))
+                    || !context.actorId().equals(envelope.actorId())
+                    || !context.actorId().equals(freshness.userId())
+                    || context.permissionRevision() != freshness.permissionRevision()
+                    || context.credentialEpoch() != freshness.credentialEpoch()
+                    || !context.permissionHash().equals(freshness.permissionHash())
+                    || freshness.status() != com.bkanent.common.authz.AuthorizationStatus.ACTIVE
+                    || context.issuedAtEpochSecond() < freshness.checkedAtEpochSecond()
+                    || envelope.expiresAtEpochSecond() > context.expiresAtEpochSecond()
+                    || envelope.expiresAtEpochSecond() > context.runHardDeadlineEpochSecond()
+                    || envelope.expiresAtEpochSecond() > freshness.notAfterEpochSecond()) {
+                throw new com.bkanent.common.authz.AuthzException(
+                        com.bkanent.common.authz.AuthzErrorCode.CONTEXT_CONFLICT);
+            }
+            com.bkanent.common.authz.AuthzSignature.verifyContext(context, context.audience(), authorityKeys,
+                    Instant.ofEpochSecond(now));
+            com.bkanent.common.authz.AuthzSignature.verifyFreshness(freshness, authorityKeys,
+                    Instant.ofEpochSecond(now));
+            boolean businessWide = context.allowedOperations().contains("listing.read.all");
+            String operation = businessWide ? "listing.read.all" : "listing.read";
+            if (!context.allowedOperations().contains(operation)) {
+                throw new com.bkanent.common.authz.AuthzException(
+                        com.bkanent.common.authz.AuthzErrorCode.PERMISSION_DENIED);
+            }
+            Long brokerId = context.businessIdentities().get("BROKER");
+            if (!businessWide && (brokerId == null || brokerId <= 0)) {
+                throw new com.bkanent.common.authz.AuthzException(
+                        com.bkanent.common.authz.AuthzErrorCode.PERMISSION_DENIED);
+            }
+            return new com.bkanent.listing.source.ListingAccessScope(Long.parseLong(context.actorId()),
+                    businessWide ? null : brokerId, businessWide);
+        } catch (com.bkanent.common.authz.AuthzException failure) {
+            throw toRagException(failure);
+        }
+    }
+
     /** Verifies one caller-signed Listing request for its exact user or explicitly-wide operation. */
     public com.bkanent.common.authz.AuthzRequestScope.Scope openAuthorizedOperationScope(
             com.bkanent.common.rag.RagAuthorizedListingReadRequest request, RagAuthEnvelope envelope,

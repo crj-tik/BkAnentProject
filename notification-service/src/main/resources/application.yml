@@ -37,7 +37,7 @@ a2a:
 
 notification:
   authorization:
-    enabled: false
+    enabled: ${NOTIFICATION_AUTHORIZATION_ENABLED:false}
 
 dubbo:
   application:
@@ -52,15 +52,20 @@ dubbo:
   consumer:
     protocol: dubbo
 
-# Disabled until Auth and this MCP service have reviewed keys and per-tool permissions.
+# User calls require Auth-signed context, registered verifier keys and an exact per-tool operation mapping.
 mcp:
   authorization:
     server:
-      enabled: false
+      enabled: ${NOTIFICATION_MCP_AUTHORIZATION_ENABLED:false}
       caller-service: agent-service
       authority-public-keys:
         auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
       caller-public-keys:
         agent-service-current: ${AGENT_SERVICE_IDENTITY_PUBLIC_KEY:}
-      tool-operations: {}
+      tool-operations:
+        sendStationMessage: notification.message.send.all
+        sendMyStationMessage: notification.message.send.own
+        sendEmailMessage: notification.email.send.all
+        listUserMessages: notification.message.read.own
+        countUnreadMessages: notification.message.read.own
       public-tools: []

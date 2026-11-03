@@ -1,30 +1,46 @@
 package com.bkanent.marketing.campaign;
 
-import com.bkanent.common.a2a.A2aCredentialContext;
+import com.bkanent.common.a2a.VerifiedDomainAuthorization;
+import com.bkanent.common.listing.ListingBusinessResponse;
+import com.bkanent.common.listing.ListingRef;
+import com.bkanent.common.listing.ListingSnapshotBatchReadItem;
+import com.bkanent.common.listing.ListingSnapshotBatchReadRequest;
+import com.bkanent.common.listing.ListingSourceSnapshot;
+import com.bkanent.common.listing.ListingSourceStatus;
 import com.bkanent.common.marketing.campaign.CampaignDataMode;
 import com.bkanent.common.marketing.campaign.CampaignErrorCode;
+import com.bkanent.common.rag.RagActorMode;
+import com.bkanent.common.rag.RagAuthEnvelope;
+import com.bkanent.common.rag.RagCanonicalHash;
+import com.bkanent.common.rag.RagContextAuthorizedListingBusinessBatchReadRequest;
+import com.bkanent.common.rag.RagOperation;
+import com.bkanent.common.rag.RagRequestSigner;
+import com.bkanent.common.rpc.ListingBusinessSourceRpcService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.dubbo.config.annotation.DubboReference;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
-/** Marketing-owned wire adapter for the frozen domain-parallel-v1 listing snapshot endpoint. */
+/** Marketing-owned adapter for the signed, versioned Listing business source RPC. */
 @Component
 public class CampaignListingSnapshotClient {
 
     private final CampaignRuntimeProperties properties;
     private final ObjectMapper objectMapper;
-    private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
+    @DubboReference(check = false)
+    private ListingBusinessSourceRpcService listings;
+    @Value("${marketing.listing-read.key-id:marketing-read-current}")
+    private String keyId = "marketing-read-current";
+    @Value("${marketing.listing-read.signing-secret:}")
+    private String secret = "";
 
     public CampaignListingSnapshotClient(CampaignRuntimeProperties properties, ObjectMapper objectMapper) {
         this.properties = properties;
@@ -44,85 +60,74 @@ public class CampaignListingSnapshotClient {
                     "facts", Map.of("title", "Fixture listing " + listingId, "areaSquareMetres", "88.0",
                             "totalPrice", Map.of("amount", "2500000", "currency", "CNY", "unit", "YUAN"))));
         }
-        String baseUrl = properties.getListingSnapshotBaseUrl();
-        String credential = requestCredential();
-        if (!StringUtils.hasText(baseUrl)) {
+        if (listings == null) throw CampaignDomainException.unavailable(
+                CampaignErrorCode.DEPENDENCY_UNAVAILABLE, "listing snapshot source is not configured");
+        if (!StringUtils.hasText(secret) || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
             throw CampaignDomainException.unavailable(CampaignErrorCode.DEPENDENCY_UNAVAILABLE,
-                    "listing snapshot source is not configured");
+                    "listing snapshot caller identity is not configured");
         }
-        if (!StringUtils.hasText(credential)) throw CampaignDomainException.unauthorized("listing snapshot requires current user credentials");
         try {
-            byte[] body = objectMapper.writeValueAsBytes(Map.of(
-                    "contractVersion", "domain-parallel-v1",
-                    "refs", java.util.List.of(Map.of("sourceSystem", "listing-master-service", "sourceId", Long.toString(listingId)))));
-            HttpRequest request = HttpRequest.newBuilder(URI.create(trimSlash(baseUrl) + "/listings/business/v1/snapshots/batch-read"))
-                    .timeout(Duration.ofSeconds(8))
-                    .header("Content-Type", "application/json")
-                    .header("Authorization", credential)
-                    .POST(HttpRequest.BodyPublishers.ofByteArray(body)).build();
-            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw CampaignDomainException.unavailable(CampaignErrorCode.DEPENDENCY_UNAVAILABLE,
-                        "listing snapshot source returned HTTP " + response.statusCode());
-            }
-            JsonNode root = objectMapper.readTree(response.body());
-            if (!root.path("success").asBoolean(false)) {
-                throw CampaignDomainException.unavailable(CampaignErrorCode.DEPENDENCY_UNAVAILABLE,
-                        "listing snapshot source rejected the request");
-            }
-            JsonNode data = root.path("data");
-            if (!"domain-parallel-v1".equals(data.path("contractVersion").asText())
-                    || !data.path("items").isArray() || data.path("items").size() != 1) {
+            var verified = VerifiedDomainAuthorization.requireVerifiedContext();
+            String operation = verified.context().allowedOperations().contains("listing.read.all")
+                    ? "listing.read.all" : "listing.read";
+            VerifiedDomainAuthorization.requirePermission(operation);
+            String requestId = UUID.randomUUID().toString();
+            var read = new ListingSnapshotBatchReadRequest(ListingBusinessResponse.VERSION,
+                    List.of(new com.bkanent.common.listing.ListingSourceVersionRef(
+                            new ListingRef("listing-master-service", Long.toString(listingId)), null)));
+            var request = new RagContextAuthorizedListingBusinessBatchReadRequest(1, requestId, read,
+                    verified.context(), verified.freshness());
+            long now = Instant.now().getEpochSecond();
+            long expires = Math.min(now + 60, Math.min(verified.context().expiresAtEpochSecond(),
+                    Math.min(verified.context().runHardDeadlineEpochSecond(),
+                            verified.freshness().notAfterEpochSecond())));
+            if (expires <= now) throw CampaignDomainException.unauthorized("listing authorization has expired");
+            var unsigned = new RagAuthEnvelope(1, keyId, "listing-master-service", "marketing-content-service",
+                    RagOperation.READ, requestId, RagCanonicalHash.requestHash(request), RagActorMode.USER,
+                    verified.actorId(), now, expires, null, null);
+            var envelope = RagRequestSigner.sign(unsigned, secret.getBytes(StandardCharsets.UTF_8));
+            ListingBusinessResponse<ListingSnapshotBatchReadItem> response = listings.batchReadContext(request, envelope);
+            if (response == null || !ListingBusinessResponse.VERSION.equals(response.contractVersion())
+                    || response.items().size() != 1) {
                 throw CampaignDomainException.unavailable(CampaignErrorCode.DEPENDENCY_UNAVAILABLE,
                         "listing snapshot response does not match domain-parallel-v1");
             }
-            JsonNode item = data.path("items").get(0);
-            if (!Long.toString(listingId).equals(item.path("listingRef").path("sourceId").asText())
-                    || !"listing-master-service".equals(item.path("listingRef").path("sourceSystem").asText())
-                    || !item.path("contentHash").asText().matches("[0-9a-f]{64}")
-                    || !StringUtils.hasText(item.path("revision").asText())
-                    || !StringUtils.hasText(item.path("datasetId").asText())
-                    || !item.path("facts").isObject()
-                    || !validObservedAt(item.path("observedAt").asText())
-                    || !"REAL".equals(item.path("dataMode").asText())) {
-                throw CampaignDomainException.unavailable(CampaignErrorCode.DEPENDENCY_UNAVAILABLE,
-                        "listing snapshot response has invalid identity, version, facts, or source mode");
+            ListingSnapshotBatchReadItem item = response.items().get(0);
+            if (item.status() != ListingSourceStatus.CURRENT || item.snapshot() == null
+                    || !item.listingRef().equals(new ListingRef("listing-master-service", Long.toString(listingId)))) {
+                throw CampaignDomainException.forbidden("listing snapshot is not accessible");
             }
-            return item;
+            ListingSourceSnapshot snapshot = item.snapshot();
+            if (!snapshot.listingRef().equals(item.listingRef()) || snapshot.dataMode() != com.bkanent.common.listing.ListingDataMode.REAL) {
+                throw CampaignDomainException.unavailable(CampaignErrorCode.DEPENDENCY_UNAVAILABLE,
+                        "listing snapshot has an invalid identity or source mode");
+            }
+            return objectMapper.valueToTree(Map.of("contractVersion", ListingBusinessResponse.VERSION,
+                    "listingRef", snapshot.listingRef(), "revision", snapshot.revision(),
+                    "contentHash", snapshot.contentHash(), "observedAt", snapshot.observedAt(),
+                    "dataMode", snapshot.dataMode(), "datasetId", snapshot.datasetId(), "facts", snapshot.facts()));
         } catch (CampaignDomainException failure) {
             throw failure;
-        } catch (InterruptedException failure) {
-            Thread.currentThread().interrupt();
-            throw CampaignDomainException.unavailable(CampaignErrorCode.DEPENDENCY_UNAVAILABLE, "listing snapshot request was interrupted");
+        } catch (com.bkanent.common.rag.RagException failure) {
+            if (failure.code() == com.bkanent.common.rag.RagErrorCode.FORBIDDEN) {
+                throw CampaignDomainException.forbidden("listing snapshot is not accessible");
+            }
+            if (failure.code() == com.bkanent.common.rag.RagErrorCode.AUTHENTICATION_EXPIRED) {
+                throw CampaignDomainException.unauthorized("listing authorization has expired");
+            }
+            throw CampaignDomainException.unavailable(CampaignErrorCode.DEPENDENCY_UNAVAILABLE,
+                    "listing snapshot authorization failed");
+        } catch (com.bkanent.common.authz.AuthzException failure) {
+            if (failure.code().httpStatus() == 401) {
+                throw CampaignDomainException.unauthorized("listing authorization is required");
+            }
+            if (failure.code().httpStatus() == 403) {
+                throw CampaignDomainException.forbidden("listing snapshot is not accessible");
+            }
+            throw CampaignDomainException.unavailable(CampaignErrorCode.DEPENDENCY_UNAVAILABLE,
+                    "listing snapshot authorization is unavailable");
         } catch (Exception failure) {
             throw CampaignDomainException.unavailable(CampaignErrorCode.DEPENDENCY_UNAVAILABLE, "listing snapshot source is unavailable");
-        }
-    }
-
-    private String requestCredential() {
-        var attributes = RequestContextHolder.getRequestAttributes();
-        if (attributes instanceof ServletRequestAttributes servlet) {
-            String authorization = servlet.getRequest().getHeader("Authorization");
-            if (StringUtils.hasText(authorization)) return authorization;
-        }
-        try {
-            var credentials = A2aCredentialContext.currentCredentials();
-            if (credentials != null && StringUtils.hasText(credentials.accessToken())) return "Bearer " + credentials.accessToken();
-        } catch (RuntimeException ignored) {
-            return null;
-        }
-        return null;
-    }
-
-    private String trimSlash(String value) { return value.endsWith("/") ? value.substring(0, value.length() - 1) : value; }
-
-    private boolean validObservedAt(String value) {
-        if (!StringUtils.hasText(value)) return false;
-        try {
-            java.time.Instant.parse(value);
-            return true;
-        } catch (RuntimeException invalid) {
-            return false;
         }
     }
 }

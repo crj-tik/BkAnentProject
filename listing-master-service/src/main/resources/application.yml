@@ -69,6 +69,7 @@ listing:
     report:
       storage-dir: ${LISTING_COMPARISON_STORAGE_DIR:/app/runtime/reports}
   rag:
+    versioned-authorization-required: ${LISTING_RAG_VERSIONED_AUTHORIZATION_REQUIRED:false}
     key-id: ${LISTING_RAG_RPC_KEY_ID:listing-current}
     secret: ${LISTING_RAG_RPC_SECRET:}
     auth-response-key-id: ${AUTH_RAG_RPC_RESPONSE_KEY_ID:auth-current}

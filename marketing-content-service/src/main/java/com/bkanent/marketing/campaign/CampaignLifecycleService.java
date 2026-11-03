@@ -1,6 +1,7 @@
 package com.bkanent.marketing.campaign;
 
 import com.bkanent.common.marketing.campaign.*;
+import com.bkanent.common.a2a.VerifiedDomainAuthorization;
 import com.bkanent.common.marketing.campaign.CampaignErrorCode;
 import com.bkanent.common.marketing.campaign.CampaignDataMode;
 import com.bkanent.marketing.entity.MarketingContentEntity;
@@ -57,6 +58,7 @@ public class CampaignLifecycleService {
         authorization.require(actorId, CampaignAuthorizationService.PLAN_PREPARE);
         MarketingContentEntity content = marketingAssets.getById(request.contentId());
         if (content == null) throw CampaignDomainException.missing(CampaignErrorCode.CONTENT_NOT_FOUND, "marketing content was not found");
+        requireContentOwner(content);
         if (!"APPROVED".equalsIgnoreCase(content.getAuditStatus())) {
             throw CampaignDomainException.conflict(CampaignErrorCode.CONTENT_NOT_APPROVED, "content must be approved before preparing a campaign");
         }
@@ -397,6 +399,7 @@ public class CampaignLifecycleService {
         if (current == null || !"APPROVED".equalsIgnoreCase(current.getAuditStatus())) {
             throw CampaignDomainException.conflict(CampaignErrorCode.PLAN_VERSION_CONFLICT, "content approval or identity changed after preparation");
         }
+        requireContentOwner(current);
         JsonNode prior = readJson(plan.contentSnapshotJson());
         JsonNode previousListing = prior.path("listingSnapshot");
         JsonNode currentListing = listingSnapshots.read(plan.contentId() == current.getId() ? current.getListingId() : plan.contentId(), plan.dataMode());
@@ -409,6 +412,18 @@ public class CampaignLifecycleService {
         List<Map<String, Object>> currentAssets = repository.findAssets(readAssetIds(plan.assetsSnapshotJson()));
         String assetHash = CampaignHash.sha256(CampaignHash.canonicalJson(currentAssets, objectMapper));
         if (!assetHash.equals(plan.assetHash())) throw CampaignDomainException.conflict(CampaignErrorCode.PLAN_VERSION_CONFLICT, "selected brand assets changed after preparation");
+    }
+
+    private void requireContentOwner(MarketingContentEntity content) {
+        if (VerifiedDomainAuthorization.hasOperation("marketing.content.read.all")) {
+            VerifiedDomainAuthorization.requirePermission("marketing.content.read.all");
+            return;
+        }
+        VerifiedDomainAuthorization.requirePermission("marketing.content.read.own");
+        long brokerId = VerifiedDomainAuthorization.requireBrokerIdentity();
+        if (content.getOwnerBrokerId() == null || content.getOwnerBrokerId() != brokerId) {
+            throw CampaignDomainException.forbidden("marketing content belongs to another broker");
+        }
     }
 
     private List<Long> readAssetIds(String assetsJson) {

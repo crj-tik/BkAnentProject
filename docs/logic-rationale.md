@@ -1546,3 +1546,13 @@
 **代码位置**：`media-worker-service/client/MockStableDiffusionClient`、`KeSeedreamImageGenerationClient`；`nacos/media-worker-service.yaml`。
 
 **关联**：KI-240。
+
+## LR-175 Campaign 房源快照通过签名 RPC 传递用户授权上下文
+
+**结论**：Marketing 获取真实房源快照时调用 Listing 的内部批量读取 RPC；请求同时绑定短时 Auth 签名的授权上下文与 freshness，以及 Marketing 服务身份对完整请求体的签名。Listing 验证调用方 ACL、请求摘要、上下文受众/时效、房源读取操作和经纪人范围，并在读取前后复核范围；Marketing 不向 Listing 转发用户 Bearer。
+
+**根因**：Campaign 准备依赖房源事实，但普通 HTTP 转发 Bearer 会让跨域验证依赖用户令牌复用，旧服务签名只证明调用方而不能证明用户仍有当前房源权限。双重签名把用户授权事实和服务调用身份分别绑定到同一 RPC 请求，同时保留 Listing 作为房源范围的最终判定者。
+
+**代码位置**：`CampaignListingSnapshotClient`、`RagContextAuthorizedListingBusinessBatchReadRequest`、`RagCanonicalHash`、`ListingRagIdentity.verifyAuthorizedBusinessSourceContext`、`ListingBusinessSourceService.batchRead`；迁移 `20261103_marketing_campaign_authorization.sql`。
+
+**关联**：LR-131、LR-160；KI-196；change `unify-versioned-permission-context` task 7.6、10.3。

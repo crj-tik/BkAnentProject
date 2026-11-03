@@ -30,4 +30,8 @@ public class ListingBusinessApiException extends RuntimeException {
     public static ListingBusinessApiException dependencyUnavailable() {
         return new ListingBusinessApiException("DEPENDENCY_UNAVAILABLE", HttpStatus.SERVICE_UNAVAILABLE);
     }
+
+    public static ListingBusinessApiException authenticationRequired() {
+        return new ListingBusinessApiException("AUTHENTICATION_REQUIRED", HttpStatus.UNAUTHORIZED);
+    }
 }

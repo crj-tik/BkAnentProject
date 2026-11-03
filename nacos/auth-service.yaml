@@ -21,11 +21,11 @@ auth:
         service: gateway
         public-key: ${GATEWAY_IDENTITY_PUBLIC_KEY:}
         operations: [RESOLVE_REQUEST_AUTHORIZATION]
-        audiences: [auth-service, agent-service, interview-service, platform-operations-service]
+        audiences: [auth-service, agent-service, interview-service, platform-operations-service, listing-master-service, customer-service, marketing-content-service, notification-service]
       agent-service-current:
         service: agent-service
         public-key: ${AGENT_SERVICE_IDENTITY_PUBLIC_KEY:}
-        operations: [BIND_EXECUTION]
+        operations: [BIND_EXECUTION, REFRESH_AUTHORIZATION]
         audiences: [agent-service]
         # Exact active catalog snapshot; the ingress Auth signature remains the source of actor scope.
         permission-codes:

@@ -43,6 +43,38 @@ class ListingVersionedAuthorizationTest {
     }
 
     @Test
+    void legacyCredentialCannotReadPrivateDetailOrDetailList() {
+        var domain = org.mockito.Mockito.mock(com.bkanent.listing.service.ListingDomainService.class);
+        var service = new com.bkanent.listing.service.impl.ListingManagementServiceImpl(domain,
+                new com.bkanent.listing.converter.ListingConverter(),
+                org.mockito.Mockito.mock(com.bkanent.listing.service.ListingSearchService.class),
+                new com.bkanent.listing.search.ListingKnowledgeDocumentAssembler(),
+                org.mockito.Mockito.mock(ListingRagOutbox.class), identity);
+        try (var ignored = ListingRagCredentialContext.open(new com.bkanent.common.rag.RagCredentialContext("legacy-token"))) {
+            assertThrows(AuthzException.class, () -> service.getListingDetail(8L));
+            assertThrows(AuthzException.class, () -> service.searchListings(null));
+        }
+        org.mockito.Mockito.verifyNoInteractions(domain);
+    }
+
+    @Test
+    void mappedBrokerCanReadOwnPrivateDetail() {
+        var domain = org.mockito.Mockito.mock(com.bkanent.listing.service.ListingDomainService.class);
+        var entity = row(41L, "ON_SALE");
+        entity.setId(8L);
+        org.mockito.Mockito.when(domain.getById(8L)).thenReturn(entity);
+        var service = new com.bkanent.listing.service.impl.ListingManagementServiceImpl(domain,
+                new com.bkanent.listing.converter.ListingConverter(),
+                org.mockito.Mockito.mock(com.bkanent.listing.service.ListingSearchService.class),
+                new com.bkanent.listing.search.ListingKnowledgeDocumentAssembler(),
+                org.mockito.Mockito.mock(ListingRagOutbox.class), identity);
+        try (var ignored = ListingAuthzScopeFixture.open(false, java.util.List.of("listing.read"),
+                java.util.List.of("listing.read"), java.util.Map.of("BROKER", 41L))) {
+            assertEquals(8L, service.getListingDetail(8L).id());
+        }
+    }
+
+    @Test
     void businessWideRagSearchRequiresExplicitAdminReadOperationAndDoesNotInventBroker() {
         try (var ignored = ListingAuthzScopeFixture.open(true, java.util.List.of("listing.read.all"),
                 java.util.List.of("listing.read.all"), java.util.Map.of())) {

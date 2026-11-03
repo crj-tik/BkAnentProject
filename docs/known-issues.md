@@ -1692,13 +1692,13 @@
 
 ## KI-196 [OPEN·P1] 营销内容多协议写入缺少 Auth 操作与内容归属准入
 
-**发现日期**：2026-10-27。营销内容基础服务已接入部分 `VerifiedDomainAuthorization` 操作检查并为新内容写入 owner；但 campaign prepare/confirm/review 仍通过兼容 `AuthPermissionRpcService`，没有证明其消费 Auth v2 签名上下文。Auth v2 的营销操作码尚未登记。
+**发现日期**：2026-10-27。营销内容基础服务已接入部分 `VerifiedDomainAuthorization` 操作检查并为新内容写入 owner；早期 Campaign prepare/confirm/review 仍使用兼容 `AuthPermissionRpcService`，Auth v2 营销操作码也尚未登记。
 
-**现象与证据**：`MarketingAssetServiceImpl` 对一般内容创建、变体、查询、素材绑定和审核状态增加精确操作及 broker owner 检查；`marketing_content.owner_broker_id` 迁移只新增可空列，历史记录有意保持无主，待责任人复核。MCP 草稿调用这些基础服务并继承其检查。Campaign lifecycle 的本地 `CampaignActorResolver`/`CampaignAuthorizationService` 仍是旧兼容授权，不等同版本化签名委托；历史 owner 归属、角色授予和 campaign 多协议的 Auth v2 接线仍须准入验收。
+**2026-11-03 代码处置**：Campaign actor/permission 检查改为消费已验证的 Auth 签名上下文；受管迁移 630 仅登记 Campaign 和内容审核的精确操作，不自动授予角色；MCP 工具逐项映射操作码；Marketing→Listing 改走调用方签名的内部 RPC，携带 Auth 签名上下文与 freshness，并由 Listing 校验房源访问范围，不转发用户 Bearer。Marketing、Listing 单测覆盖允许/拒绝与跨服务签名边界。历史 `marketing_content.owner_broker_id` 仍可空，保留待责任人核对。
 
-**影响**：已登录或服务身份本身不足以证明对目标内容的读取、编辑和发布权。Auth v2 adoption、历史归属核对及 campaign 跨 REST/RPC/MCP owner 隔离未完成前，不得启用或宣称营销内容与 campaign 全入口安全合并完成；发布 provider、审批、业务权限和 owner 检查必须分别通过。
+**未闭环**：迁移 630 尚未应用到运行库，Marketing/Notification 实际配置和账号权限尚未运行态验收；开发库没有活动 Campaign 渠道账号，因此不能据此宣称真实发布/渠道归属可用。历史内容归属需责任人核对；HTTP、RPC、MCP 全链路及发布 provider 仍需运行态逐项验收。
 
-**后续门槛**：由 `unify-versioned-permission-context` task 10.3 与本 change task 7.6 完成精确操作登记、可信身份/归属映射、跨协议正反例和生产启用验收。
+**后续门槛**：由 `unify-versioned-permission-context` task 10.3 与本 change task 7.6 完成受管迁移应用、有效账号/内容归属核对、跨协议正反例和目标环境启用验收。
 
 **关联**：LR-131/135；`openspec/changes/unify-versioned-permission-context/tasks.md` task 10.3；本 change task 7.6。
 
@@ -1830,6 +1830,14 @@
 
 **修复**：在应用配置登记各自公钥与精确 domain/agent，并扩展 `MemoryV2DeploymentConfigurationTest`，逐一验证应用和 Nacos 两个配置面。运行态仍须验证 Nacos 已加载及服务间真实签名调用。
 
+## KI-236 [OPEN·P1] 版本化网关授权缺少部分路由受众映射
+
+**发现日期**：2026-10-30。旧模板的房源、客户、营销、通知及兼容路由缺少 `gateway.authorization.route-audiences`，开启 Gateway 版本化授权时会对这些路由返回 HTTP 503 `AUTHORIZATION_ROUTE_UNMAPPED`。
+
+**2026-11-03 代码处置**：Gateway/Nacos 模板已为全部 10 个活动路由登记精确受众；Auth `gateway-current` ACL 与这些受众一致，新增配置测试逐项比对 route id、后端 URI 和信任受众。房源、客户、营销、通知各自入口的代码/配置接入另由 KI-196、KI-243 跟踪。
+
+**未闭环**：尚未将新模板发布到 Nacos 或逐路由执行目标环境 API 请求。运行配置覆盖、后端服务可用性和账号业务身份仍需运行态验证；补齐映射本身不证明下游授权完成。
+
 ## KI-233 [FIXED·本提交·P1] 开发 Auth 缺少 Agent 执行绑定受信授权
 
 **发现日期**：2026-10-30。开发 Nacos 与仓库 Auth 模板的版本化授权 `trusted-callers` 仅登记 Gateway，未登记 Agent 的 `BIND_EXECUTION`；当前 Agent 执行绑定要求 caller 受信且其精确操作许可覆盖入口签发的全部非基线操作，因此实际 Agent 授权链不能仅靠服务健康或平台权限目录完成。
@@ -1899,3 +1907,23 @@
 **根因**：两种实现只在调用方法内检查 `media.integration.mode`，组件本身始终注册；模式选择没有约束 Bean 注册。
 
 **处置**：按 `media.integration.mode` 对实现增加互斥条件注册；新源码镜像重建后，媒体服务 readiness 返回 HTTP 200，容器保持运行且未进入重启循环。修复提交 `dfcc8be07f8a04a0c94a41acf6730073502713d5`。关联 LR-174。
+
+## KI-241 [OPEN·P1] Agent 授权刷新缺少 Auth 调用方许可
+
+**发现日期**：2026-11-03。Agent 实际调用 `REFRESH_AUTHORIZATION` 刷新已绑定运行，但 Nacos 的 Auth 可信调用方配置仅允许 Agent 使用 `BIND_EXECUTION`；授权版本变化时刷新会被拒绝。
+
+**处置**：已在模板为 Agent 的精确身份及 `agent-service` 受众登记刷新操作，并增加配置与签名请求回归；待发布和运行态验收后更新状态。
+
+## KI-242 [OPEN·P1] RAG 授权开关及公钥未在 Compose 部署面成组传递
+
+**发现日期**：2026-11-03。RAG 服务和三个消费者的版本化授权配置被模板固定关闭，RAG 容器也未加载 Auth 验签公钥；仅修改 `.env` 无法完整开启签名授权，单侧开启会使新旧协议请求互相拒绝。
+
+**处置**：通过统一 Compose 开关向 RAG、Agent、Listing 和 Memory RAG 消费端传递协议选择，并向 RAG 注入受管公钥；仓库模板及配置回归已覆盖，本机 `.env` 已成组开启。真实调用、运行配置发布及 RAG 能力状态验收待完成；独立的 `MEMORY_V2_AUTHORIZATION_CONTEXT_ENABLED` 仍按设计保持关闭，避免未切换的 Memory v2 调用方被强制失败关闭。
+
+## KI-243 [OPEN·P1] 客户授权入口开关与业务服务的身份要求不一致
+
+**发现日期**：2026-11-03。客户业务方法要求已验证的授权上下文和经纪人身份，但早期应用与 Nacos 模板将入口授权固定关闭且缺少 Auth 验签公钥登记；普通业务请求无法建立所需上下文。
+
+**代码与配置处置**：客户入口开关可由 Compose 注入，Auth 公钥和签名请求回归已补；本机 `.env` 已开启 Customer 版本化授权。只读核对确认当前 Auth 账号都没有经纪人映射；`admin01` 的业务管理员权限不构成经纪人身份，不能据此推断现存房源/客户归属。
+
+**未闭环**：需在目标 Auth 运行版本上通过管理 API 创建经纪人账号并登记经确认的开发经纪人身份，再验证房源/客户自有范围与跨用户拒绝。当前没有权威经纪人主数据映射，运行态业务请求仍可能因缺少身份被正确拒绝。关联 KI-55。

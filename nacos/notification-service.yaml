@@ -116,7 +116,7 @@ agent:
     watch-enabled: ${AGENT_SKILLS_WATCH_ENABLED:true}
 notification:
   authorization:
-    enabled: false
+    enabled: ${NOTIFICATION_AUTHORIZATION_ENABLED:false}
   integration:
     mode: local # Docker development only; production requires real mode and an implemented real provider.
   workflow-events:
@@ -146,13 +146,17 @@ a2a:
 mcp:
   authorization:
     server:
-      # Keep disabled until both key sets and the exact per-tool allowlist are configured.
-      enabled: false
+      enabled: ${NOTIFICATION_MCP_AUTHORIZATION_ENABLED:false}
       caller-service: agent-service
       authority-public-keys:
         auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
       caller-public-keys:
         agent-service-current: ${AGENT_SERVICE_IDENTITY_PUBLIC_KEY:}
-      # tool name -> registered permission code; no implicit public tools.
-      tool-operations: {}
+      # 工具名到权限码精确映射；无隐式公开工具。
+      tool-operations:
+        sendStationMessage: notification.message.send.all
+        sendMyStationMessage: notification.message.send.own
+        sendEmailMessage: notification.email.send.all
+        listUserMessages: notification.message.read.own
+        countUnreadMessages: notification.message.read.own
       public-tools: []

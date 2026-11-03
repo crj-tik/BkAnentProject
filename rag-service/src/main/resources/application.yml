@@ -72,7 +72,7 @@ rag:
     key-id: ${RAG_MEMORY_CANDIDATE_KEY_ID:rag-memory-candidate-current}
     secret: ${RAG_MEMORY_CANDIDATE_KEY_SECRET:}
   security:
-    versioned-authorization-enabled: false
+    versioned-authorization-enabled: ${RAG_VERSIONED_AUTHORIZATION_ENABLED:false}
     trusted-keys: {}
     auth-request-key-id: ${RAG_AUTH_RPC_KEY_ID:rag-current}
     auth-request-secret: ${RAG_AUTH_RPC_SECRET:}

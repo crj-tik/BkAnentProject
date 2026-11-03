@@ -82,6 +82,12 @@ gateway:
       agent-service: agent-service
       interview-service: interview-service
       platform-operations-service: platform-operations-service
+      listing-master-service: listing-master-service
+      listing-comparison-compatibility: listing-master-service
+      customer-service: customer-service
+      marketing-promotion-compat: marketing-content-service
+      marketing-content-service: marketing-content-service
+      notification-service: notification-service
   access:
     whitelist-prefixes:
       - /auth/login
