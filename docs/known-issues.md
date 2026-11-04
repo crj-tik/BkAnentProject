@@ -1945,3 +1945,11 @@
 **修复**：两域的 Nacos 与应用模板均登记固定服务受众及 `AUTH_SERVICE_IDENTITY_PUBLIC_KEY`，相应配置回归断言已补齐。Compose 通过受限 public-keys env 文件向应用容器注入公钥。
 
 **运行态验证**：新 Nacos Data ID 已发布并回读；两个容器中 Auth 与 Agent 公钥变量均有配置，Marketing 和 Notification 的 readiness 均 HTTP 200/UP，重启计数均为 0。真实业务调用的签名上下文和精确操作权限仍需端到端验证。关联 KI-196、KI-243。
+
+## KI-246 [FIXED·本提交·P2] 接口盘点映射漏项及错位且知识创建 OpenAPI 范围过宽
+
+**发现日期与依据**：2026-11-04。控制器盘点在空参数 `@GetMapping` / `@PostMapping` 根路径处漏列多个创建、列表入口，也遗漏复盘诊断版本和 Studio 命令回执；Studio 控制器的提取结果把注解和相邻方法声明错放在表格两列。平台经营知识创建契约还允许 `scopeType=STORE` 及非空 `storeId`，而实现只支持 `OWN` 创建并拒绝非空门店 ID。
+
+**修复**：按源码补齐所列控制器的根路径映射，重排 Studio 的注解与方法对应关系；将 OpenAPI 创建 schema 收窄到 `scopeType=OWN`，并将 `storeId` 限定为省略或 null。门店创建能力未在此变更中开放；门店范围继续依赖 Auth 签发的可信身份，不接受请求参数推断。
+
+**验证边界**：静态核对盘点中的 22 个控制器、226 个请求映射：数量、源码行号、映射注解和处理方法均匹配；OpenAPI schema 与 `KnowledgeLifecycleService.create` 的现有校验一致。此项为文档与契约修复，未做运行环境联调。

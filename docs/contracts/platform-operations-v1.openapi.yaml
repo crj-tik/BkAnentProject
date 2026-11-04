@@ -607,8 +607,8 @@ components:
       required: [requestId, scopeType, title, problem, scene, body]
       properties:
         requestId: { type: string }
-        scopeType: { type: string, enum: [OWN, STORE] }
-        storeId: { type: [integer, 'null'], format: int64 }
+        scopeType: { type: string, enum: [OWN], description: 当前创建操作仅支持 OWN 范围；门店范围创建尚未开放 }
+        storeId: { type: 'null', description: OWN 创建时必须省略或为 null；非空门店 ID 不受支持，门店授权范围不能由请求参数建立 }
         title: { type: string }
         problem: { type: string }
         scene: { type: string }
