@@ -105,16 +105,11 @@ listing:
     authority-public-keys:
       auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
   source:
+    # 2026-11-05 内部数据决定：正式业务仅使用内部 legacy-local 房源；外部 HTTP provider 已退役，
+    # fixture 仅限显式隔离的测试/演示环境（SIMULATED），不作为任何故障回退。
     provider: ${LISTING_SOURCE_PROVIDER:legacy-local}
     dataset-id: ${LISTING_SOURCE_DATASET_ID:legacy-local}
     fixture-broker-id: ${LISTING_SOURCE_FIXTURE_BROKER_ID:1}
-    http:
-      base-url: ${LISTING_SOURCE_HTTP_BASE_URL:}
-      bearer-token: ${LISTING_SOURCE_HTTP_BEARER_TOKEN:}
-      source-system: ${LISTING_SOURCE_HTTP_SYSTEM:upstream}
-      confirmed-data-mode: ${LISTING_SOURCE_HTTP_CONFIRMED_DATA_MODE:UNKNOWN}
-      connect-timeout-ms: ${LISTING_SOURCE_HTTP_CONNECT_TIMEOUT_MS:1000}
-      read-timeout-ms: ${LISTING_SOURCE_HTTP_READ_TIMEOUT_MS:3000}
   comparison:
     report:
       storage-dir: ${LISTING_COMPARISON_STORAGE_DIR:/app/runtime/reports}
@@ -137,6 +132,9 @@ listing:
       customer-read-current:
         caller-service: customer-service
         secret: ${CUSTOMER_LISTING_READ_SECRET:}
+      customer-inquiry-verify-current:
+        caller-service: customer-service
+        secret: ${CUSTOMER_LISTING_INQUIRY_VERIFY_SECRET:}
       marketing-read-current:
         caller-service: marketing-content-service
         secret: ${MARKETING_LISTING_READ_SECRET:}

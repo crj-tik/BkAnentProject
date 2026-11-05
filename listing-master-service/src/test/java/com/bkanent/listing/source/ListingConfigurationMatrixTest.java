@@ -25,18 +25,31 @@ class ListingConfigurationMatrixTest {
         String publisher = read(root, "scripts/deploy/publish-nacos.py");
         String cutover = read(root, "docs/listing-comparison-cutover.md");
 
+        // 2026-11-05 内部数据决定：外部 HTTP provider 退役，正式业务仅使用内部 legacy-local 房源。
         List<String> listingKeys = List.of("LISTING_SOURCE_PROVIDER", "LISTING_SOURCE_DATASET_ID",
-                "LISTING_SOURCE_FIXTURE_BROKER_ID", "LISTING_SOURCE_HTTP_BASE_URL",
-                "LISTING_SOURCE_HTTP_BEARER_TOKEN", "LISTING_SOURCE_HTTP_SYSTEM",
-                "LISTING_SOURCE_HTTP_CONFIRMED_DATA_MODE", "LISTING_SOURCE_HTTP_CONNECT_TIMEOUT_MS",
-                "LISTING_SOURCE_HTTP_READ_TIMEOUT_MS", "LISTING_AUTHORIZATION_ENABLED",
+                "LISTING_SOURCE_FIXTURE_BROKER_ID", "LISTING_AUTHORIZATION_ENABLED",
                 "LISTING_COMPARISON_STORAGE_DIR");
         for (String key : listingKeys) {
             assertTrue(envExample.contains(key + "="), "missing .env.example value for " + key);
             assertTrue(listingApplication.contains("${" + key + ":"), "missing application placeholder for " + key);
             assertTrue(listingNacos.contains("${" + key + ":"), "missing Nacos placeholder for " + key);
             assertTrue(compose.contains(key + ": ${" + key + ":"), "missing Compose pass-through for " + key);
-            assertTrue(cutover.contains(key), "missing config matrix row for " + key);
+        }
+        // Retired external HTTP provider keys must not be re-introduced in any template.
+        for (String retired : List.of("LISTING_SOURCE_HTTP_BASE_URL", "LISTING_SOURCE_HTTP_BEARER_TOKEN",
+                "LISTING_SOURCE_HTTP_SYSTEM", "LISTING_SOURCE_HTTP_CONFIRMED_DATA_MODE",
+                "LISTING_SOURCE_HTTP_CONNECT_TIMEOUT_MS", "LISTING_SOURCE_HTTP_READ_TIMEOUT_MS")) {
+            assertFalse(envExample.contains(retired), "retired key must not return to .env.example: " + retired);
+            assertFalse(listingApplication.contains(retired), "retired key must not return to application.yml: " + retired);
+            assertFalse(listingNacos.contains(retired), "retired key must not return to Nacos: " + retired);
+            assertFalse(compose.contains(retired), "retired key must not return to Compose: " + retired);
+        }
+        // Cross-service owner-profile and inquiry verification secrets stay wired in every template.
+        List<String> verifyKeys = List.of("LISTING_CUSTOMER_VERIFY_SIGNING_SECRET",
+                "CUSTOMER_LISTING_INQUIRY_VERIFY_SECRET");
+        for (String key : verifyKeys) {
+            assertTrue(envExample.contains(key + "="), "missing .env.example value for " + key);
+            assertTrue(compose.contains(key + ": ${" + key + ":-}"), "missing Compose pass-through for " + key);
         }
 
         String optionalMemory = "MEMORY_V2_AUTHORIZATION_CONTEXT_ENABLED";

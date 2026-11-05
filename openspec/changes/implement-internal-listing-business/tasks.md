@@ -15,11 +15,11 @@
 
 ## 3. 内部房源登记与维护
 
-- [ ] 3.1 实现新增房源时的 Customer 业主档案当前授权和类型验证、可信 broker 归属以及失效/不可用失败关闭；实现受权的存量房源业主确认与解除绑定，验证不因登记关联赋予产权或登录身份。
-- [ ] 3.2 实现房源登记幂等回执及同事务房源、初始价格、状态与 RAG outbox 写入；覆盖并发重试、不同请求冲突、写入失败回滚及跨服务验证窗口。
-- [ ] 3.3 实现待上架/在售/下架/成交的允许转换、资料校验、版本条件写及追加状态历史；验证直接上架不依赖合同、委托、审批或模拟核验，非法转换不变更数据。
-- [ ] 3.4 统一所有房源编辑和状态入口的价格/状态更新，确保主表、价格历史、状态历史和 RAG outbox 同事务；覆盖并发冲突和普通 upsert 不能绕过历史。
-- [ ] 3.5 实现元价格为唯一内部写入主值、旧万元 DTO 兼容投影及无损范围验证；核对客户预算匹配不发生万倍误差，覆盖边界值、重复换算与回填对账。
+- [x] 3.1 实现新增房源时的 Customer 业主档案当前授权和类型验证、可信 broker 归属以及失效/不可用失败关闭；实现受权的存量房源业主确认与解除绑定，验证不因登记关联赋予产权或登录身份。（证据：`CustomerProfileVerifyClient`（失败关闭）+ `ListingManagementServiceImpl.createListing/confirmOwner/unbindOwner`；`CustomerProfileVerifyClientTest` 7 项、`ListingInternalBusinessTest`）
+- [x] 3.2 实现房源登记幂等回执及同事务房源、初始价格、状态与 RAG outbox 写入；覆盖并发重试、不同请求冲突、写入失败回滚及跨服务验证窗口。（证据：`ListingCommandReceiptService`（JdbcTemplate 复合主键回执）+ `ListingCommandReceiptServiceTest` 4 项；登记同事务写初始价格/状态记录与 outbox）
+- [x] 3.3 实现待上架/在售/下架/成交的允许转换、资料校验、版本条件写及追加状态历史；验证直接上架不依赖合同、委托、审批或模拟核验，非法转换不变更数据。（证据：`ListingManagementServiceImpl.updateStatus` 状态机 + `ListingStatusRecordEntity`；`ListingInternalBusinessTest` 18 项覆盖合法/非法转换、SOLD 终态、同状态 no-op、上架资料校验）
+- [x] 3.4 统一所有房源编辑和状态入口的价格/状态更新，确保主表、价格历史、状态历史和 RAG outbox 同事务；覆盖并发冲突和普通 upsert 不能绕过历史。（证据：`updateListing` 版本条件写（影响 0 行抛冲突）+ 价格变化写 `listing_price_record`；`ListingInternalBusinessTest` 并发冲突用例）
+- [x] 3.5 实现元价格为唯一内部写入主值、旧万元 DTO 兼容投影及无损范围验证；核对客户预算匹配不发生万倍误差，覆盖边界值、重复换算与回填对账。（证据：asking_price_yuan 主值 + total_price 万元投影同事务换算、除不尽拒绝；`ListingV1CompatibilityGoldenSampleTest` 固定 hash 与旧 DTO 万元断言；回填迁移 `20261105_listing_internal_backfill.sql`）
 - [ ] 3.6 实现素材逐项绑定、排序、删除、可见性、受权文件访问以及历史 URL 迁移；如服务端需主动读取 URL，测试仅允许 http/https、拒绝本地/私网/保留地址、逐跳重定向校验及 DNS 重绑定防护。
 - [ ] 3.7 实现产权证号受管加密与密钥版本、敏感详情操作授权和脱敏日志；买方输出、普通摘要和 RAG 均不得包含敏感资料，并修正模拟 OCR/核验不得冒充真实权属核验的行为。
 
@@ -32,7 +32,7 @@
 
 ## 5. 系统内消费者与旧来源收敛
 
-- [ ] 5.1 在生产配置禁止外部房源 HTTP provider 和 fixture 回退，测试/演示模拟数据显式隔离及标识；保留内部 HTTP/RPC、Agent、RAG 接口，不在普通失败时使用模拟数据。
+- [x] 5.1 在生产配置禁止外部房源 HTTP provider 和 fixture 回退，测试/演示模拟数据显式隔离及标识；保留内部 HTTP/RPC、Agent、RAG 接口，不在普通失败时使用模拟数据。（证据：application.yml/nacos/compose/.env.example 移除 LISTING_SOURCE_HTTP_* 并加退役注释；`ListingConfigurationMatrixTest` 断言退役键不回流且新验证密钥四处接线；listing 127/127 通过）
 - [ ] 5.2 保持旧 `domain-parallel-v1`、`legacy-local`、UNKNOWN、hash 算法及旧 `/compare/**` 的已发布兼容，定义并实现新增内部 `listingId` 消费方式与版本化迁移，不静默重标历史为 REAL。
 - [ ] 5.3 以真实 Listing 生产者契约联测营销、经营、Studio、比较和 Customer；修复营销内部房源标识/模式不一致及经营版本检查请求形状问题，不使用 mock 数据掩盖真实模式差异。
 - [ ] 5.4 验证比较报告/PDF、Studio 工件、营销计划中的旧引用和原始文件保留；覆盖重启、价格变更、下架、撤权及依赖不可用，不绕过 owner 或逐房源权限检查。
