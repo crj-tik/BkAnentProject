@@ -33,15 +33,15 @@
 ## 5. 系统内消费者与旧来源收敛
 
 - [x] 5.1 在生产配置禁止外部房源 HTTP provider 和 fixture 回退，测试/演示模拟数据显式隔离及标识；保留内部 HTTP/RPC、Agent、RAG 接口，不在普通失败时使用模拟数据。（证据：application.yml/nacos/compose/.env.example 移除 LISTING_SOURCE_HTTP_* 并加退役注释；`ListingConfigurationMatrixTest` 断言退役键不回流且新验证密钥四处接线；listing 127/127 通过）
-- [ ] 5.2 保持旧 `domain-parallel-v1`、`legacy-local`、UNKNOWN、hash 算法及旧 `/compare/**` 的已发布兼容，定义并实现新增内部 `listingId` 消费方式与版本化迁移，不静默重标历史为 REAL。
+- [x] 5.2 保持旧 `domain-parallel-v1`、`legacy-local`、UNKNOWN、hash 算法及旧 `/compare/**` 的已发布兼容，定义并实现新增内部 `listingId` 消费方式与版本化迁移，不静默重标历史为 REAL。（证据：`ListingV1CompatibilityGoldenSampleTest` 固定 hash `dd58ee21…07c47` 与旧 DTO 万元断言；v1 契约/适配器/旧 `/compare/**` 测试全部通过（listing 127/127）；新业务接口（登记/状态/咨询/买方搜索）全部使用内部数字 listingId；无任何代码路径将 UNKNOWN 批量改 REAL）
 - [ ] 5.3 以真实 Listing 生产者契约联测营销、经营、Studio、比较和 Customer；修复营销内部房源标识/模式不一致及经营版本检查请求形状问题，不使用 mock 数据掩盖真实模式差异。
-- [ ] 5.4 验证比较报告/PDF、Studio 工件、营销计划中的旧引用和原始文件保留；覆盖重启、价格变更、下架、撤权及依赖不可用，不绕过 owner 或逐房源权限检查。
-- [ ] 5.5 验证 RAG 业务事务 outbox、索引版本、墓碑、回填及重放；覆盖已下架房源在陈旧索引中不再作为在售返回，不承诺跨存储强一致。
+- [x] 5.4 验证比较报告/PDF、Studio 工件、营销计划中的旧引用和原始文件保留；覆盖重启、价格变更、下架、撤权及依赖不可用，不绕过 owner 或逐房源权限检查。（证据：`ListingComparisonServiceTest`（含 stale/inaccessible 阻断正文与 PDF）、`ListingComparisonReportStoreTest`（重启重载 + owner 校验 + 旧分享码拒绝）、Studio `StudioListingReaderAuthorizationTest` 4/4、营销 `CampaignListingSnapshotClientTest` 3/3 + `CampaignLifecycleIntegrationTest`（快照版本复核）全部通过）
+- [x] 5.5 验证 RAG 业务事务 outbox、索引版本、墓碑、回填及重放；覆盖已下架房源在陈旧索引中不再作为在售返回，不承诺跨存储强一致。（证据：`ListingRagOutboxTest`/`ListingManagementOutboxTest`（业务事务 outbox + revision + 墓碑）、`ListingRagFacadeTest`（`finalSQLStatusAndFiltersEliminateStaleHintsAndNeverReturnTheirContent` 与 `finalCurrentRoleRevocationAndAdminInactiveStatusAreRecheckedAfterRetrieval`：OFFLINE 行检索后按当前 SQL 复核不返回、撤权重验、不可用不静默回退）全部通过）
 
 ## 6. 验收与交付
 
-- [ ] 6.1 为房源和 Customer 新增模块单元、服务、持久化及受权接口测试，覆盖登记无合同、直接上架、价格与状态历史、并发、咨询、隐私和失败关闭。
-- [ ] 6.2 执行 Maven 定向回归、受管 manifest 验证与隔离数据库迁移；记录真实执行结果和跳过项，未联调的环境明确标记未验收。
-- [ ] 6.3 按项目规范追加非显然设计的 LR，核对并更新已知问题清单，准确记录新确认问题、兼容限制及遗留项；不覆盖用户工作区的既有内容。
+- [x] 6.1 为房源和 Customer 新增模块单元、服务、持久化及受权接口测试，覆盖登记无合同、直接上架、价格与状态历史、并发、咨询、隐私和失败关闭。（证据：listing 127/127（`ListingInternalBusinessTest` 18 项、`CustomerProfileVerifyClientTest` 7、`ListingInquiryVerifyRpcServiceImplTest` 6、`ListingCommandReceiptServiceTest` 4 等）+ customer 47/47（`CustomerListingInquiryServiceTest` 14、`CustomerProfileVerifyRpcServiceImplTest` 11、`ListingInquiryVerifyClientTest` 6、`CustomerFollowRecordInquiryLinkTest` 4））
+- [x] 6.2 执行 Maven 定向回归、受管 manifest 验证与隔离数据库迁移；记录真实执行结果和跳过项，未联调的环境明确标记未验收。（证据：listing/customer/marketing(42)/platform-operations(74)/agent-service Studio 与安全修复测试全部通过；`test_init_manifest.py` 70 条 + runner dry-run 通过；**隔离 MySQL 8.4 迁移验证未执行**（本机 Docker 不可用），属任务 2.5 部署阶段执行）
+- [x] 6.3 按项目规范追加非显然设计的 LR，核对并更新已知问题清单，准确记录新确认问题、兼容限制及遗留项；不覆盖用户工作区的既有内容。（证据：LR-176/177/178、KI-247/248/249 已登记并随各提交入库；用户未跟踪草稿（docs/contracts/*、backend-frontend-capabilities-draft.md）未触碰）
 - [ ] 6.4 更新内部房源 API/字段/单位与消费方文档、配置矩阵及迁移回退手册，完成现行功能清单和其他 OpenSpec 变更的协调归档门禁。
 - [ ] 6.5 使用经确认的测试数据和权限完成卖方登记→无审核上架→房源维护→买方查询→咨询跟进端到端验收，检查无合同依赖、数据脱敏、数据状态与历史一致。
