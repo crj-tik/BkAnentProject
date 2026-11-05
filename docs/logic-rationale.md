@@ -1557,6 +1557,16 @@
 
 **关联**：LR-131、LR-160；KI-196；change `unify-versioned-permission-context` task 7.6、10.3。
 
+## LR-176 内部房源真源的三种版本不可互换，元价格唯一写入口维护万元投影
+
+**结论**：房源业务真源为内部 `listing_info`。业务快照 contentHash（v1 兼容，含 sourceSystem/dataMode/datasetId/facts 的规范化 SHA-256）、RAG 索引 revision（按房源递增整数 + 墓碑）与行级乐观锁 `version`（并发控制）三者语义不同，任何一处不得改名、复用或互相替代。`asking_price_yuan`（CNY 元）是唯一业务写入主值；旧 `total_price`（万元）仅作兼容投影，由统一领域命令在同一事务换算维护，无法无损表达（除不尽万元精度）时兼容期明确拒绝，不静默四舍五入。
+
+**根因**：v1 快照 hash 输入包含来源名与数据模式，直接因"内部化"改名会把所有既有报告、Studio 工件与营销计划的版本引用静默作废；RAG revision 承担索引对账与墓碑恢复，与业务 hash 混用会破坏 KI-56 的补偿语义；双价格字段若无唯一写入口，任一入口直写都会产生万倍漂移（LR-54 已确认旧单位为万元）。黄金样本测试固定 hash 值防止重构静默改变版本算法。
+
+**代码位置**：`ListingSnapshotFactory`、`ListingRagOutbox`、`LegacyLocalListingSourceAdapter`、`ListingManagementServiceImpl`、`ListingV1CompatibilityGoldenSampleTest`；迁移 `20261105_listing_internal_business.sql`、`20261105_listing_internal_backfill.sql`。
+
+**关联**：LR-54、LR-149、LR-175；KI-56、KI-247、KI-248；change `implement-internal-listing-business` 决策 2/3/5。
+
 ## LR-177 买方咨询跨服务验证的本地规范哈希与受众双收
 
 **结论**：Listing→Customer 卖方档案验证与 Customer→Listing 咨询房源验证两条 RPC 链路的请求摘要由 `CustomerVerifyContractHash` 在 customer 侧按固定编码（域分隔 + 长度前缀 + 类型标记，覆盖契约版本、内层请求、签名上下文哈希、签名新鲜度哈希）计算，不改动 common 的 `RagCanonicalHash`；Customer 侧验签接受的 Auth 上下文受众为可信调用方服务名（listing-master-service）或 agent-service 二者之一；非业务管理员缺少 BROKER 映射时档案验证返回 NOT_ACCESSIBLE 而非在验签阶段抛 PERMISSION_DENIED。咨询创建在事务内同步验证并落 CONFIRMED，事务提交后由 `recheckAfterCreate` 复查，版本变化或不可访问置 NEEDS_RECHECK，补偿任务 `recheckInquiries` 对 NEEDS_RECHECK 逐条重验：仍 ACCESSIBLE 且版本一致 → CONFIRMED，版本变化 → 更新版本并保持 NEEDS_RECHECK，NOT_ACCESSIBLE → REJECTED。
@@ -1566,6 +1576,7 @@
 **代码位置**：`customer-service/rpc/CustomerVerifyContractHash`、`CustomerRpcIdentity`、`CustomerProfileVerifyRpcServiceImpl`；`customer-service/service/ListingInquiryVerifyClient`、`CustomerInquiryCommandReceiptStore`、`impl/CustomerListingInquiryServiceImpl`；迁移 `20261105_customer_listing_inquiry.sql`、`20261105_customer_inquiry_authorization.sql`。
 
 **关联**：LR-175、LR-176；KI-249；change `implement-internal-listing-business` 决策 2/4/7、任务 4.2–4.4。
+
 ## LR-178 房源登记业主验证失败关闭、幂等回执与手动版本条件写
 
 **结论**：新登记必须先经 `CustomerProfileVerifyRpcService` 受权验证业主档案（仅 VERIFIED 继续），验证顺序在幂等回执检查之前，同键重试也会重新验证当前授权；登记命令按 `(actor_user_id, operation, request_id)` 写 `listing_command_receipt` 回执，requestHash 为请求确定性 JSON 的 SHA-256，同键同内容重试按回执返回原房源、不同内容拒绝，并发插入主键冲突整体回滚后重放。所有影响可见事实的写入（调价、状态、业主关联）用手动版本条件写（`UPDATE ... SET version=version+1 WHERE id=? AND version=?`，影响 0 行即冲突回滚），不使用未确认拦截器配置的 MyBatis Plus `@Version`；价格/状态历史为追加型（无 update/delete），与主表更新、RAG outbox 同事务；`asking_price_yuan`（元）为唯一写入口，`total_price`（万元）仅作兼容投影同事务换算，除不尽时兼容期拒绝。listing 侧咨询验证提供方与卖方档案验证调用方的请求摘要使用 `ListingVerifyContractHash`，与 customer 侧 `CustomerVerifyContractHash` 编码逐字节一致，入站上下文受众双收（可信调用方服务名或 agent-service）。

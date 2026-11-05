@@ -106,12 +106,17 @@ public class DomainParallelHttpReadAdapter implements ReviewDatasetPort {
         if (facts.isEmpty()) return true;
         List<Map<String, Object>> refs = facts.stream().map(f -> {
             Map<String, Object> ref = new LinkedHashMap<>();
-            ref.put(knowledgeSource ? "knowledgeId" : "sourceSystem", knowledgeSource
-                    ? f.source().sourceId() : f.source().sourceSystem());
-            if (!knowledgeSource) ref.put("sourceId", f.source().sourceId());
-            ref.put("expectedRevision", f.source().revision());
-            if (knowledgeSource && f.source().contentHash() != null)
-                ref.put("contentHash", f.source().contentHash());
+            if (knowledgeSource) {
+                ref.put("knowledgeId", f.source().sourceId());
+                ref.put("expectedRevision", f.source().revision());
+                if (f.source().contentHash() != null)
+                    ref.put("contentHash", f.source().contentHash());
+            } else {
+                // Listing v1 check contract requires the nested listingRef shape, not a flat ref.
+                ref.put("listingRef", Map.of("sourceSystem", f.source().sourceSystem(),
+                        "sourceId", f.source().sourceId()));
+                ref.put("expectedRevision", f.source().revision());
+            }
             return ref;
         }).toList();
         JsonNode response = knowledgeSource
@@ -250,10 +255,18 @@ public class DomainParallelHttpReadAdapter implements ReviewDatasetPort {
         Map<String, String> attributes = new LinkedHashMap<>();
         if (kind == FactKind.LISTING_MAINTENANCE) {
             JsonNode listingFacts = item.path("facts");
-            for (String field : List.of("title", "areaSquareMetres", "totalPrice", "status", "maintenanceGap")) {
+            for (String field : List.of("title", "areaSquareMetres")) {
                 if (listingFacts.has(field) && !listingFacts.get(field).isNull())
-                    attributes.put(field, listingFacts.get(field).isValueNode()
-                            ? listingFacts.get(field).asText() : listingFacts.get(field).toString());
+                    attributes.put(field, listingFacts.get(field).asText());
+            }
+            // Snapshot money is an object; keep only the explicit amount string.
+            JsonNode totalPrice = listingFacts.path("totalPrice");
+            if (totalPrice.isObject() && totalPrice.path("amount").isTextual())
+                attributes.put("totalPrice", totalPrice.path("amount").asText());
+            // Listing status lives in facts.attributes, not as a direct facts field.
+            for (String attribute : List.of("status", "maintenanceGap")) {
+                String value = listingFacts.path("attributes").path(attribute).asText(null);
+                if (value != null && !value.isBlank()) attributes.put(attribute, value);
             }
         } else if (item.path("body").isObject()) {
             JsonNode body = item.path("body");

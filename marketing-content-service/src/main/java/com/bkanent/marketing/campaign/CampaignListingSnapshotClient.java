@@ -74,7 +74,7 @@ public class CampaignListingSnapshotClient {
             String requestId = UUID.randomUUID().toString();
             var read = new ListingSnapshotBatchReadRequest(ListingBusinessResponse.VERSION,
                     List.of(new com.bkanent.common.listing.ListingSourceVersionRef(
-                            new ListingRef("listing-master-service", Long.toString(listingId)), null)));
+                            new ListingRef("legacy-local", Long.toString(listingId)), null)));
             var request = new RagContextAuthorizedListingBusinessBatchReadRequest(1, requestId, read,
                     verified.context(), verified.freshness());
             long now = Instant.now().getEpochSecond();
@@ -94,11 +94,14 @@ public class CampaignListingSnapshotClient {
             }
             ListingSnapshotBatchReadItem item = response.items().get(0);
             if (item.status() != ListingSourceStatus.CURRENT || item.snapshot() == null
-                    || !item.listingRef().equals(new ListingRef("listing-master-service", Long.toString(listingId)))) {
+                    || !item.listingRef().equals(new ListingRef("legacy-local", Long.toString(listingId)))) {
                 throw CampaignDomainException.forbidden("listing snapshot is not accessible");
             }
             ListingSourceSnapshot snapshot = item.snapshot();
-            if (!snapshot.listingRef().equals(item.listingRef()) || snapshot.dataMode() != com.bkanent.common.listing.ListingDataMode.REAL) {
+            // Internal listings are the only production source; their unproven rows stay UNKNOWN,
+            // so real-mode campaigns accept REAL or UNKNOWN and only reject SIMULATED facts.
+            if (!snapshot.listingRef().equals(item.listingRef())
+                    || snapshot.dataMode() == com.bkanent.common.listing.ListingDataMode.SIMULATED) {
                 throw CampaignDomainException.unavailable(CampaignErrorCode.DEPENDENCY_UNAVAILABLE,
                         "listing snapshot has an invalid identity or source mode");
             }

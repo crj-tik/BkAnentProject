@@ -35,9 +35,10 @@ class CampaignListingSnapshotClientTest {
         ReflectionTestUtils.setField(client, "keyId", KEY_ID);
         ReflectionTestUtils.setField(client, "secret", SECRET);
 
-        var identity = new ListingRef("listing-master-service", "55");
+        // Internal listings are addressed as legacy-local and stay UNKNOWN until proven REAL.
+        var identity = new ListingRef("legacy-local", "55");
         var source = new ListingSourceSnapshot(identity, "rev-7", "a".repeat(64), Instant.now(),
-                ListingDataMode.REAL, "source-v1", new ListingSnapshotFacts("Listing 55", "88.0",
+                ListingDataMode.UNKNOWN, "legacy-local", new ListingSnapshotFacts("Listing 55", "88.0",
                 new ListingMoney("2500000", "CNY", ListingMoney.Unit.YUAN), Map.of(), List.of()));
         when(listings.batchReadContext(any(), any())).thenAnswer(invocation -> {
             RagContextAuthorizedListingBusinessBatchReadRequest request = invocation.getArgument(0);
@@ -59,9 +60,32 @@ class CampaignListingSnapshotClientTest {
             var snapshot = client.read(55, com.bkanent.common.marketing.campaign.CampaignDataMode.REAL);
             assertEquals("domain-parallel-v1", snapshot.path("contractVersion").asText());
             assertEquals("rev-7", snapshot.path("revision").asText());
-            assertEquals("REAL", snapshot.path("dataMode").asText());
+            assertEquals("UNKNOWN", snapshot.path("dataMode").asText());
         }
         verify(listings, times(1)).batchReadContext(any(), any());
+    }
+
+    @Test
+    void simulatedInternalSnapshotIsRejectedInRealMode() throws Exception {
+        var listings = mock(ListingBusinessSourceRpcService.class);
+        var client = new CampaignListingSnapshotClient(new CampaignRuntimeProperties(), new ObjectMapper());
+        ReflectionTestUtils.setField(client, "listings", listings);
+        ReflectionTestUtils.setField(client, "keyId", KEY_ID);
+        ReflectionTestUtils.setField(client, "secret", SECRET);
+
+        var identity = new ListingRef("legacy-local", "55");
+        var source = new ListingSourceSnapshot(identity, "rev-7", "a".repeat(64), Instant.now(),
+                ListingDataMode.SIMULATED, "legacy-local", new ListingSnapshotFacts("Listing 55", "88.0",
+                new ListingMoney("2500000", "CNY", ListingMoney.Unit.YUAN), Map.of(), List.of()));
+        when(listings.batchReadContext(any(), any())).thenReturn(new ListingBusinessResponse<>(
+                ListingBusinessResponse.VERSION,
+                List.of(new ListingSnapshotBatchReadItem(identity, ListingSourceStatus.CURRENT, source)), null));
+
+        try (var ignored = McpAuthorizationScope.open(context(List.of("listing.read")))) {
+            var rejected = assertThrows(CampaignDomainException.class, () -> client.read(55,
+                    com.bkanent.common.marketing.campaign.CampaignDataMode.REAL));
+            assertEquals(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, rejected.status());
+        }
     }
 
     @Test

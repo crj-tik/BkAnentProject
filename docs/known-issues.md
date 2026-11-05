@@ -1958,6 +1958,22 @@ Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/
 
 **验证边界**：静态核对盘点中的 22 个控制器、226 个请求映射：数量、源码行号、映射注解和处理方法均匹配；OpenAPI schema 与 `KnowledgeLifecycleService.create` 的现有校验一致。此项为文档与契约修复，未做运行环境联调。
 
+## KI-247 [FIXED·本提交·P1] 营销真实 Campaign 房源快照标识与模式检查和内部来源不兼容
+
+**发现日期与依据**：2026-11-05。`CampaignListingSnapshotClient` 真实模式请求 `ListingRef("listing-master-service", id)` 并要求快照 `dataMode=REAL`；默认内部来源适配器只接受 `legacy-local/<id>` 且存量数据标记 `UNKNOWN`，真实模式 Campaign 准备必然失败。既有单测 mock 了 `listing-master-service/REAL` 响应，掩盖了与默认生产者的不兼容（静态代码核对确认）。
+
+**修复**：请求标识改为 `legacy-local/<id>`；模式检查改为仅拒绝 `SIMULATED`、接受 `REAL/UNKNOWN`（内部未证实数据保持 UNKNOWN，不批量转正）。单测改用内部 UNKNOWN 快照断言，并新增内部 SIMULATED 快照拒绝用例；`CampaignLifecycleIntegrationTest` 使用独立 SIMULATED 分支不受影响。
+
+**验证边界**：营销模块 42 项测试通过。真实 Listing 生产者与营销的端到端联测仍待 change `implement-internal-listing-business` 任务 5.3 联调验收，不以 mock 结果替代。关联 LR-175、LR-176。
+
+## KI-248 [FIXED·本提交·P1] 平台经营来源 check 请求形状与房源快照字段读取不匹配
+
+**发现日期与依据**：2026-11-05。门店复盘 `DomainParallelHttpReadAdapter` 的来源 check 发送平铺 `{sourceSystem,sourceId,expectedRevision}`，而 Listing v1 契约要求嵌套 `{listingRef:{sourceSystem,sourceId},expectedRevision}`；`mapFact` 读取 `facts.status`/`facts.maintenanceGap`，但快照状态位于 `facts.attributes`，`totalPrice` 为金额对象而非值节点，导致维护事实无法取得（静态代码核对确认）。
+
+**修复**：check 请求改为嵌套 `listingRef` 形状；`mapFact` 改读 `facts.attributes.status/maintenanceGap` 与 `totalPrice.amount`，仅保留快照实际提供的字段。新增 `listingCheckRequestUsesNestedListingRefShape` 回归测试断言请求形状与响应处理。
+
+**验证边界**：平台经营模块 74 项测试通过。带房源证据的真实复盘链路联测仍待任务 5.3 联调验收。关联 LR-176。
+
 ## KI-249 [OPEN·P2] common 规范哈希未登记新增跨服务验证请求类型
 
 **发现日期与依据**：2026-11-05。`RagCanonicalHash.REQUESTS` 只登记既有 RAG 请求类型，本变更新增的 `RagContextAuthorizedCustomerProfileVerifyRequest`、`RagContextAuthorizedListingInquiryVerifyRequest`（及内层 `RagCustomerProfileVerifyRequest`、`RagListingInquiryVerifyRequest`）不在其中，`requestHash` 对其抛 INVALID_ARGUMENT。customer 侧（LR-177）已按约定编码本地实现 `CustomerVerifyContractHash`；listing 侧实现咨询验证提供方与卖方档案验证调用方时必须采用完全相同的编码，否则跨服务验签必然失败。
