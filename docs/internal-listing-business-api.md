@@ -12,7 +12,11 @@
 | PUT `/listings/{id}/status` | `{status, requestId?}` | `ListingDetail` | 状态转换（见 §3 状态机） |
 | PUT `/listings/{id}/owner` | `{ownerCustomerId}` | `ListingDetail` | 存量房源业主确认（先经 Customer 验证） |
 | DELETE `/listings/{id}/owner` | 路径 id | `ListingDetail` | 解除业主关联（保留历史，不删除记录） |
-| PUT `/listings/{id}/assets` | `{imageUrls,floorPlanUrls,videoUrls}` | `ListingDetail` | 素材绑定（逐项落 `listing_asset` 行，见 §4） |
+| PUT `/listings/{id}/assets` | `{imageUrls,floorPlanUrls,videoUrls}` | `ListingDetail` | 素材绑定（逐项落 `listing_asset` 行，见 §4；旧字段同事务双写兼容） |
+| POST `/listings/{id}/assets/legacy-register` | 路径 id | `ListingDetail` | 存量逗号 URL 受控登记为 `PENDING_REVIEW` 素材行（幂等，不抓取） |
+| DELETE `/listings/assets/{assetId}` | 路径 assetId | `ListingDetail` | 退役单条素材（逻辑删除） |
+| GET `/listings/buyer/search` | query：`districtCode,communityName(模糊),layout,minArea,maxArea,minAskingPriceYuan,maxAskingPriceYuan(元),cursor,limit(默认20上限100)` | `ListingBuyerSearchResponse` | 买方可见在售分页搜索（见 §4a）；查询不创建咨询或档案 |
+| GET `/listings/buyer/{id}` | 路径 id | `ListingBuyerViewResponse` | 买方可见详情（仅 BUYER 可见 ACTIVE 素材，无敏感字段） |
 | POST `/listings/{id}/ocr` | `{propertyCertificateUrl,contractUrl}` | `ListingDetail` | OCR 占位（明确标注模拟，不填占位证号） |
 | POST `/listings/{id}/verify` | `{externalSource?,certificateNo?,ownerName?}` | `ListingDetail` | 内部人工登记核验（非第三方权属核验）；证号加密保存 |
 | GET `/listings/{id}` / `/listings` / `/listings/search` | 既有契约 | 既有响应 | 兼容保留；`totalPrice` 仍为万元 |
@@ -47,11 +51,24 @@ PENDING_REVIEW(待上架) ──上架──> ON_SALE ──确认成交──> 
 
 ## 4. 素材分级
 
-素材逐项落 `listing_asset` 行：`assetType`（IMAGE/FLOOR_PLAN/VIDEO/CERTIFICATE/CONTRACT）、`visibility`（BUYER/INTERNAL/SENSITIVE）、`sortOrder`、`status`（ACTIVE/PENDING_REVIEW/RETIRED）、`storageKey`（保留原值，不主动抓取）。
+素材逐项落 `listing_asset` 行：`assetType`（IMAGE/FLOOR_PLAN/VIDEO/CERTIFICATE/CONTRACT）、`visibility`（BUYER/INTERNAL/SENSITIVE）、`sortOrder`、`status`（ACTIVE/PENDING_REVIEW/RETIRED）、`storageKey`（保留原值，不主动抓取；本期不实现任何服务端 URL 读取）。
 
-- 买方输出仅返回 `visibility=BUYER` 且 `status=ACTIVE` 的素材。
+- 买方输出仅返回 `visibility=BUYER` 且 `status=ACTIVE` 的素材；`PENDING_REVIEW` 待核对行不外露。
 - 产权证/合同类素材为 SENSITIVE：仅具备私有详情权限的调用方可访问；知道存储地址不构成权限。
 - 旧逗号拼接 URL 可经受权入口登记为 `PENDING_REVIEW` 行（幂等），迁移设计见变更目录 [backfill.md](../openspec/changes/implement-internal-listing-business/backfill.md)。
+
+### 4a. 买方可见搜索与详情
+
+- 分页：键集游标 `cursor=base64(lastUpdatedAt,lastId)`，排序 `updated_at DESC, id DESC`，同条件翻页不重不漏；limit 默认 20、上限 100。
+- 价格过滤为 CNY 元；`asking_price_yuan` 为空的存量行回退 `total_price×10000` 比较。
+- 输出前复核当前状态与权限：非在售/已删/无权不返回。
+- 买方投影字段：id、title、address、communityName、districtCode、layout、area、askingPriceYuan（元）、status、floorLevel、decoration、schoolZone、traffic、BUYER 可见素材列表；**不含** ownerName、certificateNo、业主联系方式、证件与合同 URL。
+
+### 4b. 产权证号受管加密
+
+- AES-256-GCM（密文 = 12 字节随机 nonce ‖ 密文 ‖ tag）；密钥经 `LISTING_PRIVATE_INFO_ENCRYPTION_KEY`（Base64 ≥32 字节）注入，未配置时敏感写入失败关闭、不降级明文；`certificateKeyId` 记录密钥版本支持轮换，轮换失配或密文篡改明确拒绝。
+- 核验通过即同事务加密保存并置空 `listing_info.certificate_no` 明文；存量明文批量清理属部署期受控操作。
+- 日志全程脱敏，不打印明文证号或密钥。
 
 ## 5. 买方房源咨询（customer-service）
 

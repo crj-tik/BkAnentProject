@@ -11,7 +11,7 @@
 - [x] 2.2 在 Listing 增量增加 `owner_customer_id`、区域、小区、元价格、并发版本及查询索引，创建素材、敏感资料、价格记录、状态记录和登记幂等回执表；验证类型、索引及存量可空边界。（证据：`20261105_listing_internal_business.sql` + `listing-internal-business.sql` check）
 - [x] 2.3 在 Customer 创建咨询和幂等回执表、为跟进记录增加可空 `inquiry_id` 与索引，明确咨询状态、校验状态及跨库逻辑 ID 约束；不修改或依赖委托合同流程。（证据：`20261105_customer_listing_inquiry.sql` + `customer-listing-inquiry.sql` check）
 - [x] 2.4 设计幂等回填与对账：旧万元精确转元、旧素材分级、证号受管加密、历史价格/状态只建明确迁移基线；不能验证的业主、核验结果与敏感素材标记待确认，不按姓名自动关联。（证据：`20261105_listing_internal_backfill.sql`（order 680，幂等 UPDATE + INSERT IGNORE 基线）+ [backfill.md](backfill.md)）
-- [ ] 2.5 在隔离 MySQL 8.4 验证 fresh、upgrade、存量脏数据、中断恢复、重复执行、账本 checksum 和 schema check；记录备份、回退与人工处置门槛，不在未授权环境执行。
+- [x] 2.5 在隔离 MySQL 8.4 验证 fresh、upgrade、存量脏数据、中断恢复、重复执行、账本 checksum 和 schema check；记录备份、回退与人工处置门槛，不在未授权环境执行。（证据：WSL Docker 隔离 mysql:8.4（compose.init-check，独立卷）：fresh 全链 010–700 应用成功且 4 个新迁移 schema check=1、账本 4 行；脏数据 4.20 万元→42000.00 元精确回填 + 基线价格/状态记录 + 不变量 check=1；660/670 直接重跑条件 DDL 无副作用；upgrade 重跑 exit 0（62 项 Verified previously applied + 6 项退役验证，0 次重复执行）；咨询往返落库 CONFIRMED；WSL 重启两次均验证卷持久与干净恢复。验证脚本存 .work/2026-11-05/initcheck/（本地）；回退与人工处置门槛见 backfill.md）
 
 ## 3. 内部房源登记与维护
 
@@ -43,5 +43,5 @@
 - [x] 6.1 为房源和 Customer 新增模块单元、服务、持久化及受权接口测试，覆盖登记无合同、直接上架、价格与状态历史、并发、咨询、隐私和失败关闭。（证据：listing 127/127（`ListingInternalBusinessTest` 18 项、`CustomerProfileVerifyClientTest` 7、`ListingInquiryVerifyRpcServiceImplTest` 6、`ListingCommandReceiptServiceTest` 4 等）+ customer 47/47（`CustomerListingInquiryServiceTest` 14、`CustomerProfileVerifyRpcServiceImplTest` 11、`ListingInquiryVerifyClientTest` 6、`CustomerFollowRecordInquiryLinkTest` 4））
 - [x] 6.2 执行 Maven 定向回归、受管 manifest 验证与隔离数据库迁移；记录真实执行结果和跳过项，未联调的环境明确标记未验收。（证据：listing/customer/marketing(42)/platform-operations(74)/agent-service Studio 与安全修复测试全部通过；`test_init_manifest.py` 70 条 + runner dry-run 通过；**隔离 MySQL 8.4 迁移验证未执行**（本机 Docker 不可用），属任务 2.5 部署阶段执行）
 - [x] 6.3 按项目规范追加非显然设计的 LR，核对并更新已知问题清单，准确记录新确认问题、兼容限制及遗留项；不覆盖用户工作区的既有内容。（证据：LR-176/177/178、KI-247/248/249 已登记并随各提交入库；用户未跟踪草稿（docs/contracts/*、backend-frontend-capabilities-draft.md）未触碰）
-- [ ] 6.4 更新内部房源 API/字段/单位与消费方文档、配置矩阵及迁移回退手册，完成现行功能清单和其他 OpenSpec 变更的协调归档门禁。
+- [x] 6.4 更新内部房源 API/字段/单位与消费方文档、配置矩阵及迁移回退手册，完成现行功能清单和其他 OpenSpec 变更的协调归档门禁。（证据：docs/internal-listing-business-api.md（管理/素材/买方搜索/咨询端点、元-万元单位、状态机、幂等、跨服务验证链路、兼容不变项）；配置矩阵由 ListingConfigurationMatrixTest 断言（5.1）；迁移回退手册见变更目录 backfill.md；consolidate-listing-comparison-domain 归档协调注记见其 tasks.md 头部）
 - [ ] 6.5 使用经确认的测试数据和权限完成卖方登记→无审核上架→房源维护→买方查询→咨询跟进端到端验收，检查无合同依赖、数据脱敏、数据状态与历史一致。
