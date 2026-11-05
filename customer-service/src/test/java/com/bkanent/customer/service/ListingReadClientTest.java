@@ -129,7 +129,8 @@ class ListingReadClientTest {
         var customers = mock(CustomerDomainService.class);
         var management = new CustomerManagementServiceImpl(customers, mock(CustomerFollowRecordDomainService.class),
                 mock(OwnerEntrustRecordDomainService.class), mock(CustomerFavoriteListingDomainService.class),
-                new CustomerConverter(), client);
+                new CustomerConverter(), client,
+                mock(com.bkanent.customer.service.CustomerListingInquiryDomainService.class));
         var customer = new CustomerEntity(); customer.setId(9L); customer.setBrokerId(41L);
         when(customers.getById(9L)).thenReturn(customer);
         when(client.authenticate()).thenThrow(new RagException(RagErrorCode.AUTHENTICATION_FAILED));

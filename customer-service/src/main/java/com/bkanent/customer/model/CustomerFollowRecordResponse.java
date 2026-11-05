@@ -20,6 +20,8 @@ public record CustomerFollowRecordResponse(
         String resultTag,
         /** 业务属性：nextFollowTime。 */
         LocalDateTime nextFollowTime,
+        /** 业务属性：inquiryId（关联咨询，历史记录为 NULL）。 */
+        Long inquiryId,
         /** 业务属性：createdAt。 */
         LocalDateTime createdAt
 ) {

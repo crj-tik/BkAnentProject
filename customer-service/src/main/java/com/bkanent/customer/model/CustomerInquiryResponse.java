@@ -1,0 +1,30 @@
+package com.bkanent.customer.model;
+
+import java.time.LocalDateTime;
+
+/**
+ * 买方房源咨询响应。
+ */
+public record CustomerInquiryResponse(
+        /** 业务属性：id。 */
+        Long id,
+        /** 业务属性：customerId。 */
+        Long customerId,
+        /** 业务属性：listingId。 */
+        Long listingId,
+        /** 业务属性：brokerId（可信负责经纪人）。 */
+        Long brokerId,
+        /** 业务属性：inquiryChannel。 */
+        String inquiryChannel,
+        /** 业务属性：inquiryContent。 */
+        String inquiryContent,
+        /** 业务属性：status（业务状态）。 */
+        String status,
+        /** 业务属性：validationState（验证状态）。 */
+        String validationState,
+        /** 业务属性：checkedListingVersion（验证时房源版本）。 */
+        String checkedListingVersion,
+        /** 业务属性：checkedAt（验证时间）。 */
+        LocalDateTime checkedAt
+) {
+}

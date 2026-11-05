@@ -35,6 +35,10 @@ public class CustomerFollowRecordEntity extends BaseEntity {
      * 业务属性：nextFollowTime。
      */
     private LocalDateTime nextFollowTime;
+    /**
+     * 业务属性：inquiryId（可选关联的买方咨询；历史记录为 NULL，不推断）。
+     */
+    private Long inquiryId;
 
     public Long getCustomerId() {
         return customerId;
@@ -82,5 +86,13 @@ public class CustomerFollowRecordEntity extends BaseEntity {
 
     public void setNextFollowTime(LocalDateTime nextFollowTime) {
         this.nextFollowTime = nextFollowTime;
+    }
+
+    public Long getInquiryId() {
+        return inquiryId;
+    }
+
+    public void setInquiryId(Long inquiryId) {
+        this.inquiryId = inquiryId;
     }
 }

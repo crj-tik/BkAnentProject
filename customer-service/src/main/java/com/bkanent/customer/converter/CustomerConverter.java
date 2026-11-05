@@ -52,6 +52,7 @@ public class CustomerConverter {
                 entity.getContent(),
                 entity.getResultTag(),
                 entity.getNextFollowTime(),
+                entity.getInquiryId(),
                 entity.getCreatedAt()
         );
     }

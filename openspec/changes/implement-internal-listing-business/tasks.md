@@ -1,0 +1,47 @@
+## 1. 冲突规范与现状基线
+
+- [x] 1.1 盘点 `consolidate-listing-comparison-domain` 的 proposal/design/specs/tasks，协调移除外部房源来源和上游真源假设，保留比较、权限、版本及 RAG 既有有效要求，明确双方归档顺序及 5.1–5.4 验收责任。
+- [x] 1.2 核对 `unify-versioned-permission-context` 和 KI-243，定义 Listing→Customer 卖方验证、Customer→Listing 咨询和各接口的可信主体、操作、资源范围及缺失/过期时拒绝行为；不以请求字段替代身份。
+- [x] 1.3 形成现有表、ID、旧万元价格与客户预算单位、owner 不明、文件素材、模拟核验、比较报告/Studio、RAG revision/outbox、消费者与外部 provider 配置清单；不读取秘密，不假设线上或历史数据为空。（证据：[inventory.md](inventory.md)）
+- [x] 1.4 固化现有 v1 `legacy-local` 引用、标准化 hash、UNKNOWN 模式、报告/PDF 读取权和旧接口万元单位的兼容样本及回归测试。（证据：`ListingV1CompatibilityGoldenSampleTest` 黄金 hash `dd58ee21…07c47` 与旧 DTO 万元断言；报告/PDF 权限复核沿用 `ListingComparisonServiceTest#staleInaccessibleAndUnavailableSourcesBlockHistoricalBodyAndPdf`）
+
+## 2. 数据模型和安全迁移
+
+- [x] 2.1 扩展初始化 runner 的 `upgrade:bk_customer` 白名单及清单测试，为 Listing 和 Customer 分别追加版本化迁移、独立 schema check、manifest 顺序与规范 LF SHA256，不修改已应用文件。（证据：runner 白名单已加 `upgrade:bk_customer`；manifest 新增 660/670/680 三条；`test_init_manifest.py` 69 条全过；`--mode fresh --dry-run` 通过）
+- [x] 2.2 在 Listing 增量增加 `owner_customer_id`、区域、小区、元价格、并发版本及查询索引，创建素材、敏感资料、价格记录、状态记录和登记幂等回执表；验证类型、索引及存量可空边界。（证据：`20261105_listing_internal_business.sql` + `listing-internal-business.sql` check）
+- [x] 2.3 在 Customer 创建咨询和幂等回执表、为跟进记录增加可空 `inquiry_id` 与索引，明确咨询状态、校验状态及跨库逻辑 ID 约束；不修改或依赖委托合同流程。（证据：`20261105_customer_listing_inquiry.sql` + `customer-listing-inquiry.sql` check）
+- [x] 2.4 设计幂等回填与对账：旧万元精确转元、旧素材分级、证号受管加密、历史价格/状态只建明确迁移基线；不能验证的业主、核验结果与敏感素材标记待确认，不按姓名自动关联。（证据：`20261105_listing_internal_backfill.sql`（order 680，幂等 UPDATE + INSERT IGNORE 基线）+ [backfill.md](backfill.md)）
+- [ ] 2.5 在隔离 MySQL 8.4 验证 fresh、upgrade、存量脏数据、中断恢复、重复执行、账本 checksum 和 schema check；记录备份、回退与人工处置门槛，不在未授权环境执行。
+
+## 3. 内部房源登记与维护
+
+- [ ] 3.1 实现新增房源时的 Customer 业主档案当前授权和类型验证、可信 broker 归属以及失效/不可用失败关闭；实现受权的存量房源业主确认与解除绑定，验证不因登记关联赋予产权或登录身份。
+- [ ] 3.2 实现房源登记幂等回执及同事务房源、初始价格、状态与 RAG outbox 写入；覆盖并发重试、不同请求冲突、写入失败回滚及跨服务验证窗口。
+- [ ] 3.3 实现待上架/在售/下架/成交的允许转换、资料校验、版本条件写及追加状态历史；验证直接上架不依赖合同、委托、审批或模拟核验，非法转换不变更数据。
+- [ ] 3.4 统一所有房源编辑和状态入口的价格/状态更新，确保主表、价格历史、状态历史和 RAG outbox 同事务；覆盖并发冲突和普通 upsert 不能绕过历史。
+- [ ] 3.5 实现元价格为唯一内部写入主值、旧万元 DTO 兼容投影及无损范围验证；核对客户预算匹配不发生万倍误差，覆盖边界值、重复换算与回填对账。
+- [ ] 3.6 实现素材逐项绑定、排序、删除、可见性、受权文件访问以及历史 URL 迁移；如服务端需主动读取 URL，测试仅允许 http/https、拒绝本地/私网/保留地址、逐跳重定向校验及 DNS 重绑定防护。
+- [ ] 3.7 实现产权证号受管加密与密钥版本、敏感详情操作授权和脱敏日志；买方输出、普通摘要和 RAG 均不得包含敏感资料，并修正模拟 OCR/核验不得冒充真实权属核验的行为。
+
+## 4. 买方咨询和房源输出
+
+- [ ] 4.1 提供受权、稳定分页的内部在售房源搜索及买方可见详情，覆盖区域、小区、户型、面积、元价格和素材过滤；输出前复核当前状态及权限，查询不创建咨询。
+- [x] 4.2 实现显式咨询登记、客户类型和资源校验、Listing 当前在售与读取权校验、可信 broker 归属及幂等回执；覆盖不存在、越权、下架和依赖不可用。（证据：`CustomerListingInquiryServiceImpl` + `ListingInquiryVerifyClient` + `CustomerInquiryCommandReceiptStore`；`CustomerListingInquiryServiceTest` 覆盖 ACCESSIBLE→CONFIRMED、NOT_ACCESSIBLE/依赖异常失败关闭、同 requestId 重试与不同内容拒绝；操作码迁移 `20261105_customer_inquiry_authorization.sql`）
+- [x] 4.3 实现咨询提交后版本/状态复查及 `PENDING`、`CONFIRMED`、`NEEDS_RECHECK`、`REJECTED` 的可恢复处理；验证检查后下架、服务超时、重试和并发情况下不虚报成功、不重复创建。（证据：`recheckAfterCreate`（事务提交后触发，失败不影响已创建记录）与 `recheckInquiries` 补偿（同版本→CONFIRMED、版本变化→保持 NEEDS_RECHECK 并更新版本、NOT_ACCESSIBLE→REJECTED）；`CustomerListingInquiryServiceTest.postCommit*` 与 `recheckInquiries*` 用例）
+- [x] 4.4 实现咨询列表、详情、跟进状态变更和按同一客户关联 `inquiry_id`；覆盖历史空关联、跨客户拒绝、客户及房源权限撤回、房源下架后受权历史读取。（证据：`CustomerInquiryController`（POST/GET /customers/{id}/inquiries、PUT /customers/inquiries/{id}/status，列表响应携带完整验证状态即详情事实）；`CustomerManagementServiceImpl.requireInquiryLink`；`CustomerFollowRecordInquiryLinkTest` 覆盖同客户关联、跨客户拒绝、空关联兼容；读取每次 `requireCustomer` 复核当前客户权限，下架房源咨询保留为 REJECTED 历史不携带在售事实）
+
+## 5. 系统内消费者与旧来源收敛
+
+- [ ] 5.1 在生产配置禁止外部房源 HTTP provider 和 fixture 回退，测试/演示模拟数据显式隔离及标识；保留内部 HTTP/RPC、Agent、RAG 接口，不在普通失败时使用模拟数据。
+- [ ] 5.2 保持旧 `domain-parallel-v1`、`legacy-local`、UNKNOWN、hash 算法及旧 `/compare/**` 的已发布兼容，定义并实现新增内部 `listingId` 消费方式与版本化迁移，不静默重标历史为 REAL。
+- [ ] 5.3 以真实 Listing 生产者契约联测营销、经营、Studio、比较和 Customer；修复营销内部房源标识/模式不一致及经营版本检查请求形状问题，不使用 mock 数据掩盖真实模式差异。
+- [ ] 5.4 验证比较报告/PDF、Studio 工件、营销计划中的旧引用和原始文件保留；覆盖重启、价格变更、下架、撤权及依赖不可用，不绕过 owner 或逐房源权限检查。
+- [ ] 5.5 验证 RAG 业务事务 outbox、索引版本、墓碑、回填及重放；覆盖已下架房源在陈旧索引中不再作为在售返回，不承诺跨存储强一致。
+
+## 6. 验收与交付
+
+- [ ] 6.1 为房源和 Customer 新增模块单元、服务、持久化及受权接口测试，覆盖登记无合同、直接上架、价格与状态历史、并发、咨询、隐私和失败关闭。
+- [ ] 6.2 执行 Maven 定向回归、受管 manifest 验证与隔离数据库迁移；记录真实执行结果和跳过项，未联调的环境明确标记未验收。
+- [ ] 6.3 按项目规范追加非显然设计的 LR，核对并更新已知问题清单，准确记录新确认问题、兼容限制及遗留项；不覆盖用户工作区的既有内容。
+- [ ] 6.4 更新内部房源 API/字段/单位与消费方文档、配置矩阵及迁移回退手册，完成现行功能清单和其他 OpenSpec 变更的协调归档门禁。
+- [ ] 6.5 使用经确认的测试数据和权限完成卖方登记→无审核上架→房源维护→买方查询→咨询跟进端到端验收，检查无合同依赖、数据脱敏、数据状态与历史一致。

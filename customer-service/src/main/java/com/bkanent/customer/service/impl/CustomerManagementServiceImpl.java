@@ -8,6 +8,7 @@ import com.bkanent.customer.converter.CustomerConverter;
 import com.bkanent.customer.entity.CustomerEntity;
 import com.bkanent.customer.entity.CustomerFavoriteListingEntity;
 import com.bkanent.customer.entity.CustomerFollowRecordEntity;
+import com.bkanent.customer.entity.CustomerListingInquiryEntity;
 import com.bkanent.customer.entity.OwnerEntrustRecordEntity;
 import com.bkanent.customer.enums.CustomerProfileTypeEnum;
 import com.bkanent.customer.enums.EntrustStatusEnum;
@@ -25,6 +26,7 @@ import com.bkanent.customer.model.OwnerEntrustUpsertRequest;
 import com.bkanent.customer.service.CustomerDomainService;
 import com.bkanent.customer.service.CustomerFavoriteListingDomainService;
 import com.bkanent.customer.service.CustomerFollowRecordDomainService;
+import com.bkanent.customer.service.CustomerListingInquiryDomainService;
 import com.bkanent.customer.service.CustomerManagementService;
 import com.bkanent.customer.service.OwnerEntrustRecordDomainService;
 import org.apache.dubbo.config.annotation.DubboReference;
@@ -51,6 +53,7 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
     private final OwnerEntrustRecordDomainService ownerEntrustRecordDomainService;
     private final CustomerFavoriteListingDomainService favoriteListingDomainService;
     private final CustomerConverter customerConverter;
+    private final CustomerListingInquiryDomainService inquiryDomainService;
 
     private final com.bkanent.customer.service.ListingReadClient listingReadClient;
 
@@ -59,13 +62,15 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
                                          OwnerEntrustRecordDomainService ownerEntrustRecordDomainService,
                                          CustomerFavoriteListingDomainService favoriteListingDomainService,
                                          CustomerConverter customerConverter,
-                                         com.bkanent.customer.service.ListingReadClient listingReadClient) {
+                                         com.bkanent.customer.service.ListingReadClient listingReadClient,
+                                         CustomerListingInquiryDomainService inquiryDomainService) {
         this.listingReadClient = listingReadClient;
         this.customerDomainService = customerDomainService;
         this.followRecordDomainService = followRecordDomainService;
         this.ownerEntrustRecordDomainService = ownerEntrustRecordDomainService;
         this.favoriteListingDomainService = favoriteListingDomainService;
         this.customerConverter = customerConverter;
+        this.inquiryDomainService = inquiryDomainService;
     }
 
     @Override
@@ -140,6 +145,7 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
         entity.setContent(request.content());
         entity.setResultTag(request.resultTag());
         entity.setNextFollowTime(request.nextFollowTime());
+        entity.setInquiryId(requireInquiryLink(customerId, request.inquiryId()));
         followRecordDomainService.save(entity);
         log.info("新增客户跟进记录成功，customerId={}，followId={}", customerId, entity.getId());
         return customerConverter.toFollowResponse(entity);
@@ -282,6 +288,24 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
         return favoriteListingDomainService.listByCustomerId(customerId).stream()
                 .map(customerConverter::toFavoriteResponse)
                 .toList();
+    }
+
+    /**
+     * 跟进记录可选关联咨询：咨询必须存在且属于同一客户，跨客户拒绝；
+     * 历史 inquiryId 为 NULL 时不做推断。
+     */
+    private Long requireInquiryLink(Long customerId, Long inquiryId) {
+        if (inquiryId == null) {
+            return null;
+        }
+        CustomerListingInquiryEntity inquiry = inquiryDomainService.getById(inquiryId);
+        if (inquiry == null) {
+            throw new IllegalArgumentException("咨询不存在: " + inquiryId);
+        }
+        if (!customerId.equals(inquiry.getCustomerId())) {
+            throw new IllegalArgumentException("跟进记录不能关联其他客户的咨询");
+        }
+        return inquiryId;
     }
 
     private void validateProfileRequest(CustomerUpsertRequest request) {

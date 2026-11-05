@@ -52,3 +52,11 @@ customer:
   listing-read:
     key-id: ${CUSTOMER_LISTING_READ_KEY_ID:customer-read-current}
     signing-secret: ${CUSTOMER_LISTING_READ_SECRET:}
+  profile-verify:
+    trusted-callers:
+      customer-verify-current:
+        caller-service: listing-master-service
+        secret: ${LISTING_CUSTOMER_VERIFY_SIGNING_SECRET:}
+  listing-inquiry-verify:
+    key-id: ${CUSTOMER_LISTING_INQUIRY_VERIFY_KEY_ID:customer-inquiry-verify-current}
+    signing-secret: ${CUSTOMER_LISTING_INQUIRY_VERIFY_SECRET:}

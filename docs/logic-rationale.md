@@ -1556,3 +1556,13 @@
 **代码位置**：`CampaignListingSnapshotClient`、`RagContextAuthorizedListingBusinessBatchReadRequest`、`RagCanonicalHash`、`ListingRagIdentity.verifyAuthorizedBusinessSourceContext`、`ListingBusinessSourceService.batchRead`；迁移 `20261103_marketing_campaign_authorization.sql`。
 
 **关联**：LR-131、LR-160；KI-196；change `unify-versioned-permission-context` task 7.6、10.3。
+
+## LR-177 买方咨询跨服务验证的本地规范哈希与受众双收
+
+**结论**：Listing→Customer 卖方档案验证与 Customer→Listing 咨询房源验证两条 RPC 链路的请求摘要由 `CustomerVerifyContractHash` 在 customer 侧按固定编码（域分隔 + 长度前缀 + 类型标记，覆盖契约版本、内层请求、签名上下文哈希、签名新鲜度哈希）计算，不改动 common 的 `RagCanonicalHash`；Customer 侧验签接受的 Auth 上下文受众为可信调用方服务名（listing-master-service）或 agent-service 二者之一；非业务管理员缺少 BROKER 映射时档案验证返回 NOT_ACCESSIBLE 而非在验签阶段抛 PERMISSION_DENIED。咨询创建在事务内同步验证并落 CONFIRMED，事务提交后由 `recheckAfterCreate` 复查，版本变化或不可访问置 NEEDS_RECHECK，补偿任务 `recheckInquiries` 对 NEEDS_RECHECK 逐条重验：仍 ACCESSIBLE 且版本一致 → CONFIRMED，版本变化 → 更新版本并保持 NEEDS_RECHECK，NOT_ACCESSIBLE → REJECTED。
+
+**根因**：common 尚未登记两个新验证请求类型，`RagCanonicalHash.requestHash` 对其直接拒绝，而本变更禁止修改 common，因此摘要编码必须在两侧独立实现且保持一致（见 KI-249）；跨服务转发的上下文既可能来自网关入口绑定（受众为调用方服务）也可能来自 A2A 运行（受众为 agent-service），只收其一会切断另一条合法链路，与 listing 侧 `verifyAuthorizedBusinessSourceContext` 的双收模式保持一致；BROKER 映射缺失属于"档案与当前操作人范围不匹配"，按决策 7 端到端仍是拒绝登记，但任务 4.2 契约把边界结果定义为 NOT_ACCESSIBLE，避免把可正常返回的业务不可达当成验签失败。NEEDS_RECHECK 是补偿状态而非业务跟进状态：创建路径失败关闭不产生该状态，只有提交后复查发现漂移才标记，防止跨服务校验与本地提交之间的状态变化窗口被谎报为已确认。
+
+**代码位置**：`customer-service/rpc/CustomerVerifyContractHash`、`CustomerRpcIdentity`、`CustomerProfileVerifyRpcServiceImpl`；`customer-service/service/ListingInquiryVerifyClient`、`CustomerInquiryCommandReceiptStore`、`impl/CustomerListingInquiryServiceImpl`；迁移 `20261105_customer_listing_inquiry.sql`、`20261105_customer_inquiry_authorization.sql`。
+
+**关联**：LR-175、LR-176；KI-249；change `implement-internal-listing-business` 决策 2/4/7、任务 4.2–4.4。

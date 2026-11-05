@@ -19,7 +19,8 @@ class CustomerVersionedAuthorizationTest {
         var customers = mock(CustomerDomainService.class);
         var management = new CustomerManagementServiceImpl(customers, mock(CustomerFollowRecordDomainService.class),
                 mock(OwnerEntrustRecordDomainService.class), mock(CustomerFavoriteListingDomainService.class),
-                new CustomerConverter(), mock(ListingReadClient.class));
+                new CustomerConverter(), mock(ListingReadClient.class),
+                mock(com.bkanent.customer.service.CustomerListingInquiryDomainService.class));
         var customer = new CustomerEntity();
         customer.setId(1L);
         customer.setBrokerId(41L);
@@ -45,7 +46,8 @@ class CustomerVersionedAuthorizationTest {
         var customers = mock(CustomerDomainService.class);
         var management = new CustomerManagementServiceImpl(customers, mock(CustomerFollowRecordDomainService.class),
                 mock(OwnerEntrustRecordDomainService.class), mock(CustomerFavoriteListingDomainService.class),
-                new CustomerConverter(), mock(ListingReadClient.class));
+                new CustomerConverter(), mock(ListingReadClient.class),
+                mock(com.bkanent.customer.service.CustomerListingInquiryDomainService.class));
         assertThrows(AuthzException.class, () -> management.updateProfile(1L, request(null)));
         verifyNoInteractions(customers);
 

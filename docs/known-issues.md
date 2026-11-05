@@ -1957,3 +1957,11 @@ Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/
 **修复**：按源码补齐所列控制器的根路径映射，重排 Studio 的注解与方法对应关系；将 OpenAPI 创建 schema 收窄到 `scopeType=OWN`，并将 `storeId` 限定为省略或 null。门店创建能力未在此变更中开放；门店范围继续依赖 Auth 签发的可信身份，不接受请求参数推断。
 
 **验证边界**：静态核对盘点中的 22 个控制器、226 个请求映射：数量、源码行号、映射注解和处理方法均匹配；OpenAPI schema 与 `KnowledgeLifecycleService.create` 的现有校验一致。此项为文档与契约修复，未做运行环境联调。
+
+## KI-249 [OPEN·P2] common 规范哈希未登记新增跨服务验证请求类型
+
+**发现日期与依据**：2026-11-05。`RagCanonicalHash.REQUESTS` 只登记既有 RAG 请求类型，本变更新增的 `RagContextAuthorizedCustomerProfileVerifyRequest`、`RagContextAuthorizedListingInquiryVerifyRequest`（及内层 `RagCustomerProfileVerifyRequest`、`RagListingInquiryVerifyRequest`）不在其中，`requestHash` 对其抛 INVALID_ARGUMENT。customer 侧（LR-177）已按约定编码本地实现 `CustomerVerifyContractHash`；listing 侧实现咨询验证提供方与卖方档案验证调用方时必须采用完全相同的编码，否则跨服务验签必然失败。
+
+**风险与约束**：两侧哈希实现无共享代码，编码漂移只能在联调时暴露；common 收编这两个类型前，任何字段顺序、类型标记或域名的调整都需要两侧同步并升级协议版本。
+
+**处置**：待 change `implement-internal-listing-business` 联调阶段把两个请求类型收编进 `RagCanonicalHash` 并删除本地实现；收编前以 `CustomerProfileVerifyRpcServiceImplTest`、`ListingInquiryVerifyClientTest` 的互验签名测试守住当前编码。关联 LR-177。

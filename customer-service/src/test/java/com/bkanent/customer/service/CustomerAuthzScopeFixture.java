@@ -22,17 +22,30 @@ final class CustomerAuthzScopeFixture {
 
     static AuthzRequestScope.Scope open(boolean businessAdmin, List<String> permissions,
                                          Map<String, Long> identities) {
+        return open(businessAdmin, permissions, identities, null, null);
+    }
+
+    /**
+     * 打开带 runId/sessionId 的执行绑定上下文（受权验证 RPC 请求类型要求二者非空）。
+     */
+    static AuthzRequestScope.Scope openBound(boolean businessAdmin, List<String> permissions,
+                                             Map<String, Long> identities, String runId, String sessionId) {
+        return open(businessAdmin, permissions, identities, runId, sessionId);
+    }
+
+    static AuthzRequestScope.Scope open(boolean businessAdmin, List<String> permissions,
+                                         Map<String, Long> identities, String runId, String sessionId) {
         try {
             KeyPair key = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
             String path = "/customers/1";
             var binding = new RequestBinding("gateway", "customer-service", "PUT", path, path,
-                    List.of(), "customer-request", null, null, HASH, HASH, NONCE, NOW, NOW + 60);
+                    List.of(), "customer-request", runId, sessionId, HASH, HASH, NONCE, NOW, NOW + 60);
             var snapshot = AuthzSignature.sign(new AuthorizationSnapshot("123", 1, 1, businessAdmin,
                     permissions, null, identities, AuthzContract.ALGORITHM, KEY_ID, null), key.getPrivate());
             String permissionHash = AuthzCanonicalHash.snapshotHash(snapshot);
             String requestHash = AuthzCanonicalHash.resolveRequestHash(TOKEN, binding);
             var context = AuthzSignature.sign(new AuthorizationContext("123", 1, 0, permissionHash, permissions,
-                    "customer-service", binding.requestId(), null, null, HASH, requestHash, NONCE,
+                    "customer-service", binding.requestId(), runId, sessionId, HASH, requestHash, NONCE,
                     NOW, NOW + 60, NOW + 300, identities, AuthzContract.ALGORITHM, KEY_ID, null), key.getPrivate());
             var freshness = AuthzSignature.sign(new AuthzFreshness("123", 1, 0, AuthorizationStatus.ACTIVE,
                     permissionHash, NOW, NOW + 30, NONCE, AuthzContract.ALGORITHM, KEY_ID, null), key.getPrivate());
