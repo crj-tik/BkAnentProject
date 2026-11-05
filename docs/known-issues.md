@@ -1696,9 +1696,13 @@
 
 **2026-11-03 代码处置**：Campaign actor/permission 检查改为消费已验证的 Auth 签名上下文；受管迁移 630 仅登记 Campaign 和内容审核的精确操作，不自动授予角色；MCP 工具逐项映射操作码；Marketing→Listing 改走调用方签名的内部 RPC，携带 Auth 签名上下文与 freshness，并由 Listing 校验房源访问范围，不转发用户 Bearer。Marketing、Listing 单测覆盖允许/拒绝与跨服务签名边界。历史 `marketing_content.owner_broker_id` 仍可空，保留待责任人核对。
 
-**2026-11-03 运行态**：受管迁移 630/640 已应用，Campaign、审核和 BEIKE/DOUYIN/XIAOHONGSHU 渠道权限已进入 Auth 活动目录；两次目录变更共 18 条授权 outbox 均为 `PUBLISHED`。管理 API 读回确认 `BROKER` 有 50 项授权，其中本次新增 23 项全域读取、审核、Campaign、渠道、素材和邮件权限；现有 7 个 BROKER 成员继承该角色变更，角色更新 outbox 为 `PUBLISHED`。相关 `.env` 版本化开关已开启，12 个活动 Nacos Data ID 发布并回读；12 个应用容器及 MySQL MCP 使用与工作区 HEAD 同步的源码 SHA 标签，Marketing 与 Notification readiness 为 UP。
+**2026-11-03 历史运行态记录**：当时记录受管迁移 630/640 已应用，Campaign、审核和 BEIKE/DOUYIN/XIAOHONGSHU 渠道权限已进入 Auth 活动目录；两次目录变更共 18 条授权 outbox 均为 `PUBLISHED`。管理 API 读回记录 `BROKER` 有 50 项授权，其中新增 23 项全域读取、审核、Campaign、渠道、素材和邮件权限；7 个 BROKER 成员继承该角色变更，角色更新 outbox 为 `PUBLISHED`。当时记录相关 `.env` 开关、12 个活动 Nacos Data ID 和 12 个应用镜像已同步，Marketing 与 Notification readiness 为 UP。该记录不代表后续检查使用相同数据库状态。
 
-**未闭环**：开发库 `marketing_campaign_account` 仍为 0 行，没有可执行的真实 Campaign 渠道账号/provider 配置；Auth 经纪人身份映射也为 0，故不能宣称渠道发布、经纪人自有范围及真实内容归属可用。历史 `marketing_content.owner_broker_id` 仍可能为空；HTTP、RPC、MCP 正反例与发布 provider 仍需逐项验收。
+**2026-11-05 当前开发栈复核**：`bk-anent-dev` 的 630/640 目录迁移标记均存在；但本次查询到 BROKER 只有 22 项角色权限、1 个有效成员、Campaign 权限 0 项，与 11-03 历史读回不一致，差异来源尚未确认。新增受管迁移 650，只向 BROKER 授予 7 项自有范围操作：内容创建/读取/变体、本人素材绑定、Campaign 读取/准备/效果读取；应用后角色共 29 项授权，受影响成员的授权 outbox 为 `PUBLISHED`。未授予审核、独立渠道发布、Campaign 发布、全局品牌素材管理、全域读取或邮件发送权限。迁移 runner 同时验证并应用当时清单内的 Listing 660 和 Customer 670；当前活动清单后来又新增 Listing 回填 680，本次未运行该项。
+
+Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/Redis writer/reader、Gateway、Agent、RAG、Listing、Customer、Marketing/MCP、Notification/MCP、平台经营/A2A 和 Interview 授权开关为启用，应用镜像标签与工作区 HEAD `c5985fe7cf9294bf022f189bf4aac29e8ef375de` 一致。Memory v2 授权上下文仍关闭：`.env` 未配置 `AUTH_SERVICE_IDENTITY_PUBLIC_KEY`，不满足启用校验前提。Marketing、Notification 等容器没有 Docker healthcheck，本次未验证其完整业务 API。
+
+**未闭环**：开发库 `marketing_campaign_account` 仍为 0 行，没有可执行的真实 Campaign 渠道账号/provider 配置；Auth 经纪人身份映射也为 0，故不能宣称经纪人私有数据访问及真实内容归属可用。Campaign 准备还要求内容已审核通过和有效目标账号；当前 BROKER 未获审核/发布权限，业务闭环仍不可用。历史 `marketing_content.owner_broker_id` 仍可能为空；HTTP、RPC、MCP 正反例与发布 provider 仍需逐项验收。
 
 **后续门槛**：由 `unify-versioned-permission-context` task 10.3 与本 change task 7.6 完成受管迁移应用、有效账号/内容归属核对、跨协议正反例和目标环境启用验收。
 
