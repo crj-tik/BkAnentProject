@@ -1981,3 +1981,11 @@ Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/
 **风险与约束**：两侧哈希实现无共享代码，编码漂移只能在联调时暴露；common 收编这两个类型前，任何字段顺序、类型标记或域名的调整都需要两侧同步并升级协议版本。
 
 **处置**：待 change `implement-internal-listing-business` 联调阶段把两个请求类型收编进 `RagCanonicalHash` 并删除本地实现；收编前以 `CustomerProfileVerifyRpcServiceImplTest`、`ListingInquiryVerifyClientTest` 的互验签名测试守住当前编码。关联 LR-177。
+
+## KI-250 [FIXED·2026-11-05·P1] 平台经营数据库账号已授权但仍锁定，服务启动失败
+
+**发现日期与依据**：2026-11-05。受管迁移 570 创建 `platform_operations_app` 与 `platform_operations_source_ro` 时使用 `ACCOUNT LOCK` 并登记最小表级权限；当前 `.env` 已配置两项密码，但没有后续流程把密码设置到账户并解锁。平台经营与 A2A 授权默认开启，`a2aAuthorizationVerifier` 创建 durable task store 时取得 JDBC 连接失败，容器进入重启循环。
+
+**修复**：新增受管迁移 700，从 `.env` 配置的两个运行凭据设置账号密码并解锁，校验账号非锁定且存在非空认证摘要；runner 在缺少任一凭据时先行拒绝。密码只经容器环境和 MySQL 会话变量传递，不写入迁移 SQL 或日志。
+
+**验证**：2026-11-05，受管 runner 应用并通过迁移 700 检查器，确认两个账号已解锁且认证摘要非空；同次运行中 MySQL、Auth、Gateway、Nacos 与平台经营服务均报告健康。跨协议平台经营业务调用仍需单独验收。关联 LR-179。

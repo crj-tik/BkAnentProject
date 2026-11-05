@@ -73,6 +73,8 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Explicit MYSQL_ROOT_PASSWORD required}
+      PLATFORM_OPERATIONS_DB_PASSWORD: ${PLATFORM_OPERATIONS_DB_PASSWORD:-}
+      PLATFORM_OPERATIONS_SOURCE_DB_PASSWORD: ${PLATFORM_OPERATIONS_SOURCE_DB_PASSWORD:-}
       TZ: Asia/Shanghai
     command:
       - --character-set-server=utf8mb4

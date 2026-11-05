@@ -48,9 +48,35 @@ if [ "$DRY_RUN" -eq 0 ] && [ -n "$CONTAINER" ]; then
 fi
 mysql_sql() {
   if [ -n "$CONTAINER" ]; then
-    MSYS_NO_PATHCONV=1 docker exec -i "$CONTAINER" sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql -uroot --batch --skip-column-names --default-character-set=utf8mb4'
+    MSYS_NO_PATHCONV=1 docker exec -i "$CONTAINER" sh -c '
+      app_hex=""
+      source_hex=""
+      if [ -n "${PLATFORM_OPERATIONS_DB_PASSWORD:-}" ]; then
+        app_hex="$(printf "%s" "$PLATFORM_OPERATIONS_DB_PASSWORD" | od -An -tx1 | tr -d " \n")"
+      fi
+      if [ -n "${PLATFORM_OPERATIONS_SOURCE_DB_PASSWORD:-}" ]; then
+        source_hex="$(printf "%s" "$PLATFORM_OPERATIONS_SOURCE_DB_PASSWORD" | od -An -tx1 | tr -d " \n")"
+      fi
+      {
+        if [ -n "$app_hex" ]; then printf "SET @platform_operations_app_password=CONVERT(0x%s USING utf8mb4);\n" "$app_hex"; fi
+        if [ -n "$source_hex" ]; then printf "SET @platform_operations_source_password=CONVERT(0x%s USING utf8mb4);\n" "$source_hex"; fi
+        cat
+      } | MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot --batch --skip-column-names --default-character-set=utf8mb4
+    '
   else
-    MYSQL_PWD="${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}" mysql -uroot --batch --skip-column-names --default-character-set=utf8mb4
+    app_hex=""
+    source_hex=""
+    if [ -n "${PLATFORM_OPERATIONS_DB_PASSWORD:-}" ]; then
+      app_hex="$(printf "%s" "$PLATFORM_OPERATIONS_DB_PASSWORD" | od -An -tx1 | tr -d ' \n')"
+    fi
+    if [ -n "${PLATFORM_OPERATIONS_SOURCE_DB_PASSWORD:-}" ]; then
+      source_hex="$(printf "%s" "$PLATFORM_OPERATIONS_SOURCE_DB_PASSWORD" | od -An -tx1 | tr -d ' \n')"
+    fi
+    {
+      if [ -n "$app_hex" ]; then printf "SET @platform_operations_app_password=CONVERT(0x%s USING utf8mb4);\n" "$app_hex"; fi
+      if [ -n "$source_hex" ]; then printf "SET @platform_operations_source_password=CONVERT(0x%s USING utf8mb4);\n" "$source_hex"; fi
+      cat
+    } | MYSQL_PWD="${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}" mysql -uroot --batch --skip-column-names --default-character-set=utf8mb4
   fi
 }
 retirement_ledger_exists=0
@@ -100,6 +126,20 @@ while IFS=$'\t' read -r order phase version db file checksum check check_checksu
   fi
   # Fresh-only files never replay historical platform seed rows on an existing volume.
   if [ "$phase" = upgrade ] || [ -z "${previous:-}" ]; then
+    if [ "$version" = platform-operations-runtime-credentials-20261105-v1 ]; then
+      if [ -n "$CONTAINER" ]; then
+        app_password="$(docker exec "$CONTAINER" sh -c 'printf "%s" "${PLATFORM_OPERATIONS_DB_PASSWORD:-}"')"
+        source_password="$(docker exec "$CONTAINER" sh -c 'printf "%s" "${PLATFORM_OPERATIONS_SOURCE_DB_PASSWORD:-}"')"
+      else
+        app_password="${PLATFORM_OPERATIONS_DB_PASSWORD:-}"
+        source_password="${PLATFORM_OPERATIONS_SOURCE_DB_PASSWORD:-}"
+      fi
+      [ -n "$app_password" ] && [ -n "$source_password" ] || {
+        printf '%s\n' 'Platform Operations database credentials must be set in .env before migration 700' >&2
+        exit 64
+      }
+      unset app_password source_password
+    fi
     # rag_control creates its own new database; all other targets must already exist.
     if [ "$db" = bk_rag ] || [ "$phase" = fresh ]; then
       mysql_sql < "$ROOT/$file" >/dev/null

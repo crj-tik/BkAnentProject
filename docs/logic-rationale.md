@@ -1586,3 +1586,13 @@
 **代码位置**：`listing-master-service/service/impl/ListingManagementServiceImpl`、`service/ListingCommandReceiptService`、`customer/CustomerProfileVerifyClient`、`rpc/ListingInquiryVerifyRpcServiceImpl`、`rag/ListingVerifyContractHash`、`rag/ListingRagIdentity.verifyAuthorizedInquiryVerifyContext`、`mapper/ListingPriceRecordMapper`、`mapper/ListingStatusRecordMapper`；迁移 `20261105_listing_internal_business.sql`。
 
 **关联**：LR-176、LR-177；KI-249；change `implement-internal-listing-business` 决策 1/3/4/7、任务 3.1–3.5。
+
+## LR-179 平台经营数据库账号由受管迁移从运行密钥解锁
+
+**结论**：平台经营应用与只读来源账号的密码只从 `.env` 注入 MySQL 服务容器；受管 runner 在对应 MySQL 会话开头把密码字节编码为十六进制 SQL 字面量，并设置为会话变量。迁移通过 MySQL `QUOTE()` 和 prepared `ALTER USER` 设置密码并解锁账号；迁移文件、清单、日志与版本库均不保存密码。空凭据时 runner 必须在任何迁移 SQL 执行前拒绝。
+
+**根因**：平台经营 schema 迁移为最小权限预建了锁定账号和表级 grants，避免未配置密钥时出现可登录的空密码账号；当服务授权与 A2A 默认启用时，Spring 初始化需要该持久化账号，未在运行密钥配置后执行账号解锁会使服务启动失败关闭。动态 SQL 只能在同一 MySQL 会话持有受保护的密码变量，十六进制传递避免 shell 或 SQL 字符转义改变密码。
+
+**代码位置**：`docker-compose.yml` MySQL `environment`、`scripts/deploy/run-init-manifest.sh::mysql_sql`、迁移 `20261105_platform_operations_runtime_credentials.sql`。
+
+**关联**：LR-164、LR-169；KI-250。
