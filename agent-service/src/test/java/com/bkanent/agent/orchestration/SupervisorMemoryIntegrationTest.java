@@ -53,19 +53,19 @@ class SupervisorMemoryIntegrationTest {
                 if (tools.isEmpty()) { f.summaryCalls.incrementAndGet(); return new AssistantMessage("{\"items\":[{\"kind\":\"FACT\",\"text\":\"用户事项\",\"evidence\":[0]}],\"entities\":[]}"); }
                 return new AssistantMessage("done");
             });
-            assertEquals("COMPLETED", f.execute("start", "开始买房事项", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房")).status());
+            assertEquals("COMPLETED", f.runSupervisor("start", "开始买房事项", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房")).status());
             var matter = f.remote.snapshot.matters().get(0);
             assertEquals(MemoryMatter.State.ACTIVE, matter.state(), "assistant done is not user confirmation");
             assertEquals(0, f.summaryCalls.get());
-            assertEquals("COMPLETED", f.execute("close", "确认关闭", new MemoryMatterIntent(MemoryMatterIntent.Action.CLOSE, matter.matterId(), 1, null)).status());
+            assertEquals("COMPLETED", f.runSupervisor("close", "确认关闭", new MemoryMatterIntent(MemoryMatterIntent.Action.CLOSE, matter.matterId(), 1, null)).status());
             assertEquals(1, f.summaryCalls.get()); assertFalse(f.remote.snapshot.summaries().isEmpty());
             assertEquals(MemoryMatter.State.CLOSED, f.remote.snapshot.matters().get(0).state());
             assertEquals(2, f.remote.snapshot.summaries().get(0).coveredRange().throughSequence());
-            assertEquals("COMPLETED", f.execute("closed-ordinary", "开始另一个事情").status());
+            assertEquals("COMPLETED", f.runSupervisor("closed-ordinary", "开始另一个事情").status());
             var ordinary = f.state("closed-ordinary").messages.get(0);
             assertNull(ordinary.matterId(), "a closed matter is not silently selected or reopened");
             f.restartIdentity();
-            assertEquals("COMPLETED", f.execute("reopen", "继续此事项", new MemoryMatterIntent(MemoryMatterIntent.Action.REOPEN, matter.matterId(), 2, null)).status());
+            assertEquals("COMPLETED", f.runSupervisor("reopen", "继续此事项", new MemoryMatterIntent(MemoryMatterIntent.Action.REOPEN, matter.matterId(), 2, null)).status());
             assertEquals(MemoryMatter.State.REOPENED, f.remote.snapshot.matters().get(0).state());
             assertEquals(3, f.remote.snapshot.matters().get(0).version().revision());
             assertNull(f.state("start").messages.get(0).matterId(), "old archived user event is never retagged");
@@ -75,7 +75,7 @@ class SupervisorMemoryIntegrationTest {
     @Test void typedIntentFailsBeforeModelOrBusinessExecutionWhenMemoryIsUnavailable() throws Exception {
         try (Fixture f = new Fixture()) {
             f.remote.unavailable = true;
-            assertEquals("FAILED", f.execute("disabled-intent", "开始事项", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房")).status());
+            assertEquals("FAILED", f.runSupervisor("disabled-intent", "开始事项", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房")).status());
             assertEquals(0, f.remote.count("transitionMatter"));
             assertEquals(0, f.effects.get());
             verifyNoInteractions(f.model);
@@ -89,7 +89,7 @@ class SupervisorMemoryIntegrationTest {
                 return new AssistantMessage("本轮完成");
             });
 
-            var response = f.execute("memory-required", "独立请求");
+            var response = f.runSupervisor("memory-required", "独立请求");
 
             assertEquals("COMPLETED", response.status());
             assertEquals("V2", f.state("memory-required").memoryMode);
@@ -108,7 +108,7 @@ class SupervisorMemoryIntegrationTest {
                 f.remote.preferenceRevision++;
                 return new AssistantMessage("stale answer using an outdated preference");
             });
-            var response = f.execute("preference", "开始买房", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算"));
+            var response = f.runSupervisor("preference", "开始买房", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算"));
             assertEquals("FAILED", response.status());
             assertEquals("MEMORY_VERSION_CONFLICT", response.governanceMetadata().get("errorCode"));
             assertEquals(1, f.remote.count("assemblePreferences"));
@@ -122,7 +122,7 @@ class SupervisorMemoryIntegrationTest {
         try (Fixture f = new Fixture()) {
             f.remote.preferenceValue = "100万";
             f.localToolThenAnswer();
-            var response = f.execute("preference-refresh", "开始买房", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算"));
+            var response = f.runSupervisor("preference-refresh", "开始买房", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算"));
             assertEquals("COMPLETED", response.status(), response.governanceMetadata().toString());
             assertEquals(1, f.remote.count("assemblePreferences"), "the same valid selection is reused across model/tool rounds");
             assertTrue(f.inputs.get(0).toString().contains("100万"));
@@ -133,7 +133,7 @@ class SupervisorMemoryIntegrationTest {
         try (Fixture f = new Fixture()) {
             f.remote.experienceValue = "买房预算建议先核对总价和月供";
             f.localToolThenAnswer();
-            var response = f.execute("experience-selection", "开始买房", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算"));
+            var response = f.runSupervisor("experience-selection", "开始买房", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算"));
             assertEquals("COMPLETED", response.status(), response.governanceMetadata().toString());
             assertEquals(1, f.remote.count("searchExperiences"), "the same matter reuses experience selection across model/tool rounds");
             assertTrue(f.inputs.get(0).toString().contains("买房预算建议先核对总价和月供"));
@@ -148,7 +148,7 @@ class SupervisorMemoryIntegrationTest {
                 f.remote.experienceRevision++;
                 return new AssistantMessage("根据旧经验生成的回答");
             });
-            var response = f.execute("experience-revoked", "开始买房", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算"));
+            var response = f.runSupervisor("experience-revoked", "开始买房", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算"));
             assertEquals("FAILED", response.status());
             assertEquals("MEMORY_VERSION_CONFLICT", response.governanceMetadata().get("errorCode"));
             for (String json : f.jdbc.queryForList("SELECT snapshot_json FROM agent_workflow_checkpoint", String.class))
@@ -162,7 +162,7 @@ class SupervisorMemoryIntegrationTest {
             f.remote.preferenceValue = "100万";
             f.localToolThenAnswer();
             f.onToolCall = () -> { f.remote.preferenceRevision++; f.remote.preferenceValue = "200万"; };
-            var response = f.execute("preference-change-during-tool", "开始买房", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算"));
+            var response = f.runSupervisor("preference-change-during-tool", "开始买房", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算"));
             assertEquals("FAILED", response.status());
             assertEquals("MEMORY_VERSION_CONFLICT", response.governanceMetadata().get("errorCode"));
             assertEquals(1, f.remote.count("assemblePreferences"));
@@ -177,10 +177,10 @@ class SupervisorMemoryIntegrationTest {
                 f.inputs.add(call.getArgument(0));
                 return new AssistantMessage("done");
             });
-            assertEquals("COMPLETED", f.execute("preference-turn-1", "开始买房", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算")).status());
+            assertEquals("COMPLETED", f.runSupervisor("preference-turn-1", "开始买房", new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算")).status());
             f.remote.preferenceRevision++;
             f.remote.preferenceValue = "200万";
-            assertEquals("COMPLETED", f.execute("preference-turn-2", "预算调整").status());
+            assertEquals("COMPLETED", f.runSupervisor("preference-turn-2", "预算调整").status());
             assertEquals(2, f.remote.count("assemblePreferences"));
             assertTrue(f.inputs.get(0).toString().contains("100万"));
             assertTrue(f.inputs.get(1).toString().contains("200万"));
@@ -193,9 +193,9 @@ class SupervisorMemoryIntegrationTest {
                 f.inputs.add(call.getArgument(0));
                 return new AssistantMessage("done");
             });
-            assertEquals("COMPLETED", f.execute("preference-correction-start", "开始买房",
+            assertEquals("COMPLETED", f.runSupervisor("preference-correction-start", "开始买房",
                     new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算")).status());
-            assertEquals("COMPLETED", f.execute("preference-correction", "更正：本轮预算改为200万，之前的100万不再适用。").status());
+            assertEquals("COMPLETED", f.runSupervisor("preference-correction", "更正：本轮预算改为200万，之前的100万不再适用。").status());
             assertEquals(2, f.remote.count("assemblePreferences"), "the new user event refreshes the local selection");
             List<String> currentMessages = f.inputs.get(1).stream().map(Message::getText).filter(Objects::nonNull).toList();
             String currentInput = String.join("\n", currentMessages);
@@ -215,7 +215,7 @@ class SupervisorMemoryIntegrationTest {
                 if (f.inputs.size() == 1) return AssistantMessage.builder().content("").toolCalls(List.of(new AssistantMessage.ToolCall("reference-1", "function", SupervisorMemoryReferentResolver.TOOL_NAME, "{\"reference\":\"那套房\"}"))).build();
                 assertTrue(input.toString().contains("NEEDS_CLARIFICATION")); return new AssistantMessage("请说明所指房源");
             });
-            assertEquals("COMPLETED", f.execute("reference", "那套房呢").status());
+            assertEquals("COMPLETED", f.runSupervisor("reference", "那套房呢").status());
             assertEquals(1, f.remote.count("queryEntities")); assertEquals(0, f.effects.get());
             assertTrue(f.state("reference").messages.stream().anyMatch(m -> "tool".equals(m.role()) && m.responses().get(0).name().equals(SupervisorMemoryReferentResolver.TOOL_NAME)));
         }
@@ -223,7 +223,7 @@ class SupervisorMemoryIntegrationTest {
     @Test void actualModelNodesArchiveOnceReuseWindowAndNeverPersistCredential() throws Exception {
         try (Fixture f = new Fixture()) {
             f.localToolThenAnswer();
-            var response = f.execute("run", "first input");
+            var response = f.runSupervisor("run", "first input");
             assertEquals("COMPLETED", response.status());
             assertEquals(1, f.effects.get());
             assertEquals(4, f.remote.snapshot.messages().size());
@@ -244,8 +244,8 @@ class SupervisorMemoryIntegrationTest {
                 f.inputs.add(messages);
                 return new AssistantMessage("answer");
             });
-            assertEquals("COMPLETED", f.execute("run-1", "unique first input").status());
-            assertEquals("COMPLETED", f.execute("run-2", "unique second input").status());
+            assertEquals("COMPLETED", f.runSupervisor("run-1", "unique first input").status());
+            assertEquals("COMPLETED", f.runSupervisor("run-2", "unique second input").status());
             String second = f.inputs.get(1).toString();
             assertEquals(1, occurrences(second, "unique second input"));
             assertEquals(1, occurrences(second, "unique first input"));
@@ -257,7 +257,7 @@ class SupervisorMemoryIntegrationTest {
         try (Fixture f = new Fixture()) {
             f.localToolThenAnswer();
             f.remote.loseToolReceipt = true;
-            var failed = f.execute("run", "find");
+            var failed = f.runSupervisor("run", "find");
             assertEquals("FAILED", failed.status());
             assertEquals("COMPLETED", f.store.find("run", "call-1").status());
             assertEquals(1, f.effects.get());
@@ -265,7 +265,7 @@ class SupervisorMemoryIntegrationTest {
             f.remote.loseToolReceipt = false;
             f.restartIdentity();
             assertThrows(com.bkanent.agent.security.AgentRagAuthenticationException.class, () -> f.runner.execute(f.request("run", "find")));
-            assertEquals("COMPLETED", f.execute("run", "find").status());
+            assertEquals("COMPLETED", f.runSupervisor("run", "find").status());
             assertEquals(1, f.effects.get());
             assertEquals(4, f.remote.snapshot.messages().size(), "missing reply retries the same immutable event");
             assertEquals(0, f.jdbc.queryForObject("SELECT COUNT(*) FROM agent_memory_delivery WHERE state='PENDING'", Integer.class));
@@ -275,7 +275,7 @@ class SupervisorMemoryIntegrationTest {
     @Test void sourceRevokedDuringModelCannotEscapeIntoOutputOrCheckpoint() throws Exception {
         try (Fixture f = new Fixture()) {
             when(f.model.call(anyList(), anyList())).thenAnswer(call -> { f.remote.revoked = true; return new AssistantMessage("stale private output"); });
-            var response = f.execute("run", "input");
+            var response = f.runSupervisor("run", "input");
             assertEquals("FAILED", response.status());
             assertEquals("MEMORY_WITHDRAWN", response.governanceMetadata().get("errorCode"));
             assertEquals("记忆资料当前不可安全使用，已保留执行记录，请重新认证或稍后恢复。", response.finalAnswer());
@@ -288,7 +288,7 @@ class SupervisorMemoryIntegrationTest {
     @Test void v2CheckpointCannotFallBackToRawBodyWhenMemoryIsUnavailable() throws Exception {
         try (Fixture f = new Fixture()) {
             when(f.model.call(anyList(), anyList())).thenReturn(new AssistantMessage("private old answer"));
-            f.execute("run", "input");
+            f.runSupervisor("run", "input");
             f.remote.unavailable = true;
             try (var auth = f.identities.openAuthorization("Bearer transport-only-value")) {
                 assertEquals(MemoryErrorCode.MEMORY_UNAVAILABLE, assertThrows(MemoryException.class, () -> f.runner.current("run", "1")).code());
@@ -299,7 +299,7 @@ class SupervisorMemoryIntegrationTest {
     @Test void memoryUnavailableBlocksNewRunBeforeModelOrBusinessTool() throws Exception {
         try (Fixture f = new Fixture()) {
             f.remote.unavailable = true; f.localToolThenAnswer();
-            assertEquals("FAILED", f.execute("run", "original request").status());
+            assertEquals("FAILED", f.runSupervisor("run", "original request").status());
             assertEquals(0, f.effects.get());
             assertEquals(0, f.remote.count("readWorkingSet"));
             assertEquals(0, f.jdbc.queryForObject("SELECT COUNT(*) FROM agent_memory_delivery", Integer.class));
@@ -311,7 +311,7 @@ class SupervisorMemoryIntegrationTest {
         try (Fixture f = new Fixture()) {
             f.properties.setCompressionEnabled(true); f.properties.setSoftTokens(1); f.properties.setRecentMessages(1);
             f.localToolThenAnswer();
-            assertEquals("COMPLETED", f.execute("run", "first input").status());
+            assertEquals("COMPLETED", f.runSupervisor("run", "first input").status());
             assertEquals(1, f.remote.count("submitSummary"));
             assertEquals(1, f.summaryCalls.get());
             assertEquals(1, f.remote.snapshot.summaries().get(0).coveredRange().throughSequence());
@@ -323,7 +323,7 @@ class SupervisorMemoryIntegrationTest {
     @Test void hardBudgetStopsBeforeModelAndKeepsCheckpointAndJournal() throws Exception {
         try (Fixture f = new Fixture()) {
             f.properties.setHardTokens(1);
-            var result = f.execute("run", "input");
+            var result = f.runSupervisor("run", "input");
             assertEquals("FAILED", result.status());
             assertEquals("MEMORY_CONTEXT_BUDGET_EXCEEDED", result.governanceMetadata().get("errorCode"));
             verifyNoInteractions(f.model);
@@ -346,7 +346,7 @@ class SupervisorMemoryIntegrationTest {
                 }
             };
             f.localToolThenAnswer();
-            assertEquals("COMPLETED", f.execute("run", "first input").status());
+            assertEquals("COMPLETED", f.runSupervisor("run", "first input").status());
             assertTrue(interrupted.await(2, TimeUnit.SECONDS), "timed out candidate generation is cancelled");
             assertEquals(0, f.remote.count("submitSummary"));
             assertTrue(f.remote.snapshot.summaries().isEmpty());
@@ -359,7 +359,7 @@ class SupervisorMemoryIntegrationTest {
     @Test void initialMemoryDependencyFailureBlocksAnIndependentRequestBeforeModel() throws Exception {
         try (Fixture f = new Fixture()) {
             f.remote.unavailable = true;
-            var result = f.execute("run", "independent input");
+            var result = f.runSupervisor("run", "independent input");
             assertEquals("FAILED", result.status());
             verifyNoInteractions(f.model);
             assertEquals(0, f.jdbc.queryForObject("SELECT COUNT(*) FROM agent_memory_delivery", Integer.class));
@@ -372,7 +372,7 @@ class SupervisorMemoryIntegrationTest {
                 noMatch.inputs.add(call.getArgument(0));
                 return new AssistantMessage("请补充预算");
             });
-            var response = noMatch.execute("preference-no-match", "开始买房事项，预算按之前确认的金额继续",
+            var response = noMatch.runSupervisor("preference-no-match", "开始买房事项，预算按之前确认的金额继续",
                     new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算"));
             assertEquals("COMPLETED", response.status());
             assertEquals("NO_MATCH", noMatch.state("preference-no-match").memoryPreferenceStatus);
@@ -385,7 +385,7 @@ class SupervisorMemoryIntegrationTest {
                 unavailable.inputs.add(call.getArgument(0));
                 return new AssistantMessage("请补充预算");
             });
-            var response = unavailable.execute("preference-unavailable", "开始买房事项，预算按之前确认的金额继续",
+            var response = unavailable.runSupervisor("preference-unavailable", "开始买房事项，预算按之前确认的金额继续",
                     new MemoryMatterIntent(MemoryMatterIntent.Action.START, null, 0, "买房预算"));
             assertEquals("COMPLETED", response.status());
             assertEquals("MEMORY_UNAVAILABLE", unavailable.state("preference-unavailable").memoryPreferenceStatus);
@@ -397,7 +397,7 @@ class SupervisorMemoryIntegrationTest {
     @Test void historicalMemoryCannotBeForwardedToExternalCollaboratorWithoutGrant() throws Exception {
         try (Fixture f = new Fixture()) {
             when(f.model.call(anyList(), anyList())).thenReturn(new AssistantMessage("first result"));
-            assertEquals("COMPLETED", f.execute("run-1", "private input").status());
+            assertEquals("COMPLETED", f.runSupervisor("run-1", "private input").status());
             AtomicInteger externalEffects = new AtomicInteger();
             ToolCallback external = new ToolCallback() {
                 public ToolDefinition getToolDefinition() { return ToolDefinition.builder().name("send").description("external collaboration").inputSchema("{\"type\":\"object\"}").build(); }
@@ -406,7 +406,7 @@ class SupervisorMemoryIntegrationTest {
             when(f.catalog.snapshot("1", true)).thenReturn(Map.of("a2a:partner:send", new SupervisorCapability("a2a:partner:send", "a2a", "partner", "1", external)));
             when(f.model.call(anyList(), anyList())).thenReturn(AssistantMessage.builder().content("")
                     .toolCalls(List.of(new AssistantMessage.ToolCall("call-external", "function", "send", "{}"))).build());
-            var response = f.execute("run-2", "continue with partner");
+            var response = f.runSupervisor("run-2", "continue with partner");
             assertEquals("FAILED", response.status());
             assertEquals("MEMORY_FORBIDDEN", response.governanceMetadata().get("errorCode"));
             assertEquals(0, externalEffects.get());
@@ -417,7 +417,7 @@ class SupervisorMemoryIntegrationTest {
     @Test void restoredCheckpointRechecksSourceAuthorizationBeforeReusingItsModelWindow() throws Exception {
         try (Fixture f = new Fixture()) {
             f.localToolThenAnswer();
-            assertEquals("COMPLETED", f.execute("run", "input").status());
+            assertEquals("COMPLETED", f.runSupervisor("run", "input").status());
             var restored = f.state("run");
             assertFalse(restored.adoptedMemorySources.isEmpty(), "persisted run state pins the source dependencies it adopted");
             f.remote.revoked = true;
@@ -437,7 +437,7 @@ class SupervisorMemoryIntegrationTest {
             f.onToolCall = () -> f.remote.revoked = true;
             when(f.model.call(anyList(), anyList())).thenReturn(AssistantMessage.builder().content("")
                     .toolCalls(List.of(new AssistantMessage.ToolCall("call-1", "function", "find", "{}"))).build());
-            var response = f.execute("run", "input");
+            var response = f.runSupervisor("run", "input");
             assertEquals("FAILED", response.status());
             assertEquals("MEMORY_WITHDRAWN", response.governanceMetadata().get("errorCode"));
             assertTrue(((List<?>) response.governanceMetadata().get("calls")).isEmpty(), "revoked tool content is withheld from the task response");
@@ -477,7 +477,7 @@ class SupervisorMemoryIntegrationTest {
                 assertTrue(data.toString().length() <= 2048); assertTrue(data.get("hasMore").asBoolean());
                 return new AssistantMessage("done");
             });
-            assertEquals("COMPLETED", f.execute("run", "find").status());
+            assertEquals("COMPLETED", f.runSupervisor("run", "find").status());
             assertEquals(1, f.effects.get()); assertNull(f.store.find("run", "recall-1"));
             var raw = f.remote.snapshot.messages().stream().flatMap(m -> m.toolResponses().stream()).filter(r -> r.toolName().equals("find")).findFirst().orElseThrow();
             assertEquals(complete, raw.responseData().properties().get("detail").scalar());
@@ -490,7 +490,7 @@ class SupervisorMemoryIntegrationTest {
     @Test void coldRunCanRecallCompressedPreviousResultWithoutRepeatingBusinessTool() throws Exception {
         try (Fixture f = new Fixture()) {
             f.properties.setToolInlineChars(256); f.toolResult = "{\"detail\":\"" + "full-value".repeat(1000) + "\"}";
-            f.localToolThenAnswer(); assertEquals("COMPLETED", f.execute("old-run", "find").status());
+            f.localToolThenAnswer(); assertEquals("COMPLETED", f.runSupervisor("old-run", "find").status());
             f.restartIdentity(); f.properties.setCompressionEnabled(true); f.properties.setSoftTokens(1); f.properties.setRecentMessages(1);
             AtomicInteger turns = new AtomicInteger();
             when(f.model.call(anyList(), anyList())).thenAnswer(invocation -> {
@@ -505,7 +505,7 @@ class SupervisorMemoryIntegrationTest {
                 List<Message> messages = invocation.getArgument(0);
                 assertTrue(messages.toString().contains("full-value")); return new AssistantMessage("done");
             });
-            assertEquals("COMPLETED", f.execute("new-run", "查看上一结果").status());
+            assertEquals("COMPLETED", f.runSupervisor("new-run", "查看上一结果").status());
             assertEquals(1, f.effects.get());
             assertEquals(1, f.remote.snapshot.summaries().get(0).toolResults().size(), "later compaction preserves prior result anchors");
             verify(f.journal).readReceived(any(), any());
@@ -515,7 +515,7 @@ class SupervisorMemoryIntegrationTest {
     @Test void withdrawalAfterReferenceMetadataPreventsBodyReadAndSameRunResumesWithoutBusinessReplay() throws Exception {
         try (Fixture f = new Fixture()) {
             f.properties.setToolInlineChars(256); f.toolResult = "{\"detail\":\"" + "x".repeat(1000) + "\"}";
-            f.localToolThenAnswer(); assertEquals("COMPLETED", f.execute("old", "find").status());
+            f.localToolThenAnswer(); assertEquals("COMPLETED", f.runSupervisor("old", "find").status());
             var message = f.remote.snapshot.messages().stream().filter(m -> m.role() == MemoryMessage.Role.TOOL).findFirst().orElseThrow();
             var anchor = new SupervisorMemoryResultView(f.mapper, 256, 2048).anchors(List.of(message)).get(0);
             String args = f.mapper.writeValueAsString(Map.of("eventId", anchor.source().sourceEventId(), "callId", anchor.callId(), "referenceId", SupervisorMemoryResultView.referenceId(anchor)));
@@ -523,12 +523,12 @@ class SupervisorMemoryIntegrationTest {
             when(f.model.call(anyList(), anyList())).thenAnswer(invocation -> turns.getAndIncrement() == 0
                     ? toolCall("recall", SupervisorMemoryResultView.TOOL_NAME, args) : new AssistantMessage("done"));
             doAnswer(invocation -> { Object source = invocation.callRealMethod(); f.remote.revoked = true; return source; }).when(f.journal).receivedSource(any(), anyString());
-            var failed = f.execute("new", "补忆");
+            var failed = f.runSupervisor("new", "补忆");
             assertEquals("FAILED", failed.status()); assertEquals("MEMORY_WITHDRAWN", failed.governanceMetadata().get("errorCode"));
             verify(f.journal, never()).readReceived(any(), any());
             assertEquals("MemoryRecall", f.state("new").memoryResumeNode);
             f.remote.revoked = false; f.restartIdentity();
-            assertEquals("COMPLETED", f.execute("new", "补忆").status());
+            assertEquals("COMPLETED", f.runSupervisor("new", "补忆").status());
             verify(f.journal).readReceived(any(), any()); assertEquals(1, f.effects.get());
         }
     }
@@ -542,7 +542,7 @@ class SupervisorMemoryIntegrationTest {
                 List<Message> messages = invocation.getArgument(0); assertTrue(messages.toString().contains("NOT_FOUND"));
                 return new AssistantMessage("无法获取");
             });
-            assertEquals("COMPLETED", f.execute("run", "补忆").status());
+            assertEquals("COMPLETED", f.runSupervisor("run", "补忆").status());
             verify(f.journal, never()).readReceived(any(), any()); assertEquals(0, f.effects.get());
         }
     }
@@ -554,7 +554,7 @@ class SupervisorMemoryIntegrationTest {
                     ? AssistantMessage.builder().content("").toolCalls(List.of(new AssistantMessage.ToolCall("a", "function", "find", "{}"),
                         new AssistantMessage.ToolCall("b", "function", SupervisorMemoryResultView.TOOL_NAME, "{}"))).build()
                     : new AssistantMessage("done"));
-            assertEquals("COMPLETED", f.execute("run", "input").status()); assertEquals(0, f.effects.get());
+            assertEquals("COMPLETED", f.runSupervisor("run", "input").status()); assertEquals(0, f.effects.get());
             assertTrue(f.state("run").messages.toString().contains("CONTROL_BATCH_REJECTED"));
         }
         try (Fixture f = new Fixture()) {
@@ -563,7 +563,7 @@ class SupervisorMemoryIntegrationTest {
                 public String call(String args) { fail("must not execute"); return ""; }
             };
             when(f.catalog.snapshot("1", true)).thenReturn(Map.of("local:find", new SupervisorCapability("local:find", "local", "find", "1", enormous)));
-            var response = f.execute("run", "small input");
+            var response = f.runSupervisor("run", "small input");
             assertEquals("FAILED", response.status()); assertEquals("MEMORY_CONTEXT_BUDGET_EXCEEDED", response.governanceMetadata().get("errorCode"));
             verifyNoInteractions(f.model);
         }
@@ -574,7 +574,7 @@ class SupervisorMemoryIntegrationTest {
             f.orchestration.setMaxToolCalls(1);
             AtomicInteger turns = new AtomicInteger();
             when(f.model.call(anyList(), anyList())).thenAnswer(invocation -> toolCall("read-" + turns.incrementAndGet(), SupervisorMemoryResultView.TOOL_NAME, "{}"));
-            var result = f.execute("run", "补忆");
+            var result = f.runSupervisor("run", "补忆");
             assertEquals("FAILED", result.status()); assertEquals("BUDGET_EXHAUSTED", result.governanceMetadata().get("errorCode"));
             assertEquals(0, f.effects.get()); verify(f.journal, never()).readReceived(any(), any());
         }
@@ -687,10 +687,10 @@ class SupervisorMemoryIntegrationTest {
             });
         }
         SupervisorTaskRequest request(String run, String input) { return new SupervisorTaskRequest("session", "1", run, "trace", input, Map.of(), "api", false); }
-        com.bkanent.agent.model.distributed.SupervisorTaskResponse execute(String run, String input) throws Exception {
+        com.bkanent.agent.model.distributed.SupervisorTaskResponse runSupervisor(String run, String input) throws Exception {
             try (var scope = identities.openAuthorization("Bearer transport-only-value")) { return runner.execute(request(run, input)); }
         }
-        com.bkanent.agent.model.distributed.SupervisorTaskResponse execute(String run, String input, MemoryMatterIntent intent) throws Exception {
+        com.bkanent.agent.model.distributed.SupervisorTaskResponse runSupervisor(String run, String input, MemoryMatterIntent intent) throws Exception {
             var request = new SupervisorTaskRequest("session", "1", run, "trace", input, Map.of(), "api", false, null, null, null, intent);
             try (var scope = identities.openAuthorization("Bearer transport-only-value")) { return runner.execute(request); }
         }

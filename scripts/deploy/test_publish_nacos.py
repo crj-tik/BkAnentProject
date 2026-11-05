@@ -3,6 +3,7 @@ import io
 import importlib.util
 import json
 import os
+import secrets
 import tempfile
 import unittest
 import urllib.parse
@@ -30,6 +31,10 @@ class FakeResponse:
         return False
 
 
+# Test fixture token is generated per run; it never authenticates a real system.
+FIXTURE_ACCESS_TOKEN = secrets.token_urlsafe(18)
+
+
 class FakeOpener:
     def __init__(self, content):
         self.content = content.encode()
@@ -40,7 +45,7 @@ class FakeOpener:
         values = urllib.parse.parse_qs((request.data or url.query.encode()).decode())
         self.calls.append((url.path, request.method, values, timeout))
         if url.path.endswith("/nacos/v3/auth/user/login"):
-            return FakeResponse(json.dumps({"data": {"accessToken": "fixture-token"}}).encode())
+            return FakeResponse(json.dumps({"data": {"accessToken": FIXTURE_ACCESS_TOKEN}}).encode())
         if request.method == "POST":
             self.content = values["content"][0].encode()
             return FakeResponse(b"true")
@@ -79,7 +84,7 @@ class PublishNacosTest(unittest.TestCase):
         self.assertEqual(2, len(opener.calls))
         self.assertTrue(all(path == "/nacos/v1/cs/configs" for path, *_ in opener.calls))
         self.assertTrue(all("accessToken" not in values for _, _, values, _ in opener.calls))
-        self.assertNotIn("fixture-token", output)
+        self.assertNotIn(FIXTURE_ACCESS_TOKEN, output)
 
     def test_runtime_entry_configs_are_explicitly_allowlisted(self):
         for data_id in ("interview-service.yaml", "gateway.yaml"):
@@ -92,7 +97,7 @@ class PublishNacosTest(unittest.TestCase):
                 config_calls = [call for call in opener.calls if call[0] == "/nacos/v1/cs/configs"]
                 self.assertEqual(2, len(config_calls))
                 self.assertTrue(all(values.get("dataId") == [data_id] for _, _, values, _ in config_calls))
-                self.assertNotIn("fixture-token", output)
+                self.assertNotIn(FIXTURE_ACCESS_TOKEN, output)
 
     def test_auth_enabled_uses_admin_and_sends_token_without_printing_it(self):
         content = "spring:\n  application:\n    name: memory-service\n"
@@ -105,8 +110,8 @@ class PublishNacosTest(unittest.TestCase):
         self.assertEqual(["fixture-admin"], login_call[2]["username"])
         config_calls = [call for call in opener.calls if call[0] == "/nacos/v1/cs/configs"]
         self.assertEqual(2, len(config_calls))
-        self.assertTrue(all(values.get("accessToken") == ["fixture-token"] for _, _, values, _ in config_calls))
-        self.assertNotIn("fixture-token", output)
+        self.assertTrue(all(values.get("accessToken") == [FIXTURE_ACCESS_TOKEN] for _, _, values, _ in config_calls))
+        self.assertNotIn(FIXTURE_ACCESS_TOKEN, output)
         self.assertNotIn("fixture-password", output)
 
     def test_auth_mode_must_be_explicit(self):

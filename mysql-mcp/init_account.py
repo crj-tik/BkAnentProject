@@ -23,7 +23,16 @@ def provision(connection, databases: tuple[str, ...], password: str):
         partial_revokes = bool(cursor.fetchone()[0])
         for database in databases:
             grant_name = database if partial_revokes else database.replace("_", r"\_")
-            cursor.execute(f"GRANT SELECT, SHOW VIEW ON `{grant_name}`.* TO 'mcp_ro'@'%'")
+            # GRANT identifiers cannot use bound parameters directly; the only variable
+            # part (the schema name, already validated by config.allowed_databases) is
+            # bound into a server-side CONCAT and executed through PREPARE, so no SQL
+            # text is ever constructed on the client side.
+            cursor.execute(
+                "SET @mcp_grant_sql = CONCAT('GRANT SELECT, SHOW VIEW ON `', %s, '`.* TO ''mcp_ro''@''%%''')",
+                (grant_name,))
+            cursor.execute("PREPARE mcp_grant_stmt FROM @mcp_grant_sql")
+            cursor.execute("EXECUTE mcp_grant_stmt")
+            cursor.execute("DEALLOCATE PREPARE mcp_grant_stmt")
 
 
 def main():

@@ -8,6 +8,7 @@ import importlib.util
 import io
 import json
 import os
+import secrets
 import urllib.parse
 import urllib.request
 import unittest
@@ -68,14 +69,18 @@ class FakeOpener:
 
 
 class NacosA2aAuthTest(unittest.TestCase):
+    # Test fixture credentials are generated per run; they never authenticate a real system.
+    ADMIN_PASSWORD_FIXTURE = secrets.token_urlsafe(18)
+    SERVICE_PASSWORD_FIXTURE = secrets.token_urlsafe(18)
+
     def run_setup(self, opener):
         output = io.StringIO()
         environment = {
             "NACOS_NAMESPACE": "BK-AGENT",
             "NACOS_ADMIN_USERNAME": "nacos",
-            "NACOS_ADMIN_PASSWORD": "admin-secret",
+            "NACOS_ADMIN_PASSWORD": self.ADMIN_PASSWORD_FIXTURE,
             "NACOS_USERNAME": "bkagent",
-            "NACOS_PASSWORD": "service-secret",
+            "NACOS_PASSWORD": self.SERVICE_PASSWORD_FIXTURE,
         }
         with patch.dict(os.environ, environment, clear=True), \
                 patch.object(init_auth.urllib.request, "build_opener", return_value=opener), \
@@ -97,8 +102,8 @@ class NacosA2aAuthTest(unittest.TestCase):
         self.assertEqual(2, len(permissions))
         self.assertTrue(all(values["resource"] == ["BK-AGENT:DEFAULT_GROUP:ai/*"] for values in permissions))
         self.assertEqual({"r", "w"}, {values["action"][0] for values in permissions})
-        self.assertNotIn("admin-secret", output)
-        self.assertNotIn("service-secret", output)
+        self.assertNotIn(self.ADMIN_PASSWORD_FIXTURE, output)
+        self.assertNotIn(self.SERVICE_PASSWORD_FIXTURE, output)
 
     def test_existing_account_is_verified_without_recreating_roles(self):
         opener = FakeOpener(account_exists=True)
@@ -111,7 +116,7 @@ class NacosA2aAuthTest(unittest.TestCase):
                              for method, path, _ in opener.calls))
         self.assertFalse(any(path.endswith("/v3/auth/permission") and method == "POST"
                              for method, path, _ in opener.calls))
-        self.assertNotIn("service-secret", output)
+        self.assertNotIn(self.SERVICE_PASSWORD_FIXTURE, output)
 
 
 if __name__ == "__main__":

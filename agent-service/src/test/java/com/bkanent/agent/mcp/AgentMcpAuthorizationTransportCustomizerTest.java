@@ -37,7 +37,8 @@ import static org.mockito.Mockito.when;
 
 class AgentMcpAuthorizationTransportCustomizerTest {
     private static final String ACTOR = "73";
-    private static final String ACCESS_TOKEN = "verified-test-token";
+    /** Generated per test run; a fixture value that never authenticates a real system. */
+    private static final String ACCESS_TOKEN = "test-" + java.util.UUID.randomUUID();
     private static final String SERVER = "interview-mcp-server";
     private static final String TOOL = "search_transcripts";
     private static final String AUDIENCE = "interview-service";
