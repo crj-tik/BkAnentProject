@@ -10,6 +10,7 @@ import com.bkanent.common.rag.RagException;
 import com.bkanent.listing.customer.CustomerProfileVerifyClient;
 import com.bkanent.listing.rag.ListingRagOutbox;
 import com.bkanent.listing.converter.ListingConverter;
+import com.bkanent.listing.entity.ListingAssetEntity;
 import com.bkanent.listing.entity.ListingEntity;
 import com.bkanent.listing.entity.ListingPriceRecordEntity;
 import com.bkanent.listing.entity.ListingStatusRecordEntity;
@@ -18,6 +19,11 @@ import com.bkanent.listing.enums.ListingVerificationStatusEnum;
 import com.bkanent.listing.mapper.ListingPriceRecordMapper;
 import com.bkanent.listing.mapper.ListingStatusRecordMapper;
 import com.bkanent.listing.model.ListingAssetBindRequest;
+import com.bkanent.listing.model.ListingAssetUpsertItem;
+import com.bkanent.listing.model.ListingAssetView;
+import com.bkanent.listing.model.ListingBuyerSearchQuery;
+import com.bkanent.listing.model.ListingBuyerSearchResponse;
+import com.bkanent.listing.model.ListingBuyerViewResponse;
 import com.bkanent.listing.model.ListingDetailResponse;
 import com.bkanent.listing.model.ListingOcrRecognizeRequest;
 import com.bkanent.listing.model.ListingQueryRequest;
@@ -25,9 +31,11 @@ import com.bkanent.listing.model.ListingStatusUpdateRequest;
 import com.bkanent.listing.model.ListingUpsertRequest;
 import com.bkanent.listing.model.ListingVerifyRequest;
 import com.bkanent.listing.search.ListingKnowledgeDocumentAssembler;
+import com.bkanent.listing.service.ListingAssetService;
 import com.bkanent.listing.service.ListingCommandReceiptService;
 import com.bkanent.listing.service.ListingDomainService;
 import com.bkanent.listing.service.ListingManagementService;
+import com.bkanent.listing.service.ListingPrivateInfoService;
 import com.bkanent.listing.service.ListingSearchService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,6 +75,10 @@ public class ListingManagementServiceImpl implements ListingManagementService {
             "PENDING_REVIEW", Set.of("ON_SALE", "OFFLINE"),
             "ON_SALE", Set.of("OFFLINE", "SOLD"),
             "OFFLINE", Set.of("ON_SALE"));
+    /**
+     * 常量：BUYER_ASSET_TYPES（兼容端点与 upsert 双写的素材类型：图片/户型图/视频，可见性 BUYER）。
+     */
+    private static final Set<String> BUYER_ASSET_TYPES = Set.of("IMAGE", "FLOOR_PLAN", "VIDEO");
 
     /**
      * 字段：log。
@@ -112,6 +124,14 @@ public class ListingManagementServiceImpl implements ListingManagementService {
      * 字段：ownerVerify（业主档案验证调用方，失败关闭）。
      */
     private final CustomerProfileVerifyClient ownerVerify;
+    /**
+     * 字段：assetService（素材逐项管理，3.6）。
+     */
+    private final ListingAssetService assetService;
+    /**
+     * 字段：privateInfo（产权证号受管加密，3.7）。
+     */
+    private final ListingPrivateInfoService privateInfo;
 
     /**
      * 构造 ListingManagementServiceImpl 实例。
@@ -125,7 +145,9 @@ public class ListingManagementServiceImpl implements ListingManagementService {
                                         ListingPriceRecordMapper priceRecordMapper,
                                         ListingStatusRecordMapper statusRecordMapper,
                                         ListingCommandReceiptService receipts,
-                                        CustomerProfileVerifyClient ownerVerify) {
+                                        CustomerProfileVerifyClient ownerVerify,
+                                        ListingAssetService assetService,
+                                        ListingPrivateInfoService privateInfo) {
         this.identity = identity;
         this.listingDomainService = listingDomainService;
         this.listingConverter = listingConverter;
@@ -136,6 +158,8 @@ public class ListingManagementServiceImpl implements ListingManagementService {
         this.statusRecordMapper = statusRecordMapper;
         this.receipts = receipts;
         this.ownerVerify = ownerVerify;
+        this.assetService = assetService;
+        this.privateInfo = privateInfo;
     }
 
     /**
@@ -164,7 +188,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
                 if (!Arrays.equals(existing.get().requestHash(), requestHash)) {
                     throw new RagException(RagErrorCode.INVALID_ARGUMENT, "requestId");
                 }
-                return listingConverter.toDetailResponse(loadCommitted(existing.get().listingId()));
+                return toDetail(loadCommitted(existing.get().listingId()));
             }
         }
         ListingEntity entity = new ListingEntity();
@@ -201,10 +225,14 @@ public class ListingManagementServiceImpl implements ListingManagementService {
             receipts.insertSameTransaction(actorUserId, CREATE_OPERATION, requestId,
                     requestHash, entity.getId(), "COMPLETED");
         }
+        // 素材逐项行（IMAGE/FLOOR_PLAN/VIDEO → BUYER）：与旧字段同事务双写（过渡期）。
+        assetService.replaceAssets(entity.getId(),
+                buyerAssetItems(request.imageUrls(), request.floorPlanUrls(), request.videoUrls()),
+                BUYER_ASSET_TYPES, actorUserId);
         outbox.publishCurrent(entity.getId());
         log.info("新增房源成功，listingId={}，title={}，ownerCustomerId={}",
                 entity.getId(), entity.getTitle(), entity.getOwnerCustomerId());
-        return listingConverter.toDetailResponse(entity);
+        return toDetail(entity);
     }
 
     /**
@@ -247,9 +275,13 @@ public class ListingManagementServiceImpl implements ListingManagementService {
             priceRecord.setRequestId(UUID.randomUUID().toString());
             priceRecordMapper.insert(priceRecord);
         }
+        // 素材逐项行与旧字段同事务双写（过渡期）：请求携带的三类列表全量替换。
+        assetService.replaceAssets(listingId,
+                buyerAssetItems(request.imageUrls(), request.floorPlanUrls(), request.videoUrls()),
+                BUYER_ASSET_TYPES, currentActorUserId());
         outbox.publishCurrent(listingId);
         log.info("更新房源成功，listingId={}，version={}", listingId, entity.getVersion());
-        return listingConverter.toDetailResponse(entity);
+        return toDetail(entity);
     }
 
     /**
@@ -277,7 +309,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
         ListingEntity entity = requireListing(listingId);
         requireOwner(entity, "listing.read", "listing.read.all");
         requireReadable(entity, currentReader());
-        return listingConverter.toDetailResponse(entity);
+        return toDetail(entity);
     }
 
     /**
@@ -301,7 +333,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
         List<ListingDetailResponse> result = new java.util.ArrayList<>();
         for (ListingEntity row : rows) {
             requireOwner(row, "listing.read", "listing.read.all");
-            if (com.bkanent.listing.rag.ListingRagIdentity.canRead(current, row)) result.add(listingConverter.toDetailResponse(row));
+            if (com.bkanent.listing.rag.ListingRagIdentity.canRead(current, row)) result.add(toDetail(row));
         }
         return List.copyOf(result);
     }
@@ -378,7 +410,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
         String current = entity.getStatus();
         if (target.equals(current)) {
             // 同状态 no-op：直接返回当前，不写历史、不递增版本。
-            return listingConverter.toDetailResponse(entity);
+            return toDetail(entity);
         }
         if (current == null || !ALLOWED_TRANSITIONS.getOrDefault(current, Set.of()).contains(target)) {
             throw new IllegalArgumentException("非法房源状态跳转: " + current + " -> " + target);
@@ -398,7 +430,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
         statusRecordMapper.insert(statusRecord);
         outbox.publishCurrent(listingId);
         log.info("更新房源状态成功，listingId={}，{} -> {}，version={}", listingId, current, target, entity.getVersion());
-        return listingConverter.toDetailResponse(entity);
+        return toDetail(entity);
     }
 
     /**
@@ -420,7 +452,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
         updateWithVersion(entity);
         outbox.publishCurrent(listingId);
         log.info("确认房源业主关联成功，listingId={}，ownerCustomerId={}", listingId, ownerCustomerId);
-        return listingConverter.toDetailResponse(entity);
+        return toDetail(entity);
     }
 
     /**
@@ -435,7 +467,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
         ListingEntity entity = requireListing(listingId);
         requireOwner(entity, "listing.update.own", "listing.update.all");
         if (entity.getOwnerCustomerId() == null) {
-            return listingConverter.toDetailResponse(entity);
+            return toDetail(entity);
         }
         long oldVersion = versionOf(entity);
         boolean updated = listingDomainService.update(null, new LambdaUpdateWrapper<ListingEntity>()
@@ -450,11 +482,88 @@ public class ListingManagementServiceImpl implements ListingManagementService {
         entity.setVersion(oldVersion + 1L);
         outbox.publishCurrent(listingId);
         log.info("解除房源业主关联成功，listingId={}，version={}", listingId, entity.getVersion());
-        return listingConverter.toDetailResponse(entity);
+        return toDetail(entity);
     }
 
     /**
-     * 绑定房源资源。
+     * 历史素材迁移登记（受权操作 listing.assets.bind.own/.all + requireOwner）：
+     * 旧逗号拼接 URL 与证件/合同 URL 逐条登记为 PENDING_REVIEW 行（图片/户型图/视频=BUYER，
+     * 产权证/合同=SENSITIVE），幂等（同 storageKey 跳过）；不抓取任何 URL，不修改旧字段。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Integer registerLegacyAssets(Long listingId) {
+        requireOperation("listing.assets.bind.own");
+        ListingEntity entity = requireListing(listingId);
+        requireOwner(entity, "listing.assets.bind.own", "listing.assets.bind.all");
+        int registered = assetService.registerLegacyAssets(listingId, currentActorUserId());
+        log.info("历史素材迁移登记成功，listingId={}，新登记={}", listingId, registered);
+        return registered;
+    }
+
+    /**
+     * 退役单条素材（受权操作 listing.assets.bind.own/.all + requireOwner，逻辑删除）。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void retireAsset(Long assetId) {
+        requireOperation("listing.assets.bind.own");
+        ListingAssetEntity asset = assetService.getAsset(assetId);
+        if (asset == null) {
+            throw new IllegalArgumentException("素材不存在: " + assetId);
+        }
+        ListingEntity entity = requireListing(asset.getListingId());
+        requireOwner(entity, "listing.assets.bind.own", "listing.assets.bind.all");
+        assetService.retireAsset(assetId);
+        log.info("退役房源素材成功，assetId={}，listingId={}", assetId, asset.getListingId());
+    }
+
+    /**
+     * 买方可见在售房源分页搜索：requireReadPermission + ON_SALE 公开范围（canRead）；
+     * 输出前逐行复核当前状态（非在售/已删不返回）；查询只读，不创建任何咨询或档案。
+     */
+    @Override
+    public ListingBuyerSearchResponse searchBuyerListings(ListingBuyerSearchQuery query) {
+        com.bkanent.common.authz.AuthzRequestScope.requireCurrent();
+        requireReadPermission();
+        var page = listingDomainService.searchOnSalePage(query);
+        var principal = currentReader();
+        List<ListingBuyerViewResponse> items = new ArrayList<>();
+        for (ListingEntity row : page.rows()) {
+            if (!ListingStatusEnum.ON_SALE.name().equals(row.getStatus())
+                    || !Integer.valueOf(0).equals(row.getDeleted())
+                    || !com.bkanent.listing.rag.ListingRagIdentity.canRead(principal, row)) {
+                continue;
+            }
+            items.add(toBuyerView(row));
+        }
+        return new ListingBuyerSearchResponse(List.copyOf(items), page.nextCursor());
+    }
+
+    /**
+     * 买方可见房源详情：requireReadPermission + ON_SALE 公开范围（canRead）；
+     * 输出前复核当前状态，非在售/已删/不可读返回 null，不泄露受限详情。
+     */
+    @Override
+    public ListingBuyerViewResponse getBuyerDetail(Long listingId) {
+        com.bkanent.common.authz.AuthzRequestScope.requireCurrent();
+        requireReadPermission();
+        ListingEntity entity = listingDomainService.getById(listingId);
+        if (entity == null || !Integer.valueOf(0).equals(entity.getDeleted())
+                || !ListingStatusEnum.ON_SALE.name().equals(entity.getStatus())) {
+            return null;
+        }
+        var principal = currentReader();
+        if (!com.bkanent.listing.rag.ListingRagIdentity.canRead(principal, entity)) {
+            return null;
+        }
+        return toBuyerView(entity);
+    }
+
+    /**
+     * 绑定房源资源：委托 ListingAssetService 逐项写入/替换素材行（IMAGE/FLOOR_PLAN/VIDEO → BUYER），
+     * 旧 listing_info 的 image_urls 等字段保留兼容写入（同事务双写，过渡期）；
+     * 详情响应的素材数组从 listing_asset 读取。storageKey 保留原值，服务端不抓取任何 URL。
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -467,13 +576,17 @@ public class ListingManagementServiceImpl implements ListingManagementService {
         entity.setFloorPlanUrls(listingConverter.joinValues(request.floorPlanUrls()));
         entity.setVideoUrls(listingConverter.joinValues(request.videoUrls()));
         listingDomainService.updateById(entity);
+        assetService.replaceAssets(listingId,
+                buyerAssetItems(request.imageUrls(), request.floorPlanUrls(), request.videoUrls()),
+                BUYER_ASSET_TYPES, currentActorUserId());
         outbox.publishCurrent(listingId);
         log.info("绑定房源媒资成功，listingId={}", listingId);
-        return listingConverter.toDetailResponse(entity);
+        return toDetail(entity);
     }
 
     /**
-     * 执行房源 OCR。
+     * 执行房源 OCR（模拟 OCR 占位，非真实识别）：不再默认填 OCR-{id} 占位证号或占位业主名，
+     * 证号为空时保持为空并提示走人工登记，避免占位值通过核验。
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -485,20 +598,23 @@ public class ListingManagementServiceImpl implements ListingManagementService {
         entity.setPropertyCertificateUrl(request.propertyCertificateUrl());
         entity.setContractUrl(request.contractUrl());
         entity.setOcrStatus("DONE");
-        if (!StringUtils.hasText(entity.getCertificateNo())) {
-            entity.setCertificateNo("OCR-" + listingId);
-        }
-        if (!StringUtils.hasText(entity.getOwnerName())) {
-            entity.setOwnerName("OCR识别业主" + listingId);
+        if (!ListingVerificationStatusEnum.VERIFIED.name().equals(entity.getVerificationStatus())) {
+            String remark = "模拟 OCR 占位，非真实识别";
+            if (!StringUtils.hasText(entity.getCertificateNo())) {
+                remark = remark + "；证号为空，需人工登记核验";
+            }
+            entity.setVerificationRemark(remark);
         }
         listingDomainService.updateById(entity);
         outbox.publishCurrent(listingId);
-        log.info("完成房源 OCR 识别，listingId={}", listingId);
-        return listingConverter.toDetailResponse(entity);
+        log.info("完成房源 OCR 识别（模拟 OCR 占位，非真实识别），listingId={}", listingId);
+        return toDetail(entity);
     }
 
     /**
-     * 核验房源真实性（内部人工登记核验，非第三方权属核验）。
+     * 核验房源真实性（内部人工登记核验，非第三方权属核验）：
+     * 核验通过时同时调用 saveCertificate 加密保存证号（同事务置空明文）；
+     * 证号来源优先请求值，其次实体明文，最后已加密密文的解密值（支持加密后重复核验）。
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -507,23 +623,106 @@ public class ListingManagementServiceImpl implements ListingManagementService {
         outbox.lock(listingId);
         ListingEntity entity = requireListing(listingId);
         requireOwner(entity, "listing.verify.own", "listing.verify.all");
-        if (StringUtils.hasText(request.certificateNo())) {
-            entity.setCertificateNo(request.certificateNo());
+        String certificateNo = StringUtils.hasText(request.certificateNo()) ? request.certificateNo()
+                : StringUtils.hasText(entity.getCertificateNo()) ? entity.getCertificateNo()
+                : privateInfo.readCertificate(listingId);
+        if (StringUtils.hasText(certificateNo)) {
+            entity.setCertificateNo(certificateNo);
         }
         if (StringUtils.hasText(request.ownerName())) {
             entity.setOwnerName(request.ownerName());
         }
         entity.setVerificationSource(StringUtils.hasText(request.externalSource()) ? request.externalSource() : "manual-internal");
 
-        boolean verified = StringUtils.hasText(entity.getCertificateNo()) && StringUtils.hasText(entity.getOwnerName());
+        boolean verified = StringUtils.hasText(certificateNo) && StringUtils.hasText(entity.getOwnerName());
         entity.setVerificationStatus(verified
                 ? ListingVerificationStatusEnum.VERIFIED.name()
                 : ListingVerificationStatusEnum.FAILED.name());
         entity.setVerificationRemark(verified ? "内部人工登记核验通过（非第三方权属核验）" : "证号或业主信息缺失，校验失败");
         listingDomainService.updateById(entity);
+        if (verified) {
+            privateInfo.saveCertificate(listingId, certificateNo);
+        }
         outbox.publishCurrent(listingId);
         log.info("完成房源真实性核验，listingId={}，status={}", listingId, entity.getVerificationStatus());
-        return listingConverter.toDetailResponse(entity);
+        return toDetail(entity);
+    }
+
+    /**
+     * 组装内部详情响应：素材数组从 listing_asset 读取（全部可见性，内部视图）；
+     * 证号优先实体明文（未迁移行），无明文时读取已加密密文的解密值（已迁移行）。
+     * 调用方均已通过房源 owner/admin 级读取权限校验。
+     */
+    private ListingDetailResponse toDetail(ListingEntity entity) {
+        String certificateNo = entity.getCertificateNo();
+        if (!StringUtils.hasText(certificateNo)) {
+            certificateNo = privateInfo.readCertificate(entity.getId());
+        }
+        List<ListingAssetEntity> assets = assetService.listAssets(entity.getId(), null);
+        return listingConverter.toDetailResponse(entity, assets, certificateNo);
+    }
+
+    /**
+     * 组装买方可见投影：不含 ownerName/certificateNo/证件与合同 URL/内部备注；
+     * 素材仅 BUYER 可见且 ACTIVE 状态；askingPriceYuan 为 CNY 元（asking 为空的存量行回退 total_price×10000）。
+     */
+    private ListingBuyerViewResponse toBuyerView(ListingEntity entity) {
+        BigDecimal askingPriceYuan = entity.getAskingPriceYuan() != null ? entity.getAskingPriceYuan()
+                : entity.getTotalPrice() != null ? entity.getTotalPrice().multiply(YUAN_PER_WAN) : null;
+        List<ListingAssetView> assets = new ArrayList<>();
+        for (ListingAssetEntity asset : assetService.listAssets(entity.getId(), "BUYER")) {
+            if (!"ACTIVE".equals(asset.getStatus())) {
+                continue;
+            }
+            assets.add(new ListingAssetView(asset.getAssetType(), asset.getStorageKey(), asset.getSortOrder()));
+        }
+        return new ListingBuyerViewResponse(
+                entity.getId(),
+                entity.getTitle(),
+                entity.getAddress(),
+                entity.getCommunityName(),
+                entity.getDistrictCode(),
+                entity.getLayout(),
+                entity.getArea(),
+                askingPriceYuan,
+                entity.getStatus(),
+                entity.getFloorLevel(),
+                entity.getDecoration(),
+                entity.getSchoolZone(),
+                entity.getTraffic(),
+                List.copyOf(assets)
+        );
+    }
+
+    /**
+     * 兼容端点与 upsert 双写的素材条目映射：IMAGE/FLOOR_PLAN/VIDEO、visibility=BUYER、
+     * status=ACTIVE、sortOrder 按列表顺序；空列表即清空对应类型。
+     */
+    private static List<ListingAssetUpsertItem> buyerAssetItems(List<String> imageUrls,
+                                                                List<String> floorPlanUrls,
+                                                                List<String> videoUrls) {
+        List<ListingAssetUpsertItem> items = new ArrayList<>();
+        appendBuyerAssetItems(items, "IMAGE", imageUrls);
+        appendBuyerAssetItems(items, "FLOOR_PLAN", floorPlanUrls);
+        appendBuyerAssetItems(items, "VIDEO", videoUrls);
+        return items;
+    }
+
+    /**
+     * 追加单类型 BUYER 素材条目。
+     */
+    private static void appendBuyerAssetItems(List<ListingAssetUpsertItem> items, String assetType,
+                                              List<String> storageKeys) {
+        if (storageKeys == null) {
+            return;
+        }
+        int sortOrder = 0;
+        for (String storageKey : storageKeys) {
+            if (!StringUtils.hasText(storageKey)) {
+                continue;
+            }
+            items.add(new ListingAssetUpsertItem(assetType, storageKey.trim(), "BUYER", sortOrder++, "ACTIVE"));
+        }
     }
 
     /**

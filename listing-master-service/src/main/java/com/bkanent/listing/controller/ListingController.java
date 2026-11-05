@@ -4,6 +4,9 @@ import com.bkanent.common.model.ApiResponse;
 import com.bkanent.common.model.HealthStatusDTO;
 import com.bkanent.common.model.ListingDTO;
 import com.bkanent.listing.model.ListingAssetBindRequest;
+import com.bkanent.listing.model.ListingBuyerSearchQuery;
+import com.bkanent.listing.model.ListingBuyerSearchResponse;
+import com.bkanent.listing.model.ListingBuyerViewResponse;
 import com.bkanent.listing.model.ListingDetailResponse;
 import com.bkanent.listing.model.ListingOcrRecognizeRequest;
 import com.bkanent.listing.model.ListingOwnerConfirmRequest;
@@ -95,6 +98,38 @@ public class ListingController {
     public ApiResponse<ListingDetailResponse> bindAssets(@PathVariable("id") Long id,
                                                          @RequestBody ListingAssetBindRequest request) {
         return ApiResponse.ok(listingManagementService.bindAssets(id, request));
+    }
+
+    @PostMapping("/{id}/assets/legacy-register")
+    public ApiResponse<Integer> registerLegacyAssets(@PathVariable("id") Long id) {
+        return ApiResponse.ok(listingManagementService.registerLegacyAssets(id));
+    }
+
+    @DeleteMapping("/assets/{assetId}")
+    public ApiResponse<Void> retireAsset(@PathVariable("assetId") Long assetId) {
+        listingManagementService.retireAsset(assetId);
+        return ApiResponse.ok(null);
+    }
+
+    @GetMapping("/buyer/search")
+    public ApiResponse<ListingBuyerSearchResponse> searchBuyerListings(
+            @RequestParam(name = "districtCode", required = false) String districtCode,
+            @RequestParam(name = "communityName", required = false) String communityName,
+            @RequestParam(name = "layout", required = false) String layout,
+            @RequestParam(name = "minArea", required = false) BigDecimal minArea,
+            @RequestParam(name = "maxArea", required = false) BigDecimal maxArea,
+            @RequestParam(name = "minAskingPriceYuan", required = false) BigDecimal minAskingPriceYuan,
+            @RequestParam(name = "maxAskingPriceYuan", required = false) BigDecimal maxAskingPriceYuan,
+            @RequestParam(name = "cursor", required = false) String cursor,
+            @RequestParam(name = "limit", required = false) Integer limit) {
+        return ApiResponse.ok(listingManagementService.searchBuyerListings(new ListingBuyerSearchQuery(
+                districtCode, communityName, layout, minArea, maxArea,
+                minAskingPriceYuan, maxAskingPriceYuan, cursor, limit)));
+    }
+
+    @GetMapping("/buyer/{id}")
+    public ApiResponse<ListingBuyerViewResponse> getBuyerDetail(@PathVariable("id") Long id) {
+        return ApiResponse.ok(listingManagementService.getBuyerDetail(id));
     }
 
     @PostMapping("/{id}/ocr")

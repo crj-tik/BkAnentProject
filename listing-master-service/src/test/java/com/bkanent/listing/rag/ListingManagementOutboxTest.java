@@ -26,7 +26,8 @@ class ListingManagementOutboxTest {
         return new ListingManagementServiceImpl(domain, new ListingConverter(), search,
                 new ListingKnowledgeDocumentAssembler(), outbox, identity,
                 mock(ListingPriceRecordMapper.class), mock(ListingStatusRecordMapper.class),
-                receipts, ownerVerify);
+                receipts, ownerVerify, mock(com.bkanent.listing.service.ListingAssetService.class),
+                mock(com.bkanent.listing.service.ListingPrivateInfoService.class));
     }
 
     @Test void everyActiveMutationLocksThenPublishesAndNeverExecutesSearchOrAgentRPC() {

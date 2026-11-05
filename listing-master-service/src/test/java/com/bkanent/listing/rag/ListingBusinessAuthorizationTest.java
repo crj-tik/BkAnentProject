@@ -52,7 +52,9 @@ class ListingBusinessAuthorizationTest {
                 mock(com.bkanent.listing.mapper.ListingPriceRecordMapper.class),
                 mock(com.bkanent.listing.mapper.ListingStatusRecordMapper.class),
                 mock(com.bkanent.listing.service.ListingCommandReceiptService.class),
-                mock(com.bkanent.listing.customer.CustomerProfileVerifyClient.class));
+                mock(com.bkanent.listing.customer.CustomerProfileVerifyClient.class),
+                mock(com.bkanent.listing.service.ListingAssetService.class),
+                mock(com.bkanent.listing.service.ListingPrivateInfoService.class));
     }
     @Test void singleSummaryRejectsTokenRevokedDuringSql() {
         var domain = mock(ListingDomainService.class); var identity = mock(ListingRagIdentity.class);

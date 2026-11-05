@@ -52,6 +52,10 @@ listing:
   customer-verify:
     key-id: ${LISTING_CUSTOMER_VERIFY_KEY_ID:customer-verify-current}
     signing-secret: ${LISTING_CUSTOMER_VERIFY_SIGNING_SECRET:}
+  # 产权证号 AES-256-GCM 受管加密：密钥未配置或无效时敏感写入失败关闭，不降级明文。
+  private-info:
+    encryption-key: ${LISTING_PRIVATE_INFO_ENCRYPTION_KEY:}
+    key-id: ${LISTING_PRIVATE_INFO_KEY_ID:private-info-current}
   authorization:
     enabled: ${LISTING_AUTHORIZATION_ENABLED:false}
     audience: listing-master-service

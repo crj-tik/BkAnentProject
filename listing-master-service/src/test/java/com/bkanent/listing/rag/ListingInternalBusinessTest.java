@@ -13,8 +13,10 @@ import com.bkanent.listing.mapper.ListingPriceRecordMapper;
 import com.bkanent.listing.mapper.ListingStatusRecordMapper;
 import com.bkanent.listing.model.ListingStatusUpdateRequest;
 import com.bkanent.listing.model.ListingUpsertRequest;
+import com.bkanent.listing.service.ListingAssetService;
 import com.bkanent.listing.service.ListingCommandReceiptService;
 import com.bkanent.listing.service.ListingDomainService;
+import com.bkanent.listing.service.ListingPrivateInfoService;
 import com.bkanent.listing.service.ListingSearchService;
 import com.bkanent.listing.service.impl.ListingManagementServiceImpl;
 import com.bkanent.listing.converter.ListingConverter;
@@ -74,7 +76,7 @@ class ListingInternalBusinessTest {
                                                  ListingStatusRecordMapper statusMapper) {
         return new ListingManagementServiceImpl(domain, new ListingConverter(), mock(ListingSearchService.class),
                 new ListingKnowledgeDocumentAssembler(), outbox, identity, priceMapper, statusMapper,
-                receipts, ownerVerify);
+                receipts, ownerVerify, mock(ListingAssetService.class), mock(ListingPrivateInfoService.class));
     }
 
     private ListingRagIdentity identity() {

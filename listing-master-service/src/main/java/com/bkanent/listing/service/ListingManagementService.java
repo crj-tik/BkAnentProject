@@ -5,6 +5,9 @@ import com.bkanent.common.model.ListingDTO;
 import com.bkanent.common.model.ListingKeywordSearchRequest;
 import com.bkanent.common.model.ListingKeywordSearchResultDTO;
 import com.bkanent.listing.model.ListingAssetBindRequest;
+import com.bkanent.listing.model.ListingBuyerSearchQuery;
+import com.bkanent.listing.model.ListingBuyerSearchResponse;
+import com.bkanent.listing.model.ListingBuyerViewResponse;
 import com.bkanent.listing.model.ListingDetailResponse;
 import com.bkanent.listing.model.ListingOcrRecognizeRequest;
 import com.bkanent.listing.model.ListingQueryRequest;
@@ -93,4 +96,28 @@ public interface ListingManagementService {
      * 解除存量房源的业主档案关联（保留全部历史，不删除任何记录）。
      */
     ListingDetailResponse unbindOwner(Long listingId);
+
+    /**
+     * 历史素材迁移登记（受权操作 listing.assets.bind.own/.all）：旧逗号拼接 URL 与证件/合同 URL
+     * 逐条登记为 PENDING_REVIEW 行（图片/户型图/视频=BUYER，产权证/合同=SENSITIVE），
+     * 幂等（同 storageKey 跳过），不抓取任何 URL；返回新登记行数。
+     */
+    Integer registerLegacyAssets(Long listingId);
+
+    /**
+     * 退役单条素材（受权操作 listing.assets.bind.own/.all + requireOwner，逻辑删除）。
+     */
+    void retireAsset(Long assetId);
+
+    /**
+     * 买方可见在售房源分页搜索（requireReadPermission + ON_SALE 公开范围）；
+     * 查询只读，不创建任何咨询或客户档案。
+     */
+    ListingBuyerSearchResponse searchBuyerListings(ListingBuyerSearchQuery query);
+
+    /**
+     * 买方可见房源详情（requireReadPermission + ON_SALE 公开范围）；
+     * 输出前复核当前状态，非在售或不可读返回 null，不泄露受限详情。
+     */
+    ListingBuyerViewResponse getBuyerDetail(Long listingId);
 }
