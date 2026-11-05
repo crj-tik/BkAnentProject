@@ -1,9 +1,13 @@
 package com.bkanent.listing.rag;
 
 import com.bkanent.listing.converter.ListingConverter;
+import com.bkanent.listing.customer.CustomerProfileVerifyClient;
 import com.bkanent.listing.entity.ListingEntity;
+import com.bkanent.listing.mapper.ListingPriceRecordMapper;
+import com.bkanent.listing.mapper.ListingStatusRecordMapper;
 import com.bkanent.listing.model.*;
 import com.bkanent.listing.search.ListingKnowledgeDocumentAssembler;
+import com.bkanent.listing.service.ListingCommandReceiptService;
 import com.bkanent.listing.service.ListingDomainService;
 import com.bkanent.listing.service.ListingSearchService;
 import com.bkanent.listing.service.impl.ListingManagementServiceImpl;
@@ -12,16 +16,36 @@ import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 
 class ListingManagementOutboxTest {
+    private ListingManagementServiceImpl managementService(ListingDomainService domain, ListingSearchService search,
+                                                           ListingRagOutbox outbox, ListingRagIdentity identity,
+                                                           CustomerProfileVerifyClient ownerVerify,
+                                                           ListingCommandReceiptService receipts) {
+        return new ListingManagementServiceImpl(domain, new ListingConverter(), search,
+                new ListingKnowledgeDocumentAssembler(), outbox, identity,
+                mock(ListingPriceRecordMapper.class), mock(ListingStatusRecordMapper.class),
+                receipts, ownerVerify);
+    }
+
     @Test void everyActiveMutationLocksThenPublishesAndNeverExecutesSearchOrAgentRPC() {
         var domain = mock(ListingDomainService.class); var search = mock(ListingSearchService.class); var outbox = mock(ListingRagOutbox.class);
         var identity = mock(ListingRagIdentity.class);
+        var ownerVerify = mock(CustomerProfileVerifyClient.class);
+        var receipts = mock(ListingCommandReceiptService.class);
+        when(receipts.find(anyLong(), anyString(), anyString())).thenReturn(Optional.empty());
         when(identity.requireReader(any())).thenReturn(new com.bkanent.common.rag.AuthRagPrincipal(7L,"ADMIN",true,true,Long.MAX_VALUE));
-        var service = new ListingManagementServiceImpl(domain, new ListingConverter(), search, new ListingKnowledgeDocumentAssembler(), outbox, identity);
-        var entity = new ListingEntity(); entity.setDeleted(0); entity.setId(11L); entity.setBrokerId(9L); when(domain.getById(11L)).thenReturn(entity);
+        var service = managementService(domain, search, outbox, identity, ownerVerify, receipts);
+        var entity = new ListingEntity(); entity.setDeleted(0); entity.setId(11L); entity.setBrokerId(9L);
+        entity.setStatus("PENDING_REVIEW"); entity.setTitle("title"); entity.setAddress("address");
+        entity.setLayout("layout"); entity.setArea(BigDecimal.ONE); entity.setTotalPrice(BigDecimal.TEN);
+        when(domain.getById(11L)).thenReturn(entity);
         when(domain.save(any())).thenAnswer(call -> { ((ListingEntity)call.getArgument(0)).setId(11L); return true; });
-        var request = new ListingUpsertRequest(9L,"title","address","layout",BigDecimal.ONE,BigDecimal.TEN,"floor","decoration","school","traffic","owner","certificate","certificateUrl","contractUrl",List.of(),List.of(),List.of());
+        when(domain.update(any(ListingEntity.class), any())).thenReturn(true);
+        var request = new ListingUpsertRequest(9L, 55L, null, "title", "address", null, null, "layout",
+                BigDecimal.ONE, BigDecimal.TEN, "floor", "decoration", "school", "traffic", "owner",
+                "certificate", "certificateUrl", "contractUrl", List.of(), List.of(), List.of());
         try (var authz = ListingAuthzScopeFixture.open(false,
                 List.of("listing.create", "listing.update.own", "listing.status.update.own", "listing.assets.bind.own",
                         "listing.ocr.own", "listing.verify.own", "listing.delete.own"),
@@ -41,7 +65,7 @@ class ListingManagementOutboxTest {
         verify(outbox,times(7)).publishCurrent(11L); verify(outbox,times(6)).lock(11L); verifyNoInteractions(search);
         var order=inOrder(outbox,domain);
         order.verify(domain).save(any()); order.verify(outbox).publishCurrent(11L);
-        order.verify(outbox).lock(11L); order.verify(domain).getById(11L); order.verify(domain).updateById(any()); order.verify(outbox).publishCurrent(11L);
+        order.verify(outbox).lock(11L); order.verify(domain).getById(11L); order.verify(domain).update(any(ListingEntity.class), any()); order.verify(outbox).publishCurrent(11L);
     }
     @Test void legacyNoCredentialRPCAndToolNoContextDenyInsteadOfGuessingBroker() {
         var management=mock(com.bkanent.listing.service.ListingManagementService.class);

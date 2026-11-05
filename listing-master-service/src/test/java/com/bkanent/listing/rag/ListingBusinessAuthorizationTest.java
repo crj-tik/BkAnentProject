@@ -31,8 +31,7 @@ class ListingBusinessAuthorizationTest {
     }
     @Test void detailSummaryToolsRequireRealCredentialContextAndFinalStatusPolicy() {
         var domain = mock(ListingDomainService.class); var identity = mock(ListingRagIdentity.class);
-        var service = new ListingManagementServiceImpl(domain, new ListingConverter(), mock(ListingSearchService.class),
-                new ListingKnowledgeDocumentAssembler(), mock(ListingRagOutbox.class), identity);
+        var service = managementService(domain, identity, mock(com.bkanent.listing.service.ListingSearchService.class));
         var tools = new com.bkanent.listing.tool.ListingTools(service);
         assertThrows(RagException.class, () -> tools.getListingSummary(11L));
         verifyNoInteractions(domain, identity);
@@ -46,9 +45,14 @@ class ListingBusinessAuthorizationTest {
         }
         assertThrows(RagException.class, ListingRagCredentialContext::current);
     }
-    private ListingManagementServiceImpl summaryService(ListingDomainService domain, ListingRagIdentity identity) {
-        return new ListingManagementServiceImpl(domain, new ListingConverter(), mock(ListingSearchService.class),
-                new ListingKnowledgeDocumentAssembler(), mock(ListingRagOutbox.class), identity);
+    private ListingManagementServiceImpl managementService(ListingDomainService domain, ListingRagIdentity identity,
+                                                           ListingSearchService search) {
+        return new ListingManagementServiceImpl(domain, new ListingConverter(), search,
+                new ListingKnowledgeDocumentAssembler(), mock(ListingRagOutbox.class), identity,
+                mock(com.bkanent.listing.mapper.ListingPriceRecordMapper.class),
+                mock(com.bkanent.listing.mapper.ListingStatusRecordMapper.class),
+                mock(com.bkanent.listing.service.ListingCommandReceiptService.class),
+                mock(com.bkanent.listing.customer.CustomerProfileVerifyClient.class));
     }
     @Test void singleSummaryRejectsTokenRevokedDuringSql() {
         var domain = mock(ListingDomainService.class); var identity = mock(ListingRagIdentity.class);
@@ -58,7 +62,7 @@ class ListingBusinessAuthorizationTest {
             when(identity.requireReader(credentials)).thenThrow(new RagException(RagErrorCode.AUTHENTICATION_FAILED));
             return row("OFFLINE", 0);
         });
-        var service = summaryService(domain, identity);
+        var service = managementService(domain, identity, mock(ListingSearchService.class));
         try (var ignored = ListingRagCredentialContext.open(credentials)) {
             assertEquals(RagErrorCode.AUTHENTICATION_FAILED,
                     assertThrows(RagException.class, () -> service.getListingSummary(11L)).code());
@@ -74,7 +78,7 @@ class ListingBusinessAuthorizationTest {
             when(identity.requireReader(credentials)).thenReturn(principal("BROKER"));
             return row("OFFLINE", 0);
         });
-        var service = summaryService(domain, identity);
+        var service = managementService(domain, identity, mock(ListingSearchService.class));
         try (var ignored = ListingRagCredentialContext.open(credentials)) {
             assertEquals(RagErrorCode.FORBIDDEN,
                     assertThrows(RagException.class, () -> service.getListingSummary(11L)).code());
@@ -89,7 +93,7 @@ class ListingBusinessAuthorizationTest {
             when(identity.requireReader(credentials)).thenReturn(principal("BROKER"));
             return row("ON_SALE", 0);
         });
-        var service = summaryService(domain, identity);
+        var service = managementService(domain, identity, mock(ListingSearchService.class));
         try (var ignored = ListingRagCredentialContext.open(credentials)) {
             assertEquals("ON_SALE", service.getListingSummary(11L).status());
         }
@@ -103,7 +107,7 @@ class ListingBusinessAuthorizationTest {
             when(identity.requireReader(credentials)).thenReturn(new AuthRagPrincipal(8L, "ADMIN", true, true, Long.MAX_VALUE));
             return row("ON_SALE", 0);
         });
-        var service = summaryService(domain, identity);
+        var service = managementService(domain, identity, mock(ListingSearchService.class));
         try (var ignored = ListingRagCredentialContext.open(credentials)) {
             assertEquals(RagErrorCode.AUTHENTICATION_FAILED,
                     assertThrows(RagException.class, () -> service.getListingSummary(11L)).code());
@@ -114,8 +118,7 @@ class ListingBusinessAuthorizationTest {
         var domain = mock(ListingDomainService.class); var identity = mock(ListingRagIdentity.class);
         when(identity.requireReader(any())).thenReturn(principal("BROKER"));
         when(domain.search(any())).thenReturn(List.of(row("ON_SALE",0), row("SOLD",0), row("ON_SALE",1)));
-        var service = new ListingManagementServiceImpl(domain, new ListingConverter(), mock(ListingSearchService.class),
-                new ListingKnowledgeDocumentAssembler(), mock(ListingRagOutbox.class), identity);
+        var service = managementService(domain, identity, mock(ListingSearchService.class));
         try (var ignored = ListingRagCredentialContext.open(new RagCredentialContext("dedicated-access"))) {
             assertEquals(1, service.searchListingSummaries("region").size());
             verify(domain).search(argThat(r -> "ON_SALE".equals(r.status()) && "region".equals(r.keyword())));

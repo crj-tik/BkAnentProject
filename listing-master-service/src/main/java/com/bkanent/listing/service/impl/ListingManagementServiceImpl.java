@@ -1,14 +1,22 @@
 package com.bkanent.listing.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.bkanent.common.model.KnowledgeDocument;
 import com.bkanent.common.model.ListingDTO;
 import com.bkanent.common.model.ListingKeywordSearchRequest;
 import com.bkanent.common.model.ListingKeywordSearchResultDTO;
+import com.bkanent.common.rag.RagErrorCode;
+import com.bkanent.common.rag.RagException;
+import com.bkanent.listing.customer.CustomerProfileVerifyClient;
 import com.bkanent.listing.rag.ListingRagOutbox;
 import com.bkanent.listing.converter.ListingConverter;
 import com.bkanent.listing.entity.ListingEntity;
+import com.bkanent.listing.entity.ListingPriceRecordEntity;
+import com.bkanent.listing.entity.ListingStatusRecordEntity;
 import com.bkanent.listing.enums.ListingStatusEnum;
 import com.bkanent.listing.enums.ListingVerificationStatusEnum;
+import com.bkanent.listing.mapper.ListingPriceRecordMapper;
+import com.bkanent.listing.mapper.ListingStatusRecordMapper;
 import com.bkanent.listing.model.ListingAssetBindRequest;
 import com.bkanent.listing.model.ListingDetailResponse;
 import com.bkanent.listing.model.ListingOcrRecognizeRequest;
@@ -17,6 +25,7 @@ import com.bkanent.listing.model.ListingStatusUpdateRequest;
 import com.bkanent.listing.model.ListingUpsertRequest;
 import com.bkanent.listing.model.ListingVerifyRequest;
 import com.bkanent.listing.search.ListingKnowledgeDocumentAssembler;
+import com.bkanent.listing.service.ListingCommandReceiptService;
 import com.bkanent.listing.service.ListingDomainService;
 import com.bkanent.listing.service.ListingManagementService;
 import com.bkanent.listing.service.ListingSearchService;
@@ -26,13 +35,38 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * ListingManagementServiceImpl 服务实现类。
+ * 内部房源登记与维护：业主档案验证失败关闭、登记幂等回执、价格/状态历史与 RAG outbox 同事务、
+ * 版本条件写（手动条件更新，不依赖 MyBatis Plus @Version 拦截器）。
  */
 @Service
 public class ListingManagementServiceImpl implements ListingManagementService {
+
+    /**
+     * 常量：YUAN_PER_WAN（万元到元的换算系数）。
+     */
+    private static final BigDecimal YUAN_PER_WAN = BigDecimal.valueOf(10000L);
+    /**
+     * 常量：CREATE_OPERATION（登记幂等操作码）。
+     */
+    private static final String CREATE_OPERATION = "listing.create";
+    /**
+     * 常量：ALLOWED_TRANSITIONS（状态机：PENDING_REVIEW→ON_SALE/OFFLINE；ON_SALE→OFFLINE/SOLD；
+     * OFFLINE→ON_SALE；SOLD 终态；同状态 no-op 由调用方处理）。
+     */
+    private static final Map<String, Set<String>> ALLOWED_TRANSITIONS = Map.of(
+            "PENDING_REVIEW", Set.of("ON_SALE", "OFFLINE"),
+            "ON_SALE", Set.of("OFFLINE", "SOLD"),
+            "OFFLINE", Set.of("ON_SALE"));
 
     /**
      * 字段：log。
@@ -54,8 +88,30 @@ public class ListingManagementServiceImpl implements ListingManagementService {
      * 字段：listingKnowledgeDocumentAssembler。
      */
     private final ListingKnowledgeDocumentAssembler listingKnowledgeDocumentAssembler;
+    /**
+     * 字段：outbox。
+     */
     private final ListingRagOutbox outbox;
+    /**
+     * 字段：identity。
+     */
     private final com.bkanent.listing.rag.ListingRagIdentity identity;
+    /**
+     * 字段：priceRecordMapper（追加型价格历史）。
+     */
+    private final ListingPriceRecordMapper priceRecordMapper;
+    /**
+     * 字段：statusRecordMapper（追加型状态历史）。
+     */
+    private final ListingStatusRecordMapper statusRecordMapper;
+    /**
+     * 字段：receipts（登记幂等回执）。
+     */
+    private final ListingCommandReceiptService receipts;
+    /**
+     * 字段：ownerVerify（业主档案验证调用方，失败关闭）。
+     */
+    private final CustomerProfileVerifyClient ownerVerify;
 
     /**
      * 构造 ListingManagementServiceImpl 实例。
@@ -65,39 +121,94 @@ public class ListingManagementServiceImpl implements ListingManagementService {
                                         ListingSearchService listingSearchService,
                                         ListingKnowledgeDocumentAssembler listingKnowledgeDocumentAssembler,
                                         ListingRagOutbox outbox,
-                                        com.bkanent.listing.rag.ListingRagIdentity identity) {
+                                        com.bkanent.listing.rag.ListingRagIdentity identity,
+                                        ListingPriceRecordMapper priceRecordMapper,
+                                        ListingStatusRecordMapper statusRecordMapper,
+                                        ListingCommandReceiptService receipts,
+                                        CustomerProfileVerifyClient ownerVerify) {
         this.identity = identity;
         this.listingDomainService = listingDomainService;
         this.listingConverter = listingConverter;
         this.listingSearchService = listingSearchService;
         this.listingKnowledgeDocumentAssembler = listingKnowledgeDocumentAssembler;
         this.outbox = outbox;
+        this.priceRecordMapper = priceRecordMapper;
+        this.statusRecordMapper = statusRecordMapper;
+        this.receipts = receipts;
+        this.ownerVerify = ownerVerify;
     }
 
     /**
-     * 创建房源。
+     * 创建房源：可信 broker 归属 → 业主档案当前授权验证（失败关闭不创建）→ 幂等检查 →
+     * 同事务保存房源、初始价格/状态历史、登记回执与 RAG outbox。
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ListingDetailResponse createListing(ListingUpsertRequest request) {
-        requireOperation("listing.create");
+        requireOperation(CREATE_OPERATION);
         long brokerId = com.bkanent.common.authz.AuthzRequestScope.requireBrokerIdentity();
         requireSubmittedBroker(request.brokerId(), brokerId);
-        currentReader();
+        if (request.ownerCustomerId() == null || request.ownerCustomerId() <= 0) {
+            throw new RagException(RagErrorCode.INVALID_ARGUMENT, "ownerCustomerId");
+        }
+        long actorUserId = currentActorUserId();
+        // 业主档案验证：仅 VERIFIED 继续；不可用或拒绝时不创建可用房源。
+        ownerVerify.verifyOwnerProfile(request.ownerCustomerId());
+        // 幂等检查：同键同内容重试返回原房源，不同内容拒绝冲突。
+        String requestId = StringUtils.hasText(request.requestId()) ? request.requestId().trim() : null;
+        byte[] requestHash = null;
+        if (requestId != null) {
+            requestHash = receipts.requestHash(request);
+            var existing = receipts.find(actorUserId, CREATE_OPERATION, requestId);
+            if (existing.isPresent()) {
+                if (!Arrays.equals(existing.get().requestHash(), requestHash)) {
+                    throw new RagException(RagErrorCode.INVALID_ARGUMENT, "requestId");
+                }
+                return listingConverter.toDetailResponse(loadCommitted(existing.get().listingId()));
+            }
+        }
         ListingEntity entity = new ListingEntity();
         entity.setBrokerId(brokerId);
+        entity.setOwnerCustomerId(request.ownerCustomerId());
         applyUpsert(entity, request);
+        entity.setTotalPrice(request.totalPrice());
+        entity.setAskingPriceYuan(yuanFromWan(request.totalPrice()));
         entity.setStatus(ListingStatusEnum.PENDING_REVIEW.name());
         entity.setOcrStatus("PENDING");
         entity.setVerificationStatus(ListingVerificationStatusEnum.PENDING.name());
+        entity.setVersion(0L);
         listingDomainService.save(entity);
+        String recordRequestId = requestId != null ? requestId : UUID.randomUUID().toString();
+        if (entity.getAskingPriceYuan() != null) {
+            ListingPriceRecordEntity priceRecord = new ListingPriceRecordEntity();
+            priceRecord.setListingId(entity.getId());
+            priceRecord.setOldPriceYuan(null);
+            priceRecord.setNewPriceYuan(entity.getAskingPriceYuan());
+            priceRecord.setOperatorUserId(actorUserId);
+            priceRecord.setRequestId(recordRequestId);
+            priceRecordMapper.insert(priceRecord);
+        }
+        ListingStatusRecordEntity statusRecord = new ListingStatusRecordEntity();
+        statusRecord.setListingId(entity.getId());
+        statusRecord.setFromStatus(null);
+        statusRecord.setToStatus(ListingStatusEnum.PENDING_REVIEW.name());
+        statusRecord.setAction("REGISTER");
+        statusRecord.setOperatorUserId(actorUserId);
+        statusRecord.setRequestId(recordRequestId);
+        statusRecordMapper.insert(statusRecord);
+        if (requestId != null) {
+            // 主键冲突（并发重试）时整体回滚，重试按既有回执返回原房源。
+            receipts.insertSameTransaction(actorUserId, CREATE_OPERATION, requestId,
+                    requestHash, entity.getId(), "COMPLETED");
+        }
         outbox.publishCurrent(entity.getId());
-        log.info("新增房源成功，listingId={}，title={}", entity.getId(), entity.getTitle());
+        log.info("新增房源成功，listingId={}，title={}，ownerCustomerId={}",
+                entity.getId(), entity.getTitle(), entity.getOwnerCustomerId());
         return listingConverter.toDetailResponse(entity);
     }
 
     /**
-     * 更新房源。
+     * 更新房源：版本条件写（冲突回滚）；价格变化写价格历史并同步万元投影（除不尽时兼容期拒绝）。
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -109,10 +220,35 @@ public class ListingManagementServiceImpl implements ListingManagementService {
         if (request.brokerId() != null && !request.brokerId().equals(entity.getBrokerId())) {
             throw new com.bkanent.common.authz.AuthzException(com.bkanent.common.authz.AuthzErrorCode.PERMISSION_DENIED);
         }
+        BigDecimal oldAsking = entity.getAskingPriceYuan();
+        BigDecimal newAsking = yuanFromWan(request.totalPrice());
+        boolean priceChanged = newAsking != null
+                && (oldAsking == null || newAsking.compareTo(oldAsking) != 0);
+        if (priceChanged) {
+            BigDecimal[] division = newAsking.divideAndRemainder(YUAN_PER_WAN);
+            if (division[1].signum() != 0) {
+                throw new IllegalArgumentException("挂牌价无法无损换算为万元兼容投影，兼容期拒绝该价格: " + newAsking);
+            }
+        }
         applyUpsert(entity, request);
-        listingDomainService.updateById(entity);
+        if (request.totalPrice() != null) {
+            entity.setTotalPrice(request.totalPrice());
+            if (priceChanged) {
+                entity.setAskingPriceYuan(newAsking);
+            }
+        }
+        updateWithVersion(entity);
+        if (priceChanged) {
+            ListingPriceRecordEntity priceRecord = new ListingPriceRecordEntity();
+            priceRecord.setListingId(listingId);
+            priceRecord.setOldPriceYuan(oldAsking);
+            priceRecord.setNewPriceYuan(newAsking);
+            priceRecord.setOperatorUserId(currentActorUserId());
+            priceRecord.setRequestId(UUID.randomUUID().toString());
+            priceRecordMapper.insert(priceRecord);
+        }
         outbox.publishCurrent(listingId);
-        log.info("更新房源成功，listingId={}", listingId);
+        log.info("更新房源成功，listingId={}，version={}", listingId, entity.getVersion());
         return listingConverter.toDetailResponse(entity);
     }
 
@@ -225,7 +361,8 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     }
 
     /**
-     * 更新房源状态。
+     * 更新房源状态：状态机校验（非法跳转拒绝且数据不变；同状态 no-op 不写历史）、
+     * 上架资料校验、版本条件写与追加状态历史同事务。
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -234,13 +371,85 @@ public class ListingManagementServiceImpl implements ListingManagementService {
         if (!ListingStatusEnum.contains(request.status())) {
             throw new IllegalArgumentException("房源状态不合法: " + request.status());
         }
+        String target = request.status().toUpperCase();
         outbox.lock(listingId);
         ListingEntity entity = requireListing(listingId);
         requireOwner(entity, "listing.status.update.own", "listing.status.update.all");
-        entity.setStatus(request.status().toUpperCase());
-        listingDomainService.updateById(entity);
+        String current = entity.getStatus();
+        if (target.equals(current)) {
+            // 同状态 no-op：直接返回当前，不写历史、不递增版本。
+            return listingConverter.toDetailResponse(entity);
+        }
+        if (current == null || !ALLOWED_TRANSITIONS.getOrDefault(current, Set.of()).contains(target)) {
+            throw new IllegalArgumentException("非法房源状态跳转: " + current + " -> " + target);
+        }
+        if (ListingStatusEnum.ON_SALE.name().equals(target)) {
+            requireListable(entity);
+        }
+        entity.setStatus(target);
+        updateWithVersion(entity);
+        ListingStatusRecordEntity statusRecord = new ListingStatusRecordEntity();
+        statusRecord.setListingId(listingId);
+        statusRecord.setFromStatus(current);
+        statusRecord.setToStatus(target);
+        statusRecord.setAction(actionFor(target));
+        statusRecord.setOperatorUserId(currentActorUserId());
+        statusRecord.setRequestId(UUID.randomUUID().toString());
+        statusRecordMapper.insert(statusRecord);
         outbox.publishCurrent(listingId);
-        log.info("更新房源状态成功，listingId={}，status={}", listingId, entity.getStatus());
+        log.info("更新房源状态成功，listingId={}，{} -> {}，version={}", listingId, current, target, entity.getVersion());
+        return listingConverter.toDetailResponse(entity);
+    }
+
+    /**
+     * 确认存量房源的业主档案关联：先验证业主档案当前授权与类型（VERIFIED 才继续），
+     * 再更新 owner_customer_id 并递增版本；该关联不证明产权或登录身份。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ListingDetailResponse confirmOwner(Long listingId, Long ownerCustomerId) {
+        requireOperation("listing.update.own");
+        if (ownerCustomerId == null || ownerCustomerId <= 0) {
+            throw new RagException(RagErrorCode.INVALID_ARGUMENT, "ownerCustomerId");
+        }
+        outbox.lock(listingId);
+        ListingEntity entity = requireListing(listingId);
+        requireOwner(entity, "listing.update.own", "listing.update.all");
+        ownerVerify.verifyOwnerProfile(ownerCustomerId);
+        entity.setOwnerCustomerId(ownerCustomerId);
+        updateWithVersion(entity);
+        outbox.publishCurrent(listingId);
+        log.info("确认房源业主关联成功，listingId={}，ownerCustomerId={}", listingId, ownerCustomerId);
+        return listingConverter.toDetailResponse(entity);
+    }
+
+    /**
+     * 解除存量房源的业主档案关联：owner_customer_id 置 NULL 并递增版本；
+     * 不删除任何价格/状态历史或回执记录。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ListingDetailResponse unbindOwner(Long listingId) {
+        requireOperation("listing.update.own");
+        outbox.lock(listingId);
+        ListingEntity entity = requireListing(listingId);
+        requireOwner(entity, "listing.update.own", "listing.update.all");
+        if (entity.getOwnerCustomerId() == null) {
+            return listingConverter.toDetailResponse(entity);
+        }
+        long oldVersion = versionOf(entity);
+        boolean updated = listingDomainService.update(null, new LambdaUpdateWrapper<ListingEntity>()
+                .eq(ListingEntity::getId, listingId)
+                .eq(ListingEntity::getVersion, oldVersion)
+                .set(ListingEntity::getOwnerCustomerId, null)
+                .set(ListingEntity::getVersion, oldVersion + 1L));
+        if (!updated) {
+            throw new IllegalStateException("房源版本冲突，请刷新后重试: " + listingId);
+        }
+        entity.setOwnerCustomerId(null);
+        entity.setVersion(oldVersion + 1L);
+        outbox.publishCurrent(listingId);
+        log.info("解除房源业主关联成功，listingId={}，version={}", listingId, entity.getVersion());
         return listingConverter.toDetailResponse(entity);
     }
 
@@ -289,7 +498,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     }
 
     /**
-     * 核验房源真实性。
+     * 核验房源真实性（内部人工登记核验，非第三方权属核验）。
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -304,13 +513,13 @@ public class ListingManagementServiceImpl implements ListingManagementService {
         if (StringUtils.hasText(request.ownerName())) {
             entity.setOwnerName(request.ownerName());
         }
-        entity.setVerificationSource(StringUtils.hasText(request.externalSource()) ? request.externalSource() : "mock-third-party");
+        entity.setVerificationSource(StringUtils.hasText(request.externalSource()) ? request.externalSource() : "manual-internal");
 
         boolean verified = StringUtils.hasText(entity.getCertificateNo()) && StringUtils.hasText(entity.getOwnerName());
         entity.setVerificationStatus(verified
                 ? ListingVerificationStatusEnum.VERIFIED.name()
                 : ListingVerificationStatusEnum.FAILED.name());
-        entity.setVerificationRemark(verified ? "房源信息校验通过" : "证号或业主信息缺失，校验失败");
+        entity.setVerificationRemark(verified ? "内部人工登记核验通过（非第三方权属核验）" : "证号或业主信息缺失，校验失败");
         listingDomainService.updateById(entity);
         outbox.publishCurrent(listingId);
         log.info("完成房源真实性核验，listingId={}，status={}", listingId, entity.getVerificationStatus());
@@ -318,14 +527,15 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     }
 
     /**
-     * 应用upsert字段。
+     * 应用upsert字段（价格与业主关联由统一入口单独维护，此处不触碰）。
      */
     private void applyUpsert(ListingEntity entity, ListingUpsertRequest request) {
         entity.setTitle(request.title());
         entity.setAddress(request.address());
+        entity.setCommunityName(request.communityName());
+        entity.setDistrictCode(request.districtCode());
         entity.setLayout(request.layout());
         entity.setArea(request.area());
-        entity.setTotalPrice(request.totalPrice());
         entity.setFloorLevel(request.floorLevel());
         entity.setDecoration(request.decoration());
         entity.setSchoolZone(request.schoolZone());
@@ -340,6 +550,92 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     }
 
     /**
+     * 万元转元（null 保持 null）。
+     */
+    private static BigDecimal yuanFromWan(BigDecimal totalPriceWan) {
+        return totalPriceWan == null ? null : totalPriceWan.multiply(YUAN_PER_WAN);
+    }
+
+    /**
+     * 上架资料校验：标题/地址/户型非空、面积大于零、挂牌价大于零
+     * （asking 为空但 total_price 大于零时用 total_price×10000 补齐）；
+     * 不校验合同、委托、审批或核验状态。
+     */
+    private void requireListable(ListingEntity entity) {
+        List<String> missing = new ArrayList<>();
+        if (!StringUtils.hasText(entity.getTitle())) {
+            missing.add("标题");
+        }
+        if (!StringUtils.hasText(entity.getAddress())) {
+            missing.add("地址");
+        }
+        if (!StringUtils.hasText(entity.getLayout())) {
+            missing.add("户型");
+        }
+        if (entity.getArea() == null || entity.getArea().signum() <= 0) {
+            missing.add("面积");
+        }
+        if (entity.getAskingPriceYuan() == null && entity.getTotalPrice() != null
+                && entity.getTotalPrice().signum() > 0) {
+            entity.setAskingPriceYuan(entity.getTotalPrice().multiply(YUAN_PER_WAN));
+        }
+        if (entity.getAskingPriceYuan() == null || entity.getAskingPriceYuan().signum() <= 0) {
+            missing.add("挂牌价");
+        }
+        if (!missing.isEmpty()) {
+            throw new IllegalArgumentException("房源缺少有效上架资料: " + String.join("、", missing));
+        }
+    }
+
+    /**
+     * 目标状态对应的动作编码。
+     */
+    private static String actionFor(String target) {
+        return switch (target) {
+            case "ON_SALE" -> "LIST";
+            case "OFFLINE" -> "DELIST";
+            case "SOLD" -> "SOLD_CONFIRM";
+            default -> "STATUS_CHANGE";
+        };
+    }
+
+    /**
+     * 版本条件写：SET version=version+1 WHERE id=? AND version=?；
+     * 影响行数为 0 视为版本冲突，整体回滚。
+     */
+    private void updateWithVersion(ListingEntity entity) {
+        long oldVersion = versionOf(entity);
+        entity.setVersion(oldVersion + 1L);
+        boolean updated = listingDomainService.update(entity, new LambdaUpdateWrapper<ListingEntity>()
+                .eq(ListingEntity::getId, entity.getId())
+                .eq(ListingEntity::getVersion, oldVersion));
+        if (!updated) {
+            throw new IllegalStateException("房源版本冲突，请刷新后重试: " + entity.getId());
+        }
+    }
+
+    /**
+     * 读取既有版本（存量空值按 0 处理）。
+     */
+    private static long versionOf(ListingEntity entity) {
+        return entity.getVersion() == null ? 0L : entity.getVersion();
+    }
+
+    /**
+     * 按回执加载原房源（幂等重放路径，不重复创建）。
+     */
+    private ListingEntity loadCommitted(Long listingId) {
+        if (listingId == null || listingId <= 0) {
+            throw new RagException(RagErrorCode.INVALID_ARGUMENT, "listingId");
+        }
+        ListingEntity entity = listingDomainService.getById(listingId);
+        if (entity == null || !Integer.valueOf(0).equals(entity.getDeleted())) {
+            throw new IllegalArgumentException("房源不存在: " + listingId);
+        }
+        return entity;
+    }
+
+    /**
      * 获取必需房源。
      */
     private ListingEntity requireListing(Long listingId) {
@@ -349,6 +645,21 @@ public class ListingManagementServiceImpl implements ListingManagementService {
             throw new IllegalArgumentException("房源不存在: " + listingId);
         }
         return entity;
+    }
+
+    /**
+     * 当前操作人用户 ID：AuthzRequestScope 存在时用 actorId()；
+     * 否则按 currentReader() 经 identity 解析。
+     */
+    private long currentActorUserId() {
+        if (com.bkanent.common.authz.AuthzRequestScope.present()) {
+            return com.bkanent.common.authz.AuthzRequestScope.actorId();
+        }
+        var principal = currentReader();
+        if (principal.userId() == null || principal.userId() <= 0) {
+            throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
+        }
+        return principal.userId();
     }
 
     private com.bkanent.common.rag.AuthRagPrincipal currentReader() {

@@ -16,6 +16,10 @@ public class ListingEntity extends BaseEntity {
      */
     private Long brokerId;
     /**
+     * 业务属性：ownerCustomerId（Customer 域业主档案 ID，仅存量可空，非产权证明）。
+     */
+    private Long ownerCustomerId;
+    /**
      * 业务属性：title。
      */
     private String title;
@@ -23,6 +27,14 @@ public class ListingEntity extends BaseEntity {
      * 业务属性：address。
      */
     private String address;
+    /**
+     * 业务属性：communityName（小区名称，筛选用）。
+     */
+    private String communityName;
+    /**
+     * 业务属性：districtCode（行政区域编码，筛选用）。
+     */
+    private String districtCode;
     /**
      * 业务属性：layout。
      */
@@ -32,9 +44,13 @@ public class ListingEntity extends BaseEntity {
      */
     private BigDecimal area;
     /**
-     * 业务属性：totalPrice。
+     * 业务属性：totalPrice（兼容期万元字段，唯一写入口为统一领域命令）。
      */
     private BigDecimal totalPrice;
+    /**
+     * 业务属性：askingPriceYuan（内部挂牌价主值，CNY 元）。
+     */
+    private BigDecimal askingPriceYuan;
     /**
      * 业务属性：status。
      */
@@ -99,6 +115,10 @@ public class ListingEntity extends BaseEntity {
      * 业务属性：verificationRemark。
      */
     private String verificationRemark;
+    /**
+     * 业务属性：version（乐观并发版本，影响可见事实或状态的修改递增；手动条件更新，不使用 @Version）。
+     */
+    private Long version;
 
     public Long getBrokerId() {
         return brokerId;
@@ -106,6 +126,14 @@ public class ListingEntity extends BaseEntity {
 
     public void setBrokerId(Long brokerId) {
         this.brokerId = brokerId;
+    }
+
+    public Long getOwnerCustomerId() {
+        return ownerCustomerId;
+    }
+
+    public void setOwnerCustomerId(Long ownerCustomerId) {
+        this.ownerCustomerId = ownerCustomerId;
     }
 
     public String getTitle() {
@@ -122,6 +150,22 @@ public class ListingEntity extends BaseEntity {
 
     public void setAddress(String address) {
         this.address = address;
+    }
+
+    public String getCommunityName() {
+        return communityName;
+    }
+
+    public void setCommunityName(String communityName) {
+        this.communityName = communityName;
+    }
+
+    public String getDistrictCode() {
+        return districtCode;
+    }
+
+    public void setDistrictCode(String districtCode) {
+        this.districtCode = districtCode;
     }
 
     public String getLayout() {
@@ -146,6 +190,14 @@ public class ListingEntity extends BaseEntity {
 
     public void setTotalPrice(BigDecimal totalPrice) {
         this.totalPrice = totalPrice;
+    }
+
+    public BigDecimal getAskingPriceYuan() {
+        return askingPriceYuan;
+    }
+
+    public void setAskingPriceYuan(BigDecimal askingPriceYuan) {
+        this.askingPriceYuan = askingPriceYuan;
     }
 
     public String getStatus() {
@@ -274,5 +326,13 @@ public class ListingEntity extends BaseEntity {
 
     public void setVerificationRemark(String verificationRemark) {
         this.verificationRemark = verificationRemark;
+    }
+
+    public Long getVersion() {
+        return version;
+    }
+
+    public void setVersion(Long version) {
+        this.version = version;
     }
 }

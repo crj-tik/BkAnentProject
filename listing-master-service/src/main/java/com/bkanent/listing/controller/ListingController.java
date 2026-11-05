@@ -6,6 +6,7 @@ import com.bkanent.common.model.ListingDTO;
 import com.bkanent.listing.model.ListingAssetBindRequest;
 import com.bkanent.listing.model.ListingDetailResponse;
 import com.bkanent.listing.model.ListingOcrRecognizeRequest;
+import com.bkanent.listing.model.ListingOwnerConfirmRequest;
 import com.bkanent.listing.model.ListingQueryRequest;
 import com.bkanent.listing.model.ListingStatusUpdateRequest;
 import com.bkanent.listing.model.ListingUpsertRequest;
@@ -106,6 +107,17 @@ public class ListingController {
     public ApiResponse<ListingDetailResponse> verify(@PathVariable("id") Long id,
                                                      @RequestBody ListingVerifyRequest request) {
         return ApiResponse.ok(listingManagementService.verifyAuthenticity(id, request));
+    }
+
+    @PutMapping("/{id}/owner")
+    public ApiResponse<ListingDetailResponse> confirmOwner(@PathVariable("id") Long id,
+                                                           @RequestBody ListingOwnerConfirmRequest request) {
+        return ApiResponse.ok(listingManagementService.confirmOwner(id, request.ownerCustomerId()));
+    }
+
+    @DeleteMapping("/{id}/owner")
+    public ApiResponse<ListingDetailResponse> unbindOwner(@PathVariable("id") Long id) {
+        return ApiResponse.ok(listingManagementService.unbindOwner(id));
     }
 
     @GetMapping("/health")

@@ -83,4 +83,14 @@ public interface ListingManagementService {
      * 核验房源真实性。
      */
     ListingDetailResponse verifyAuthenticity(Long listingId, ListingVerifyRequest request);
+
+    /**
+     * 确认存量房源的业主档案关联（先验证业主档案当前授权与类型）。
+     */
+    ListingDetailResponse confirmOwner(Long listingId, Long ownerCustomerId);
+
+    /**
+     * 解除存量房源的业主档案关联（保留全部历史，不删除任何记录）。
+     */
+    ListingDetailResponse unbindOwner(Long listingId);
 }

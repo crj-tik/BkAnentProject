@@ -35,7 +35,11 @@ class ListingVersionedAuthorizationTest {
                 new com.bkanent.listing.converter.ListingConverter(),
                 org.mockito.Mockito.mock(com.bkanent.listing.service.ListingSearchService.class),
                 new com.bkanent.listing.search.ListingKnowledgeDocumentAssembler(),
-                org.mockito.Mockito.mock(ListingRagOutbox.class), identity);
+                org.mockito.Mockito.mock(ListingRagOutbox.class), identity,
+                org.mockito.Mockito.mock(com.bkanent.listing.mapper.ListingPriceRecordMapper.class),
+                org.mockito.Mockito.mock(com.bkanent.listing.mapper.ListingStatusRecordMapper.class),
+                org.mockito.Mockito.mock(com.bkanent.listing.service.ListingCommandReceiptService.class),
+                org.mockito.Mockito.mock(com.bkanent.listing.customer.CustomerProfileVerifyClient.class));
         try (var ignored = ListingAuthzScopeFixture.open(false, java.util.List.of("listing.read"),
                 java.util.List.of("listing.read"), java.util.Map.of("BROKER", 41L))) {
             assertThrows(AuthzException.class, () -> service.getListingDetail(8L));
@@ -49,7 +53,11 @@ class ListingVersionedAuthorizationTest {
                 new com.bkanent.listing.converter.ListingConverter(),
                 org.mockito.Mockito.mock(com.bkanent.listing.service.ListingSearchService.class),
                 new com.bkanent.listing.search.ListingKnowledgeDocumentAssembler(),
-                org.mockito.Mockito.mock(ListingRagOutbox.class), identity);
+                org.mockito.Mockito.mock(ListingRagOutbox.class), identity,
+                org.mockito.Mockito.mock(com.bkanent.listing.mapper.ListingPriceRecordMapper.class),
+                org.mockito.Mockito.mock(com.bkanent.listing.mapper.ListingStatusRecordMapper.class),
+                org.mockito.Mockito.mock(com.bkanent.listing.service.ListingCommandReceiptService.class),
+                org.mockito.Mockito.mock(com.bkanent.listing.customer.CustomerProfileVerifyClient.class));
         try (var ignored = ListingRagCredentialContext.open(new com.bkanent.common.rag.RagCredentialContext("legacy-token"))) {
             assertThrows(AuthzException.class, () -> service.getListingDetail(8L));
             assertThrows(AuthzException.class, () -> service.searchListings(null));
@@ -67,7 +75,11 @@ class ListingVersionedAuthorizationTest {
                 new com.bkanent.listing.converter.ListingConverter(),
                 org.mockito.Mockito.mock(com.bkanent.listing.service.ListingSearchService.class),
                 new com.bkanent.listing.search.ListingKnowledgeDocumentAssembler(),
-                org.mockito.Mockito.mock(ListingRagOutbox.class), identity);
+                org.mockito.Mockito.mock(ListingRagOutbox.class), identity,
+                org.mockito.Mockito.mock(com.bkanent.listing.mapper.ListingPriceRecordMapper.class),
+                org.mockito.Mockito.mock(com.bkanent.listing.mapper.ListingStatusRecordMapper.class),
+                org.mockito.Mockito.mock(com.bkanent.listing.service.ListingCommandReceiptService.class),
+                org.mockito.Mockito.mock(com.bkanent.listing.customer.CustomerProfileVerifyClient.class));
         try (var ignored = ListingAuthzScopeFixture.open(false, java.util.List.of("listing.read"),
                 java.util.List.of("listing.read"), java.util.Map.of("BROKER", 41L))) {
             assertEquals(8L, service.getListingDetail(8L).id());

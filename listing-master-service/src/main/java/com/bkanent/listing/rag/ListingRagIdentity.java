@@ -139,6 +139,17 @@ public class ListingRagIdentity {
                         Set.of(RagOperation.SEARCH, RagOperation.READ, RagOperation.SUBMIT), bytes(caller.getSecret())), Instant.now());
     }
 
+    /** Caller proof check against a precomputed canonical request hash (contracts outside RagCanonicalHash). */
+    private void verifyCallerWithHash(String requestHash, String requestId, RagOperation operation,
+                                      RagAuthEnvelope envelope, RagCredentialContext credentials) {
+        if (envelope == null) { throw new RagException(RagErrorCode.AUTHENTICATION_FAILED); }
+        ListingRagProperties.TrustedCaller caller = properties.getTrustedCallers().get(envelope.keyId());
+        if (caller == null) { throw new RagException(RagErrorCode.AUTHENTICATION_FAILED); }
+        RagRequestSigner.verify(envelope, requestHash, SERVICE, operation, requestId,
+                credentials, new RagSigningKey(envelope.keyId(), caller.getCallerService(), null,
+                        Set.of(RagOperation.SEARCH, RagOperation.READ, RagOperation.SUBMIT), bytes(caller.getSecret())), Instant.now());
+    }
+
     public com.bkanent.common.authz.AuthzRequestScope.Scope openAuthorizedReadScope(
             com.bkanent.common.rag.RagAuthorizedListingReadRequest request, RagAuthEnvelope envelope,
             com.bkanent.common.authz.AuthzResponse authorization,
@@ -273,6 +284,62 @@ public class ListingRagIdentity {
                 "listing.read", "listing.read.all");
     }
 
+    /** Verifies a Customer inquiry-verify caller bound to an Auth-signed execution context (listing.read range). */
+    public AuthRagPrincipal verifyAuthorizedInquiryVerifyContext(
+            com.bkanent.common.rag.RagContextAuthorizedListingInquiryVerifyRequest request,
+            RagAuthEnvelope envelope, java.util.Map<String, java.security.PublicKey> authorityKeys) {
+        try {
+            if (request == null || envelope == null || authorityKeys == null || authorityKeys.isEmpty()) {
+                throw new com.bkanent.common.authz.AuthzException(
+                        com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
+            }
+            verifyCallerWithHash(ListingVerifyContractHash.listingInquiryVerifyRequestHash(request),
+                    request.request().requestId(), RagOperation.READ, envelope, null);
+            ListingRagProperties.TrustedCaller caller = properties.getTrustedCallers().get(envelope.keyId());
+            var context = request.authorizationContext();
+            var freshness = request.freshness();
+            long now = Instant.now().getEpochSecond();
+            // 上下文受众双收：可信调用方服务名（customer-service 的网关入口绑定上下文）
+            // 或 agent-service（A2A 运行上下文），与 Customer 侧验签模式一致（LR-177）。
+            if (envelope.actorMode() != RagActorMode.USER
+                    || caller == null
+                    || !(caller.getCallerService().equals(context.audience())
+                        || A2A_PARENT_SERVICE.equals(context.audience()))
+                    || !context.actorId().equals(envelope.actorId())
+                    || !context.actorId().equals(freshness.userId())
+                    || context.permissionRevision() != freshness.permissionRevision()
+                    || context.credentialEpoch() != freshness.credentialEpoch()
+                    || !context.permissionHash().equals(freshness.permissionHash())
+                    || context.runId() == null || context.sessionId() == null
+                    || context.issuedAtEpochSecond() < freshness.checkedAtEpochSecond()
+                    || envelope.expiresAtEpochSecond() > context.expiresAtEpochSecond()
+                    || envelope.expiresAtEpochSecond() > context.runHardDeadlineEpochSecond()
+                    || envelope.expiresAtEpochSecond() > freshness.notAfterEpochSecond()) {
+                throw new com.bkanent.common.authz.AuthzException(
+                        com.bkanent.common.authz.AuthzErrorCode.CONTEXT_CONFLICT);
+            }
+            com.bkanent.common.authz.AuthzSignature.verifyContext(context, context.audience(), authorityKeys,
+                    Instant.ofEpochSecond(now));
+            com.bkanent.common.authz.AuthzSignature.verifyFreshness(freshness, authorityKeys,
+                    Instant.ofEpochSecond(now));
+            boolean businessWide = context.allowedOperations().contains("listing.read.all");
+            String operation = businessWide ? "listing.read.all" : "listing.read";
+            if (!context.allowedOperations().contains(operation)) {
+                throw new com.bkanent.common.authz.AuthzException(
+                        com.bkanent.common.authz.AuthzErrorCode.PERMISSION_DENIED);
+            }
+            long expires = Math.min(context.expiresAtEpochSecond(), Math.min(context.runHardDeadlineEpochSecond(),
+                    freshness.notAfterEpochSecond()));
+            return new AuthRagPrincipal(Long.parseLong(context.actorId()), "SIGNED", true, true, expires,
+                    AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION, context.permissionRevision(),
+                    context.credentialEpoch(), businessWide,
+                    businessWide ? java.util.List.of("BUSINESS_ADMIN") : java.util.List.of("USER"),
+                    context.allowedOperations(), null);
+        } catch (com.bkanent.common.authz.AuthzException failure) {
+            throw toRagException(failure);
+        }
+    }
+
     /** Validates an A2A/MCP signed execution context for a narrower Listing operation. */
     public AuthRagPrincipal verifyAuthorizedOperationContext(
             com.bkanent.common.rag.RagContextAuthorizedListingReadRequest request,
@@ -301,13 +368,24 @@ public class ListingRagIdentity {
             com.bkanent.common.authz.AuthzFreshness freshness,
             RagAuthEnvelope envelope, java.util.Map<String, java.security.PublicKey> authorityKeys,
             String ownOperation, String businessWideOperation) {
+        return verifyAuthorizedOperationContext(
+                signedRequest == null ? null : RagCanonicalHash.requestHash(signedRequest), requestId,
+                context, freshness, envelope, authorityKeys, ownOperation, businessWideOperation);
+    }
+
+    private AuthRagPrincipal verifyAuthorizedOperationContext(
+            String requestHash, String requestId,
+            com.bkanent.common.authz.AuthorizationContext context,
+            com.bkanent.common.authz.AuthzFreshness freshness,
+            RagAuthEnvelope envelope, java.util.Map<String, java.security.PublicKey> authorityKeys,
+            String ownOperation, String businessWideOperation) {
         try {
-            if (signedRequest == null || requestId == null || context == null || freshness == null
+            if (requestHash == null || requestId == null || context == null || freshness == null
                     || envelope == null || authorityKeys == null || authorityKeys.isEmpty()) {
                 throw new com.bkanent.common.authz.AuthzException(
                         com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
             }
-            verifyCaller(signedRequest, requestId, RagOperation.READ, envelope, null);
+            verifyCallerWithHash(requestHash, requestId, RagOperation.READ, envelope, null);
             long now = Instant.now().getEpochSecond();
             if (envelope.actorMode() != RagActorMode.USER
                     || !A2A_PARENT_SERVICE.equals(context.audience())

@@ -1566,3 +1566,12 @@
 **代码位置**：`customer-service/rpc/CustomerVerifyContractHash`、`CustomerRpcIdentity`、`CustomerProfileVerifyRpcServiceImpl`；`customer-service/service/ListingInquiryVerifyClient`、`CustomerInquiryCommandReceiptStore`、`impl/CustomerListingInquiryServiceImpl`；迁移 `20261105_customer_listing_inquiry.sql`、`20261105_customer_inquiry_authorization.sql`。
 
 **关联**：LR-175、LR-176；KI-249；change `implement-internal-listing-business` 决策 2/4/7、任务 4.2–4.4。
+## LR-178 房源登记业主验证失败关闭、幂等回执与手动版本条件写
+
+**结论**：新登记必须先经 `CustomerProfileVerifyRpcService` 受权验证业主档案（仅 VERIFIED 继续），验证顺序在幂等回执检查之前，同键重试也会重新验证当前授权；登记命令按 `(actor_user_id, operation, request_id)` 写 `listing_command_receipt` 回执，requestHash 为请求确定性 JSON 的 SHA-256，同键同内容重试按回执返回原房源、不同内容拒绝，并发插入主键冲突整体回滚后重放。所有影响可见事实的写入（调价、状态、业主关联）用手动版本条件写（`UPDATE ... SET version=version+1 WHERE id=? AND version=?`，影响 0 行即冲突回滚），不使用未确认拦截器配置的 MyBatis Plus `@Version`；价格/状态历史为追加型（无 update/delete），与主表更新、RAG outbox 同事务；`asking_price_yuan`（元）为唯一写入口，`total_price`（万元）仅作兼容投影同事务换算，除不尽时兼容期拒绝。listing 侧咨询验证提供方与卖方档案验证调用方的请求摘要使用 `ListingVerifyContractHash`，与 customer 侧 `CustomerVerifyContractHash` 编码逐字节一致，入站上下文受众双收（可信调用方服务名或 agent-service）。
+
+**根因**：跨服务校验与本地提交不构成分布式事务，校验后可能撤权，因此重试也重新验证且失败关闭不创建可用房源；回执唯一键串行化并发重试，业务插入与回执同事务保证异常回滚不留下成功回执；`@Version` 依赖 `OptimisticLockerInnerInterceptor` 而仓库未确认该配置，手动条件写不引入新配置面；MyBatis Plus 实体更新跳过 null 字段，解除业主关联（置 NULL）必须用 UpdateWrapper 显式 SET；common 的 `RagCanonicalHash` 未登记新契约类型（KI-249），两侧独立实现编码漂移会使跨服务验签必然失败，故 listing 侧以独立复刻编码加防漂移回归测试守住。
+
+**代码位置**：`listing-master-service/service/impl/ListingManagementServiceImpl`、`service/ListingCommandReceiptService`、`customer/CustomerProfileVerifyClient`、`rpc/ListingInquiryVerifyRpcServiceImpl`、`rag/ListingVerifyContractHash`、`rag/ListingRagIdentity.verifyAuthorizedInquiryVerifyContext`、`mapper/ListingPriceRecordMapper`、`mapper/ListingStatusRecordMapper`；迁移 `20261105_listing_internal_business.sql`。
+
+**关联**：LR-176、LR-177；KI-249；change `implement-internal-listing-business` 决策 1/3/4/7、任务 3.1–3.5。

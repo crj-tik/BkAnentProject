@@ -49,6 +49,9 @@ dubbo:
     protocol: dubbo
 
 listing:
+  customer-verify:
+    key-id: ${LISTING_CUSTOMER_VERIFY_KEY_ID:customer-verify-current}
+    signing-secret: ${LISTING_CUSTOMER_VERIFY_SIGNING_SECRET:}
   authorization:
     enabled: ${LISTING_AUTHORIZATION_ENABLED:false}
     audience: listing-master-service
@@ -86,6 +89,9 @@ listing:
       customer-read-current:
         caller-service: customer-service
         secret: ${CUSTOMER_LISTING_READ_SECRET:}
+      customer-inquiry-verify-current:
+        caller-service: customer-service
+        secret: ${CUSTOMER_LISTING_INQUIRY_VERIFY_SECRET:}
       marketing-read-current:
         caller-service: marketing-content-service
         secret: ${MARKETING_LISTING_READ_SECRET:}
