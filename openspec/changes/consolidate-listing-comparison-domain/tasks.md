@@ -1,5 +1,7 @@
 # Tasks
 
+> 2026-11-05 协调说明：用户确认所有房源均为内部数据、不接入外部房源系统。本变更剩余任务按内部真源方向执行：外部 HTTP provider 从正式配置退役（由 `implement-internal-listing-business` 任务 5.1 落实），fixture 仅限隔离测试/演示。归档顺序：`implement-internal-listing-business` 完成内部真源与消费者迁移后，本变更再按第 5 组功能矩阵验收归档；内部登记/维护/咨询的验收责任归 `implement-internal-listing-business`，比较域功能矩阵与旧比较能力退役归本变更。
+
 ## 0. 独立会话与契约基线
 
 - [x] 0.1 按并行总览确认本会话独立 worktree/分支与共同 base SHA、独立 .m2repo 和测试资源，记录路径/分支/基线并验证未导入其它三个实现分支。记录：worktree=`C:/Users/User/.codex/worktrees/consolidate-listing-comparison-domain/BkAnentProject`，branch=`codex/consolidate-listing-comparison-domain`，执行基线=`46d6828a797f0566144e0359793ba41af06ef331`，独立 `.m2repo/` 与 `.work/2026-10-27/01a17c2e-f800-7fb3-9906-0d0e49b07378/`；知识/营销现有分支历史共同祖先为 `6d13117169fb6eeb3c15165b43a08cc08b142889`，本会话采用其后 Auth/Memory/Listing 鉴权已接线且未包含另外领域实现提交的基线，分歧留给后续协调。
@@ -27,7 +29,7 @@
 - [x] 3.1 在 listing-agent 发布 `listing-comparison` 技能和工具，迁移 compare 技能调用方；将 `a2a:listing-agent` 精确映射到基线操作 `listing.read`，比较创建和报告读取分别核验签名上下文中的 `compare.report.create` 与 `compare.report.read.own`，不映射通用 `agent.chat.use`。基线动作不是角色权限，仍由 Listing 核验每套来源和资源边界。证据：Listing skill/tools、Nacos capability mapping、比较授权和 Agent 装配回归。
 - [x] 3.2 复用 `listing-master-service/listing/listing-agent` 的既有必需 Memory Hook 与 trusted-caller 登记，不新增 Listing 比较 Agent/身份；用装配测试验证读取、来源复核、成功归档，以及 Memory 不可用/未授权时模型、来源和报告工具均未执行。旧 Compare Memory 仅按原身份留作受控历史读取。证据：`ExplicitSkillAgentWiringTest` 与配置矩阵保留旧 Compare caller/domain/key；仅 Memory v2 可选上下文开关维持关闭。
 - [x] 3.3 更新 common 稳定来源比较契约、Supervisor 工具/技能配置、Listing ingress Auth 配置和旧 HTTP 兼容入口；Studio 保留工作区工件与回执，改用稳定来源版本和房源域确定性比较逻辑。用契约测试验证当前授权、预期版本和拒绝语义。证据：listing API 文档/控制器、Studio `ListingReader`、回执 schema/API 文档及签名授权回归。
-- [ ] 3.4 按配置矩阵同步本地 `.env`、`.env.example`、服务配置模板、Nacos 与 `docker-compose.yml`：新增 Listing 来源 provider/HTTP 配置、`listing.authorization` 开关和公钥注入、Agent capability mapping 与 Memory 可选上下文显式默认；删除或迁移不再使用的 Compare endpoint，新增旧 REST/RPC 默认关闭及可控回滚项。保留本地秘密、不提交 `.env`；Compare Auth/Memory 身份仅在排空门禁后移除。证据：跟踪模板/Nacos/Compose 已同步并由配置矩阵覆盖；当前集成 worktree 没有本地 `.env`，用户本地值无法在此次合并中同步；旧身份待排空后退役。
+- [ ] 3.4 按配置矩阵同步本地 `.env`、`.env.example`、服务配置模板、Nacos 与 `docker-compose.yml`：保留 `legacy-local` 来源配置并将正式 provider 固定为内部（外部 HTTP provider 退役，见 `implement-internal-listing-business` 任务 5.1）、`listing.authorization` 开关和公钥注入、Agent capability mapping 与 Memory 可选上下文显式默认；删除或迁移不再使用的 Compare endpoint，新增旧 REST/RPC 默认关闭及可控回滚项。保留本地秘密、不提交 `.env`；Compare Auth/Memory 身份仅在排空门禁后移除。证据：跟踪模板/Nacos/Compose 已同步并由配置矩阵覆盖；当前集成 worktree 没有本地 `.env`，用户本地值无法在此次合并中同步；旧身份待排空后退役。
 - [x] 3.5 编制 REST/MCP/A2A/RPC 入口、调用方/Card/Memory 身份、Auth 操作映射、配置项、Compose 服务/卷的迁移清单；用报告卷、legacy ID、A2A 任务关联及身份配置夹具验证文件、taskId、历史记忆和授权范围保留，真实运行清单由合并后门禁现场核对。证据：切换手册、报告卷/legacy mapper 测试、A2A client taskId correlation tests、`LegacyCompareIngressConfigurationTest` 和 Auth/Memory/Compose identity matrix；运行中任务只在原 Compare 身份下对账，不自动迁移或重发。
 - [x] 3.6 停止旧 compare 能力接收新委托并完成原身份对账；旧 `/compare/**` 仅保留当前授权的 legacy-local 兼容，匿名公开分享不再可读。仅在消费者和历史读取不再依赖时退役旧 Nacos、Compose、环境变量和 Auth/Memory 信任项；保留报告卷定义并迁挂到 Listing。代码默认关闭旧 A2A/MCP、旧 Compare REST/RPC 与 profile、移除 Agent endpoint、Gateway 路由改至 Listing；共享 Nacos 发布和线上排空仍交协调人在切换门禁执行。
 - [x] 3.7 同步 Auth 数据库中的比较操作目录归属：保留 `compare.report.create` / `compare.report.read.own` 稳定签名动作标识，将目录 domain/operation 迁至 `listing`；与基线退役一致，目录行保持停用且无角色关联。目录元数据变化时递增授权修订号并发布 outbox，不重新启用或授予权限。证据：`20261028_listing_comparison_authorization_domain.sql`、`listing-comparison-auth-domain.sql` 与 MySQL 初始化清单 460。
@@ -43,5 +45,5 @@
 
 - [ ] 5.1 建立房源与比较源功能矩阵，逐项记录房源 CRUD/搜索/摘要/状态/资产/OCR/核验/RAG，以及比较/历史/分享/PDF、HTTP/RPC/MCP/A2A/Supervisor 入口的目标能力、调用方和验收证据；存在未映射项时不得登记为合并完成。
 - [ ] 5.2 盘点所有已知比较 REST、RPC、MCP、A2A/技能和 Supervisor 调用方并迁移到房源域目标入口；以调用方清单、动态目录和调用记录验证没有遗漏或旧路径绕行。
-- [ ] 5.3 回归验证房源管理与 RAG 原有业务结果、比较历史、授权分享和 PDF 导出；覆盖本地维护与上游事实边界、接收人撤权和裸分享码拒绝。
-- [ ] 5.4 在矩阵全部有目标入口、调用迁移记录及可重复证据后，才启用停止旧接收和 compare 部署退役；真实上游写入/联机未提供时单独标为未验证，不以模拟结果替代。
+- [ ] 5.3 回归验证房源管理与 RAG 原有业务结果、比较历史、授权分享和 PDF 导出；覆盖内部真源维护语义（见 `implement-internal-listing-business`）、接收人撤权和裸分享码拒绝。
+- [ ] 5.4 在矩阵全部有目标入口、调用迁移记录及可重复证据后，才启用停止旧接收和 compare 部署退役；外部房源上游接入已取消，内部消费者联调未完成时单独标为未验证，不以模拟结果替代。

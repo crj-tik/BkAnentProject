@@ -4,7 +4,7 @@
 
 动机见 proposal.md。当前 `CompareAnalysisServiceImpl` 先要求 `compare.report.create`，再经 `CompareListingReadClient` 使用签名授权逐套读取 `ListingDTO`；`ListingMasterRpcService.getListingById` 这类旧无凭据读取入口会拒绝请求。KI-115 已修复：报告缓存按 owner 和快照指纹隔离，单位换算由 `ListingComparisonFacts` 处理。尚未覆盖的是稳定来源引用/版本，以及历史详情、分享和 PDF 返回前的当前来源复核。
 
-比较服务目前包含 REST `/compare/**`、MCP `compare-mcp-server`、A2A `compare-agent` 和 Long ID-only 的 `CompareEngineRpcService`。报告缓存将 JSON 元数据与 PDF 文件写入 `compare-report-data` 命名卷；报告可由 owner 显式发布为匿名可读分享。`listing-master-service` 则以本地 `listing_info` 为主要数据模型，负责 CRUD 和 RAG outbox/index，尚无上游接口来源适配器。Studio 是另一条工作区命令链：它经签名 RPC 读取当前房源、核对候选版本并写入自己的 `listing.comparison` 工件和回执，不调用 Compare 报告服务。
+比较服务目前包含 REST `/compare/**`、MCP `compare-mcp-server`、A2A `compare-agent` 和 Long ID-only 的 `CompareEngineRpcService`。报告缓存将 JSON 元数据与 PDF 文件写入 `compare-report-data` 命名卷；报告可由 owner 显式发布为匿名可读分享。`listing-master-service` 则以本地 `listing_info` 为事实模型，负责 CRUD 和 RAG outbox/index（2026-11-05 确认所有房源均为内部数据，不接入外部房源系统；来源端口仅服务内部身份与版本契约）。Studio 是另一条工作区命令链：它经签名 RPC 读取当前房源、核对候选版本并写入自己的 `listing.comparison` 工件和回执，不调用 Compare 报告服务。
 
 用户确认：业务数据目前模拟，房源以接口接入。现有本地记录不因此自动成为上游 REAL 数据；本 change 需要增加来源端口，并为存量记录提供明确的 `legacy-local` 来源身份。现有测试包括 `ListingBusinessAuthorizationTest`、Compare 缓存/分析测试、Studio 授权读取和两域技能装配测试；合并时需迁移对应行为验证。
 
@@ -20,15 +20,15 @@
 
 将现有比较计算、报告缓存、PDF、响应模型和必要入口迁入房源模块的 `comparison` 包，保留 `listing-agent`，新增 `listing-comparison` 技能。Compare 的签名读取与 owner 隔离是已修复行为，迁移时应保留；新域再加入稳定来源版本和报告读取时的当前来源复核。相比继续保留两个对外 Agent，此方式减少同一组事实在两个身份间来回读取；相比同时重命名为新服务，保留模块名可缩小部署与身份变更范围。报告有自己的持久生命周期，但其事实来源仍归房源域。
 
-### 2. 接口事实与本地维护记录分别持久化
+### 2. 内部房源事实与来源身份（2026-11-05 调整）
 
-定义 `ListingSourcePort`，提供有界搜索、批量详情和当前版本核验。首期提供显式 `legacy-local`、`fixture` 与 `http` 适配器；`legacy-local` 只读现有 `listing_info`，为旧 Long ID 建立稳定来源引用，不替代现有管理写入和 RAG 索引。HTTP 地址/凭据来自受管配置，端点未配置或不可用时返回不可用，不回退到 fixture 或 `legacy-local`。fixture 使用相同契约并标记 `SIMULATED`，测试可通过本地受控 HTTP 夹具覆盖映射。
+按用户确认，所有房源均为本系统内部登记和维护的数据，不接入外部房源系统。`ListingSourcePort` 保留有界搜索、批量详情和当前版本核验能力，正式业务仅使用 `legacy-local` 适配器读取内部 `listing_info`，为 Long ID 建立稳定来源引用；外部 HTTP 适配器从正式配置退役，`fixture` 仅限显式隔离的测试/演示环境并标记 `SIMULATED`，不作为任何故障回退路径。
 
-输入固定包含 `sourceSystem/sourceId/sourceRevision/observedAt/dataMode`、事实字段及金额单位；无上游 revision 时用规范化投影 hash，不能用抓取时间冒充版本。`legacy-local` 无来源性质证明时标记 `UNKNOWN`；只有服务端配置能确认模拟数据时才标记 `SIMULATED`。新增稳定来源映射，外部字符串 ID 不截断或哈希成可能碰撞的旧 ID。DTO 兼容层显式映射身份。
+输入固定包含 `sourceSystem/sourceId/sourceRevision/observedAt/dataMode`、事实字段及金额单位；无外部 revision 时用规范化投影 hash，不能用抓取时间冒充版本。`legacy-local` 存量数据无来源性质证明时标记 `UNKNOWN`；只有服务端配置能确认模拟数据时才标记 `SIMULATED`。新增稳定来源映射，外部字符串 ID 不截断或哈希成可能碰撞的旧 ID。DTO 兼容层显式映射身份。
 
-来源模式由服务端适配器确认：已确认真实为 REAL、模拟为 SIMULATED、性质不明为 UNKNOWN；派生材料只有全部来源均为 REAL 才为 REAL，含未知来源为 UNKNOWN，已知真实/模拟混合为 MIXED。数据模式与指标是否可计算是不同字段，不以 UNKNOWN 来源替代具体指标缺口说明。
+来源模式由服务端确认：已确认真实为 REAL、模拟为 SIMULATED、性质不明为 UNKNOWN；派生材料只有全部来源均为 REAL 才为 REAL，含未知来源为 UNKNOWN，已知真实/模拟混合为 MIXED。数据模式与指标是否可计算是不同字段，不以 UNKNOWN 来源替代具体指标缺口说明。
 
-上游价格、可售状态等为外部事实，本地只维护资料补充、维护事项和受权投影。没有上游写接口时，完成本地待办只代表操作人提交了处理记录，不能宣称上游已调价或已核验。既有 SQL 管理 API 和 RAG 索引职责继续保留；`legacy-local` 是显式选择的迁移来源，不是 HTTP 故障时的回退路径。
+房源价格、挂牌状态等业务事实以本系统内部记录为准；本地维护操作直接修改内部真源并按 `implement-internal-listing-business` 的历史记录要求落库，不再区分“上游事实”与“本地处理记录”。既有 SQL 管理 API 和 RAG 索引职责继续保留。
 
 ### 3. 比较只使用同次授权和量纲一致的快照
 
@@ -92,7 +92,7 @@ Compare 专属的 MCP endpoint、Compose 服务项、A2A Card/MCP 服务项、�
 以下是合并后由协调会话执行的共享环境计划。本会话实现相应兼容、围栏和回退能力，并在私有夹具/隔离库验证，不等待其它 change、不操作现有开发栈。
 
 1. 固化 `/compare/**`、Compare MCP/A2A/RPC、Supervisor 与 Studio 调用方、Compose/Nacos 发布项、`.env`/`.env.example`/配置模板、`compare-report-data` 卷以及历史 Auth/Memory 身份。形成逐键配置矩阵，标明新增、迁移、保留、废除、生效门槛及回滚值；不读取或提交本地密钥。
-2. 在 listing 中实现 `legacy-local`、fixture 和 HTTP 来源适配，以及稳定引用/版本契约；先用 fixture 和现有本地数据映射验证授权、版本、金额，再按受管配置接上游 HTTP。来源 provider、endpoint 和凭据属性统一命名，并同步到 Nacos、Compose、`.env.example` 与本地 `.env`。
+2. 在 listing 中保留 `legacy-local` 内部来源适配和稳定引用/版本契约；外部 HTTP 适配器按 2026-11-05 内部数据决定从正式配置退役，fixture 仅限显式隔离的测试/演示环境。先用 fixture 和现有本地数据映射验证授权、版本、金额。来源 provider 属性命名保留并同步到 Nacos、Compose、`.env.example` 与本地 `.env`，正式环境固定 `legacy-local`。
 3. 迁入比较计算、报告缓存和 PDF；切换时将 `compare-report-data` 卷受控挂载给 listing，核验 JSON/PDF 与 owner/source hash 元数据，确保旧 Compare 停写后 listing 成为唯一写入方。
 4. 发布 `listing-agent` 的 `listing-comparison` 技能并更新 Supervisor；配置精确 `a2a:listing-agent` 权限映射及 Listing ingress Auth 验签所需设置。Studio 保留工作区工件/回执语义，改用稳定来源版本。复用 Listing 既有 Memory Hook 和身份；旧 `/compare/**` 仅保留当前授权的 `legacy-local` 兼容，按旧身份排空或登记未知任务。
 5. 在 `.env.example`、本地 `.env`、服务模板、Nacos 与 Compose 同步新增/废除项；核对 Compare MCP endpoint、Compose 服务块、报告路径和 Compare Memory 参数。将 `MEMORY_V2_AUTHORIZATION_CONTEXT_ENABLED` 默认统一为 `false` 并显式透传；Auth、Agent、Listing 和 Memory 上下文模式只有对应密钥/Redis/签名验证门禁通过后才开启。保留旧 Compare Auth/Memory 信任直到在途任务和历史读取排空。
@@ -100,4 +100,4 @@ Compare 专属的 MCP endpoint、Compose 服务项、A2A Card/MCP 服务项、�
 
 ## Open Questions
 
-真实房源接口的受管地址、凭据、字段映射和速率额度由部署接入提供。规范契约、模拟验收和上述任务拆分不依赖这些具体值；其补齐仅决定真实 HTTP 适配的联机验收时点。
+外部房源接口接入已按 2026-11-05 内部数据决定取消；本变更不再等待真实上游地址、凭据或字段映射。规范契约、模拟验收和上述任务拆分不依赖外部接入；内部真源迁移与消费者联调由 `implement-internal-listing-business` 负责。

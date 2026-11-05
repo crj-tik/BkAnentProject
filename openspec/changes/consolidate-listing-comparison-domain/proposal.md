@@ -1,15 +1,17 @@
 # 房源与对比合并为房源经营域
 
 > 2026-10-29：用户确认本项目未正式上线，没有需要保留的历史资产；旧服务不再作为默认构建和部署对象。下述历史保留及回退前提不再作为本环境退役的必要条件，功能覆盖与调用迁移仍须核验。
+>
+> 2026-11-05：用户确认所有房源均为本系统内部登记和维护的数据，不接入外部房源系统。下述外部上游来源、HTTP 适配与“上游事实/本地记录分离”假设由 `implement-internal-listing-business` 变更取代：正式业务仅使用 `legacy-local` 内部房源身份，外部 HTTP provider 退役，fixture 仅限显式隔离的测试/演示环境。比较、报告、授权、版本复核与 RAG 要求继续有效。归档顺序：`implement-internal-listing-business` 完成内部真源与消费者迁移后，本变更再按功能矩阵验收归档；两变更的验收责任划分见各自 tasks。
 
 ## Why
 
-`compare-engine-service` 已通过签名授权读取房源，并按 owner 和快照指纹隔离报告缓存（KI-115 已修复）；但比较、报告生命周期和房源来源仍分属不同服务。当前 `listing-master-service` 的主要事实模型仍是本地 `listing_info`，尚无统一的上游接口来源契约。将比较纳入房源域并引入稳定来源引用、版本核验和接口适配，可让检索、比较及历史报告共享同一授权事实边界。
+`compare-engine-service` 已通过签名授权读取房源，并按 owner 和快照指纹隔离报告缓存（KI-115 已修复）；但比较、报告生命周期和房源来源仍分属不同服务。当前 `listing-master-service` 的事实模型是本地 `listing_info`（2026-11-05 确认为唯一内部真源，不接入外部房源系统）。将比较纳入房源域并引入稳定来源引用、版本核验和接口适配，可让检索、比较及历史报告共享同一授权事实边界。
 
 ## What Changes
 
 - 将现有比较计算、报告缓存及 PDF 能力迁入 `listing-master-service` 的 `comparison` 包，通过 `listing-agent` 的 `listing-comparison` 技能提供；Studio 保留其工作区比较工件、版本校验和回执语义。
-- 为房源事实建立统一来源端口，明确支持 `legacy-local`、`fixture` 和 `http` 适配器。现有本地房源映射到 `legacy-local`；模拟和真实接口适配都返回稳定来源、版本、观察时间、金额单位和服务端确认的 `dataMode`。
+- 为房源事实建立统一来源端口。按 2026-11-05 内部数据决定，正式业务仅使用 `legacy-local` 内部房源身份；外部 HTTP 适配器从正式配置退役，`fixture` 仅限显式隔离的测试/演示环境并保持 `SIMULATED` 标记。来源引用、版本、观察时间、金额单位和服务端确认的 `dataMode` 契约继续有效。
 - **BREAKING**：不再为新请求发布 `compare-agent` 或独立比较 MCP/RPC 能力；迁移 Supervisor 等调用方。旧 `/compare/**` HTTP 路径可暂留为要求当前授权的兼容入口，旧 Long ID 仅映射到 `legacy-local`，不作为跨来源标识。
 - 比较缓存、历史报告、分享和 PDF 输出都要核验当前用户、逐项来源读取权及当前来源版本。分享码仅定位报告，不授予读取权；既有匿名公开分享按退役/私有化迁移。
 - 比较报告沿用现有 JSON 元数据和 PDF 文件；迁移时保留 `compare-report-data` 卷及历史文件，切换为单一写入方。
