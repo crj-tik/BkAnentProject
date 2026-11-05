@@ -1,0 +1,1 @@
+SELECT (SELECT COUNT(*) FROM bk_auth.auth_permission WHERE permission_code IN ('customer.inquiry.read.own','customer.inquiry.read.all','customer.inquiry.write.own','customer.inquiry.write.all') AND domain='customer' AND active=1)=4 AND (SELECT COUNT(*) FROM bk_auth.auth_authorization_migration WHERE migration_id='20261105_customer_inquiry_authorization')=1;
