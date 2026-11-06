@@ -1,2 +1,3 @@
 com.bkanent.common.readiness.ReadinessAutoConfiguration
 com.bkanent.common.mcp.authz.McpAuthorizationAutoConfiguration
+com.bkanent.common.model.MybatisPlusFillAutoConfiguration
