@@ -2,13 +2,13 @@
 
 ## 1. 现状核对与契约固化
 
-- [ ] 1.1 核对对比报告存储与读取路径（报告 store 的 sources 结构、响应模型、过时/权限复验入口）、listing-agent 技能装配点、Supervisor 技能注册方式与前端契约文档位置；确认卡片投影的挂接点与存量报告兼容性前提。
-- [ ] 1.2 固化卡片数据结构契约（cards/metrics/highlights/单位/unknownFields 字段定义）与两种传输方式（内嵌结构块 / reportId 句柄）的边界，作为实现与前端契约文档的共同基准。
+- [x] 1.1 核对对比报告存储与读取路径（报告 store 的 sources 结构、响应模型、过时/权限复验入口）、listing-agent 技能装配点、Supervisor 技能注册方式与前端契约文档位置；确认卡片投影的挂接点与存量报告兼容性前提。（证据：挂接点=服务边界 create/getOwned 返回，store 与存储格式零改动；响应模型经 11 参兼容构造保持既有调用方编译不变）
+- [x] 1.2 固化卡片数据结构契约（cards/metrics/highlights/单位/unknownFields 字段定义）与两种传输方式（内嵌结构块 / reportId 句柄）的边界，作为实现与前端契约文档的共同基准。（证据：卡片/指标归属模型 `ListingComparisonCard`/`ListingComparisonMetricWinner`，字段与 specs 契约一致）
 
 ## 2. 卡片投影（listing 域，零新对比逻辑）
 
-- [ ] 2.1 实现报告读取响应的卡片投影：读取时从已存储 sources 与规则结果计算 cards（每套一张：listingRef/revision/contentHash/标题/显式单位事实/unknownFields）、跨卡 metrics、每卡 highlights（由确定性指标反查）；不引入独立计算、不修改 rows/metrics 语义。
-- [ ] 2.2 测试：多套报告卡片完整性、卡片与 rows 同源逐字段一致、未知字段不补值、单价缺省（缺面积/价格为空且不参与单价指标）、徽标仅来自确定性指标、存量旧报告读取自动获得卡片、过时判定与权限复验行为不变。
+- [x] 2.1 实现报告读取响应的卡片投影：读取时从已存储 sources 与规则结果计算 cards（每套一张：listingRef/revision/contentHash/标题/显式单位事实/unknownFields）、跨卡 metrics、每卡 highlights（由确定性指标反查）；不引入独立计算、不修改 rows/metrics 语义。（证据：`ListingComparisonCardProjection.fill`——从 sources 确定性投影，单价复用 `ListingComparisonFacts.unitPriceYuan`，徽标/指标归属由 min/max 反查；服务边界 create/getOwned 接入）
+- [x] 2.2 测试：多套报告卡片完整性、卡片与 rows 同源逐字段一致、未知字段不补值、单价缺省（缺面积/价格为空且不参与单价指标）、徽标仅来自确定性指标、存量旧报告读取自动获得卡片、过时判定与权限复验行为不变。（证据：`ListingComparisonCardProjectionTest` 4 项——投影与指标归属、卡片与 rows 同源一致（含未知↔"未知"、单价缺省 null）、create/getOwned 返回卡片、存量旧文件（JSON 移除卡片字段）读取自动投影；listing 153/153 通过）
 
 ## 3. 咨询-报告关联（customer 域）
 

@@ -67,7 +67,7 @@ public class ListingComparisonService {
         String cacheKey = ListingComparisonFingerprint.cacheKey(snapshots, RULES_VERSION, request.includeConclusion());
         ListingComparisonReportResponse candidate = buildReport(UUID.randomUUID().toString().replace("-", ""),
                 snapshots, request.includeConclusion());
-        return store.createIfAbsent(actor, cacheKey, sourceHash, candidate);
+        return ListingComparisonCardProjection.fill(store.createIfAbsent(actor, cacheKey, sourceHash, candidate));
     }
 
     /** Authorized compatibility path; each old numeric ID is explicitly scoped to legacy-local. */
@@ -88,7 +88,7 @@ public class ListingComparisonService {
         ListingComparisonReportResponse report = store.findOwned(reportId, actor);
         verifyCurrent(report.sources());
         requireSameReader(actor);
-        return report;
+        return ListingComparisonCardProjection.fill(report);
     }
 
     public Resource loadPdf(String reportId) {
