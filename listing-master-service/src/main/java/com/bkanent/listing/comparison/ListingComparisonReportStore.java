@@ -79,6 +79,21 @@ public class ListingComparisonReportStore {
         return stored.report();
     }
 
+    /**
+     * 跨服务关联核验用的归属探测：报告缺失、格式非法或非本人所有时返回 null，不抛出也不区分原因，
+     * 与 findOwned 的语义差异是刻意为之（attach 核验只关心“当前经纪人是否可读”，不泄露报告存在性）。
+     */
+    public ListingComparisonReportResponse findOwnedOrNull(String reportId, String actorId) {
+        if (reportId == null || !validReportId(reportId) || actorId == null || !validActor(actorId)) {
+            return null;
+        }
+        ListingComparisonStoredReport stored = byReportId.get(reportId);
+        if (stored == null || !validStored(stored) || !stored.ownerActorId().equals(actorId)) {
+            return null;
+        }
+        return stored.report();
+    }
+
     public synchronized Resource loadPdf(String reportId, String actorId) {
         ListingComparisonReportResponse report = findOwned(reportId, actorId);
         Path pdf = safeResolve(reportId + ".pdf");

@@ -1,6 +1,8 @@
 package com.bkanent.customer.controller;
 
 import com.bkanent.common.model.ApiResponse;
+import com.bkanent.customer.model.CustomerInquiryComparisonAttachRequest;
+import com.bkanent.customer.model.CustomerInquiryComparisonView;
 import com.bkanent.customer.model.CustomerInquiryCreateRequest;
 import com.bkanent.customer.model.CustomerInquiryResponse;
 import com.bkanent.customer.model.CustomerInquiryStatusUpdateRequest;
@@ -16,8 +18,8 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * 买方房源咨询端点：显式登记、列表与业务状态变更。
- * 咨询与收藏分离；查询不创建咨询记录。
+ * 买方房源咨询端点：显式登记、列表、业务状态变更与对比报告关联。
+ * 咨询与收藏分离；查询不创建咨询记录；关联只存 reportId 引用，不转存报告内容。
  */
 @RestController
 @RequestMapping("/customers")
@@ -44,5 +46,14 @@ public class CustomerInquiryController {
     public ApiResponse<CustomerInquiryResponse> updateInquiryStatus(
             @PathVariable Long inquiryId, @RequestBody CustomerInquiryStatusUpdateRequest request) {
         return ApiResponse.ok(inquiryService.updateInquiryStatus(inquiryId, request.status()));
+    }
+
+    @PostMapping("/inquiries/{inquiryId}/comparison-reports")
+    public ApiResponse<CustomerInquiryComparisonView> attachComparisonReport(
+            @PathVariable Long inquiryId, @RequestBody CustomerInquiryComparisonAttachRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("请求不能为空");
+        }
+        return ApiResponse.ok(inquiryService.attachComparisonReport(inquiryId, request.reportId()));
     }
 }

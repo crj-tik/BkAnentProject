@@ -352,6 +352,61 @@ public class ListingRagIdentity {
                 ownOperation, businessWideOperation);
     }
 
+    /** Verifies a Customer comparison-report-verify caller bound to an Auth-signed execution context (compare.report.read.own). */
+    public AuthRagPrincipal verifyAuthorizedComparisonReportVerifyContext(
+            com.bkanent.common.rag.RagContextAuthorizedComparisonReportVerifyRequest request,
+            RagAuthEnvelope envelope, java.util.Map<String, java.security.PublicKey> authorityKeys) {
+        try {
+            if (request == null || envelope == null || authorityKeys == null || authorityKeys.isEmpty()) {
+                throw new com.bkanent.common.authz.AuthzException(
+                        com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
+            }
+            verifyCallerWithHash(ListingVerifyContractHash.comparisonReportVerifyRequestHash(request),
+                    request.request().requestId(), RagOperation.READ, envelope, null);
+            ListingRagProperties.TrustedCaller caller = properties.getTrustedCallers().get(envelope.keyId());
+            var context = request.authorizationContext();
+            var freshness = request.freshness();
+            long now = Instant.now().getEpochSecond();
+            // 上下文受众双收：可信调用方服务名（customer-service 的网关入口绑定上下文）
+            // 或 agent-service（A2A 运行上下文），与 Customer 侧验签模式一致（LR-177）。
+            if (envelope.actorMode() != RagActorMode.USER
+                    || caller == null
+                    || !(caller.getCallerService().equals(context.audience())
+                        || A2A_PARENT_SERVICE.equals(context.audience()))
+                    || !context.actorId().equals(envelope.actorId())
+                    || !context.actorId().equals(freshness.userId())
+                    || context.permissionRevision() != freshness.permissionRevision()
+                    || context.credentialEpoch() != freshness.credentialEpoch()
+                    || !context.permissionHash().equals(freshness.permissionHash())
+                    || context.runId() == null || context.sessionId() == null
+                    || context.issuedAtEpochSecond() < freshness.checkedAtEpochSecond()
+                    || envelope.expiresAtEpochSecond() > context.expiresAtEpochSecond()
+                    || envelope.expiresAtEpochSecond() > context.runHardDeadlineEpochSecond()
+                    || envelope.expiresAtEpochSecond() > freshness.notAfterEpochSecond()) {
+                throw new com.bkanent.common.authz.AuthzException(
+                        com.bkanent.common.authz.AuthzErrorCode.CONTEXT_CONFLICT);
+            }
+            com.bkanent.common.authz.AuthzSignature.verifyContext(context, context.audience(), authorityKeys,
+                    Instant.ofEpochSecond(now));
+            com.bkanent.common.authz.AuthzSignature.verifyFreshness(freshness, authorityKeys,
+                    Instant.ofEpochSecond(now));
+            // 对比报告读取只有 own 一档（own=all=该操作），不存在业务宽域变体（LR 参见对比域迁移 460）。
+            if (!context.allowedOperations().contains("compare.report.read.own")) {
+                throw new com.bkanent.common.authz.AuthzException(
+                        com.bkanent.common.authz.AuthzErrorCode.PERMISSION_DENIED);
+            }
+            long expires = Math.min(context.expiresAtEpochSecond(), Math.min(context.runHardDeadlineEpochSecond(),
+                    freshness.notAfterEpochSecond()));
+            return new AuthRagPrincipal(Long.parseLong(context.actorId()), "SIGNED", true, true, expires,
+                    AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION, context.permissionRevision(),
+                    context.credentialEpoch(), false,
+                    java.util.List.of("USER"),
+                    context.allowedOperations(), null);
+        } catch (com.bkanent.common.authz.AuthzException failure) {
+            throw toRagException(failure);
+        }
+    }
+
     public AuthRagPrincipal verifyAuthorizedAssetWriteContext(
             com.bkanent.common.rag.RagContextAuthorizedListingAssetWriteRequest request,
             RagAuthEnvelope envelope, java.util.Map<String, java.security.PublicKey> authorityKeys) {

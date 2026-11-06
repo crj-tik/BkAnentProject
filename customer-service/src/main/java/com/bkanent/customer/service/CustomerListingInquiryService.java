@@ -1,5 +1,6 @@
 package com.bkanent.customer.service;
 
+import com.bkanent.customer.model.CustomerInquiryComparisonView;
 import com.bkanent.customer.model.CustomerInquiryCreateRequest;
 import com.bkanent.customer.model.CustomerInquiryResponse;
 
@@ -19,7 +20,7 @@ public interface CustomerListingInquiryService {
 
     /**
      * 业务方法：listInquiries。
-     * 返回当前授权范围内客户的咨询列表（含 NEEDS_RECHECK 过渡状态）。
+     * 返回当前授权范围内客户的咨询列表（含 NEEDS_RECHECK 过渡状态），带出关联对比报告清单。
      */
     List<CustomerInquiryResponse> listInquiries(Long customerId);
 
@@ -28,6 +29,14 @@ public interface CustomerListingInquiryService {
      * 状态机：OPEN→FOLLOWING/CLOSED、FOLLOWING→CLOSED，CLOSED 终态，非法跳转拒绝。
      */
     CustomerInquiryResponse updateInquiryStatus(Long inquiryId, String status);
+
+    /**
+     * 业务方法：attachComparisonReport。
+     * 将对比报告关联到咨询：校验咨询归属（customer.inquiry.write.own/.all）与
+     * 报告归属（经签名上下文向房源域核验 owner=当前经纪人）；任一失败拒绝且不落库。
+     * 同 (咨询, 报告) 重复关联幂等；一次咨询可关联多份报告，互不覆盖。
+     */
+    CustomerInquiryComparisonView attachComparisonReport(Long inquiryId, String reportId);
 
     /**
      * 业务方法：recheckAfterCreate。

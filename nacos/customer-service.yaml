@@ -59,6 +59,9 @@ customer:
   listing-inquiry-verify:
     key-id: customer-inquiry-verify-current
     signing-secret: ${CUSTOMER_LISTING_INQUIRY_VERIFY_SECRET:}
+  comparison-report-verify:
+    key-id: customer-comparison-verify-current
+    signing-secret: ${CUSTOMER_COMPARISON_VERIFY_SECRET:}
   reminder:
     enabled: true
     entrust-expire-days: 7

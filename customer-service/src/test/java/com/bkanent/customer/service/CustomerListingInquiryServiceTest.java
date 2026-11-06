@@ -3,9 +3,12 @@ package com.bkanent.customer.service;
 import com.bkanent.common.authz.AuthzException;
 import com.bkanent.common.rag.RagErrorCode;
 import com.bkanent.common.rag.RagException;
+import com.bkanent.common.rpc.ListingComparisonReportVerifyResponse;
 import com.bkanent.common.rpc.ListingInquiryVerifyResponse;
 import com.bkanent.customer.entity.CustomerEntity;
+import com.bkanent.customer.entity.CustomerInquiryComparisonEntity;
 import com.bkanent.customer.entity.CustomerListingInquiryEntity;
+import com.bkanent.customer.model.CustomerInquiryComparisonView;
 import com.bkanent.customer.model.CustomerInquiryCreateRequest;
 import com.bkanent.customer.model.CustomerInquiryResponse;
 import com.bkanent.customer.service.impl.CustomerListingInquiryServiceImpl;
@@ -25,7 +28,8 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
- * 买方房源咨询管理服务测试：创建/幂等/失败关闭/提交后复查/补偿复查/状态机/列表。
+ * 买方房源咨询管理服务测试：创建/幂等/失败关闭/提交后复查/补偿复查/状态机/列表
+ * 与咨询-对比报告关联（attach 核验/幂等/多报告排序/清单带出）。
  */
 class CustomerListingInquiryServiceTest {
 
@@ -33,15 +37,22 @@ class CustomerListingInquiryServiceTest {
     private static final long LISTING_ID = 77L;
     private static final long BROKER_ID = 41L;
     private static final long ACTOR_ID = 123L;
+    private static final String REPORT_ID = "ab".repeat(16);
+    private static final String OTHER_REPORT_ID = "cd".repeat(16);
     private static final byte[] REQUEST_HASH = new byte[32];
 
     private final CustomerDomainService customers = mock(CustomerDomainService.class);
     private final CustomerListingInquiryDomainService inquiries = mock(CustomerListingInquiryDomainService.class);
     private final CustomerInquiryCommandReceiptStore receipts = mock(CustomerInquiryCommandReceiptStore.class);
     private final ListingInquiryVerifyClient verifyClient = mock(ListingInquiryVerifyClient.class);
+    private final CustomerInquiryComparisonDomainService comparisons =
+            mock(CustomerInquiryComparisonDomainService.class);
+    private final ListingComparisonReportVerifyClient comparisonVerifyClient =
+            mock(ListingComparisonReportVerifyClient.class);
 
     private CustomerListingInquiryServiceImpl service() {
-        return new CustomerListingInquiryServiceImpl(customers, inquiries, receipts, verifyClient);
+        return new CustomerListingInquiryServiceImpl(customers, inquiries, receipts, verifyClient,
+                comparisons, comparisonVerifyClient);
     }
 
     private CustomerEntity customer() {
@@ -382,6 +393,148 @@ class CustomerListingInquiryServiceTest {
                     () -> service().createInquiry(CUSTOMER_ID, request()));
         }
         verify(inquiries, never()).save(any());
+    }
+
+    @Test
+    void attachComparisonReportPersistsVerifiedReport() {
+        customer();
+        when(inquiries.getById(2L)).thenReturn(inquiry(2L, CUSTOMER_ID));
+        when(comparisonVerifyClient.verify(REPORT_ID)).thenReturn(accessibleReport(REPORT_ID));
+        when(comparisons.find(2L, REPORT_ID)).thenReturn(Optional.empty());
+        when(comparisons.insert(2L, REPORT_ID, ACTOR_ID)).thenReturn(
+                association(1L, 2L, REPORT_ID, LocalDateTime.now()));
+
+        try (var ignored = CustomerAuthzScopeFixture.open(false,
+                List.of("customer.inquiry.write.own"), Map.of("BROKER", BROKER_ID))) {
+            CustomerInquiryComparisonView view = service().attachComparisonReport(2L, REPORT_ID);
+            assertEquals(REPORT_ID, view.reportId());
+            assertNotNull(view.createdAt());
+        }
+        verify(comparisons).insert(2L, REPORT_ID, ACTOR_ID);
+    }
+
+    @Test
+    void notAccessibleOrFailingReportRejectsAttachWithoutPersisting() {
+        customer();
+        when(inquiries.getById(2L)).thenReturn(inquiry(2L, CUSTOMER_ID));
+        when(comparisonVerifyClient.verify(REPORT_ID)).thenReturn(
+                new ListingComparisonReportVerifyResponse("verify-report",
+                        ListingComparisonReportVerifyResponse.NOT_ACCESSIBLE, null));
+
+        try (var ignored = CustomerAuthzScopeFixture.open(false,
+                List.of("customer.inquiry.write.own"), Map.of("BROKER", BROKER_ID))) {
+            assertThrows(IllegalArgumentException.class, () -> service().attachComparisonReport(2L, REPORT_ID));
+        }
+
+        when(comparisonVerifyClient.verify(REPORT_ID))
+                .thenThrow(new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE));
+        try (var ignored = CustomerAuthzScopeFixture.open(false,
+                List.of("customer.inquiry.write.own"), Map.of("BROKER", BROKER_ID))) {
+            assertThrows(RagException.class, () -> service().attachComparisonReport(2L, REPORT_ID));
+        }
+        verify(comparisons, never()).insert(anyLong(), any(), anyLong());
+    }
+
+    @Test
+    void attachToForeignInquiryIsDeniedWithoutReportVerification() {
+        CustomerEntity foreign = new CustomerEntity();
+        foreign.setId(8L);
+        foreign.setBrokerId(82L);
+        when(customers.getById(8L)).thenReturn(foreign);
+        when(inquiries.getById(2L)).thenReturn(inquiry(2L, 8L));
+
+        try (var ignored = CustomerAuthzScopeFixture.open(false,
+                List.of("customer.inquiry.write.own"), Map.of("BROKER", BROKER_ID))) {
+            assertThrows(AuthzException.class, () -> service().attachComparisonReport(2L, REPORT_ID));
+        }
+        verify(comparisonVerifyClient, never()).verify(any());
+        verify(comparisons, never()).insert(anyLong(), any(), anyLong());
+    }
+
+    @Test
+    void invalidReportIdFormatRejectsAttachBeforeVerification() {
+        try (var ignored = CustomerAuthzScopeFixture.open(false,
+                List.of("customer.inquiry.write.own"), Map.of("BROKER", BROKER_ID))) {
+            assertThrows(IllegalArgumentException.class, () -> service().attachComparisonReport(2L, null));
+            assertThrows(IllegalArgumentException.class, () -> service().attachComparisonReport(2L, "not-hex"));
+            assertThrows(IllegalArgumentException.class, () -> service().attachComparisonReport(2L, "AB".repeat(16)));
+            assertThrows(IllegalArgumentException.class, () -> service().attachComparisonReport(2L, "abc"));
+        }
+        verify(comparisonVerifyClient, never()).verify(any());
+        verify(comparisons, never()).insert(anyLong(), any(), anyLong());
+    }
+
+    @Test
+    void repeatedAttachReturnsExistingAssociationWithoutInsert() {
+        customer();
+        when(inquiries.getById(2L)).thenReturn(inquiry(2L, CUSTOMER_ID));
+        when(comparisonVerifyClient.verify(REPORT_ID)).thenReturn(accessibleReport(REPORT_ID));
+        LocalDateTime associatedAt = LocalDateTime.of(2026, 11, 6, 10, 0);
+        when(comparisons.find(2L, REPORT_ID)).thenReturn(
+                Optional.of(association(1L, 2L, REPORT_ID, associatedAt)));
+
+        try (var ignored = CustomerAuthzScopeFixture.open(false,
+                List.of("customer.inquiry.write.own"), Map.of("BROKER", BROKER_ID))) {
+            CustomerInquiryComparisonView view = service().attachComparisonReport(2L, REPORT_ID);
+            assertEquals(REPORT_ID, view.reportId());
+            assertEquals(associatedAt, view.createdAt());
+        }
+        verify(comparisons, never()).insert(anyLong(), any(), anyLong());
+    }
+
+    @Test
+    void listInquiriesReturnsComparisonReportsSortedByAssociationTime() {
+        customer();
+        when(inquiries.listByCustomer(CUSTOMER_ID))
+                .thenReturn(List.of(inquiry(11L, CUSTOMER_ID), inquiry(12L, CUSTOMER_ID)));
+        LocalDateTime early = LocalDateTime.of(2026, 11, 6, 9, 0);
+        LocalDateTime late = LocalDateTime.of(2026, 11, 6, 10, 0);
+        when(comparisons.listByInquiryIds(List.of(11L, 12L))).thenReturn(List.of(
+                association(1L, 11L, REPORT_ID, early),
+                association(2L, 11L, OTHER_REPORT_ID, late),
+                association(3L, 12L, OTHER_REPORT_ID, early)));
+
+        try (var ignored = CustomerAuthzScopeFixture.open(false,
+                List.of("customer.inquiry.read.own"), Map.of("BROKER", BROKER_ID))) {
+            List<CustomerInquiryResponse> responses = service().listInquiries(CUSTOMER_ID);
+            assertEquals(2, responses.size());
+            // 多报告共存：同一咨询的两份关联按关联时间升序，互不覆盖。
+            assertEquals(2, responses.get(0).comparisonReports().size());
+            assertEquals(List.of(REPORT_ID, OTHER_REPORT_ID),
+                    responses.get(0).comparisonReports().stream()
+                            .map(CustomerInquiryComparisonView::reportId).toList());
+            assertEquals(early, responses.get(0).comparisonReports().get(0).createdAt());
+            assertEquals(late, responses.get(0).comparisonReports().get(1).createdAt());
+            assertEquals(1, responses.get(1).comparisonReports().size());
+            assertEquals(OTHER_REPORT_ID, responses.get(1).comparisonReports().get(0).reportId());
+        }
+    }
+
+    private CustomerListingInquiryEntity inquiry(long id, long customerId) {
+        CustomerListingInquiryEntity entity = new CustomerListingInquiryEntity();
+        entity.setId(id);
+        entity.setCustomerId(customerId);
+        entity.setListingId(LISTING_ID);
+        entity.setBrokerId(BROKER_ID);
+        entity.setStatus("OPEN");
+        entity.setValidationState("CONFIRMED");
+        return entity;
+    }
+
+    private CustomerInquiryComparisonEntity association(long id, long inquiryId, String reportId,
+                                                        LocalDateTime createdAt) {
+        CustomerInquiryComparisonEntity entity = new CustomerInquiryComparisonEntity();
+        entity.setId(id);
+        entity.setInquiryId(inquiryId);
+        entity.setReportId(reportId);
+        entity.setCreatedBy(ACTOR_ID);
+        entity.setCreatedAt(createdAt);
+        return entity;
+    }
+
+    private static ListingComparisonReportVerifyResponse accessibleReport(String reportId) {
+        return new ListingComparisonReportVerifyResponse("verify-report",
+                ListingComparisonReportVerifyResponse.ACCESSIBLE, reportId);
     }
 
     private CustomerListingInquiryEntity pendingInquiry(long id, long listingId, String version) {

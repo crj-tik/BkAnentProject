@@ -3,8 +3,10 @@ package com.bkanent.listing.rag;
 import com.bkanent.common.authz.AuthzCanonicalHash;
 import com.bkanent.common.rag.RagContextAuthorizedCustomerProfileVerifyRequest;
 import com.bkanent.common.rag.RagContextAuthorizedListingInquiryVerifyRequest;
+import com.bkanent.common.rag.RagContextAuthorizedComparisonReportVerifyRequest;
 import com.bkanent.common.rag.RagCustomerProfileVerifyRequest;
 import com.bkanent.common.rag.RagListingInquiryVerifyRequest;
+import com.bkanent.common.rag.RagComparisonReportVerifyRequest;
 import com.bkanent.common.rag.RagErrorCode;
 import com.bkanent.common.rag.RagException;
 
@@ -54,6 +56,21 @@ public final class ListingVerifyContractHash {
         RagListingInquiryVerifyRequest selector = request.request();
         return digest("rag.context-authorized-listing-inquiry-verify.v1",
                 selector.contractVersion(), selector.requestId(), selector.listingId(),
+                AuthzCanonicalHash.signedContextHash(request.authorizationContext()),
+                AuthzCanonicalHash.signedFreshnessHash(request.freshness()));
+    }
+
+    /**
+     * Customer→Listing 对比报告归属验证请求的规范哈希。
+     */
+    public static String comparisonReportVerifyRequestHash(
+            RagContextAuthorizedComparisonReportVerifyRequest request) {
+        if (request == null) {
+            throw new RagException(RagErrorCode.INVALID_ARGUMENT, "request");
+        }
+        RagComparisonReportVerifyRequest selector = request.request();
+        return digest("rag.context-authorized-comparison-report-verify.v1",
+                selector.contractVersion(), selector.requestId(), selector.reportId(),
                 AuthzCanonicalHash.signedContextHash(request.authorizationContext()),
                 AuthzCanonicalHash.signedFreshnessHash(request.freshness()));
     }

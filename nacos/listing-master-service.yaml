@@ -135,6 +135,9 @@ listing:
       customer-inquiry-verify-current:
         caller-service: customer-service
         secret: ${CUSTOMER_LISTING_INQUIRY_VERIFY_SECRET:}
+      customer-comparison-verify-current:
+        caller-service: customer-service
+        secret: ${CUSTOMER_COMPARISON_VERIFY_SECRET:}
       marketing-read-current:
         caller-service: marketing-content-service
         secret: ${MARKETING_LISTING_READ_SECRET:}

@@ -60,3 +60,6 @@ customer:
   listing-inquiry-verify:
     key-id: ${CUSTOMER_LISTING_INQUIRY_VERIFY_KEY_ID:customer-inquiry-verify-current}
     signing-secret: ${CUSTOMER_LISTING_INQUIRY_VERIFY_SECRET:}
+  comparison-report-verify:
+    key-id: ${CUSTOMER_COMPARISON_REPORT_VERIFY_KEY_ID:customer-comparison-verify-current}
+    signing-secret: ${CUSTOMER_COMPARISON_VERIFY_SECRET:}
