@@ -1836,7 +1836,7 @@ Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/
 
 **修复**：在应用配置登记各自公钥与精确 domain/agent，并扩展 `MemoryV2DeploymentConfigurationTest`，逐一验证应用和 Nacos 两个配置面。运行态仍须验证 Nacos 已加载及服务间真实签名调用。
 
-## KI-236 [OPEN·P1] 版本化网关授权缺少部分路由受众映射
+## KI-236 [OPEN·P1] 网关授权运行配置及逐路由验收未闭环
 
 **发现日期**：2026-10-30。旧模板的房源、客户、营销、通知及兼容路由缺少 `gateway.authorization.route-audiences`，开启 Gateway 版本化授权时会对这些路由返回 HTTP 503 `AUTHORIZATION_ROUTE_UNMAPPED`。
 
