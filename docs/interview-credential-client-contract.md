@@ -1,5 +1,7 @@
 # Interview 浏览器凭据领取与请求契约
 
+**统一契约入口**：[前后端接口契约 v1](contracts/README.md)。本文补充访谈凭据和 REST/SSE 请求规则。
+
 本文是 Interview REST/SSE 客户端集成约定。请求经 Gateway 到达 `interview-service`；Gateway 负责验证用户登录并为实际请求签署授权上下文，Interview 在本地验签。前端不得发送自称的 `userId`、角色、管理员标记或权限列表来声明身份。
 
 ## 领取场次凭据

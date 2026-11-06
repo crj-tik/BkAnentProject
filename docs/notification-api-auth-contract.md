@@ -1,5 +1,7 @@
 # Notification API 鉴权契约
 
+**统一契约入口**：[前后端接口契约 v1](contracts/README.md)。本文是 Notification 鉴权边界补充，尚未覆盖完整 REST 请求/响应 schema。
+
 ## 身份来源与启动边界
 
 - 受保护的 REST 请求必须由 `notification.authorization.enabled=true` 的 ingress filter 建立并验证 Auth 请求上下文。该开关默认关闭；没有已验证上下文时，业务服务返回 `AUTHENTICATION_REQUIRED`。

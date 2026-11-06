@@ -1,5 +1,7 @@
 # Listing Business API v1
 
+**统一契约入口**：[前后端接口契约 v1](contracts/README.md)。本文描述 Listing 服务间来源接口，不是普通浏览器 API。
+
 These producer endpoints implement the frozen `domain-parallel-v1` contract. All three requests carry `contractVersion`; IDs and revisions are opaque strings. They require the current signed Auth context. A missing signature, expired freshness proof, or unavailable authorization check never falls back to `brokerId`, an old credential path, or cached permission.
 
 ## Search

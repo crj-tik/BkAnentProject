@@ -4,7 +4,7 @@
 
 **域边界**：经营分析、门店经营复盘和知识运营合并到平台经营域。对外只有一个平台经营 Agent；页面通过业务 API 读取和写入，不直接调用 Agent 来代替状态变更。合同、结算与 Compare 独立服务不在当前功能范围内；房源比较仍由 Listing 提供。
 
-**接口契约**：[平台经营 API OpenAPI](contracts/platform-operations-v1.openapi.yaml)；已发布知识检索/批量读取的详细响应契约见 [published knowledge contract](contracts/platform-operations-published-knowledge-v1.openapi.yaml)。
+**统一契约入口**：[前后端接口契约 v1](contracts/README.md)。域级细节：[平台经营 API OpenAPI](contracts/platform-operations-v1.openapi.yaml)；已发布知识检索/批量读取见 [published knowledge OpenAPI](contracts/platform-operations-published-knowledge-v1.openapi.yaml)。
 
 ## 页面与功能
 

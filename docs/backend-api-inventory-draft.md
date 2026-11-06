@@ -1,5 +1,7 @@
 # 后端接口盘点（控制器级源码核对版）
 
+**统一契约入口**：[前后端接口契约 v1](contracts/README.md)。本盘点用于定位 Controller 映射，不能替代该入口列出的域级请求/响应契约。
+
 本文逐一核对所列控制器的请求映射。每行左侧是源码注解行号、映射注解和对应处理方法；类级路径与方法级路径需要组合，空参数的 `@GetMapping` / `@PostMapping` 表示类级路径本身。多路径别名按源码保留。该表用于定位接口，不展开 DTO 字段、错误响应、授权条件和运行配置，不能替代完整联调契约。若模块维护独立契约，应同时核对契约和实现；没有独立契约的接口，需查对应 DTO、异常处理和授权逻辑。
 
 平台经营已维护 [OpenAPI 契约](contracts/platform-operations-v1.openapi.yaml) 和 [前端功能清单](platform-operations-frontend-function-list.md)。

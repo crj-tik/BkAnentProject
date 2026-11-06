@@ -16,6 +16,10 @@
 - 房源对比与报告生成由 `listing-master-service` 承担
 - `media-worker-service`：异步媒体任务
 
+## 前后端接口契约
+
+统一入口、Auth 登录与授权契约、各业务域契约目录及覆盖状态见[前后端接口契约 v1](docs/contracts/README.md)。
+
 ## 当前架构
 
 - Agent 主链路使用 `DeepSeek` 官方模型接入

@@ -1,5 +1,7 @@
 # Studio V2：已实施接口与交付边界
 
+**统一契约入口**：[前后端接口契约 v1](contracts/README.md)。本文是 Studio 域详细补充。
+
 日期：2026-10-15。变更 `implement-studio-v2`。本文件描述当前源码，完整目标仍见同名 OpenSpec 未完成任务及前端仓库的后端实施 Prompt。
 
 源码交付：`35afd8d`，经用户明确授权已推送 `origin/dev-fix`。该提交不等于数据库迁移、部署或业务联调完成。
