@@ -19,12 +19,12 @@
 
 ## 4. Supervisor 技能与装配
 
-- [ ] 4.1 编写 Supervisor 技能 `consultation-listing-comparison`：步骤（买方上下文→listing-agent 搜索版本化候选→选 2–6 套→真实 refs+expectedRevisions 对比→卡片结构原样透传+文字引导→有咨询时关联 reportId）与硬约束（禁编造房源/版本、版本冲突重搜一次仍冲突如实告知、权限/依赖失败明确上报、agent 观点只进文字）。
-- [ ] 4.2 装配测试：技能可被动态目录发现并指向 listing-agent 现有 `listing-search`/`listing-comparison` 能力；listing-agent 无新增技能；失败关闭（能力缺失/权限不足不回退）。
+- [x] 4.1 编写 Supervisor 技能 `consultation-listing-comparison`：步骤（买方上下文→listing-agent 搜索版本化候选→选 2–6 套→真实 refs+expectedRevisions 对比→卡片结构原样透传+文字引导→有咨询时关联 reportId）与硬约束（禁编造房源/版本、版本冲突重搜一次仍冲突如实告知、权限/依赖失败明确上报、agent 观点只进文字）（证据：agent-service/src/main/resources/skills/supervisor/consultation-listing-comparison.md——步骤①买方上下文→②listing-search 版本化候选→③选 2–6 套→④listing-comparison 真实 refs+revisions→⑤卡片原样透传+文字引导→⑥reportId 留痕经客户域关联接口、agent 不直接写客户域；硬约束：版本冲突重搜一次仍冲突如实告知、不虚构、不降级）。
+- [x] 4.2 装配测试：技能可被动态目录发现并指向 listing-agent 现有 `listing-search`/`listing-comparison` 能力；listing-agent 无新增技能；失败关闭（能力缺失/权限不足不回退）（证据：`ConsultationListingComparisonSkillTest` 2 项——显式技能+allowlist 绑定 a2a:listing-agent+SkillExecutionResolver 解析/非显式拒绝；systemPrompt 断言卡片透传/观点隔离/失败关闭约束；agent-service 285 项通过（6 skip 为既有））。
 
 ## 5. 前端契约文档
 
-- [ ] 5.1 编写卡片结构字段说明（含单位/unknownFields/highlights 语义、版本标识用途）与两种传输方式的使用场景（即时对话内嵌块 / 历史回看按 reportId 拉取），明确数据不含 UI 语义、前端自行设计呈现。
+- [x] 5.1 编写卡片结构字段说明（含单位/unknownFields/highlights 语义、版本标识用途）与两种传输方式的使用场景（即时对话内嵌块 / 历史回看按 reportId 拉取），明确数据不含 UI 语义、前端自行设计呈现（证据：docs/consultation-comparison-cards.md——卡片/指标归属字段契约、两种传输方式（内嵌块/reportId 句柄）、渲染约定（未知不补值/单位显式/徽标）、咨询留痕关联 API、边界）。
 
 ## 6. 验收
 
