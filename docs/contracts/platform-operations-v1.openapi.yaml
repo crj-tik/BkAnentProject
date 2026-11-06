@@ -157,8 +157,8 @@ paths:
               type: object
               required: [storeId, datasetId]
               properties:
-                storeId: { type: integer, format: int64 }
-                datasetId: { type: string }
+                storeId: { type: integer, format: int64, description: 当前 Auth 签名 STORE 身份；服务端要求完全匹配，此字段本身不授予门店权限 }
+                datasetId: { type: string, description: 当前为后端固定来源适配器标识，不是用户可选数据集；HTTP 来源使用 domain-parallel-v1，fixture 来源使用 store-review-demo-v1。没有数据集目录，详见 KI-252 }
       responses:
         '200': { $ref: '#/components/responses/Success' }
         '400': { $ref: '#/components/responses/InvalidRequest' }

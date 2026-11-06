@@ -17,7 +17,7 @@
 | 房源流转 | 查询房源从发布到带看到成交的天数与状态 | `GET /analytics/listing-turnover-report?month` | 展示房源、门店、区域、分阶段天数、总流转天数和流转状态 |
 | 门店看板 | 查看指定门店的经营概览 | `GET /analytics/store-dashboard?storeName` | `storeName` 是查询参数；授权仍由服务端上下文核验，页面不得据此建立用户门店身份 |
 | 复盘列表 | 查看可信门店范围内的复盘事项，游标分页 | `GET /platform-operations/reviews?storeId&cursor&limit` | 返回下一游标与复盘事项；门店 ID 必须来自当前 Auth 身份允许的范围，不能通过任意输入绕过后端门店校验 |
-| 创建复盘 | 选择有效数据集并创建复盘事项 | `POST /platform-operations/reviews`，正文 `{storeId, datasetId}` | 现有后端没有独立的数据集目录接口；数据集选项需由前后端另行约定，不应在页面里伪造 ID |
+| 创建复盘 | 创建当前可信门店的复盘事项 | `POST /platform-operations/reviews`，当前正文 `{storeId, datasetId}` | `datasetId` 目前只是随部署数据源模式固定的后端适配器标识，不是用户可选数据集；当前 API 需后端提供固定值才能联调，不应伪造或让用户选择。长期应由服务端解析，只有存在真实业务选项时才增加授权数据集目录。`storeId` 必须等于 Auth 签名 STORE 身份，不建立授权 |
 | 复盘详情 | 查看诊断、来源事实、来源修订、模拟/真实模式、计划、动作和观察值 | `GET /reviews/{reviewId}`、`GET /reviews/{reviewId}/plans`、`GET /reviews/{reviewId}/actions`、`GET /reviews/{reviewId}/observations` | 对假设和证据缺口做视觉区分；来源修订过期时显示冲突并要求刷新，不呈现失效正文 |
 | 复盘计划 | 创建或更新计划，确认计划并生成行动项 | `GET /reviews/{reviewId}/diagnosis-version`、`POST /reviews/{reviewId}/plans`、`POST /reviews/{reviewId}/plans/confirm` | 先获取可信事项版本与诊断修订，写入仍会复核版本和来源；确认操作显示动作清单和到期时间，使用 `requestId` 幂等提交 |
 | 行动反馈 | 更新行动执行状态并记录证据等级和说明 | `POST /reviews/{reviewId}/actions/{actionId}/feedback` | 状态为 `IN_PROGRESS`、`DONE`、`CANCELLED`；证据为 `USER_REPORTED` 或 `SOURCE_CONFIRMED`；不能把人工反馈自动展示成已验证业绩 |
@@ -64,6 +64,6 @@
 ## 当前前端接入缺口
 
 1. 知识案例目前只有按 ID 查询，没有案例列表、我的草稿/待审筛选、服务端分页或标签字典接口；页面列表需要新增后端 API 后才能完整实现。
-2. 复盘创建需要 `datasetId`，目前没有数据集目录接口；需要明确数据集来源和前端如何选取。
+2. 复盘创建当前要求的 `datasetId` 是后端固定数据源适配器标识，没有目录或用户选择语义；`storeId` 又与 Auth 签名 STORE 身份重复。当前创建契约需要后端给出部署对应固定值才能联调，长期应由服务端解析数据源和门店范围；仅当产品确实支持多数据集选择时才新增可信门店范围内的数据集目录。事项响应目前还直接包含 `actorId` 和内部 `datasetId`，应评估用公开响应 DTO 收敛字段。详见 KI-252。
 3. 分析 API 的授权角色/范围由 Auth 当前 operation catalog 决定，页面路由守卫需接入 Auth 的实际权限查询，不得按姓名、角色名或门店输入推断。
 4. 页面无前端实现，因此交互稿仍需联调后端校验、错误码和目标环境实际数据源；成功的空列表不代表数据源故障。
