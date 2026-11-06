@@ -1838,7 +1838,7 @@ Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/
 
 ## KI-236 [OPEN·P1] 网关授权运行配置及逐路由验收未闭环
 
-**发现日期**：2026-10-30。旧模板的房源、客户、营销、通知及兼容路由缺少 `gateway.authorization.route-audiences`，开启 Gateway 版本化授权时会对这些路由返回 HTTP 503 `AUTHORIZATION_ROUTE_UNMAPPED`。
+**历史发现（2026-10-30）**：当时旧模板的房源、客户、营销、通知及兼容路由缺少 `gateway.authorization.route-audiences`；在该旧配置下开启 Gateway 版本化授权会对这些路由返回 HTTP 503 `AUTHORIZATION_ROUTE_UNMAPPED`。此处记录历史根因，当前源码模板状态见下方代码处置。
 
 **2026-11-03 代码处置**：Gateway/Nacos 模板已为全部 10 个活动路由登记精确受众；Auth `gateway-current` ACL 与这些受众一致，新增配置测试逐项比对 route id、后端 URI 和信任受众。房源、客户、营销、通知各自入口的代码/配置接入另由 KI-196、KI-243 跟踪。
 

@@ -6,7 +6,7 @@
 
 网关当前路由：`/auth/**`、`/agent/**`、`/listings/**`、`/customers/**`、`/platform-operations/**`、`/marketing/**`、`/notifications/**`、`/interviews/**`；`/compare/**`、`/promotions/**` 为兼容路由。媒体、Memory、RAG 等服务接口需要结合实际调用方式判断，不应直接假定为浏览器入口。
 
-本表范围内的 22 个控制器、226 个请求映射均已与源码逐项核对，补入此前遗漏的类级根路径和复盘诊断版本、Studio 命令回执等接口，并修正 Studio 控制器曾发生的注解/方法列错位。版本化网关授权开启且没有额外受众覆盖时，部分已配置路由会因受众缺失返回 503；见 [KI-236](known-issues.md)。路由存在不代表当前环境可直接联调。
+本表范围内的 22 个控制器、226 个请求映射均已与源码逐项核对，补入此前遗漏的类级根路径和复盘诊断版本、Studio 命令回执等接口，并修正 Studio 控制器曾发生的注解/方法列错位。当前 Gateway 模板的 10 条活动路由均有精确受众映射，Auth `gateway-current` ACL 与去重后的受众一致；目标 Nacos 配置是否已发布及逐路由运行验收仍按 [KI-236](known-issues.md) 跟踪。路由存在不代表当前环境可直接联调。
 
 ## auth-service
 
