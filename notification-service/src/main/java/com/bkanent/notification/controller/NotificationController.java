@@ -52,30 +52,30 @@ public class NotificationController {
     }
 
     @GetMapping
-    public ApiResponse<List<NotificationListItemResponse>> list(@RequestParam(required = false) Long userId,
-                                                                @RequestParam(required = false) String channel,
-                                                                @RequestParam(required = false) String readStatus) {
+    public ApiResponse<List<NotificationListItemResponse>> list(@RequestParam(name = "userId", required = false) Long userId,
+                                                                @RequestParam(name = "channel", required = false) String channel,
+                                                                @RequestParam(name = "readStatus", required = false) String readStatus) {
         return ApiResponse.ok(notificationManagementService.listUserMessages(userId, channel, readStatus));
     }
 
     @PostMapping("/{id}/read")
-    public ApiResponse<Void> markRead(@PathVariable Long id, @RequestBody NotificationReadRequest request) {
+    public ApiResponse<Void> markRead(@PathVariable(name = "id") Long id, @RequestBody NotificationReadRequest request) {
         notificationManagementService.markMessageRead(id, request == null ? null : request.userId());
         return ApiResponse.ok(null);
     }
 
     @GetMapping("/unread-count")
-    public ApiResponse<Long> unreadCount(@RequestParam(required = false) Long userId) {
+    public ApiResponse<Long> unreadCount(@RequestParam(name = "userId", required = false) Long userId) {
         return ApiResponse.ok(notificationManagementService.countUnreadMessages(userId));
     }
 
     @GetMapping("/workflow-events")
     public ApiResponse<List<NotificationWorkflowEventConsumeResponse>> workflowEvents(
-            @RequestParam(required = false) String consumeStatus,
-            @RequestParam(required = false) String eventType,
-            @RequestParam(required = false) String taskId,
-            @RequestParam(required = false) Long recipientUserId,
-            @RequestParam(required = false) Integer limit) {
+            @RequestParam(name = "consumeStatus", required = false) String consumeStatus,
+            @RequestParam(name = "eventType", required = false) String eventType,
+            @RequestParam(name = "taskId", required = false) String taskId,
+            @RequestParam(name = "recipientUserId", required = false) Long recipientUserId,
+            @RequestParam(name = "limit", required = false) Integer limit) {
         VerifiedDomainAuthorization.requirePermission("notification.workflow.events.read.all");
         return ApiResponse.ok(notificationWorkflowEventQueryService.listRecent(
                 consumeStatus,

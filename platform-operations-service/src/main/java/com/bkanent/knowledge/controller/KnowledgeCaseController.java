@@ -34,35 +34,35 @@ public class KnowledgeCaseController {
         return ApiResponse.ok(service.create(request));
     }
     @GetMapping("/{knowledgeId}")
-    public ApiResponse<KnowledgeCaseDetail> read(@PathVariable String knowledgeId) {
+    public ApiResponse<KnowledgeCaseDetail> read(@PathVariable(name = "knowledgeId") String knowledgeId) {
         return ApiResponse.ok(service.read(knowledgeId));
     }
     @PostMapping("/{knowledgeId}/edit")
-    public ApiResponse<KnowledgeMutationReceipt> edit(@PathVariable String knowledgeId, @RequestBody EditKnowledgeRequest request) {
+    public ApiResponse<KnowledgeMutationReceipt> edit(@PathVariable(name = "knowledgeId") String knowledgeId, @RequestBody EditKnowledgeRequest request) {
         return ApiResponse.ok(service.edit(knowledgeId, request));
     }
     @PostMapping("/{knowledgeId}/submit")
-    public ApiResponse<KnowledgeMutationReceipt> submit(@PathVariable String knowledgeId, @RequestBody KnowledgeOperationRequest request) {
+    public ApiResponse<KnowledgeMutationReceipt> submit(@PathVariable(name = "knowledgeId") String knowledgeId, @RequestBody KnowledgeOperationRequest request) {
         return ApiResponse.ok(service.submit(knowledgeId, request));
     }
     @PostMapping("/{knowledgeId}/generate")
-    public ApiResponse<KnowledgeGenerationStatus> generate(@PathVariable String knowledgeId, @RequestBody GenerateKnowledgeRequest request) {
+    public ApiResponse<KnowledgeGenerationStatus> generate(@PathVariable(name = "knowledgeId") String knowledgeId, @RequestBody GenerateKnowledgeRequest request) {
         return ApiResponse.ok(generationService.generate(knowledgeId, request));
     }
     @GetMapping("/{knowledgeId}/generation/{taskId}")
-    public ApiResponse<KnowledgeGenerationStatus> generationStatus(@PathVariable String knowledgeId, @PathVariable String taskId) {
+    public ApiResponse<KnowledgeGenerationStatus> generationStatus(@PathVariable(name = "knowledgeId") String knowledgeId, @PathVariable(name = "taskId") String taskId) {
         return ApiResponse.ok(generationService.status(knowledgeId, taskId));
     }
     @PostMapping("/{knowledgeId}/review")
-    public ApiResponse<KnowledgeMutationReceipt> review(@PathVariable String knowledgeId, @RequestBody KnowledgeReviewRequest request) {
+    public ApiResponse<KnowledgeMutationReceipt> review(@PathVariable(name = "knowledgeId") String knowledgeId, @RequestBody KnowledgeReviewRequest request) {
         return ApiResponse.ok(service.review(knowledgeId, request));
     }
     @PostMapping("/{knowledgeId}/publish")
-    public ApiResponse<KnowledgeMutationReceipt> publish(@PathVariable String knowledgeId, @RequestBody KnowledgeOperationRequest request) {
+    public ApiResponse<KnowledgeMutationReceipt> publish(@PathVariable(name = "knowledgeId") String knowledgeId, @RequestBody KnowledgeOperationRequest request) {
         return ApiResponse.ok(service.publish(knowledgeId, request));
     }
     @PostMapping("/{knowledgeId}/withdraw")
-    public ApiResponse<KnowledgeMutationReceipt> withdraw(@PathVariable String knowledgeId, @RequestBody KnowledgeOperationRequest request) {
+    public ApiResponse<KnowledgeMutationReceipt> withdraw(@PathVariable(name = "knowledgeId") String knowledgeId, @RequestBody KnowledgeOperationRequest request) {
         return ApiResponse.ok(service.withdraw(knowledgeId, request));
     }
 }

@@ -1990,10 +1990,10 @@ Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/
 
 **验证**：2026-11-05，受管 runner 应用并通过迁移 700 检查器，确认两个账号已解锁且认证摘要非空；同次运行中 MySQL、Auth、Gateway、Nacos 与平台经营服务均报告健康。跨协议平台经营业务调用仍需单独验收。关联 LR-179。
 
-## KI-251 [FIXED·本提交·P1] Studio MVC 参数名依赖未启用的编译元数据
+## KI-251 [FIXED·本提交·P1] 全仓部分 Spring MVC 参数名依赖隐式推断
 
-**发现日期与依据**：2026-11-06。`StudioController` 的 `@RequestParam` 与 `@PathVariable` 未显式指定参数名；根 POM 的有效 `maven-compiler-plugin` 只设置 `release=17`，未启用 `parameters`。现有 Agent JAR 中对应类缺少 `MethodParameters` 属性，因此不能依赖反射恢复这些名字。
+**发现日期与依据**：2026-11-06。Studio 修复后继续全仓检查，发现 Agent、客户、房源、访谈、营销、媒体、通知和平台经营等 14 个控制器文件中仍有 113 处 `@RequestParam` / `@PathVariable` 未显式指定绑定名。根 POM 原先未启用 `parameters`，旧 Agent JAR 也缺少 `MethodParameters` 属性。
 
-**修复**：Studio 控制器所有请求参数和路径变量均显式绑定名称；根 POM 为 Java 编译启用 `<parameters>true</parameters>`，为其他依赖反射参数名的 Spring 入口提供稳定元数据。
+**修复**：上述 113 处请求参数和路径变量均按原 Java 形参名显式绑定；根 POM 启用 `<parameters>true</parameters>`，作为其他反射型框架的兼容元数据。新增仓库约定，后续 MVC 入口不得依赖编译参数元数据完成 HTTP 绑定。
 
-**验证**：2026-11-06，Agent 模块有效 POM 显示 `<parameters>true</parameters>`；`mvn -gs .mvn-settings.xml -s .mvn-settings.xml -pl agent-service -am -DskipTests package` 构建成功，从新 JAR 提取 `StudioController.class` 后确认存在 `MethodParameters`，且所有 MVC 参数注解都带显式名称。`StudioCapabilityServiceTest` 定向运行 2 项通过。未做容器运行态验收。
+**验证**：2026-11-06，源码扫描确认所有 `@RequestParam` / `@PathVariable` 都显式包含名称；有效 POM 显示 `<parameters>true</parameters>`，Agent 模块打包成功且新 JAR 中存在 `MethodParameters`；根工程 19 个 Maven 模块 `compile` 全部成功。未运行全量测试或容器运行态验收。

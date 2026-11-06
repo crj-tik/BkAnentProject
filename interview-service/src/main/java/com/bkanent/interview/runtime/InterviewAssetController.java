@@ -36,7 +36,7 @@ public class InterviewAssetController {
     }
 
     @PostMapping("/{assetId}/publish")
-    public ApiResponse<Map<String, Object>> publish(@PathVariable Long assetId) {
+    public ApiResponse<Map<String, Object>> publish(@PathVariable(name = "assetId") Long assetId) {
         try {
             return ApiResponse.ok(view(assetService.publish(assetId)));
         } catch (AuthzException denied) {
@@ -47,7 +47,7 @@ public class InterviewAssetController {
     }
 
     @PostMapping("/{assetId}/revoke-publication")
-    public ApiResponse<Map<String, Object>> revokePublication(@PathVariable Long assetId) {
+    public ApiResponse<Map<String, Object>> revokePublication(@PathVariable(name = "assetId") Long assetId) {
         try {
             if (!assetService.revokePublication(assetId)) {
                 return ApiResponse.fail("INTERVIEW_ASSET_CHANGED", "访谈资料已变更，请重新读取后操作");
@@ -61,7 +61,7 @@ public class InterviewAssetController {
     }
 
     @PostMapping("/{assetId}/regrade")
-    public ApiResponse<Map<String, Object>> regrade(@PathVariable Long assetId) {
+    public ApiResponse<Map<String, Object>> regrade(@PathVariable(name = "assetId") Long assetId) {
         try {
             return ApiResponse.ok(view(assetService.regrade(assetId)));
         } catch (AuthzException denied) {

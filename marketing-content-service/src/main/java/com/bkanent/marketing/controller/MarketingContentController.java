@@ -38,30 +38,30 @@ public class MarketingContentController {
     }
 
     @PostMapping("/contents/{id}/variants")
-    public ApiResponse<MarketingContentDetailResponse> createVariant(@PathVariable Long id,
+    public ApiResponse<MarketingContentDetailResponse> createVariant(@PathVariable(name = "id") Long id,
                                                                      @RequestBody MarketingContentUpsertRequest request) {
         return ApiResponse.ok(marketingAssetService.createPlatformVariant(id, request));
     }
 
     @PutMapping("/contents/{id}/publish-status")
-    public ApiResponse<MarketingContentDetailResponse> updatePublishStatus(@PathVariable Long id,
+    public ApiResponse<MarketingContentDetailResponse> updatePublishStatus(@PathVariable(name = "id") Long id,
                                                                            @RequestBody MarketingPublishStatusUpdateRequest request) {
         return ApiResponse.ok(marketingAssetService.updatePublishStatus(id, request));
     }
 
     @GetMapping("/contents")
-    public ApiResponse<List<MarketingContentDTO>> list(@RequestParam Long listingId) {
+    public ApiResponse<List<MarketingContentDTO>> list(@RequestParam(name = "listingId") Long listingId) {
         return ApiResponse.ok(marketingAssetService.listByListingId(listingId));
     }
 
     @GetMapping("/contents/search")
-    public ApiResponse<List<MarketingContentDetailResponse>> search(@RequestParam(required = false) Long listingId,
-                                                                    @RequestParam(required = false) String platform,
-                                                                    @RequestParam(required = false) String keyword,
-                                                                    @RequestParam(required = false) String tag,
-                                                                    @RequestParam(required = false) String contentType,
-                                                                    @RequestParam(required = false) String auditStatus,
-                                                                    @RequestParam(required = false) String publishStatus) {
+    public ApiResponse<List<MarketingContentDetailResponse>> search(@RequestParam(name = "listingId", required = false) Long listingId,
+                                                                    @RequestParam(name = "platform", required = false) String platform,
+                                                                    @RequestParam(name = "keyword", required = false) String keyword,
+                                                                    @RequestParam(name = "tag", required = false) String tag,
+                                                                    @RequestParam(name = "contentType", required = false) String contentType,
+                                                                    @RequestParam(name = "auditStatus", required = false) String auditStatus,
+                                                                    @RequestParam(name = "publishStatus", required = false) String publishStatus) {
         return ApiResponse.ok(marketingAssetService.searchContents(new MarketingContentSearchRequest(
                 listingId,
                 platform,

@@ -94,7 +94,7 @@ public class AgentController {
     }
 
     @PostMapping("/supervisor/runs/cancel")
-    public ApiResponse<SupervisorTaskResponse> cancelRun(@RequestParam String runId, @RequestParam(name = "userId", required = false) String userId) {
+    public ApiResponse<SupervisorTaskResponse> cancelRun(@RequestParam(name = "runId") String runId, @RequestParam(name = "userId", required = false) String userId) {
         return guarded(() -> {
             String actor = authenticatedPrincipal.resolveUserId(userId);
             if (supervisorWorkflowQueryService.findWorkflow(runId, actor).isEmpty()) return ApiResponse.fail("RUN_NOT_FOUND", "run not found");
@@ -104,7 +104,7 @@ public class AgentController {
     }
 
     @PostMapping("/supervisor/runs/reconcile")
-    public ApiResponse<SupervisorTaskResponse> reconcileRun(@RequestParam String runId, @RequestParam(name = "userId", required = false) String userId) {
+    public ApiResponse<SupervisorTaskResponse> reconcileRun(@RequestParam(name = "runId") String runId, @RequestParam(name = "userId", required = false) String userId) {
         return guarded(() -> {
             String actor = authenticatedPrincipal.resolveUserId(userId);
             if (supervisorWorkflowQueryService.findWorkflow(runId, actor).isEmpty()) return ApiResponse.fail("RUN_NOT_FOUND", "run not found");
@@ -235,7 +235,7 @@ public class AgentController {
      * 查询mcpTools。
      */
     @GetMapping("/mcp/tools")
-    public ApiResponse<List<AgentMcpToolDescriptor>> listMcpTools(@RequestParam String userId) {
+    public ApiResponse<List<AgentMcpToolDescriptor>> listMcpTools(@RequestParam(name = "userId") String userId) {
         String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return guarded(() -> {
             agentPermissionService.assertPermission(authenticatedUserId, "agent.mcp.tools.read", "mcp tool listing");
@@ -250,7 +250,7 @@ public class AgentController {
      * 查询mcpToolCatalog。
      */
     @GetMapping("/mcp/tools/catalog")
-    public ApiResponse<List<AgentToolCatalogItem>> listMcpToolCatalog(@RequestParam String userId) {
+    public ApiResponse<List<AgentToolCatalogItem>> listMcpToolCatalog(@RequestParam(name = "userId") String userId) {
         String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return guarded(() -> {
             agentPermissionService.assertPermission(authenticatedUserId, "agent.mcp.catalog.read", "mcp tool catalog");
@@ -265,7 +265,7 @@ public class AgentController {
      * 查询discoveredMcpTools。
      */
     @GetMapping("/mcp/tools/discovered")
-    public ApiResponse<List<DiscoveredMcpTool>> listDiscoveredMcpTools(@RequestParam String userId) {
+    public ApiResponse<List<DiscoveredMcpTool>> listDiscoveredMcpTools(@RequestParam(name = "userId") String userId) {
         String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return guarded(() -> {
             agentPermissionService.assertPermission(authenticatedUserId, "agent.mcp.debug.read", "mcp discovered tool listing");
@@ -280,7 +280,7 @@ public class AgentController {
      * 查询registeredMcpTools。
      */
     @GetMapping("/mcp/tools/registered")
-    public ApiResponse<List<RegisteredMcpTool>> listRegisteredMcpTools(@RequestParam String userId) {
+    public ApiResponse<List<RegisteredMcpTool>> listRegisteredMcpTools(@RequestParam(name = "userId") String userId) {
         String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return guarded(() -> {
             agentPermissionService.assertPermission(authenticatedUserId, "agent.mcp.debug.read", "mcp registered tool listing");
@@ -295,7 +295,7 @@ public class AgentController {
      * 查询mcpServerStatuses。
      */
     @GetMapping("/mcp/servers/status")
-    public ApiResponse<List<McpServerStatus>> listMcpServerStatuses(@RequestParam String userId) {
+    public ApiResponse<List<McpServerStatus>> listMcpServerStatuses(@RequestParam(name = "userId") String userId) {
         String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return guarded(() -> {
             agentPermissionService.assertPermission(authenticatedUserId, "agent.mcp.debug.read", "mcp server status listing");
@@ -306,7 +306,7 @@ public class AgentController {
     }
 
     @GetMapping("/mcp/dynamic/connections")
-    public ApiResponse<List<String>> listDynamicMcpConnections(@RequestParam String userId) {
+    public ApiResponse<List<String>> listDynamicMcpConnections(@RequestParam(name = "userId") String userId) {
         String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return guarded(() -> {
             agentPermissionService.assertPermission(authenticatedUserId, "agent.mcp.debug.read", "dynamic mcp connection listing");
@@ -315,7 +315,7 @@ public class AgentController {
     }
 
     @PostMapping("/mcp/dynamic/connect")
-    public ApiResponse<String> registerDynamicMcpConnection(@RequestParam String userId,
+    public ApiResponse<String> registerDynamicMcpConnection(@RequestParam(name = "userId") String userId,
                                                              @RequestBody DynamicMcpConnectionConfig config) {
         String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return guarded(() -> {
@@ -326,8 +326,8 @@ public class AgentController {
     }
 
     @DeleteMapping("/mcp/dynamic/connect/{name}")
-    public ApiResponse<String> unregisterDynamicMcpConnection(@RequestParam String userId,
-                                                               @PathVariable String name) {
+    public ApiResponse<String> unregisterDynamicMcpConnection(@RequestParam(name = "userId") String userId,
+                                                               @PathVariable(name = "name") String name) {
         String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return guarded(() -> {
             agentPermissionService.assertPermission(authenticatedUserId, "agent.mcp.admin.manage", "dynamic mcp connection removal");
@@ -433,8 +433,8 @@ public class AgentController {
     }
 
     @GetMapping("/supervisor/tasks/async/status")
-    public ApiResponse<SupervisorAsyncTaskStatusResponse> querySupervisorAsyncTaskStatus(@RequestParam String asyncTaskId,
-                                                                                         @RequestParam String userId) {
+    public ApiResponse<SupervisorAsyncTaskStatusResponse> querySupervisorAsyncTaskStatus(@RequestParam(name = "asyncTaskId") String asyncTaskId,
+                                                                                         @RequestParam(name = "userId") String userId) {
         String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         SupervisorAsyncTaskStatusResponse response = supervisorAsyncTaskService.queryStatus(asyncTaskId, authenticatedUserId);
         if (response == null) {
@@ -444,8 +444,8 @@ public class AgentController {
     }
 
     @GetMapping("/supervisor/tasks/async/stream")
-    public SseEmitter streamSupervisorAsyncTask(@RequestParam String asyncTaskId,
-                                                @RequestParam String userId) {
+    public SseEmitter streamSupervisorAsyncTask(@RequestParam(name = "asyncTaskId") String asyncTaskId,
+                                                @RequestParam(name = "userId") String userId) {
         String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         SseEmitter emitter = new SseEmitter(0L);
         var capturedContext = captureRequestContext();
@@ -512,10 +512,10 @@ public class AgentController {
     }
 
     @GetMapping("/supervisor/workflows/async/stream")
-    public SseEmitter streamSupervisorAsyncWorkflow(@RequestParam String asyncWorkflowId,
-                                                    @RequestParam String userId,
+    public SseEmitter streamSupervisorAsyncWorkflow(@RequestParam(name = "asyncWorkflowId") String asyncWorkflowId,
+                                                    @RequestParam(name = "userId") String userId,
                                                     @RequestParam(name = "afterEventId", required = false) String afterEventId,
-                                                    @RequestParam(required = false) Long afterSequence,
+                                                    @RequestParam(name = "afterSequence", required = false) Long afterSequence,
                                                     @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId) {
         String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return supervisorAsyncWorkflowService.subscribeWorkflowStream(
@@ -523,8 +523,8 @@ public class AgentController {
     }
 
     @PostMapping("/supervisor/workflows/async/cancel")
-    public ApiResponse<SupervisorAsyncWorkflowStatusResponse> cancelSupervisorAsyncWorkflow(@RequestParam String asyncWorkflowId,
-                                                                                            @RequestParam String userId) {
+    public ApiResponse<SupervisorAsyncWorkflowStatusResponse> cancelSupervisorAsyncWorkflow(@RequestParam(name = "asyncWorkflowId") String asyncWorkflowId,
+                                                                                            @RequestParam(name = "userId") String userId) {
         String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         requireSupportedControlBinding();
         SupervisorAsyncWorkflowStatusResponse response = supervisorAsyncWorkflowService.cancelWorkflow(asyncWorkflowId, authenticatedUserId);
@@ -535,8 +535,8 @@ public class AgentController {
     }
 
     @PostMapping("/supervisor/workflows/async/retry")
-    public ApiResponse<SupervisorAsyncWorkflowCreateResponse> retrySupervisorAsyncWorkflow(@RequestParam String asyncWorkflowId,
-                                                                                           @RequestParam String userId) {
+    public ApiResponse<SupervisorAsyncWorkflowCreateResponse> retrySupervisorAsyncWorkflow(@RequestParam(name = "asyncWorkflowId") String asyncWorkflowId,
+                                                                                           @RequestParam(name = "userId") String userId) {
         try {
             String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
             requireSupportedControlBinding();
@@ -599,7 +599,7 @@ public class AgentController {
     }
 
     @GetMapping("/supervisor/diagnostics")
-    public ApiResponse<SupervisorDiagnosticsView> diagnostics(@RequestParam String userId,
+    public ApiResponse<SupervisorDiagnosticsView> diagnostics(@RequestParam(name = "userId") String userId,
                                                               @RequestParam(name = "taskId", required = false) String taskId,
                                                               @RequestParam(name = "traceId", required = false) String traceId,
                                                               @RequestParam(name = "approvalId", required = false) String approvalId,

@@ -29,48 +29,48 @@ public class ReviewController {
     }
 
     @GetMapping("/{reviewId}")
-    public ApiResponse<ReviewMatter> get(@PathVariable String reviewId) {
+    public ApiResponse<ReviewMatter> get(@PathVariable(name = "reviewId") String reviewId) {
         return ApiResponse.ok(service.get(reviewId));
     }
 
     @GetMapping("/{reviewId}/diagnosis-version")
-    public ApiResponse<ReviewApplicationService.DiagnosisVersion> diagnosisVersion(@PathVariable String reviewId) {
+    public ApiResponse<ReviewApplicationService.DiagnosisVersion> diagnosisVersion(@PathVariable(name = "reviewId") String reviewId) {
         return ApiResponse.ok(service.diagnosisVersion(reviewId));
     }
 
     @GetMapping("/{reviewId}/plans")
-    public ApiResponse<List<ReviewPlan>> plans(@PathVariable String reviewId) {
+    public ApiResponse<List<ReviewPlan>> plans(@PathVariable(name = "reviewId") String reviewId) {
         return ApiResponse.ok(service.listPlans(reviewId));
     }
 
     @PostMapping("/{reviewId}/plans")
-    public ApiResponse<ReviewPlan> writePlan(@PathVariable String reviewId,
+    public ApiResponse<ReviewPlan> writePlan(@PathVariable(name = "reviewId") String reviewId,
                                              @RequestBody WritePlanRequest request) {
         return ApiResponse.ok(service.writePlan(reviewId, request.expectedMatterVersion(),
                 request.expectedDiagnosisRevision(), request.dueAt(), request.actions()));
     }
 
     @PostMapping("/{reviewId}/plans/confirm")
-    public ApiResponse<ConfirmationReceipt> confirm(@PathVariable String reviewId,
+    public ApiResponse<ConfirmationReceipt> confirm(@PathVariable(name = "reviewId") String reviewId,
                                                     @RequestBody ConfirmPlanRequest request) {
         return ApiResponse.ok(service.confirm(reviewId, request.expectedPlanVersion(),
                 request.requestId(), request.parameterHash()));
     }
 
     @GetMapping("/{reviewId}/actions")
-    public ApiResponse<List<ReviewAction>> actions(@PathVariable String reviewId) {
+    public ApiResponse<List<ReviewAction>> actions(@PathVariable(name = "reviewId") String reviewId) {
         return ApiResponse.ok(service.listActions(reviewId));
     }
 
     @PostMapping("/{reviewId}/actions/{actionId}/feedback")
-    public ApiResponse<ReviewAction> feedback(@PathVariable String reviewId, @PathVariable String actionId,
+    public ApiResponse<ReviewAction> feedback(@PathVariable(name = "reviewId") String reviewId, @PathVariable(name = "actionId") String actionId,
                                               @RequestBody ActionFeedbackRequest request) {
         return ApiResponse.ok(service.feedback(reviewId, actionId, request.status(),
                 request.evidenceLevel(), request.note(), request.expectedActionVersion(), request.requestId()));
     }
 
     @GetMapping("/{reviewId}/observations")
-    public ApiResponse<ReviewObservation> observations(@PathVariable String reviewId) {
+    public ApiResponse<ReviewObservation> observations(@PathVariable(name = "reviewId") String reviewId) {
         return ApiResponse.ok(service.observe(reviewId));
     }
 

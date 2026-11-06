@@ -56,13 +56,13 @@ public class LegacyPromotionsController {
     }
 
     @PostMapping("/{planId}/confirm")
-    public ApiResponse<CampaignReceiptResponse> confirm(@PathVariable String planId,
+    public ApiResponse<CampaignReceiptResponse> confirm(@PathVariable(name = "planId") String planId,
                                                         @RequestBody CampaignConfirmRequest request) {
         return ApiResponse.ok(campaigns.confirm(planId, request));
     }
 
     @GetMapping("/receipts/{receiptId}")
-    public ApiResponse<CampaignReceiptResponse> receipt(@PathVariable String receiptId) {
+    public ApiResponse<CampaignReceiptResponse> receipt(@PathVariable(name = "receiptId") String receiptId) {
         return ApiResponse.ok(campaigns.getReceipt(receiptId));
     }
 
@@ -73,7 +73,7 @@ public class LegacyPromotionsController {
     }
 
     @GetMapping("/effects")
-    public ApiResponse<List<CampaignEffectResponse>> effects(@RequestParam Long listingId) {
+    public ApiResponse<List<CampaignEffectResponse>> effects(@RequestParam(name = "listingId") Long listingId) {
         return ApiResponse.ok(campaigns.effectsForListing(listingId));
     }
 
@@ -86,8 +86,8 @@ public class LegacyPromotionsController {
     }
 
     @GetMapping("/brand-assets")
-    public ApiResponse<List<CampaignBrandAssetResponse>> brandAssets(@RequestParam(required = false) String assetType,
-                                                                     @RequestParam(required = false) String keyword) {
+    public ApiResponse<List<CampaignBrandAssetResponse>> brandAssets(@RequestParam(name = "assetType", required = false) String assetType,
+                                                                     @RequestParam(name = "keyword", required = false) String keyword) {
         return ApiResponse.ok(assets.list(assetType, keyword));
     }
 

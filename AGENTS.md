@@ -20,6 +20,8 @@ This repository is a multi-module Maven project for a real-estate middle-platfor
 ## Coding Style & Naming Conventions
 Use Java 17, 4-space indentation, and UTF-8 files. Keep package names lowercase (`com.bkanent.agent...`), class names PascalCase, methods/fields camelCase, and constants UPPER_SNAKE_CASE. Controllers should end with `Controller`, Dubbo providers with `RpcServiceImpl`, MyBatis Plus entities with `Entity`, mappers with `Mapper`, and domain services with `Service` / `ServiceImpl`. Prefer concise methods and explicit DTO mapping over leaking entities across service boundaries.
 
+For Spring MVC endpoints, always specify names on `@RequestParam` and `@PathVariable` (for example, `@RequestParam(name = "page")` and `@PathVariable(name = "id")`). Do not rely on Java compiler parameter metadata for HTTP binding; keep the `parameters=true` compiler option as compatibility support for other reflection-based frameworks.
+
 ## Testing Guidelines
 New business logic should add tests under `src/test/java` in the owning module. Prefer focused unit tests for pure logic and Spring Boot tests for controller/service wiring. Name test classes `*Test` and mirror production package structure. At minimum, cover RPC providers, authentication, RAG/Milvus integration adapters, and MyBatis query behavior.
 

@@ -32,25 +32,25 @@ public class CustomerInquiryController {
     }
 
     @PostMapping("/{id}/inquiries")
-    public ApiResponse<CustomerInquiryResponse> createInquiry(@PathVariable Long id,
+    public ApiResponse<CustomerInquiryResponse> createInquiry(@PathVariable(name = "id") Long id,
                                                               @RequestBody CustomerInquiryCreateRequest request) {
         return ApiResponse.ok(inquiryService.createInquiry(id, request));
     }
 
     @GetMapping("/{id}/inquiries")
-    public ApiResponse<List<CustomerInquiryResponse>> listInquiries(@PathVariable Long id) {
+    public ApiResponse<List<CustomerInquiryResponse>> listInquiries(@PathVariable(name = "id") Long id) {
         return ApiResponse.ok(inquiryService.listInquiries(id));
     }
 
     @PutMapping("/inquiries/{inquiryId}/status")
     public ApiResponse<CustomerInquiryResponse> updateInquiryStatus(
-            @PathVariable Long inquiryId, @RequestBody CustomerInquiryStatusUpdateRequest request) {
+            @PathVariable(name = "inquiryId") Long inquiryId, @RequestBody CustomerInquiryStatusUpdateRequest request) {
         return ApiResponse.ok(inquiryService.updateInquiryStatus(inquiryId, request.status()));
     }
 
     @PostMapping("/inquiries/{inquiryId}/comparison-reports")
     public ApiResponse<CustomerInquiryComparisonView> attachComparisonReport(
-            @PathVariable Long inquiryId, @RequestBody CustomerInquiryComparisonAttachRequest request) {
+            @PathVariable(name = "inquiryId") Long inquiryId, @RequestBody CustomerInquiryComparisonAttachRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("请求不能为空");
         }

@@ -31,7 +31,7 @@ public class MediaWorkerController {
     }
 
     @GetMapping("/{taskId}")
-    public ApiResponse<MediaTaskResultDTO> detail(@PathVariable String taskId) {
+    public ApiResponse<MediaTaskResultDTO> detail(@PathVariable(name = "taskId") String taskId) {
         return ApiResponse.ok(mediaGenerationTaskService.getTaskResult(taskId));
     }
 

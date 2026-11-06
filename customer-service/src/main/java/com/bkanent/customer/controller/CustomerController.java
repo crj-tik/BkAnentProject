@@ -50,28 +50,28 @@ public class CustomerController {
     }
 
     @PutMapping("/{id}")
-    public ApiResponse<CustomerProfileDTO> update(@PathVariable Long id, @RequestBody CustomerUpsertRequest request) {
+    public ApiResponse<CustomerProfileDTO> update(@PathVariable(name = "id") Long id, @RequestBody CustomerUpsertRequest request) {
         return ApiResponse.ok(customerManagementService.updateProfile(id, request));
     }
 
     @DeleteMapping("/{id}")
-    public ApiResponse<Void> delete(@PathVariable Long id) {
+    public ApiResponse<Void> delete(@PathVariable(name = "id") Long id) {
         customerManagementService.deleteProfile(id);
         return ApiResponse.ok(null);
     }
 
     @GetMapping("/{id}")
-    public ApiResponse<CustomerDetailResponse> detail(@PathVariable Long id) {
+    public ApiResponse<CustomerDetailResponse> detail(@PathVariable(name = "id") Long id) {
         return ApiResponse.ok(customerManagementService.getCustomerDetail(id));
     }
 
     @GetMapping
-    public ApiResponse<List<CustomerProfileDTO>> search(@RequestParam(required = false) String profileType,
-                                                        @RequestParam(required = false) String keyword,
-                                                        @RequestParam(required = false) Long brokerId,
-                                                        @RequestParam(required = false) String intention,
-                                                        @RequestParam(required = false) BigDecimal budgetMin,
-                                                        @RequestParam(required = false) BigDecimal budgetMax) {
+    public ApiResponse<List<CustomerProfileDTO>> search(@RequestParam(name = "profileType", required = false) String profileType,
+                                                        @RequestParam(name = "keyword", required = false) String keyword,
+                                                        @RequestParam(name = "brokerId", required = false) Long brokerId,
+                                                        @RequestParam(name = "intention", required = false) String intention,
+                                                        @RequestParam(name = "budgetMin", required = false) BigDecimal budgetMin,
+                                                        @RequestParam(name = "budgetMax", required = false) BigDecimal budgetMax) {
         return ApiResponse.ok(customerManagementService.searchProfiles(new CustomerQueryRequest(
                 profileType,
                 keyword,
@@ -83,39 +83,39 @@ public class CustomerController {
     }
 
     @PostMapping("/{id}/follow-records")
-    public ApiResponse<CustomerFollowRecordResponse> addFollowRecord(@PathVariable Long id,
+    public ApiResponse<CustomerFollowRecordResponse> addFollowRecord(@PathVariable(name = "id") Long id,
                                                                      @RequestBody CustomerFollowRecordRequest request) {
         return ApiResponse.ok(customerManagementService.addFollowRecord(id, request));
     }
 
     @GetMapping("/{id}/follow-records")
-    public ApiResponse<List<CustomerFollowRecordResponse>> listFollowRecords(@PathVariable Long id) {
+    public ApiResponse<List<CustomerFollowRecordResponse>> listFollowRecords(@PathVariable(name = "id") Long id) {
         return ApiResponse.ok(customerManagementService.listFollowRecords(id));
     }
 
     @GetMapping("/{id}/matched-listings")
-    public ApiResponse<List<CustomerMatchResponse>> matchedListings(@PathVariable Long id) {
+    public ApiResponse<List<CustomerMatchResponse>> matchedListings(@PathVariable(name = "id") Long id) {
         return ApiResponse.ok(customerManagementService.matchListings(id));
     }
 
     @PostMapping("/{id}/entrusts")
-    public ApiResponse<OwnerEntrustResponse> saveEntrust(@PathVariable Long id,
+    public ApiResponse<OwnerEntrustResponse> saveEntrust(@PathVariable(name = "id") Long id,
                                                          @RequestBody OwnerEntrustUpsertRequest request) {
         return ApiResponse.ok(customerManagementService.saveEntrust(id, request));
     }
 
     @GetMapping("/{id}/entrusts")
-    public ApiResponse<List<OwnerEntrustResponse>> listEntrusts(@PathVariable Long id) {
+    public ApiResponse<List<OwnerEntrustResponse>> listEntrusts(@PathVariable(name = "id") Long id) {
         return ApiResponse.ok(customerManagementService.listEntrusts(id));
     }
 
     @GetMapping("/entrusts/expiring")
-    public ApiResponse<List<OwnerEntrustResponse>> expiringEntrusts(@RequestParam(defaultValue = "7") int days) {
+    public ApiResponse<List<OwnerEntrustResponse>> expiringEntrusts(@RequestParam(name = "days", defaultValue = "7") int days) {
         return ApiResponse.ok(customerManagementService.listExpiringEntrusts(days));
     }
 
     @PostMapping("/entrusts/remind")
-    public ApiResponse<Integer> remindExpiringEntrusts(@RequestParam(defaultValue = "7") int days) {
+    public ApiResponse<Integer> remindExpiringEntrusts(@RequestParam(name = "days", defaultValue = "7") int days) {
         if (!com.bkanent.common.authz.AuthzRequestScope.businessAdmin()) {
             throw new com.bkanent.common.authz.AuthzException(com.bkanent.common.authz.AuthzErrorCode.PERMISSION_DENIED);
         }
@@ -124,19 +124,19 @@ public class CustomerController {
     }
 
     @PostMapping("/{id}/favorites")
-    public ApiResponse<CustomerFavoriteResponse> addFavorite(@PathVariable Long id,
+    public ApiResponse<CustomerFavoriteResponse> addFavorite(@PathVariable(name = "id") Long id,
                                                              @RequestBody CustomerFavoriteRequest request) {
         return ApiResponse.ok(customerManagementService.addFavorite(id, request));
     }
 
     @DeleteMapping("/{id}/favorites/{listingId}")
-    public ApiResponse<Void> removeFavorite(@PathVariable Long id, @PathVariable Long listingId) {
+    public ApiResponse<Void> removeFavorite(@PathVariable(name = "id") Long id, @PathVariable(name = "listingId") Long listingId) {
         customerManagementService.removeFavorite(id, listingId);
         return ApiResponse.ok(null);
     }
 
     @GetMapping("/{id}/favorites")
-    public ApiResponse<List<CustomerFavoriteResponse>> listFavorites(@PathVariable Long id) {
+    public ApiResponse<List<CustomerFavoriteResponse>> listFavorites(@PathVariable(name = "id") Long id) {
         return ApiResponse.ok(customerManagementService.listFavorites(id));
     }
 

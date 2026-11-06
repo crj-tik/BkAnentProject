@@ -24,7 +24,7 @@ public class ListingRagController {
     }
     @PostMapping("/backfill")
     public ApiResponse<List<QueuedEvent>> backfill(@RequestHeader(value = "Authorization", required = false) String authorization,
-                                                   @RequestParam(defaultValue = "0") long afterId, @RequestParam(defaultValue = "100") int limit) {
+                                                   @RequestParam(name = "afterId", defaultValue = "0") long afterId, @RequestParam(name = "limit", defaultValue = "100") int limit) {
         // Explicitly QUEUED local outbox receipt, not falsely RAG ACCEPTED/APPLIED.
         return ApiResponse.ok(backfill.backfill(afterId, limit, ListingRagCredentialContext.bearer(authorization)).stream()
                 .map(event -> new QueuedEvent(event.eventId(), event.documentId(), event.revision(), "QUEUED")).toList());

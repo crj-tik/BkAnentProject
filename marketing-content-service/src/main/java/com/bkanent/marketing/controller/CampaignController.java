@@ -41,49 +41,49 @@ public class CampaignController {
     }
 
     @PostMapping("/contents/{contentId}/review")
-    public ApiResponse<MarketingContentDetailResponse> reviewContent(@PathVariable long contentId,
+    public ApiResponse<MarketingContentDetailResponse> reviewContent(@PathVariable(name = "contentId") long contentId,
                                                                      @RequestBody CampaignContentReviewRequest request) {
         return ApiResponse.ok(contentReview.review(contentId, request));
     }
 
     @GetMapping("/plans/{planId}")
-    public ApiResponse<CampaignPlanResponse> getPlan(@PathVariable String planId) {
+    public ApiResponse<CampaignPlanResponse> getPlan(@PathVariable(name = "planId") String planId) {
         return ApiResponse.ok(campaigns.getPlan(planId));
     }
 
     @PostMapping("/plans/{planId}/confirm")
-    public ApiResponse<CampaignReceiptResponse> confirm(@PathVariable String planId,
+    public ApiResponse<CampaignReceiptResponse> confirm(@PathVariable(name = "planId") String planId,
                                                         @RequestBody CampaignConfirmRequest request) {
         return ApiResponse.ok(campaigns.confirm(planId, request));
     }
 
     @GetMapping("/plans/{planId}/receipts/{requestId}")
-    public ApiResponse<CampaignReceiptResponse> receipt(@PathVariable String planId, @PathVariable String requestId) {
+    public ApiResponse<CampaignReceiptResponse> receipt(@PathVariable(name = "planId") String planId, @PathVariable(name = "requestId") String requestId) {
         return ApiResponse.ok(campaigns.findReceipt(planId, requestId));
     }
 
     @GetMapping("/receipts/{receiptId}")
-    public ApiResponse<CampaignReceiptResponse> receipt(@PathVariable String receiptId) {
+    public ApiResponse<CampaignReceiptResponse> receipt(@PathVariable(name = "receiptId") String receiptId) {
         return ApiResponse.ok(campaigns.getReceipt(receiptId));
     }
 
     @PostMapping("/attempts/{attemptId}/reconcile")
-    public ApiResponse<CampaignReceiptResponse> reconcile(@PathVariable String attemptId) {
+    public ApiResponse<CampaignReceiptResponse> reconcile(@PathVariable(name = "attemptId") String attemptId) {
         return ApiResponse.ok(campaigns.reconcile(attemptId));
     }
 
     @GetMapping("/attempts/{attemptId}/effects")
-    public ApiResponse<CampaignEffectResponse> effect(@PathVariable String attemptId) {
+    public ApiResponse<CampaignEffectResponse> effect(@PathVariable(name = "attemptId") String attemptId) {
         return ApiResponse.ok(campaigns.readEffect(attemptId, false));
     }
 
     @PostMapping("/attempts/{attemptId}/effects/sync")
-    public ApiResponse<CampaignEffectResponse> syncEffect(@PathVariable String attemptId) {
+    public ApiResponse<CampaignEffectResponse> syncEffect(@PathVariable(name = "attemptId") String attemptId) {
         return ApiResponse.ok(campaigns.readEffect(attemptId, true));
     }
 
     @GetMapping("/roi-report")
-    public ApiResponse<List<CampaignRoiReportResponse>> roiReport(@RequestParam(required = false) String platform) {
+    public ApiResponse<List<CampaignRoiReportResponse>> roiReport(@RequestParam(name = "platform", required = false) String platform) {
         return ApiResponse.ok(campaigns.roiReport(platform));
     }
 
@@ -93,8 +93,8 @@ public class CampaignController {
     }
 
     @GetMapping("/brand-assets")
-    public ApiResponse<List<CampaignBrandAssetResponse>> listAssets(@RequestParam(required = false) String assetType,
-                                                                    @RequestParam(required = false) String keyword) {
+    public ApiResponse<List<CampaignBrandAssetResponse>> listAssets(@RequestParam(name = "assetType", required = false) String assetType,
+                                                                    @RequestParam(name = "keyword", required = false) String keyword) {
         return ApiResponse.ok(assets.list(assetType, keyword));
     }
 }

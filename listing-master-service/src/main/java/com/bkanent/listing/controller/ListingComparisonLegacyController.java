@@ -24,14 +24,14 @@ public class ListingComparisonLegacyController {
     public ListingComparisonLegacyController(ListingComparisonService service) { this.service = service; }
 
     @GetMapping("/listings")
-    public ApiResponse<ListingComparisonLegacySummaryResponse> compareListings(@RequestParam List<Long> listingIds) {
+    public ApiResponse<ListingComparisonLegacySummaryResponse> compareListings(@RequestParam(name = "listingIds") List<Long> listingIds) {
         return ApiResponse.ok(service.createLegacyDto(listingIds));
     }
 
     @GetMapping("/reports")
     public ApiResponse<ListingComparisonLegacyReportResponse> createReport(
-            @RequestParam List<Long> listingIds,
-            @RequestParam(defaultValue = "true") boolean includeAiConclusion) {
+            @RequestParam(name = "listingIds") List<Long> listingIds,
+            @RequestParam(name = "includeAiConclusion", defaultValue = "true") boolean includeAiConclusion) {
         ListingComparisonReportResponse report = service.createLegacyLocal(listingIds, includeAiConclusion);
         List<ListingComparisonLegacyReportResponse.Row> rows = report.rows().stream().map(this::legacyRow).toList();
         List<ListingComparisonLegacyReportResponse.Metric> metrics = report.metrics().stream()

@@ -34,12 +34,12 @@ public class ListingComparisonController {
     }
 
     @GetMapping("/{reportId}")
-    public ApiResponse<ListingComparisonReportResponse> get(@PathVariable String reportId) {
+    public ApiResponse<ListingComparisonReportResponse> get(@PathVariable(name = "reportId") String reportId) {
         return ApiResponse.ok(service.getOwned(reportId));
     }
 
     @GetMapping("/{reportId}/pdf")
-    public ResponseEntity<Resource> pdf(@PathVariable String reportId) {
+    public ResponseEntity<Resource> pdf(@PathVariable(name = "reportId") String reportId) {
         return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF)
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "inline; filename=\"listing-comparison-" + reportId + ".pdf\"")
