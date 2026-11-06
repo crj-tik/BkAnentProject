@@ -1596,3 +1596,13 @@
 **代码位置**：`docker-compose.yml` MySQL `environment`、`scripts/deploy/run-init-manifest.sh::mysql_sql`、迁移 `20261105_platform_operations_runtime_credentials.sql`。
 
 **关联**：LR-164、LR-169；KI-250。
+
+## LR-179 咨询对比卡片为同源投影，关联单向引用且归属探测不泄露存在性
+
+**结论**：对比卡片（cards/metricWinners/highlights）是报告来源快照的确定性投影——在服务读取边界（create/getOwned 返回）计算、从不写入存储，存量旧报告自动获得卡片视图；徽标与指标归属仅由既有确定性指标（含结论的面积最大）反查得出。咨询-报告关联由客户域存 reportId（消费方存引用，同收藏存 listingId 惯例），attach 时经签名 RPC 核验报告 owner=当前经纪人；报告缺失/非本人/格式非法统一返回 NOT_ACCESSIBLE（`findOwnedOrNull` 不抛），不泄露报告存在性。关联实体不继承 BaseEntity——表无 updated_at/deleted 列，@TableLogic 会生成非法 SQL。
+
+**根因**：卡片若独立计算或生成时存储，会与 rows/metrics 漂移且旧报告需迁移；引用方向反向（报告存咨询 ID）会让房源域感知客户域并破坏归档边界；`findOwned` 的抛异常语义无法在 RPC 层统一 NOT_ACCESSIBLE（会区分不存在与无权）；MyBatis Plus 逻辑删除插件对无 deleted 列的表生成非法 SQL。跨服务验证的规范哈希两侧（Listing/Customer ContractHash 的 comparisonReportVerifyRequestHash）逐字节一致并以互验测试防漂移（KI-249 教训）。
+
+**代码位置**：`ListingComparisonCardProjection`、`ListingComparisonService`（边界填充）、`ListingComparisonReportStore.findOwnedOrNull`、`CustomerInquiryComparisonEntity`、`ListingComparisonReportVerifyRpcServiceImpl`、`ListingComparisonReportVerifyClient`、两侧 `ContractHash.comparisonReportVerifyRequestHash`；迁移 `20261106_customer_inquiry_comparison.sql`（order 710）。
+
+**关联**：LR-176、LR-177、LR-178；KI-249；change `add-consultation-comparison-cards` 决策 1/2/3。

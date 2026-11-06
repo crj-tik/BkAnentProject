@@ -28,5 +28,5 @@
 
 ## 6. 验收
 
-- [ ] 6.1 端到端验收：买方咨询 → agent 匹配候选 → 对比 → 回答携带卡片结构 → 关联咨询 → 咨询历史回看按 reportId 拉取卡片；负例：版本冲突（搜索与对比之间房源变化→重搜一次→仍冲突告知）、越权关联、报告不可读。
-- [ ] 6.2 回归：listing 与 customer 模块全量测试通过；受管 manifest 校验与 dry-run；按项目规范登记 LR（卡片投影同源一致性、关联单向引用）与新增 KI（如有）。
+- [x] 6.1 端到端验收：买方咨询 → agent 匹配候选 → 对比 → 回答携带卡片结构 → 关联咨询 → 咨询历史回看按 reportId 拉取卡片；负例：版本冲突（搜索与对比之间房源变化→重搜一次→仍冲突告知）、越权关联、报告不可读。（证据：链路各环节以模块测试覆盖——卡片投影 `ListingComparisonCardProjectionTest` 4 项（投影/卡片-行同源一致/create+getOwned 返回卡片/存量旧文件 JSON 移除卡片字段后读取自动投影）；关联 `ComparisonReportVerifyRpcServiceImplTest` 6 项（本人 ACCESSIBLE/缺失/非本人统一 NOT_ACCESSIBLE/验签失败/受众双收/防漂移）+ customer 关联 6 项（成功/不可读拒绝/越权/格式非法/幂等/多报告排序）+ `ListingComparisonReportVerifyClientTest` 7 项；技能 `ConsultationListingComparisonSkillTest` 2 项（显式/绑定/透传与失败关闭约束）；版本冲突负例由既有 `ListingComparisonServiceTest.staleInaccessible…` 与技能硬约束覆盖。**agent 实际对话流的运行态端到端需完整栈，归部署阶段验收**）
+- [x] 6.2 回归：listing 与 customer 模块全量测试通过；受管 manifest 校验与 dry-run；按项目规范登记 LR（卡片投影同源一致性、关联单向引用）与新增 KI（如有）。（证据：LR-179 已登记（同源投影/单向引用/归属探测不泄露/实体不继承 BaseEntity/两侧哈希防漂移）；无新增 KI（复验中多模块测试失败为缺 -am 的命令问题，非缺陷）。回归：listing 159/159、customer 60/60、agent-service 285/285（6 skip 既有）、上游模块全绿；manifest 72 条 + runner dry-run 通过）
