@@ -16,7 +16,7 @@
 
 | 方法 | 路径（相对 Studio 根路径） | 语义 |
 | --- | --- | --- |
-| GET | /capabilities | 受控业务目录；发现不代表健康或直接操作授权；当前 directOperations=[]，不返回已退役的合同和结算能力 |
+| GET | /capabilities | 受控业务目录；`availability` 仅表示 Agent 目录发现状态；业务项 `authorization.status=NOT_EVALUATED`、`checkMode=PER_OPERATION`；当前 `directOperations=[]`，不返回已退役的合同和结算能力 |
 | POST | /works | 幂等保存工作草稿；不会自动启动 |
 | GET | /works?keyword=&cursor=&limit=20 | 本人工作，更新时间/ID倒序，最多100条；status/needsDecision 当前返回400，不静默忽略 |
 | GET | /works/{id} | 上下文、最新执行、待输入/审批、首100成果摘要及状态读取前的事件水位 |
@@ -31,6 +31,10 @@
 | POST | /artifact-series/{seriesId}/revisions | 营销正文保存或恢复；expectedVersion，追加新版本 |
 | POST | /works/{id}/commands | 受控只读比较/候选展开/计划快照；返回真实结果引用 |
 | GET | /works/{id}/commands/{requestId} | 查询原回执；结果来源仍重新授权 |
+
+能力目录的 `AVAILABLE` 仅表示 Agent Card 声明的领域能力已发现，不表示依赖健康，也不表示当前用户获准执行操作。普通业务能力返回 `authorization={status:NOT_EVALUATED,checkMode:PER_OPERATION}`；每次实际请求仍由目标接口核验操作权限和资源范围。账号管理项仅在当前用户通过 `auth.users.manage` 检查后出现，并返回 `authorization.status=AUTHORIZED`。目前没有可由 Studio 直接执行的业务操作，因此 `directOperations` 保持空数组，不用目录发现结果代替权限授予。
+
+平台经营 Agent 在 Agent Card 中使用统一 `platform-operations` 域，目录分别列出 `business`（经营分析）、`reviews`（门店复盘）和 `knowledge`（知识运营）；`interviews` 只代表访谈，不再与复盘合并。示例：`{"id":"reviews","availability":"AVAILABLE","authorization":{"status":"NOT_EVALUATED","checkMode":"PER_OPERATION"},"directOperations":[]}`。
 
 NEW 使用现有 async 执行，事务提交前派发器看不到半关联请求。CONTINUE 只接受原执行 WAITING_USER_INPUT，冻结 context/skill/allowMcp，沿用原有效 contextRevision；已完成追问必须 NEW。为避免未定义写策略，本批 Studio 发起的模型调用使用现有 requireApproval=true 门。该门不代替旧领域接口自身授权。
 

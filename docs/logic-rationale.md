@@ -521,7 +521,7 @@
 
 **根因**：原 Memory artifact 是不可变生成输出，没有事务编辑/OCC及回执接口。跨服务双写无法原子绑定用户修改和幂等结果；把旧 versionNo 当人工版本也会冲突。Studio 修订与回执同事务可在响应丢失时找回原结果，expectedVersion防止覆盖。NEW复用既有异步执行，CONTINUE仅 WAITING_USER_INPUT并冻结原context/skill/allowMcp和有效contextRevision；新增引用需装配授权的不可变内容快照，不能把Studio系列ID误当Memory产物ID。
 
-**代码位置**：agent-service/studio；sql/migrations/20261015_studio_workspace.sql；docker/mysql/init-manifest.tsv。事件水位先于状态读取，接受重放重叠；客户端定时及断线读取权威状态，以覆盖持久事件不可用的回退。工作与原事件保持owner-only，公开能力发现不代表健康、allowedActions不授予权限；新模型执行使用原审批门，完整领域写策略仍待对接。
+**代码位置**：agent-service/studio；sql/migrations/20261015_studio_workspace.sql；docker/mysql/init-manifest.tsv。事件水位先于状态读取，接受重放重叠；客户端定时及断线读取权威状态，以覆盖持久事件不可用的回退。工作与原事件保持owner-only，公开能力发现不代表健康、allowedActions不授予权限；能力目录以 `availability` 表达 Agent Card 发现，以 `authorization.status=NOT_EVALUATED` 表达尚未评估具体用户权限，实际操作仍逐请求核验。平台经营的 analytics/reviews/knowledge 分项与 interview 分离；新模型执行使用原审批门，完整领域写策略仍待对接。
 
 **关联**：LR-40、LR-41、LR-42；KI-114。仅完成源码/编译与契约，未应用迁移或声明运行闭合。
 
@@ -1606,3 +1606,13 @@
 **代码位置**：`ListingComparisonCardProjection`、`ListingComparisonService`（边界填充）、`ListingComparisonReportStore.findOwnedOrNull`、`CustomerInquiryComparisonEntity`、`ListingComparisonReportVerifyRpcServiceImpl`、`ListingComparisonReportVerifyClient`、两侧 `ContractHash.comparisonReportVerifyRequestHash`；迁移 `20261106_customer_inquiry_comparison.sql`（order 710）。
 
 **关联**：LR-176、LR-177、LR-178；KI-249；change `add-consultation-comparison-cards` 决策 1/2/3。
+
+## LR-180 Studio 能力发现与逐操作授权使用独立状态
+
+**结论**：Studio `/capabilities` 的 `availability=AVAILABLE` 只表示 Agent Card 中发现了对应领域，不表示依赖健康或当前用户获准操作。普通业务项返回 `authorization.status=NOT_EVALUATED` 和 `checkMode=PER_OPERATION`，权限与资源范围由目标 API 在每次请求中校验；只有已检查 `auth.users.manage` 的管理员项可标记 `AUTHORIZED`。平台经营 Agent 的统一 `platform-operations` 域在 Studio 目录中拆成经营分析、门店复盘和知识运营三项；访谈是独立 `interviews` 项。`directOperations` 只列 Studio 已实现的直执业务动作，未接入时保持空，不从 Agent Card 推导。
+
+**根因**：Agent Card 是服务能力声明，不能承载用户/门店的动态权限结论；平台经营各分支拥有独立操作码和资源范围，即使共享一个 Agent 服务也必须分项发现。把目录可发现等同于操作授权会让前端绕过目标接口的请求级权限检查。
+
+**代码位置**：`agent-service/studio/StudioCapabilityService`、`StudioIdentity`、`nacos/agent-service.yaml`、`nacos/auth-service.yaml`；接口语义见 `docs/studio-v2-api.md`。
+
+**关联**：LR-53；KI-114。

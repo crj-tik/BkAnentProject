@@ -258,7 +258,7 @@
 
 **确认日期**：2026-10-15。`implement-studio-v2` 已新增工作/修订/比较/回执及未配置计划快照；完整P3/P4仍未完成。发布账号/素材版本/实际审批参数绑定、选定结算、保留直写接口等价校验、访谈凭据恢复、受保护文件和完整领域投影/分页尚缺；userId/workNo/employeeId不能凭字段相似直接映射。部分现有Agent只回summary，不能据此生成候选事实。
 
-**处置**：新Studio未配置路径不提供执行actions，directOperations为空，发布计划INCOMPLETE/NOT_CONFIGURED。前端保留输入/原请求身份，缺回执不盲重发；剩余实现及可信映射需求见docs/studio-v2-api.md和前端backend-integration-prompts-v2.md。新增迁移尚未应用，未运行环境联调。本问题不是已修KI-110/111的复发。
+**处置**：新Studio未配置路径不提供执行actions，directOperations为空，发布计划INCOMPLETE/NOT_CONFIGURED。前端保留输入/原请求身份，缺回执不盲重发。2026-11-06能力目录补出独立 `reviews` 项；`availability` 只表示 Agent 目录发现，普通业务项的授权状态为 `NOT_EVALUATED` 并按实际请求校验。directOperations 仍为空，因为 Studio 尚无可直接执行的业务操作。剩余实现及可信映射需求见 docs/studio-v2-api.md。本问题不是已修KI-110/111的复发。
 
 **关联**：LR-53、KI-12。源码/compile与实际部署分别报告；现有直写路径的历史权限缺口不能因新门面受控而标为修复。
 
@@ -1989,3 +1989,11 @@ Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/
 **修复**：新增受管迁移 700，从 `.env` 配置的两个运行凭据设置账号密码并解锁，校验账号非锁定且存在非空认证摘要；runner 在缺少任一凭据时先行拒绝。密码只经容器环境和 MySQL 会话变量传递，不写入迁移 SQL 或日志。
 
 **验证**：2026-11-05，受管 runner 应用并通过迁移 700 检查器，确认两个账号已解锁且认证摘要非空；同次运行中 MySQL、Auth、Gateway、Nacos 与平台经营服务均报告健康。跨协议平台经营业务调用仍需单独验收。关联 LR-179。
+
+## KI-251 [FIXED·本提交·P1] Studio MVC 参数名依赖未启用的编译元数据
+
+**发现日期与依据**：2026-11-06。`StudioController` 的 `@RequestParam` 与 `@PathVariable` 未显式指定参数名；根 POM 的有效 `maven-compiler-plugin` 只设置 `release=17`，未启用 `parameters`。现有 Agent JAR 中对应类缺少 `MethodParameters` 属性，因此不能依赖反射恢复这些名字。
+
+**修复**：Studio 控制器所有请求参数和路径变量均显式绑定名称；根 POM 为 Java 编译启用 `<parameters>true</parameters>`，为其他依赖反射参数名的 Spring 入口提供稳定元数据。
+
+**验证**：2026-11-06，Agent 模块有效 POM 显示 `<parameters>true</parameters>`；`mvn -gs .mvn-settings.xml -s .mvn-settings.xml -pl agent-service -am -DskipTests package` 构建成功，从新 JAR 提取 `StudioController.class` 后确认存在 `MethodParameters`，且所有 MVC 参数注解都带显式名称。`StudioCapabilityServiceTest` 定向运行 2 项通过。未做容器运行态验收。
