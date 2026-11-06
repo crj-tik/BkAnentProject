@@ -35,45 +35,45 @@ public class RoleAuthorizationManagementController {
 
     @PutMapping("/roles/{roleId}")
     public RoleAuthorizationManagementService.ManagementResult updateRole(@RequestHeader(value="Authorization",required=false) String header,
-                                                                          @PathVariable("roleId") long roleId,
+                                                                          @PathVariable(name = "roleId") long roleId,
                                                                           @RequestBody RoleAuthorizationManagementService.RoleDefinition body) {
         return service.updateRole(bearer(header),roleId,body);
     }
 
     @DeleteMapping("/roles/{roleId}")
     public RoleAuthorizationManagementService.ManagementResult deleteRole(@RequestHeader(value="Authorization",required=false) String header,
-                                                                          @PathVariable("roleId") long roleId) {
+                                                                          @PathVariable(name = "roleId") long roleId) {
         return service.deleteRole(bearer(header),roleId);
     }
 
     @GetMapping("/users/{userId}/roles")
     public List<RoleAuthorizationManagementService.UserRoleGrant> grants(@RequestHeader(value="Authorization",required=false) String header,
-                                                                         @PathVariable("userId") long userId) {
+                                                                         @PathVariable(name = "userId") long userId) {
         return service.userRoles(bearer(header),userId);
     }
 
     @PutMapping("/users/{userId}/roles")
     public RoleAuthorizationManagementService.ManagementResult replaceGrants(@RequestHeader(value="Authorization",required=false) String header,
-                                                                              @PathVariable("userId") long userId,@RequestBody UserRoles body) {
+                                                                              @PathVariable(name = "userId") long userId,@RequestBody UserRoles body) {
         return service.replaceUserRoles(bearer(header),userId,body.grants());
     }
 
     @PutMapping("/users/{userId}/business-admin")
     public RoleAuthorizationManagementService.ManagementResult administrator(@RequestHeader(value="Authorization",required=false) String header,
-                                                                             @PathVariable("userId") long userId,@RequestBody BusinessAdmin body) {
+                                                                             @PathVariable(name = "userId") long userId,@RequestBody BusinessAdmin body) {
         return service.setBusinessAdmin(bearer(header),userId,body.enabled());
     }
 
     @GetMapping("/users/{userId}/business-identities")
     public List<RoleAuthorizationManagementService.BusinessIdentity> businessIdentities(
-            @RequestHeader(value="Authorization",required=false) String header, @PathVariable("userId") long userId) {
+            @RequestHeader(value="Authorization",required=false) String header, @PathVariable(name = "userId") long userId) {
         return service.businessIdentities(bearer(header), userId);
     }
 
     @PutMapping("/users/{userId}/broker-identity")
     public RoleAuthorizationManagementService.BusinessIdentityChange brokerIdentity(
             @RequestHeader(value="Authorization",required=false) String header,
-            @PathVariable("userId") long userId, @RequestBody BrokerIdentity body) {
+            @PathVariable(name = "userId") long userId, @RequestBody BrokerIdentity body) {
         if (body == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Identity body required");
         return service.setBrokerIdentity(bearer(header), userId, body.brokerId());
     }
@@ -81,7 +81,7 @@ public class RoleAuthorizationManagementController {
     @PutMapping("/users/{userId}/store-identity")
     public RoleAuthorizationManagementService.StoreIdentityChange storeIdentity(
             @RequestHeader(value="Authorization",required=false) String header,
-            @PathVariable("userId") long userId, @RequestBody StoreIdentity body) {
+            @PathVariable(name = "userId") long userId, @RequestBody StoreIdentity body) {
         if (body == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Identity body required");
         return service.setStoreIdentity(bearer(header), userId, body.storeId());
     }

@@ -151,7 +151,7 @@ public class InterviewController {
     /** List only the caller's confirmed participation relations, or the explicit business-wide read scope. */
     @GetMapping
     public ApiResponse<List<Map<String, Object>>> listSessions(
-            @RequestParam(value = "status", required = false) String status) {
+            @RequestParam(name = "status", required = false) String status) {
         if (!authorizationProperties.isEnabled() || authorizationService == null) {
             return ApiResponse.fail("INTERVIEW_AUTHORIZATION_DISABLED", "访谈关系查询暂不可用");
         }
@@ -202,7 +202,7 @@ public class InterviewController {
 
     /** User selection is a target invitation only; the selected user must authenticate to confirm it. */
     @PostMapping("/{sessionId}/participants/respond/invite")
-    public ApiResponse<Map<String, Object>> inviteRespondent(@PathVariable("sessionId") Long sessionId,
+    public ApiResponse<Map<String, Object>> inviteRespondent(@PathVariable(name = "sessionId") Long sessionId,
                                                                @RequestBody InviteRespondentRequest request) {
         if (!authorizationProperties.isEnabled() || participantService == null || authorizationService == null) {
             return ApiResponse.fail("INTERVIEW_AUTHORIZATION_DISABLED", "受访邀请暂不可用");
@@ -255,7 +255,7 @@ public class InterviewController {
     /** Credentials are delivered only to the authenticated browser caller and are never returned by A2A tools. */
     @PostMapping("/{sessionId}/credentials")
     public ResponseEntity<ApiResponse<Map<String, Object>>> issueParticipantCredential(
-            @PathVariable("sessionId") Long sessionId,
+            @PathVariable(name = "sessionId") Long sessionId,
             @RequestBody ParticipantCredentialRequest request) {
         HttpHeaders headers = noStoreHeaders();
         if (!authorizationProperties.isEnabled() || participantTicketService == null) {
@@ -282,8 +282,8 @@ public class InterviewController {
     /** A caller may revoke its own credential; a session initiator may revoke a credential for that session. */
     @org.springframework.web.bind.annotation.DeleteMapping("/{sessionId}/credentials/{credentialId}")
     public ApiResponse<Map<String, Object>> revokeParticipantCredential(
-            @PathVariable("sessionId") Long sessionId,
-            @PathVariable("credentialId") Long credentialId) {
+            @PathVariable(name = "sessionId") Long sessionId,
+            @PathVariable(name = "credentialId") Long credentialId) {
         if (!authorizationProperties.isEnabled() || participantTicketService == null) {
             return ApiResponse.fail("INTERVIEW_AUTHORIZATION_DISABLED", "访谈凭据撤销暂不可用");
         }
@@ -298,7 +298,7 @@ public class InterviewController {
 
     /** A selected respondent confirms only their own pending relation using their signed actor context. */
     @PostMapping("/{sessionId}/participants/respond/confirm")
-    public ApiResponse<Map<String, Object>> confirmRespondent(@PathVariable("sessionId") Long sessionId) {
+    public ApiResponse<Map<String, Object>> confirmRespondent(@PathVariable(name = "sessionId") Long sessionId) {
         if (!authorizationProperties.isEnabled() || participantService == null) {
             return ApiResponse.fail("INTERVIEW_AUTHORIZATION_DISABLED", "受访者确认暂不可用");
         }
@@ -319,7 +319,7 @@ public class InterviewController {
      */
     @PostMapping("/{sessionId}/questions")
     public ApiResponse<Map<String, Object>> createQuestions(
-            @PathVariable("sessionId") Long sessionId,
+            @PathVariable(name = "sessionId") Long sessionId,
             @RequestHeader(value = "x-ticket", required = false) String ticket,
             @RequestBody CreateQuestionsRequest request) {
         String authFailure = sessionAuthorizationFailure(sessionId, ticket, SessionPolicy.INITIATE);
@@ -349,7 +349,7 @@ public class InterviewController {
      */
     @PostMapping("/{sessionId}/questions/confirm")
     public ApiResponse<Map<String, Object>> confirmQuestions(
-            @PathVariable("sessionId") Long sessionId,
+            @PathVariable(name = "sessionId") Long sessionId,
             @RequestHeader(value = "x-ticket", required = false) String ticket,
             @RequestBody ConfirmQuestionsRequest request) {
         String authFailure = sessionAuthorizationFailure(sessionId, ticket, SessionPolicy.INITIATE);
@@ -373,7 +373,7 @@ public class InterviewController {
      */
     @PostMapping("/{sessionId}/start")
     public ApiResponse<Map<String, Object>> start(
-            @PathVariable("sessionId") Long sessionId,
+            @PathVariable(name = "sessionId") Long sessionId,
             @RequestHeader(value = "x-ticket", required = false) String ticket) {
         String authFailure = sessionAuthorizationFailure(sessionId, ticket, SessionPolicy.INITIATE);
         if (authFailure != null) return ApiResponse.fail(authFailure, "当前身份不能启动此访谈");
@@ -399,7 +399,7 @@ public class InterviewController {
     /** 访谈入口页读取当前题目和进度；会话凭据只从请求头传递。 */
     @GetMapping("/{sessionId}")
     public ApiResponse<InterviewMonitorResponse> monitor(
-            @PathVariable("sessionId") Long sessionId,
+            @PathVariable(name = "sessionId") Long sessionId,
             @RequestHeader(value = "x-ticket", required = false) String ticket) {
         String authFailure = sessionAuthorizationFailure(sessionId, ticket, SessionPolicy.READ);
         if (authFailure != null) return ApiResponse.fail(authFailure, "当前身份不能读取此访谈");
@@ -427,7 +427,7 @@ public class InterviewController {
      */
     @PostMapping(value = "/{sessionId}/turns", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> submitTurn(
-            @PathVariable("sessionId") Long sessionId,
+            @PathVariable(name = "sessionId") Long sessionId,
             @RequestHeader(value = "x-req-id", required = false) String reqId,
             @RequestHeader(value = "x-ticket", required = false) String ticket,
             @RequestBody TurnRequest request) {
@@ -469,8 +469,8 @@ public class InterviewController {
      */
     @GetMapping("/{sessionId}/replies/{reqId}")
     public ApiResponse<Map<String, Object>> reply(
-            @PathVariable("sessionId") Long sessionId,
-            @PathVariable("reqId") String reqId,
+            @PathVariable(name = "sessionId") Long sessionId,
+            @PathVariable(name = "reqId") String reqId,
             @RequestHeader(value = "x-ticket", required = false) String ticket) {
         if (Sanitizer.containsCredentialShape(reqId)) {
             return ApiResponse.fail("INTERVIEW_REQUEST_ID_INVALID", "回执编号格式无效");
@@ -497,7 +497,7 @@ public class InterviewController {
      */
     @GetMapping(value = "/{sessionId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> stream(
-            @PathVariable("sessionId") Long sessionId,
+            @PathVariable(name = "sessionId") Long sessionId,
             @RequestHeader(value = "x-ticket", required = false) String ticket) {
         if (!authorizationProperties.isEnabled()) return reject("INTERVIEW_AUTHORIZATION_DISABLED");
         if (authorizationService == null || participantTicketService == null) {
@@ -530,10 +530,10 @@ public class InterviewController {
      */
     @GetMapping("/reports/tasks")
     public ApiResponse<Map<String, Object>> listReportTasks(
-            @RequestParam(value = "creatorWorkNo", required = false) String creatorWorkNo,
-            @RequestParam(value = "status", required = false) String status,
-            @RequestParam(value = "page", defaultValue = "1") int page,
-            @RequestParam(value = "pageSize", defaultValue = "20") int pageSize) {
+            @RequestParam(name = "creatorWorkNo", required = false) String creatorWorkNo,
+            @RequestParam(name = "status", required = false) String status,
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "pageSize", defaultValue = "20") int pageSize) {
         try {
             if (!authorizationProperties.isEnabled()) {
                 return ApiResponse.fail("INTERVIEW_AUTHORIZATION_DISABLED", "访谈报告读取暂不可用");
@@ -550,7 +550,7 @@ public class InterviewController {
      */
     @GetMapping("/reports/tasks/{taskId}")
     public ApiResponse<Map<String, Object>> reportTaskDetail(
-            @PathVariable("taskId") Long taskId) {
+            @PathVariable(name = "taskId") Long taskId) {
         if (!authorizationProperties.isEnabled()) {
             return ApiResponse.fail("INTERVIEW_AUTHORIZATION_DISABLED", "访谈报告读取暂不可用");
         }
@@ -574,10 +574,10 @@ public class InterviewController {
      */
     @GetMapping("/reports/search")
     public ApiResponse<Map<String, Object>> searchReports(
-            @RequestParam(value = "keyword", required = false) String keyword,
-            @RequestParam(value = "creatorWorkNo", required = false) String creatorWorkNo,
-            @RequestParam(value = "page", defaultValue = "1") int page,
-            @RequestParam(value = "pageSize", defaultValue = "20") int pageSize) {
+            @RequestParam(name = "keyword", required = false) String keyword,
+            @RequestParam(name = "creatorWorkNo", required = false) String creatorWorkNo,
+            @RequestParam(name = "page", defaultValue = "1") int page,
+            @RequestParam(name = "pageSize", defaultValue = "20") int pageSize) {
         try {
             if (!authorizationProperties.isEnabled()) {
                 return ApiResponse.fail("INTERVIEW_AUTHORIZATION_DISABLED", "访谈报告搜索暂不可用");
@@ -597,7 +597,7 @@ public class InterviewController {
     @PostMapping("/{sessionId}/director-commands")
     @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public ApiResponse<Map<String, Object>> sendDirectorCommand(
-            @PathVariable("sessionId") Long sessionId,
+            @PathVariable(name = "sessionId") Long sessionId,
             @RequestHeader(value = "x-ticket", required = false) String ticket,
             @RequestBody DirectorCommandRequest request) {
         String authFailure = sessionAuthorizationFailure(sessionId, ticket, SessionPolicy.ASSIST);

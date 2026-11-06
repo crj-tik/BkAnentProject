@@ -501,8 +501,8 @@ public class AgentController {
     }
 
     @GetMapping("/supervisor/workflows/async/status")
-    public ApiResponse<SupervisorAsyncWorkflowStatusResponse> querySupervisorAsyncWorkflowStatus(@RequestParam("asyncWorkflowId") String asyncWorkflowId,
-                                                                                                 @RequestParam("userId") String userId) {
+    public ApiResponse<SupervisorAsyncWorkflowStatusResponse> querySupervisorAsyncWorkflowStatus(@RequestParam(name = "asyncWorkflowId") String asyncWorkflowId,
+                                                                                                 @RequestParam(name = "userId") String userId) {
         String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         SupervisorAsyncWorkflowStatusResponse response = supervisorAsyncWorkflowService.queryStatus(asyncWorkflowId, authenticatedUserId);
         if (response == null) {
@@ -581,15 +581,15 @@ public class AgentController {
     }
 
     @GetMapping("/supervisor/workflows/state")
-    public ApiResponse<SupervisorWorkflowView> getWorkflowState(@RequestParam("taskId") String taskId,
-                                                                @RequestParam("userId") String userId) {
+    public ApiResponse<SupervisorWorkflowView> getWorkflowState(@RequestParam(name = "taskId") String taskId,
+                                                                @RequestParam(name = "userId") String userId) {
         String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
         return guarded(() -> ApiResponse.ok(supervisorWorkflowQueryService.findWorkflow(taskId, authenticatedUserId).orElse(null)));
     }
 
     @GetMapping("/supervisor/workflows/artifacts")
-    public ApiResponse<List<TaskArtifactView>> listWorkflowArtifacts(@RequestParam("taskId") String taskId,
-                                                                     @RequestParam("userId") String userId) {
+    public ApiResponse<List<TaskArtifactView>> listWorkflowArtifacts(@RequestParam(name = "taskId") String taskId,
+                                                                     @RequestParam(name = "userId") String userId) {
         try {
             String authenticatedUserId = authenticatedPrincipal.resolveUserId(userId);
             return ApiResponse.ok(supervisorWorkflowQueryService.listArtifacts(taskId, authenticatedUserId));
@@ -705,10 +705,10 @@ public class AgentController {
     }
 
     @GetMapping("/supervisor/stream")
-    public SseEmitter subscribeSupervisorStream(@RequestParam("sessionId") String sessionId,
-                                                @RequestParam(value = "taskId", required = false) String taskId,
-                                                @RequestParam(value = "afterEventId", required = false) String afterEventId,
-                                                @RequestParam(value = "afterSequence", required = false) Long afterSequence,
+    public SseEmitter subscribeSupervisorStream(@RequestParam(name = "sessionId") String sessionId,
+                                                @RequestParam(name = "taskId", required = false) String taskId,
+                                                @RequestParam(name = "afterEventId", required = false) String afterEventId,
+                                                @RequestParam(name = "afterSequence", required = false) Long afterSequence,
                                                 @RequestHeader(value = "Last-Event-ID", required = false) String lastEventId) {
         String authenticatedUserId = authenticatedPrincipal.userId();
         supervisorSessionOwnershipService.assertOwned(sessionId, authenticatedUserId);

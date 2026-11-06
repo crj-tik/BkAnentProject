@@ -78,7 +78,7 @@ public class MemoryController {
     }
 
     @GetMapping("/sessions")
-    public ApiResponse<SessionMemoryResponse> getSessionMemory(@RequestParam("sessionId") String sessionId) {
+    public ApiResponse<SessionMemoryResponse> getSessionMemory(@RequestParam(name = "sessionId") String sessionId) {
         return checkedResponse(requireSessionOwner(sessionId).orElse(null));
     }
 
@@ -89,8 +89,8 @@ public class MemoryController {
     }
 
     @GetMapping("/artifacts/by-task")
-    public ApiResponse<List<ArtifactQueryResponse>> listArtifactsByTask(@RequestParam("taskId") String taskId,
-                                                                        @RequestParam("sessionId") String sessionId) {
+    public ApiResponse<List<ArtifactQueryResponse>> listArtifactsByTask(@RequestParam(name = "taskId") String taskId,
+                                                                        @RequestParam(name = "sessionId") String sessionId) {
         requireSessionOwner(sessionId);
         var artifacts = taskArtifactMemoryService.listByTaskId(taskId, sessionId);
         artifacts.forEach(this::requireArtifactOwner);
@@ -98,9 +98,9 @@ public class MemoryController {
     }
 
     @GetMapping("/artifacts/by-id")
-    public ApiResponse<ArtifactQueryResponse> getArtifactById(@RequestParam("artifactId") String artifactId,
-                                                              @RequestParam("taskId") String taskId,
-                                                              @RequestParam(value = "sessionId", required = false) String sessionId) {
+    public ApiResponse<ArtifactQueryResponse> getArtifactById(@RequestParam(name = "artifactId") String artifactId,
+                                                              @RequestParam(name = "taskId") String taskId,
+                                                              @RequestParam(name = "sessionId", required = false) String sessionId) {
         currentPrincipal();
         if (sessionId != null) requireSessionOwner(sessionId);
         var artifact = taskArtifactMemoryService.getByArtifactId(artifactId, taskId, sessionId);
@@ -115,7 +115,7 @@ public class MemoryController {
     }
 
     @GetMapping("/handoffs/by-task")
-    public ApiResponse<List<HandoffRelationQueryResponse>> listHandoffsByTask(@RequestParam("taskId") String taskId) {
+    public ApiResponse<List<HandoffRelationQueryResponse>> listHandoffsByTask(@RequestParam(name = "taskId") String taskId) {
         currentPrincipal();
         var handoffs = handoffRelationMemoryService.listByTaskId(taskId);
         requireHandoffOwners(handoffs);
@@ -123,7 +123,7 @@ public class MemoryController {
     }
 
     @GetMapping("/handoffs/by-session")
-    public ApiResponse<List<HandoffRelationQueryResponse>> listHandoffsBySession(@RequestParam("sessionId") String sessionId) {
+    public ApiResponse<List<HandoffRelationQueryResponse>> listHandoffsBySession(@RequestParam(name = "sessionId") String sessionId) {
         requireSessionOwner(sessionId);
         var handoffs = handoffRelationMemoryService.listBySessionId(sessionId);
         requireHandoffOwners(handoffs);
@@ -186,8 +186,8 @@ public class MemoryController {
 
     @GetMapping("/user-preferences/{userId}")
     public ApiResponse<List<UserPreferenceRecord>> getUserPreferences(
-            @PathVariable("userId") String userId,
-            @RequestParam(value = "category", required = false) String category,
+            @PathVariable(name = "userId") String userId,
+            @RequestParam(name = "category", required = false) String category,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         ragSecurity.requireOwner(ragSecurity.authenticate(credentials(authorization)), userId);
         return checkedResponse(userPreferenceMemoryService.findByUserId(userId, category));
@@ -195,8 +195,8 @@ public class MemoryController {
 
     @PostMapping("/user-preferences/{userId}/decay")
     public ApiResponse<Void> decayUserPreferences(
-            @PathVariable("userId") String userId,
-            @RequestParam(value = "excludePreferenceKey", required = false) String excludePreferenceKey,
+            @PathVariable(name = "userId") String userId,
+            @RequestParam(name = "excludePreferenceKey", required = false) String excludePreferenceKey,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         ragSecurity.requireOwner(ragSecurity.authenticate(credentials(authorization)), userId);
         userPreferenceMemoryService.decayConfidence(userId, excludePreferenceKey);
@@ -215,7 +215,7 @@ public class MemoryController {
 
     @GetMapping("/system-constraints")
     public ApiResponse<List<SystemConstraintRecord>> getSystemConstraints(
-            @RequestParam(value = "category", required = false) String category,
+            @RequestParam(name = "category", required = false) String category,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         ragSecurity.requireConstraintRead(ragSecurity.authenticate(credentials(authorization)));
         return checkedResponse(systemConstraintMemoryService.findByCategory(category));
@@ -223,7 +223,7 @@ public class MemoryController {
 
     @GetMapping("/system-constraints/search")
     public ApiResponse<List<SystemConstraintRecord>> searchSystemConstraints(
-            @RequestParam(value = "tags", required = false) String tags,
+            @RequestParam(name = "tags", required = false) String tags,
             @RequestHeader(value = "Authorization", required = false) String authorization) {
         ragSecurity.requireConstraintRead(ragSecurity.authenticate(credentials(authorization)));
         return checkedResponse(systemConstraintMemoryService.searchByTags(tags));
@@ -239,8 +239,8 @@ public class MemoryController {
     @PostMapping("/rag/backfill")
     public ApiResponse<MemoryRagBackfillService.BackfillPage> backfillMemory(
             @RequestHeader(value = "Authorization", required = false) String authorization,
-            @RequestParam(value = "cursor", required = false) String cursor,
-            @RequestParam(value = "limit", defaultValue = "" + MemoryRagBackfillService.DEFAULT_LIMIT) int limit) {
+            @RequestParam(name = "cursor", required = false) String cursor,
+            @RequestParam(name = "limit", defaultValue = "" + MemoryRagBackfillService.DEFAULT_LIMIT) int limit) {
         return checkedResponse(ragBackfill.backfill(cursor, limit, credentials(authorization)));
     }
 
@@ -259,7 +259,7 @@ public class MemoryController {
     }
 
     @GetMapping("/sessions/snapshot/{sessionId}")
-    public ApiResponse<SessionMemoryResponse> getLatestSessionMemorySnapshot(@PathVariable("sessionId") String sessionId) {
+    public ApiResponse<SessionMemoryResponse> getLatestSessionMemorySnapshot(@PathVariable(name = "sessionId") String sessionId) {
         requireSessionOwner(sessionId);
         return checkedResponse(sessionMemorySnapshotService.getLatest(sessionId).orElse(null));
     }
@@ -267,7 +267,7 @@ public class MemoryController {
     // --- Workflow History ---
 
     @GetMapping("/workflow/{taskId}/history")
-    public ApiResponse<WorkflowHistoryView> getWorkflowHistory(@PathVariable("taskId") String taskId) {
+    public ApiResponse<WorkflowHistoryView> getWorkflowHistory(@PathVariable(name = "taskId") String taskId) {
         currentPrincipal();
         List<HandoffRelationQueryResponse> handoffs = handoffRelationMemoryService.listByTaskId(taskId);
         requireHandoffOwners(handoffs);

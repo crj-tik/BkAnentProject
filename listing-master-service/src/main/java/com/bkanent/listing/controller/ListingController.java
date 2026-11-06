@@ -47,18 +47,18 @@ public class ListingController {
     }
 
     @PutMapping("/{id}")
-    public ApiResponse<ListingDetailResponse> update(@PathVariable("id") Long id, @RequestBody ListingUpsertRequest request) {
+    public ApiResponse<ListingDetailResponse> update(@PathVariable(name = "id") Long id, @RequestBody ListingUpsertRequest request) {
         return ApiResponse.ok(listingManagementService.updateListing(id, request));
     }
 
     @DeleteMapping("/{id}")
-    public ApiResponse<Void> delete(@PathVariable("id") Long id) {
+    public ApiResponse<Void> delete(@PathVariable(name = "id") Long id) {
         listingManagementService.deleteListing(id);
         return ApiResponse.ok(null);
     }
 
     @GetMapping("/{id}")
-    public ApiResponse<ListingDetailResponse> detail(@PathVariable("id") Long id) {
+    public ApiResponse<ListingDetailResponse> detail(@PathVariable(name = "id") Long id) {
         return ApiResponse.ok(listingManagementService.getListingDetail(id));
     }
 
@@ -89,24 +89,24 @@ public class ListingController {
     }
 
     @PutMapping("/{id}/status")
-    public ApiResponse<ListingDetailResponse> updateStatus(@PathVariable("id") Long id,
+    public ApiResponse<ListingDetailResponse> updateStatus(@PathVariable(name = "id") Long id,
                                                            @RequestBody ListingStatusUpdateRequest request) {
         return ApiResponse.ok(listingManagementService.updateStatus(id, request));
     }
 
     @PutMapping("/{id}/assets")
-    public ApiResponse<ListingDetailResponse> bindAssets(@PathVariable("id") Long id,
+    public ApiResponse<ListingDetailResponse> bindAssets(@PathVariable(name = "id") Long id,
                                                          @RequestBody ListingAssetBindRequest request) {
         return ApiResponse.ok(listingManagementService.bindAssets(id, request));
     }
 
     @PostMapping("/{id}/assets/legacy-register")
-    public ApiResponse<Integer> registerLegacyAssets(@PathVariable("id") Long id) {
+    public ApiResponse<Integer> registerLegacyAssets(@PathVariable(name = "id") Long id) {
         return ApiResponse.ok(listingManagementService.registerLegacyAssets(id));
     }
 
     @DeleteMapping("/assets/{assetId}")
-    public ApiResponse<Void> retireAsset(@PathVariable("assetId") Long assetId) {
+    public ApiResponse<Void> retireAsset(@PathVariable(name = "assetId") Long assetId) {
         listingManagementService.retireAsset(assetId);
         return ApiResponse.ok(null);
     }
@@ -128,30 +128,30 @@ public class ListingController {
     }
 
     @GetMapping("/buyer/{id}")
-    public ApiResponse<ListingBuyerViewResponse> getBuyerDetail(@PathVariable("id") Long id) {
+    public ApiResponse<ListingBuyerViewResponse> getBuyerDetail(@PathVariable(name = "id") Long id) {
         return ApiResponse.ok(listingManagementService.getBuyerDetail(id));
     }
 
     @PostMapping("/{id}/ocr")
-    public ApiResponse<ListingDetailResponse> recognizeOcr(@PathVariable("id") Long id,
+    public ApiResponse<ListingDetailResponse> recognizeOcr(@PathVariable(name = "id") Long id,
                                                            @RequestBody ListingOcrRecognizeRequest request) {
         return ApiResponse.ok(listingManagementService.recognizeOcr(id, request));
     }
 
     @PostMapping("/{id}/verify")
-    public ApiResponse<ListingDetailResponse> verify(@PathVariable("id") Long id,
+    public ApiResponse<ListingDetailResponse> verify(@PathVariable(name = "id") Long id,
                                                      @RequestBody ListingVerifyRequest request) {
         return ApiResponse.ok(listingManagementService.verifyAuthenticity(id, request));
     }
 
     @PutMapping("/{id}/owner")
-    public ApiResponse<ListingDetailResponse> confirmOwner(@PathVariable("id") Long id,
+    public ApiResponse<ListingDetailResponse> confirmOwner(@PathVariable(name = "id") Long id,
                                                            @RequestBody ListingOwnerConfirmRequest request) {
         return ApiResponse.ok(listingManagementService.confirmOwner(id, request.ownerCustomerId()));
     }
 
     @DeleteMapping("/{id}/owner")
-    public ApiResponse<ListingDetailResponse> unbindOwner(@PathVariable("id") Long id) {
+    public ApiResponse<ListingDetailResponse> unbindOwner(@PathVariable(name = "id") Long id) {
         return ApiResponse.ok(listingManagementService.unbindOwner(id));
     }
 

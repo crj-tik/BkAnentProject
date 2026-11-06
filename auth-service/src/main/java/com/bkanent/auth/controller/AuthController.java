@@ -179,7 +179,7 @@ public class AuthController {
     @PutMapping("/users/{userId}")
     public ApiResponse<UserItem> updateUser(
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
-            @PathVariable("userId") long userId,
+            @PathVariable(name = "userId") long userId,
             @Valid @RequestBody UpdateUserRequest request) {
         UserAccountEntity actor = requireAdmin(authorization);
         return ApiResponse.ok(userManagementService.isVersionedAuthorization()
@@ -190,7 +190,7 @@ public class AuthController {
     @PutMapping("/users/{userId}/password")
     public ApiResponse<Void> resetPassword(
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
-            @PathVariable("userId") long userId,
+            @PathVariable(name = "userId") long userId,
             @Valid @RequestBody ResetPasswordRequest request) {
         UserAccountEntity actor = requireAdmin(authorization);
         if (userManagementService.isVersionedAuthorization()) userManagementService.resetPassword(accessToken(authorization), actor.getId(), userId, request.password());
@@ -201,7 +201,7 @@ public class AuthController {
     @DeleteMapping("/users/{userId}")
     public ApiResponse<Void> deleteUser(
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
-            @PathVariable("userId") long userId) {
+            @PathVariable(name = "userId") long userId) {
         UserAccountEntity actor = requireAdmin(authorization);
         if (userManagementService.isVersionedAuthorization()) userManagementService.deleteUser(accessToken(authorization), actor.getId(), userId);
         else userManagementService.deleteUser(actor.getId(), userId);
