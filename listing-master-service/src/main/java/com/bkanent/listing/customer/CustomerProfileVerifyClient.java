@@ -66,9 +66,11 @@ public class CustomerProfileVerifyClient {
      */
     public VerifiedOwnerProfile verifyOwnerProfile(long customerId) {
         if (customerProfileVerify == null) {
+            log.warn("业主档案验证失败：Dubbo 引用未注入");
             throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
         }
         if (!StringUtils.hasText(secret) || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
+            log.warn("业主档案验证失败：签名密钥未配置或不足 32 字节");
             throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
         }
         try {
@@ -95,11 +97,14 @@ public class CustomerProfileVerifyClient {
             try {
                 response = customerProfileVerify.verifyOwnerProfileContext(request, envelope);
             } catch (RagException failure) {
+                log.warn("业主档案验证失败：RPC 返回 RagException code={}", failure.code());
                 throw failure;
             } catch (RuntimeException failure) {
+                log.warn("业主档案验证失败：RPC 调用异常", failure);
                 throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
             }
             if (response == null || response.requestId() == null || !response.requestId().equals(requestId)) {
+                log.warn("业主档案验证失败：响应为空或 requestId 不匹配 response={}", response);
                 throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
             }
             if (!CustomerProfileVerifyResponse.VERIFIED.equals(response.result())) {
