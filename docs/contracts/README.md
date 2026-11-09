@@ -105,7 +105,7 @@ Content-Type: application/json
 | --- | --- | --- |
 | Auth | 本文件“Auth 契约”；`auth-service` 的 `AuthController`、`RoleAuthorizationManagementController` 与 DTO | 浏览器身份、用户管理、角色和身份管理已按源码整理；当前以本文作为 Auth 接口契约，尚无独立 Auth OpenAPI；完整有效权限码的自助查询端点尚未定义。 |
 | Gateway | [后端接口盘点](../backend-api-inventory-draft.md)、[Gateway 模板](../../nacos/gateway.yaml)、[KI-236](../known-issues.md) | 路由/受众仅是接入前提；目标环境逐路由验收未闭环。 |
-| Agent / Studio | [Agent 对话和任务参数](agent-supervisor-frontend-draft.md)、[Studio API 说明](../studio-v2-api.md)、[Studio schema](studio-v2.schema.json)、[后端接口盘点](../backend-api-inventory-draft.md) | 已补充 Agent 对话、任务、审批和流及 Studio 工作项请求参数；MCP、RAG、诊断、治理等入口和运行行为仍需逐项核对。 |
+| Agent / Studio | [Agent 接口参数](agent-supervisor-frontend-draft.md)、[Studio API 说明](../studio-v2-api.md)、[Studio schema](studio-v2.schema.json)、[后端接口盘点](../backend-api-inventory-draft.md) | 已补充 Agent 对话、任务、审批、流、MCP、RAG 及 Studio 工作项请求参数；诊断、治理、响应和运行行为仍需逐项核对。 |
 | Listing / Customer | [房源与客户接口草稿](listing-customer-frontend-draft.md)、[Listing Business API v1](../listing-business-api-v1.md)、[内部 Listing API](../internal-listing-business-api.md) | 前端 CRUD 草稿字段较多但尚未逐项核实；`Listing Business API v1` 是受签名授权的服务间来源接口，不是普通浏览器契约。 |
 | Platform Operations | [平台经营 OpenAPI](platform-operations-v1.openapi.yaml)、[已发布知识 OpenAPI](platform-operations-published-knowledge-v1.openapi.yaml)、[前端功能清单](../platform-operations-frontend-function-list.md) | OpenAPI 覆盖分析、复盘、知识接口；复盘响应 schema 等字段仍需与实际 DTO 继续对齐，相关数据源字段问题见 [KI-252](../known-issues.md)。 |
 | Marketing | [营销接口请求参数](marketing-frontend-draft.md)、[后端接口盘点](../backend-api-inventory-draft.md) | 请求字段及已确认的校验已按源码补充；响应字段、全部授权和错误码仍需逐项核对。准备及兼容效果接口的未使用字段见 KI-254。 |
