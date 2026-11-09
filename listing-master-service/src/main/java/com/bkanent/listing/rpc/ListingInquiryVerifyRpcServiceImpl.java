@@ -18,7 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * 按签名上下文核验：房源存在、未删除、状态为 ON_SALE、当前操作人具备 listing.read 范围；
  * 不可访问时统一返回 NOT_ACCESSIBLE，不区分不存在与无权，避免泄露房源事实。
  */
-@DubboService
+@DubboService(serialization = "fastjson2ctor", preferSerialization = "fastjson2ctor")
 public class ListingInquiryVerifyRpcServiceImpl implements ListingInquiryVerifyRpcService {
 
     /**

@@ -47,7 +47,7 @@ public class CustomerProfileVerifyClient {
      */
     private static final String EXPECTED_PROFILE_TYPE = "OWNER";
 
-    @DubboReference(check = false, parameters = {"serialization=hessian2"})
+    @DubboReference(check = false, parameters = {"serialization=fastjson2ctor"})
     private CustomerProfileVerifyRpcService customerProfileVerify;
     /**
      * 字段：keyId（服务签名 keyId）。

@@ -19,7 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
  * 且报告存在、owner 为当前操作人；报告不存在或非本人所有统一返回 NOT_ACCESSIBLE，
  * 不区分二者，避免泄露报告存在性（设计决策 3：attach 时核验一次，读取不重复核验）。
  */
-@DubboService
+@DubboService(serialization = "fastjson2ctor", preferSerialization = "fastjson2ctor")
 public class ListingComparisonReportVerifyRpcServiceImpl implements ListingComparisonReportVerifyRpcService {
 
     /**

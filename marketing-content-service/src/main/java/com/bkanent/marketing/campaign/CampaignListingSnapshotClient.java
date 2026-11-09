@@ -35,7 +35,7 @@ public class CampaignListingSnapshotClient {
 
     private final CampaignRuntimeProperties properties;
     private final ObjectMapper objectMapper;
-    @DubboReference(check = false, parameters = {"serialization=hessian2"})
+    @DubboReference(check = false, parameters = {"serialization=fastjson2ctor"})
     private ListingBusinessSourceRpcService listings;
     @Value("${marketing.listing-read.key-id:marketing-read-current}")
     private String keyId = "marketing-read-current";

@@ -18,7 +18,7 @@ import java.time.ZoneId;
  * 不以请求字段推断归属。业务管理员（customer.read.all）放行任意档案，
  * 非管理员要求档案 brokerId 与当前 BROKER 映射一致。
  */
-@DubboService
+@DubboService(serialization = "fastjson2ctor", preferSerialization = "fastjson2ctor")
 public class CustomerProfileVerifyRpcServiceImpl implements CustomerProfileVerifyRpcService {
 
     private final CustomerRpcIdentity identity;

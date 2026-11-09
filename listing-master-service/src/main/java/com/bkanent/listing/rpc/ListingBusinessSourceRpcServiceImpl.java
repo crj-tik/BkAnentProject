@@ -17,7 +17,7 @@ import org.apache.dubbo.config.annotation.DubboService;
 import java.util.function.Supplier;
 
 /** Internal stable-source transport; every method opens the same verified user scope as the HTTP ingress. */
-@DubboService
+@DubboService(serialization = "fastjson2ctor", preferSerialization = "fastjson2ctor")
 public class ListingBusinessSourceRpcServiceImpl implements ListingBusinessSourceRpcService {
     private final com.bkanent.listing.rag.ListingRagIdentity identity;
     private final ListingAuthorizationProperties authorizationProperties;
