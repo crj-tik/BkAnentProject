@@ -110,7 +110,7 @@ Content-Type: application/json
 | Platform Operations | [平台经营 OpenAPI](platform-operations-v1.openapi.yaml)、[已发布知识 OpenAPI](platform-operations-published-knowledge-v1.openapi.yaml)、[前端功能清单](../platform-operations-frontend-function-list.md) | OpenAPI 覆盖分析、复盘、知识接口；复盘响应 schema 等字段仍需与实际 DTO 继续对齐，相关数据源字段问题见 [KI-252](../known-issues.md)。 |
 | Marketing | [营销接口请求参数](marketing-frontend-draft.md)、[后端接口盘点](../backend-api-inventory-draft.md) | 请求字段及已确认的校验已按源码补充；响应字段、全部授权和错误码仍需逐项核对。准备及兼容效果接口的未使用字段见 KI-254。 |
 | Notification | [Notification 鉴权契约](../notification-api-auth-contract.md)、[后端接口盘点](../backend-api-inventory-draft.md) | 已说明身份和权限边界；REST 请求/响应 schema 尚需补齐。 |
-| Interview | [浏览器凭据与请求契约](../interview-credential-client-contract.md)、[后端接口盘点](../backend-api-inventory-draft.md) | 凭据领取、SSE 请求头规则已说明；会话全生命周期 schema 仍需补齐。 |
+| Interview | [访谈接口请求参数](interview-frontend-draft.md)、[浏览器凭据与请求契约](../interview-credential-client-contract.md) | 已补充当前 REST/SSE 请求参数、场次凭据和回执规则；响应完整 schema、全部异常及运行行为仍需验收。 |
 | Compare / Promotions | [后端接口盘点](../backend-api-inventory-draft.md) | 仅有兼容路由/能力线索；使用前需核实目标 Gateway 路由和实际控制器，不默认当作新页面接口。 |
 | Media / Memory / RAG 及其他 RPC | 对应服务源码与内部协议说明 | 默认属于服务间接口；只有明确登记 Gateway 路由及浏览器调用契约后才纳入前端。 |
 
