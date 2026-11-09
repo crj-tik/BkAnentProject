@@ -32,6 +32,8 @@ import java.util.UUID;
 @Component
 public class CustomerProfileVerifyClient {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(CustomerProfileVerifyClient.class);
+
     /**
      * 常量：AUDIENCE（目标服务）。
      */
@@ -108,12 +110,14 @@ public class CustomerProfileVerifyClient {
         } catch (RagException failure) {
             throw failure;
         } catch (AuthzException failure) {
+            log.warn("业主档案验证授权失败：{}", failure.getMessage());
             throw new RagException(switch (failure.code()) {
                 case EXPIRED -> RagErrorCode.AUTHENTICATION_EXPIRED;
                 case PERMISSION_DENIED -> RagErrorCode.FORBIDDEN;
                 default -> RagErrorCode.AUTHENTICATION_FAILED;
             });
         } catch (Exception failure) {
+            log.warn("业主档案验证依赖失败：{}", failure.toString(), failure);
             throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
         }
     }

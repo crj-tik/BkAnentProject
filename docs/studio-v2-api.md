@@ -34,6 +34,28 @@
 | POST | /works/{id}/commands | 受控只读比较/候选展开/计划快照；返回真实结果引用 |
 | GET | /works/{id}/commands/{requestId} | 查询原回执；结果来源仍重新授权 |
 
+### 请求参数
+
+所有路径相对 `/agent/studio/v1`，`id`、`seriesId`、`requestId` 路径值为字符串。下表中的写入均要求 JSON body；`requestId` 须为非空白字符串、最多 128 字符，版本值接受整数或可解析为整数的字符串。
+
+| 接口 | 参数和约束 |
+| --- | --- |
+| `POST /works` | `{requestId,goal,title?,context?}`；`goal` 非空白且最多 8000 字符。`title` 缺省或空白时取 `goal`，最终截取前 100 字符 |
+| `GET /works` | 可选 query `keyword:string`、`cursor:string`、`limit:int32`，`limit` 默认 20；`keyword` 最多 200 字符。`status` 或 `needsDecision` 一旦提供即拒绝 |
+| `POST /works/{id}/context` | `{requestId,expectedContextRevision,changes?}`；`changes` 为含 `refs` 和/或 `criteria` 的对象，省略按空修改处理；仍会推进上下文版本 |
+| `POST /works/{id}/ui-state` | `{requestId,expectedUiRevision,activeSeriesId?,pinnedViews?}`；`activeSeriesId` 须为当前工作成果的非空字符串、最多 64 字符；`pinnedViews` 最多 20 个字符串，每个最多 80 字符 |
+| `POST /works/{id}/runs` | `{requestId,expectedContextRevision,message,mode,continueRunId?,baseArtifactRefs?,skill?}`；`message` 非空白、最多 12000 字符，`mode` 为 `NEW` 或 `CONTINUE`；`CONTINUE` 要求 `continueRunId` 非空白、最多 128 字符并指向本工作等待补充的执行 |
+| `GET /works/{id}/runs` | 可选 `cursor:string`、`limit:int32`；`limit` 默认 20 |
+| `GET /works/{id}/messages`、`/works/{id}/artifacts`、`/artifact-series/{seriesId}/revisions` | 可选 `cursor:string`、`limit:int32`；`limit` 默认 100 |
+| `GET /artifact-series/{seriesId}` | 可选 query `version:int64`；省略时读取当前版本 |
+| `POST /artifact-series/{seriesId}/revisions` | `{requestId,expectedVersion,content?,derivedFromVersion?,note?}`；非空 `derivedFromVersion` 从历史版本恢复，否则 `content.body:string` 必填且最多 100000 字符 |
+| `POST /works/{id}/commands` | `{requestId,actionId,expectedContextRevision,input?,artifactRefs?}`；`actionId` 非空白、最多 160 字符，具体输入随操作而定 |
+| `GET /works/{id}/commands/{requestId}`、`GET /works/{id}`、`GET /capabilities` | 仅使用路径参数，无 query 或 body |
+
+所有分页 `limit` 经服务端限制在 1–100。`NEW` 的 `baseArtifactRefs` 为可选数组，最多 20 个对象，每项包含 `seriesId:string`（非空白、最多 64 字符）、`version` 和可选 `revisionId`；服务端验证其属于当前工作并核验来源。`skill` 可为 `{name:string,version:string|null}`，`name` 非空白且最多 200 字符。`CONTINUE` 沿用原执行的上下文、技能和 MCP 设置，不采用新传的这些选项。
+
+`context.refs` 最多 100 项，每项 `type` 非空白、最多 64 字符，`id` 非空白、最多 128 字符；`label`、`sourceSystem`、`sourceRevision`、`contentHash`、`dataMode` 仅在是最多 500 字符的字符串时保留，其他引用字段被忽略。`criteria` 只允许 `region`、`areaCode`、`budget`、`bedrooms`、`platform`、`period`、`scopeLabel`、`requirements`；字符串条件最多 8000 字符，`bedrooms` 为 0–30 的整数或整数字符串。
+
 能力目录的 `AVAILABLE` 仅表示 Agent Card 声明的领域能力已发现，不表示依赖健康，也不表示当前用户获准执行操作。普通业务能力返回 `authorization={status:NOT_EVALUATED,checkMode:PER_OPERATION}`；每次实际请求仍由目标接口核验操作权限和资源范围。账号管理项仅在当前用户通过 `auth.users.manage` 检查后出现，并返回 `authorization.status=AUTHORIZED`。目前没有可由 Studio 直接执行的业务操作，因此 `directOperations` 保持空数组，不用目录发现结果代替权限授予。
 
 平台经营 Agent 在 Agent Card 中使用统一 `platform-operations` 域，目录分别列出 `business`（经营分析）、`reviews`（门店复盘）和 `knowledge`（知识运营）；`interviews` 只代表访谈，不再与复盘合并。示例：`{"id":"reviews","availability":"AVAILABLE","authorization":{"status":"NOT_EVALUATED","checkMode":"PER_OPERATION"},"directOperations":[]}`。
