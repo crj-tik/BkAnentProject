@@ -26,7 +26,7 @@
 | 知识审核与发布 | 提交审核、审核通过/拒绝、发布、撤回 | `POST /{knowledgeId}/submit`、`/review`、`/publish`、`/withdraw` | 审核人不能是案例 owner；批准和发布是分开的动作；写操作携带 `requestId` 与 `expectedVersion`，展示状态变更回执 |
 | 已发布知识检索 | 按问题、场景和标签检索可见案例，或按精确 revision 检查/读取 | `POST /knowledge/v1/published/search`、`/batch-read`、`/check` | 常规知识运营页优先展示搜索结果；批量读取和 check 用于引用校验。每次返回都重新验证当前发布版本和访谈来源 |
 
-所有路径以 Gateway 根路径为准，域前缀是 `/platform-operations`。分析接口的查询参数需使用实际日期/月格式；评估、筛选等规则由后端返回值定义。
+所有路径以 Gateway 根路径为准，域前缀是 `/platform-operations`。分析接口建议使用 `YYYY-MM` 和 `YYYY-MM-DD`；当前服务直接使用字符串查询，未统一验证格式。排行榜范围大小写不敏感；`topN` 建议使用正数，非正数的行为依读取路径而异。
 
 ## 关键状态与字段
 

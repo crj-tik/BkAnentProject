@@ -31,7 +31,7 @@ paths:
         - name: statDate
           in: query
           required: true
-          schema: { type: string, format: date }
+          schema: { type: string, description: 建议 YYYY-MM-DD；当前服务直接按字符串查询，未进行日期格式校验 }
       responses:
         '200': { $ref: '#/components/responses/Success' }
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -55,11 +55,11 @@ paths:
         - name: scope
           in: query
           required: true
-          schema: { type: string, enum: [PERSONAL, STORE, REGION] }
+          schema: { type: string, description: PERSONAL、STORE 或 REGION，大小写不敏感 }
         - name: topN
           in: query
           required: false
-          schema: { type: integer, default: 10, minimum: 1 }
+          schema: { type: integer, default: 10, description: 建议正整数；服务端尚未统一校验非正数，不同读取路径可能产生空结果或错误 }
       responses:
         '200': { $ref: '#/components/responses/Success' }
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -106,11 +106,11 @@ paths:
         - name: startDate
           in: query
           required: true
-          schema: { type: string, format: date }
+          schema: { type: string, description: 建议 YYYY-MM-DD；当前服务按字符串传递至查询，未进行日期格式校验 }
         - name: endDate
           in: query
           required: true
-          schema: { type: string, format: date }
+          schema: { type: string, description: 建议 YYYY-MM-DD；当前服务按字符串传递至查询，未进行日期格式校验 }
         - name: regionName
           in: query
           required: false
@@ -118,7 +118,7 @@ paths:
         - name: topN
           in: query
           required: false
-          schema: { type: integer, default: 5, minimum: 1 }
+          schema: { type: integer, default: 5, description: 建议正整数；服务端尚未统一校验非正数，负数可能导致处理错误 }
       responses:
         '200': { $ref: '#/components/responses/Success' }
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -543,7 +543,7 @@ components:
       name: month
       in: query
       required: true
-      schema: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$' }
+      schema: { type: string, description: 建议 YYYY-MM；当前服务按字符串查询，未进行月份格式校验 }
     reviewId:
       name: reviewId
       in: path
