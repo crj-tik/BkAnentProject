@@ -108,7 +108,7 @@ Content-Type: application/json
 | Agent / Studio | [Studio API 说明](../studio-v2-api.md)、[Studio schema](studio-v2.schema.json)、[后端接口盘点](../backend-api-inventory-draft.md) | Studio 命令、工作项资料局部成形；Agent 其余浏览器端接口字段、权限与错误仍是盘点/局部说明。 |
 | Listing / Customer | [房源与客户接口草稿](listing-customer-frontend-draft.md)、[Listing Business API v1](../listing-business-api-v1.md)、[内部 Listing API](../internal-listing-business-api.md) | 前端 CRUD 草稿字段较多但尚未逐项核实；`Listing Business API v1` 是受签名授权的服务间来源接口，不是普通浏览器契约。 |
 | Platform Operations | [平台经营 OpenAPI](platform-operations-v1.openapi.yaml)、[已发布知识 OpenAPI](platform-operations-published-knowledge-v1.openapi.yaml)、[前端功能清单](../platform-operations-frontend-function-list.md) | OpenAPI 覆盖分析、复盘、知识接口；复盘响应 schema 等字段仍需与实际 DTO 继续对齐，相关数据源字段问题见 [KI-252](../known-issues.md)。 |
-| Marketing | [后端接口盘点](../backend-api-inventory-draft.md)、源码 Controller/DTO | 目前是接口盘点，不是完整参数、响应、权限和错误码契约。 |
+| Marketing | [营销接口请求参数](marketing-frontend-draft.md)、[后端接口盘点](../backend-api-inventory-draft.md) | 请求字段及已确认的校验已按源码补充；响应字段、全部授权和错误码仍需逐项核对。准备及兼容效果接口的未使用字段见 KI-254。 |
 | Notification | [Notification 鉴权契约](../notification-api-auth-contract.md)、[后端接口盘点](../backend-api-inventory-draft.md) | 已说明身份和权限边界；REST 请求/响应 schema 尚需补齐。 |
 | Interview | [浏览器凭据与请求契约](../interview-credential-client-contract.md)、[后端接口盘点](../backend-api-inventory-draft.md) | 凭据领取、SSE 请求头规则已说明；会话全生命周期 schema 仍需补齐。 |
 | Compare / Promotions | [后端接口盘点](../backend-api-inventory-draft.md) | 仅有兼容路由/能力线索；使用前需核实目标 Gateway 路由和实际控制器，不默认当作新页面接口。 |

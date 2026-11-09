@@ -36,7 +36,15 @@
 
 **验证**：两份 OpenAPI 的 Postman 语法检查通过；`PublishedKnowledgeContractConsistencyTest` 通过，检查两份契约的发布知识请求 schema 和引用保持一致；Studio schema 已完成 JSON 解析。未进行 Gateway 或浏览器运行态联调。
 
+**2026-11-09 补充**：新增营销请求参数源码核对稿，覆盖当前内容、Campaign 与 Promotions 兼容控制器；静态检查确认 8 个请求 record 的字段名均已列入。营销响应字段、全部权限及运行行为仍待核对，未使用字段另见 KI-254。
+
 **未闭环**：统一入口仍引用多个草稿和局部说明；Agent、营销、通知、访谈及其他 Gateway 接口尚未逐个核对请求体、类型、默认值、权限与运行行为。需继续按 Controller、DTO 和服务校验逐项补齐，并验证与目标部署一致后再关闭；本条不代表全域接口已验收。
+
+## KI-254 [OPEN·P2] 营销接口接收但不使用准备幂等键和兼容统计日期
+
+**发现日期与依据**：2026-11-09。`CampaignPlanPrepareRequest` 包含 `requestId`，但 `CampaignLifecycleService.prepare` 未读取该字段，每次生成新 `planId` 并插入计划；`/promotions/publish` 复用该请求。兼容接口 `/promotions/effects/sync` 的 `LegacyEffectSyncRequest` 包含 `statDate`，Controller 仅将 `publishRecordId` 传给服务。
+
+**影响与待处理**：调用方若把准备请求的 `requestId` 当作幂等键，重试可能生成多个计划；提供 `statDate` 不会选择统计日期。契约已按当前实现标明这两个字段未生效；需明确业务语义，再实现可验证的幂等和日期筛选，或修订接口移除无效字段。当前未修改业务行为，不能宣称已修复。
 
 > **目的**：记录项目全部已知缺陷（已修/待修）与设计限制，让开发者与 AI 快速了解项目真实状态。
 > **读者**：所有 AI 助手与开发者。**修复前先查重（避免重复排查）；修复后在条目更新状态与 commit；发现新问题必须当日追加。**
