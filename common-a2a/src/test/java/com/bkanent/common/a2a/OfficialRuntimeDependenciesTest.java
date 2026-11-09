@@ -19,6 +19,7 @@ import org.apache.dubbo.common.utils.SerializeSecurityConfigurator;
 import org.apache.dubbo.common.utils.SerializeSecurityManager;
 import org.apache.dubbo.remoting.http.RestClient;
 import org.apache.dubbo.remoting.http.config.HttpClientConfig;
+import org.apache.dubbo.remoting.http.restclient.OKHttpRestClient;
 import org.apache.dubbo.remoting.transport.CodecSupport;
 import org.apache.dubbo.rpc.model.FrameworkModel;
 import org.junit.jupiter.api.Test;
@@ -65,14 +66,11 @@ class OfficialRuntimeDependenciesTest {
     }
 
     @Test void dubboDefaultHttpClientLinksAndConstructsWithoutNetwork() throws Exception {
-        for (String type : java.util.List.of("okhttp3.Callback", "okhttp3.OkHttpClient", "okio.Buffer",
-                "kotlin.jvm.internal.Intrinsics")) {
-            Class.forName(type).getDeclaredMethods();
+        for (Class<?> type : List.of(okhttp3.Callback.class, okhttp3.OkHttpClient.class, okio.Buffer.class,
+                kotlin.jvm.internal.Intrinsics.class)) {
+            type.getDeclaredMethods();
         }
-        Class<?> implementation = Class.forName("org.apache.dubbo.remoting.http.restclient.OKHttpRestClient");
-        implementation.getDeclaredMethods();
-        RestClient client = (RestClient) implementation.getConstructor(HttpClientConfig.class)
-                .newInstance(new HttpClientConfig());
+        RestClient client = new OKHttpRestClient(new HttpClientConfig());
         try {
             check(client != null, "Official Dubbo OkHttp client must construct without missing dependencies");
         } finally {

@@ -286,6 +286,8 @@
 
 **处置**：保留此前 allowlist 最小精确注册，不新增包前缀、不改第三方/.m2，也不声称任意陌生类型一律拒绝。本次补根因回归和外部无允许名前缀的动态 Throwable，验证官方 fastjson2 内存 wire 拒绝无允许名前缀的外部 Throwable，并断言拒绝异常链；第三方前缀接受行为未修，不能据此推导利用链。后续 2.2 必须验证选定 ctor-SPI 的类型/异常联合边界，官方 fastjson2 fixture 不替代其生产契约。关联 LR-48/55，测试位于 common memory 两个 focused suite，最终29项通过。
 
+**2026-11-09 更新**：按 Mimosa 中危处置要求，`MemoryExceptionSerializationTest` 中运行期编译 + URLClassLoader + TCCL 切换的外部 fixture 改为类路径 fixture `com.bkanent.common.memory.fixture.UntrustedFailure`（包名不以 `MemoryException` 开头，避开本条前缀信任）。仍断言无允许名前缀的未登记 Throwable 被官方 wire 拒绝且拒绝异常链源自 fastjson2 安全 handler；外部类加载器场景不再单独覆盖，第三方前缀接受行为本身未变、本项保持 OPEN。
+
 ## KI-116 [OPEN·P1] 原生 SummarizationHook 默认替换不满足耐久与完整工具事实契约
 
 **确认日期**：2026-10-16。实际 Spring AI 1.1.2 / Alibaba 1.1.2.3 制品级测试确认：摘要模型异常转错误 SystemMessage 后仍 REPLACE，异常文本可进入日志；cutoff 五条邻域可拆长间隔工具组，并行未完成响应未被完整阻断；总结 getText 不携带 responseData/工具身份；第一条 user 在保留尾部可能重复。普通 gate 返回前版本判断也不保护随后到达的新输入。
