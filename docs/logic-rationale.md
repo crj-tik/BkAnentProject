@@ -1616,3 +1616,13 @@
 **代码位置**：`agent-service/studio/StudioCapabilityService`、`StudioIdentity`、`nacos/agent-service.yaml`、`nacos/auth-service.yaml`；接口语义见 `docs/studio-v2-api.md`。
 
 **关联**：LR-53；KI-114。
+
+## LR-180 跨服务验证链 RPC 必须使用 fastjson2ctor 序列化
+
+**结论**：携带 `AuthorizationContext`/`AuthzFreshness` 的跨服务验证 RPC（业主档案验证、咨询房源验证、对比报告归属验证、业务来源批量读取）的提供方与消费方必须显式配置 `serialization = "fastjson2ctor"`（`@DubboService` 注解 + `@DubboReference(parameters = {"serialization=fastjson2ctor"})`）。Dubbo 3.2 默认 fastjson2 在 STRICT 序列化安全模式下拒绝反序列化未列入白名单的类，提供方解码直接失败（`Fail to decode request, parameterTypes=null`），消费方只能看到 DEPENDENCY_UNAVAILABLE，且异常被吞无日志。
+
+**根因**：默认 fastjson2 序列化写入类名标签，提供方反序列化时触发 Dubbo 序列化安全检查（STRICT 模式），新契约类不在允许清单即被拒绝；项目为此在 common 注册了自定义 `fastjson2ctor`（id 27，无类名标签、构造器/属性 JSON，见 KI-113 后续），Auth RPC 已用此模式，但新验证链遗漏了该配置。hessian2 同样受白名单约束，不能作为替代。
+
+**代码位置**：`CustomerProfileVerifyRpcServiceImpl`、`ListingInquiryVerifyRpcServiceImpl`、`ListingComparisonReportVerifyRpcServiceImpl`、`ListingBusinessSourceRpcServiceImpl`（提供方注解）；`CustomerProfileVerifyClient`、`ListingInquiryVerifyClient`、`ListingComparisonReportVerifyClient`、`CampaignListingSnapshotClient`（消费方参数）；先例 `AuthAuthorizationRpcServiceImpl`、`Fastjson2ConstructorSerialization`。
+
+**关联**：LR-177、LR-179；change `implement-internal-listing-business` 6.5 端到端验收、`add-consultation-comparison-cards`；提交 `0af714bc`。
