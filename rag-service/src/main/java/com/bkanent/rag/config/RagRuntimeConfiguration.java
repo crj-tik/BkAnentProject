@@ -27,7 +27,9 @@ import org.springframework.context.annotation.*;
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties({RagProperties.class, RagSecurityProperties.class, RagMemoryCandidateAuthorizationProperties.class})
 public class RagRuntimeConfiguration {
-    @DubboReference(check = false, init = false, timeout = 5000, retries = 0)
+    // AuthRagPrincipal is a record with List fields; plain fastjson2 cannot decode it (KI-113),
+    // so pin the same fastjson2ctor contract the auth provider now advertises.
+    @DubboReference(check = false, init = false, timeout = 5000, retries = 0, parameters = {"serialization=fastjson2ctor"})
     private RagPrincipalRpcService auth;
 
     @Bean Clock ragClock() { return Clock.systemUTC(); }

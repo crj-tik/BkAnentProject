@@ -1,5 +1,30 @@
 # Bug 与已知问题清单
 
+## KI-256 [FIXED·本提交·P1] RagPrincipalRpcService 未随验证链迁移 fastjson2ctor 导致解码失败
+
+**发现日期与依据**：2026-11-09，知识域运行态验收中 RagRuntimeProbe 调用 `resolveRagPrincipal` 报 `array not support input TYPED_ANY`。`AuthRagPrincipal` 自 70271f73（2026-10-26）起含 `List<String> roles/permissions` 字段，属 KI-113 record+List 模式；0af714bc 只把 customer/listing/marketing 验证链 RPC 改为 fastjson2ctor，auth 的 `RagPrincipalRpcServiceImpl`（plain `@DubboService`）、rag-service 消费引用（无序列化参数）与探针 auth 引用（fastjson2）均未跟进：fastjson2 消费端响应解码失败，fastjson2ctor 请求提供方无法解码，探针自身校验又排除 hessian2，auth 通道死锁。
+
+**修复**：三处统一 fastjson2ctor——`RagPrincipalRpcServiceImpl` 注解 `serialization/preferSerialization`、`RagRuntimeConfiguration` 消费引用 `parameters={"serialization=fastjson2ctor"}`、`RagRuntimeProbe` principalRpc 改用 ragReference。重建 auth/rag jar 注入容器后探针 ADMIN 验证与 RagSpaceAdminRpcService INSPECT/PROVISION 全链路通过。系统侧 rag→auth 该路径在 dev 因 `RAG_VERSIONED_AUTHORIZATION_ENABLED=false` 未触发，属潜在缺陷，本次一并修复。
+
+**验证与边界**：探针 DOMAIN INSPECT/PROVISION 实测通过；受影响模块定向测试通过。`AuthPermissionRpcService.resolvePrincipal` 返回 `AuthenticatedPrincipal(Long userId)` 无 List 字段，保持 fastjson2 不变。关联 KI-113、LR-180 系列证据。
+
+## KI-257 [FIXED·本提交·P1] 已发布知识读取范围选择不回退 OWN，businessAdmin 无门店身份时全部拒绝
+
+**发现日期与依据**：2026-11-09，知识 E2E 中 admin01（businessAdmin，全量权限）调用 `published/search` 返回 PERMISSION_DENIED。`requirePublishedReadScope` 先检查 `READ_STORE` 即要求可信 STORE 身份，admin01 无门店映射直接失败关闭，不再评估其同样持有的 `READ_OWN`——与契约"read.own 或 read.store"语义不符，影响所有无门店身份的 businessAdmin 用户使用 published search/batch-read/check。
+
+**修复**：STORE 分支增加 `businessIdentities.containsKey("STORE")` 前置条件，无门店身份时回退 OWN 分支；有身份时保持 STORE 优先。修复后 admin01 的 search 命中已发布案例、check 返回 CURRENT、batch-read 返回正文。`requireStoreIdentity` 本身的失败关闭语义与既有测试（KnowledgeAuthorizationFailClosedTest）不变。
+
+**验证与边界**：知识模块定向 14 项测试通过；E2E 实测 search/check/batch-read 全通。门店范围读取仍要求可信 STORE 身份，不因本修复放宽。关联 KI-216（OWN 审核边界）、LR-119。
+
+## KI-258 [OPEN·P2] rag-service 双网卡下 Dubbo 注册 rerank 网卡，bk 消费者经注册地址不可达
+
+**发现日期与依据**：2026-11-09，知识域运行态联调中 rag-service 加入 `bkanent-rerank-dev` 网络后，Dubbo 选择 rerank 网卡 10.253.240.2 注册（端口 20898）；bk-only 消费者（agent/memory 等）按 Nacos 注册地址实测不可达（网络隔离），仅 DNS 名直连可用（服务端实际监听全部网卡）。会话内已断开 rerank 网络并重启，Dubbo 重新注册 bk 地址 172.18.0.6:20898。
+
+**待处理**：根治需在 compose/env 固定 `DUBBO_IP_TO_BIND`（或调整双网卡选择），使 rerank 网络仅承载 rerank HTTP 出站、Dubbo 始终注册 bk 地址；重建容器后需复验。另：模板 `elasticsearch` 内网网段原为 172.24.0.0/16（Docker Desktop 时代），不覆盖 WSL2 Docker 的 172.18.0.0/16，本次已补双网段并发布 Nacos；`bkanent-rerank-dev` 外部网络在本环境为占位创建（无真实 reranker，rerank 能力保持关闭）。
+
+**验证与边界**：断开重启后 5 类 knowledge Memory v2 空间 PROVISION/INSPECT 正常；rerank 阶段 DEPENDENCY_UNAVAILABLE 为无部署环境的预期失败关闭。关联 KI-120（同族注册地址问题）、KI-107。
+
+
 ## KI-237 [FIXED·本提交·P2] 复盘计划缺少可读取的权威诊断修订
 
 **发现日期**：2026-11-02。复盘计划写入要求 `expectedDiagnosisRevision`，事项详情未提供诊断修订，浏览器无法安全构造请求。
@@ -1814,7 +1839,13 @@ Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/
 
 **处置**：独立 `knowledge-service` 已由 `consolidate-platform-operations` 退役，知识创建、审核、发布、检索和撤回归入 `platform-operations-service`；原 Knowledge 专属 Nacos ID、Auth/Memory caller 和运行入口不再作为当前验收目标。平台经营库、受限访谈来源视图/owner、应用与来源账号、当前迁移账本及幂等升级已按现态检查，12 个活动 Nacos Data ID 已发布并回读。新统一服务的授权 Agent 绑定和可信 STORE 范围仍由 KI-233 跟踪；此处置不表示真实 Agent 端到端链路已关闭。
 
-**替代依据**：LR-170；`docs/platform-operations-frontend-function-list.md`；`openspec/changes/archive/2026-11-09-consolidate-platform-operations`。
+**2026-11-09 运行态验收记录**（WSL2 Docker dev 栈，full+rag 档）：
+- **RAG 空间物理创建**：5 类 `memory.v2.{session,summary,preference-history,experience,collaboration}.knowledge.platform-operations-knowledge` 经签名 ADMIN 探针逐项 PROVISION 完成，ES 索引（`_cat/indices` 确认 5 个 open）与 Milvus 集合创建、EMBEDDING 维度 1024 验证通过；仅 RERANK 因无 reranker 部署保持 DEPENDENCY_UNAVAILABLE，空间 ready=false 为该环境的失败关闭预期，不构成验收阻塞。
+- **知识生命周期 E2E**：访谈案例创建→逐字稿提交（L2 评级，700+字/12话轮）→资产发布 PUBLISHED→知识案例创建（DRAFT/r1）→提交审核（REVIEW_PENDING）→admin02 非_owner 审核 APPROVE（职责分离验证）→owner 发布 PUBLISHED→`published/search` 命中（dataMode=UNKNOWN 符合 LR-115 无 provenance 语义）→`published/check` CURRENT→`published/batch-read` 返回正文→撤回访谈来源后受限视图即时失效（root 与来源账号查询均 0 行，视图级失败关闭）。
+- **未完成项**：真实模型生成链路——`.env` 的 `DEEPSEEK_API_KEY` 为占位值，网关实测 401（"api key不存在"），生成任务受理后 FAILED（GENERATION_FAILED）；因此"生成→来源引用绑定→来源撤回后 published/check 返回 NOT_ACCESSIBLE"的完整依赖失效链路待配置有效模型凭据后补验。本记录不宣称知识域具备生产运行条件。
+- **验收中发现并修复**：KI-256（RagPrincipalRpcService fastjson2ctor 三处）、KI-257（published 读取范围回退 OWN）、KI-258（双网卡 Dubbo 注册，会话内缓解）；环境侧另修复 rag_runtime MySQL 账号缺失（按两控制表最小权限创建并验证跨库拒绝）、interview/platform-operations 容器为 11-06 旧 jar（早于 a18e4156 参数名修复，已重建注入）。
+
+**替代依据**：LR-170；`docs/platform-operations-frontend-function-list.md`；`openspec/changes/archive/2026-11-09-consolidate-platform-operations`；KI-256/257/258。
 
 ## KI-219 [FIXED·本提交·P2] 门店复盘数据库创建项的manifest校验摘要误录
 

@@ -58,7 +58,8 @@ rag:
     allowed-hosts: [elasticsearch, host.docker.internal, open-chatgpt.ke.com, bkanent-reranker-dev]
     internal-networks:
       '[host.docker.internal]': [192.168.65.254/32]
-      elasticsearch: [172.24.0.0/16]
+      # 172.24.0.0/16 covers the Docker Desktop bridge; 172.18.0.0/16 covers the WSL2 bridge.
+      elasticsearch: [172.24.0.0/16, 172.18.0.0/16]
       bkanent-reranker-dev: [10.253.240.0/24]
   milvus:
     host: ${RAG_MILVUS_HOST:}

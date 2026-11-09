@@ -30,7 +30,7 @@ import java.util.Set;
  * Both RPC directions use independent service keys; the existing auth RPC is unchanged.
  * Credentials are dedicated RPC arguments, never logged or copied into the response.
  */
-@DubboService
+@DubboService(serialization = "fastjson2ctor", preferSerialization = "fastjson2ctor")
 public class RagPrincipalRpcServiceImpl implements RagPrincipalRpcService {
 
     private static final String AUTH_SERVICE = "auth-service";

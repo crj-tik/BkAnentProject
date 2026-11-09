@@ -60,7 +60,10 @@ public final class KnowledgeAuthorization {
 
     public static KnowledgeAccessScope requirePublishedReadScope() {
         VerifiedDomainAuthorization.VerifiedContext verified = VerifiedDomainAuthorization.requireVerifiedContext();
-        if (verified.context().allowedOperations().contains(KnowledgeOperations.READ_STORE)) {
+        // STORE scope needs the trusted identity; without it a caller holding both operations
+        // still reads OWN scope instead of failing closed on the missing identity.
+        if (verified.context().allowedOperations().contains(KnowledgeOperations.READ_STORE)
+                && verified.context().businessIdentities().containsKey("STORE")) {
             long storeId = requireStoreIdentity(KnowledgeOperations.READ_STORE);
             return new KnowledgeAccessScope("STORE", verified.actorId(), storeId);
         }

@@ -122,7 +122,9 @@ final class RagRuntimeProbe implements AutoCloseable {
         }
         bootstrap();
         permissions = reference(AuthPermissionRpcService.class, required("RAG_PROBE_AUTH_DUBBO_URL"));
-        principalRpc = reference(RagPrincipalRpcService.class, required("RAG_PROBE_AUTH_DUBBO_URL"));
+        // AuthRagPrincipal is a record with List fields; plain fastjson2 cannot decode it (KI-113),
+        // so pin fastjson2ctor exactly as the auth provider now advertises.
+        principalRpc = ragReference(RagPrincipalRpcService.class, required("RAG_PROBE_AUTH_DUBBO_URL"));
         AuthenticatedPrincipal authenticated = permissions.resolvePrincipal(credentials.accessToken());
         require(authenticated != null && authenticated.userId() != null && authenticated.userId() > 0,
                 RagErrorCode.AUTHENTICATION_FAILED);
