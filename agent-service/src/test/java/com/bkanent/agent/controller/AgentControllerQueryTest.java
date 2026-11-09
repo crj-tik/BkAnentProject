@@ -60,6 +60,27 @@ class AgentControllerQueryTest {
     }
 
     @Test
+    void currentUserQueryParameterCanBeOmittedOrSuppliedForCompatibility() throws Exception {
+        when(principal.resolveUserId(null)).thenReturn("2");
+        when(asyncTaskService.queryStatus("async-1", "2")).thenReturn(
+                new com.bkanent.agent.model.distributed.SupervisorAsyncTaskStatusResponse(
+                        "session-1", "task-1", "async-1", "COMPLETED", null, null,
+                        "trace-1", "supervisor-agent", "LOCAL_WORKFLOW"));
+        when(rag.searchKnowledge("2", null, "query", 5)).thenReturn(List.of());
+
+        mvc.perform(get("/agent/supervisor/tasks/async/status").param("asyncTaskId", "async-1"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.success").value(true));
+        mvc.perform(get("/agent/mcp/milvus/search").param("query", "query"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.success").value(true));
+        mvc.perform(get("/agent/mcp/milvus/search").param("userId", "2").param("query", "query"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.success").value(true));
+
+        verify(principal, org.mockito.Mockito.times(2)).resolveUserId(null);
+        verify(asyncTaskService).queryStatus("async-1", "2");
+        verify(rag, org.mockito.Mockito.times(2)).searchKnowledge("2", null, "query", 5);
+    }
+
+    @Test
     void chatClaimsResolvedOriginalSessionBeforeExecutingAndRejectsForeignOwner() throws Exception {
         when(runner.sessionIdForChat(null, null, "session", "2")).thenReturn("session");
         mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post("/agent/chat")

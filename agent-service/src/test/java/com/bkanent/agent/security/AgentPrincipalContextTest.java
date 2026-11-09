@@ -26,6 +26,14 @@ class AgentPrincipalContextTest {
     }
 
     @Test
+    void omittedOrMatchingUserIdUsesAuthenticatedPrincipal() {
+        AgentPrincipalContext principal = principal("42");
+
+        assertThat(principal.resolveUserId(null)).isEqualTo("42");
+        assertThat(principal.resolveUserId("42")).isEqualTo("42");
+    }
+
+    @Test
     void rejectsCallerSuppliedDifferentUserId() {
         AgentPrincipalContext principal = principal("42");
 
