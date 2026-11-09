@@ -8,9 +8,9 @@ info:
   description: >-
     Consumer contract for current published knowledge. Requests must reach Platform Operations
     through the authenticated Gateway or carry the equivalent verified Authz context.
-    Store-scoped operations require a trusted STORE identity in that context; the
-    current Auth service does not issue that identity, so store reads fail closed
-    until its coordinated authorization registration is deployed.
+    Store-scoped operations require an Auth-signed STORE identity in that context.
+    The target environment must have the coordinated authorization configuration
+    and user-to-store identity mapping; missing or invalid identity fails closed.
 servers:
   - url: /platform-operations/knowledge/v1
 paths:
@@ -140,7 +140,7 @@ components:
       properties:
         knowledgeId: { type: string, minLength: 1, maxLength: 64 }
         revision: { type: string, minLength: 1, maxLength: 64, description: Opaque revision identifier }
-        contentHash: { type: string, pattern: '^[a-f0-9]{64}$' }
+        contentHash: { type: [string, 'null'], pattern: '^[a-f0-9]{64}$' }
     SourceRef:
       type: object
       required: [sourceSystem, sourceId, snapshotHash, contentHash, contentRevision, sanitizationRevision, publicationRevision, dataMode]
@@ -175,7 +175,7 @@ components:
         contractVersion: { const: domain-parallel-v1 }
         problem: { type: [string, 'null'], maxLength: 500 }
         scene: { type: [string, 'null'], maxLength: 120 }
-        tags: { type: array, maxItems: 20, items: { type: string, maxLength: 48 } }
+        tags: { type: [array, 'null'], maxItems: 20, items: { type: string, minLength: 1, maxLength: 48 }, description: 字母、数字、下划线或连字符；null 按空数组处理 }
         cursor: { type: [string, 'null'], maxLength: 128, description: Opaque pagination cursor }
         limit: { type: [integer, 'null'], minimum: 1, maximum: 100, default: 20 }
     BatchReadRequest:
@@ -198,6 +198,8 @@ components:
               - $ref: '#/components/schemas/KnowledgeRef'
               - type: object
                 required: [contentHash]
+                properties:
+                  contentHash: { type: string, pattern: '^[a-f0-9]{64}$' }
     SearchEnvelope:
       allOf:
         - $ref: '#/components/schemas/Envelope'

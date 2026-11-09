@@ -20,7 +20,7 @@
 | 创建复盘 | 创建当前可信门店的复盘事项 | `POST /platform-operations/reviews`，当前正文 `{storeId, datasetId}` | `datasetId` 目前只是随部署数据源模式固定的后端适配器标识，不是用户可选数据集；当前 API 需后端提供固定值才能联调，不应伪造或让用户选择。长期应由服务端解析，只有存在真实业务选项时才增加授权数据集目录。`storeId` 必须等于 Auth 签名 STORE 身份，不建立授权 |
 | 复盘详情 | 查看诊断、来源事实、来源修订、模拟/真实模式、计划、动作和观察值 | `GET /reviews/{reviewId}`、`GET /reviews/{reviewId}/plans`、`GET /reviews/{reviewId}/actions`、`GET /reviews/{reviewId}/observations` | 对假设和证据缺口做视觉区分；来源修订过期时显示冲突并要求刷新，不呈现失效正文 |
 | 复盘计划 | 创建或更新计划，确认计划并生成行动项 | `GET /reviews/{reviewId}/diagnosis-version`、`POST /reviews/{reviewId}/plans`、`POST /reviews/{reviewId}/plans/confirm` | 先获取可信事项版本与诊断修订，写入仍会复核版本和来源；确认操作显示动作清单和到期时间，使用 `requestId` 幂等提交 |
-| 行动反馈 | 更新行动执行状态并记录证据等级和说明 | `POST /reviews/{reviewId}/actions/{actionId}/feedback` | 状态为 `IN_PROGRESS`、`DONE`、`CANCELLED`；证据为 `USER_REPORTED` 或 `SOURCE_CONFIRMED`；不能把人工反馈自动展示成已验证业绩 |
+| 行动反馈 | 更新行动执行状态并记录证据等级和说明 | `POST /reviews/{reviewId}/actions/{actionId}/feedback` | 状态为 `IN_PROGRESS`、`DONE`、`CANCELLED`；当前用户反馈只接受 `USER_REPORTED`，`SOURCE_CONFIRMED` 缺少来源回执会被拒绝；不能把人工反馈自动展示成已验证业绩 |
 | 知识案例 | 创建、查看和编辑案例修订 | `POST /knowledge/v1/cases`、`GET /knowledge/v1/cases/{knowledgeId}`、`POST /{knowledgeId}/edit` | 正文包含问题、场景、前提、动作、观察结果、适用条件、未验证项和证据等级；提交编辑时传 `expectedVersion` |
 | 知识候选生成 | 提供访谈资产 ID 和规则版本，生成异步候选并查看任务状态 | `POST /{knowledgeId}/generate`、`GET /{knowledgeId}/generation/{taskId}` | Agent 只接触获准的来源 ID、修订和任务状态；界面不展示逐字稿原文。来源撤回、版本过期或服务不可用时显示可识别状态 |
 | 知识审核与发布 | 提交审核、审核通过/拒绝、发布、撤回 | `POST /{knowledgeId}/submit`、`/review`、`/publish`、`/withdraw` | 审核人不能是案例 owner；批准和发布是分开的动作；写操作携带 `requestId` 与 `expectedVersion`，展示状态变更回执 |

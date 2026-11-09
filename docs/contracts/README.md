@@ -40,7 +40,7 @@ Auth 是登录令牌、角色授权和业务身份的唯一管理入口。除特
 | 方法和路径 | 请求 | 成功响应 |
 | --- | --- | --- |
 | `GET /auth/roles` | 无 | `ApiResponse<RoleOption[]>` |
-| `GET /auth/users?page=1&pageSize=20` | `page:int64`、`pageSize:int64`；可选 `keyword:string`、`roleCode:string`、`accountStatus:string`（`ACTIVE` / `DISABLED`） | `ApiResponse<PageResult<UserItem>>` |
+| `GET /auth/users?page=1&pageSize=20` | 可选 `page:int64`、`pageSize:int64`、`keyword:string`、`roleCode:string`、`accountStatus:string` | `ApiResponse<PageResult<UserItem>>` |
 | `POST /auth/users` | `CreateUser` | HTTP 201，`ApiResponse<UserItem>` |
 | `PUT /auth/users/{userId}` | `UpdateUser` | `ApiResponse<UserItem>` |
 | `PUT /auth/users/{userId}/password` | `{password}` | `ApiResponse<null>` |
@@ -54,7 +54,7 @@ Auth 是登录令牌、角色授权和业务身份的唯一管理入口。除特
 
 `RoleOption={roleCode:string,roleName:string,description:string|null}`。`UserItem` 包含 `CurrentUser` 的同名账户与授权摘要字段，另有 `accountStatus:string`、`createdAt:LocalDateTime`。`PageResult<T>={records:T[],total:int64,page:int64,pageSize:int64}`。列表默认 `page=1`、`pageSize=20`；服务端将 `page` 限制为至少 1、将 `pageSize` 限制在 1–100。
 
-Auth 登录/刷新方法内的失败通过 `ApiResponse.fail` 的 `success/code` 表达，当前 Controller 不为这些失败设置非 200 状态；参数校验异常为 HTTP 400 / `AUTH_400`。受保护 Auth 接口未认证为 HTTP 401，权限不足为 HTTP 403，用户/角色不存在为 HTTP 404，用户冲突为 HTTP 409。`/auth/authorization/**` 直接返回 HTTP 错误且错误正文不保证采用 Auth envelope；客户端按状态处理，不解析未约定的错误文案。
+Auth 登录/刷新方法内的失败通过 `ApiResponse.fail` 的 `success/code` 表达，当前 Controller 不为这些失败设置非 200 状态；参数校验异常为 HTTP 400 / `AUTH_400`。受保护 Auth 接口未认证为 HTTP 401，权限不足为 HTTP 403，用户不存在为 HTTP 404，用户管理中角色无效为 HTTP 400，用户冲突为 HTTP 409。`/auth/authorization/**` 直接返回 HTTP 错误且错误正文不保证采用 Auth envelope；客户端按状态处理，不解析未约定的错误文案。
 
 ### 角色、权限与业务身份管理
 
@@ -113,6 +113,8 @@ Content-Type: application/json
 | Interview | [浏览器凭据与请求契约](../interview-credential-client-contract.md)、[后端接口盘点](../backend-api-inventory-draft.md) | 凭据领取、SSE 请求头规则已说明；会话全生命周期 schema 仍需补齐。 |
 | Compare / Promotions | [后端接口盘点](../backend-api-inventory-draft.md) | 仅有兼容路由/能力线索；使用前需核实目标 Gateway 路由和实际控制器，不默认当作新页面接口。 |
 | Media / Memory / RAG 及其他 RPC | 对应服务源码与内部协议说明 | 默认属于服务间接口；只有明确登记 Gateway 路由及浏览器调用契约后才纳入前端。 |
+
+接口参数逐域核对的范围与剩余工作见 [KI-253](../known-issues.md)。目录入口和已有契约文件不意味着所有 Gateway 接口都已完成字段级核对。
 
 旧合同和结算域已退役，不属于当前前端契约。
 

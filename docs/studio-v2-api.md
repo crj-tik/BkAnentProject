@@ -68,6 +68,10 @@ baseArtifactRefs 由服务端检查 owner/work/series/version/revisionId并装�
 
 该命令按现有签名 READ 获取真实房源，受 LR-40 ADMIN/BROKER 范围约束。比较操作再绑定候选版本及每套来源指纹：
 
+`load-context-listings` 只要求 `requestId`、`actionId`、`expectedContextRevision`；示例中的 `input` 和 `artifactRefs` 可以省略。比较和发布计划命令需要各自的输入；`expectedContextRevision` 可为整数或可解析为整数的字符串。
+
+工作上下文输入可省略 `refs` 和 `criteria`，分别归一化为空数组和空对象；人民币预算的 `amount` 为可解析且大于零的十进制字符串。保存草稿时 `expectedVersion` 和 `derivedFromVersion` 也接受整数格式的字符串；`note` 超过 500 字符时截断，超过 500 字符的 `headline` 会被忽略。
+
 ```json
 {
   "requestId":"request-003",

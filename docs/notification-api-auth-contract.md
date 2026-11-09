@@ -14,13 +14,21 @@
 | --- | --- | --- |
 | `GET /notifications` | `notification.message.read.own` | 查询始终按 Auth actor 过滤。可选 `userId` 若提供必须等于 actor。 |
 | `GET /notifications/unread-count` | `notification.message.read.own` | 统计始终按 Auth actor 过滤。可选 `userId` 若提供必须等于 actor。 |
-| `POST /notifications/{id}/read` | `notification.message.mark-read.own` | 可选 body `userId` 只作 actor 一致性断言；消息必须是站内消息且 SQL recipient 必须等于 actor。 |
+| `POST /notifications/{id}/read` | `notification.message.mark-read.own` | JSON body 必须提供，可为 `{}`；body 中的 `userId` 可省略，仅作 actor 一致性断言。消息必须是站内消息且 SQL recipient 必须等于 actor。 |
 | `POST /notifications/station` | `notification.message.send.own` 或 `notification.message.send.all` | 自己收件时允许 `.send.own`；发给其他用户要求 `.send.all`。目标 `userId` 不是当前 actor。 |
 | `POST /notifications/email` | `notification.email.send.all` | 邮件地址与目标用户是发送目标；当前服务只允许显式 local simulation 模式。 |
 | `POST /notifications/robot` | `notification.robot.send.all` | webhook 与渠道是发送目标；当前服务只允许显式 local simulation 模式。 |
 | `GET /notifications/workflow-events` | `notification.workflow.events.read.all` | 管理查询全局消费记录，按权限过滤而非使用请求声明的管理员身份。 |
 
 没有通过用户 REST API 暴露工作流事件写入。内部 RocketMQ 工作流事件只接受登记的事件类型、有效任务/会话和服务端注入的正整数 actor；若事件带 `runId`，它必须与 `taskId` 相同。模型 tool 参数不构成此内部事件来源。
+
+## REST 请求参数
+
+- `GET /notifications` 的 query `userId:int64`、`channel:string`、`readStatus:string` 均可省略；非空的 `readStatus` 为 `UNREAD` 或 `READ`，大小写不敏感。`GET /notifications/unread-count` 仅接受可选 `userId:int64`。
+- `POST /notifications/{id}/read` 的路径 `id:int64` 必填，JSON body 为 `{userId:int64|null}`；字段可省略，整个 body 仍为必填。
+- `POST /notifications/station` 和 `/email` 的 JSON body 均使用 `{userId:int64,receiverAddress:string,sceneCode:string,title:string,content:string,operator:string}`。站内消息要求正数 `userId` 及非空白 `title`、`content`；邮件要求正数 `userId` 和非空白 `receiverAddress`。`operator` 不用于建立调用者身份。
+- `POST /notifications/robot` 的 JSON body 为 `{channel:string,webhookUrl:string,title:string,content:string,operator:string}`；`channel` 接受 `WECOM` 或 `DINGTALK`（大小写不敏感），`webhookUrl` 须非空白。
+- `GET /notifications/workflow-events` 的 `consumeStatus:string`、`eventType:string`、`taskId:string`、`recipientUserId:int64`、`limit:int32` 均为可选 query；`limit` 缺省或不大于 0 时为 20，超过 100 时取 100。列表接口当前没有分页游标参数。
 
 ## Agent 与 MCP 工具
 

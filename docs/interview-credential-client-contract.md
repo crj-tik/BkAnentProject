@@ -14,6 +14,8 @@ Content-Type: application/json
 
 请求体中的 `purpose` 必须是 `MANAGE`、`RESPOND` 或 `READ`。服务按已签名 actor 和当前访谈关系/操作授权确认领取资格。成功响应为 `ApiResponse` 包装，数据字段包括 `credentialId`、`credential`、`purpose`、`expiresAt` 和 `headerName`（值为 `X-Ticket`）；响应带 `Cache-Control: no-store` 与 `Pragma: no-cache`。服务只保存 256 位随机凭据的 SHA-256 摘要，默认有效期 15 分钟且配置不能延长超过 15 分钟。
 
+路径参数 `sessionId` 为 int64，JSON body 为 `{"purpose":"MANAGE"}` 等合法用途。撤销入口为 `DELETE /interviews/{sessionId}/credentials/{credentialId}`，两个路径参数均为 int64、无请求体；调用者可撤销自己的凭据，会话发起人可撤销本场凭据。响应使用 `ApiResponse`，成功数据为 `{credentialId,revoked:true}`；业务失败需检查响应体的 `success/code`。
+
 开台和 A2A 工具只提供场次导航及领取路径，不返回凭据原文。页面刷新时，仍登录的用户重新调用领取接口获取新凭据。浏览器应只把凭据保存在当前页面内存中，不写入 URL、localStorage、日志、埋点或持久化状态。
 
 ## 访问会话资源
