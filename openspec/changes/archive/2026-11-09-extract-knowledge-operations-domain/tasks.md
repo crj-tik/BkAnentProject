@@ -49,6 +49,8 @@
 
 ## 5. 验收与交接
 
+> 2026-11-09 归档说明：5.1–5.3 未在本 change 独立 worktree 内执行。独立 `knowledge-service` 已由 `consolidate-platform-operations` 退役并入 `platform-operations-service`，上述验收由该变更的任务 2.3、2.5、3.1–3.2、4.2–4.3 承接并完成；承接关系见该变更 implementation-inventory.md 的承接表与 KI-218 处置记录。
+
 - [ ] 5.1 在本 change 独立 worktree 和本地 Maven 仓库运行 Knowledge 模块编译、聚焦测试、视图/schema check 与配置静态检查，不拉取其它业务 change 制品或写共享数据库。
 - [ ] 5.2 验证 USER/Agent Auth 正反路径、Memory 未登记/不可用失败关闭、PRIVATE/撤回/STALE/UNAVAILABLE 来源、原声定位和 Memory sentinel 不泄漏。
 - [ ] 5.3 在明确标记 SIMULATED 的隔离 Interview 来源完成导入→生成→人工审核→发布→当前 check→来源撤回/失效闭环；全程保留 UNKNOWN/SIMULATED 语义，不声称真实效果。

@@ -1812,7 +1812,7 @@ Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/
 
 **处置**：独立 `knowledge-service` 已由 `consolidate-platform-operations` 退役，知识创建、审核、发布、检索和撤回归入 `platform-operations-service`；原 Knowledge 专属 Nacos ID、Auth/Memory caller 和运行入口不再作为当前验收目标。平台经营库、受限访谈来源视图/owner、应用与来源账号、当前迁移账本及幂等升级已按现态检查，12 个活动 Nacos Data ID 已发布并回读。新统一服务的授权 Agent 绑定和可信 STORE 范围仍由 KI-233 跟踪；此处置不表示真实 Agent 端到端链路已关闭。
 
-**替代依据**：LR-170；`docs/platform-operations-frontend-function-list.md`；`openspec/changes/consolidate-platform-operations`。
+**替代依据**：LR-170；`docs/platform-operations-frontend-function-list.md`；`openspec/changes/archive/2026-11-09-consolidate-platform-operations`。
 
 ## KI-219 [FIXED·本提交·P2] 门店复盘数据库创建项的manifest校验摘要误录
 

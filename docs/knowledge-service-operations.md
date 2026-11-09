@@ -13,6 +13,6 @@
 
 - API 契约：[平台经营域 OpenAPI](contracts/platform-operations-v1.openapi.yaml) 与[已发布知识读接口细则](contracts/platform-operations-published-knowledge-v1.openapi.yaml)。
 - 前端页面和现有后端能力：[平台经营域前端功能清单](platform-operations-frontend-function-list.md)。
-- 实施状态和设计决策：[consolidate-platform-operations OpenSpec change](../openspec/changes/consolidate-platform-operations/)。
+- 实施状态和设计决策：[consolidate-platform-operations OpenSpec change](../openspec/changes/archive/2026-11-09-consolidate-platform-operations/)。
 
 本文作为历史交接索引保留；独立服务部署步骤、旧数据库账号矩阵和旧 Nacos 清单不再是现行运维依据。

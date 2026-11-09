@@ -995,7 +995,7 @@
 
 **根因**：逐字稿事实、运营归纳与个人记忆具有不同的编辑/使用权。复制原稿建第二个真源会破坏来源撤回和证据一致性，把审核发布交给 Memory 又会把知识可见范围误换成私有历史访问权。独立派生资产及来源检查使运营可修订知识，同时保留原访谈事实和共享边界。
 
-**代码位置（当前与规划）**：当前 `interview-service/InterviewCollectionService`、`InterviewReportService`、逐字稿及占位打法/共性实体；拟新增 `knowledge-service` 和窄逐字稿读取契约。方案见 `openspec/changes/extract-knowledge-operations-domain/`；尚未实施，不据此宣称 KI-15 已修或知识服务已上线。
+**代码位置（当前与规划）**：当前 `interview-service/InterviewCollectionService`、`InterviewReportService`、逐字稿及占位打法/共性实体；拟新增 `knowledge-service` 和窄逐字稿读取契约。方案见 `openspec/changes/archive/2026-11-09-extract-knowledge-operations-domain/`；尚未实施，不据此宣称 KI-15 已修或知识服务已上线。
 
 **关联**：LR-3/6/8/59/90/94/96/97；KI-15。
 
