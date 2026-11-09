@@ -39,7 +39,7 @@ public class ListingInquiryVerifyClient {
      */
     public static final String CALLER_SERVICE = "customer-service";
 
-    @DubboReference(check = false)
+    @DubboReference(check = false, parameters = {"serialization=hessian2"})
     private ListingInquiryVerifyRpcService listings;
 
     private final String keyId;
