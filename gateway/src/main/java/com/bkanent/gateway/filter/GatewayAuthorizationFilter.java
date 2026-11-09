@@ -113,10 +113,14 @@ public class GatewayAuthorizationFilter {
         random.nextBytes(nonceBytes);
         String nonce = Base64.getUrlEncoder().withoutPadding().encodeToString(nonceBytes);
         String requestId = UUID.randomUUID().toString();
+        // 执行绑定：每个获准请求生成 runId/sessionId，使下游跨服务验证链
+        // （要求 runId/sessionId 非空的 executionBinding）在普通 REST 流程中可构造。
+        String runId = UUID.randomUUID().toString();
+        String sessionId = UUID.randomUUID().toString();
         // Policy is bound to this exact ingress, never read from body, actor/session headers or metadata.
         String bodyHash = AuthzCanonicalHash.bodyHash(bytes);
         RequestBinding binding = new RequestBinding(properties.getCallerService(), audience, method,
-                path, path, query, requestId, null, null, bodyHash, bodyHash, nonce, now, now + 60);
+                path, path, query, requestId, runId, sessionId, bodyHash, bodyHash, nonce, now, now + 60);
         String requestHash = AuthzCanonicalHash.resolveRequestHash(token, binding);
         CallerProof proof = AuthzSignature.sign(new CallerProof(properties.getCallerService(), "auth-service",
                 AuthzRpcOperation.RESOLVE_REQUEST_AUTHORIZATION, requestId, requestHash, nonce,
