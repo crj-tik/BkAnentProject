@@ -304,7 +304,13 @@ public class ListingManagementServiceImpl implements ListingManagementService {
      */
     @Override
     public ListingDetailResponse getListingDetail(Long listingId) {
-        com.bkanent.common.authz.AuthzRequestScope.requireCurrent();
+        if (com.bkanent.common.authz.AuthzRequestScope.present()) {
+            com.bkanent.common.authz.AuthzRequestScope.requireCurrent();
+        } else if (com.bkanent.common.mcp.authz.McpAuthorizationScope.current() == null) {
+            // 私有详情要求版本化 REST 上下文或 MCP 授权上下文；旧 RAG 凭据单独不放行。
+            throw new com.bkanent.common.authz.AuthzException(
+                    com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
+        }
         requireReadPermission();
         ListingEntity entity = requireListing(listingId);
         requireOwner(entity, "listing.read", "listing.read.all");
@@ -865,7 +871,29 @@ public class ListingManagementServiceImpl implements ListingManagementService {
         if (com.bkanent.common.authz.AuthzRequestScope.present()) {
             return identity.requireReader(null);
         }
+        if (com.bkanent.common.mcp.authz.McpAuthorizationScope.current() != null) {
+            return mcpReader();
+        }
         return identity.requireReader(com.bkanent.listing.rag.ListingRagCredentialContext.current());
+    }
+
+    /**
+     * MCP 上下文桥接：从 McpAuthorizationScope 的已验证上下文构造读取主体。
+     * 与 scopedPrincipal() 同构（SIGNED/版本化/操作清单来自 Auth 签名上下文），
+     * 使摘要/详情的公开范围与归属校验在 MCP 通道下与 REST 行为一致。
+     */
+    private com.bkanent.common.rag.AuthRagPrincipal mcpReader() {
+        var verified = com.bkanent.common.mcp.authz.McpAuthorizationScope.requireCurrent();
+        var context = verified.context();
+        long expires = Math.min(context.expiresAtEpochSecond(),
+                Math.min(context.runHardDeadlineEpochSecond(), verified.freshness().notAfterEpochSecond()));
+        boolean businessAdmin = context.allowedOperations().contains("listing.read.all");
+        return new com.bkanent.common.rag.AuthRagPrincipal(
+                Long.parseLong(verified.actorId()), "SIGNED", true, true, expires,
+                com.bkanent.common.rag.AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION,
+                context.permissionRevision(), context.credentialEpoch(), businessAdmin,
+                businessAdmin ? java.util.List.of("BUSINESS_ADMIN") : java.util.List.of("BROKER"),
+                context.allowedOperations(), null);
     }
 
     private void requireOperation(String operation) {
@@ -913,7 +941,31 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     }
 
     private void requireOwner(ListingEntity entity, String ownOperation, String allOperation) {
+        if (com.bkanent.common.mcp.authz.McpAuthorizationScope.current() != null) {
+            requireMcpOwner(entity, ownOperation, allOperation);
+            return;
+        }
         com.bkanent.common.authz.AuthzRequestScope.requireBrokerOwnership(entity.getBrokerId(), ownOperation, allOperation);
+    }
+
+    /**
+     * MCP 上下文下的资源归属校验：业务管理员凭 all 操作放行；
+     * 普通用户凭 own 操作 + Auth 签名上下文中的 BROKER 映射与房源经纪人比对。
+     * 与 AuthzRequestScope.requireBrokerOwnership 语义一致，仅上下文来源不同。
+     */
+    private void requireMcpOwner(ListingEntity entity, String ownOperation, String allOperation) {
+        var verified = com.bkanent.common.mcp.authz.McpAuthorizationScope.requireCurrent();
+        var context = verified.context();
+        if (context.allowedOperations().contains(allOperation)) {
+            return;
+        }
+        if (!context.allowedOperations().contains(ownOperation)) {
+            throw new com.bkanent.common.authz.AuthzException(com.bkanent.common.authz.AuthzErrorCode.PERMISSION_DENIED);
+        }
+        Long brokerId = context.businessIdentities().get("BROKER");
+        if (brokerId == null || entity.getBrokerId() == null || !brokerId.equals(entity.getBrokerId())) {
+            throw new com.bkanent.common.authz.AuthzException(com.bkanent.common.authz.AuthzErrorCode.PERMISSION_DENIED);
+        }
     }
 
     private void requireSubmittedBroker(Long submittedBrokerId, long trustedBrokerId) {

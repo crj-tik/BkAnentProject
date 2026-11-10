@@ -75,8 +75,7 @@ class MemoryV2DeploymentConfigurationTest {
                         "nacos", "memory-service.yaml")));
         Map<String, String> callerFlags = Map.of(
                 "marketing-content-service", "MARKETING_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER",
-                "interview-service", "INTERVIEW_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER",
-                "listing-master-service", "LISTING_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER");
+                "interview-service", "INTERVIEW_MEMORY_EXPERIENCE_OUTCOME_PUBLISHER");
 
         for (Resource resource : resources) {
             for (String callerName : callerFlags.keySet()) {
