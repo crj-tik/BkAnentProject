@@ -73,6 +73,18 @@ public class UserManagementService {
                 snapshot.businessAdmin(), info.roles(), snapshot.permissionRevision(), snapshot.credentialEpoch());
     }
 
+    @Transactional
+    public com.bkanent.auth.dto.AuthUserManagementModels.CurrentUser updateOwnProfile(long userId, String displayName) {
+        if (userAccountMapper.updateOwnDisplayName(userId, displayName) != 1) {
+            throw new UserManagementException(HttpStatus.UNAUTHORIZED, "AUTH_UNAUTHORIZED", "账号已停用或不存在");
+        }
+        UserAccountEntity updated = userAccountMapper.selectById(userId);
+        if (updated == null || !isAuthorizedAccount(updated)) {
+            throw new UserManagementException(HttpStatus.UNAUTHORIZED, "AUTH_UNAUTHORIZED", "账号已停用或权限已失效");
+        }
+        return currentUser(updated);
+    }
+
     public com.bkanent.common.model.AuthTokenDTO tokenResponse(UserAccountEntity account, String access, String refresh) {
         if (!isVersionedAuthorization()) return new com.bkanent.common.model.AuthTokenDTO(access, refresh,
                 account.getId(), account.getRoleCode(), account.getDisplayName(), getRoleNameForCode(account.getRoleCode()),

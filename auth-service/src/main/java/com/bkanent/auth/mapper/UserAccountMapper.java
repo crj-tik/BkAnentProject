@@ -68,5 +68,9 @@ public interface UserAccountMapper extends BaseMapper<UserAccountEntity> {
     @Update("UPDATE user_account SET deleted = 1, updated_at = CURRENT_TIMESTAMP "
             + "WHERE id = #{userId} AND deleted = 0")
     int softDeleteById(@Param("userId") long userId);
+
+    @Update("UPDATE user_account SET display_name = #{displayName}, updated_at = CURRENT_TIMESTAMP "
+            + "WHERE id = #{userId} AND deleted = 0 AND account_status = 'ACTIVE'")
+    int updateOwnDisplayName(@Param("userId") long userId, @Param("displayName") String displayName);
 }
 

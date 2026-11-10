@@ -17,6 +17,7 @@ import com.bkanent.common.model.AuthLoginRequest;
 import com.bkanent.common.model.AuthRefreshRequest;
 import com.bkanent.common.model.AuthTokenDTO;
 import com.bkanent.common.model.HealthStatusDTO;
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.validation.Valid;
 
 import java.util.List;
@@ -36,6 +37,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 
 /**
  * Authentication controller.
@@ -145,6 +147,22 @@ public class AuthController {
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization) {
         UserAccountEntity account = requireAuthenticatedAccount(authorization);
         return ApiResponse.ok(userManagementService.currentUser(account));
+    }
+
+    @PatchMapping("/me/profile")
+    public ApiResponse<CurrentUser> updateOwnProfile(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authorization,
+            @RequestBody JsonNode request) {
+        UserAccountEntity account = requireAuthenticatedAccount(authorization);
+        if (request == null || !request.isObject() || request.size() != 1
+                || !request.has("displayName") || !request.get("displayName").isTextual()) {
+            throw new UserManagementException(HttpStatus.BAD_REQUEST, "AUTH_400", "仅允许修改显示名称");
+        }
+        String displayName = request.get("displayName").textValue().trim();
+        if (displayName.isEmpty() || displayName.length() > 64) {
+            throw new UserManagementException(HttpStatus.BAD_REQUEST, "AUTH_400", "显示名称长度应为 1 至 64");
+        }
+        return ApiResponse.ok(userManagementService.updateOwnProfile(account.getId(), displayName));
     }
 
     @GetMapping("/roles")

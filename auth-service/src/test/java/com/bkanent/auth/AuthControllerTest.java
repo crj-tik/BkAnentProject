@@ -12,6 +12,9 @@ import com.bkanent.common.model.ApiResponse;
 import com.bkanent.common.model.AuthLoginRequest;
 import com.bkanent.common.model.AuthRefreshRequest;
 import com.bkanent.common.model.AuthTokenDTO;
+import com.bkanent.auth.dto.AuthUserManagementModels.CurrentUser;
+import com.bkanent.auth.service.UserManagementException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -21,7 +24,10 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AuthControllerTest {
@@ -167,5 +173,25 @@ class AuthControllerTest {
         );
 
         assertFalse(response.success());
+    }
+
+    @Test
+    void profileUsesAuthenticatedActorAndRejectsPrivilegeFields() throws Exception {
+        String token = authTokenService.issueAccessToken(activeAccount);
+        when(userAccountService.getById(7L)).thenReturn(activeAccount);
+        CurrentUser updated = new CurrentUser(7L, "broker01", "新名称", "BROKER", "经纪人", "local");
+        when(userManagementService.updateOwnProfile(7L, "新名称")).thenReturn(updated);
+        ObjectMapper mapper = new ObjectMapper();
+
+        var result = authController.updateOwnProfile("Bearer " + token,
+                mapper.readTree("{\"displayName\":\" 新名称 \"}"));
+        assertTrue(result.success());
+        verify(userManagementService).updateOwnProfile(7L, "新名称");
+
+        assertThrows(UserManagementException.class, () -> authController.updateOwnProfile("Bearer " + token,
+                mapper.readTree("{\"displayName\":\"名称\",\"userId\":8,\"roles\":[\"ADMIN\"]}")));
+        verify(userManagementService, never()).updateOwnProfile(8L, "名称");
+        assertThrows(UserManagementException.class, () -> authController.updateOwnProfile(null,
+                mapper.readTree("{\"displayName\":\"名称\"}")));
     }
 }

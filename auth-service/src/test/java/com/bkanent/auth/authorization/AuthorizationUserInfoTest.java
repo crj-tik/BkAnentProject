@@ -116,6 +116,24 @@ class AuthorizationUserInfoTest {
     }
 
     @Test
+    void selfProfileChangesOnlyDisplayNameAndRejectsDisabledAccount() {
+        long revision = fixture.jdbc.queryForObject(
+                "SELECT permission_revision FROM auth_user_authorization_state WHERE user_id=1", Long.class);
+        var result = management.updateOwnProfile(1, "新名称");
+        assertThat(result.userId()).isEqualTo(1);
+        assertThat(result.displayName()).isEqualTo("新名称");
+        assertThat(result.roles()).containsExactly("BROKER");
+        assertThat(result.permissionRevision()).isEqualTo(revision);
+        assertThat(fixture.jdbc.queryForObject("SELECT role_code FROM user_account WHERE id=1", String.class))
+                .isEqualTo("BROKER");
+        fixture.jdbc.update("UPDATE user_account SET account_status='DISABLED' WHERE id=1");
+        assertThrows(com.bkanent.auth.service.UserManagementException.class,
+                () -> management.updateOwnProfile(1, "不能修改"));
+        assertThat(fixture.jdbc.queryForObject("SELECT display_name FROM user_account WHERE id=1", String.class))
+                .isEqualTo("新名称");
+    }
+
+    @Test
     void legacyConstructorsAndJsonKeepExistingFieldsWithoutInferringAuthority() throws Exception {
         var token = new AuthTokenDTO("synthetic-access", "synthetic-refresh", 7L, "ADMIN", "name", "admin", "tenant");
         var user = new AuthUserManagementModels.UserItem(7L, "user", "name", "ADMIN", "admin", "tenant", "ACTIVE", null);

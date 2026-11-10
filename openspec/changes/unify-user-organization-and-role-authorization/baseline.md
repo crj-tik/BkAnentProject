@@ -22,3 +22,9 @@
 - 开发库当前 BROKER 映射 1 条、STORE 映射 0 条。`auth_user_store_identity` 每用户最多一门店，同一门店可有多个用户；该表本身没有门店主数据或可追溯来源，不能证明任一数字代表真实门店。
 - Customer 的 `customer_profile` 及跟进/委托/收藏/咨询等数据、Listing 的 `listing_info` 和多个派生记录使用 brokerId；其字段语义、独立业务主体与历史变更须逐表核验。平台运营存储 `employee_kpi_stat`、`employee_daily_workload`、`store_dashboard_snapshot` 和门店复盘事实，但这些事实表不能独自证明员工/门店主数据及其与账号的关系。
 - 当前初查未发现公司、部门、员工或门店的完整主数据表；这不是全仓及外部系统权威性结论。不存在可验证来源时不能给旧 STORE 分配组织节点；新建开发样例须建立明确的组织门店与 storeId 映射，避免同号推断。KI-204/206 的受限能力维持原门禁。
+
+## 本人档案部分实现（任务 3.1 未完成）
+
+- 新增 `PATCH /auth/me/profile`，从 access token 确定 actor，仅接受非空 `displayName`，拒绝 userId、角色等其他字段。数据库更新仅作用于有效本人账号，显示名更新不改变角色或授权版本。
+- `AuthControllerTest` 与 `AuthorizationUserInfoTest` 定向 13 项通过，覆盖身份字段伪造拒绝、本人字段更新及已停用账号拒绝；测试未覆盖真实 Gateway 请求。
+- `/auth/me` 的组织摘要、组织成员管理与开发栈 API 验收尚未实现，因此任务 3.1 不勾选，服务也尚未部署。
