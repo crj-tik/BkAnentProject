@@ -134,6 +134,19 @@ class AuthorizationUserInfoTest {
     }
 
     @Test
+    void currentUserOnlyReturnsOwnActiveOrganizationMemberships() {
+        fixture.jdbc.update("INSERT INTO auth_org_unit(id,org_code,org_name,org_type,parent_id,status) VALUES (10,'C','公司','COMPANY',NULL,'ACTIVE'),(11,'S','门店','STORE',10,'ACTIVE'),(12,'D','运营','DEPARTMENT',10,'ACTIVE')");
+        fixture.jdbc.update("INSERT INTO auth_org_membership(user_id,org_id,is_primary,status,valid_from,valid_until) VALUES (1,11,1,'ACTIVE',NULL,NULL),(2,12,1,'ACTIVE',NULL,NULL),(1,12,0,'ENDED',NULL,NULL)");
+        var account = mapper.selectById(1L);
+        var organizations = management.currentUser(account).organizations();
+        assertThat(organizations).singleElement().satisfies(org -> {
+            assertThat(org.id()).isEqualTo(11L);
+            assertThat(org.parentId()).isEqualTo(10L);
+            assertThat(org.primary()).isTrue();
+        });
+    }
+
+    @Test
     void legacyConstructorsAndJsonKeepExistingFieldsWithoutInferringAuthority() throws Exception {
         var token = new AuthTokenDTO("synthetic-access", "synthetic-refresh", 7L, "ADMIN", "name", "admin", "tenant");
         var user = new AuthUserManagementModels.UserItem(7L, "user", "name", "ADMIN", "admin", "tenant", "ACTIVE", null);

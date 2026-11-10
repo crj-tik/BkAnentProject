@@ -5,6 +5,8 @@ import com.bkanent.auth.entity.UserAccountEntity;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
+import org.apache.ibatis.annotations.Arg;
+import org.apache.ibatis.annotations.ConstructorArgs;
 
 import java.util.List;
 /**
@@ -72,5 +74,18 @@ public interface UserAccountMapper extends BaseMapper<UserAccountEntity> {
     @Update("UPDATE user_account SET display_name = #{displayName}, updated_at = CURRENT_TIMESTAMP "
             + "WHERE id = #{userId} AND deleted = 0 AND account_status = 'ACTIVE'")
     int updateOwnDisplayName(@Param("userId") long userId, @Param("displayName") String displayName);
+
+    @Select("SELECT o.id,o.org_code,o.org_name,o.org_type,o.parent_id,m.is_primary "
+            + "FROM auth_org_membership m JOIN auth_org_unit o ON o.id=m.org_id "
+            + "WHERE m.user_id=#{userId} AND m.status='ACTIVE' AND o.status='ACTIVE' "
+            + "AND (m.valid_from IS NULL OR m.valid_from<=#{now}) "
+            + "AND (m.valid_until IS NULL OR m.valid_until>#{now}) ORDER BY m.is_primary DESC,o.id")
+    @ConstructorArgs({
+            @Arg(column="id", javaType=Long.class), @Arg(column="org_code", javaType=String.class),
+            @Arg(column="org_name", javaType=String.class), @Arg(column="org_type", javaType=String.class),
+            @Arg(column="parent_id", javaType=Long.class), @Arg(column="is_primary", javaType=boolean.class)
+    })
+    List<com.bkanent.auth.dto.AuthUserManagementModels.OrganizationSummary> selectCurrentOrganizations(
+            @Param("userId") long userId, @Param("now") java.sql.Timestamp now);
 }
 

@@ -63,14 +63,16 @@ public class UserManagementService {
     }
 
     public com.bkanent.auth.dto.AuthUserManagementModels.CurrentUser currentUser(UserAccountEntity account) {
+        var organizations = userAccountMapper.selectCurrentOrganizations(account.getId(),
+                java.sql.Timestamp.from(java.time.Instant.now()));
         if (!isVersionedAuthorization()) return new com.bkanent.auth.dto.AuthUserManagementModels.CurrentUser(
                 account.getId(), account.getUsername(), account.getDisplayName(), account.getRoleCode(),
-                getRoleNameForCode(account.getRoleCode()), account.getTenantCode());
+                getRoleNameForCode(account.getRoleCode()), account.getTenantCode(), false, List.of(), 0, 0, organizations);
         var info = accountMutations.authorizationInfo(account.getId());
         var snapshot = info.snapshot();
         return new com.bkanent.auth.dto.AuthUserManagementModels.CurrentUser(account.getId(), account.getUsername(),
                 account.getDisplayName(), account.getRoleCode(), getRoleNameForCode(account.getRoleCode()), account.getTenantCode(),
-                snapshot.businessAdmin(), info.roles(), snapshot.permissionRevision(), snapshot.credentialEpoch());
+                snapshot.businessAdmin(), info.roles(), snapshot.permissionRevision(), snapshot.credentialEpoch(), organizations);
     }
 
     @Transactional
