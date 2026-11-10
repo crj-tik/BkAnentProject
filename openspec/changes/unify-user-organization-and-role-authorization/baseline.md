@@ -30,7 +30,7 @@
 
 - 新增 `PATCH /auth/me/profile`，从 access token 确定 actor，仅接受非空 `displayName`，拒绝 userId、角色等其他字段。数据库更新仅作用于有效本人账号，显示名更新不改变角色或授权版本。
 - `AuthControllerTest` 与 `AuthorizationUserInfoTest` 定向 13 项通过，覆盖身份字段伪造拒绝、本人字段更新及已停用账号拒绝；测试未覆盖真实 Gateway 请求。
-- `/auth/me` 返回仅本人当前有效组织摘要，保留旧字段与构造器；H2 和本人跨用户隔离测试已覆盖。Auth 模块 222 项测试通过；上游 common 回归中另一会话未提交的 `RagVerifyDubboSerializationTest` 在 STRICT 序列化白名单下有 3 个错误，排除该类后 common + Auth 构建通过，不能称为全量通过。真实 Gateway 和开发栈 API 验收属于任务 5.4，服务尚未部署。
+- `/auth/me` 返回仅本人当前有效组织摘要，保留旧字段与构造器；H2 和本人跨用户隔离测试已覆盖。Auth 模块 222 项测试通过；上游 common 回归中另一会话未提交的 `RagVerifyDubboSerializationTest` 在 STRICT 序列化白名单下有 3 个错误，排除该类后 common + Auth 构建通过，不能称为全量通过。已部署开发 Auth 镜像并通过 Gateway 调用 `/auth/me`；Graph 及业务域完整 API 验收属于任务 5.4。
 
 ## 组织表部分实现（任务 2.1/2.2 未完成）
 
@@ -40,4 +40,10 @@
 ## 组织管理部分实现（任务 3.2 未完成）
 
 - 新增受现有 `auth.users.manage` 权限保护的组织节点创建及管理列表接口。公司只能作为根节点，门店和部门必须属于有效公司；创建使用授权写锁和审计，组织代码冲突拒绝。此阶段不接受客户端提交 storeId，也不产生组织成员或门店授权。
-- 新增初始主归属登记和成员列表：有效用户可被管理人员关联到门店或部门，事务内递增权限版本、写 outbox 和审计；已有旧 STORE 授权的用户须等待可信迁移。此记录不生成 STORE 授权。`OrganizationManagementControllerTest` 覆盖节点层级、审计、无权限、重复成员、版本与 outbox 及旧映射冲突。成员到期调度、撤销和门店授权范围仍未接通，故任务 3.2 不勾选；服务尚未部署。
+- 新增初始主归属登记和成员列表：有效用户可被管理人员关联到门店或部门，事务内递增权限版本、写 outbox 和审计；已有旧 STORE 授权的用户须等待可信迁移。此记录不生成 STORE 授权。`OrganizationManagementControllerTest` 覆盖节点层级、审计、无权限、重复成员、版本与 outbox 及旧映射冲突。成员到期调度、撤销和门店授权范围仍未接通，故任务 3.2 不勾选。
+
+## 开发样例与部署（任务 5.1/5.2 已完成）
+
+- `scripts/acceptance/bootstrap-auth-organizations.py --apply-development` 显式在本地 Gateway 创建公司 1、门店 2、运营部门 3；经纪人 userId 4 和运营职能人员 userId 5 分别为两个子节点的成员。两角色 `ACCEPTANCE_BROKER` / `ACCEPTANCE_OPERATIONS` 均显式授予且不包含受限权限；不能因此推断门店或经纪人私有业务授权。
+- 两组验收账号凭据保存在被 Git 忽略的 `.env` 的 `ORG_ACCEPTANCE_BROKER_*` 和 `ORG_ACCEPTANCE_OPERATIONS_*` 键中；脚本不输出密码或 token。脚本已重复运行，确认对象不重复创建，并验证非管理员无法访问组织管理及不能伪造本人档案 userId。
+- 当前开发 Auth 容器使用 `bk-anent-services:auth-org-f08ae55f`，基于先前镜像替换 `f08ae55f` 对应 Auth jar；Gateway、Agent 及其他服务未重建。版本仅在本次 Compose 启动时覆盖，没有改 `.env` 的全局 `APP_VERSION`；后续以旧全局版本重建 Auth 可能恢复旧镜像，需显式使用此版本或按后续发布流程更新。
