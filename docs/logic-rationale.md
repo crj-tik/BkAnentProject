@@ -1626,3 +1626,13 @@
 **代码位置**：`CustomerProfileVerifyRpcServiceImpl`、`ListingInquiryVerifyRpcServiceImpl`、`ListingComparisonReportVerifyRpcServiceImpl`、`ListingBusinessSourceRpcServiceImpl`（提供方注解）；`CustomerProfileVerifyClient`、`ListingInquiryVerifyClient`、`ListingComparisonReportVerifyClient`、`CampaignListingSnapshotClient`（消费方参数）；先例 `AuthAuthorizationRpcServiceImpl`、`Fastjson2ConstructorSerialization`。
 
 **关联**：LR-177、LR-179；change `implement-internal-listing-business` 6.5 端到端验收、`add-consultation-comparison-cards`；提交 `0af714bc`。
+
+## LR-181 房源域 MCP 通道只读且与 A2A/REST 共用服务层
+
+**结论**：listing-master-service 的 MCP 端点（`/mcp`，STREAMABLE）只暴露 6 个只读/计算工具（摘要搜索、按 ID 摘要、详情、版本化来源搜索、对比创建、报告读取），与 A2A（listing-agent）和 REST 调用同一服务层；房源写操作（登记、维护、状态、素材、业主、OCR、核验）不得进入 MCP——MCP 调用方是 agent-service 代理用户，写操作必须走经纪人身份的 REST + 网关签名上下文。公开工具（两个摘要工具）不做方法内操作码校验，由服务器 `public-tools` 白名单门控（interview 先例）；受限工具在方法内 `VerifiedDomainAuthorization.requireOperation` 作为纵深防御（该方法在 MCP 上下文自动走 `McpAuthorizationScope`）。工具 Bean 以 `@ConditionalOnProperty(mcp.authorization.server.enabled)` 门控，开关默认关闭。
+
+**根因**：MCP 的调用方是 agent-service（代理用户），没有经纪人归属；若暴露写操作会绕过"经纪人身份 + 资源归属"模型（LR-176/177 系列）。公开工具若在方法内强制操作码，则与过滤器 public-tools 白名单语义冲突（白名单的意义就是免操作码放行）。工具与 A2A 的 ListingTools 分离但共用服务层，避免两通道行为漂移（marketing/media 先例）。
+
+**代码位置**：`ListingMcpTools`、`ListingMcpConfiguration`、`listing-master-service/src/main/resources/application.yml`（mcp.authorization.server 段）、`nacos/listing-master-service.yaml`（spring.ai.mcp.server + mcp.authorization）、`nacos/agent-service.yaml`（listing-mcp-server 连接）；先例 `InterviewMcpConfiguration`、`MarketingMcpTools`、`McpAuthorizationScope`。
+
+**关联**：LR-176、LR-177、LR-180；change `add-listing-mcp-endpoint`；提交见该变更。

@@ -49,6 +49,9 @@ spring:
           interview-mcp-server:
             url: ${INTERVIEW_MCP_ENDPOINT:http://interview-service:9014/mcp}
             type: STREAMABLE
+          listing-mcp-server:
+            url: ${LISTING_MCP_ENDPOINT:http://listing-master-service:9004/mcp}
+            type: STREAMABLE
 
 management:
   endpoints:

@@ -100,3 +100,23 @@ listing:
       media-listing-current:
         caller-service: media-worker-service
         secret: ${MEDIA_LISTING_AUTH_SECRET:}
+
+# Explicitly gated: callers require an Auth-signed per-tool authorization context.
+# Tools are registered only when the guard is enabled (ListingMcpConfiguration).
+mcp:
+  authorization:
+    server:
+      enabled: ${LISTING_MCP_AUTHORIZATION_ENABLED:false}
+      caller-service: agent-service
+      authority-public-keys:
+        auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+      caller-public-keys:
+        agent-service-current: ${AGENT_SERVICE_IDENTITY_PUBLIC_KEY:}
+      tool-operations:
+        getListingDetail: listing.read
+        searchListingSource: listing.read
+        createListingComparison: compare.report.create
+        getComparisonReport: compare.report.read.own
+      public-tools:
+        - searchListingSummaries
+        - getListingSummary

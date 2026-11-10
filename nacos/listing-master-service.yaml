@@ -42,6 +42,14 @@ spring:
             enabled: true
           discovery:
             enabled: true
+    mcp:
+      server:
+        enabled: ${MCP_SERVER_ENABLED:true}
+        protocol: ${MCP_SERVER_PROTOCOL:STREAMABLE}
+        name: listing-mcp-server
+        version: ${MCP_SERVER_VERSION:1.0.0}
+        streamable-http:
+          mcp-endpoint: ${MCP_SERVER_MCP_ENDPOINT:/mcp}
   cloud:
     nacos:
       discovery:
@@ -157,3 +165,23 @@ listing:
       Always call available tools to get real listing data before making recommendations.
       The top-level JSON must also include contentType="listing", summary (string), and nextHints (string array; use [] when no next agent is needed).
       Return only the JSON object without Markdown fences, internal IDs, reasoning, tool arguments, or extra prose.
+
+# Explicitly gated: callers require an Auth-signed per-tool authorization context.
+# Tools are registered only when the guard is enabled (ListingMcpConfiguration).
+mcp:
+  authorization:
+    server:
+      enabled: ${LISTING_MCP_AUTHORIZATION_ENABLED:false}
+      caller-service: agent-service
+      authority-public-keys:
+        auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+      caller-public-keys:
+        agent-service-current: ${AGENT_SERVICE_IDENTITY_PUBLIC_KEY:}
+      tool-operations:
+        getListingDetail: listing.read
+        searchListingSource: listing.read
+        createListingComparison: compare.report.create
+        getComparisonReport: compare.report.read.own
+      public-tools:
+        - searchListingSummaries
+        - getListingSummary
