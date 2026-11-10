@@ -28,3 +28,8 @@
 - 新增 `PATCH /auth/me/profile`，从 access token 确定 actor，仅接受非空 `displayName`，拒绝 userId、角色等其他字段。数据库更新仅作用于有效本人账号，显示名更新不改变角色或授权版本。
 - `AuthControllerTest` 与 `AuthorizationUserInfoTest` 定向 13 项通过，覆盖身份字段伪造拒绝、本人字段更新及已停用账号拒绝；测试未覆盖真实 Gateway 请求。
 - `/auth/me` 的组织摘要、组织成员管理与开发栈 API 验收尚未实现，因此任务 3.1 不勾选，服务也尚未部署。
+
+## 组织表部分实现（任务 2.1/2.2 未完成）
+
+- 新增 `auth_org_unit`、`auth_org_membership` 及受管 manifest 条目 `auth-organization-20261110-v1`；未变更现有账号、角色和授予数据。表结构约束节点类型、父节点存在、门店业务 ID 唯一、成员关联及时间区间；单一主归属、树循环和同公司规则仍需管理服务的事务锁校验，不能仅凭表结构声称已完成。
+- 已在 WSL 开发栈通过受管 runner 执行 upgrade 和重复 upgrade，后者验证迁移已应用；未进行 fresh 数据库演练。组织数据、管理 API、角色分类及成员失效/outbox 仍未实现，因此任务 2.1/2.2 保持未完成。
