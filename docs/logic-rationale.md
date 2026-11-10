@@ -541,7 +541,7 @@
 
 **根因**：外部服务的模型 alias 是部署级标识，不是推理身份；同一 alias 下 revision、评分实现或 artifact 变化会改变分数尺度（logit vs sigmoid、数值分布）。若客户端只按 URL/alias 信任，模型热替换后旧 profile 的 sigmoid/范围校验会在错误尺度上运行，产生静默的排序偏差而非显式失败。`truncate=false` 若被服务端静默截断，重排分数对应的文本与候选实际内容不一致，无法通过事后校验发现。400/413 是请求参数/预算漂移（配置与预算不匹配），重试只会重复失败并白耗阶段预算。
 
-**代码位置**：`rag-service/src/main/java/com/bkanent/rag/rerank/BgeRerankService.java`（governed 分支与身份核对）、`RerankEndpoint.java`（钉扎字段）、`config/RagRuntimeConfiguration.java`（端点装配）；`nacos/rag-service.yaml`（expected-revision/artifact-digest 与三空间 measured-governed-profile 锚点）、`docker-compose.yml`/`.env.example`（env 接线与 bkanent-rerank-dev 网络声明）。
+**代码位置**：`rag-service/src/main/java/com/bkanent/rag/rerank/BgeRerankService.java`（governed 分支与身份核对）、`RerankEndpoint.java`（钉扎字段）、`config/RagRuntimeConfiguration.java`（端点装配）；`nacos/rag-service.yaml`（expected-revision/artifact-digest 与三空间 measured-governed-profile 锚点）、`docker-compose.yml`/`.env.example`（env 接线；2026-11-10 起 reranker 以别名 `bkanent-reranker-dev` 由其自身项目 compose 挂入 bk 网络，本仓不再声明 rerank 专用网络，见 KI-258 根治记录）。
 
 **关联**：LR-31、LR-34；KI-57（目标合规部分已接线，真实联调未做）。分数归一化仍由 `RerankProfile.normalize` 单点执行（LR-31）；身份钉扎值来自外部项目 `docs/capability-results-dev.json` 实测记录，外部升级模型时必须同步更新三处（endpoint env、nacos rerank 段、空间 rerank-profile 的 scoring-version），漏改即失败关闭而非漂移。
 

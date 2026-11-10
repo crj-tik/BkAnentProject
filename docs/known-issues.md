@@ -16,13 +16,13 @@
 
 **验证与边界**：知识模块定向 14 项测试通过；E2E 实测 search/check/batch-read 全通。门店范围读取仍要求可信 STORE 身份，不因本修复放宽。关联 KI-216（OWN 审核边界）、LR-119。
 
-## KI-258 [OPEN·P2] rag-service 双网卡下 Dubbo 注册 rerank 网卡，bk 消费者经注册地址不可达
+## KI-258 [FIXED·本提交·P2] rag-service 双网卡下 Dubbo 注册 rerank 网卡，bk 消费者经注册地址不可达
 
-**发现日期与依据**：2026-11-09，知识域运行态联调中 rag-service 加入 `bkanent-rerank-dev` 网络后，Dubbo 选择 rerank 网卡 10.253.240.2 注册（端口 20898）；bk-only 消费者（agent/memory 等）按 Nacos 注册地址实测不可达（网络隔离），仅 DNS 名直连可用（服务端实际监听全部网卡）。会话内已断开 rerank 网络并重启，Dubbo 重新注册 bk 地址 172.18.0.6:20898。
+**发现日期与依据**：2026-11-09，知识域运行态联调中 rag-service 加入 `bkanent-rerank-dev` 网络后，Dubbo 选择 rerank 网卡 10.253.240.2 注册（端口 20898）；bk-only 消费者（agent/memory 等）按 Nacos 注册地址实测不可达（网络隔离），仅 DNS 名直连可用（服务端实际监听全部网卡）。会话内已断开 rerank 网络并重启，Dubbo 重新注册 bk 地址 172.18.0.6:20898。与 KI-93 同根因（当时以固定 IP 钉扎缓解 release 栈）。
 
-**待处理**：根治需在 compose/env 固定 `DUBBO_IP_TO_BIND`（或调整双网卡选择），使 rerank 网络仅承载 rerank HTTP 出站、Dubbo 始终注册 bk 地址；重建容器后需复验。另：模板 `elasticsearch` 内网网段原为 172.24.0.0/16（Docker Desktop 时代），不覆盖 WSL2 Docker 的 172.18.0.0/16，本次已补双网段并发布 Nacos；`bkanent-rerank-dev` 外部网络在本环境为占位创建（无真实 reranker，rerank 能力保持关闭）。
+**根治（2026-11-10，被调用方加入调用方网络）**：网络方向反转——外部 Reranker-BGE-V2-M3 项目的 `compose.dev.yml` 将 reranker 容器以别名 `bkanent-reranker-dev` 挂入本仓 bk 桥接网络（其部署脚本网络校验同步改为校验 bk 网络存在）；本仓 rag-service 回归单网卡（compose 删除 `bkanent-rerank-dev` 网络声明与挂载），Dubbo 不再有第二网卡可选，始终注册 bk 地址。rerank 端点主机名经别名保持不变（`http://bkanent-reranker-dev:18111/api/v1/rerank`）；模板 `internal-networks` 的 `bkanent-reranker-dev` 条目改为 bk 桥接网段（172.24.0.0/16 + 172.18.0.0/16）。主 `.env` 的 `SYSTEM_RERANK_API_KEY` 对齐外部项目签发的 `bkanent-rag-dev` caller 密钥（指纹核验，不落源码）。
 
-**验证与边界**：断开重启后 5 类 knowledge Memory v2 空间 PROVISION/INSPECT 正常；rerank 阶段 DEPENDENCY_UNAVAILABLE 为无部署环境的预期失败关闭。关联 KI-120（同族注册地址问题）、KI-107。
+**验证与边界**：reranker（GPU）部署后从 rag 容器经别名可达；rag-service 单网卡重建后 Dubbo 注册 bk 地址；探针 INSPECT 的 RERANK 阶段经真实治理接口通过、知识空间 ready 转真（见验收记录）。无 reranker 部署的环境 rerank 仍失败关闭，不影响其余阶段。历史 KI-93 的固定 IP 钉扎方案保留为 release 栈记录，本条为机制性根治。
 
 
 ## KI-237 [FIXED·本提交·P2] 复盘计划缺少可读取的权威诊断修订

@@ -889,11 +889,12 @@ services:
       timeout: 5s
       retries: 30
       start_period: 30s
-    # bkanent-rerank-dev is the external reranker network created by that project's deploy script;
-    # it is optional so environments without the reranker still start (rerank capability stays closed).
+    # Reranker networking is callee-joins-caller (KI-258 root fix): the external
+    # Reranker-BGE-V2-M3 project attaches its container to the bk bridge with alias
+    # bkanent-reranker-dev, so this service stays single-NIC and Dubbo always
+    # registers the bk address. Without the reranker deployed, rerank stays closed.
     networks:
       - bk
-      - bkanent-rerank-dev
 
   interview-service:
     <<: *app-service
@@ -933,8 +934,3 @@ volumes:
 networks:
   bk:
     driver: bridge
-  # External dedicated reranker network (10.253.240.0/24, internal=true), owned by the
-  # Reranker-BGE-V2-M3 project; only rag-service joins it. Never attach the whole bk network.
-  bkanent-rerank-dev:
-    external: true
-    name: bkanent-rerank-dev

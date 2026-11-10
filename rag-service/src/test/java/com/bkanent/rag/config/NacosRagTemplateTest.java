@@ -53,7 +53,7 @@ class NacosRagTemplateTest {
         assertThat(nacos.get("password")).isEqualTo("${NACOS_CLIENT_PASSWORD:}");
     }
 
-    @Test void rerankerHostHasOwnManagedCidrAndIdentityPins() throws java.io.IOException {
+    @Test void rerankerHostHasManagedCidrAndIdentityPins() throws java.io.IOException {
         Map<String, Object> rag = section(template(), "rag");
         Map<String, Object> rerank = section(rag, "rerank");
         assertThat(rerank.get("protocol")).isEqualTo("${SYSTEM_RERANK_PROTOCOL:governed}");
@@ -61,8 +61,10 @@ class NacosRagTemplateTest {
         assertThat(((String) rerank.get("expected-artifact-digest"))).contains("76cd4a9");
         Map<String, Object> http = section(rag, "http");
         assertThat((List<String>) http.get("allowed-hosts")).contains("bkanent-reranker-dev");
+        // The reranker joins the bk bridge with alias bkanent-reranker-dev (callee-joins-caller,
+        // KI-258), so its managed CIDRs are the project bridge subnets.
         assertThat((List<String>) ((Map<String, Object>) http.get("internal-networks")).get("bkanent-reranker-dev"))
-                .containsExactly("10.253.240.0/24");
+                .containsExactlyInAnyOrder("172.24.0.0/16", "172.18.0.0/16");
     }
 
     @Test void memoryV2SpacesAreRegisteredWithRequiredScopeAndUniquePhysicalTargets() throws java.io.IOException {

@@ -59,8 +59,9 @@ rag:
     internal-networks:
       '[host.docker.internal]': [192.168.65.254/32]
       # 172.24.0.0/16 covers the Docker Desktop bridge; 172.18.0.0/16 covers the WSL2 bridge.
+      # The reranker joins the bk bridge with alias bkanent-reranker-dev (callee-joins-caller, KI-258).
       elasticsearch: [172.24.0.0/16, 172.18.0.0/16]
-      bkanent-reranker-dev: [10.253.240.0/24]
+      bkanent-reranker-dev: [172.24.0.0/16, 172.18.0.0/16]
   milvus:
     host: ${RAG_MILVUS_HOST:}
     port: ${RAG_MILVUS_PORT:19530}
