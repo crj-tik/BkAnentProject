@@ -4,6 +4,7 @@ import java.util.List;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -50,6 +51,13 @@ public class OrganizationManagementController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User ID required");
         }
         return service.addPrimaryMember(bearer(header), orgId, body.userId());
+    }
+
+    @DeleteMapping("/{orgId}/members/{userId}")
+    public OrganizationManagementService.MemberChange endMember(
+            @RequestHeader(value = "Authorization", required = false) String header,
+            @PathVariable(name = "orgId") long orgId, @PathVariable(name = "userId") long userId) {
+        return service.endPrimaryMember(bearer(header), orgId, userId);
     }
 
     private static String bearer(String header) {

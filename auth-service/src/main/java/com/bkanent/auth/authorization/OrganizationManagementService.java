@@ -130,6 +130,37 @@ public class OrganizationManagementService {
         });
     }
 
+    /** Ending an initial membership is allowed only while no legacy store scope needs migration. */
+    public MemberChange endPrimaryMember(String token, long orgId, long userId) {
+        return authenticated(token, actor -> {
+            if (orgId <= 0 || userId <= 0) throw error(HttpStatus.BAD_REQUEST, "Invalid member");
+            var starts = repository.jdbc().query("SELECT valid_from FROM auth_org_membership "
+                            + "WHERE org_id=? AND user_id=? AND status='ACTIVE' AND is_primary=1",
+                    (rs, row) -> rs.getTimestamp(1), orgId, userId);
+            if (starts.size() != 1) throw error(HttpStatus.NOT_FOUND, "Active primary membership not found");
+            if (repository.jdbc().queryForObject("SELECT COUNT(*) FROM auth_user_store_identity WHERE user_id=?",
+                    Integer.class, userId) != 0) {
+                throw error(HttpStatus.CONFLICT, "Existing store scope requires verified migration");
+            }
+            var now = clock.instant().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+            if (starts.get(0) != null && !starts.get(0).toInstant().isBefore(now)) {
+                throw error(HttpStatus.CONFLICT, "Membership was just created; retry");
+            }
+            var result = repository.mutateUsers(List.of(userId), "ORG_MEMBERSHIP_ENDED", false, jdbc -> {
+                if (jdbc.update("UPDATE auth_org_membership SET status='ENDED',valid_until=? "
+                                + "WHERE org_id=? AND user_id=? AND status='ACTIVE' AND is_primary=1",
+                        Timestamp.from(now), orgId, userId) != 1) {
+                    throw error(HttpStatus.CONFLICT, "Membership changed");
+                }
+            });
+            repository.jdbc().update("INSERT INTO auth_authorization_audit"
+                            + "(audit_id,actor_id,actor_revision,action,target_type,target_id,event_id) VALUES (?,?,?,?,?,?,?)",
+                    UUID.randomUUID().toString(), actor.userId(), actor.permissionRevision(),
+                    "ORG_MEMBER_ENDED", "USER", userId, result.eventId());
+            return new MemberChange(userId, orgId, result.eventId(), result.versions().get(0).permissionRevision());
+        });
+    }
+
     private <T> T authenticated(String token, Function<EffectivePermissionService.Snapshot, T> work) {
         authenticate(token);
         return repository.withWriterLock(() -> work.apply(authenticate(token)));

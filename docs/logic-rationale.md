@@ -985,9 +985,9 @@
 
 **根因**：拆分的比较服务依赖 Listing 事实，却缺少可跨来源稳定验证的身份与版本；ID-only 缓存不能发现来源更新，也会把服务重构误作授权变化。稳定引用和当前签名 Auth 上下文共同限定每次读取，来源模式作为服务端事实保留。确认没有在途任务或可保留的历史资产后，独立 Compare 服务、RPC/A2A/MCP 信任和 Memory `compare/compare-agent` 空间一并退役；当前 Listing 只使用自身已登记的 Memory 身份。
 
-**代码位置**：`common/listing` 中的来源与版本契约、`common/model/ListingComparisonFacts` 和 `common/rag/RagCanonicalHash`；`listing-master-service/source` 的 legacy-local、fixture、HTTP provider 与业务来源授权服务；`listing-master-service/comparison` 的比较、版本指纹、报告存储、兼容 JSON 与 PDF；Auth 目录迁移 `20261028_listing_comparison_authorization_domain.sql` 与退役迁移 `20261029_legacy_compare_promotion_retirement.sql`；Listing Agent 的既有 Memory Hook 与 `listing-comparison` skill。最终服务和权限边界见 `docs/listing-comparison-cutover.md`。
+**代码位置**：`common/listing` 中的来源与版本契约、`common/model/ListingComparisonFacts` 和 `common/rag/RagCanonicalHash`；`listing-master-service/source` 的 legacy-local、fixture、HTTP provider 与业务来源授权服务；`listing-master-service/comparison` 的比较、版本指纹、报告存储与 PDF；Auth 目录迁移 `20261028_listing_comparison_authorization_domain.sql` 与退役迁移 `20261029_legacy_compare_promotion_retirement.sql`；Listing Agent 的既有 Memory Hook 与 `listing-comparison` skill。旧 `/compare/**` 兼容入口已按最新决定移除，保留内部 `legacy-local` 来源及其版本契约；最终服务和权限边界见 `docs/listing-comparison-cutover.md`。
 
-**关联**：LR-22/23/54/79/96/97/149；KI-115。定向契约、来源、授权、报告、Agent 装配、Studio 授权与配置矩阵测试通过；真实上游联机、共享 Nacos 发布、容器部署和线上切流仍待部署验收。
+**关联**：LR-22/23/54/79/96/97/149；KI-115。此前定向契约、来源、授权、报告、Agent 装配、Studio 授权与配置矩阵测试通过；2026-11-10 旧入口移除后的新增或调整测试尚未运行，真实上游联机、共享 Nacos 发布、容器部署和线上切流仍待部署验收。
 
 ## LR-100 知识运营拥有派生资产，逐字稿继续归访谈域（规划）
 
@@ -1411,11 +1411,11 @@
 
 ## LR-161 未上线环境移除旧比较服务的默认部署
 
-**结论**：用户于 2026-10-29 确认项目没有正式上线或需保留的历史资产，独立 Compare 模块的源码、维护测试、RPC 契约、Compose 服务、独立 Nacos data ID、Auth/Memory 信任和 Compare Memory 空间均退役；房源比较继续由 Listing 提供，旧 `/compare/**` 响应字段由 Listing 兼容 DTO 承接。
+**结论**：用户于 2026-10-29 确认项目没有正式上线或需保留的历史资产，独立 Compare 模块的源码、维护测试、RPC 契约、Compose 服务、独立 Nacos data ID、Auth/Memory 信任和 Compare Memory 空间均退役；房源比较继续由 Listing 提供。当时旧 `/compare/**` 响应字段由 Listing 兼容 DTO 承接；2026-11-10 按最新决定移除该旧控制器和专属 DTO，仅保留 `/listings/comparisons/**` 新入口与内部 `legacy-local` 来源。
 
-**根因**：项目未正式上线且没有需要迁移的旧报告或在途任务，不再需要保留不可调用的独立服务或身份。Listing 自有回归覆盖来源版本、owner 隔离和兼容响应；数据库迁移只在确认旧 Promotion schema 为空后删除，并停用未迁移的公开分享权限。
+**根因**：项目未正式上线且没有需要迁移的旧报告或在途任务，不再需要保留不可调用的独立服务或身份。旧 HTTP 兼容不再需要，但来源标识及来源版本不是旧 HTTP 入口，不应随之删除；数据库迁移只在确认旧 Promotion schema 为空后删除，并停用未迁移的公开分享权限。
 
-**代码位置**：根 `pom.xml`、`docker-compose.yml`、Listing 比较兼容 DTO/测试、Auth/Memory/RAG 配置、受管迁移 540；关联 LR-99、KI-115、KI-224、KI-227。
+**代码位置**：根 `pom.xml`、`docker-compose.yml`、Listing 比较控制器/测试、Auth/Memory/RAG 配置、受管迁移 540；关联 LR-99、KI-115、KI-224、KI-227。网关配置及部署状态须独立核对，源码修改不代表已部署。
 
 ## LR-168 退役数据库的迁移账本必须先集中保存
 
@@ -1639,10 +1639,10 @@
 
 ## LR-182 组织成员初始记录不推导门店授权范围
 
-**结论**：组织成员写入必须持有用户管理权限，在授权写锁内记录主归属、递增该用户权限版本并写 outbox 和审计；初期成员记录本身不产生 STORE 授权。用户已有旧 STORE 映射时暂拒绝新主归属，待可信门店映射及迁移流程接通后处理。
+**结论**：组织成员写入或结束必须持有用户管理权限，在授权写锁内记录主归属、递增该用户权限版本并写 outbox 和审计；初期成员记录本身不产生 STORE 授权。用户已有旧 STORE 映射时暂拒绝新主归属或结束归属，待可信门店映射及迁移流程接通后处理。
 
 **根因**：组织节点 ID 和业务 storeId 分属不同事实，不能凭数字、部门或角色推导。旧授权快照依赖显式 STORE，贸然覆盖或拼接成员记录会产生错误门店范围。先保存可审计的无授权归属、对旧映射保守拒绝，可保持无可信范围时业务拒绝。
 
 **代码位置**：`auth-service/authorization/OrganizationManagementService`、`OrganizationManagementController`；迁移 `20261110_auth_organization.sql`。
 
-**关联**：LR-145/146；KI-204；change `unify-user-organization-and-role-authorization` 任务 3.2/3.6。成员有效期调度、旧 STORE 同步和开发栈验收仍未完成，不得将初始记录当作完整组织授权实现。
+**关联**：LR-145/146；KI-204；change `unify-user-organization-and-role-authorization` 任务 3.2/3.6。成员有效期调度、旧 STORE 同步和变更撤销的开发栈验收仍未完成，不得将初始记录当作完整组织授权实现。

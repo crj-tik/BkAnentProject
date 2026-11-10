@@ -12,6 +12,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -98,6 +99,10 @@ class OrganizationManagementControllerTest {
         assertEquals(0, fixture.jdbc.queryForObject("SELECT COUNT(*) FROM auth_user_store_identity WHERE user_id=1", Integer.class));
         assertEquals(1, fixture.jdbc.queryForObject("SELECT COUNT(*) FROM auth_authorization_outbox WHERE reason='ORG_MEMBERSHIP_ADDED'", Integer.class));
         assertEquals(1, fixture.jdbc.queryForObject("SELECT COUNT(*) FROM auth_authorization_audit WHERE action='ORG_MEMBER_ADDED'", Integer.class));
+        mvc.perform(delete("/auth/authorization/organizations/2/members/1").header("Authorization", "Bearer " + admin))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.permissionRevision").value(3));
+        assertEquals(1, fixture.jdbc.queryForObject("SELECT COUNT(*) FROM auth_org_membership WHERE status='ENDED'", Integer.class));
+        assertEquals(1, fixture.jdbc.queryForObject("SELECT COUNT(*) FROM auth_authorization_outbox WHERE reason='ORG_MEMBERSHIP_ENDED'", Integer.class));
     }
 
     @Test
