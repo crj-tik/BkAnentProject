@@ -17,11 +17,14 @@
 - 共享协议和消费点：`AuthzRequestScope`、`VerifiedDomainAuthorization`、`AuthorizationSnapshot` 与签名/哈希；Customer 的 controller、管理服务、咨询服务及 Listing 客户端；Listing 的管理、RPC、RAG identity/grant；RAG、Memory 的 principal/scope 签名；Agent、Marketing、Media 的 RAG 或 Listing 客户端。逐调用点需区分权限授予、业务宽范围选择、签名兼容和数据传输，不能统一简单删除判断。
 - 尚需输出各管理员现有快照与目标管理角色逐权限差异、角色到期和目录基线排除结果；继续搜索非 Java 协议、SQL、配置及运行部署消费者。计数仅作为现状证据，不是迁移前后权限等价证明。
 
-## 门店与业务身份初查（任务 1.2/1.4 进行中）
+## 门店与业务身份初查（任务 1.2 进行中；1.4 已盘点）
 
 - 开发库当前 BROKER 映射 1 条、STORE 映射 0 条。`auth_user_store_identity` 每用户最多一门店，同一门店可有多个用户；该表本身没有门店主数据或可追溯来源，不能证明任一数字代表真实门店。
 - Customer 的 `customer_profile` 及跟进/委托/收藏/咨询等数据、Listing 的 `listing_info` 和多个派生记录使用 brokerId；其字段语义、独立业务主体与历史变更须逐表核验。平台运营存储 `employee_kpi_stat`、`employee_daily_workload`、`store_dashboard_snapshot` 和门店复盘事实，但这些事实表不能独自证明员工/门店主数据及其与账号的关系。
-- 当前初查未发现公司、部门、员工或门店的完整主数据表；这不是全仓及外部系统权威性结论。不存在可验证来源时不能给旧 STORE 分配组织节点；新建开发样例须建立明确的组织门店与 storeId 映射，避免同号推断。KI-204/206 的受限能力维持原门禁。
+- 仓库 MySQL schema 和 Java 实体/mapper 检索未发现独立公司、部门、员工或门店主数据表；平台经营的数据是分析或复盘事实，并不负责维护门店名册。外部系统是否存在门店名册尚未得到证据。现有 `setStoreIdentity` 只校验 storeId 为正、用户有效并记录审计，没有核实门店存在；`VerifiedStoreScopeAdapter` 将 Auth 签名 STORE 与请求 storeId 比较。不能由这条映射倒推出门店主数据。
+- 2026-11-10 开发库核对：`auth_user_store_identity` 0 行、`store_review_matter` 0 行、`auth_org_unit` 中 STORE 0 行，开发库当前无待回填门店映射；这不证明其他环境或外部来源为空。
+- 迁移处理：先将新建组织门店登记为 Auth 受控真源，并以显式 `store_business_id` 唯一约束关联业务 storeId。新 storeId 必须由服务端持久分配，查重已知旧 ID 和已绑定 ID，不能根据组织节点的数字相同推断。其他环境逐条导出旧映射，以权威名册或可审计的管理员核实证据建立旧 storeId→组织门店一对一账本；无证据、冲突、无效账号或停用门店列为待处理，不导入有效成员或授权。跨用户共享同一门店应落在同一已验证组织节点，不能重复创建不同门店。
+- 过渡期间继续由旧签名 STORE 支撑现有消费者；仅在已确认的成员关系与旧映射一致、成员变动可事务更新授权版本/失效并覆盖到期边界后，按用户切换来源。`auth_user_store_identity` 保留至消费者、对账和回退验收完成。KI-204/206 的受限能力维持原门禁。
 
 ## 本人档案部分实现（任务 3.1 未完成）
 
