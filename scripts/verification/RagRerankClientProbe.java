@@ -46,12 +46,12 @@ public final class RagRerankClientProbe {
     }
 
     private static void run() throws Exception {
-        URI uri = URI.create(value("RAG_RERANK_ENDPOINT", DEFAULT_ENDPOINT));
-        String model = value("RAG_RERANK_MODEL", DEFAULT_MODEL);
-        String protocol = value("RAG_RERANK_PROTOCOL", "governed");
-        String revision = value("RAG_RERANK_EXPECTED_REVISION", DEFAULT_REVISION);
-        String digest = value("RAG_RERANK_EXPECTED_ARTIFACT_DIGEST", DEFAULT_ARTIFACT_DIGEST);
-        String apiKey = System.getenv("RAG_RERANK_API_KEY");
+        URI uri = URI.create(value("SYSTEM_RERANK_ENDPOINT", DEFAULT_ENDPOINT));
+        String model = value("SYSTEM_RERANK_MODEL", DEFAULT_MODEL);
+        String protocol = value("SYSTEM_RERANK_PROTOCOL", "governed");
+        String revision = value("SYSTEM_RERANK_EXPECTED_REVISION", DEFAULT_REVISION);
+        String digest = value("SYSTEM_RERANK_EXPECTED_ARTIFACT_DIGEST", DEFAULT_ARTIFACT_DIGEST);
+        String apiKey = System.getenv("SYSTEM_RERANK_API_KEY");
         if (!"http".equalsIgnoreCase(uri.getScheme()) || !HOST.equalsIgnoreCase(uri.getHost())
                 || uri.getPort() != 18111 || !"/api/v1/rerank".equals(uri.getPath())
                 || !"governed".equalsIgnoreCase(protocol) || model.isBlank()

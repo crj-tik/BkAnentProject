@@ -10,14 +10,14 @@ spring:
   ai:
     deepseek:
       # KE OpenAI-compatible gateway (Bella). DeepSeek starter drives all chat traffic.
-      api-key: ${DEEPSEEK_API_KEY:${KE_API_KEY:}}
-      base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
+      api-key: ${SYSTEM_MODEL_API_KEY:}
+      base-url: ${SYSTEM_MODEL_BASE_URL:https://open-chatgpt.ke.com/v1}
       chat:
-        api-key: ${DEEPSEEK_API_KEY:${KE_API_KEY:}}
-        base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
+        api-key: ${SYSTEM_MODEL_API_KEY:}
+        base-url: ${SYSTEM_MODEL_BASE_URL:https://open-chatgpt.ke.com/v1}
         completions-path: /chat/completions
         options:
-          model: ${AGENT_CHAT_MODEL:${AGENT_DEEPSEEK_MODEL:gpt-5.6-terra}}
+          model: ${AGENT_CHAT_MODEL:gpt-5.6-terra}
           temperature: 0.2
     model:
       chat: deepseek
@@ -174,12 +174,12 @@ agent:
   memory:
     base-url: ${MEMORY_SERVICE_BASE_URL:http://10.117.102.54:9011}
   chat:
-    model: ${AGENT_CHAT_MODEL:${AGENT_DEEPSEEK_MODEL:gpt-5.6-terra}}
-    temperature: ${AGENT_CHAT_TEMPERATURE:${AGENT_DEEPSEEK_TEMPERATURE:0.2}}
-    max-tokens: ${AGENT_CHAT_MAX_TOKENS:${AGENT_DEEPSEEK_MAX_TOKENS:4000}}
-    top-p: ${AGENT_CHAT_TOP_P:${AGENT_DEEPSEEK_TOP_P:1.0}}
-    default-top-k: ${AGENT_CHAT_DEFAULT_TOP_K:${AGENT_DEEPSEEK_DEFAULT_TOP_K:4}}
-    system-prompt: ${AGENT_CHAT_SYSTEM_PROMPT:${AGENT_DEEPSEEK_SYSTEM_PROMPT:}}
+    model: ${AGENT_CHAT_MODEL:gpt-5.6-terra}
+    temperature: ${AGENT_CHAT_TEMPERATURE:0.2}
+    max-tokens: ${AGENT_CHAT_MAX_TOKENS:4000}
+    top-p: ${AGENT_CHAT_TOP_P:1.0}
+    default-top-k: ${AGENT_CHAT_DEFAULT_TOP_K:4}
+    system-prompt: ${AGENT_CHAT_SYSTEM_PROMPT:}
   rag-consumer:
     knowledge-enabled: false
     versioned-authorization-required: ${AGENT_RAG_VERSIONED_AUTHORIZATION_REQUIRED:false}

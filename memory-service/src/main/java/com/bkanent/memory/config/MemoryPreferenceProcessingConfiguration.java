@@ -23,8 +23,8 @@ public class MemoryPreferenceProcessingConfiguration {
     @Conditional(PreferenceModelConfiguredCondition.class)
     PreferenceEvaluator preferenceEvaluator(ObjectMapper mapper,
             @Value("${memory.v2.preference.processing.model:}") String model,
-            @Value("${DEEPSEEK_API_KEY:${KE_API_KEY:}}") String key,
-            @Value("${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}") String baseUrl) {
+            @Value("${SYSTEM_MODEL_API_KEY:}") String key,
+            @Value("${SYSTEM_MODEL_BASE_URL:https://open-chatgpt.ke.com/v1}") String baseUrl) {
         if(key.isBlank() || key.equals("local-dev-placeholder") || model.isBlank()) throw new IllegalArgumentException("preference model credentials/configuration missing");
         var client=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).followRedirects(HttpClient.Redirect.NEVER).build();
         var factory=new JdkClientHttpRequestFactory(client); factory.setReadTimeout(Duration.ofSeconds(30));
@@ -42,8 +42,7 @@ public class MemoryPreferenceProcessingConfiguration {
     static final class PreferenceModelConfiguredCondition implements Condition {
         @Override public boolean matches(ConditionContext context, AnnotatedTypeMetadata metadata) {
             String model = context.getEnvironment().getProperty("memory.v2.preference.processing.model", "");
-            String key = context.getEnvironment().getProperty("DEEPSEEK_API_KEY",
-                    context.getEnvironment().getProperty("KE_API_KEY", ""));
+            String key = context.getEnvironment().getProperty("SYSTEM_MODEL_API_KEY", "");
             return !model.isBlank() && !key.isBlank() && !"local-dev-placeholder".equals(key);
         }
     }

@@ -228,7 +228,7 @@ done
 
 # 8) 汇总与后续步骤。
 log_info "初始化完成。要点回顾："
-log_info "  - env 已就绪（权限 600）；真实 chat/embedding/rerank 调用前核验 DEEPSEEK_API_KEY / RAG_EMBEDDING_API_KEY / RAG_RERANK_API_KEY，既有值不覆盖；旧 AGENT_RAG_RERANK_API_KEY 不再消费"
+log_info "  - env 已就绪（权限 600）；真实 chat/embedding/rerank 调用前核验 SYSTEM_MODEL_API_KEY / SYSTEM_EMBEDDING_API_KEY / SYSTEM_RERANK_API_KEY，既有值不覆盖；旧 AGENT_RAG_RERANK_API_KEY 不再消费"
 if [ "$BIND_ADDR" != "0.0.0.0" ] && [ "$PROFILE" != "mcp" ]; then
   log_info "  - 默认只绑定 127.0.0.1；需要局域网访问时用 --bind 0.0.0.0 或手工改 .env 的 HOST_BIND_ADDRESS，并同步复查 A2A_PUBLIC_BASE_URL / MINIO_PUBLIC_BASE_URL"
 fi

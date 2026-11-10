@@ -42,7 +42,7 @@ public class KeSeedreamImageGenerationClient implements MediaImageGenerationClie
     public KeSeedreamImageGenerationClient(MediaIntegrationProperties integrationProperties,
                                            @Value("${media.integration.image-gateway-base-url:https://open-chatgpt.ke.com/v1}") String gatewayBaseUrl,
                                            @Value("${media.integration.image-model:doubao-seedream-4.5-gen}") String model,
-                                           @Value("${KE_API_KEY:${DEEPSEEK_API_KEY:}}") String apiKey) {
+                                           @Value("${SYSTEM_IMAGE_API_KEY:${SYSTEM_MODEL_API_KEY:}}") String apiKey) {
         this.integrationProperties = integrationProperties;
         this.gatewayBaseUrl = gatewayBaseUrl;
         this.model = model;

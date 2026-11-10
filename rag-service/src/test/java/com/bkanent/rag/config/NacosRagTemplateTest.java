@@ -56,7 +56,7 @@ class NacosRagTemplateTest {
     @Test void rerankerHostHasOwnManagedCidrAndIdentityPins() throws java.io.IOException {
         Map<String, Object> rag = section(template(), "rag");
         Map<String, Object> rerank = section(rag, "rerank");
-        assertThat(rerank.get("protocol")).isEqualTo("${RAG_RERANK_PROTOCOL:governed}");
+        assertThat(rerank.get("protocol")).isEqualTo("${SYSTEM_RERANK_PROTOCOL:governed}");
         assertThat(((String) rerank.get("expected-revision"))).contains("324cc405");
         assertThat(((String) rerank.get("expected-artifact-digest"))).contains("76cd4a9");
         Map<String, Object> http = section(rag, "http");

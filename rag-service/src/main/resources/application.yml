@@ -36,12 +36,12 @@ spring:
     vectorstore:
       type: none
     openai:
-      base-url: ${RAG_EMBEDDING_BASE_URL:}
-      api-key: ${RAG_EMBEDDING_API_KEY:}
+      base-url: ${SYSTEM_EMBEDDING_BASE_URL:}
+      api-key: ${SYSTEM_EMBEDDING_API_KEY:}
       embedding:
         options:
-          model: ${RAG_EMBEDDING_MODEL:}
-          dimensions: ${RAG_EMBEDDING_DIMENSIONS:1024}
+          model: ${SYSTEM_EMBEDDING_MODEL:}
+          dimensions: ${SYSTEM_EMBEDDING_DIMENSIONS:1024}
     retry:
       max-attempts: 1
 dubbo:
@@ -96,13 +96,13 @@ rag:
     connect-timeout-ms: 5000
     rpc-deadline-ms: 5000
   rerank:
-    endpoint: ${RAG_RERANK_ENDPOINT:}
-    api-key: ${RAG_RERANK_API_KEY:}
-    model: ${RAG_RERANK_MODEL:}
-    protocol: ${RAG_RERANK_PROTOCOL:}
+    endpoint: ${SYSTEM_RERANK_ENDPOINT:}
+    api-key: ${SYSTEM_RERANK_API_KEY:}
+    model: ${SYSTEM_RERANK_MODEL:}
+    protocol: ${SYSTEM_RERANK_PROTOCOL:}
     # Governed provider identity pins; same-alias model drift fails closed, never re-normalizes.
-    expected-revision: ${RAG_RERANK_EXPECTED_REVISION:}
-    expected-artifact-digest: ${RAG_RERANK_EXPECTED_ARTIFACT_DIGEST:}
+    expected-revision: ${SYSTEM_RERANK_EXPECTED_REVISION:}
+    expected-artifact-digest: ${SYSTEM_RERANK_EXPECTED_ARTIFACT_DIGEST:}
   http:
     mode: ${RAG_HTTP_MODE:PUBLIC_ONLY}
     allowed-hosts: ${RAG_HTTP_ALLOWED_HOSTS:}

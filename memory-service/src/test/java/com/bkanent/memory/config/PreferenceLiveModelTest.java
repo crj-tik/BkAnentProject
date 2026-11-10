@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class PreferenceLiveModelTest {
     @Test void actualManagedModelDistinguishesPreferenceCorrectionQuestionAndTemporaryException() {
         var evaluator=new MemoryPreferenceProcessingConfiguration().preferenceEvaluator(JsonMapper.builder().build(),System.getenv("MEMORY_V2_PREFERENCE_MODEL"),
-                System.getenv("DEEPSEEK_API_KEY"),System.getenv("DEEPSEEK_BASE_URL"));
+                System.getenv("SYSTEM_MODEL_API_KEY"),System.getenv("SYSTEM_MODEL_BASE_URL"));
         String[] texts={"我长期偏好总价100万以内的房子。","以后长期预算改成200万以内。","300万的可以吗？我只是问问，没有决定。","只在这次看房允许300万以内，长期预算不变。"};
         var context=new MemoryContextKey("42","preference-fixture","copy-agent","live-fixture");
         for(int i=0;i<texts.length;i++) {

@@ -32,13 +32,13 @@ x-app-environment: &app-environment
   AUTH_SERVICE_IDENTITY_KEY_ID: ${AUTH_SERVICE_IDENTITY_KEY_ID:-auth-service-current}
   # Spring AI validates provider keys during bean creation. The placeholders
   # only keep local containers bootable; real AI calls still require keys.
-  DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-${KE_API_KEY:-local-dev-placeholder}}
-  DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://open-chatgpt.ke.com/v1}
-  KE_API_KEY: ${KE_API_KEY:-}
-  KE_OCR_BASE_URL: ${KE_OCR_BASE_URL:-https://open-chatgpt.ke.com/v1}
-  KE_OCR_MODEL: ${KE_OCR_MODEL:-baidu-general}
-  KE_IMAGE_BASE_URL: ${KE_IMAGE_BASE_URL:-https://open-chatgpt.ke.com/v1}
-  KE_IMAGE_MODEL: ${KE_IMAGE_MODEL:-doubao-seedream-4.5-gen}
+  SYSTEM_MODEL_API_KEY: ${SYSTEM_MODEL_API_KEY:-local-dev-placeholder}
+  SYSTEM_MODEL_BASE_URL: ${SYSTEM_MODEL_BASE_URL:-https://open-chatgpt.ke.com/v1}
+  SYSTEM_IMAGE_API_KEY: ${SYSTEM_IMAGE_API_KEY:-${SYSTEM_MODEL_API_KEY:-}}
+  SYSTEM_OCR_BASE_URL: ${SYSTEM_OCR_BASE_URL:-https://open-chatgpt.ke.com/v1}
+  SYSTEM_OCR_MODEL: ${SYSTEM_OCR_MODEL:-baidu-general}
+  SYSTEM_IMAGE_BASE_URL: ${SYSTEM_IMAGE_BASE_URL:-https://open-chatgpt.ke.com/v1}
+  SYSTEM_IMAGE_MODEL: ${SYSTEM_IMAGE_MODEL:-doubao-seedream-4.5-gen}
   A2A_PUBLIC_BASE_URL: ${A2A_PUBLIC_BASE_URL:-http://localhost}
   SERVICE_READINESS_MODE: distributed
   # Business modes, token TTLs, stream and search switches are owned by Nacos.
@@ -863,16 +863,16 @@ services:
       RAG_MILVUS_PORT: ${RAG_MILVUS_PORT:-19530}
       RAG_MILVUS_TOKEN: ${RAG_MILVUS_TOKEN:-}
       RAG_MILVUS_SECURE: ${RAG_MILVUS_SECURE:-false}
-      RAG_EMBEDDING_API_KEY: ${RAG_EMBEDDING_API_KEY:-}
-      RAG_EMBEDDING_BASE_URL: ${RAG_EMBEDDING_BASE_URL:-https://open-chatgpt.ke.com/v1}
-      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-baai-m3-1b-base-v1-embedding-20240619}
+      SYSTEM_EMBEDDING_API_KEY: ${SYSTEM_EMBEDDING_API_KEY:-}
+      SYSTEM_EMBEDDING_BASE_URL: ${SYSTEM_EMBEDDING_BASE_URL:-https://open-chatgpt.ke.com/v1}
+      SYSTEM_EMBEDDING_MODEL: ${SYSTEM_EMBEDDING_MODEL:-baai-m3-1b-base-v1-embedding-20240619}
       # Governed reranker on the dedicated internal network; identity pins fail closed on drift.
-      RAG_RERANK_ENDPOINT: ${RAG_RERANK_ENDPOINT:-http://bkanent-reranker-dev:18111/api/v1/rerank}
-      RAG_RERANK_API_KEY: ${RAG_RERANK_API_KEY:-}
-      RAG_RERANK_MODEL: ${RAG_RERANK_MODEL:-bge-reranker-v2-m3-v1}
-      RAG_RERANK_PROTOCOL: ${RAG_RERANK_PROTOCOL:-governed}
-      RAG_RERANK_EXPECTED_REVISION: ${RAG_RERANK_EXPECTED_REVISION:-324cc40576b08b305b9c65a867c26c173a477ae2}
-      RAG_RERANK_EXPECTED_ARTIFACT_DIGEST: ${RAG_RERANK_EXPECTED_ARTIFACT_DIGEST:-76cd4a977b9001bf8e28e41bac6ce53b2d334d0c567f6928a9b88655bafc833f}
+      SYSTEM_RERANK_ENDPOINT: ${SYSTEM_RERANK_ENDPOINT:-http://bkanent-reranker-dev:18111/api/v1/rerank}
+      SYSTEM_RERANK_API_KEY: ${SYSTEM_RERANK_API_KEY:-}
+      SYSTEM_RERANK_MODEL: ${SYSTEM_RERANK_MODEL:-bge-reranker-v2-m3-v1}
+      SYSTEM_RERANK_PROTOCOL: ${SYSTEM_RERANK_PROTOCOL:-governed}
+      SYSTEM_RERANK_EXPECTED_REVISION: ${SYSTEM_RERANK_EXPECTED_REVISION:-324cc40576b08b305b9c65a867c26c173a477ae2}
+      SYSTEM_RERANK_EXPECTED_ARTIFACT_DIGEST: ${SYSTEM_RERANK_EXPECTED_ARTIFACT_DIGEST:-76cd4a977b9001bf8e28e41bac6ce53b2d334d0c567f6928a9b88655bafc833f}
       RAG_AUTH_RPC_SECRET: ${RAG_AUTH_RPC_SECRET:-}
       AGENT_RAG_RPC_SECRET: ${AGENT_RAG_RPC_SECRET:-}
       LISTING_RAG_RPC_SECRET: ${LISTING_RAG_RPC_SECRET:-}

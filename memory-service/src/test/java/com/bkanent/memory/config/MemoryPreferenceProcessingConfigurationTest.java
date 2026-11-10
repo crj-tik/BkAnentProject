@@ -16,7 +16,7 @@ class MemoryPreferenceProcessingConfigurationTest {
     }
     @Test void explicitEnableBuildsOneToolFreeModelWithoutNetworkAtStartup() {
         runner.withPropertyValues("memory.v2.preference.processing.enabled=true",
-                "memory.v2.preference.processing.model=fixture-model","DEEPSEEK_API_KEY=synthetic-fixture-key")
+                "memory.v2.preference.processing.model=fixture-model","SYSTEM_MODEL_API_KEY=synthetic-fixture-key")
                 .run(context -> { assertThat(context).hasSingleBean(PreferenceEvaluator.class); assertThat(context).hasBean("memoryPreferenceScheduler"); });
     }
     @Test void capacityConfigurationHasFiniteLimits() {

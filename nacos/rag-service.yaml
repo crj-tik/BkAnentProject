@@ -19,12 +19,12 @@ spring:
     vectorstore:
       type: none
     openai:
-      api-key: ${RAG_EMBEDDING_API_KEY:}
-      base-url: ${RAG_EMBEDDING_BASE_URL:}
+      api-key: ${SYSTEM_EMBEDDING_API_KEY:}
+      base-url: ${SYSTEM_EMBEDDING_BASE_URL:}
       embedding:
         embeddings-path: /embeddings
         options:
-          model: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+          model: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
 
 management:
   endpoints:
@@ -69,13 +69,13 @@ rag:
     connect-timeout-ms: 5000
     rpc-deadline-ms: 5000
   rerank:
-    endpoint: ${RAG_RERANK_ENDPOINT:}
-    api-key: ${RAG_RERANK_API_KEY:}
-    model: ${RAG_RERANK_MODEL:bge-reranker-v2-m3-v1}
-    protocol: ${RAG_RERANK_PROTOCOL:governed}
+    endpoint: ${SYSTEM_RERANK_ENDPOINT:}
+    api-key: ${SYSTEM_RERANK_API_KEY:}
+    model: ${SYSTEM_RERANK_MODEL:bge-reranker-v2-m3-v1}
+    protocol: ${SYSTEM_RERANK_PROTOCOL:governed}
     # Identity pins verified against every governed response; drift fails closed (SCORING_PROFILE_MISMATCH).
-    expected-revision: ${RAG_RERANK_EXPECTED_REVISION:324cc40576b08b305b9c65a867c26c173a477ae2}
-    expected-artifact-digest: ${RAG_RERANK_EXPECTED_ARTIFACT_DIGEST:76cd4a977b9001bf8e28e41bac6ce53b2d334d0c567f6928a9b88655bafc833f}
+    expected-revision: ${SYSTEM_RERANK_EXPECTED_REVISION:324cc40576b08b305b9c65a867c26c173a477ae2}
+    expected-artifact-digest: ${SYSTEM_RERANK_EXPECTED_ARTIFACT_DIGEST:76cd4a977b9001bf8e28e41bac6ce53b2d334d0c567f6928a9b88655bafc833f}
   security:
     versioned-authorization-enabled: ${RAG_VERSIONED_AUTHORIZATION_ENABLED:false}
     auth-request-key-id: rag-current
@@ -125,7 +125,7 @@ rag:
       vector-schema: &listing-vector-schema
         database: default
         collection: rag_listing_knowledge_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -254,7 +254,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_session_marketing_marketing_agent_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -331,7 +331,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_summary_marketing_marketing_agent_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -408,7 +408,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_preference_history_marketing_marketing_agent_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -493,7 +493,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_experience_marketing_marketing_agent_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -566,7 +566,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_collaboration_marketing_marketing_agent_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -655,7 +655,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_session_interview_interview_agent_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -732,7 +732,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_summary_interview_interview_agent_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -809,7 +809,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_preference_history_interview_interview_agent_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -894,7 +894,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_experience_interview_interview_agent_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -967,7 +967,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_collaboration_interview_interview_agent_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -1056,7 +1056,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_session_listing_listing_agent_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -1133,7 +1133,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_summary_listing_listing_agent_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -1210,7 +1210,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_preference_history_listing_listing_agent_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -1295,7 +1295,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_experience_listing_listing_agent_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -1368,7 +1368,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_collaboration_listing_listing_agent_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -1457,7 +1457,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_session_analytics_platform_operations_analytics_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -1534,7 +1534,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_summary_analytics_platform_operations_analytics_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -1611,7 +1611,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_preference_history_analytics_platform_operations_analytics_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -1696,7 +1696,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_experience_analytics_platform_operations_analytics_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -1769,7 +1769,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_collaboration_analytics_platform_operations_analytics_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -1858,7 +1858,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_session_review_platform_operations_review_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -1935,7 +1935,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_summary_review_platform_operations_review_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -2012,7 +2012,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_preference_history_review_platform_operations_review_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -2097,7 +2097,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_experience_review_platform_operations_review_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -2170,7 +2170,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_collaboration_review_platform_operations_review_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -2259,7 +2259,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_session_knowledge_platform_operations_knowledge_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -2336,7 +2336,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_summary_knowledge_platform_operations_knowledge_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -2413,7 +2413,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_preference_history_knowledge_platform_operations_knowledge_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -2498,7 +2498,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_experience_knowledge_platform_operations_knowledge_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content
@@ -2571,7 +2571,7 @@ rag:
       vector-schema:
         database: default
         collection: rag_memory_v2_collaboration_knowledge_platform_operations_knowledge_v1
-        model-version: ${RAG_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
+        model-version: ${SYSTEM_EMBEDDING_MODEL:baai-m3-1b-base-v1-embedding-20240619}
         dimension: 1024
         id-field: doc_id
         content-field: content

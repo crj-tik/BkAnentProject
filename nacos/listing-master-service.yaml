@@ -7,11 +7,11 @@ spring:
   ai:
     deepseek:
       # KE OpenAI-compatible gateway (Bella). DeepSeek starter drives chat traffic.
-      api-key: ${DEEPSEEK_API_KEY:${KE_API_KEY:}}
-      base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
+      api-key: ${SYSTEM_MODEL_API_KEY:}
+      base-url: ${SYSTEM_MODEL_BASE_URL:https://open-chatgpt.ke.com/v1}
       chat:
-        api-key: ${DEEPSEEK_API_KEY:${KE_API_KEY:}}
-        base-url: ${DEEPSEEK_BASE_URL:https://open-chatgpt.ke.com/v1}
+        api-key: ${SYSTEM_MODEL_API_KEY:}
+        base-url: ${SYSTEM_MODEL_BASE_URL:https://open-chatgpt.ke.com/v1}
         completions-path: /chat/completions
         options:
           model: ${LISTING_AGENT_MODEL:gpt-5.6-terra}
