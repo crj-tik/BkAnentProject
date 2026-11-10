@@ -1,5 +1,13 @@
 # Bug 与已知问题清单
 
+## KI-259 [FIXED·本提交·P1] 知识候选生成因 evidence 规则提示不清与数字 assetId 拒绝而必然失败
+
+**发现日期与依据**：2026-11-10，配置有效模型密钥后知识 E2E 的 generate 任务仍 GENERATION_FAILED（模型调用 ~8-10s 后失败，异常被吞无日志）。手动复现定位两处根因：其一，系统提示词未说明"每个 assetId 至多一条 quote、总条数不超过来源数"，模型对单一来源返回 3 条 evidence，触发 `entries.size() > sources.size()` 拒绝；其二，模型将 assetId 输出为 JSON 数字（`"assetId": 2`），`text()` 只接受文本节点返回 null，`byId.get(null)` 直接 INVALID_GENERATION_EVIDENCE——即真实模型生成在该环境从未成功过。
+
+**修复**：提示词明确"每个 assetId 至多一条，evidence 总条数不得超过来源数量"；evidence 的 assetId 接受可精确转换的整型节点并 `asText()` 归一（数字节点无注入面）；生成失败 catch 增加 WARN 日志（仅异常类型与消息，不含来源正文/模型输出），消除静默失败。修复后真实模型生成 SUCCEEDED（r2，来源引用绑定，dataMode=UNKNOWN 符合 LR-115），完整闭环见 KI-218 验收记录。
+
+**验证与边界**：知识模块定向 14 项测试通过；E2E 实测生成→提交→非 owner 审核→发布→检索 CURRENT→撤回来源后 check/batch-read NOT_ACCESSIBLE、search 过滤。提示词约束仍属尽力而为，模型输出格式漂移由服务端校验兜底失败关闭。关联 KI-218、LR-114/115。
+
 ## KI-256 [FIXED·本提交·P1] RagPrincipalRpcService 未随验证链迁移 fastjson2ctor 导致解码失败
 
 **发现日期与依据**：2026-11-09，知识域运行态验收中 RagRuntimeProbe 调用 `resolveRagPrincipal` 报 `array not support input TYPED_ANY`。`AuthRagPrincipal` 自 70271f73（2026-10-26）起含 `List<String> roles/permissions` 字段，属 KI-113 record+List 模式；0af714bc 只把 customer/listing/marketing 验证链 RPC 改为 fastjson2ctor，auth 的 `RagPrincipalRpcServiceImpl`（plain `@DubboService`）、rag-service 消费引用（无序列化参数）与探针 auth 引用（fastjson2）均未跟进：fastjson2 消费端响应解码失败，fastjson2ctor 请求提供方无法解码，探针自身校验又排除 hessian2，auth 通道死锁。
@@ -1842,10 +1850,10 @@ Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/
 **2026-11-09 运行态验收记录**（WSL2 Docker dev 栈，full+rag 档）：
 - **RAG 空间物理创建**：5 类 `memory.v2.{session,summary,preference-history,experience,collaboration}.knowledge.platform-operations-knowledge` 经签名 ADMIN 探针逐项 PROVISION 完成，ES 索引（`_cat/indices` 确认 5 个 open）与 Milvus 集合创建、EMBEDDING 维度 1024 验证通过；仅 RERANK 因无 reranker 部署保持 DEPENDENCY_UNAVAILABLE，空间 ready=false 为该环境的失败关闭预期，不构成验收阻塞。
 - **知识生命周期 E2E**：访谈案例创建→逐字稿提交（L2 评级，700+字/12话轮）→资产发布 PUBLISHED→知识案例创建（DRAFT/r1）→提交审核（REVIEW_PENDING）→admin02 非_owner 审核 APPROVE（职责分离验证）→owner 发布 PUBLISHED→`published/search` 命中（dataMode=UNKNOWN 符合 LR-115 无 provenance 语义）→`published/check` CURRENT→`published/batch-read` 返回正文→撤回访谈来源后受限视图即时失效（root 与来源账号查询均 0 行，视图级失败关闭）。
-- **未完成项**：真实模型生成链路——`.env` 的 `DEEPSEEK_API_KEY` 为占位值，网关实测 401（"api key不存在"），生成任务受理后 FAILED（GENERATION_FAILED）；因此"生成→来源引用绑定→来源撤回后 published/check 返回 NOT_ACCESSIBLE"的完整依赖失效链路待配置有效模型凭据后补验。本记录不宣称知识域具备生产运行条件。
-- **验收中发现并修复**：KI-256（RagPrincipalRpcService fastjson2ctor 三处）、KI-257（published 读取范围回退 OWN）、KI-258（双网卡 Dubbo 注册，会话内缓解）；环境侧另修复 rag_runtime MySQL 账号缺失（按两控制表最小权限创建并验证跨库拒绝）、interview/platform-operations 容器为 11-06 旧 jar（早于 a18e4156 参数名修复，已重建注入）。
+- **未完成项（2026-11-10 已补完）**：真实模型生成链路原被占位密钥阻塞（网关 401）；配置有效 `SYSTEM_MODEL_API_KEY` 后生成仍失败，定位并修复 KI-259（evidence 提示词 + 数字 assetId 归一 + 失败日志）。补验结果：generate 真实模型 SUCCEEDED（r2，来源引用绑定 asset 2，dataMode=UNKNOWN）→提交→admin02 非 owner 审核→owner 发布（r2 PUBLISHED）→`published/search` 命中、`check` CURRENT→**撤回访谈来源后 `check`/`batch-read` 返回 NOT_ACCESSIBLE 且无正文、`search` 不再返回该案例**——来源依赖失败关闭完整闭环。本记录不宣称知识域具备生产运行条件。
+- **验收中发现并修复**：KI-256（RagPrincipalRpcService fastjson2ctor 三处）、KI-257（published 读取范围回退 OWN）、KI-258（双网卡 Dubbo 注册，2026-11-10 已根治：reranker 以别名挂入 bk 网络、rag 单网卡，5/5 空间 ready=true 0 失败）、KI-259（生成 evidence 双缺陷）；环境侧另修复 rag_runtime MySQL 账号缺失（按两控制表最小权限创建并验证跨库拒绝）、interview/platform-operations 容器为 11-06 旧 jar（早于 a18e4156 参数名修复，已重建注入）、模型入口统一 SYSTEM_*** 命名（54ba00b0）。
 
-**替代依据**：LR-170；`docs/platform-operations-frontend-function-list.md`；`openspec/changes/archive/2026-11-09-consolidate-platform-operations`；KI-256/257/258。
+**替代依据**：LR-170；`docs/platform-operations-frontend-function-list.md`；`openspec/changes/archive/2026-11-09-consolidate-platform-operations`；KI-256/257/258/259。
 
 ## KI-219 [FIXED·本提交·P2] 门店复盘数据库创建项的manifest校验摘要误录
 

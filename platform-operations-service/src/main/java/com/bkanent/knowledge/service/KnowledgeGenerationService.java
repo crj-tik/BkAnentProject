@@ -79,6 +79,11 @@ public class KnowledgeGenerationService {
         } catch (KnowledgeOperationException failure) {
             return failTask(taskId, knowledgeId, request, actor, failure.code());
         } catch (RuntimeException failure) {
+            // Generation failures must stay diagnosable: record the cause server-side without
+            // echoing source content or model output into logs.
+            org.slf4j.LoggerFactory.getLogger(KnowledgeGenerationService.class)
+                    .warn("knowledge generation taskId={} failed: {}: {}", taskId,
+                            failure.getClass().getSimpleName(), String.valueOf(failure.getMessage()));
             return failTask(taskId, knowledgeId, request, actor, "GENERATION_FAILED");
         }
     }

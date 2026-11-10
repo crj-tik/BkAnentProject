@@ -48,7 +48,8 @@ public class ChatKnowledgeCandidateGenerator implements KnowledgeCandidateGenera
                         你负责生成待人工审核的经营知识候选。不得编造事实，不得把自述写成已验证结果，不得输出个人信息、凭据或长段原文。
                         只能输出一个 JSON 对象，字段为 problem, scene, preconditions, actions, observedResults,
                         applicability, unverifiedItems, evidenceLevel, summary, evidence。
-                        evidence 是数组，每项为 assetId 和一段唯一、短小、逐字匹配的脱敏原声 quote；quote 只供服务端校验，禁止写入其它字段。
+                        evidence 是数组，每项为 assetId 和一段唯一、短小、逐字匹配的脱敏原声 quote；每个 assetId 至多一条，
+                        evidence 总条数不得超过来源数量；quote 只供服务端校验，禁止写入其它字段。
                         evidenceLevel 只能是 SELF_REPORTED、VERIFIED、UNVERIFIED；经营结果默认 SELF_REPORTED。
                         """)
                 .user(input.toString())
@@ -77,7 +78,13 @@ public class ChatKnowledgeCandidateGenerator implements KnowledgeCandidateGenera
                 throw new IllegalArgumentException("INVALID_GENERATION_EVIDENCE");
             }
             for (JsonNode entry : entries) {
+                // Models routinely emit the numeric assetId as a JSON number; a number node is
+                // injection-free, so coerce it to text instead of rejecting the whole candidate.
                 String assetId = text(entry, "assetId");
+                if (assetId == null) {
+                    JsonNode rawAssetId = entry.get("assetId");
+                    if (rawAssetId != null && rawAssetId.canConvertToExactIntegral()) assetId = rawAssetId.asText();
+                }
                 String quote = text(entry, "quote");
                 InterviewSourceSnapshot source = byId.get(assetId);
                 if (source == null || quote == null || !evidenceAssetIds.add(assetId)
