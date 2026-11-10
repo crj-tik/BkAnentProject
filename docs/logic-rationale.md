@@ -1636,3 +1636,13 @@
 **代码位置**：`ListingMcpTools`、`ListingMcpConfiguration`、`listing-master-service/src/main/resources/application.yml`（mcp.authorization.server 段）、`nacos/listing-master-service.yaml`（spring.ai.mcp.server + mcp.authorization）、`nacos/agent-service.yaml`（listing-mcp-server 连接）；先例 `InterviewMcpConfiguration`、`MarketingMcpTools`、`McpAuthorizationScope`。
 
 **关联**：LR-176、LR-177、LR-180；change `add-listing-mcp-endpoint`；提交见该变更。
+
+## LR-182 组织成员初始记录不推导门店授权范围
+
+**结论**：组织成员写入必须持有用户管理权限，在授权写锁内记录主归属、递增该用户权限版本并写 outbox 和审计；初期成员记录本身不产生 STORE 授权。用户已有旧 STORE 映射时暂拒绝新主归属，待可信门店映射及迁移流程接通后处理。
+
+**根因**：组织节点 ID 和业务 storeId 分属不同事实，不能凭数字、部门或角色推导。旧授权快照依赖显式 STORE，贸然覆盖或拼接成员记录会产生错误门店范围。先保存可审计的无授权归属、对旧映射保守拒绝，可保持无可信范围时业务拒绝。
+
+**代码位置**：`auth-service/authorization/OrganizationManagementService`、`OrganizationManagementController`；迁移 `20261110_auth_organization.sql`。
+
+**关联**：LR-145/146；KI-204；change `unify-user-organization-and-role-authorization` 任务 3.2/3.6。成员有效期调度、旧 STORE 同步和开发栈验收仍未完成，不得将初始记录当作完整组织授权实现。
