@@ -53,6 +53,31 @@ class EffectivePermissionServiceTest {
     }
 
     @Test
+    void shadowRoleProjectionShowsAdministratorMigrationGapWithoutChangingLiveSnapshot() {
+        var facts = new AuthorizationFacts(user(true), catalog,
+                List.of(grant(1, true, false, true, null, now.plusSeconds(30), Set.of("listing.read.all"))));
+        var live = service.calculate(facts, now);
+        var shadow = service.roleProjection(facts, now);
+        assertEquals(List.of("auth.users.manage", "listing.read.all"), live.permissions());
+        assertEquals(List.of("listing.read.all"), shadow.permissions());
+        assertEquals(now.plusSeconds(30), shadow.grantDeadline());
+        assertFalse(shadow.permissions().contains("auth.users.manage"));
+        assertEquals(List.of(), service.roleProjection(new AuthorizationFacts(user(true), catalog, List.of()), now).permissions());
+        assertTrue(service.calculate(facts, now).businessAdmin());
+    }
+
+    @Test
+    void shadowProjectionHonorsFutureStartsAndRejectsInactiveUsers() {
+        var facts = new AuthorizationFacts(user(true), catalog,
+                List.of(grant(1, true, false, true, now.plusSeconds(10), null, Set.of("auth.users.manage"))));
+        assertEquals(now.plusSeconds(10), service.roleProjection(facts, now).grantDeadline());
+        assertTrue(service.roleProjection(facts, now).permissions().isEmpty());
+        assertEquals(List.of("auth.users.manage"), service.roleProjection(facts, now.plusSeconds(10)).permissions());
+        var disabled = new AuthorizationFacts.User(7, false, false, true, 1, 1, "DISABLED");
+        assertTrue(service.roleProjection(new AuthorizationFacts(disabled, catalog, facts.grants()), now).permissions().isEmpty());
+    }
+
+    @Test
     void roleNamedAdminDoesNotSetBusinessAdministratorOrSelfElevate() {
         var result = calculate(user(false), List.of(new AuthorizationFacts.RoleGrant(1, "ADMIN", true,
                 false, true, null, null, Set.of("listing.read", "invented.manage"))));

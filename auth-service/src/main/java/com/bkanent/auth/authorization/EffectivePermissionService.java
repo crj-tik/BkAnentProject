@@ -27,28 +27,46 @@ public final class EffectivePermissionService {
         if (eligible && user.businessAdmin()) {
             permissions.addAll(registered);
         } else if (eligible) {
-            for (AuthorizationFacts.RoleGrant grant : facts.grants()) {
-                if (!grant.grantActive() || !grant.roleActive() || grant.roleDeleted()) {
-                    continue;
-                }
-                // Future starts are also a snapshot change point. A scheduler must publish a new revision.
-                if (grant.validFrom() != null && grant.validFrom().isAfter(now)) {
-                    if (grant.validUntil() == null || grant.validFrom().isBefore(grant.validUntil())) {
-                        deadline = earlier(deadline, grant.validFrom());
-                    }
-                    continue;
-                }
-                if (grant.validUntil() != null && !now.isBefore(grant.validUntil())) {
-                    continue;
-                }
-                deadline = earlier(deadline, grant.validUntil());
-                grant.permissionCodes().stream().filter(registered::contains).forEach(permissions::add);
-            }
+            RoleProjection projection = roleProjection(facts, now);
+            permissions.addAll(projection.permissions());
+            deadline = projection.grantDeadline();
         }
         return new Snapshot(user.userId(), user.permissionRevision(), user.credentialEpoch(),
                 eligible ? "ACTIVE" : user.deleted() ? "DELETED" : "DISABLED",
                 eligible && user.businessAdmin(), catalogVersion, List.copyOf(permissions), deadline,
                 eligible ? facts.businessIdentities() : Map.of());
+    }
+
+    /** Shadow calculation for migration; it never changes an issued authorization snapshot. */
+    public RoleProjection roleProjection(AuthorizationFacts facts, Instant now) {
+        Objects.requireNonNull(now, "now");
+        AuthorizationFacts.User user = Objects.requireNonNull(facts.user(), "user");
+        if (!user.active() || user.deleted() || !"ACTIVE".equals(user.status())) {
+            return new RoleProjection(List.of(), null);
+        }
+        TreeSet<String> registered = new TreeSet<>();
+        facts.catalog().stream().filter(AuthorizationFacts.Permission::active)
+                .filter(permission -> !AuthzOperationPolicy.isBaseline(permission.code()))
+                .map(AuthorizationFacts.Permission::code).forEach(registered::add);
+        TreeSet<String> permissions = new TreeSet<>();
+        Instant deadline = null;
+        for (AuthorizationFacts.RoleGrant grant : facts.grants()) {
+            if (!grant.grantActive() || !grant.roleActive() || grant.roleDeleted()) continue;
+            if (grant.validFrom() != null && grant.validFrom().isAfter(now)) {
+                if (grant.validUntil() == null || grant.validFrom().isBefore(grant.validUntil())) {
+                    deadline = earlier(deadline, grant.validFrom());
+                }
+                continue;
+            }
+            if (grant.validUntil() != null && !now.isBefore(grant.validUntil())) continue;
+            deadline = earlier(deadline, grant.validUntil());
+            grant.permissionCodes().stream().filter(registered::contains).forEach(permissions::add);
+        }
+        return new RoleProjection(List.copyOf(permissions), deadline);
+    }
+
+    public record RoleProjection(List<String> permissions, Instant grantDeadline) {
+        public RoleProjection { permissions = List.copyOf(permissions); }
     }
 
     private static Instant earlier(Instant first, Instant second) {
