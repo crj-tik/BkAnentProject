@@ -60,6 +60,10 @@ def main():
     active = {entry['code'] for entry in catalog if entry.get('active') and entry['code'] not in baseline}
     role_map = {role['code']: set(role.get('permissionCodes', [])) & active
                 for role in roles if role.get('active')}
+    prepared = next((role for role in roles if role.get('code') == 'PLATFORM_ADMIN'), None)
+    if prepared and (not prepared.get('active') or prepared.get('assignable')):
+        raise RuntimeError('Prepared administrator role must remain active and unassignable')
+    staged_grants = role_map.get('PLATFORM_ADMIN', set())
     administrators = []
     for user in users:
         if not user.get('businessAdmin') or user.get('accountStatus') != 'ACTIVE':
@@ -69,15 +73,18 @@ def main():
                                'effectiveRoles': sorted(user.get('roles', [])),
                                'currentRestrictedPermissions': sorted(active),
                                'roleGrantedRestrictedPermissions': sorted(grants),
-                               'missingFromRoles': sorted(active - grants)})
-    result = {'activeRestrictedCatalogCount': len(active), 'administrators': administrators}
+                               'missingFromRoles': sorted(active - grants),
+                               'missingIfPreparedRoleAssigned': sorted(active - grants - staged_grants) if prepared else None})
+    result = {'activeRestrictedCatalogCount': len(active), 'preparedRolePresent': bool(prepared),
+              'administrators': administrators}
     rendered = json.dumps(result, ensure_ascii=False, indent=2)
     if args.output:
         args.output.write_text(rendered + '\n', encoding='utf-8')
         print(f'Audited {len(administrators)} administrators; active restricted permissions: {len(active)}')
         for item in administrators:
             print(f'User {item["userId"]}: role grants {len(item["roleGrantedRestrictedPermissions"])}, '
-                  f'missing {len(item["missingFromRoles"])}')
+                  f'missing {len(item["missingFromRoles"])}, '
+                  f'prepared-role gap {len(item["missingIfPreparedRoleAssigned"]) if prepared else "not prepared"}')
     else:
         print(rendered)
 

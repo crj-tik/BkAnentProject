@@ -1646,3 +1646,13 @@
 **代码位置**：`auth-service/authorization/OrganizationManagementService`、`OrganizationManagementController`；迁移 `20261110_auth_organization.sql`。
 
 **关联**：LR-145/146；KI-204；change `unify-user-organization-and-role-authorization` 任务 3.2/3.6。成员有效期调度、旧 STORE 同步和变更撤销的开发栈验收仍未完成，不得将初始记录当作完整组织授权实现。
+
+## LR-184 管理员权限迁移先准备角色但不绑定用户
+
+**结论**：旧 `businessAdmin` 仍独立生效期间，迁移只准备不可一般分配且不绑定用户的 `PLATFORM_ADMIN` 角色及当前受限权限，并做影子对账；完成管理员角色/旧标记授予撤销联动、最后管理员保护及下游消费改造后，才能绑定用户并切换角色授权。
+
+**根因**：若提前把全权限角色赋给旧管理员，旧接口随后撤销 `businessAdmin` 时，现有角色授权计算仍会从该角色取得全部权限，撤销操作表面成功但权限残留。仅准备无用户关联的角色不会改变任何用户权限；影子比较避免在保护未完成前扩大实际授权。
+
+**代码位置**：`sql/migrations/20261111_prepare_management_role.sql`、`docker/mysql/checks/auth-prepared-management-role.sql`、`EffectivePermissionService.roleProjection`、`scripts/acceptance/audit-auth-admin-roles.py`。
+
+**关联**：LR-145/182；change `unify-user-organization-and-role-authorization` 任务 2.3/3.4/3.5。新权限目录项仍须显式授予；角色分类只作元数据，旧特权尚未退役。
