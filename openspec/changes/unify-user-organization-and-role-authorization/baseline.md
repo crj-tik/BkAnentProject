@@ -10,12 +10,13 @@
 - 工作区 HEAD 在盘点时为 `ff3be6d2`，开发服务镜像并非该 HEAD；部署前需核对制品来源与并发会话，不能把源码事实直接当成容器行为。
 - 实施顺序：保留旧协议和运行范围 → 盘点所有消费方及原权限 → 建立角色和管理员权限逐项对账 → 兼容部署及影子验证 → 成组切换授权事实和域消费者 → 完成实际失效、回退和跨服务验收后才退役旧字段。旧 change 未完成的验收不因本设计而跳过。
 
-## 管理员基线（任务 1.1 进行中）
+## 管理员基线（任务 1.1 已盘点）
 
 - 开发库查询结果：2 个有效 `business_admin` 用户；有效权限目录 125 条；两个用户均有至少一个有效角色，但按角色关联到的有效目录项计数均为 0。当前 `EffectivePermissionService` 将有效管理员直接赋予活动受限目录项，因此直接移除管理员分支会造成显著权限缺失。125 是目录计数，不等同于最终快照中的权限数量：基础操作需要按 `AuthzOperationPolicy` 排除。
 - 管理员授权入口：`EffectivePermissionService` 直接扩权；`AuthAccountMutationService`、`RoleAuthorizationManagementService` 和 `AuthController` 还有直接标记检查和最后管理员计数。`A2aBeaconStore`、`RagPrincipalRpcServiceImpl` 用其影响角色有效性。
 - 共享协议和消费点：`AuthzRequestScope`、`VerifiedDomainAuthorization`、`AuthorizationSnapshot` 与签名/哈希；Customer 的 controller、管理服务、咨询服务及 Listing 客户端；Listing 的管理、RPC、RAG identity/grant；RAG、Memory 的 principal/scope 签名；Agent、Marketing、Media 的 RAG 或 Listing 客户端。逐调用点需区分权限授予、业务宽范围选择、签名兼容和数据传输，不能统一简单删除判断。
-- 尚需输出各管理员现有快照与目标管理角色逐权限差异、角色到期和目录基线排除结果；继续搜索非 Java 协议、SQL、配置及运行部署消费者。计数仅作为现状证据，不是迁移前后权限等价证明。
+- 全仓生产 Java、SQL、YAML 中 `businessAdmin/business_admin/BUSINESS_ADMIN/isBusinessAdmin/isAdmin/ADMIN` 相关文件清单见同目录 `business-admin-consumers.txt`，后续按清单逐处区分权限决策、业务宽范围、签名字段及旧模式兼容，并补充后续新引入消费者。
+- `scripts/acceptance/audit-auth-admin-roles.py` 从本地实际 Gateway 读取权限目录、角色和所有用户，并排除源码 `AuthzOperationPolicy` 中的基础操作；核对两次列表无可见变动后给出每位管理员的旧受限权限、当前有效角色授予和逐权限缺口。2026-11-11 连续两次对账内容一致：2 个管理员均有 125 个受限目录项而现有有效角色授予 0 项，完整逐项结果位于本机 `runtime-logs/diagnostics/2026-11-11/auth-admin-role-audit-20261111.json`，未提交用户数据或凭据。该脚本要求已部署运行的 Auth 与当前源码基线一致，报告是迁移前快照；切换前必须重新对账并额外验证到期边界。
 
 ## 门店与业务身份初查（任务 1.2 进行中；1.4 已盘点）
 
