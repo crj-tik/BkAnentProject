@@ -152,6 +152,12 @@ public class RoleAuthorizationManagementService {
             if (!enabled && actor.userId()==userId) throw error(HttpStatus.FORBIDDEN, "Cannot revoke own administrator flag");
             var result = repository.mutateUsers(List.of(userId), "BUSINESS_ADMIN_CHANGED", false, jdbc -> {
                 jdbc.update("UPDATE user_account SET business_admin=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", enabled?1:0, userId);
+                // During migration, revoking the legacy flag must not leave the prepared full-access role behind.
+                if (!enabled) {
+                    jdbc.update("DELETE FROM auth_user_role WHERE user_id=? AND role_id IN "
+                            + "(SELECT id FROM auth_role WHERE role_code='PLATFORM_ADMIN')", userId);
+                    repository.resetGrantBoundaries(userId, clock.instant());
+                }
                 Integer admins = jdbc.queryForObject("""
                         SELECT COUNT(*) FROM user_account u JOIN auth_user_authorization_state s ON s.user_id=u.id
                         WHERE u.business_admin=1 AND u.deleted=0 AND u.account_status='ACTIVE' AND s.status='ACTIVE'

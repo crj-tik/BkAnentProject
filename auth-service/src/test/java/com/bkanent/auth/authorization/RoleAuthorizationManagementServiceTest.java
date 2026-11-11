@@ -131,6 +131,37 @@ class RoleAuthorizationManagementServiceTest {
     }
 
     @Test
+    void revokingLegacyAdministratorAlsoRevokesPreparedAdministratorRoleAtomically() {
+        fixture.jdbc.update("INSERT INTO auth_role(id,role_code,role_name,active,assignable,deleted,role_type) "
+                + "VALUES (50,'PLATFORM_ADMIN','平台管理员',1,0,0,'MANAGEMENT')");
+        fixture.jdbc.update("INSERT INTO auth_role_permission(role_id,permission_code) VALUES (50,'auth.users.manage'),(50,'auth.roles.manage')");
+        service.setBusinessAdmin(admin, 2, true);
+        fixture.jdbc.update("INSERT INTO auth_user_role(user_id,role_id,active) VALUES (2,50,1)");
+        assertTrue(fixture.repository.snapshot(2, now).orElseThrow().businessAdmin());
+        var result = service.setBusinessAdmin(admin, 2, false);
+        var after = fixture.repository.snapshot(2, now).orElseThrow();
+        assertFalse(after.businessAdmin());
+        assertFalse(after.hasPermission("auth.users.manage", now));
+        assertFalse(after.hasPermission("auth.roles.manage", now));
+        assertEquals(0, fixture.jdbc.queryForObject("SELECT COUNT(*) FROM auth_user_role WHERE user_id=2 AND role_id=50", Integer.class));
+        assertEquals(1, fixture.jdbc.queryForObject("SELECT COUNT(*) FROM auth_authorization_audit WHERE action='BUSINESS_ADMIN_CHANGED' AND event_id=?", Integer.class, result.eventId()));
+    }
+
+    @Test
+    void administratorRevocationRestoresFlagAndPreparedRoleWhenAuditFails() {
+        fixture.jdbc.update("INSERT INTO auth_role(id,role_code,role_name,active,assignable,deleted,role_type) "
+                + "VALUES (50,'PLATFORM_ADMIN','平台管理员',1,0,0,'MANAGEMENT')");
+        service.setBusinessAdmin(admin, 2, true);
+        fixture.jdbc.update("INSERT INTO auth_user_role(user_id,role_id,active) VALUES (2,50,1)");
+        long revision = fixture.repository.currentVersion(2).orElseThrow().permissionRevision();
+        fixture.jdbc.execute("DROP TABLE auth_authorization_audit");
+        assertThrows(org.springframework.dao.DataAccessException.class, () -> service.setBusinessAdmin(admin, 2, false));
+        assertEquals(1, fixture.jdbc.queryForObject("SELECT business_admin FROM user_account WHERE id=2", Integer.class));
+        assertEquals(1, fixture.jdbc.queryForObject("SELECT COUNT(*) FROM auth_user_role WHERE user_id=2 AND role_id=50", Integer.class));
+        assertEquals(revision, fixture.repository.currentVersion(2).orElseThrow().permissionRevision());
+    }
+
+    @Test
     void brokerIdentityIsExplicitUniqueAuditedAndVersionsAffectedUser() {
         var first = service.setBrokerIdentity(admin, 1, 8101L);
         assertEquals(2, first.versions().get(0).permissionRevision());
