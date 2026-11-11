@@ -46,6 +46,14 @@ public class RoleAuthorizationManagementController {
         return service.deleteRole(bearer(header),roleId);
     }
 
+    @PutMapping("/roles/{roleId}/type")
+    public RoleAuthorizationManagementService.ManagementResult setRoleType(
+            @RequestHeader(value="Authorization",required=false) String header,
+            @PathVariable(name = "roleId") long roleId, @RequestBody RoleType body) {
+        if (body == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Role type required");
+        return service.setRoleType(bearer(header), roleId, body.roleType());
+    }
+
     @GetMapping("/users/{userId}/roles")
     public List<RoleAuthorizationManagementService.UserRoleGrant> grants(@RequestHeader(value="Authorization",required=false) String header,
                                                                          @PathVariable(name = "userId") long userId) {
@@ -96,4 +104,5 @@ public class RoleAuthorizationManagementController {
     public record BusinessAdmin(boolean enabled) { }
     public record BrokerIdentity(Long brokerId) { }
     public record StoreIdentity(Long storeId) { }
+    public record RoleType(String roleType) { }
 }

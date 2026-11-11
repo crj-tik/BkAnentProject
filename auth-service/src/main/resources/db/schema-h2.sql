@@ -17,6 +17,7 @@ CREATE TABLE auth_role (
     role_code VARCHAR(32) NOT NULL UNIQUE,
     role_name VARCHAR(64) NOT NULL,
     description VARCHAR(255),
+    role_type VARCHAR(16) NOT NULL DEFAULT 'UNCLASSIFIED',
     active INT NOT NULL DEFAULT 1,
     assignable INT NOT NULL DEFAULT 1,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,

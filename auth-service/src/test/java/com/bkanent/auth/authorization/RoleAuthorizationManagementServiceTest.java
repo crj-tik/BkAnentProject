@@ -75,6 +75,23 @@ class RoleAuthorizationManagementServiceTest {
     }
 
     @Test
+    void classifyingRoleDoesNotGrantAdministratorOrAdditionalPermissions() {
+        fixture.jdbc.update("INSERT INTO auth_user_role(user_id,role_id,active) VALUES (1,20,1)");
+        var before = fixture.repository.snapshot(1, now).orElseThrow();
+        var changed = service.setRoleType(admin, 20, "MANAGEMENT");
+        var after = fixture.repository.snapshot(1, now).orElseThrow();
+        assertEquals(before.permissions(), after.permissions());
+        assertFalse(after.businessAdmin());
+        assertEquals(before.permissionRevision() + 1, after.permissionRevision());
+        assertEquals("MANAGEMENT", service.roles(admin).stream().filter(role -> role.id() == 20).findFirst().orElseThrow().roleType());
+        assertNotNull(changed.eventId());
+        assertEquals(1, fixture.jdbc.queryForObject("SELECT COUNT(*) FROM auth_authorization_audit WHERE action='ROLE_TYPE_CHANGED'", Integer.class));
+        assertNull(service.setRoleType(admin, 20, "MANAGEMENT").eventId());
+        status(HttpStatus.BAD_REQUEST, () -> service.setRoleType(admin, 20, null));
+        status(HttpStatus.FORBIDDEN, () -> service.setRoleType(ordinary, 20, "JOB"));
+    }
+
+    @Test
     void unknownWildcardDisabledDuplicateAndImmutableRoleCodeRejectedBeforeWrites() {
         for (String code : List.of("invented.manage","agent.workflow.invoke.evil","listing.read ","disabled.read","LISTING.READ","*.read"))
             status(HttpStatus.BAD_REQUEST, () -> service.createRole(admin,definition("NEW",List.of(code))));

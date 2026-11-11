@@ -44,8 +44,8 @@ public class RoleAuthorizationManagementService {
 
     public List<Role> roles(String accessToken) {
         return authenticated(accessToken, "auth.roles.manage", actor -> repository.jdbc().query(
-                "SELECT id,role_code,role_name,description,active,assignable FROM auth_role WHERE deleted=0 ORDER BY id LIMIT 1000",
-                (rs, row) -> role(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getInt(5)==1, rs.getInt(6)==1)));
+                "SELECT id,role_code,role_name,description,active,assignable,role_type FROM auth_role WHERE deleted=0 ORDER BY id LIMIT 1000",
+                (rs, row) -> role(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getInt(5)==1, rs.getInt(6)==1, rs.getString(7))));
     }
 
     public ManagementResult createRole(String accessToken, RoleDefinition definition) {
@@ -93,6 +93,21 @@ public class RoleAuthorizationManagementService {
             var result = repository.mutateRole(roleId, "ROLE_DELETED", jdbc -> jdbc.update(
                     "UPDATE auth_role SET active=0,assignable=0,deleted=1,updated_at=CURRENT_TIMESTAMP WHERE id=?", roleId));
             audit(actor, "ROLE_DELETED", "ROLE", roleId, result);
+            return new ManagementResult(roleId, result.eventId(), result.versions(), false);
+        });
+    }
+
+    /** Role classification is descriptive and never confers permissions or an administrator flag. */
+    public ManagementResult setRoleType(String accessToken, long roleId, String roleType) {
+        return authenticated(accessToken, "auth.roles.manage", actor -> {
+            if (roleType == null || !List.of("JOB", "MANAGEMENT", "UNCLASSIFIED").contains(roleType)) {
+                throw error(HttpStatus.BAD_REQUEST, "Invalid role type");
+            }
+            Role existing = requireRole(roleId, false);
+            if (existing.roleType().equals(roleType)) return new ManagementResult(roleId, null, List.of(), false);
+            var result = repository.mutateRole(roleId, "ROLE_TYPE_CHANGED", jdbc -> jdbc.update(
+                    "UPDATE auth_role SET role_type=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", roleType, roleId));
+            audit(actor, "ROLE_TYPE_CHANGED", "ROLE", roleId, result);
             return new ManagementResult(roleId, result.eventId(), result.versions(), false);
         });
     }
@@ -247,17 +262,17 @@ public class RoleAuthorizationManagementService {
     }
 
     private Role requireRole(long roleId, boolean assignable) {
-        List<Role> roles = repository.jdbc().query("SELECT id,role_code,role_name,description,active,assignable FROM auth_role WHERE id=? AND deleted=0",
-                (rs,row) -> role(rs.getLong(1),rs.getString(2),rs.getString(3),rs.getString(4),rs.getInt(5)==1,rs.getInt(6)==1), roleId);
+        List<Role> roles = repository.jdbc().query("SELECT id,role_code,role_name,description,active,assignable,role_type FROM auth_role WHERE id=? AND deleted=0",
+                (rs,row) -> role(rs.getLong(1),rs.getString(2),rs.getString(3),rs.getString(4),rs.getInt(5)==1,rs.getInt(6)==1,rs.getString(7)), roleId);
         if (roles.isEmpty()) throw error(HttpStatus.NOT_FOUND, "Role not found");
         Role role = roles.get(0);
         if (assignable && (!role.active() || !role.assignable())) throw error(HttpStatus.BAD_REQUEST, "Role not assignable");
         return role;
     }
 
-    private Role role(long id, String code, String name, String description, boolean active, boolean assignable) {
+    private Role role(long id, String code, String name, String description, boolean active, boolean assignable, String roleType) {
         return new Role(id,code,name,description,active,assignable,repository.jdbc().queryForList(
-                "SELECT permission_code FROM auth_role_permission WHERE role_id=? ORDER BY permission_code", String.class,id));
+                "SELECT permission_code FROM auth_role_permission WHERE role_id=? ORDER BY permission_code", String.class,id), roleType);
     }
 
     private void validateDefinition(RoleDefinition role) {
@@ -297,7 +312,7 @@ public class RoleAuthorizationManagementService {
             permissionCodes = permissionCodes == null ? null : java.util.Collections.unmodifiableList(new java.util.ArrayList<>(permissionCodes));
         }
     }
-    public record Role(long id,String code,String name,String description,boolean active,boolean assignable,List<String> permissionCodes) {
+    public record Role(long id,String code,String name,String description,boolean active,boolean assignable,List<String> permissionCodes,String roleType) {
         public Role { permissionCodes = List.copyOf(permissionCodes); }
     }
     public record UserRoleGrant(long roleId,Instant validFrom,Instant validUntil) { }

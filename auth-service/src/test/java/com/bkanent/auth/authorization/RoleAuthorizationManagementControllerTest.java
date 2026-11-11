@@ -58,4 +58,16 @@ class RoleAuthorizationManagementControllerTest {
                 .contentType("application/json").content("{\"enabled\":false}"))
                 .andExpect(status().isForbidden());
     }
+
+    @Test
+    void roleClassificationRequiresPermissionAndIsVisible() throws Exception {
+        mvc.perform(put("/auth/authorization/roles/20/type").header("Authorization", "Bearer " + ordinary)
+                .contentType("application/json").content("{\"roleType\":\"JOB\"}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(put("/auth/authorization/roles/20/type").header("Authorization", "Bearer " + admin)
+                .contentType("application/json").content("{\"roleType\":\"JOB\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/auth/authorization/roles").header("Authorization", "Bearer " + admin))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[1].roleType").value("JOB"));
+    }
 }
