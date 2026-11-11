@@ -51,6 +51,7 @@ public class RoleAuthorizationManagementService {
     public ManagementResult createRole(String accessToken, RoleDefinition definition) {
         return authenticated(accessToken, "auth.roles.manage", actor -> {
             validateDefinition(definition);
+            rejectPreparedAdministrator(definition.code());
             ensureCatalog(definition.permissionCodes());
             if (repository.jdbc().queryForObject("SELECT COUNT(*) FROM auth_role WHERE role_code=?", Integer.class,
                     definition.code()) != 0) throw error(HttpStatus.CONFLICT, "Role code already exists");
@@ -75,6 +76,7 @@ public class RoleAuthorizationManagementService {
         return authenticated(accessToken, "auth.roles.manage", actor -> {
             validateDefinition(definition);
             Role existing = requireRole(roleId, false);
+            rejectPreparedAdministrator(existing.code());
             if (!existing.code().equals(definition.code())) throw error(HttpStatus.BAD_REQUEST, "Role code is immutable");
             ensureCatalog(definition.permissionCodes());
             var result = repository.mutateRole(roleId, "ROLE_UPDATED", jdbc -> {
@@ -89,7 +91,7 @@ public class RoleAuthorizationManagementService {
 
     public ManagementResult deleteRole(String accessToken, long roleId) {
         return authenticated(accessToken, "auth.roles.manage", actor -> {
-            requireRole(roleId, false);
+            rejectPreparedAdministrator(requireRole(roleId, false).code());
             var result = repository.mutateRole(roleId, "ROLE_DELETED", jdbc -> jdbc.update(
                     "UPDATE auth_role SET active=0,assignable=0,deleted=1,updated_at=CURRENT_TIMESTAMP WHERE id=?", roleId));
             audit(actor, "ROLE_DELETED", "ROLE", roleId, result);
@@ -104,6 +106,7 @@ public class RoleAuthorizationManagementService {
                 throw error(HttpStatus.BAD_REQUEST, "Invalid role type");
             }
             Role existing = requireRole(roleId, false);
+            rejectPreparedAdministrator(existing.code());
             if (existing.roleType().equals(roleType)) return new ManagementResult(roleId, null, List.of(), false);
             var result = repository.mutateRole(roleId, "ROLE_TYPE_CHANGED", jdbc -> jdbc.update(
                     "UPDATE auth_role SET role_type=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", roleType, roleId));
@@ -129,7 +132,7 @@ public class RoleAuthorizationManagementService {
             Instant now = clock.instant();
             for (UserRoleGrant grant : requested) {
                 if (grant == null || !unique.add(grant.roleId())) throw error(HttpStatus.BAD_REQUEST, "Duplicate/invalid role");
-                requireRole(grant.roleId(), true);
+                rejectPreparedAdministrator(requireRole(grant.roleId(), true).code());
                 if (grant.validFrom()!=null && grant.validUntil()!=null && !grant.validFrom().isBefore(grant.validUntil())
                         || grant.validUntil()!=null && !grant.validUntil().isAfter(now)) throw error(HttpStatus.BAD_REQUEST, "Invalid grant interval");
             }
@@ -310,6 +313,11 @@ public class RoleAuthorizationManagementService {
     }
 
     private static ResponseStatusException error(HttpStatus status, String reason) { return new ResponseStatusException(status,reason); }
+    private static void rejectPreparedAdministrator(String code) {
+        if ("PLATFORM_ADMIN".equals(code)) {
+            throw error(HttpStatus.FORBIDDEN, "Prepared administrator role requires controlled migration");
+        }
+    }
     private static Instant instant(Timestamp timestamp) { return timestamp==null?null:timestamp.toInstant(); }
     private static Timestamp timestamp(Instant instant) { return instant==null?null:Timestamp.from(instant); }
 

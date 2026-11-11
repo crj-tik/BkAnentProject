@@ -180,6 +180,9 @@ public class AuthAccountMutationService {
     }
 
     private long roleId(String code) {
+        if ("PLATFORM_ADMIN".equals(normalizeRole(code))) {
+            throw error(HttpStatus.FORBIDDEN, "AUTH_FORBIDDEN", "预备管理员角色须通过受控迁移分配");
+        }
         var roles = repository.jdbc().queryForList(
                 "SELECT id FROM auth_role WHERE role_code=? AND active=1 AND assignable=1 AND deleted=0", Long.class, normalizeRole(code));
         if (roles.size() != 1) throw error(HttpStatus.BAD_REQUEST, "AUTH_ROLE_INVALID", "角色不存在或不可分配");

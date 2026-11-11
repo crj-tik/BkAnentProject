@@ -302,6 +302,16 @@ class AuthAccountMutationServiceTest {
         assertEquals("Broker Demo", account(1).getDisplayName());
     }
 
+    @Test
+    void accountManagementCannotAssignPreparedAdministratorRole() {
+        jdbc.update("INSERT INTO auth_role(role_code,role_name,active,assignable,deleted,role_type) "
+                + "VALUES ('PLATFORM_ADMIN','平台管理员',1,1,0,'MANAGEMENT')");
+        String token = tokens.issueAccessToken(account(2));
+        assertThrows(UserManagementException.class, () -> management.createUser(token, 2,
+                new CreateUserRequest("reserved-role-user", "correct-password", "测试", "PLATFORM_ADMIN", "test")));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM user_account WHERE username='reserved-role-user'", Integer.class));
+    }
+
     private MockMvc mvcWithPasswordEncoder(org.springframework.security.crypto.password.PasswordEncoder passwords) {
         var guarded = new AuthAccountMutationService(repository, passwords, tokens);
         var beans = new DefaultListableBeanFactory(); beans.registerSingleton("guarded", guarded);

@@ -92,6 +92,20 @@ class RoleAuthorizationManagementServiceTest {
     }
 
     @Test
+    void preparedAdministratorRoleCannotBeModifiedOrAssignedViaGeneralApis() {
+        fixture.jdbc.update("INSERT INTO auth_role(id,role_code,role_name,active,assignable,deleted,role_type) "
+                + "VALUES (50,'PLATFORM_ADMIN','平台管理员',1,1,0,'MANAGEMENT')");
+        status(HttpStatus.FORBIDDEN, () -> service.createRole(admin, definition("PLATFORM_ADMIN", List.of())));
+        status(HttpStatus.FORBIDDEN, () -> service.updateRole(admin, 50, definition("PLATFORM_ADMIN", List.of())));
+        status(HttpStatus.FORBIDDEN, () -> service.deleteRole(admin, 50));
+        status(HttpStatus.FORBIDDEN, () -> service.setRoleType(admin, 50, "JOB"));
+        status(HttpStatus.FORBIDDEN, () -> service.replaceUserRoles(admin, 1,
+                List.of(new RoleAuthorizationManagementService.UserRoleGrant(50, null, null))));
+        assertEquals(0, fixture.jdbc.queryForObject("SELECT COUNT(*) FROM auth_user_role WHERE role_id=50", Integer.class));
+        assertEquals(1, fixture.jdbc.queryForObject("SELECT COUNT(*) FROM auth_role WHERE id=50 AND active=1 AND deleted=0", Integer.class));
+    }
+
+    @Test
     void unknownWildcardDisabledDuplicateAndImmutableRoleCodeRejectedBeforeWrites() {
         for (String code : List.of("invented.manage","agent.workflow.invoke.evil","listing.read ","disabled.read","LISTING.READ","*.read"))
             status(HttpStatus.BAD_REQUEST, () -> service.createRole(admin,definition("NEW",List.of(code))));
