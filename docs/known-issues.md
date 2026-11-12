@@ -568,7 +568,7 @@
 
 **现象与根因**：`common/.../rpc/AuthenticatedPrincipal.java` 只返回 userId；`auth-service/.../rpc/AuthPermissionRpcServiceImpl.java:36-60` 验证账号/角色活跃，但 hasPermission 不按具体权限码授予资源范围。房源 brokerId 来自业务请求，当前未证明等于认证 userId。固定 gateway 标记、普通 userId 或 Dubbo 服务名不能作为新 RAG 的服务认证或跨空间授权证明。
 
-**处置（源码与开发栈部分验收）**：在现有RAG principal/独立scope基础上，新增Auth唯一维护的类型化userId→brokerId表、受权管理API、版本化outbox及签名快照；Listing详情与写操作、Customer档案及子记录使用签名映射核资源归属，公开Listing摘要继续只返回未删除ON_SALE范围。Customer→Listing RPC以请求证明绑定授权摘要与查询，由Listing本地验签，不逐次调用Auth或转发用户Bearer。2026-11-12 WSL开发栈的Gateway/Auth/Agent链和两次Listing A2A读取已通过真实API验收。开发库只读报告仍有3条Customer档案、1条Customer咨询、3条Listing记录缺少`owner_user_id`，三域迁移账本均无候选记录；没有历史映射证据，未自动回填。未验收的私有数据范围继续拒绝访问，本项保持OPEN；开发验收不等于生产部署。
+**处置（源码与开发栈部分验收）**：在现有RAG principal/独立scope基础上，新增Auth唯一维护的类型化userId→brokerId表、受权管理API、版本化outbox及签名快照；Listing详情与写操作、Customer档案及子记录使用签名映射核资源归属，公开Listing摘要继续只返回未删除ON_SALE范围。Customer→Listing RPC以请求证明绑定授权摘要与查询，由Listing本地验签，不逐次调用Auth或转发用户Bearer。2026-11-12 WSL开发栈的Gateway/Auth/Agent链和两次Listing A2A读取已通过真实API验收。开发库当前有唯一 `BROKER:1→userId=1` 映射，Auth 审计记录显示由 userId=2 于 2026-11-06 16:15:13.419565（+08:00）登记；但3条Customer档案、1条Customer咨询、3条Listing记录的 `owner_user_id` 仍为空，三域迁移账本均为0。Customer档案1、2创建于映射登记前，其余五条记录创建于登记后；没有逐记录 `VERIFIED` 回填账本和完整写入者审计，故仍未自动回填。未完成逐域对账的私有数据范围继续拒绝访问，本项保持OPEN；开发验收不等于生产部署。
 
 **本批实施提交**：`9f87f87`（Auth映射及领域归属）与`53dbb66`（Customer→Listing请求级上下文）；跨服务其余接线、生产配置和历史映射回填仍未完成。
 
@@ -1813,7 +1813,7 @@
 
 Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/Redis writer/reader、Gateway、Agent、RAG、Listing、Customer、Marketing/MCP、Notification/MCP、平台经营/A2A 和 Interview 授权开关为启用，应用镜像标签与工作区 HEAD `c5985fe7cf9294bf022f189bf4aac29e8ef375de` 一致。Memory v2 授权上下文仍关闭：`.env` 未配置 `AUTH_SERVICE_IDENTITY_PUBLIC_KEY`，不满足启用校验前提。Marketing、Notification 等容器没有 Docker healthcheck，本次未验证其完整业务 API。
 
-**未闭环**：开发库 `marketing_campaign_account` 仍为 0 行，没有可执行的真实 Campaign 渠道账号/provider 配置；Auth 经纪人身份映射也为 0，故不能宣称经纪人私有数据访问及真实内容归属可用。Campaign 准备还要求内容已审核通过和有效目标账号；当前 BROKER 未获审核/发布权限，业务闭环仍不可用。历史 `marketing_content.owner_broker_id` 仍可能为空；HTTP、RPC、MCP 正反例与发布 provider 仍需逐项验收。
+**未闭环**：开发库 `marketing_campaign_account`、`marketing_content` 和 Marketing owner 迁移账本均为 0 行；Auth 当前仅有 `BROKER:1→userId=1` 映射，不能据此推断未存在内容的历史归属或证明其他经纪人映射。没有可执行的真实 Campaign 渠道账号/provider 配置，Campaign 准备还要求内容已审核通过和有效目标账号；当前 BROKER 未获审核/发布权限，业务闭环仍不可用。HTTP、RPC、MCP 正反例与发布 provider 仍需逐项验收。
 
 **后续门槛**：由 `unify-versioned-permission-context` task 10.3 与本 change task 7.6 完成受管迁移应用、有效账号/内容归属核对、跨协议正反例和目标环境启用验收。
 
@@ -2047,9 +2047,9 @@ Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/
 
 **发现日期**：2026-11-03。客户业务方法要求已验证的授权上下文和经纪人身份，但早期应用与 Nacos 模板将入口授权固定关闭且缺少 Auth 验签公钥登记；普通业务请求无法建立所需上下文。
 
-**代码与配置处置**：客户入口开关可由 Compose 注入，Auth 公钥和签名请求回归已补；本机 `.env` 已开启 Customer 版本化授权。只读核对确认当前 Auth 账号都没有经纪人映射；`admin01` 的业务管理员权限不构成经纪人身份，不能据此推断现存房源/客户归属。
+**代码与配置处置**：客户入口开关可由 Compose 注入，Auth 公钥和签名请求回归已补；本机 `.env` 已开启 Customer 版本化授权。2026-11-12 只读核对确认 Auth 当前唯一经纪人映射为 `BROKER:1→userId=1`；门店验收用户 `org_sample_broker` 尚无 BROKER 身份，`admin01` 的平台管理员角色也不构成经纪人身份。该映射的登记晚于两条历史客户档案写入；映射和 owner 字段都不能单独证明逐条历史归属。
 
-**未闭环**：需在目标 Auth 运行版本上通过管理 API 创建经纪人账号并登记经确认的开发经纪人身份，再验证房源/客户自有范围与跨用户拒绝。当前没有权威经纪人主数据映射，运行态业务请求仍可能因缺少身份被正确拒绝。关联 KI-55。
+**未闭环**：需逐条核验 Auth 映射登记时间与业务数据来源，填写并复核 owner 回填账本后再验收房源/客户自有范围和跨用户拒绝。`userId=1` 的 `BROKER:1` 映射虽已由 Auth 审计确认，但门店验收用户 `userId=4` 没有 BROKER 身份，且两条客户档案早于映射登记；不得据此自动回填。关联 KI-55。
 
 ## KI-244 [FIXED·ebe5049b·P1] Elasticsearch 主机发布端口未启用认证且绑定业务网卡
 

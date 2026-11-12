@@ -75,4 +75,4 @@ Graph 场景会调用已配置的模型服务，只要求以 `a2a:listing-agent`
 
 ### 尚未切换的历史私有数据
 
-开发库只读报告显示：`customer_profile` 3 条、`customer_listing_inquiry` 1 条、`listing_info` 3 条的 `owner_user_id` 均为空；Customer、Listing、Marketing 迁移账本均为 0 条。没有可信历史 `brokerId→userId` 证据，因此本轮没有回填，也没有把旧 broker 字段当作所有权证明。依赖历史私有 owner 的读写与 Customer 提醒仍保持拒绝/跳过；这项数据对账与切换是本 change 唯一保留的未完成任务 4.5。浏览器专项仍按前端需求单冻结。
+2026-11-12 对开发库做只读逐行核查：`customer_profile` 3 条、`customer_listing_inquiry` 1 条、`listing_info` 3 条的 `owner_user_id` 均为空；Customer、Listing、Marketing 迁移账本均为 0 条。Auth 当前唯一经纪人映射是 `BROKER:1→userId=1`，审计记录显示由 userId=2 于 **2026-11-06 16:15:13.419565（UTC+08:00）**登记。Customer 档案 1、2 的 `created_at` 为 2026-11-06 12:34:59，早于映射登记约 3 小时 40 分；Customer 档案 3、咨询 1 及房源 1–3 写入于 2026-11-09 映射登记之后。其余五条仍需逐条 owner 账本复核，不能仅凭 brokerId 批量改写。相关记录的 `source_channel` 或标题标明 E2E；表中没有 `created_by`/请求 ID，无法从当前表还原具体写入账号或 API 请求。依赖 owner 的私有访问与 Customer 提醒仍对空 owner 拒绝/跳过；逐域数据对账和切换仍是本 change 唯一未完成任务 4.5。浏览器专项仍按前端需求单冻结。
