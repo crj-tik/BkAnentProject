@@ -28,7 +28,7 @@ public class AgentAuthorizationProperties {
     private int maxSessions = 4000;
     private int maxSessionsPerUser = 32;
     private Map<String, String> capabilityPermissions = new LinkedHashMap<>();
-    /** Exact local capabilities available to any authenticated actor in a bound run, without a permission code. */
+    /** Exact A2A capabilities available to any authenticated actor in a bound run, without a permission grant. */
     private Set<String> baselineCapabilities = new LinkedHashSet<>();
     /** Exact remote MCP services configured to verify user-delegation proofs locally. */
     private Map<String, String> mcpTargetAudiences = new LinkedHashMap<>();
@@ -53,7 +53,8 @@ public class AgentAuthorizationProperties {
         });
         getBaselineCapabilities().forEach(capability -> {
             new com.bkanent.common.agent.CapabilityId(capability);
-            if (!capability.startsWith("local:") || capabilityPermissions.containsKey(capability))
+            if (!capability.startsWith("a2a:") || capabilityPermissions.containsKey(capability)
+                    || baselineOperationForCapability(capability) == null)
                 throw new IllegalStateException("Invalid baseline Agent capability registration");
         });
         mcpTargetAudiences.forEach((server, audience) -> {
@@ -135,6 +136,20 @@ public class AgentAuthorizationProperties {
     }
     public String permissionForCapability(String capabilityId) {
         return capabilityPermissions.get(capabilityId);
+    }
+    /** Resolves a capability to its signed action; baseline actions never become role grants. */
+    public String operationForCapability(String capabilityId) {
+        String restrictedOperation = permissionForCapability(capabilityId);
+        if (restrictedOperation != null) return restrictedOperation;
+        return isBaselineCapability(capabilityId) ? baselineOperationForCapability(capabilityId) : null;
+    }
+    private static String baselineOperationForCapability(String capabilityId) {
+        if (capabilityId == null) return null;
+        return switch (capabilityId) {
+            case "a2a:listing-agent" -> "listing.read";
+            case "a2a:platform-operations-agent" -> "agent.chat.use";
+            default -> null;
+        };
     }
     public Set<String> getBaselineCapabilities() { return Set.copyOf(baselineCapabilities); }
     public void setBaselineCapabilities(Set<String> value) {

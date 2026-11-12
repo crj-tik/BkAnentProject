@@ -73,6 +73,14 @@ public final class Fastjson2ConstructorSerialization implements Serialization {
                 writeObject(java.util.Map.of("@throwable", "AuthzException", "code", authorization.code().name()));
                 return;
             }
+            if (failure instanceof com.bkanent.common.memory.MemoryException memory) {
+                java.util.LinkedHashMap<String, Object> envelope = new java.util.LinkedHashMap<>();
+                envelope.put("@throwable", "MemoryException");
+                envelope.put("code", memory.code().name());
+                envelope.put("field", memory.field() == null ? null : memory.field().name());
+                writeObject(envelope);
+                return;
+            }
             String code = null;
             String field = null;
             for (Class<?> type = failure.getClass(); type != null; type = type.getSuperclass()) {
@@ -132,6 +140,19 @@ public final class Fastjson2ConstructorSerialization implements Serialization {
                             com.bkanent.common.authz.AuthzErrorCode.valueOf(String.valueOf(authorization.get("code"))));
                 } catch (IllegalArgumentException failure) {
                     throw new IOException("invalid authorization throwable envelope");
+                }
+            }
+            if (value instanceof java.util.Map<?, ?> memory
+                    && "MemoryException".equals(memory.get("@throwable"))) {
+                try {
+                    com.bkanent.common.memory.MemoryErrorCode code =
+                            com.bkanent.common.memory.MemoryErrorCode.valueOf(String.valueOf(memory.get("code")));
+                    Object fieldValue = memory.get("field");
+                    com.bkanent.common.memory.MemoryException.Field field = fieldValue == null ? null
+                            : com.bkanent.common.memory.MemoryException.Field.valueOf(String.valueOf(fieldValue));
+                    return new com.bkanent.common.memory.MemoryException(code, field);
+                } catch (IllegalArgumentException failure) {
+                    throw new IOException("invalid memory throwable envelope");
                 }
             }
             if (value instanceof java.util.Map<?, ?> map

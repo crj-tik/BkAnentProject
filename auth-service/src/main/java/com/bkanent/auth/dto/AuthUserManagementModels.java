@@ -28,7 +28,12 @@ public final class AuthUserManagementModels {
         }
     }
 
-    public record OrganizationSummary(Long id, String code, String name, String type, Long parentId, boolean primary) { }
+    public record OrganizationSummary(Long id, String code, String name, String type, Long parentId, boolean primary,
+                                      Long companyId, String companyCode, String companyName) {
+        public OrganizationSummary(Long id, String code, String name, String type, Long parentId, boolean primary) {
+            this(id, code, name, type, parentId, primary, null, null, null);
+        }
+    }
 
     public record RoleOption(String roleCode, String roleName, String description) {
     }

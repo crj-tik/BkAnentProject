@@ -122,6 +122,21 @@ class Fastjson2ConstructorSerializationTest {
         assertThat(failure.field()).isEqualTo("spaceId");
     }
 
+    @Test void memoryExceptionRoundTripsThroughTheThrowableEnvelope() throws Exception {
+        var bytes = new ByteArrayOutputStream();
+        ObjectOutput output = serialization.serialize(null, bytes);
+        output.writeThrowable(new com.bkanent.common.memory.MemoryException(
+                com.bkanent.common.memory.MemoryErrorCode.AUTHENTICATION_FAILED,
+                com.bkanent.common.memory.MemoryException.Field.IDENTITY));
+        output.flushBuffer();
+        ObjectInput input = serialization.deserialize(null, new ByteArrayInputStream(bytes.toByteArray()));
+        Object restored = input.readObject();
+        assertThat(restored).isInstanceOf(com.bkanent.common.memory.MemoryException.class);
+        com.bkanent.common.memory.MemoryException failure = (com.bkanent.common.memory.MemoryException) restored;
+        assertThat(failure.code()).isEqualTo(com.bkanent.common.memory.MemoryErrorCode.AUTHENTICATION_FAILED);
+        assertThat(failure.field()).isEqualTo(com.bkanent.common.memory.MemoryException.Field.IDENTITY);
+    }
+
     @Test void recordWithEmptyListFieldRoundTripsAsEmptyList() throws Exception {
         // Empty failedStages must stay empty: a null-filled phantom element would corrupt
         // response semantics on the HTTP surface (observed once on the live wire).

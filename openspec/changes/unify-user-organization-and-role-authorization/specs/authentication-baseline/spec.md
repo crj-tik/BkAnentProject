@@ -15,3 +15,10 @@ The authorization RPC SHALL reject unknown, inactive or logically deleted accoun
 #### Scenario: Repeated subAgent calls use the bound identity
 - **WHEN** an authenticated graph invokes multiple subAgents under a valid bound context
 - **THEN** each transport boundary verifies the signed request locally and SHALL NOT replace the actor from generated content or require an Auth RPC for every node
+
+### Requirement: Auth management endpoints SHALL require administrator identity and exact capability
+Versioned Auth account, organization, role, role-grant and business-identity management endpoints SHALL require both an Auth-derived administrator identity and the exact registered management permission for the endpoint. A management permission by itself SHALL NOT permit access or mutation; after role-only cutover the administrator identity SHALL derive only from an effective explicit `PLATFORM_ADMIN` role grant. Client-provided administrator claims SHALL never be trusted.
+
+#### Scenario: Ordinary role receives a management permission accidentally
+- **WHEN** a non-administrator's effective role contains `auth.users.manage` or `auth.roles.manage`
+- **THEN** Auth management endpoints deny the request and do not disclose management data or mutate authorization state

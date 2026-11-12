@@ -21,7 +21,17 @@ public class CustomerDomainServiceImpl extends ServiceImpl<CustomerMapper, Custo
     public List<CustomerEntity> searchProfiles(CustomerQueryRequest request) {
         LambdaQueryWrapper<CustomerEntity> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(StringUtils.hasText(request.profileType()), CustomerEntity::getProfileType, request.profileType());
-        queryWrapper.eq(request.brokerId() != null, CustomerEntity::getBrokerId, request.brokerId());
+        if (request.ownerUserId() != null) {
+            if (request.brokerId() == null) {
+                queryWrapper.eq(CustomerEntity::getOwnerUserId, request.ownerUserId());
+            } else {
+                queryWrapper.and(scope -> scope.eq(CustomerEntity::getOwnerUserId, request.ownerUserId())
+                        .or(legacy -> legacy.isNull(CustomerEntity::getOwnerUserId)
+                                .eq(CustomerEntity::getBrokerId, request.brokerId())));
+            }
+        } else {
+            queryWrapper.eq(request.brokerId() != null, CustomerEntity::getBrokerId, request.brokerId());
+        }
         queryWrapper.eq(StringUtils.hasText(request.intention()), CustomerEntity::getIntention, request.intention());
         queryWrapper.ge(request.budgetMin() != null, CustomerEntity::getBudgetMax, request.budgetMin());
         queryWrapper.le(request.budgetMax() != null, CustomerEntity::getBudgetMin, request.budgetMax());

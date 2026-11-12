@@ -193,6 +193,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
         }
         ListingEntity entity = new ListingEntity();
         entity.setBrokerId(brokerId);
+        entity.setOwnerUserId(actorUserId);
         entity.setOwnerCustomerId(request.ownerCustomerId());
         applyUpsert(entity, request);
         entity.setTotalPrice(request.totalPrice());
@@ -331,7 +332,8 @@ public class ListingManagementServiceImpl implements ListingManagementService {
             }
             request = request == null ? new ListingQueryRequest(null, "ON_SALE", null, null, null, null, null, null)
                     : new ListingQueryRequest(request.keyword(), "ON_SALE", request.brokerId(), request.minArea(),
-                    request.maxArea(), request.minTotalPrice(), request.maxTotalPrice(), request.verifiedOnly());
+                    request.maxArea(), request.minTotalPrice(), request.maxTotalPrice(), request.verifiedOnly(),
+                    request.ownerUserId());
         }
         var rows = listingDomainService.search(request);
         principal = currentReader();
@@ -887,12 +889,14 @@ public class ListingManagementServiceImpl implements ListingManagementService {
         var context = verified.context();
         long expires = Math.min(context.expiresAtEpochSecond(),
                 Math.min(context.runHardDeadlineEpochSecond(), verified.freshness().notAfterEpochSecond()));
-        boolean businessAdmin = context.allowedOperations().contains("listing.read.all");
+        // A broad Listing read grant is not a platform-administrator role. Preserve the
+        // compatibility marker only when Auth explicitly signed the admin-management grant.
+        boolean businessAdmin = context.allowedOperations().contains("auth.users.manage");
         return new com.bkanent.common.rag.AuthRagPrincipal(
                 Long.parseLong(verified.actorId()), "SIGNED", true, true, expires,
                 com.bkanent.common.rag.AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION,
                 context.permissionRevision(), context.credentialEpoch(), businessAdmin,
-                businessAdmin ? java.util.List.of("BUSINESS_ADMIN") : java.util.List.of("BROKER"),
+                java.util.List.of(),
                 context.allowedOperations(), null);
     }
 
@@ -905,7 +909,7 @@ public class ListingManagementServiceImpl implements ListingManagementService {
 
     private void requireReadPermission() {
         if (com.bkanent.common.authz.AuthzRequestScope.present()) {
-            if (com.bkanent.common.authz.AuthzRequestScope.businessAdmin()) {
+            if (com.bkanent.common.authz.AuthzRequestScope.hasOperation("listing.read.all")) {
                 com.bkanent.common.authz.AuthzRequestScope.requireOperation("listing.read.all");
             } else {
                 com.bkanent.common.authz.AuthzRequestScope.requireOperation("listing.read");
@@ -915,24 +919,27 @@ public class ListingManagementServiceImpl implements ListingManagementService {
 
     private ListingQueryRequest authorizedQuery(ListingQueryRequest request, String ownOperation, String allOperation) {
         com.bkanent.common.authz.AuthzRequestScope.requireCurrent();
-        if (com.bkanent.common.authz.AuthzRequestScope.businessAdmin()) {
+        if (com.bkanent.common.authz.AuthzRequestScope.hasOperation(allOperation)) {
             com.bkanent.common.authz.AuthzRequestScope.requireOperation(allOperation);
             return request;
         }
         com.bkanent.common.authz.AuthzRequestScope.requireOperation(ownOperation);
-        long brokerId = com.bkanent.common.authz.AuthzRequestScope.requireBrokerIdentity();
-        if (request != null && request.brokerId() != null && request.brokerId() != brokerId) {
+        Long brokerId = com.bkanent.common.authz.AuthzRequestScope.businessIdentity("BROKER");
+        if (request != null && request.brokerId() != null
+                && (brokerId == null || !request.brokerId().equals(brokerId))) {
             throw new com.bkanent.common.authz.AuthzException(com.bkanent.common.authz.AuthzErrorCode.PERMISSION_DENIED);
         }
-        return request == null ? new ListingQueryRequest(null, null, brokerId, null, null, null, null, null)
+        long ownerUserId = com.bkanent.common.authz.AuthzRequestScope.actorId();
+        return request == null ? new ListingQueryRequest(null, null, brokerId, null, null, null, null, null,
+                ownerUserId)
                 : new ListingQueryRequest(request.keyword(), request.status(), brokerId, request.minArea(),
-                request.maxArea(), request.minTotalPrice(), request.maxTotalPrice(), request.verifiedOnly());
+                request.maxArea(), request.minTotalPrice(), request.maxTotalPrice(), request.verifiedOnly(), ownerUserId);
     }
 
     /** Public listing summaries keep the established ON_SALE browse range; private detail routes use owner checks. */
     private ListingQueryRequest authorizedSummaryQuery(ListingQueryRequest request) {
         if (!com.bkanent.common.authz.AuthzRequestScope.present()) return request;
-        if (com.bkanent.common.authz.AuthzRequestScope.businessAdmin()) {
+        if (com.bkanent.common.authz.AuthzRequestScope.hasOperation("listing.read.all")) {
             com.bkanent.common.authz.AuthzRequestScope.requireOperation("listing.read.all");
         } else {
             com.bkanent.common.authz.AuthzRequestScope.requireOperation("listing.read");
@@ -945,7 +952,8 @@ public class ListingManagementServiceImpl implements ListingManagementService {
             requireMcpOwner(entity, ownOperation, allOperation);
             return;
         }
-        com.bkanent.common.authz.AuthzRequestScope.requireBrokerOwnership(entity.getBrokerId(), ownOperation, allOperation);
+        com.bkanent.common.authz.AuthzRequestScope.requireUserOrLegacyBrokerOwnership(
+                entity.getOwnerUserId(), entity.getBrokerId(), ownOperation, allOperation);
     }
 
     /**
@@ -962,8 +970,12 @@ public class ListingManagementServiceImpl implements ListingManagementService {
         if (!context.allowedOperations().contains(ownOperation)) {
             throw new com.bkanent.common.authz.AuthzException(com.bkanent.common.authz.AuthzErrorCode.PERMISSION_DENIED);
         }
+        Long actorId = context.actorId() == null ? null : Long.valueOf(context.actorId());
         Long brokerId = context.businessIdentities().get("BROKER");
-        if (brokerId == null || entity.getBrokerId() == null || !brokerId.equals(entity.getBrokerId())) {
+        boolean ownerMatches = entity.getOwnerUserId() != null
+                ? entity.getOwnerUserId().equals(actorId)
+                : brokerId != null && brokerId.equals(entity.getBrokerId());
+        if (!ownerMatches) {
             throw new com.bkanent.common.authz.AuthzException(com.bkanent.common.authz.AuthzErrorCode.PERMISSION_DENIED);
         }
     }

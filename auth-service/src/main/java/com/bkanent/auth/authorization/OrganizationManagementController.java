@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -36,6 +37,22 @@ public class OrganizationManagementController {
         return service.create(bearer(header), body);
     }
 
+    @PutMapping("/{orgId}/status")
+    public OrganizationManagementService.OrgUnit setStatus(
+            @RequestHeader(value = "Authorization", required = false) String header,
+            @PathVariable(name = "orgId") long orgId, @RequestBody OrganizationStatus body) {
+        if (body == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Status body required");
+        return service.setStatus(bearer(header), orgId, body.status());
+    }
+
+    @PutMapping("/{orgId}/store-business-id")
+    public OrganizationManagementService.StoreMappingChange mapStoreBusinessId(
+            @RequestHeader(value = "Authorization", required = false) String header,
+            @PathVariable(name = "orgId") long orgId, @RequestBody StoreBusinessId body) {
+        if (body == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Store mapping body required");
+        return service.setStoreBusinessId(bearer(header), orgId, body.storeBusinessId());
+    }
+
     @GetMapping("/{orgId}/members")
     public List<OrganizationManagementService.Member> members(
             @RequestHeader(value = "Authorization", required = false) String header,
@@ -50,7 +67,8 @@ public class OrganizationManagementController {
         if (body == null || body.userId() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "User ID required");
         }
-        return service.addPrimaryMember(bearer(header), orgId, body.userId());
+        return service.addMembership(bearer(header), orgId, new OrganizationManagementService.MembershipRequest(
+                body.userId(), body.primary(), body.validFrom(), body.validUntil()));
     }
 
     @DeleteMapping("/{orgId}/members/{userId}")
@@ -58,6 +76,17 @@ public class OrganizationManagementController {
             @RequestHeader(value = "Authorization", required = false) String header,
             @PathVariable(name = "orgId") long orgId, @PathVariable(name = "userId") long userId) {
         return service.endPrimaryMember(bearer(header), orgId, userId);
+    }
+
+    @PutMapping("/{orgId}/members/{userId}/organization")
+    public OrganizationManagementService.MemberChange moveMember(
+            @RequestHeader(value = "Authorization", required = false) String header,
+            @PathVariable(name = "orgId") long orgId, @PathVariable(name = "userId") long userId,
+            @RequestBody MoveMemberRequest body) {
+        if (body == null || body.targetOrgId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Target organization required");
+        }
+        return service.movePrimaryMember(bearer(header), orgId, userId, body.targetOrgId());
     }
 
     private static String bearer(String header) {
@@ -68,5 +97,11 @@ public class OrganizationManagementController {
         return header.substring(7);
     }
 
-    public record MemberRequest(Long userId) { }
+    public record MemberRequest(Long userId, Boolean primary, java.time.Instant validFrom,
+                                java.time.Instant validUntil) {
+        public MemberRequest(Long userId) { this(userId, true, null, null); }
+    }
+    public record OrganizationStatus(String status) { }
+    public record StoreBusinessId(Long storeBusinessId) { }
+    public record MoveMemberRequest(Long targetOrgId) { }
 }

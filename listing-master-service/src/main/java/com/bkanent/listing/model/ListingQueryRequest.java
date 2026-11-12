@@ -21,6 +21,13 @@ public record ListingQueryRequest(
         /** 业务属性：maxTotalPrice。 */
         BigDecimal maxTotalPrice,
         /** 业务属性：verifiedOnly。 */
-        Boolean verifiedOnly
+        Boolean verifiedOnly,
+        /** Trusted Auth user owner filter; never accepted from an external request. */
+        Long ownerUserId
 ) {
+    public ListingQueryRequest(String keyword, String status, Long brokerId, BigDecimal minArea,
+                               BigDecimal maxArea, BigDecimal minTotalPrice, BigDecimal maxTotalPrice,
+                               Boolean verifiedOnly) {
+        this(keyword, status, brokerId, minArea, maxArea, minTotalPrice, maxTotalPrice, verifiedOnly, null);
+    }
 }

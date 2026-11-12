@@ -33,7 +33,7 @@ public class HttpListingSourceAdapter implements ListingSourceAdapter {
             new ParameterizedTypeReference<>() { };
     private static final ParameterizedTypeReference<ApiResponse<ListingBusinessResponse<UpstreamBatchReadItem>>> READ_TYPE =
             new ParameterizedTypeReference<>() { };
-    private static final ParameterizedTypeReference<ApiResponse<ListingBusinessResponse<ListingSnapshotCheckItem>>> CHECK_TYPE =
+    private static final ParameterizedTypeReference<ApiResponse<ListingBusinessResponse<UpstreamCheckItem>>> CHECK_TYPE =
             new ParameterizedTypeReference<>() { };
 
     private final ListingSourceProperties.Http properties;
@@ -55,7 +55,9 @@ public class HttpListingSourceAdapter implements ListingSourceAdapter {
         if (response.items().stream().anyMatch(item -> item == null || item.listingRef() == null)) {
             throw new ListingSourceUnavailableException();
         }
-        List<ListingSourceSnapshot> normalized = response.items().stream().map(this::normalize).toList();
+        List<ListingSourceSnapshot> normalized = response.items().stream()
+                .filter(item -> readable(item, scope))
+                .map(this::normalize).toList();
         return new ListingSourcePage(normalized, response.nextCursor());
     }
 
@@ -73,6 +75,10 @@ public class HttpListingSourceAdapter implements ListingSourceAdapter {
                 throw new ListingSourceUnavailableException();
             }
             if (item.status() == ListingSourceStatus.CURRENT) {
+                if (!readable(item.snapshot(), scope)) {
+                    return new ListingSnapshotBatchReadItem(normalizeRef(item.listingRef()),
+                            ListingSourceStatus.NOT_ACCESSIBLE, null);
+                }
                 return new ListingSnapshotBatchReadItem(normalizeRef(item.listingRef()), item.status(), normalize(item.snapshot()));
             }
             return new ListingSnapshotBatchReadItem(normalizeRef(item.listingRef()), item.status(), null);
@@ -81,13 +87,19 @@ public class HttpListingSourceAdapter implements ListingSourceAdapter {
 
     @Override
     public List<ListingSnapshotCheckItem> check(ListingSnapshotCheckRequest request, ListingAccessScope scope) {
-        ListingBusinessResponse<ListingSnapshotCheckItem> response = post(
+        ListingBusinessResponse<UpstreamCheckItem> response = post(
                 properties.getCheckPath(), request, CHECK_TYPE, scope);
         if (response.items().stream().anyMatch(item -> item == null || item.listingRef() == null)) {
             throw new ListingSourceUnavailableException();
         }
-        return response.items().stream().map(item -> new ListingSnapshotCheckItem(
-                normalizeRef(item.listingRef()), item.expectedRevision(), checkedStatus(item.status()))).toList();
+        return response.items().stream().map(item -> {
+            ListingSourceStatus status = checkedStatus(item.status());
+            if ((status == ListingSourceStatus.CURRENT || status == ListingSourceStatus.STALE)
+                    && !readable(item.ownerUserId(), item.brokerId(), scope)) {
+                status = ListingSourceStatus.NOT_ACCESSIBLE;
+            }
+            return new ListingSnapshotCheckItem(normalizeRef(item.listingRef()), item.expectedRevision(), status);
+        }).toList();
     }
 
     private <T> ListingBusinessResponse<T> post(String path, Object request,
@@ -101,8 +113,11 @@ public class HttpListingSourceAdapter implements ListingSourceAdapter {
                 body.header(HttpHeaders.AUTHORIZATION, "Bearer " + properties.getBearerToken());
             }
             body.header("X-Listing-Actor-Id", Long.toString(scope.actorId()))
-                    .header("X-Listing-Read-Scope", scope.businessWideRead() ? "business" : "broker");
-            if (!scope.businessWideRead()) body.header("X-Listing-Broker-Id", Long.toString(scope.brokerId()));
+                    .header("X-Listing-Read-Scope", scope.businessWideRead() ? "business" : "owner");
+            if (!scope.businessWideRead()) {
+                body.header("X-Listing-Owner-User-Id", Long.toString(scope.actorId()));
+                if (scope.brokerId() != null) body.header("X-Listing-Broker-Id", Long.toString(scope.brokerId()));
+            }
             ApiResponse<ListingBusinessResponse<T>> envelope = body.body(request).retrieve().body(type);
             if (envelope == null || !envelope.success() || envelope.data() == null
                     || !ListingBusinessResponse.VERSION.equals(envelope.data().contractVersion())
@@ -134,6 +149,18 @@ public class HttpListingSourceAdapter implements ListingSourceAdapter {
         } catch (IllegalArgumentException malformed) {
             throw new ListingSourceUnavailableException();
         }
+    }
+
+    /** The HTTP source is an optional provider; its owner claim is checked locally before facts leave this adapter. */
+    private static boolean readable(UpstreamSnapshot snapshot, ListingAccessScope scope) {
+        return snapshot != null && readable(snapshot.ownerUserId(), snapshot.brokerId(), scope);
+    }
+
+    private static boolean readable(Long ownerUserId, Long brokerId, ListingAccessScope scope) {
+        if (scope == null) return false;
+        if (scope.businessWideRead()) return true;
+        if (ownerUserId != null) return ownerUserId == scope.actorId();
+        return scope.brokerId() != null && scope.brokerId().equals(brokerId);
     }
 
     private ListingSourceStatus checkedStatus(ListingSourceStatus status) {
@@ -181,10 +208,14 @@ public class HttpListingSourceAdapter implements ListingSourceAdapter {
     }
 
     /** Upstream revision/hash/mode are treated as claims; revision may be absent and is derived locally. */
-    private record UpstreamSnapshot(ListingRef listingRef, String revision, String contentHash,
+    private record UpstreamSnapshot(ListingRef listingRef, Long ownerUserId, Long brokerId,
+                                    String revision, String contentHash,
                                     java.time.Instant observedAt, ListingDataMode dataMode,
                                     String datasetId, com.bkanent.common.listing.ListingSnapshotFacts facts) { }
 
     private record UpstreamBatchReadItem(ListingRef listingRef, ListingSourceStatus status,
                                          UpstreamSnapshot snapshot) { }
+
+    private record UpstreamCheckItem(ListingRef listingRef, String expectedRevision,
+                                     ListingSourceStatus status, Long ownerUserId, Long brokerId) { }
 }

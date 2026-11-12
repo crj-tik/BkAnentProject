@@ -63,6 +63,8 @@ customer:
     key-id: customer-comparison-verify-current
     signing-secret: ${CUSTOMER_COMPARISON_VERIFY_SECRET:}
   reminder:
-    enabled: true
-    entrust-expire-days: 7
-    entrust-cron: 0 0 9 * * ?
+    enabled: ${CUSTOMER_ENTRUST_REMINDER_ENABLED:false}
+    entrust-expire-days: ${CUSTOMER_ENTRUST_REMINDER_DAYS:7}
+    entrust-cron: ${CUSTOMER_ENTRUST_REMINDER_CRON:0 0 9 * * ?}
+    key-id: ${SERVICE_IDENTITY_KEY_ID:customer-service-current}
+    private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}

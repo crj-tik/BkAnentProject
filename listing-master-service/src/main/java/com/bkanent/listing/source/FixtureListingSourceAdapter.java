@@ -79,7 +79,8 @@ public class FixtureListingSourceAdapter implements ListingSourceAdapter {
     }
 
     private boolean readable(ListingAccessScope scope) {
-        return scope != null && (scope.businessWideRead() || scope.brokerId() == brokerId);
+        return scope != null && (scope.businessWideRead()
+                || scope.brokerId() != null && scope.brokerId() == brokerId);
     }
 
     private static ListingSourceSnapshot fixture(String id, String title, String area, String price, String layout) {

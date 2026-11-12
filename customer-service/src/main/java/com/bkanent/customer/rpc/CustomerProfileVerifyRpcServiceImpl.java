@@ -42,8 +42,10 @@ public class CustomerProfileVerifyRpcServiceImpl implements CustomerProfileVerif
                 || !request.request().expectedProfileType().equalsIgnoreCase(profile.getProfileType())) {
             return notVerified(request, CustomerProfileVerifyResponse.INVALID_PROFILE_TYPE);
         }
-        if (!caller.businessWide()
-                && (caller.brokerId() == null || !caller.brokerId().equals(profile.getBrokerId()))) {
+        boolean ownerMatches = profile.getOwnerUserId() != null
+                ? profile.getOwnerUserId().equals(caller.actorUserId())
+                : caller.brokerId() != null && caller.brokerId().equals(profile.getBrokerId());
+        if (!caller.businessWide() && !ownerMatches) {
             return notVerified(request, CustomerProfileVerifyResponse.NOT_ACCESSIBLE);
         }
         return new CustomerProfileVerifyResponse(request.request().requestId(),

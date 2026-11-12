@@ -51,7 +51,8 @@ public final class RagAccessControl {
             require(scope.permissionRevision() == principal.permissionRevision()
                     && scope.credentialEpoch() == principal.credentialEpoch()
                     && scope.businessAdmin() == principal.businessAdmin());
-            String requiredOperation = requiredSearchPermission(space.spaceId(), principal.businessAdmin());
+            boolean businessWidePermission = "listing.read.all".equals(scope.operationCode());
+            String requiredOperation = requiredSearchPermission(space.spaceId(), businessWidePermission);
             require(requiredOperation != null && requiredOperation.equals(scope.operationCode())
                     && principal.hasPermission(requiredOperation));
         } else {
@@ -63,9 +64,9 @@ public final class RagAccessControl {
         if ("listing.knowledge".equals(space.spaceId())) {
             if (scope.businessWideRead()) {
                 require(scope.ownerId() == null && scope.allowedResourceIds().isEmpty());
-                boolean businessAdmin = principal.versionedAuthorization()
-                        ? principal.businessAdmin() : "ADMIN".equals(principal.roleCode());
-                require(businessAdmin ? Boolean.FALSE.equals(scope.activeOnly()) : Boolean.TRUE.equals(scope.activeOnly()));
+                boolean businessWidePermission = principal.versionedAuthorization()
+                        ? "listing.read.all".equals(scope.operationCode()) : "ADMIN".equals(principal.roleCode());
+                require(businessWidePermission ? Boolean.FALSE.equals(scope.activeOnly()) : Boolean.TRUE.equals(scope.activeOnly()));
             } else {
                 require(!scope.allowedResourceIds().isEmpty() && Boolean.TRUE.equals(scope.activeOnly()));
                 requiredField(space, "listingId", RagValueType.STRING);

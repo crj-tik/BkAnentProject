@@ -18,7 +18,7 @@
 - 全仓生产 Java、SQL、YAML 中 `businessAdmin/business_admin/BUSINESS_ADMIN/isBusinessAdmin/isAdmin/ADMIN` 相关文件清单见同目录 `business-admin-consumers.txt`，后续按清单逐处区分权限决策、业务宽范围、签名字段及旧模式兼容，并补充后续新引入消费者。
 - `scripts/acceptance/audit-auth-admin-roles.py` 从本地实际 Gateway 读取权限目录、角色和所有用户，并排除源码 `AuthzOperationPolicy` 中的基础操作；核对两次列表无可见变动后给出每位管理员的旧受限权限、当前有效角色授予和逐权限缺口。2026-11-11 连续两次对账内容一致：2 个管理员均有 125 个受限目录项而现有有效角色授予 0 项，完整逐项结果位于本机 `runtime-logs/diagnostics/2026-11-11/auth-admin-role-audit-20261111.json`，未提交用户数据或凭据。该脚本要求已部署运行的 Auth 与当前源码基线一致，报告是迁移前快照；切换前必须重新对账并额外验证到期边界。
 
-## 门店与业务身份初查（任务 1.2 进行中；1.4 已盘点）
+## 门店与业务身份初查（2026-11-10 基线；任务 1.2/1.4 当前已完成源码盘点）
 
 - 开发库当前 BROKER 映射 1 条、STORE 映射 0 条。`auth_user_store_identity` 每用户最多一门店，同一门店可有多个用户；该表本身没有门店主数据或可追溯来源，不能证明任一数字代表真实门店。
 - Customer 的 `customer_profile` 及跟进/委托/收藏/咨询等数据、Listing 的 `listing_info` 和多个派生记录使用 brokerId；其字段语义、独立业务主体与历史变更须逐表核验。平台运营存储 `employee_kpi_stat`、`employee_daily_workload`、`store_dashboard_snapshot` 和门店复盘事实，但这些事实表不能独自证明员工/门店主数据及其与账号的关系。
@@ -33,12 +33,12 @@
 - `AuthControllerTest` 与 `AuthorizationUserInfoTest` 定向 13 项通过，覆盖身份字段伪造拒绝、本人字段更新及已停用账号拒绝；测试未覆盖真实 Gateway 请求。
 - `/auth/me` 返回仅本人当前有效组织摘要，保留旧字段与构造器；H2 和本人跨用户隔离测试已覆盖。Auth 模块 222 项测试通过；上游 common 回归中另一会话未提交的 `RagVerifyDubboSerializationTest` 在 STRICT 序列化白名单下有 3 个错误，排除该类后 common + Auth 构建通过，不能称为全量通过。已部署开发 Auth 镜像并通过 Gateway 调用 `/auth/me`；Graph 及业务域完整 API 验收属于任务 5.4。
 
-## 组织表部分实现（任务 2.1/2.2 未完成）
+## 组织表部分实现（2026-11-10 基线状态）
 
 - 新增 `auth_org_unit`、`auth_org_membership` 及受管 manifest 条目 `auth-organization-20261110-v1`；未变更现有账号、角色和授予数据。表结构约束节点类型、父节点存在、门店业务 ID 唯一、成员关联及时间区间；单一主归属、树循环和同公司规则仍需管理服务的事务锁校验，不能仅凭表结构声称已完成。
 - 已在 WSL 开发栈通过受管 runner 执行 upgrade 和重复 upgrade，后者验证迁移已应用；未进行 fresh 数据库演练。组织管理尚未完成，角色分类和成员失效/outbox 仅部分实现，因此任务 2.1/2.2 保持未完成。
 
-## 角色分类部分实现（任务 3.3 未完成）
+## 角色分类部分实现（2026-11-10 基线状态）
 
 - 受管迁移 `auth-role-type-20261111-v1` 已在开发库完成 upgrade 和重复执行校验；既有角色默认 `UNCLASSIFIED`，不从 ADMIN、BROKER 等名称推断类别。新增角色分类修改入口只允许 `JOB`、`MANAGEMENT`、`UNCLASSIFIED`，并沿用角色写锁、版本/outbox 与审计；分类仅为元数据，不授予权限或管理员标记。
 - Auth 模块 224 项通过；common 中另一会话未提交的已知序列化测试按前述范围排除。分类接口尚未部署、既有及验收角色尚未显式分类；自动隐性角色、管理员由角色授权及最后管理员保护仍未实现，任务 3.3 未勾选。
@@ -48,13 +48,25 @@
 - 普通角色管理和账号管理入口现拒绝创建、修改、删除、分类或分配预备 `PLATFORM_ADMIN`，即使数据被误改为可分配也不能通过普通接口授予；相关角色与账号管理定向 26 项通过。该保护尚未部署，也不替代专用的受控切换与最后管理员保护。
 - 在只包含提交 `a63702ea` 的隔离工作树中，完整 common 192 项与 Auth 224 项测试通过，排除了主工作区其他会话未提交文件；角色分类新镜像构建时 Docker 构建连接中断，WSL Docker 服务显示 active 但内存与 swap 接近耗尽，当前开发 Auth 仍运行此前 `auth-org-f08ae55f` 镜像。
 
-## 组织管理部分实现（任务 3.2 未完成）
+## 组织管理部分实现（2026-11-10 基线状态）
 
 - 新增受现有 `auth.users.manage` 权限保护的组织节点创建及管理列表接口。公司只能作为根节点，门店和部门必须属于有效公司；创建使用授权写锁和审计，组织代码冲突拒绝。此阶段不接受客户端提交 storeId，也不产生组织成员或门店授权。
 - 新增初始主归属登记、结束和成员列表：有效用户可被管理人员关联到门店或部门，变更在事务内递增权限版本、写 outbox 和审计；已有旧 STORE 授权的用户须等待可信迁移。此记录不生成 STORE 授权。`OrganizationManagementControllerTest` 覆盖节点层级、审计、无权限、重复成员、版本与 outbox、结束及旧映射冲突。成员到期调度和门店授权范围仍未接通，故任务 3.2 不勾选；结束接口尚未部署至开发栈。
+- 开发中：增加受控组织启停和同公司内主归属转移；启停要求先处理有效子节点、成员及旧门店授权，转移在授权写锁下保留历史并更新用户版本/outbox。按用户要求尚未执行测试，未部署，相关任务保持未完成。
 
 ## 开发样例与部署（任务 5.1/5.2 已完成）
 
 - `scripts/acceptance/bootstrap-auth-organizations.py --apply-development` 显式在本地 Gateway 创建公司 1、门店 2、运营部门 3；经纪人 userId 4 和运营职能人员 userId 5 分别为两个子节点的成员。两角色 `ACCEPTANCE_BROKER` / `ACCEPTANCE_OPERATIONS` 均显式授予且不包含受限权限；不能因此推断门店或经纪人私有业务授权。
 - 两组验收账号凭据保存在被 Git 忽略的 `.env` 的 `ORG_ACCEPTANCE_BROKER_*` 和 `ORG_ACCEPTANCE_OPERATIONS_*` 键中；脚本不输出密码或 token。脚本已重复运行，确认对象不重复创建，并验证非管理员无法访问组织管理及不能伪造本人档案 userId。
 - 当前开发 Auth 容器使用 `bk-anent-services:auth-org-f08ae55f`，基于先前镜像替换 `f08ae55f` 对应 Auth jar；Gateway、Agent 及其他服务未重建。版本仅在本次 Compose 启动时覆盖，没有改 `.env` 的全局 `APP_VERSION`；后续以旧全局版本重建 Auth 可能恢复旧镜像，需显式使用此版本或按后续发布流程更新。
+
+## 2026-11-11 源码实施状态（运行验收待执行）
+
+- OpenSpec 现为 10/25 项已完成：当前勾选只代表已完成的盘点、源码设计/实现或历史已验收样例；需要 fresh/upgrade、跨服务、运行数据库/容器结果的项仍保持未勾选。按用户要求，源码开发全部收尾前不启动测试。
+- 任务 1.2 调用面索引已补至 `docs/authorization-user-ownership-inventory.md`，覆盖平台 userId、broker/store/employee/payee、Customer、Listing、Marketing、Notification、REST、RPC、MCP、RAG、A2A 和异步消费者；业务实体 ID 与平台用户负责人分别处理。
+- 当前源码已补齐组织与成员管理、有效期边界调度、primary 归属转移、门店显式映射和旧身份保护；角色类型及显式多角色授予不从部门或模型推导。组织管理测试文件已扩充，但按用户本轮要求，开发尚未全部完成前没有运行测试。
+- Auth 版本化账号、角色、授予、组织和业务身份管理入口现在同时要求 Auth 快照确认的管理员身份与精确管理权限码；单有 `auth.users.manage` / `auth.roles.manage` 不能自我提权。该规则和拒绝场景已同步至 Auth 契约、OpenSpec、LR-189 和 KI-264。
+- Customer、Listing 和 Marketing 的 user owner 字段及证据账本迁移、查询与写入来源已加入源码；可选 Listing HTTP source 还要本地核验返回 owner 证据。Auth 的角色-only 模式仍需基于目标开发库做最后管理员权限等价对账后才可切换；不把默认策略行当成已切换。
+- Customer 后台提醒使用限定 Customer 服务签名和幂等键；Contract reminder 的可信收件人映射尚缺，继续关闭。历史 owner ledger 不会自动猜测或批量赋权。
+- `.env.example`、Compose 和 Nacos 的 Auth/Gateway/Agent/Redis ACL 开关与变量已有静态对应；当前 Nacos 实际值、容器镜像、数据库迁移和 API 调用结果必须按 [开发验收手册](../../../docs/acceptance/user-organization-role-authorization.md)重新检查，本节不表示这些运行态验收已通过。
+- 前端工程尚不存在，浏览器专项保持冻结；`docs/auth-frontend-requirements.md` 已列入后续需求。当前可执行 API 的验收使用真实 Gateway/Auth/Agent，而不是用 Mock 冒充运行验收。

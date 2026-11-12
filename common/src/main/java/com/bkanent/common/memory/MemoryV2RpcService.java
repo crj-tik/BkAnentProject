@@ -3,8 +3,8 @@ package com.bkanent.common.memory;
 /**
  * Native memory v2 Dubbo contract (group/version fixed in MemoryV2Contract; explicit
  * consumer/provider binding happens in deployment configuration, task 2.4). Every method
- * declares throws so the official fastjson2 serialization registers the MemoryException
- * envelope for this interface; other throwables stay rejected. The server validates the
+ * declares throws so the fastjson2ctor wire preserves the safe MemoryException envelope
+ * for this interface; other throwables stay constrained to safe envelopes. The server validates the
  * envelope's current-user identity and signature — the shape checks here only pin the
  * contract surface.
  */

@@ -64,10 +64,11 @@ class ListingConfigurationMatrixTest {
         assertFalse(compose.contains("COMPARE_MCP_ENDPOINT"));
         assertFalse(envExample.contains("COMPARE_MCP_ENDPOINT"));
         assertFalse(read(root, "agent-service/src/main/resources/application.yml").contains("COMPARE_MCP_ENDPOINT"));
-        assertTrue(agentNacos.contains("\"[a2a:listing-agent]\": listing.read"));
+        assertTrue(agentNacos.contains("baseline-capabilities: ${AGENT_AUTHORIZATION_BASELINE_CAPABILITIES:}"));
+        assertFalse(agentNacos.contains("\"[a2a:listing-agent]\": listing.read"));
         assertFalse(agentNacos.contains("[a2a:compare-agent]"));
-        assertTrue(gatewayNacos.contains("id: listing-comparison-compatibility\n            uri: lb://listing-master-service"));
-        assertTrue(gatewayNacos.contains("Path=/compare/**"));
+        assertTrue(gatewayNacos.contains("id: listing-master-service\n            uri: lb://listing-master-service"));
+        assertTrue(gatewayNacos.contains("Path=/listings/**"));
         assertFalse(publisher.contains("\"compare-engine-service.yaml\""));
         assertFalse(compose.contains("profiles: [legacy-compare]"));
         assertFalse(compose.contains("SERVICE_ARTIFACT: compare-engine-service-1.0.0-SNAPSHOT.jar"));
@@ -77,7 +78,8 @@ class ListingConfigurationMatrixTest {
         assertFalse(envExample.contains("COMPARE_REPORT_STORAGE_DIR="));
         assertFalse(authNacos.contains("compare-engine-service-current:"));
         assertFalse(memoryNacos.contains("compare-engine-service-current:"));
-        assertTrue(cutover.contains("旧 `/compare/**` 用户路径由 Listing 兼容控制器承接"));
+        assertTrue(cutover.contains("旧 `/compare/**` 控制器及旧响应兼容已移除"));
+        assertTrue(cutover.contains("网关的 `/compare/**` 配置与部署状态"));
         assertTrue(cutover.contains("Memory 的 caller/domain/agent 映射"));
         assertTrue(cutover.contains("legacy-compare"));
         assertEquals(1, occurrences(compose, "listing-comparison-data:/app/runtime"));

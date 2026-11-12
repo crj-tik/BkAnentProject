@@ -67,7 +67,7 @@ public final class ListingMybatisH2Fixture implements AutoCloseable {
      */
     private void createTables() {
         jdbc.execute("CREATE TABLE listing_info ("
-                + "id BIGINT PRIMARY KEY, broker_id BIGINT, owner_customer_id BIGINT, "
+                + "id BIGINT PRIMARY KEY, broker_id BIGINT, owner_user_id BIGINT, owner_customer_id BIGINT, "
                 + "title VARCHAR(255), address VARCHAR(512), community_name VARCHAR(128), district_code VARCHAR(32), "
                 + "layout VARCHAR(64), area DECIMAL(10,2), total_price DECIMAL(12,2), asking_price_yuan DECIMAL(16,2), "
                 + "status VARCHAR(32), floor_level VARCHAR(64), decoration VARCHAR(64), school_zone VARCHAR(255), "

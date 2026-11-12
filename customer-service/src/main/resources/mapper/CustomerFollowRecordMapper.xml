@@ -8,6 +8,7 @@
         <id column="id" property="id"/>
         <result column="customer_id" property="customerId"/>
         <result column="broker_id" property="brokerId"/>
+        <result column="owner_user_id" property="ownerUserId"/>
         <result column="follow_type" property="followType"/>
         <result column="content" property="content"/>
         <result column="result_tag" property="resultTag"/>
@@ -18,7 +19,8 @@
     </resultMap>
 
     <sql id="Base_Column_List">
-        id, customer_id, broker_id, follow_type, content, result_tag, next_follow_time, created_at, updated_at, deleted
+        id, customer_id, broker_id, owner_user_id, follow_type, content, result_tag, next_follow_time,
+        created_at, updated_at, deleted
     </sql>
 
 </mapper>

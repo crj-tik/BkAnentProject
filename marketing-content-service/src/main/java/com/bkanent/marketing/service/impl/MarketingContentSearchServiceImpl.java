@@ -63,21 +63,27 @@ public class MarketingContentSearchServiceImpl implements MarketingContentSearch
 
     @Override
     public List<MarketingContentEntity> search(MarketingContentSearchRequest request, Long ownerBrokerId) {
+        return search(request, ownerBrokerId, null);
+    }
+
+    @Override
+    public List<MarketingContentEntity> search(MarketingContentSearchRequest request, Long ownerBrokerId,
+                                              Long ownerUserId) {
         ElasticsearchOperations operations = elasticsearchOperationsProvider.getIfAvailable();
         if (marketingSearchProperties.isUseElasticsearch() && operations != null) {
             try {
-                return searchByElasticsearch(operations, request, ownerBrokerId);
+                return searchByElasticsearch(operations, request, ownerBrokerId, ownerUserId);
             } catch (Exception exception) {
                 log.warn("营销内容 Elasticsearch 检索失败，降级使用 MySQL，原因={}", exception.getMessage());
             }
         }
-        return searchByMysql(request, ownerBrokerId);
+        return searchByMysql(request, ownerBrokerId, ownerUserId);
     }
 
     private List<MarketingContentEntity> searchByElasticsearch(ElasticsearchOperations operations,
                                                                MarketingContentSearchRequest request,
-                                                               Long ownerBrokerId) {
-        String queryJson = buildEsQuery(request, ownerBrokerId);
+                                                               Long ownerBrokerId, Long ownerUserId) {
+        String queryJson = buildEsQuery(request, ownerBrokerId, ownerUserId);
         List<Long> ids = operations.search(new StringQuery(queryJson), MarketingContentDocument.class,
                         IndexCoordinates.of(marketingSearchProperties.getIndexName()))
                 .stream()
@@ -88,16 +94,17 @@ public class MarketingContentSearchServiceImpl implements MarketingContentSearch
             return List.of();
         }
         LambdaQueryWrapper<MarketingContentEntity> ownerQuery = new LambdaQueryWrapper<MarketingContentEntity>()
-                .in(MarketingContentEntity::getId, ids)
-                .eq(ownerBrokerId != null, MarketingContentEntity::getOwnerBrokerId, ownerBrokerId);
+                .in(MarketingContentEntity::getId, ids);
+        appendOwnerFilter(ownerQuery, ownerBrokerId, ownerUserId);
         return marketingContentMapper.selectList(ownerQuery).stream()
                 .sorted((left, right) -> ids.indexOf(left.getId()) - ids.indexOf(right.getId()))
                 .toList();
     }
 
-    private List<MarketingContentEntity> searchByMysql(MarketingContentSearchRequest request, Long ownerBrokerId) {
+    private List<MarketingContentEntity> searchByMysql(MarketingContentSearchRequest request, Long ownerBrokerId,
+                                                       Long ownerUserId) {
         LambdaQueryWrapper<MarketingContentEntity> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(ownerBrokerId != null, MarketingContentEntity::getOwnerBrokerId, ownerBrokerId);
+        appendOwnerFilter(queryWrapper, ownerBrokerId, ownerUserId);
         queryWrapper.eq(request.listingId() != null, MarketingContentEntity::getListingId, request.listingId());
         queryWrapper.eq(StringUtils.hasText(request.platform()), MarketingContentEntity::getPlatform, request.platform());
         queryWrapper.eq(StringUtils.hasText(request.contentType()), MarketingContentEntity::getContentType, request.contentType());
@@ -113,9 +120,16 @@ public class MarketingContentSearchServiceImpl implements MarketingContentSearch
         return marketingContentMapper.selectList(queryWrapper);
     }
 
-    private String buildEsQuery(MarketingContentSearchRequest request, Long ownerBrokerId) {
+    private String buildEsQuery(MarketingContentSearchRequest request, Long ownerBrokerId, Long ownerUserId) {
         Set<String> mustClauses = new LinkedHashSet<>();
-        if (ownerBrokerId != null) {
+        if (ownerUserId != null && ownerBrokerId != null) {
+            mustClauses.add("{\"bool\":{\"should\":[{\"term\":{\"ownerUserId\":" + ownerUserId
+                    + "}},{\"bool\":{\"must_not\":[{\"exists\":{\"field\":\"ownerUserId\"}}],"
+                    + "\"filter\":[{\"term\":{\"ownerBrokerId\":" + ownerBrokerId
+                    + "}}]}}],\"minimum_should_match\":1}}");
+        } else if (ownerUserId != null) {
+            mustClauses.add("{\"term\":{\"ownerUserId\":" + ownerUserId + "}}");
+        } else if (ownerBrokerId != null) {
             mustClauses.add("{\"term\":{\"ownerBrokerId\":" + ownerBrokerId + "}}");
         }
         if (request.listingId() != null) {
@@ -162,5 +176,18 @@ public class MarketingContentSearchServiceImpl implements MarketingContentSearch
 
     private String escapeJson(String value) {
         return value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    private static void appendOwnerFilter(LambdaQueryWrapper<MarketingContentEntity> wrapper,
+                                          Long ownerBrokerId, Long ownerUserId) {
+        if (ownerUserId != null && ownerBrokerId != null) {
+            wrapper.and(scope -> scope.eq(MarketingContentEntity::getOwnerUserId, ownerUserId)
+                    .or(legacy -> legacy.isNull(MarketingContentEntity::getOwnerUserId)
+                            .eq(MarketingContentEntity::getOwnerBrokerId, ownerBrokerId)));
+        } else if (ownerUserId != null) {
+            wrapper.eq(MarketingContentEntity::getOwnerUserId, ownerUserId);
+        } else {
+            wrapper.eq(ownerBrokerId != null, MarketingContentEntity::getOwnerBrokerId, ownerBrokerId);
+        }
     }
 }

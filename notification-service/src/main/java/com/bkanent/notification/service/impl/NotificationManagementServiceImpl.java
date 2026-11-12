@@ -2,6 +2,7 @@ package com.bkanent.notification.service.impl;
 
 import com.bkanent.common.a2a.VerifiedDomainAuthorization;
 import com.bkanent.common.agent.SessionStreamEvent;
+import com.bkanent.common.rpc.AuthorizedNotificationPermit;
 import com.bkanent.common.authz.AuthzErrorCode;
 import com.bkanent.common.authz.AuthzException;
 import com.bkanent.notification.converter.NotificationConverter;
@@ -18,6 +19,7 @@ import com.bkanent.notification.service.NotificationRecordDomainService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
@@ -89,6 +91,42 @@ public class NotificationManagementServiceImpl implements NotificationManagement
         log.info("工作流事件通知已记录，eventType={}，taskId={}，notificationId={}",
                 event.eventType(), event.taskId(), entity.getId());
         return entity.getId();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Long sendAuthorizedReminder(AuthorizedNotificationPermit permit) {
+        if (permit == null || permit.recipientUserId() <= 0
+                || !AuthorizedNotificationPermit.CUSTOMER_ENTRUST_EXPIRING_SCENE.equals(permit.sceneCode())) {
+            throw new AuthzException(AuthzErrorCode.AUTHENTICATION_REQUIRED);
+        }
+        var existing = notificationRecordDomainService.getOne(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<NotificationRecordEntity>()
+                .eq(NotificationRecordEntity::getIdempotencyKey, permit.idempotencyKey()).last("limit 1"));
+        if (existing != null) return requireSameReminder(existing, permit);
+        NotificationRecordEntity entity = buildBaseRecord(NotificationChannelEnum.STATION.name(),
+                permit.recipientUserId(), null, null, permit.sceneCode(), permit.title(), permit.content());
+        entity.setIdempotencyKey(permit.idempotencyKey());
+        entity.setReadStatus(NotificationReadStatusEnum.UNREAD.name());
+        entity.setSendStatus(NotificationSendStatusEnum.SENT.name());
+        entity.setSendTime(LocalDateTime.now());
+        try {
+            notificationRecordDomainService.save(entity);
+            return entity.getId();
+        } catch (DuplicateKeyException duplicate) {
+            var raced = notificationRecordDomainService.getOne(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<NotificationRecordEntity>()
+                    .eq(NotificationRecordEntity::getIdempotencyKey, permit.idempotencyKey()).last("limit 1"));
+            if (raced == null) throw duplicate;
+            return requireSameReminder(raced, permit);
+        }
+    }
+
+    private static Long requireSameReminder(NotificationRecordEntity existing, AuthorizedNotificationPermit permit) {
+        if (existing.getRecipientUserId() == null || existing.getRecipientUserId() != permit.recipientUserId()
+                || !permit.sceneCode().equals(existing.getSceneCode())
+                || !permit.title().equals(existing.getTitle()) || !permit.content().equals(existing.getContent())) {
+            throw new AuthzException(AuthzErrorCode.CONTEXT_CONFLICT);
+        }
+        return existing.getId();
     }
 
     @Override

@@ -38,10 +38,31 @@ public final class AuthorizationRepository {
         return loadFacts(userId, now).map(facts -> calculator.calculate(facts, now));
     }
 
+    /** Counts currently usable administrators across both sides of the compatibility cutover. */
+    public int countActiveAdministratorsExcept(long excludedUserId, Instant now) {
+        Integer count = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM user_account u
+                JOIN auth_user_authorization_state s ON s.user_id=u.id
+                JOIN auth_authorization_policy policy ON policy.policy_id=1
+                WHERE u.id<>? AND u.deleted=0 AND u.account_status='ACTIVE' AND s.status='ACTIVE'
+                  AND ((policy.role_only_mode=0 AND u.business_admin=1) OR EXISTS (
+                    SELECT 1 FROM auth_user_role ur JOIN auth_role r ON r.id=ur.role_id
+                    JOIN auth_role_permission rp ON rp.role_id=r.id
+                    JOIN auth_permission p ON p.permission_code=rp.permission_code
+                    WHERE ur.user_id=u.id AND ur.active=1 AND r.active=1 AND r.deleted=0
+                      AND r.role_code='PLATFORM_ADMIN' AND rp.permission_code='auth.users.manage' AND p.active=1
+                      AND (ur.valid_from IS NULL OR ur.valid_from<=?)
+                      AND (ur.valid_until IS NULL OR ur.valid_until>?)
+                  ))
+                """, Integer.class, excludedUserId, timestamp(now), timestamp(now));
+        return count == null ? 0 : count;
+    }
+
     public Optional<AuthorizationFacts> loadFacts(long userId, Instant now) {
         Objects.requireNonNull(now, "now");
         return withWriterLock(() -> {
             processUserGrantBoundaries(userId, now);
+            processUserMembershipBoundaries(userId, now);
             return readFacts(userId, now);
         });
     }
@@ -66,6 +87,8 @@ public final class AuthorizationRepository {
                     """, (rs, row) -> new AuthorizationFacts.Permission(rs.getString("permission_code"),
                     rs.getString("domain"), rs.getString("operation"), rs.getInt("active") == 1,
                     rs.getLong("version")));
+            boolean roleOnlyMode = jdbc.queryForObject(
+                    "SELECT role_only_mode FROM auth_authorization_policy WHERE policy_id=1", Integer.class) == 1;
             List<AuthorizationFacts.RoleGrant> grants = jdbc.query("""
                     SELECT r.id, r.role_code, ur.valid_from, ur.valid_until
                     FROM auth_user_role ur JOIN auth_role r ON r.id = ur.role_id
@@ -87,9 +110,24 @@ public final class AuthorizationRepository {
             Map<String, Long> identities = new java.util.TreeMap<>();
             jdbc.query("SELECT identity_type,identity_id FROM auth_user_business_identity WHERE user_id=? ORDER BY identity_type",
                     (org.springframework.jdbc.core.RowCallbackHandler) rs -> identities.put(rs.getString(1), rs.getLong(2)), userId);
-            jdbc.query("SELECT store_id FROM auth_user_store_identity WHERE user_id=?",
-                    (org.springframework.jdbc.core.RowCallbackHandler) rs -> identities.put("STORE", rs.getLong(1)), userId);
-            return Optional.of(new AuthorizationFacts(users.get(0), catalog, grants, identities));
+            List<Long> legacyStores = jdbc.queryForList("SELECT store_id FROM auth_user_store_identity WHERE user_id=?",
+                    Long.class, userId);
+            List<Long> organizationStores = jdbc.queryForList("""
+                    SELECT o.store_business_id FROM auth_org_membership m
+                    JOIN auth_org_unit o ON o.id=m.org_id
+                    WHERE m.user_id=? AND m.status='ACTIVE' AND m.is_primary=1
+                      AND o.org_type='STORE' AND o.status='ACTIVE' AND o.store_business_id IS NOT NULL
+                      AND (m.valid_from IS NULL OR m.valid_from<=?)
+                      AND (m.valid_until IS NULL OR m.valid_until>?)
+                    """, Long.class, userId, timestamp(now), timestamp(now));
+            if (organizationStores.size() == 1 && (legacyStores.isEmpty()
+                    || legacyStores.size() == 1 && legacyStores.get(0).equals(organizationStores.get(0)))) {
+                identities.put("STORE", organizationStores.get(0));
+            } else if (organizationStores.isEmpty() && legacyStores.size() == 1) {
+                identities.put("STORE", legacyStores.get(0));
+            }
+            // Conflicting or ambiguous organization/legacy store mappings intentionally produce no STORE scope.
+            return Optional.of(new AuthorizationFacts(users.get(0), catalog, grants, identities, roleOnlyMode));
         });
     }
 
@@ -185,6 +223,23 @@ public final class AuthorizationRepository {
         resetGrantBoundaries(userId, now);
     }
 
+    /** Compatibility roleCode edits replace only the legacy primary role, preserving other explicit grants. */
+    public void updateCompatibilityAccountRole(long userId, String previousRoleCode, long roleId, Instant now) {
+        String nextRoleCode = jdbc.queryForObject("SELECT role_code FROM auth_role WHERE id=?", String.class, roleId);
+        String normalizedPrevious = previousRoleCode == null ? null : previousRoleCode.trim().toUpperCase(java.util.Locale.ROOT);
+        if (Objects.equals(normalizedPrevious, nextRoleCode)) return;
+        if (normalizedPrevious != null && !"PLATFORM_ADMIN".equals(normalizedPrevious)) {
+            jdbc.update("DELETE FROM auth_user_role WHERE user_id=? AND role_id IN "
+                    + "(SELECT id FROM auth_role WHERE role_code=? AND role_code<>'PLATFORM_ADMIN')",
+                    userId, normalizedPrevious);
+        }
+        if (jdbc.queryForObject("SELECT COUNT(*) FROM auth_user_role WHERE user_id=? AND role_id=?",
+                Integer.class, userId, roleId) == 0) {
+            jdbc.update("INSERT INTO auth_user_role(user_id,role_id,active) VALUES (?,?,1)", userId, roleId);
+        }
+        resetGrantBoundaries(userId, now);
+    }
+
     /** SQL acceptance precedes external revocation: pending events already deny token re-entry. */
     public LogoutEvent recordLogout(long userId, String tokenDigest, Instant expiresAt) {
         requireTokenDigest(tokenDigest);
@@ -230,6 +285,10 @@ public final class AuthorizationRepository {
             jdbc.queryForList("SELECT business_admin FROM user_account WHERE 1=0");
             jdbc.queryForList("SELECT event_id,lease_epoch,status FROM auth_authorization_outbox WHERE 1=0");
             jdbc.queryForList("SELECT role_id,valid_from,valid_until,active FROM auth_user_role WHERE 1=0");
+            jdbc.queryForList("SELECT membership_id,boundary_kind,boundary_at,processed_at FROM auth_authorization_membership_boundary WHERE 1=0");
+            jdbc.queryForList("SELECT policy_id,role_only_mode FROM auth_authorization_policy WHERE policy_id=1");
+            if (jdbc.queryForObject("SELECT COUNT(*) FROM auth_authorization_policy WHERE policy_id=1",
+                    Integer.class) != 1) throw new IllegalStateException("Authorization policy singleton missing");
             return null;
         });
     }
@@ -486,7 +545,7 @@ public final class AuthorizationRepository {
     public int processGrantBoundaries(Instant now, int limit) {
         if (limit < 1 || limit > 100) throw new IllegalArgumentException("Invalid boundary batch");
         return withWriterLock(() -> {
-            List<Long> users = jdbc.queryForList("""
+            TreeSet<Long> users = new TreeSet<>(jdbc.queryForList("""
                     SELECT DISTINCT due.user_id FROM (
                         SELECT user_id, role_id, 'START' boundary_kind, valid_from boundary_at
                         FROM auth_user_role WHERE active=1 AND valid_from IS NOT NULL AND valid_from <= ?
@@ -498,9 +557,25 @@ public final class AuthorizationRepository {
                         WHERE b.user_id=due.user_id AND b.role_id=due.role_id
                           AND b.boundary_kind=due.boundary_kind AND b.boundary_at=due.boundary_at)
                     ORDER BY due.user_id LIMIT ?
-                    """, Long.class, timestamp(now), timestamp(now), limit);
+                    """, Long.class, timestamp(now), timestamp(now), limit));
+            users.addAll(jdbc.queryForList("""
+                    SELECT DISTINCT m.user_id FROM auth_org_membership m
+                    WHERE m.status='ACTIVE' AND (
+                        (m.valid_from IS NOT NULL AND m.valid_from<=? AND NOT EXISTS (
+                            SELECT 1 FROM auth_authorization_membership_boundary b
+                            WHERE b.membership_id=m.id AND b.boundary_kind='START' AND b.boundary_at=m.valid_from))
+                        OR (m.valid_until IS NOT NULL AND m.valid_until<=? AND NOT EXISTS (
+                            SELECT 1 FROM auth_authorization_membership_boundary b
+                            WHERE b.membership_id=m.id AND b.boundary_kind='END' AND b.boundary_at=m.valid_until))
+                    ) ORDER BY m.user_id LIMIT ?
+                    """, Long.class, timestamp(now), timestamp(now), limit));
             int count = 0;
-            for (Long user : users) count += processUserGrantBoundaries(user, now);
+            int processedUsers = 0;
+            for (Long user : users) {
+                if (processedUsers++ >= limit) break;
+                count += processUserGrantBoundaries(user, now);
+                count += processUserMembershipBoundaries(user, now);
+            }
             return count;
         });
     }
@@ -535,6 +610,48 @@ public final class AuthorizationRepository {
         });
     }
 
+    /** Membership start/end boundaries bump the same user revision and durable outbox as role grants. */
+    public int processUserMembershipBoundaries(long userId, Instant now) {
+        return withWriterLock(() -> {
+            List<MembershipBoundary> due = jdbc.query("""
+                    SELECT due.membership_id,due.boundary_kind,due.boundary_at FROM (
+                        SELECT id membership_id,user_id,'START' boundary_kind,valid_from boundary_at
+                        FROM auth_org_membership WHERE user_id=? AND status='ACTIVE'
+                          AND valid_from IS NOT NULL AND valid_from<=?
+                        UNION ALL
+                        SELECT id membership_id,user_id,'END' boundary_kind,valid_until boundary_at
+                        FROM auth_org_membership WHERE user_id=? AND status='ACTIVE'
+                          AND valid_until IS NOT NULL AND valid_until<=?
+                    ) due JOIN user_account u ON u.id=due.user_id
+                    WHERE NOT EXISTS (SELECT 1 FROM auth_authorization_membership_boundary b
+                        WHERE b.membership_id=due.membership_id AND b.boundary_kind=due.boundary_kind
+                          AND b.boundary_at=due.boundary_at)
+                    ORDER BY due.boundary_at,due.membership_id,due.boundary_kind
+                    """, (rs,row) -> new MembershipBoundary(rs.getLong(1),rs.getString(2),rs.getTimestamp(3).toInstant()),
+                    userId,timestamp(now),userId,timestamp(now));
+            if (due.isEmpty()) return 0;
+            mutateUsers(List.of(userId), "ORG_MEMBERSHIP_BOUNDARY", false, template -> {
+                for (MembershipBoundary boundary : due) {
+                    template.update("""
+                            INSERT INTO auth_authorization_membership_boundary
+                            (membership_id,boundary_kind,boundary_at,processed_at) VALUES (?,?,?,?)
+                            """, boundary.membershipId(),boundary.kind(),timestamp(boundary.at()),timestamp(now));
+                    List<Long> mappedStores = template.queryForList("""
+                            SELECT o.store_business_id FROM auth_org_membership m
+                            JOIN auth_org_unit o ON o.id=m.org_id
+                            WHERE m.id=? AND m.user_id=? AND m.is_primary=1
+                              AND o.org_type='STORE' AND o.store_business_id IS NOT NULL
+                            """, Long.class, boundary.membershipId(), userId);
+                    for (Long storeId : mappedStores) {
+                        template.update("DELETE FROM auth_user_store_identity WHERE user_id=? AND store_id=?",
+                                userId, storeId);
+                    }
+                }
+            });
+            return due.size();
+        });
+    }
+
     /** Called inside a replacing-grants transaction, whose revision already records all past boundaries. */
     void resetGrantBoundaries(long userId, Instant now) {
         jdbc.update("DELETE FROM auth_authorization_grant_boundary WHERE user_id=?", userId);
@@ -552,7 +669,15 @@ public final class AuthorizationRepository {
                 """, timestamp(now), userId, timestamp(now));
     }
 
+    void markMembershipBoundaryProcessed(long membershipId, String kind, Instant boundaryAt, Instant now) {
+        jdbc.update("""
+                INSERT INTO auth_authorization_membership_boundary
+                (membership_id,boundary_kind,boundary_at,processed_at) VALUES (?,?,?,?)
+                """, membershipId, kind, timestamp(boundaryAt), timestamp(now));
+    }
+
     private record GrantBoundary(long roleId, String kind, Instant at) { }
+    private record MembershipBoundary(long membershipId, String kind, Instant at) { }
 
     private void lockWriter() {
         if (jdbc.queryForList("SELECT lock_id FROM auth_authorization_writer_lock WHERE lock_id = 1 FOR UPDATE",

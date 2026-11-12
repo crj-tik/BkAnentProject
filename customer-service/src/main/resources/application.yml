@@ -67,3 +67,9 @@ customer:
   comparison-report-verify:
     key-id: ${CUSTOMER_COMPARISON_REPORT_VERIFY_KEY_ID:customer-comparison-verify-current}
     signing-secret: ${CUSTOMER_COMPARISON_VERIFY_SECRET:}
+  reminder:
+    enabled: ${CUSTOMER_ENTRUST_REMINDER_ENABLED:false}
+    entrust-expire-days: ${CUSTOMER_ENTRUST_REMINDER_DAYS:7}
+    entrust-cron: ${CUSTOMER_ENTRUST_REMINDER_CRON:0 0 9 * * ?}
+    key-id: ${SERVICE_IDENTITY_KEY_ID:customer-service-current}
+    private-key-file: ${SERVICE_IDENTITY_PRIVATE_KEY_FILE:/run/secrets/service-identity.pem}

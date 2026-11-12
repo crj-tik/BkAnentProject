@@ -96,6 +96,15 @@ public class ListingMasterRpcServiceImpl implements ListingMasterRpcService {
                 authorizationProperties.decodedAuthorityPublicKeys());
         var listing = domain.getById(request.request().listingId());
         if (!com.bkanent.listing.rag.ListingRagIdentity.canRead(principal, listing)) return List.of();
+        var authContext = request.authorizationContext();
+        if (!authContext.allowedOperations().contains("listing.read.all")) {
+            long actorId = Long.parseLong(authContext.actorId());
+            Long brokerId = authContext.businessIdentities().get("BROKER");
+            boolean ownerMatches = listing.getOwnerUserId() != null
+                    ? listing.getOwnerUserId() == actorId
+                    : brokerId != null && brokerId.equals(listing.getBrokerId());
+            if (!ownerMatches) return List.of();
+        }
         return List.of(converter.toDto(listing));
     }
 
@@ -107,13 +116,16 @@ public class ListingMasterRpcServiceImpl implements ListingMasterRpcService {
         var scope = identity.openAuthorizedAssetWriteScope(request, authentication, authorization,
                 authorizationProperties.decodedAuthorityPublicKeys());
         try (scope) {
-            boolean businessWide = com.bkanent.common.authz.AuthzRequestScope.businessAdmin();
-            long brokerId = businessWide ? 0L
-                    : com.bkanent.common.authz.AuthzRequestScope.requireBrokerIdentity();
             var listing = domain.getById(request.request().listingId());
             if (listing == null || !Integer.valueOf(0).equals(listing.getDeleted())) return false;
-            if (businessWide) return true;
-            return listing.getBrokerId() != null && listing.getBrokerId() == brokerId;
+            try {
+                com.bkanent.common.authz.AuthzRequestScope.requireUserOrLegacyBrokerOwnership(
+                        listing.getOwnerUserId(), listing.getBrokerId(),
+                        "listing.assets.bind.own", "listing.assets.bind.all");
+                return true;
+            } catch (com.bkanent.common.authz.AuthzException denied) {
+                return false;
+            }
         }
     }
 
@@ -127,16 +139,20 @@ public class ListingMasterRpcServiceImpl implements ListingMasterRpcService {
         }
         var principal = identity.verifyAuthorizedAssetWriteContext(request, authentication,
                 authorizationProperties.decodedAuthorityPublicKeys());
-        Long brokerId = principal.businessAdmin() ? null
+        boolean businessWide = request.authorizationContext().allowedOperations().contains("listing.assets.bind.all");
+        long actorId = Long.parseLong(request.authorizationContext().actorId());
+        Long brokerId = businessWide ? null
                 : request.authorizationContext().businessIdentities().get("BROKER");
-        if (!principal.businessAdmin() && brokerId == null) {
+        if (!businessWide && brokerId == null) {
             throw new com.bkanent.common.authz.AuthzException(
                     com.bkanent.common.authz.AuthzErrorCode.PERMISSION_DENIED);
         }
         var listing = domain.getById(request.request().listingId());
         if (listing == null || !Integer.valueOf(0).equals(listing.getDeleted())) return false;
-        if (principal.businessAdmin()) return true;
-        return brokerId != null && listing.getBrokerId() != null && listing.getBrokerId().equals(brokerId);
+        if (businessWide) return true;
+        return listing.getOwnerUserId() != null
+                ? listing.getOwnerUserId() == actorId
+                : brokerId != null && listing.getBrokerId() != null && listing.getBrokerId().equals(brokerId);
     }
 
     /**

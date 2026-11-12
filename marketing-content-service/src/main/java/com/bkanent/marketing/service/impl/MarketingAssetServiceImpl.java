@@ -46,10 +46,12 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
     public List<MarketingContentDTO> saveContents(List<MarketingContentDTO> contents) {
         VerifiedDomainAuthorization.requireOperation("marketing.content.create.own");
         long ownerBrokerId = VerifiedDomainAuthorization.requireBrokerIdentity();
+        long ownerUserId = VerifiedDomainAuthorization.requireActorId();
         List<MarketingContentEntity> entities = contents.stream()
                 .map(marketingContentConverter::toEntity)
                 .peek(entity -> {
                     entity.setOwnerBrokerId(ownerBrokerId);
+                    entity.setOwnerUserId(ownerUserId);
                     entity.setAuditStatus(MarketingAuditStatusEnum.DRAFT.name());
                     entity.setStatus(MarketingPublishStatusEnum.DRAFT.name());
                 })
@@ -64,12 +66,14 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
 
     @Override
     public List<MarketingContentDTO> listByListingId(Long listingId) {
-        Long ownerBrokerId = VerifiedDomainAuthorization.requireBrokerScope(
+        String actorScope = VerifiedDomainAuthorization.requireActorScope(
                 "marketing.content.read.own", "marketing.content.read.all");
-        return list(new LambdaQueryWrapper<MarketingContentEntity>()
-                .eq(MarketingContentEntity::getListingId, listingId)
-                .eq(ownerBrokerId != null, MarketingContentEntity::getOwnerBrokerId, ownerBrokerId)
-                .orderByDesc(MarketingContentEntity::getVersionNo)
+        Long ownerUserId = actorScope == null ? null : Long.valueOf(actorScope);
+        Long ownerBrokerId = actorScope == null ? null : VerifiedDomainAuthorization.brokerIdentityOrNull();
+        LambdaQueryWrapper<MarketingContentEntity> query = new LambdaQueryWrapper<MarketingContentEntity>()
+                .eq(MarketingContentEntity::getListingId, listingId);
+        appendOwnerFilter(query, ownerUserId, ownerBrokerId);
+        return list(query.orderByDesc(MarketingContentEntity::getVersionNo)
                 .orderByDesc(MarketingContentEntity::getUpdatedAt))
                 .stream()
                 .map(marketingContentConverter::toDto)
@@ -101,10 +105,12 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
     public MarketingContentDetailResponse createContent(MarketingContentUpsertRequest request) {
         VerifiedDomainAuthorization.requireOperation("marketing.content.create.own");
         long ownerBrokerId = VerifiedDomainAuthorization.requireBrokerIdentity();
+        long ownerUserId = VerifiedDomainAuthorization.requireActorId();
         validateUpsertRequest(request);
         MarketingContentEntity entity = new MarketingContentEntity();
         applyUpsert(entity, request);
         entity.setOwnerBrokerId(ownerBrokerId);
+        entity.setOwnerUserId(ownerUserId);
         entity.setParentContentId(null);
         entity.setVersionNo(1);
         entity.setStatus(MarketingPublishStatusEnum.DRAFT.name());
@@ -120,12 +126,12 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
         Long ownerBrokerId = VerifiedDomainAuthorization.requireBrokerScope(
                 "marketing.content.variant.create.own", "marketing.content.variant.create.all");
         MarketingContentEntity sourceEntity = requireContent(sourceContentId,
-                "marketing.content.variant.create.own", "marketing.content.variant.create.all", ownerBrokerId);
+                "marketing.content.variant.create.own", "marketing.content.variant.create.all");
         validateUpsertRequest(request);
         MarketingContentEntity entity = new MarketingContentEntity();
         applyUpsert(entity, request);
-        entity.setOwnerBrokerId(ownerBrokerId == null
-                ? VerifiedDomainAuthorization.requireBrokerIdentity() : ownerBrokerId);
+        entity.setOwnerBrokerId(ownerBrokerId == null ? sourceEntity.getOwnerBrokerId() : ownerBrokerId);
+        entity.setOwnerUserId(VerifiedDomainAuthorization.requireActorId());
         entity.setParentContentId(sourceContentId);
         entity.setVersionNo(sourceEntity.getVersionNo() == null ? 1 : sourceEntity.getVersionNo() + 1);
         entity.setStatus(MarketingPublishStatusEnum.DRAFT.name());
@@ -147,13 +153,13 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
     @Override
     @Transactional(rollbackFor = Exception.class)
     public MarketingContentDetailResponse updateAuditStatus(Long contentId, String auditStatus) {
-        Long ownerBrokerId = VerifiedDomainAuthorization.requireBrokerScope(
+        VerifiedDomainAuthorization.requireActorScope(
                 "marketing.content.review.own", "marketing.content.review.all");
         if (!MarketingAuditStatusEnum.contains(auditStatus)) {
             throw new IllegalArgumentException("审核状态不合法: " + auditStatus);
         }
         MarketingContentEntity entity = requireContent(contentId,
-                "marketing.content.review.own", "marketing.content.review.all", ownerBrokerId);
+                "marketing.content.review.own", "marketing.content.review.all");
         entity.setAuditStatus(auditStatus.toUpperCase());
         updateById(entity);
         marketingContentSearchService.indexContent(entity);
@@ -162,9 +168,11 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
 
     @Override
     public List<MarketingContentDetailResponse> searchContents(MarketingContentSearchRequest request) {
-        Long ownerBrokerId = VerifiedDomainAuthorization.requireBrokerScope(
+        String actorScope = VerifiedDomainAuthorization.requireActorScope(
                 "marketing.content.read.own", "marketing.content.read.all");
-        return marketingContentSearchService.search(request, ownerBrokerId).stream()
+        Long ownerUserId = actorScope == null ? null : Long.valueOf(actorScope);
+        Long ownerBrokerId = actorScope == null ? null : VerifiedDomainAuthorization.brokerIdentityOrNull();
+        return marketingContentSearchService.search(request, ownerBrokerId, ownerUserId).stream()
                 .map(marketingContentConverter::toDetailResponse)
                 .toList();
     }
@@ -203,19 +211,25 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
     }
 
     private MarketingContentEntity requireContent(Long contentId, String ownOperation, String businessWideOperation) {
-        Long ownerBrokerId = VerifiedDomainAuthorization.requireBrokerScope(ownOperation, businessWideOperation);
-        return requireContent(contentId, ownOperation, businessWideOperation, ownerBrokerId);
-    }
-
-    private MarketingContentEntity requireContent(Long contentId, String ownOperation,
-                                                  String businessWideOperation, Long ownerBrokerId) {
-        MarketingContentEntity entity = ownerBrokerId == null ? getById(contentId)
-                : getOne(new LambdaQueryWrapper<MarketingContentEntity>()
-                        .eq(MarketingContentEntity::getId, contentId)
-                        .eq(MarketingContentEntity::getOwnerBrokerId, ownerBrokerId));
+        MarketingContentEntity entity = getById(contentId);
         if (entity == null) {
             throw new IllegalArgumentException("营销内容不存在: " + contentId);
         }
+        VerifiedDomainAuthorization.requireUserOrLegacyBrokerOwnership(entity.getOwnerUserId(),
+                entity.getOwnerBrokerId(), ownOperation, businessWideOperation);
         return entity;
+    }
+
+    private static void appendOwnerFilter(LambdaQueryWrapper<MarketingContentEntity> query,
+                                          Long ownerUserId, Long ownerBrokerId) {
+        if (ownerUserId != null && ownerBrokerId != null) {
+            query.and(scope -> scope.eq(MarketingContentEntity::getOwnerUserId, ownerUserId)
+                    .or(legacy -> legacy.isNull(MarketingContentEntity::getOwnerUserId)
+                            .eq(MarketingContentEntity::getOwnerBrokerId, ownerBrokerId)));
+        } else if (ownerUserId != null) {
+            query.eq(MarketingContentEntity::getOwnerUserId, ownerUserId);
+        } else {
+            query.eq(ownerBrokerId != null, MarketingContentEntity::getOwnerBrokerId, ownerBrokerId);
+        }
     }
 }

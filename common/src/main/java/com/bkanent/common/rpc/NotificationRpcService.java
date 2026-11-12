@@ -5,6 +5,12 @@ package com.bkanent.common.rpc;
  */
 public interface NotificationRpcService {
 
+    /** Verifies a caller-signed, short-lived permit for one idempotent system reminder. */
+    default void sendAuthorizedReminder(AuthorizedNotificationPermit permit) {
+        throw new com.bkanent.common.authz.AuthzException(
+                com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
+    }
+
     /**
      * 业务方法：sendStationMessage。
      */

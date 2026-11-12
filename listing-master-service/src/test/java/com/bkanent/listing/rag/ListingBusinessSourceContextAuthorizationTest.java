@@ -43,11 +43,13 @@ class ListingBusinessSourceContextAuthorizationTest {
     }
 
     @Test
-    void rejectsCallerAudienceAndMissingOwnBrokerMapping() throws Exception {
+    void rejectsCallerAudienceAndAllowsUserOwnerWithoutLegacyBrokerMapping() throws Exception {
         var missingBroker = fixture(List.of("listing.read"), Map.of());
-        assertEquals(RagErrorCode.FORBIDDEN, assertThrows(RagException.class,
-                () -> missingBroker.identity.verifyAuthorizedBusinessSourceContext(missingBroker.request,
-                        missingBroker.envelope, missingBroker.authorityKeys)).code());
+        var ownerScope = missingBroker.identity.verifyAuthorizedBusinessSourceContext(missingBroker.request,
+                missingBroker.envelope, missingBroker.authorityKeys);
+        assertEquals(42, ownerScope.actorId());
+        assertNull(ownerScope.brokerId());
+        assertFalse(ownerScope.businessWideRead());
 
         var wrongAudience = fixture(List.of("listing.read"), Map.of("BROKER", 84L));
         var context = wrongAudience.request.authorizationContext();

@@ -152,6 +152,21 @@ class MemoryControllerTest {
     }
 
     @Test
+    void authenticatedOwnerGetsEmptyResultForSessionNotCreatedYet() throws Exception {
+        var sessions = mock(SessionSharedMemoryService.class);
+        var security = security();
+        when(sessions.find("new-session")).thenReturn(Optional.empty());
+        var mvc = mvc(new MemoryController(sessions, null, null, null, null, null, security, null, null), security);
+
+        mvc.perform(get("/internal/memory/sessions").param("sessionId", "new-session")
+                        .header("Authorization", "Bearer valid-token").header(MemoryTransportHeaders.OWNER, "42"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+
+        verify(sessions).find("new-session");
+    }
+
+    @Test
     void missingPersistedSessionNeverAuthorizesArtifactHandoffOrSnapshotWrites() throws Exception {
         var sessions = mock(SessionSharedMemoryService.class);
         var artifacts = mock(TaskArtifactMemoryService.class);

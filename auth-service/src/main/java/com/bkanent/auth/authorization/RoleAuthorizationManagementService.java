@@ -58,10 +58,11 @@ public class RoleAuthorizationManagementService {
             GeneratedKeyHolder key = new GeneratedKeyHolder();
             var result = repository.mutateRole(-1, "ROLE_CREATED", jdbc -> {
                 jdbc.update(connection -> {
-                    var statement = connection.prepareStatement("INSERT INTO auth_role(role_code,role_name,description,active,assignable) VALUES (?,?,?,?,?)", new String[]{"id"});
+                    var statement = connection.prepareStatement("INSERT INTO auth_role(role_code,role_name,description,active,assignable,role_type) VALUES (?,?,?,?,?,?)", new String[]{"id"});
                     statement.setString(1, definition.code()); statement.setString(2, definition.name());
                     statement.setString(3, definition.description()); statement.setInt(4, definition.active()?1:0);
                     statement.setInt(5, definition.assignable()?1:0);
+                    statement.setString(6, definition.roleType() == null ? "UNCLASSIFIED" : definition.roleType());
                     return statement;
                 }, key);
                 replacePermissions(Objects.requireNonNull(key.getKey()).longValue(), definition.permissionCodes());
@@ -80,8 +81,8 @@ public class RoleAuthorizationManagementService {
             if (!existing.code().equals(definition.code())) throw error(HttpStatus.BAD_REQUEST, "Role code is immutable");
             ensureCatalog(definition.permissionCodes());
             var result = repository.mutateRole(roleId, "ROLE_UPDATED", jdbc -> {
-                jdbc.update("UPDATE auth_role SET role_name=?,description=?,active=?,assignable=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND deleted=0",
-                        definition.name(), definition.description(), definition.active()?1:0, definition.assignable()?1:0, roleId);
+                jdbc.update("UPDATE auth_role SET role_name=?,description=?,active=?,assignable=?,role_type=COALESCE(?,role_type),updated_at=CURRENT_TIMESTAMP WHERE id=? AND deleted=0",
+                        definition.name(), definition.description(), definition.active()?1:0, definition.assignable()?1:0, definition.roleType(), roleId);
                 replacePermissions(roleId, definition.permissionCodes());
             });
             audit(actor, "ROLE_UPDATED", "ROLE", roleId, result);
@@ -115,6 +116,60 @@ public class RoleAuthorizationManagementService {
         });
     }
 
+    /** Explicitly approves the permission set for the reserved admin role; no wildcard is synthesized. */
+    public ManagementResult updatePreparedAdministratorPermissions(String accessToken, List<String> permissionCodes) {
+        final List<String> requested = permissionCodes == null ? null : new java.util.ArrayList<>(permissionCodes);
+        return authenticated(accessToken, "auth.roles.manage", actor -> {
+            if (!actor.businessAdmin()) throw error(HttpStatus.FORBIDDEN, "Platform administrator required");
+            if (requested == null || requested.size() > 500 || !requested.contains("auth.users.manage")) {
+                throw error(HttpStatus.BAD_REQUEST, "Administrator role must retain auth.users.manage");
+            }
+            long roleId = requirePreparedAdministratorRole();
+            ensureCatalog(requested);
+            if (new TreeSet<>(requested).size() != requested.size()) {
+                throw error(HttpStatus.BAD_REQUEST, "Duplicate administrator permission");
+            }
+            var result = repository.mutateRole(roleId, "PLATFORM_ADMIN_PERMISSIONS_UPDATED", jdbc -> {
+                replacePermissions(roleId, requested);
+                if (repository.countActiveAdministratorsExcept(0, clock.instant()) == 0) {
+                    throw error(HttpStatus.CONFLICT, "At least one active administrator must remain");
+                }
+            });
+            audit(actor, "PLATFORM_ADMIN_PERMISSIONS_UPDATED", "ROLE", roleId, result);
+            return new ManagementResult(roleId, result.eventId(), result.versions(), false);
+        });
+    }
+
+    /** One-way global cutover after legacy users are migrated and the reserved role matches the active catalog. */
+    public ManagementResult enableRoleOnlyMode(String accessToken) {
+        return authenticated(accessToken, "auth.users.manage", actor -> {
+            if (!actor.businessAdmin()) throw error(HttpStatus.FORBIDDEN, "Platform administrator required");
+            int roleOnly = repository.jdbc().queryForObject(
+                    "SELECT role_only_mode FROM auth_authorization_policy WHERE policy_id=1", Integer.class);
+            if (roleOnly == 1) return new ManagementResult(1, null, List.of(), false);
+            int legacyAdmins = repository.jdbc().queryForObject("""
+                    SELECT COUNT(*) FROM user_account
+                    WHERE business_admin=1 AND deleted=0 AND account_status='ACTIVE'
+                    """, Integer.class);
+            if (legacyAdmins != 0) {
+                throw error(HttpStatus.CONFLICT, "Migrate or revoke every active legacy administrator first");
+            }
+            long adminRoleId = requirePreparedAdministratorRole();
+            if (repository.countActiveAdministratorsExcept(0, clock.instant()) == 0) {
+                throw error(HttpStatus.CONFLICT, "At least one active role-based administrator must remain");
+            }
+            requireEquivalentAdministratorPermissions(adminRoleId, actor.userId());
+            var result = repository.mutateCatalog("AUTHZ_ROLE_ONLY_MODE_ENABLED", jdbc -> {
+                if (jdbc.update("UPDATE auth_authorization_policy SET role_only_mode=1,updated_at=CURRENT_TIMESTAMP "
+                                + "WHERE policy_id=1 AND role_only_mode=0") != 1) {
+                    throw error(HttpStatus.CONFLICT, "Authorization mode changed concurrently");
+                }
+            });
+            audit(actor, "AUTHZ_ROLE_ONLY_MODE_ENABLED", "POLICY", 1, result);
+            return new ManagementResult(1, result.eventId(), result.versions(), false);
+        });
+    }
+
     public List<UserRoleGrant> userRoles(String accessToken, long userId) {
         return authenticated(accessToken, "auth.users.manage", actor -> {
             requireActiveUser(userId);
@@ -127,6 +182,9 @@ public class RoleAuthorizationManagementService {
         final List<UserRoleGrant> requested = grants == null ? null : new java.util.ArrayList<>(grants);
         return authenticated(accessToken, "auth.users.manage", actor -> {
             requireActiveUser(userId);
+            if (hasActivePlatformAdminGrant(userId, clock.instant())) {
+                throw error(HttpStatus.CONFLICT, "Platform administrator grants require the dedicated administrator operation");
+            }
             if (requested == null || requested.size() > 100) throw error(HttpStatus.BAD_REQUEST, "Invalid grant count");
             var unique = new TreeSet<Long>();
             Instant now = clock.instant();
@@ -150,9 +208,16 @@ public class RoleAuthorizationManagementService {
     public ManagementResult setBusinessAdmin(String accessToken, long userId, boolean enabled) {
         return authenticated(accessToken, "auth.users.manage", actor -> {
             // Delegated user management does not include granting the independent global-admin flag.
-            if (!actor.businessAdmin()) throw error(HttpStatus.FORBIDDEN, "Business administrator required");
-            requireActiveUser(userId);
+            if (!actor.businessAdmin() || !legacyAdministrator(actor.userId()))
+                throw error(HttpStatus.FORBIDDEN, "Legacy business administrator required during migration");
+            requireExistingUser(userId);
+            if (enabled) {
+                throw error(HttpStatus.CONFLICT, "New administrators must use the explicit role-based administrator operation");
+            }
             if (!enabled && actor.userId()==userId) throw error(HttpStatus.FORBIDDEN, "Cannot revoke own administrator flag");
+            if (!legacyAdministrator(userId) && !enabled) {
+                throw error(HttpStatus.CONFLICT, "Use the role-based administrator operation");
+            }
             var result = repository.mutateUsers(List.of(userId), "BUSINESS_ADMIN_CHANGED", false, jdbc -> {
                 jdbc.update("UPDATE user_account SET business_admin=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", enabled?1:0, userId);
                 // During migration, revoking the legacy flag must not leave the prepared full-access role behind.
@@ -161,20 +226,50 @@ public class RoleAuthorizationManagementService {
                             + "(SELECT id FROM auth_role WHERE role_code='PLATFORM_ADMIN')", userId);
                     repository.resetGrantBoundaries(userId, clock.instant());
                 }
-                Integer admins = jdbc.queryForObject("""
-                        SELECT COUNT(*) FROM user_account u JOIN auth_user_authorization_state s ON s.user_id=u.id
-                        WHERE u.business_admin=1 AND u.deleted=0 AND u.account_status='ACTIVE' AND s.status='ACTIVE'
-                        """, Integer.class);
-                if (admins == null || admins==0) throw error(HttpStatus.CONFLICT, "At least one active business administrator must remain");
+                if (repository.countActiveAdministratorsExcept(0, clock.instant()) == 0)
+                    throw error(HttpStatus.CONFLICT, "At least one active administrator must remain");
             });
             audit(actor, "BUSINESS_ADMIN_CHANGED", "USER", userId, result);
             return new ManagementResult(userId, result.eventId(), result.versions(), false);
         });
     }
 
+    /** Atomically replaces the legacy global flag with a reserved, explicitly granted role. */
+    public ManagementResult setPlatformAdministrator(String accessToken, long userId, boolean enabled) {
+        return authenticated(accessToken, "auth.users.manage", actor -> {
+            if (!actor.businessAdmin()) throw error(HttpStatus.FORBIDDEN, "Business administrator required");
+            if (enabled) requireActiveUser(userId); else requireExistingUser(userId);
+            long roleId = requirePreparedAdministratorRole();
+            boolean roleGrant = hasActivePlatformAdminGrant(userId, clock.instant());
+            boolean legacy = legacyAdministrator(userId);
+            if (enabled && roleGrant && !legacy || !enabled && !roleGrant && !legacy) {
+                return new ManagementResult(userId, null, List.of(), false);
+            }
+            if (enabled) requireEquivalentAdministratorPermissions(roleId, userId);
+            else if (repository.countActiveAdministratorsExcept(userId, clock.instant()) == 0) {
+                throw error(HttpStatus.CONFLICT, "At least one active administrator must remain");
+            }
+            var result = repository.mutateUsers(List.of(userId), enabled
+                    ? "PLATFORM_ADMIN_MIGRATED" : "PLATFORM_ADMIN_REVOKED", false, jdbc -> {
+                if (enabled) {
+                    if (!roleGrant) jdbc.update("INSERT INTO auth_user_role(user_id,role_id,valid_from,valid_until,active) "
+                            + "VALUES (?,?,NULL,NULL,1)", userId, roleId);
+                    jdbc.update("UPDATE user_account SET business_admin=0,updated_at=CURRENT_TIMESTAMP WHERE id=?", userId);
+                } else {
+                    jdbc.update("DELETE FROM auth_user_role WHERE user_id=? AND role_id=?", userId, roleId);
+                    jdbc.update("UPDATE user_account SET business_admin=0,updated_at=CURRENT_TIMESTAMP WHERE id=?", userId);
+                }
+                repository.resetGrantBoundaries(userId, clock.instant());
+                if (repository.countActiveAdministratorsExcept(0, clock.instant()) == 0)
+                    throw error(HttpStatus.CONFLICT, "At least one active administrator must remain");
+            });
+            audit(actor, enabled ? "PLATFORM_ADMIN_MIGRATED" : "PLATFORM_ADMIN_REVOKED", "USER", userId, result);
+            return new ManagementResult(userId, result.eventId(), result.versions(), false);
+        });
+    }
+
     public BusinessIdentityChange setBrokerIdentity(String accessToken, long userId, Long brokerId) {
         return authenticated(accessToken, "auth.business-identity.manage", actor -> {
-            if (!actor.businessAdmin()) throw error(HttpStatus.FORBIDDEN, "Business administrator required");
             requireActiveUser(userId);
             if (brokerId != null && brokerId <= 0) throw error(HttpStatus.BAD_REQUEST, "Invalid broker id");
             List<Long> current = repository.jdbc().queryForList(
@@ -205,12 +300,27 @@ public class RoleAuthorizationManagementService {
 
     public StoreIdentityChange setStoreIdentity(String accessToken, long userId, Long storeId) {
         return authenticated(accessToken, "auth.business-identity.manage", actor -> {
-            if (!actor.businessAdmin()) throw error(HttpStatus.FORBIDDEN, "Business administrator required");
             requireActiveUser(userId);
             if (storeId != null && storeId <= 0) throw error(HttpStatus.BAD_REQUEST, "Invalid store id");
             List<Long> current = repository.jdbc().queryForList(
                     "SELECT store_id FROM auth_user_store_identity WHERE user_id=?", Long.class, userId);
             Long oldStoreId = current.isEmpty() ? null : current.get(0);
+            List<Long> organizationStoreIds = repository.jdbc().queryForList("""
+                    SELECT o.store_business_id FROM auth_org_membership m
+                    JOIN auth_org_unit o ON o.id=m.org_id
+                    WHERE m.user_id=? AND m.is_primary=1 AND m.status='ACTIVE'
+                      AND o.org_type='STORE' AND o.status='ACTIVE' AND o.store_business_id IS NOT NULL
+                      AND (m.valid_until IS NULL OR m.valid_until>?)
+                    ORDER BY m.valid_from
+                    """, Long.class, userId, timestamp(clock.instant()));
+            if (!organizationStoreIds.isEmpty()) {
+                if (storeId == null && oldStoreId == null
+                        || storeId != null && organizationStoreIds.size() == 1
+                        && organizationStoreIds.get(0).equals(storeId)) {
+                    return new StoreIdentityChange(userId, storeId, null, List.of());
+                }
+                throw error(HttpStatus.CONFLICT, "Store scope is derived from organization membership");
+            }
             if (Objects.equals(oldStoreId, storeId)) return new StoreIdentityChange(userId, storeId, null, List.of());
             var result = repository.mutateUsers(List.of(userId), "STORE_IDENTITY_CHANGED", false, jdbc -> {
                 jdbc.update("DELETE FROM auth_user_store_identity WHERE user_id=?", userId);
@@ -224,7 +334,6 @@ public class RoleAuthorizationManagementService {
 
     public List<BusinessIdentity> businessIdentities(String accessToken, long userId) {
         return authenticated(accessToken, "auth.business-identity.manage", actor -> {
-            if (!actor.businessAdmin()) throw error(HttpStatus.FORBIDDEN, "Business administrator required");
             requireActiveUser(userId);
             var identities = new java.util.ArrayList<>(repository.jdbc().query("""
                     SELECT identity_type,identity_id FROM auth_user_business_identity
@@ -261,13 +370,65 @@ public class RoleAuthorizationManagementService {
         if (principal==null || !"access".equals(principal.tokenType())) throw error(HttpStatus.UNAUTHORIZED, "Valid access token required");
         var snapshot = repository.snapshot(principal.userId(), clock.instant()).orElseThrow(() -> error(HttpStatus.UNAUTHORIZED, "Unknown authorization state"));
         if (!"ACTIVE".equals(snapshot.status())) throw error(HttpStatus.UNAUTHORIZED, "Inactive user");
-        if (!snapshot.hasPermission(permission, clock.instant())) throw error(HttpStatus.FORBIDDEN, "Management permission required");
+        Instant now = clock.instant();
+        if (!snapshot.businessAdmin() || !snapshot.hasPermission(permission, now))
+            throw error(HttpStatus.FORBIDDEN, "Platform administrator and management permission required");
         return snapshot;
     }
 
     private void requireActiveUser(long userId) {
         if (userId<=0 || repository.jdbc().queryForObject("SELECT COUNT(*) FROM user_account WHERE id=? AND deleted=0 AND account_status='ACTIVE'", Integer.class, userId)!=1)
             throw error(HttpStatus.NOT_FOUND, "Active user not found");
+    }
+
+    private void requireExistingUser(long userId) {
+        if (userId <= 0 || repository.jdbc().queryForObject(
+                "SELECT COUNT(*) FROM user_account WHERE id=? AND deleted=0", Integer.class, userId) != 1) {
+            throw error(HttpStatus.NOT_FOUND, "User not found");
+        }
+    }
+
+    private boolean legacyAdministrator(long userId) {
+        return repository.jdbc().queryForObject(
+                "SELECT COUNT(*) FROM user_account WHERE id=? AND business_admin=1 AND deleted=0 AND account_status='ACTIVE'",
+                Integer.class, userId) == 1;
+    }
+
+    private boolean hasActivePlatformAdminGrant(long userId, Instant now) {
+        return repository.jdbc().queryForObject("""
+                SELECT COUNT(*) FROM auth_user_role ur JOIN auth_role r ON r.id=ur.role_id
+                WHERE ur.user_id=? AND ur.active=1 AND r.role_code='PLATFORM_ADMIN' AND r.active=1 AND r.deleted=0
+                  AND (ur.valid_from IS NULL OR ur.valid_from<=?)
+                  AND (ur.valid_until IS NULL OR ur.valid_until>?)
+                """, Integer.class, userId, timestamp(now), timestamp(now)) > 0;
+    }
+
+    private long requirePreparedAdministratorRole() {
+        var ids = repository.jdbc().queryForList("""
+                SELECT id FROM auth_role WHERE role_code='PLATFORM_ADMIN' AND role_type='MANAGEMENT'
+                  AND active=1 AND assignable=0 AND deleted=0
+                """, Long.class);
+        if (ids.size() != 1) throw error(HttpStatus.CONFLICT, "Prepared administrator role is unavailable");
+        return ids.get(0);
+    }
+
+    private void requireEquivalentAdministratorPermissions(long roleId, long userId) {
+        Instant now = clock.instant();
+        var facts = repository.loadFacts(userId, now)
+                .orElseThrow(() -> error(HttpStatus.NOT_FOUND, "Active user not found"));
+        var expected = facts.catalog().stream().filter(AuthorizationFacts.Permission::active)
+                .filter(permission -> !com.bkanent.common.authz.AuthzOperationPolicy.isBaseline(permission.code()))
+                .map(AuthorizationFacts.Permission::code).collect(java.util.stream.Collectors.toCollection(TreeSet::new));
+        var actual = repository.jdbc().queryForList("""
+                SELECT rp.permission_code FROM auth_role_permission rp
+                JOIN auth_permission p ON p.permission_code=rp.permission_code
+                WHERE rp.role_id=? AND p.active=1 ORDER BY rp.permission_code
+                """, String.class, roleId).stream()
+                .filter(code -> !com.bkanent.common.authz.AuthzOperationPolicy.isBaseline(code))
+                .collect(java.util.stream.Collectors.toCollection(TreeSet::new));
+        if (!expected.equals(actual)) {
+            throw error(HttpStatus.CONFLICT, "Prepared administrator role does not match the current permission catalog");
+        }
     }
 
     private Role requireRole(long roleId, boolean assignable) {
@@ -288,6 +449,7 @@ public class RoleAuthorizationManagementService {
         if (role==null || role.code()==null || !role.code().matches("[A-Z][A-Z0-9_]{0,31}")
                 || role.name()==null || role.name().isBlank() || role.name().length()>64
                 || role.description()!=null && role.description().length()>255
+                || role.roleType()!=null && !List.of("JOB", "MANAGEMENT", "UNCLASSIFIED").contains(role.roleType())
                 || role.permissionCodes()==null || role.permissionCodes().size()>500) throw error(HttpStatus.BAD_REQUEST, "Invalid role definition");
     }
 
@@ -321,9 +483,13 @@ public class RoleAuthorizationManagementService {
     private static Instant instant(Timestamp timestamp) { return timestamp==null?null:timestamp.toInstant(); }
     private static Timestamp timestamp(Instant instant) { return instant==null?null:Timestamp.from(instant); }
 
-    public record RoleDefinition(String code,String name,String description,boolean active,boolean assignable,List<String> permissionCodes) {
+    public record RoleDefinition(String code,String name,String description,boolean active,boolean assignable,List<String> permissionCodes,String roleType) {
         public RoleDefinition {
             permissionCodes = permissionCodes == null ? null : java.util.Collections.unmodifiableList(new java.util.ArrayList<>(permissionCodes));
+        }
+        public RoleDefinition(String code, String name, String description, boolean active, boolean assignable,
+                              List<String> permissionCodes) {
+            this(code, name, description, active, assignable, permissionCodes, null);
         }
     }
     public record Role(long id,String code,String name,String description,boolean active,boolean assignable,List<String> permissionCodes,String roleType) {

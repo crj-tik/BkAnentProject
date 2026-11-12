@@ -15,6 +15,8 @@ public class ListingEntity extends BaseEntity {
      * 业务属性：brokerId。
      */
     private Long brokerId;
+    /** Auth user who owns this platform listing; null only for legacy rows pending evidence review. */
+    private Long ownerUserId;
     /**
      * 业务属性：ownerCustomerId（Customer 域业主档案 ID，仅存量可空，非产权证明）。
      */
@@ -127,6 +129,10 @@ public class ListingEntity extends BaseEntity {
     public void setBrokerId(Long brokerId) {
         this.brokerId = brokerId;
     }
+
+    public Long getOwnerUserId() { return ownerUserId; }
+
+    public void setOwnerUserId(Long ownerUserId) { this.ownerUserId = ownerUserId; }
 
     public Long getOwnerCustomerId() {
         return ownerCustomerId;

@@ -124,12 +124,10 @@ agent:
     max-users: 1000
     max-sessions: 4000
     max-sessions-per-user: 32
-    # Capability ID -> exact Auth operation; baseline operations are signed actions, not role grants.
+    # Restricted capabilities map to granted operations; baseline A2A capabilities are listed separately.
     capability-permissions:
       "[local:milvusKnowledgeSearch]": agent.rag.search
-      "[a2a:listing-agent]": listing.read
-      "[a2a:platform-operations-agent]": agent.chat.use
-    # Only exact local capability IDs belong here; every call still needs a signed actor and bound run.
+    # Only exact reviewed A2A IDs; each call still needs a signed actor and bound run.
     baseline-capabilities: ${AGENT_AUTHORIZATION_BASELINE_CAPABILITIES:}
     # Keep user-delegated MCP destinations closed until static streamable-http connections exist.
     mcp-target-audiences: {}
@@ -274,3 +272,9 @@ rocketmq:
   name-server: ${ROCKETMQ_NAME_SERVER:10.117.102.54:9876}
   producer:
     group: ${AGENT_STREAM_ROCKETMQ_PRODUCER_GROUP:agent-service-session-stream-producer}
+
+# Pin only the Memory V2 consumer; other Agent Dubbo calls follow each provider's negotiated protocol.
+dubbo:
+  reference:
+    com.bkanent.common.memory.MemoryV2RpcService:
+      serialization: fastjson2ctor

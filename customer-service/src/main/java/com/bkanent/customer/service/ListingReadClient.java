@@ -30,7 +30,7 @@ public class ListingReadClient {
 
     public UserRead authenticate() {
         if (com.bkanent.common.authz.AuthzRequestScope.present()) {
-            String operation = com.bkanent.common.authz.AuthzRequestScope.businessAdmin()
+            String operation = com.bkanent.common.authz.AuthzRequestScope.hasOperation("listing.read.all")
                     ? "listing.read.all" : "listing.read";
             com.bkanent.common.authz.AuthzRequestScope.requireOperation(operation);
             var response = com.bkanent.common.authz.AuthzRequestScope.requireCurrent();

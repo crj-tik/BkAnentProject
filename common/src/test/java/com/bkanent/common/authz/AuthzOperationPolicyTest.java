@@ -33,4 +33,5 @@ class AuthzOperationPolicyTest {
         assertThat(AuthzOperationPolicy.allows("invented.action", List.of("invented.action"),
                 List.of())).isFalse();
     }
+
 }

@@ -75,15 +75,19 @@ public interface UserAccountMapper extends BaseMapper<UserAccountEntity> {
             + "WHERE id = #{userId} AND deleted = 0 AND account_status = 'ACTIVE'")
     int updateOwnDisplayName(@Param("userId") long userId, @Param("displayName") String displayName);
 
-    @Select("SELECT o.id,o.org_code,o.org_name,o.org_type,o.parent_id,m.is_primary "
+    @Select("SELECT o.id,o.org_code,o.org_name,o.org_type,o.parent_id,m.is_primary,"
+            + "c.id company_id,c.org_code company_code,c.org_name company_name "
             + "FROM auth_org_membership m JOIN auth_org_unit o ON o.id=m.org_id "
+            + "JOIN auth_org_unit c ON c.id=o.parent_id AND c.org_type='COMPANY' "
             + "WHERE m.user_id=#{userId} AND m.status='ACTIVE' AND o.status='ACTIVE' "
             + "AND (m.valid_from IS NULL OR m.valid_from<=#{now}) "
             + "AND (m.valid_until IS NULL OR m.valid_until>#{now}) ORDER BY m.is_primary DESC,o.id")
     @ConstructorArgs({
             @Arg(column="id", javaType=Long.class), @Arg(column="org_code", javaType=String.class),
             @Arg(column="org_name", javaType=String.class), @Arg(column="org_type", javaType=String.class),
-            @Arg(column="parent_id", javaType=Long.class), @Arg(column="is_primary", javaType=boolean.class)
+            @Arg(column="parent_id", javaType=Long.class), @Arg(column="is_primary", javaType=boolean.class),
+            @Arg(column="company_id", javaType=Long.class), @Arg(column="company_code", javaType=String.class),
+            @Arg(column="company_name", javaType=String.class)
     })
     List<com.bkanent.auth.dto.AuthUserManagementModels.OrganizationSummary> selectCurrentOrganizations(
             @Param("userId") long userId, @Param("now") java.sql.Timestamp now);

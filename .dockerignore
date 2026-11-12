@@ -1,25 +1,6 @@
-.git
-.idea
-.agents
-.codegraph
-.mvn-local
-runtime-logs
-.work
-**/target/**
-!**/target/*.jar
-*.iml
-.codex-temp-*
-.env
-.env.*
-.secrets
-**/.secrets
-**/__pycache__
-mysql-mcp
-.codex
-.mimosa
-.tmp
-.zcode
-.zcodeignore
-derby.log
-docs
-openspec
+# Dockerfile.prebuilt copies only packaged module JARs. Keep source trees,
+# test outputs, credentials and documentation out of the image build context.
+**
+!*/
+!*/target/
+!*/target/*.jar

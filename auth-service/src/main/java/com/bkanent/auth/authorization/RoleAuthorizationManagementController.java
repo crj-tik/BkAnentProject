@@ -54,6 +54,20 @@ public class RoleAuthorizationManagementController {
         return service.setRoleType(bearer(header), roleId, body.roleType());
     }
 
+    @PutMapping("/roles/platform-administrator/permissions")
+    public RoleAuthorizationManagementService.ManagementResult platformAdministratorPermissions(
+            @RequestHeader(value="Authorization",required=false) String header,
+            @RequestBody RolePermissions body) {
+        if (body == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Permission list required");
+        return service.updatePreparedAdministratorPermissions(bearer(header), body.permissionCodes());
+    }
+
+    @PutMapping("/policy/role-only")
+    public RoleAuthorizationManagementService.ManagementResult enableRoleOnlyMode(
+            @RequestHeader(value="Authorization",required=false) String header) {
+        return service.enableRoleOnlyMode(bearer(header));
+    }
+
     @GetMapping("/users/{userId}/roles")
     public List<RoleAuthorizationManagementService.UserRoleGrant> grants(@RequestHeader(value="Authorization",required=false) String header,
                                                                          @PathVariable(name = "userId") long userId) {
@@ -70,6 +84,14 @@ public class RoleAuthorizationManagementController {
     public RoleAuthorizationManagementService.ManagementResult administrator(@RequestHeader(value="Authorization",required=false) String header,
                                                                              @PathVariable(name = "userId") long userId,@RequestBody BusinessAdmin body) {
         return service.setBusinessAdmin(bearer(header),userId,body.enabled());
+    }
+
+    @PutMapping("/users/{userId}/platform-administrator")
+    public RoleAuthorizationManagementService.ManagementResult platformAdministrator(
+            @RequestHeader(value="Authorization",required=false) String header,
+            @PathVariable(name = "userId") long userId, @RequestBody BusinessAdmin body) {
+        if (body == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Administrator state required");
+        return service.setPlatformAdministrator(bearer(header), userId, body.enabled());
     }
 
     @GetMapping("/users/{userId}/business-identities")
@@ -105,4 +127,5 @@ public class RoleAuthorizationManagementController {
     public record BrokerIdentity(Long brokerId) { }
     public record StoreIdentity(Long storeId) { }
     public record RoleType(String roleType) { }
+    public record RolePermissions(List<String> permissionCodes) { }
 }

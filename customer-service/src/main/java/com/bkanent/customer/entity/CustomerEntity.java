@@ -63,6 +63,8 @@ public class CustomerEntity extends BaseEntity {
      * 业务属性：brokerId。
      */
     private Long brokerId;
+    /** Auth user who owns this assignment; null only for legacy rows pending evidence review. */
+    private Long ownerUserId;
     /**
      * 业务属性：sourceChannel。
      */
@@ -175,6 +177,10 @@ public class CustomerEntity extends BaseEntity {
     public void setBrokerId(Long brokerId) {
         this.brokerId = brokerId;
     }
+
+    public Long getOwnerUserId() { return ownerUserId; }
+
+    public void setOwnerUserId(Long ownerUserId) { this.ownerUserId = ownerUserId; }
 
     public String getSourceChannel() {
         return sourceChannel;

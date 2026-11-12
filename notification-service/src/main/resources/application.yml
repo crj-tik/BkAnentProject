@@ -41,6 +41,10 @@ notification:
     audience: notification-service
     authority-public-keys:
       auth-service-current: ${AUTH_SERVICE_IDENTITY_PUBLIC_KEY:}
+    trusted-system-callers:
+      customer-service-current:
+        caller-service: customer-service
+        public-key: ${CUSTOMER_SERVICE_IDENTITY_PUBLIC_KEY:}
 
 dubbo:
   application:

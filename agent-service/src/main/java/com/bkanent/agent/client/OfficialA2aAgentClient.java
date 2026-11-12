@@ -108,7 +108,7 @@ public class OfficialA2aAgentClient implements A2aAgentClient {
             String capability;
             try { capability = com.bkanent.common.agent.CapabilityId.a2a(descriptor.agentId()).value(); }
             catch (RuntimeException invalid) { throw new AuthzException(AuthzErrorCode.PERMISSION_DENIED); }
-            String operation = authorizationProperties.permissionForCapability(capability);
+            String operation = authorizationProperties.operationForCapability(capability);
             if (operation == null) throw new AuthzException(AuthzErrorCode.PERMISSION_DENIED);
             entry.session().requirePermission(operation);
             if (com.bkanent.common.agent.PlatformCapability.AGENT_ID.equals(descriptor.agentId())) {

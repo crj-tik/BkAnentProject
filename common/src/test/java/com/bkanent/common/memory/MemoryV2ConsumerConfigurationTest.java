@@ -27,6 +27,7 @@ class MemoryV2ConsumerConfigurationTest {
         assertThat(reference.isCheck()).isFalse();
         assertThat(reference.getRetries()).isZero();
         assertThat(reference.getTimeout()).isEqualTo(5000);
+        assertThat(reference.getParameters()).containsEntry("serialization", "fastjson2ctor");
     }
 
     @Test

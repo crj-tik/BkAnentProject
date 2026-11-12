@@ -3,6 +3,7 @@ package com.bkanent.notification.service;
 import com.bkanent.notification.model.NotificationListItemResponse;
 import com.bkanent.notification.model.NotificationMessageRequest;
 import com.bkanent.notification.model.RobotMessageRequest;
+import com.bkanent.common.rpc.AuthorizedNotificationPermit;
 import com.bkanent.common.agent.SessionStreamEvent;
 
 import java.util.List;
@@ -11,6 +12,9 @@ import java.util.List;
  * 通知消息管理服务接口。
  */
 public interface NotificationManagementService {
+
+    /** Persists one service-signed reminder idempotently after the RPC boundary verifies its permit. */
+    Long sendAuthorizedReminder(AuthorizedNotificationPermit permit);
 
     /**
      * 业务方法：sendStationMessage。

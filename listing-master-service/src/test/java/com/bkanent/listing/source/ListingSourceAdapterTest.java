@@ -76,6 +76,32 @@ class ListingSourceAdapterTest {
     }
 
     @Test
+    void legacyBusinessSearchUsesUserOwnerAndOnlyNullOwnerBrokerFallback() {
+        ListingMapper mapper = mock(ListingMapper.class);
+        ListingEntity owned = listing(41L, "4.2");
+        owned.setOwnerUserId(7L);
+        ListingEntity explicitlyOwnedByAnotherUser = listing(42L, "4.2");
+        explicitlyOwnedByAnotherUser.setOwnerUserId(8L);
+        ListingEntity legacyBrokerOwned = listing(43L, "4.2");
+        ListingEntity legacyOtherBroker = listing(44L, "4.2");
+        legacyOtherBroker.setBrokerId(10L);
+        when(mapper.selectList(any())).thenReturn(List.of(owned, explicitlyOwnedByAnotherUser,
+                legacyBrokerOwned, legacyOtherBroker));
+        var source = new LegacyLocalListingSourceAdapter(mapper, new ListingSourceProperties());
+
+        var result = source.search(new ListingBusinessSearchRequest("domain-parallel-v1", null, null, 10),
+                new ListingAccessScope(7, 9L, false));
+
+        assertEquals(List.of("41", "43"), result.items().stream()
+                .map(item -> item.listingRef().sourceId()).toList());
+        org.mockito.ArgumentCaptor<com.baomidou.mybatisplus.core.conditions.Wrapper> query =
+                org.mockito.ArgumentCaptor.forClass(com.baomidou.mybatisplus.core.conditions.Wrapper.class);
+        verify(mapper).selectList(query.capture());
+        assertTrue(query.getValue().getSqlSegment().contains("owner_user_id"));
+        assertTrue(query.getValue().getSqlSegment().contains("broker_id"));
+    }
+
+    @Test
     void legacyCheckReturnsStaleInsteadOfTurningVersionChangeIntoReadConflict() {
         ListingMapper mapper = mock(ListingMapper.class);
         when(mapper.selectBatchIds(any())).thenReturn(List.of(listing(41L, "4.2")));
@@ -92,7 +118,7 @@ class ListingSourceAdapterTest {
     void upstreamModeIsConfigurationControlledAndHttpFailureDoesNotFallback() throws IOException {
         String body = """
                 {"success":true,"code":"0","message":"OK","data":{"contractVersion":"domain-parallel-v1","items":[
-                  {"listingRef":{"sourceSystem":"provider-a","sourceId":"external-01"},
+                  {"listingRef":{"sourceSystem":"provider-a","sourceId":"external-01"},"ownerUserId":7,"brokerId":9,
                    "contentHash":"0000000000000000000000000000000000000000000000000000000000000000",
                    "observedAt":"2026-10-01T00:00:00Z","dataMode":"REAL","datasetId":"provider-a-v1",
                    "facts":{"title":"小区房源","areaSquareMetres":"88.5",
@@ -111,8 +137,8 @@ class ListingSourceAdapterTest {
         assertEquals("external-01", snapshot.listingRef().sourceId());
         assertEquals(snapshot.contentHash(), snapshot.revision());
         assertNotEquals("0000000000000000000000000000000000000000000000000000000000000000", snapshot.contentHash());
-        assertThatHeadersContain(Map.of("X-Listing-Actor-Id", "7", "X-Listing-Read-Scope", "broker",
-                "X-Listing-Broker-Id", "9"));
+        assertThatHeadersContain(Map.of("X-Listing-Actor-Id", "7", "X-Listing-Read-Scope", "owner",
+                "X-Listing-Owner-User-Id", "7", "X-Listing-Broker-Id", "9"));
         server.stop(0);
         server = null;
         startServer(503, "unavailable", 0);
@@ -137,12 +163,34 @@ class ListingSourceAdapterTest {
     }
 
     @Test
+    void httpSourceFiltersExplicitForeignOwnersAndAllowsOnlyNullOwnerBrokerFallback() throws IOException {
+        String body = """
+                {"success":true,"code":"0","message":"OK","data":{"contractVersion":"domain-parallel-v1","items":[
+                  {"listingRef":{"sourceSystem":"provider-a","sourceId":"foreign"},"ownerUserId":8,"brokerId":9,
+                   "observedAt":"2026-10-01T00:00:00Z","datasetId":"provider-a-v1","facts":{"title":"foreign","areaSquareMetres":"80","totalPrice":{"amount":"3000000","currency":"CNY","unit":"YUAN"},"attributes":{},"unknownFields":[]}},
+                  {"listingRef":{"sourceSystem":"provider-a","sourceId":"owned"},"ownerUserId":7,"brokerId":9,
+                   "observedAt":"2026-10-01T00:00:00Z","datasetId":"provider-a-v1","facts":{"title":"owned","areaSquareMetres":"80","totalPrice":{"amount":"3000000","currency":"CNY","unit":"YUAN"},"attributes":{},"unknownFields":[]}},
+                  {"listingRef":{"sourceSystem":"provider-a","sourceId":"legacy"},"brokerId":9,
+                   "observedAt":"2026-10-01T00:00:00Z","datasetId":"provider-a-v1","facts":{"title":"legacy","areaSquareMetres":"80","totalPrice":{"amount":"3000000","currency":"CNY","unit":"YUAN"},"attributes":{},"unknownFields":[]}}
+                ],"nextCursor":null}}
+                """;
+        startServer(200, body, 0);
+        HttpListingSourceAdapter source = new HttpListingSourceAdapter(httpProperties());
+
+        var result = source.search(new ListingBusinessSearchRequest("domain-parallel-v1", null, null, 10),
+                new ListingAccessScope(7, 9L, false));
+
+        assertEquals(List.of("owned", "legacy"), result.items().stream()
+                .map(item -> item.listingRef().sourceId()).toList());
+    }
+
+    @Test
     void managedHttpSourceUsesFrozenBatchReadAndCheckRoutesAndReconfirmsModeLocally() throws IOException {
         ListingRef ref = new ListingRef("provider-a", "external-02");
         String batchBody = """
                 {"success":true,"code":"0","message":"OK","data":{"contractVersion":"domain-parallel-v1","items":[
                   {"listingRef":{"sourceSystem":"provider-a","sourceId":"external-02"},"status":"CURRENT",
-                   "snapshot":{"listingRef":{"sourceSystem":"provider-a","sourceId":"external-02"},
+                   "snapshot":{"listingRef":{"sourceSystem":"provider-a","sourceId":"external-02"},"ownerUserId":7,"brokerId":9,
                     "revision":"upstream-rev-2","contentHash":"0000000000000000000000000000000000000000000000000000000000000000",
                     "observedAt":"2026-10-01T00:00:00Z","dataMode":"REAL","datasetId":"provider-a-v1",
                     "facts":{"title":"接口房源","areaSquareMetres":"88.5",
@@ -151,7 +199,7 @@ class ListingSourceAdapterTest {
                 """;
         String checkBody = """
                 {"success":true,"code":"0","message":"OK","data":{"contractVersion":"domain-parallel-v1","items":[
-                  {"listingRef":{"sourceSystem":"provider-a","sourceId":"external-02"},
+                  {"listingRef":{"sourceSystem":"provider-a","sourceId":"external-02"},"ownerUserId":7,"brokerId":9,
                    "expectedRevision":"upstream-rev-2","status":"CURRENT"}],"nextCursor":null}}
                 """;
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -207,6 +255,7 @@ class ListingSourceAdapterTest {
             try {
                 requestHeaders.set(Map.of("X-Listing-Actor-Id", String.valueOf(exchange.getRequestHeaders().getFirst("X-Listing-Actor-Id")),
                         "X-Listing-Read-Scope", String.valueOf(exchange.getRequestHeaders().getFirst("X-Listing-Read-Scope")),
+                        "X-Listing-Owner-User-Id", String.valueOf(exchange.getRequestHeaders().getFirst("X-Listing-Owner-User-Id")),
                         "X-Listing-Broker-Id", String.valueOf(exchange.getRequestHeaders().getFirst("X-Listing-Broker-Id"))));
                 if (delayMs > 0) Thread.sleep(delayMs);
                 byte[] response = body.getBytes(StandardCharsets.UTF_8);

@@ -137,6 +137,7 @@ class ListingReadRpcTest {
                 ServiceIdentityCrypto.encodePublicKey(signing.getPublic())));
         var domain = mock(ListingDomainService.class);
         var listing = new ListingEntity(); listing.setId(11L); listing.setDeleted(0); listing.setStatus("ON_SALE");
+        listing.setBrokerId(84L);
         when(domain.getById(11L)).thenReturn(listing);
         var rpc = new ListingMasterRpcServiceImpl(mock(ListingManagementService.class), identity(), domain,
                 new ListingConverter(), authorizationProperties);
@@ -205,7 +206,7 @@ class ListingReadRpcTest {
                 List.of("listing.assets.bind.own"), Map.of());
         var missingMappingRequest = new RagAuthorizedListingAssetWriteRequest(1, request.request(),
                 AuthzCanonicalHash.signedResponseHash(missingMapping.response()));
-        assertThrows(AuthzException.class, () -> rpc.authorizeAssetWrite(missingMappingRequest,
+        assertFalse(rpc.authorizeAssetWrite(missingMappingRequest,
                 signAuthorizedAssetWrite(missingMappingRequest, "7"), missingMapping.response()));
 
         var missingOperation = authorization(signing, List.of("listing.read"), List.of("listing.read"),
@@ -215,7 +216,7 @@ class ListingReadRpcTest {
         assertEquals(RagErrorCode.FORBIDDEN, assertThrows(RagException.class,
                 () -> rpc.authorizeAssetWrite(missingOperationRequest,
                         signAuthorizedAssetWrite(missingOperationRequest, "7"), missingOperation.response())).code());
-        verify(domain, times(2)).getById(11L);
+        verify(domain, times(3)).getById(11L);
     }
 
     @Test void a2aAssetWriteChecksBrokerMappingBeforeLoadingListing() throws Exception {

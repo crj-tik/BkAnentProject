@@ -100,7 +100,8 @@ public class MarketingListingReadClient {
             throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
         }
         var authorization = AuthzRequestScope.requireCurrent();
-        String operation = authorization.snapshot().businessAdmin() ? "listing.read.all" : "listing.read";
+        String operation = com.bkanent.common.authz.AuthzRequestScope.hasOperation("listing.read.all")
+                ? "listing.read.all" : "listing.read";
         AuthzRequestScope.requireOperation(operation);
         var request = new RagListingReadRequest(1, UUID.randomUUID().toString(), id, null);
         var authorizedRequest = new RagAuthorizedListingReadRequest(1, request,

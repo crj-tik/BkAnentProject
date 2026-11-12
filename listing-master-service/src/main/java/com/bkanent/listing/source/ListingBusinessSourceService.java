@@ -79,8 +79,10 @@ public class ListingBusinessSourceService {
     }
 
     private ListingAccessScope requireReadScope() {
-        Long brokerId = VerifiedDomainAuthorization.requireBrokerScope("listing.read", "listing.read.all");
-        return new ListingAccessScope(VerifiedDomainAuthorization.requireActorId(), brokerId, brokerId == null);
+        boolean businessWide = VerifiedDomainAuthorization.hasOperation("listing.read.all");
+        VerifiedDomainAuthorization.requireOperation(businessWide ? "listing.read.all" : "listing.read");
+        Long brokerId = businessWide ? null : VerifiedDomainAuthorization.brokerIdentityOrNull();
+        return new ListingAccessScope(VerifiedDomainAuthorization.requireActorId(), brokerId, businessWide);
     }
 
     private void recheckReadScope() {

@@ -63,6 +63,11 @@ public class NotificationRecordEntity extends BaseEntity {
      * 业务属性：errorMessage。
      */
     private String errorMessage;
+    private String idempotencyKey;
+
+    public String getIdempotencyKey() { return idempotencyKey; }
+
+    public void setIdempotencyKey(String idempotencyKey) { this.idempotencyKey = idempotencyKey; }
 
     public Long getRecipientUserId() {
         return recipientUserId;

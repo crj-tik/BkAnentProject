@@ -3,7 +3,7 @@ package com.bkanent.memory.service;
 import com.bkanent.common.memory.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Repository;
+import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.sql.Timestamp;
@@ -14,15 +14,17 @@ import java.util.List;
 import java.util.Map;
 
 /** SQL truth for v2 only. All methods run inside short archive transactions. */
-@Repository
+// Services in this package share this JdbcTemplate directly; JdbcTemplate already translates
+// SQL failures, while @Repository would wrap this bean in a proxy with uninitialized fields.
+@Component
 public class MemoryArchiveStore {
     static final int MAX_PAYLOAD_BYTES = 1024 * 1024;
     final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
 
     public MemoryArchiveStore(JdbcTemplate jdbc, ObjectMapper mapper) {
-        this.jdbc = jdbc;
-        this.mapper = mapper;
+        this.jdbc = java.util.Objects.requireNonNull(jdbc, "jdbc");
+        this.mapper = java.util.Objects.requireNonNull(mapper, "mapper");
     }
 
     static String key(MemoryContextKey context) { return MemoryCanonicalHash.contentHash(context); }

@@ -20,7 +20,7 @@ public class ListingRagGrantService {
     public RagAuthorizationScope scope(AuthRagPrincipal principal, RagSearchRequest request) {
         boolean activeOnly = ListingRagIdentity.activeOnly(principal);
         if (principal.versionedAuthorization()) {
-            String operation = principal.businessAdmin() ? "listing.read.all" : "listing.read";
+            String operation = principal.hasPermission("listing.read.all") ? "listing.read.all" : "listing.read";
             if (!principal.hasPermission(operation)) throw new RagException(RagErrorCode.FORBIDDEN);
             long now = Instant.now().getEpochSecond();
             long expiry = Math.min(now + 60, principal.expiresAtEpochSecond());

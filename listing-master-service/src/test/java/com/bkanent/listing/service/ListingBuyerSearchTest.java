@@ -13,6 +13,7 @@ import com.bkanent.listing.model.ListingAssetView;
 import com.bkanent.listing.model.ListingBuyerSearchQuery;
 import com.bkanent.listing.model.ListingBuyerSearchResponse;
 import com.bkanent.listing.model.ListingBuyerViewResponse;
+import com.bkanent.listing.model.ListingQueryRequest;
 import com.bkanent.listing.rag.ListingAuthzScopeFixture;
 import com.bkanent.listing.rag.ListingRagIdentity;
 import com.bkanent.listing.rag.ListingRagOutbox;
@@ -152,6 +153,28 @@ class ListingBuyerSearchTest {
                 null, null, null, null, null, new BigDecimal("500000.00"), new BigDecimal("1500000.00"), null, null))));
         assertEquals(List.of(2L), ids(search(new ListingBuyerSearchQuery(
                 null, null, null, null, null, new BigDecimal("1500000.00"), null, null, null))));
+    }
+
+    @Test
+    void privateListingQueryUsesExplicitUserOwnerAndOnlyFallsBackForNullOwners() {
+        fixture.insertListing(31, 41L, "OFFLINE", "2026-11-05 10:00:00", BigDecimal.TEN,
+                BigDecimal.valueOf(100000L), BigDecimal.TEN, null, null, "两室", 0);
+        fixture.insertListing(32, 41L, "OFFLINE", "2026-11-05 10:01:00", BigDecimal.TEN,
+                BigDecimal.valueOf(100000L), BigDecimal.TEN, null, null, "两室", 0);
+        fixture.insertListing(33, 82L, "OFFLINE", "2026-11-05 10:02:00", BigDecimal.TEN,
+                BigDecimal.valueOf(100000L), BigDecimal.TEN, null, null, "两室", 0);
+        fixture.jdbc.update("UPDATE listing_info SET owner_user_id=123 WHERE id=31");
+        fixture.jdbc.update("UPDATE listing_info SET owner_user_id=124 WHERE id=32");
+
+        var rows = fixture.newDomainService().search(new ListingQueryRequest(
+                null, null, 41L, null, null, null, null, null, 123L));
+
+        assertEquals(List.of(31L), rows.stream().map(com.bkanent.listing.entity.ListingEntity::getId).toList());
+        // A legacy row with no ownerUserId remains visible only through the matching trusted broker filter.
+        fixture.jdbc.update("UPDATE listing_info SET owner_user_id=NULL WHERE id=31");
+        rows = fixture.newDomainService().search(new ListingQueryRequest(
+                null, null, 41L, null, null, null, null, null, 123L));
+        assertEquals(List.of(31L), rows.stream().map(com.bkanent.listing.entity.ListingEntity::getId).toList());
     }
 
     @Test

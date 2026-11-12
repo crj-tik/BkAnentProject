@@ -74,7 +74,7 @@ public class MediaListingAuthorizationClient {
 
     private void authorizeHttp(Long listingId) {
         var authorization = AuthzRequestScope.requireCurrent();
-        String operation = authorization.snapshot().businessAdmin()
+        String operation = AuthzRequestScope.hasOperation("listing.assets.bind.all")
                 ? "listing.assets.bind.all" : "listing.assets.bind.own";
         AuthzRequestScope.requireOperation(operation);
         var request = new RagListingReadRequest(1, UUID.randomUUID().toString(), listingId, null);

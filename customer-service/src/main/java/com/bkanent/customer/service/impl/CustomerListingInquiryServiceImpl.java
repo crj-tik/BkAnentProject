@@ -111,6 +111,7 @@ public class CustomerListingInquiryServiceImpl implements CustomerListingInquiry
         entity.setCustomerId(customerId);
         entity.setListingId(request.listingId());
         entity.setBrokerId(brokerId);
+        entity.setOwnerUserId(actorId);
         entity.setInquiryChannel(request.inquiryChannel());
         entity.setInquiryContent(request.inquiryContent());
         entity.setStatus(InquiryStatusEnum.OPEN.name());
@@ -152,6 +153,8 @@ public class CustomerListingInquiryServiceImpl implements CustomerListingInquiry
             throw new IllegalArgumentException("咨询不存在: " + inquiryId);
         }
         requireCustomer(inquiry.getCustomerId(), "customer.inquiry.write.own", "customer.inquiry.write.all");
+        AuthzRequestScope.requireUserOrLegacyBrokerOwnership(inquiry.getOwnerUserId(), inquiry.getBrokerId(),
+                "customer.inquiry.write.own", "customer.inquiry.write.all");
         String target = status.toUpperCase();
         requireTransition(inquiry.getStatus(), target);
         inquiry.setStatus(target);
@@ -314,8 +317,8 @@ public class CustomerListingInquiryServiceImpl implements CustomerListingInquiry
 
     private CustomerEntity requireCustomer(Long customerId, String ownOperation, String businessWideOperation) {
         AuthzRequestScope.requireCurrent();
-        boolean businessAdmin = AuthzRequestScope.businessAdmin();
-        if (businessAdmin) {
+        boolean businessWide = AuthzRequestScope.hasOperation(businessWideOperation);
+        if (businessWide) {
             AuthzRequestScope.requireOperation(businessWideOperation);
         } else {
             AuthzRequestScope.requireOperation(ownOperation);
@@ -324,12 +327,8 @@ public class CustomerListingInquiryServiceImpl implements CustomerListingInquiry
         if (customer == null) {
             throw new IllegalArgumentException("客户档案不存在: " + customerId);
         }
-        if (!businessAdmin) {
-            Long brokerId = AuthzRequestScope.businessIdentity("BROKER");
-            if (brokerId == null || !brokerId.equals(customer.getBrokerId())) {
-                deny();
-            }
-        }
+        AuthzRequestScope.requireUserOrLegacyBrokerOwnership(customer.getOwnerUserId(), customer.getBrokerId(),
+                ownOperation, businessWideOperation);
         return customer;
     }
 

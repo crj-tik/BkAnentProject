@@ -55,7 +55,7 @@ public final class VerifiedDomainAuthorization {
      */
     public static Long requireBrokerScope(String ownOperation, String businessWideOperation) {
         if (AuthzRequestScope.present()) {
-            if (AuthzRequestScope.businessAdmin()) {
+            if (AuthzRequestScope.hasOperation(businessWideOperation)) {
                 AuthzRequestScope.requireOperation(businessWideOperation);
                 return null;
             }
@@ -88,7 +88,7 @@ public final class VerifiedDomainAuthorization {
     /** Selects actor-owned or explicit all-task access; report task ids are never identities. */
     public static String requireActorScope(String ownOperation, String businessWideOperation) {
         if (AuthzRequestScope.present()) {
-            if (AuthzRequestScope.businessAdmin()) {
+            if (AuthzRequestScope.hasOperation(businessWideOperation)) {
                 AuthzRequestScope.requireOperation(businessWideOperation);
                 return null;
             }
@@ -125,6 +125,55 @@ public final class VerifiedDomainAuthorization {
         if (brokerId != null && (resourceBrokerId == null || !brokerId.equals(resourceBrokerId))) {
             throw new AuthzException(AuthzErrorCode.PERMISSION_DENIED);
         }
+    }
+
+    /** Checks the signed platform owner first and uses broker identity only for unowned legacy rows. */
+    public static void requireUserOrLegacyBrokerOwnership(Long ownerUserId, Long resourceBrokerId,
+                                                          String ownOperation, String businessWideOperation) {
+        if (AuthzRequestScope.present()) {
+            AuthzRequestScope.requireUserOrLegacyBrokerOwnership(ownerUserId, resourceBrokerId,
+                    ownOperation, businessWideOperation);
+            return;
+        }
+        if (McpAuthorizationScope.current() != null) {
+            AuthorizationContext context = McpAuthorizationScope.requireCurrent().context();
+            if (context.allowedOperations().contains(businessWideOperation)) {
+                McpAuthorizationScope.requireContextPermission(businessWideOperation);
+                return;
+            }
+            McpAuthorizationScope.requireOperation(ownOperation);
+            requireSignedOwnerOrBroker(ownerUserId, resourceBrokerId, context);
+            return;
+        }
+        if (A2aCredentialContext.snapshot() != null) {
+            A2aCredentialContext.Lease lease = A2aCredentialContext.required();
+            AuthorizationContext context = lease.authorizationContext();
+            if (context == null) throw new AuthzException(AuthzErrorCode.AUTHENTICATION_REQUIRED);
+            if (context.allowedOperations().contains(businessWideOperation)) {
+                lease.requireOperation(businessWideOperation);
+                return;
+            }
+            lease.requireOperation(ownOperation);
+            requireSignedOwnerOrBroker(ownerUserId, resourceBrokerId, context);
+            return;
+        }
+        throw new AuthzException(AuthzErrorCode.AUTHENTICATION_REQUIRED);
+    }
+
+    /** Optional signed broker mapping for SQL fallback to rows awaiting evidence-based owner backfill. */
+    public static Long brokerIdentityOrNull() {
+        if (AuthzRequestScope.present()) {
+            return AuthzRequestScope.requireCurrent().context().businessIdentities().get("BROKER");
+        }
+        if (McpAuthorizationScope.current() != null) {
+            return McpAuthorizationScope.requireCurrent().context().businessIdentities().get("BROKER");
+        }
+        if (A2aCredentialContext.snapshot() != null) {
+            A2aCredentialContext.Lease lease = A2aCredentialContext.required();
+            return lease.authorizationContext() == null ? null
+                    : lease.authorizationContext().businessIdentities().get("BROKER");
+        }
+        throw new AuthzException(AuthzErrorCode.AUTHENTICATION_REQUIRED);
     }
 
     /** Requires a broker mapping even when the caller has an administrator role. */
@@ -226,5 +275,23 @@ public final class VerifiedDomainAuthorization {
         Long brokerId = context.businessIdentities().get("BROKER");
         if (brokerId == null) throw new AuthzException(AuthzErrorCode.PERMISSION_DENIED);
         return brokerId;
+    }
+
+    private static void requireSignedOwnerOrBroker(Long ownerUserId, Long resourceBrokerId,
+                                                    AuthorizationContext context) {
+        if (ownerUserId != null) {
+            if (ownerUserId <= 0 || !Long.toString(ownerUserId).equals(context.actorId())) {
+                throw new AuthzException(AuthzErrorCode.PERMISSION_DENIED);
+            }
+            return;
+        }
+        requireBrokerOwnership(resourceBrokerId, context);
+    }
+
+    private static void requireBrokerOwnership(Long resourceBrokerId, AuthorizationContext context) {
+        Long brokerId = context.businessIdentities().get("BROKER");
+        if (brokerId == null || resourceBrokerId == null || !brokerId.equals(resourceBrokerId)) {
+            throw new AuthzException(AuthzErrorCode.PERMISSION_DENIED);
+        }
     }
 }

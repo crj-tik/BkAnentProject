@@ -1,6 +1,7 @@
 package com.bkanent.memory.service;
 
 import com.bkanent.common.memory.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.bkanent.memory.rpc.MemoryV2RpcServiceImpl;
 import org.apache.dubbo.config.ApplicationConfig;
 import org.apache.dubbo.config.ProtocolConfig;
@@ -8,7 +9,11 @@ import org.apache.dubbo.config.ProviderConfig;
 import org.apache.dubbo.config.RegistryConfig;
 import org.apache.dubbo.config.annotation.DubboService;
 import org.junit.jupiter.api.Test;
+import org.springframework.aop.support.AopUtils;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.dao.annotation.PersistenceExceptionTranslationPostProcessor;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import java.util.List;
 import java.util.Map;
@@ -17,6 +22,23 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class MemoryArchiveProviderTest {
+    @Test void archiveStoreKeepsItsSharedJdbcTemplateAccessibleWithoutRepositoryProxy() {
+        var datasource = new DriverManagerDataSource(
+                "jdbc:h2:mem:archive-store-wiring;DB_CLOSE_DELAY=-1", "sa", "");
+        var jdbc = new JdbcTemplate(datasource);
+        try (var context = new AnnotationConfigApplicationContext()) {
+            context.registerBean(JdbcTemplate.class, () -> jdbc);
+            context.registerBean(ObjectMapper.class, () -> new ObjectMapper());
+            context.registerBean(PersistenceExceptionTranslationPostProcessor.class,
+                    PersistenceExceptionTranslationPostProcessor::new);
+            context.register(MemoryArchiveStore.class);
+            context.refresh();
+            var store = context.getBean(MemoryArchiveStore.class);
+            assertFalse(AopUtils.isAopProxy(store));
+            assertSame(jdbc, store.jdbc);
+        }
+    }
+
     @Test void providerIsRegisteredByDefaultAndPinsTheNativeInterface() throws Exception {
         var bootstrapFixture = new MemoryArchiveServiceTest.Fixture();
         var bootstrapSharing = new MemorySharingAccessService(bootstrapFixture.security, new MemoryAccessPolicy(),
@@ -52,6 +74,8 @@ class MemoryArchiveProviderTest {
         assertEquals(MemoryV2Contract.DUBBO_GROUP, binding.group());
         assertEquals(MemoryV2Contract.DUBBO_SERVICE_VERSION, binding.version());
         assertArrayEquals(new String[]{"dubbo"}, binding.protocol());
+        assertEquals("fastjson2ctor", binding.serialization());
+        assertEquals("fastjson2ctor", binding.preferSerialization());
     }
 
     @Test void nativeDubboProviderAndConsumerInvokeRealArchiveWithoutAnyContainerOrRegistry() throws Exception {

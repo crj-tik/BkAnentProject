@@ -24,16 +24,17 @@ public final class EffectivePermissionService {
         TreeSet<String> permissions = new TreeSet<>();
         Instant deadline = null;
         boolean eligible = user.active() && !user.deleted() && "ACTIVE".equals(user.status());
-        if (eligible && user.businessAdmin()) {
+        RoleProjection projection = eligible ? roleProjection(facts, now) : new RoleProjection(List.of(), null, false);
+        boolean legacyAdminExpansion = eligible && user.businessAdmin() && !facts.roleOnlyMode();
+        if (legacyAdminExpansion) {
             permissions.addAll(registered);
         } else if (eligible) {
-            RoleProjection projection = roleProjection(facts, now);
             permissions.addAll(projection.permissions());
             deadline = projection.grantDeadline();
         }
         return new Snapshot(user.userId(), user.permissionRevision(), user.credentialEpoch(),
                 eligible ? "ACTIVE" : user.deleted() ? "DELETED" : "DISABLED",
-                eligible && user.businessAdmin(), catalogVersion, List.copyOf(permissions), deadline,
+                eligible && (legacyAdminExpansion || projection.platformAdministrator()), catalogVersion, List.copyOf(permissions), deadline,
                 eligible ? facts.businessIdentities() : Map.of());
     }
 
@@ -42,7 +43,7 @@ public final class EffectivePermissionService {
         Objects.requireNonNull(now, "now");
         AuthorizationFacts.User user = Objects.requireNonNull(facts.user(), "user");
         if (!user.active() || user.deleted() || !"ACTIVE".equals(user.status())) {
-            return new RoleProjection(List.of(), null);
+            return new RoleProjection(List.of(), null, false);
         }
         TreeSet<String> registered = new TreeSet<>();
         facts.catalog().stream().filter(AuthorizationFacts.Permission::active)
@@ -50,6 +51,7 @@ public final class EffectivePermissionService {
                 .map(AuthorizationFacts.Permission::code).forEach(registered::add);
         TreeSet<String> permissions = new TreeSet<>();
         Instant deadline = null;
+        boolean platformAdministrator = false;
         for (AuthorizationFacts.RoleGrant grant : facts.grants()) {
             if (!grant.grantActive() || !grant.roleActive() || grant.roleDeleted()) continue;
             if (grant.validFrom() != null && grant.validFrom().isAfter(now)) {
@@ -61,12 +63,23 @@ public final class EffectivePermissionService {
             if (grant.validUntil() != null && !now.isBefore(grant.validUntil())) continue;
             deadline = earlier(deadline, grant.validUntil());
             grant.permissionCodes().stream().filter(registered::contains).forEach(permissions::add);
+            // This reserved, non-assignable system role only projects the legacy compatibility
+            // marker. Its permissions still come exclusively from its explicit role grants.
+            if ("PLATFORM_ADMIN".equals(grant.roleCode())
+                    && registered.contains("auth.users.manage")
+                    && grant.permissionCodes().contains("auth.users.manage")) {
+                platformAdministrator = true;
+            }
         }
-        return new RoleProjection(List.copyOf(permissions), deadline);
+        return new RoleProjection(List.copyOf(permissions), deadline, platformAdministrator);
     }
 
-    public record RoleProjection(List<String> permissions, Instant grantDeadline) {
+    public record RoleProjection(List<String> permissions, Instant grantDeadline, boolean platformAdministrator) {
         public RoleProjection { permissions = List.copyOf(permissions); }
+
+        public RoleProjection(List<String> permissions, Instant grantDeadline) {
+            this(permissions, grantDeadline, false);
+        }
     }
 
     private static Instant earlier(Instant first, Instant second) {

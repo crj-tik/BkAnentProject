@@ -1184,13 +1184,13 @@
 
 ## LR-145 请求级签名上下文防止模型替换 actor，业务资源仍由接收域校验
 
-**结论**：外部入口由 Gateway 对登录身份与实际 method/path/query/body 签署 Auth 上下文；已绑定 run 内部的 A2A/MCP 请求携带该上下文/freshness，并由调用服务对每个真实 JSON-RPC 正文和 nonce 生成逐请求 proof。接收端本地验签 actor、caller、audience、操作、请求内容和截止，不为每个 subAgent/tool/流项远程请求 Auth；Auth 刷新只发生在 Supervisor 规划边界。模型参数中生成的 userId、role、admin、permissions 均不是身份来源。签名许可仍不能替代接收域对 owner、参与关系、资源来源、业务状态和撤回版本的核查。
+**结论**：外部入口由 Gateway 对登录身份与实际 method/path/query/body 签署 Auth 上下文；Supervisor 解析并校验持久 run/session 后，只在执行入口向 Auth 绑定一次真实运行关联，绑定保留原 actor、权限范围和硬截止。首次使用的 session 尚无 Memory 记录时，经过身份校验的 owner 查询返回空结果，让 Supervisor 可创建自己的会话；已存在会话仍按持久 owner 校验，缺失与他人会话对外保持相同拒绝语义。已绑定 run 内部的 A2A/MCP 请求携带上下文/freshness，并由调用服务对每个真实 JSON-RPC 正文和 nonce 生成逐请求 proof。接收端本地验签 actor、caller、audience、操作、请求内容和截止，不为每个 subAgent/tool/流项远程请求 Auth；只有规划边界发现授权版本变化时才刷新该 run 的上下文。模型参数中生成的 userId、role、admin、permissions 均不是身份来源。签名许可仍不能替代接收域对 owner、参与关系、资源来源、业务状态和撤回版本的核查。
 
-**根因**：在 Graph 内逐工具访问 Auth 会把模型编排次数放大成身份服务依赖次数，并让普通下游故障扩大为整条请求失败；仅传递一个已签父上下文而不绑定真实请求又允许调用方篡改 body 或重放。父上下文提供不可替换身份上限，逐请求 proof 提供实际请求完整性，本地验签减少同步 RPC；领域资源检查继续维护各业务的真实授权边界。
+**根因**：在 Graph 内逐工具访问 Auth 会把模型编排次数放大成身份服务依赖次数，并让普通下游故障扩大为整条请求失败；若在持久 run/session 确定前伪造绑定字段，也会使重试或续接关联到错误执行。Supervisor 在入口校验 run owner、session 与幂等事实后一次性绑定真实关联；仅传递父上下文而不绑定实际请求又允许篡改 body 或重放。父上下文提供不可替换身份上限，逐请求 proof 提供实际请求完整性，本地验签减少同步 RPC；领域资源检查继续维护各业务的真实授权边界。
 
-**代码位置**：`common/authz/AuthzWireCodec`、`common-a2a/A2aAuthorizationVerifier`、`common/mcp/authz/McpAuthorizationFilter`、`agent-service/SupervisorToolLoopGraph`、`InterviewAuthorizationFilter` 与 `InterviewAuthorizationScope`。
+**代码位置**：`gateway/GatewayAuthorizationFilter`；`agent-service/AgentPrincipalContext`、`AgentExecutionBindingCoordinator`、`AgentAuthorizationConsumer`、`OfficialA2aAgentClient`、`SupervisorToolLoopGraph`、`SupervisorSessionOwnershipService`；`memory-service/MemoryController.getSessionMemory`；`common/authz/AuthzWireCodec`、`common-a2a/A2aAuthorizationVerifier`、`common/mcp/authz/McpAuthorizationFilter`；`InterviewAuthorizationFilter` 与 `InterviewAuthorizationScope`。
 
-**关联**：LR-1/139/140/142/143/144；KI-170/174/202/203；change `unify-versioned-permission-context`任务5–9。各新消费开关默认关闭；本地验签和模块测试不能替代跨实例nonce、真实浏览器、真实MySQL/Redis或部署启用验收。
+**关联**：LR-1/139/140/142/143/144；KI-170/174/202/203/265/266/267；change `unify-versioned-permission-context`任务5–9；change `unify-user-organization-and-role-authorization`任务5.4。2026-11-12 WSL 开发栈已用真实 MySQL/Redis 和 Gateway API 验证登录 actor 不被 prompt/context 中的 `userId`/`brokerId` 替换、首次 Memory session 初始化，以及一次 Graph 中两次 Listing subAgent 调用；role-only 切换后复验仍通过。浏览器专项仍待前端工程，生产部署不由此记录推断。
 
 ## LR-146 Auth维护显式broker映射，公开房源范围与私有归属分开
 
@@ -1200,7 +1200,7 @@
 
 **代码位置**：`common/authz/AuthzContract`、`AuthorizationSnapshot`、`AuthorizationContext`、`AuthzRequestScope`、`AuthzCanonicalHash`；`common/rag/RagAuthorizedListingReadRequest`；`auth-service/AuthorizationRepository`、`RoleAuthorizationManagementService`、`AuthAuthorizationRpcServiceImpl`；`listing-master-service/ListingAuthorizationIngressFilter`、`ListingManagementServiceImpl`、`ListingRagIdentity`、`ListingMasterRpcServiceImpl`；`customer-service/CustomerAuthorizationIngressFilter`、`CustomerManagementServiceImpl`、`ListingReadClient`；`rag-service/RagAccessControl`。
 
-**关联**：LR-31/145；KI-55；change `unify-versioned-permission-context`任务4.6、10.1。Listing/Customer新入口开关默认关闭；跨服务RPC调用、Gateway与各环境公钥配置、业务映射回填及运行栈验收完成前不得启用。
+**关联**：LR-31/145；KI-55；change `unify-versioned-permission-context`任务4.6、10.1。2026-11-12 实际 Graph API 已通过两次 Listing A2A 只读调用；但开发库 3 条客户档案、1 条客户咨询和 3 条房源仍没有 `owner_user_id`，三域迁移账本为空。历史 broker→user 映射未获证据前不回填；相关私有所有权操作继续受可信归属门禁保护。模板默认值和开发验收不代表生产开关/密钥配置。
 
 ## LR-147 Business与Settlement使用精确域操作，未映射财务主体保持关闭
 
@@ -1639,13 +1639,23 @@
 
 ## LR-182 组织成员初始记录不推导门店授权范围
 
-**结论**：组织成员写入或结束必须持有用户管理权限，在授权写锁内记录主归属、递增该用户权限版本并写 outbox 和审计；初期成员记录本身不产生 STORE 授权。用户已有旧 STORE 映射时暂拒绝新主归属或结束归属，待可信门店映射及迁移流程接通后处理。
+**结论**：组织成员写入或结束必须持有用户管理权限，在授权写锁内记录主归属、递增该用户权限版本并写 outbox 和审计。只有有效的主归属指向 ACTIVE STORE 且该组织节点有显式唯一 `store_business_id` 时，Auth 才把 STORE 放入签名身份；部门、次要成员和未映射门店不产生 STORE。与目标门店一致的旧 STORE 身份在未来成员生效前继续有效，在 START/END 边界与成员版本/outbox 同事务移除；提前结束未来成员不得提前撤销旧 STORE。冲突映射拒绝变更。
 
-**根因**：组织节点 ID 和业务 storeId 分属不同事实，不能凭数字、部门或角色推导。旧授权快照依赖显式 STORE，贸然覆盖或拼接成员记录会产生错误门店范围。先保存可审计的无授权归属、对旧映射保守拒绝，可保持无可信范围时业务拒绝。
+**根因**：组织节点 ID 和业务 storeId 分属不同事实，不能凭数字、部门或角色推导。未来有效期也不能提前改变现行授权；在边界时才用一次用户版本更新、outbox 与显式组织映射切换签名 STORE。旧映射仅在用户、门店和映射三者相符时作为过渡来源。
 
-**代码位置**：`auth-service/authorization/OrganizationManagementService`、`OrganizationManagementController`；迁移 `20261110_auth_organization.sql`。
+**代码位置**：`auth-service/authorization/OrganizationManagementService`、`OrganizationManagementController`、`AuthorizationRepository.processUserMembershipBoundaries`、`AuthorizationGrantBoundaryScheduler`；迁移 `20261110_auth_organization.sql`、`20261111_auth_membership_boundaries.sql`。
 
-**关联**：LR-145/146；KI-204；change `unify-user-organization-and-role-authorization` 任务 3.2/3.6。成员有效期调度、旧 STORE 同步和变更撤销的开发栈验收仍未完成，不得将初始记录当作完整组织授权实现。
+**关联**：LR-145/146；KI-204；change `unify-user-organization-and-role-authorization` 任务 3.2/3.6。开发栈成员边界与失效通知仍待本变更集中验收。
+
+## LR-183 退役旧入口后保留营销房源效果能力
+
+**结论**：取消独立 Compare、Promotion 的 HTTP 兼容入口后，房源比较只由 Listing 的版本化入口提供；按房源查询推广效果迁入 `/marketing/campaigns/listings/{listingId}/effects`，查询必须同时限定当前可信 actor 的计划 owner 和房源 ID，并检查效果读取操作。
+
+**根因**：旧路径属于已退役服务的 wire 契约，但房源效果查询仍是现行营销能力。不能因删除入口而删掉业务能力，也不能按房源先读取所有用户的数据再逐条过滤；历史发布 ID 与 campaign attempt ID 是不同身份，保留映射数据不表示可直接互换。
+
+**代码位置**：`CampaignController`、`CampaignLifecycleService.effectsForListing`、`CampaignJdbcRepository.findEffectsByOwnerAndListingId`、`nacos/gateway.yaml`；旧迁移和账本保留。
+
+**关联**：LR-161；KI-196、KI-236、KI-254。旧接口消费者及目标环境 Nacos 发布仍需另行核验。
 
 ## LR-184 管理员权限迁移先准备角色但不绑定用户
 
@@ -1656,3 +1666,81 @@
 **代码位置**：`sql/migrations/20261111_prepare_management_role.sql`、`docker/mysql/checks/auth-prepared-management-role.sql`、`EffectivePermissionService.roleProjection`、`scripts/acceptance/audit-auth-admin-roles.py`。
 
 **关联**：LR-145/182；change `unify-user-organization-and-role-authorization` 任务 2.3/3.4/3.5。新权限目录项仍须显式授予；角色分类只作元数据，旧特权尚未退役。
+
+## LR-185 平台用户负责人优先于兼容经纪人身份
+
+**结论**：Customer、Listing、Marketing 私有记录的新负责人只从已验签 actor 写入 `owner_user_id`。有非空负责人时，只比较 actor userId；仅历史负责人为空的记录才允许受信 BROKER 映射兼容。本人列表采用 `(owner_user_id=actor) OR (owner_user_id IS NULL AND broker_id=trustedBroker)`；全量能力仍检查精确 `.all` 操作。委托/收藏和 employee/payee 等字段按其独立业务关系处理，不批量替换成用户 ID。
+
+**根因**：brokerId 是经纪人业务主体，不能保证与 Auth userId 永久一一对应；如果明确负责人行仍因 broker 数值相同而命中旧范围，会让旧映射越过用户归属。历史数据没有唯一证据时，保持 NULL、隔离并进入人工账本，不从近期编辑者或模型参数猜测。
+
+**代码位置**：`common/authz/AuthzRequestScope.requireUserOrLegacyBrokerOwnership`、`common-a2a/VerifiedDomainAuthorization`；Customer、Listing、Marketing 的实体、查询和写入服务；`20261111_customer_user_owner.sql`、`20261111_listing_user_owner.sql`、`20261111_marketing_user_owner.sql`；`scripts/migrations/apply-user-owner-ledger.sql`。
+
+**关联**：LR-145/146/147；KI-243；change `unify-user-organization-and-role-authorization` 任务 4.1–4.5。迁移账本只提供经复核的候选和条件回填，运行库对账尚待验收。
+
+## LR-186 定时通知使用窄范围服务证明并幂等投递
+
+**结论**：Customer 委托提醒以客户档案持久化的 `owner_user_id` 作为收件人；负责人为空的历史行跳过。发送经 Dubbo 携带由 Customer 服务身份签署的短期 permit，覆盖精确 `customer-service`、`notification.message.send.entrust-reminder` 操作、收件 userId、固定场景、标题/正文 hash、幂等键和硬过期。Notification 本地验签，只允许登记的 Customer 公钥，并按唯一幂等键保存站内消息。该内部服务能力不使用 LLM 参数或用户 bearer，也不对每条提醒访问 Auth。
+
+**根因**：brokerId 与 recipientUserId 是不同主体，后台定时任务没有交互式 Auth 请求上下文。直接开放旧无证明 RPC 会让任何 Dubbo 调用方任意指定收件人；重复定时发送还需要稳定幂等标识。服务签名只授权这一种固定提醒，不扩大用户操作或 Notification 的其他写入口。
+
+**代码位置**：`common/rpc/AuthorizedNotificationPermit*`、`CustomerNotificationPermitClient`、`CustomerReminderServiceImpl`、`AuthorizedNotificationPermitVerifier`、`NotificationRpcServiceImpl`、`NotificationManagementServiceImpl`；配置 `nacos/customer-service.yaml`、`nacos/notification-service.yaml` 和 Compose reminder 开关；迁移 `20261111_notification_reminder_idempotency.sql`。
+
+**关联**：LR-150；KI-206；change `unify-user-organization-and-role-authorization` 任务 4.4。默认关闭，密钥、Nacos、迁移和重复投递仍需运行验收；Contract reminder 的权威收件映射尚未实现。
+
+## LR-187 全量业务读取不等于平台管理员身份
+
+**结论**：`listing.read.all` 只代表房源域全量读取范围，不能投影为 `businessAdmin=true` 或 `BUSINESS_ADMIN` 角色。Authz/MCP签名操作列表桥接到 RAG principal 时，兼容管理员标记只能依据 Auth 签名的 `auth.users.manage` 管理权限；本地不合成角色名。可选 HTTP 房源源在 own 范围除传入 actor/owner/broker 外，还必须回传负责人证据，Listing 本地再次校验；仅 owner 为空且 broker 与可信 Auth 映射相符时允许兼容读取。
+
+**根因**：域内 all 权限可独立授给非平台管理员；把它映射成全局管理员字段会污染 RAG principal 的兼容语义，并可能被其他消费方误作管理身份。远程 provider 忽略过滤头也不能因此跨用户返回私有数据。
+
+**代码位置**：`ListingManagementServiceImpl.mcpReader`、`ListingRagIdentity.verifyAuthorizedOperationContext`、`HttpListingSourceAdapter`、`ListingSourceAdapterTest`、`docs/internal-listing-business-api.md`。
+
+**关联**：LR-145/185；change `unify-user-organization-and-role-authorization` 任务 3.4/4.3。尚未运行本轮测试。
+
+## LR-188 门店映射变更必须保留未迁移旧身份的授权边界
+
+**结论**：已映射门店若仍有 `auth_user_store_identity` 用户引用，不得直接更换或清除 `store_business_id`。先完成旧身份与 Auth primary 成员关系的逐用户核验/迁移，再修改映射；primary 成员变化仍按锁内更新用户授权版本和 outbox。Future membership 开始前保留其旧映射，只有实际生效后才切换为组织派生范围。
+
+**根因**：签名 snapshot 在过渡期仍可能从旧 store identity 读取范围。若只更新组织映射而不处理旧行，旧 scope 会在组织来源删除后继续有效，导致维护人员误以为已撤权。
+
+**代码位置**：`OrganizationManagementService.setStoreBusinessId`、`AuthorizationRepository.readFacts`、`OrganizationManagementControllerTest`、`20261110_auth_organization.sql`。
+
+**关联**：LR-182；KI-252；change `unify-user-organization-and-role-authorization` 任务 2.4/3.6。
+
+## LR-189 Auth 管理入口要求管理员身份与精确权限双重成立
+
+**结论**：版本化授权下，Auth 账号管理、组织维护、角色目录与授予、业务身份维护等管理入口同时要求 Auth 快照派生的管理员身份和该入口对应的精确权限码。管理权限码本身不等价于管理员身份；普通角色即使因错误配置获得 `auth.users.manage` 或 `auth.roles.manage`，也不能读取管理数据或自授管理员角色。旧授权模式继续按既有 `ADMIN` 角色门控。
+
+**根因**：若只检查权限码，任何能修改角色目录或用户角色授予的普通调用者都可能给自己加上管理员权限，形成闭环提权。管理员身份是独立、受控的角色链投影，精确权限码进一步限制入口能力，两者必须来自 Auth 权威快照。
+
+**代码位置**：`AuthController.requireAdmin`、`AuthAccountMutationService.requireAdmin`、`RoleAuthorizationManagementService.authenticate`、`OrganizationManagementService.authenticate` 及其权限回归测试。
+
+**关联**：LR-145/184；KI-264；change `unify-user-organization-and-role-authorization` 任务 3.4/3.5。
+
+## LR-190 A2A 基础能力使用显式能力登记与签名操作
+
+**结论**：Agent 的 A2A capability 只有列入 `AGENT_AUTHORIZATION_BASELINE_CAPABILITIES` 才能使用基础能力；已知 `a2a:listing-agent` 与 `a2a:platform-operations-agent` 分别绑定签名操作 `listing.read` 与 `agent.chat.use`。这些操作只存在于 Auth 签名上下文，不进入角色权限授予；平台经营 Agent 的具体受限动作仍要求精确权限。Agent 和下游以请求签名本地校验 actor、audience、run/session、body、nonce 与 owner，不因 Graph 内多次子 Agent 调用逐次访问 Auth。
+
+**根因**：能力入口需要稳定的签名操作来绑定请求，但通用只读操作不应因此变成角色权限码。将退役的 `listing.read` 当作角色授权会被 Auth 正确拒绝；将所有 A2A 入口默认放行又会扩大工具能力。精确能力登记与固定操作映射同时保留基础操作与受限拦截点边界。
+
+**代码位置**：`AgentAuthorizationProperties.operationForCapability`、`OfficialA2aAgentClient.authenticate`、`AuthzOperationPolicy`、`BeaconA2aHttpClient`、`A2aAuthorizationVerifier`、`nacos/agent-service.yaml`。
+
+**关联**：LR-145/187；KI-266；change `unify-user-organization-and-role-authorization` 任务 5.4。
+
+## LR-191 Memory V2 授权上下文统一使用 constructor 序列化
+
+**结论**：Agent 到 Memory V2 的 Dubbo 引用显式固定 `fastjson2ctor`，Memory V2 provider 也显式发布该 serialization 与 `preferSerialization`。Dubbo 客户端按 provider 公布的优先序选择 wire codec；只设 provider 的协议 serializer 不会覆盖默认 preferred serializer。Memory V2 proof 携带 Authz context，其权限集合是嵌套列表；内建 `fastjson2` 的 JSONB `TYPED_ANY` 反序列化会在真实 RPC 中失败。constructor 序列化信封保留 `MemoryException` 的已知 code/field，不携带异常类名或 provider 文本。
+
+**代码位置**：`MemoryV2RpcServiceImpl`、`MemoryArchiveProviderTest`、`Fastjson2ConstructorSerialization`、`Fastjson2ConstructorSerializationTest`、`agent-service/memory/SupervisorMemoryConfiguration`、`common/memory/MemoryV2ConsumerConfiguration`、`agent-service/src/main/resources/application.yml`、`nacos/agent-service.yaml`。
+
+**关联**：LR-145/180；KI-267；change `unify-user-organization-and-role-authorization` 任务 5.4。2026-11-12 已在开发容器确认 Memory provider 发布 `prefer.serialization=fastjson2ctor`，并通过首次 Graph session 初始化及两次 Listing 子 Agent 的实际调用。
+
+## LR-192 Memory ArchiveStore 不使用字段未初始化的 Repository 代理
+
+**结论**：`MemoryArchiveStore` 以 Spring `@Component` 注册。Memory 服务中的领域服务共享并直接使用其 `JdbcTemplate`；`@Repository` 会触发异常翻译代理，领域服务调用的方法会委托到目标对象，但直接读取代理自身的 `jdbc` 字段为空。`JdbcTemplate` 已自行翻译 JDBC 异常，因此不需要 `@Repository` 的代理语义。
+
+**根因**：Spring 的类代理分别保存代理实例和目标实例的字段；直接字段访问不会经过代理拦截。测试中手工构造 Store 没有代理，因而不能发现只在运行容器出现的 NPE。
+
+**代码位置**：`MemoryArchiveStore`、`MemoryArchiveProviderTest`、`MemoryArchiveService` 与其他共享 Store 的 Memory 服务。
+
+**关联**：KI-267；change `unify-user-organization-and-role-authorization` 任务 5.4。2026-11-12 修复后 Memory 定向测试和真实 Graph API 均通过。后续新增 Store 注入测试需同时验证代理形态和共享 JDBC 可用性。

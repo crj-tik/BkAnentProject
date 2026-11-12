@@ -111,7 +111,7 @@ public class AuthAccountMutationService {
                         UPDATE user_account SET display_name=?,role_code=?,tenant_code=?,account_status=?,updated_at=CURRENT_TIMESTAMP
                         WHERE id=? AND deleted=0
                         """, request.displayName().trim(), normalizeRole(request.roleCode()), request.tenantCode().trim(), request.accountStatus(), userId);
-                repository.replaceAccountRole(userId, role, Instant.now());
+                repository.updateCompatibilityAccountRole(userId, old.getRoleCode(), role, Instant.now());
             });
             audit(actorId, userId, result, "ACCOUNT_UPDATED");
             return account(userId);
@@ -202,16 +202,16 @@ public class AuthAccountMutationService {
             throw credentialRequired();
         var authorization = snapshot(actor);
         if (principal.expiresAt() <= Instant.now().getEpochSecond()) throw credentialRequired();
-        if (!authorization.businessAdmin() || !authorization.hasPermission("auth.users.manage", Instant.now()))
+        Instant now = Instant.now();
+        if (!authorization.businessAdmin() || !authorization.hasPermission("auth.users.manage", now))
             throw error(HttpStatus.FORBIDDEN, "AUTH_FORBIDDEN", "需要业务管理员权限");
     }
 
     private void ensureAnotherAdmin(long target) {
-        int admins = repository.jdbc().queryForObject("""
-                SELECT COUNT(*) FROM user_account u JOIN auth_user_authorization_state s ON s.user_id=u.id
-                WHERE u.business_admin=1 AND u.deleted=0 AND u.account_status='ACTIVE' AND s.status='ACTIVE' AND u.id<>?
-                """, Integer.class, target);
-        boolean targetAdmin = repository.snapshot(target, Instant.now()).map(EffectivePermissionService.Snapshot::businessAdmin).orElse(false);
+        Instant now = Instant.now();
+        int admins = repository.countActiveAdministratorsExcept(target, now);
+        boolean targetAdmin = repository.snapshot(target, now)
+                .map(EffectivePermissionService.Snapshot::businessAdmin).orElse(false);
         if (targetAdmin && admins == 0) throw error(HttpStatus.CONFLICT, "AUTH_USER_CONFLICT", "系统至少需要保留一个启用的业务管理员");
     }
 

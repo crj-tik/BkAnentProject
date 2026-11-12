@@ -82,6 +82,7 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
         requireSubmittedBroker(request.brokerId(), brokerId);
         CustomerEntity entity = new CustomerEntity();
         entity.setBrokerId(brokerId);
+        entity.setOwnerUserId(com.bkanent.common.authz.AuthzRequestScope.actorId());
         applyProfile(entity, request);
         customerDomainService.save(entity);
         log.info("新增客户档案成功，customerId={}，姓名={}", entity.getId(), entity.getName());
@@ -137,8 +138,9 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
         CustomerFollowRecordEntity entity = new CustomerFollowRecordEntity();
         entity.setCustomerId(customerId);
         long brokerId = com.bkanent.common.authz.AuthzRequestScope.requireBrokerIdentity();
+        entity.setOwnerUserId(com.bkanent.common.authz.AuthzRequestScope.actorId());
         if (request.brokerId() != null && request.brokerId() != brokerId) deny();
-        if (!com.bkanent.common.authz.AuthzRequestScope.businessAdmin()
+        if (!com.bkanent.common.authz.AuthzRequestScope.hasOperation("customer.follow.write.all")
                 && !brokerIdEquals(customer.getBrokerId(), brokerId)) deny();
         entity.setBrokerId(brokerId);
         entity.setFollowType(request.followType().toUpperCase());
@@ -339,8 +341,8 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
 
     private CustomerEntity requireCustomer(Long customerId, String ownOperation, String businessWideOperation) {
         com.bkanent.common.authz.AuthzRequestScope.requireCurrent();
-        boolean businessAdmin = com.bkanent.common.authz.AuthzRequestScope.businessAdmin();
-        if (businessAdmin) {
+        boolean businessWide = com.bkanent.common.authz.AuthzRequestScope.hasOperation(businessWideOperation);
+        if (businessWide) {
             com.bkanent.common.authz.AuthzRequestScope.requireOperation(businessWideOperation);
         } else {
             com.bkanent.common.authz.AuthzRequestScope.requireOperation(ownOperation);
@@ -349,28 +351,28 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
         if (customer == null) {
             throw new IllegalArgumentException("客户档案不存在: " + customerId);
         }
-        if (!businessAdmin) {
-            Long brokerId = com.bkanent.common.authz.AuthzRequestScope.businessIdentity("BROKER");
-            if (brokerId == null || !brokerId.equals(customer.getBrokerId())) deny();
-        }
+        com.bkanent.common.authz.AuthzRequestScope.requireUserOrLegacyBrokerOwnership(
+                customer.getOwnerUserId(), customer.getBrokerId(), ownOperation, businessWideOperation);
         return customer;
     }
 
     private CustomerQueryRequest authorizedQuery(CustomerQueryRequest request) {
         if (request == null) request = new CustomerQueryRequest(null, null, null, null, null, null);
-        if (com.bkanent.common.authz.AuthzRequestScope.businessAdmin()) {
+        if (com.bkanent.common.authz.AuthzRequestScope.hasOperation("customer.read.all")) {
             com.bkanent.common.authz.AuthzRequestScope.requireOperation("customer.read.all");
             return request;
         }
         com.bkanent.common.authz.AuthzRequestScope.requireOperation("customer.read");
-        long brokerId = com.bkanent.common.authz.AuthzRequestScope.requireBrokerIdentity();
-        if (request.brokerId() != null && request.brokerId() != brokerId) deny();
+        Long brokerId = com.bkanent.common.authz.AuthzRequestScope.businessIdentity("BROKER");
+        long ownerUserId = com.bkanent.common.authz.AuthzRequestScope.actorId();
+        if (request.brokerId() != null && (brokerId == null || !request.brokerId().equals(brokerId))) deny();
         return new CustomerQueryRequest(request.profileType(), request.keyword(), brokerId,
-                request.intention(), request.budgetMin(), request.budgetMax());
+                request.intention(), request.budgetMin(), request.budgetMax(), ownerUserId);
     }
 
     private void requireOperation(String ownOperation, String businessWideOperation) {
-        if (com.bkanent.common.authz.AuthzRequestScope.businessAdmin()) {
+        if (businessWideOperation != null
+                && com.bkanent.common.authz.AuthzRequestScope.hasOperation(businessWideOperation)) {
             com.bkanent.common.authz.AuthzRequestScope.requireOperation(
                     businessWideOperation == null ? ownOperation : businessWideOperation);
         } else {
@@ -379,7 +381,6 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
     }
 
     private void requireAdminOperation(String operation) {
-        if (!com.bkanent.common.authz.AuthzRequestScope.businessAdmin()) deny();
         com.bkanent.common.authz.AuthzRequestScope.requireOperation(operation);
     }
 

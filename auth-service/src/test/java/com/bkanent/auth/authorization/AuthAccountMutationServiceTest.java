@@ -139,6 +139,22 @@ class AuthAccountMutationServiceTest {
     }
 
     @Test
+    void userManagementPermissionWithoutAdministratorIdentityCannotCreateAccounts() throws Exception {
+        jdbc.update("INSERT INTO auth_role_permission(role_id,permission_code) "
+                + "SELECT id,'auth.users.manage' FROM auth_role WHERE role_code='BROKER'");
+        String token = tokens.issueAccessToken(account(1));
+        var request = new CreateUserRequest("ordinary-admin-attempt", "correct-password", "普通用户", "BROKER", "test");
+
+        assertThrows(UserManagementException.class, () -> mutations.create(token, 1, request));
+        mvc.perform(post("/auth/users").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"ordinary-admin-attempt\",\"password\":\"correct-password\","
+                                + "\"displayName\":\"普通用户\",\"roleCode\":\"BROKER\",\"tenantCode\":\"test\"}"))
+                .andExpect(status().isForbidden());
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM user_account WHERE username='ordinary-admin-attempt'", Integer.class));
+    }
+
+    @Test
     void selfDisableDeleteAndLastBusinessAdminAreRejectedAtomically() {
         long revision = repository.currentVersion(2).orElseThrow().permissionRevision();
         assertThrows(UserManagementException.class, () -> management.updateUser(tokens.issueAccessToken(account(2)), 2, 2,
@@ -310,6 +326,34 @@ class AuthAccountMutationServiceTest {
         assertThrows(UserManagementException.class, () -> management.createUser(token, 2,
                 new CreateUserRequest("reserved-role-user", "correct-password", "测试", "PLATFORM_ADMIN", "test")));
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM user_account WHERE username='reserved-role-user'", Integer.class));
+    }
+
+    @Test
+    void compatibilityRoleUpdatePreservesExplicitAdditionalAndAdministratorRoles() {
+        jdbc.update("INSERT INTO auth_role(role_code,role_name,active,assignable,deleted,role_type) "
+                + "VALUES ('PLATFORM_ADMIN','平台管理员',1,0,0,'MANAGEMENT')");
+        jdbc.update("INSERT INTO auth_role_permission(role_id,permission_code) "
+                + "SELECT id,'auth.users.manage' FROM auth_role WHERE role_code='PLATFORM_ADMIN'");
+        jdbc.update("INSERT INTO auth_role(role_code,role_name,active,assignable,deleted,role_type) "
+                + "VALUES ('JOB_EXTRA','额外岗位',1,1,0,'JOB')");
+        jdbc.update("INSERT INTO auth_user_role(user_id,role_id,active) "
+                + "SELECT 1,id,1 FROM auth_role WHERE role_code IN ('PLATFORM_ADMIN','JOB_EXTRA')");
+        String adminToken = tokens.issueAccessToken(account(2));
+
+        mutations.update(adminToken, 2, 1,
+                new UpdateUserRequest("Broker Demo Updated", "MANAGER", "test", "ACTIVE"));
+
+        assertEquals(java.util.List.of("JOB_EXTRA", "MANAGER", "PLATFORM_ADMIN"), mutations.roles(1));
+        assertTrue(repository.snapshot(1, Instant.now()).orElseThrow().businessAdmin());
+        assertTrue(repository.snapshot(1, Instant.now()).orElseThrow().hasPermission("auth.users.manage", Instant.now()));
+    }
+
+    @Test
+    void legacyAdminFlagDoesNotCountAfterRoleOnlyAuthorizationCutover() {
+        jdbc.update("UPDATE user_account SET business_admin=1 WHERE id=1");
+        jdbc.update("UPDATE auth_authorization_policy SET role_only_mode=1 WHERE policy_id=1");
+
+        assertEquals(0, repository.countActiveAdministratorsExcept(2, Instant.now()));
     }
 
     private MockMvc mvcWithPasswordEncoder(org.springframework.security.crypto.password.PasswordEncoder passwords) {

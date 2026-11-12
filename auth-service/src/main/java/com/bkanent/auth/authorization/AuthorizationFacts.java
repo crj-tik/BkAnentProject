@@ -7,7 +7,7 @@ import java.util.Set;
 
 /** Database facts only; these records are not authentication or resource-scope proofs. */
 public record AuthorizationFacts(User user, List<Permission> catalog, List<RoleGrant> grants,
-                                 Map<String, Long> businessIdentities) {
+                                 Map<String, Long> businessIdentities, boolean roleOnlyMode) {
     public AuthorizationFacts {
         catalog = List.copyOf(catalog);
         grants = List.copyOf(grants);
@@ -15,7 +15,12 @@ public record AuthorizationFacts(User user, List<Permission> catalog, List<RoleG
     }
 
     public AuthorizationFacts(User user, List<Permission> catalog, List<RoleGrant> grants) {
-        this(user, catalog, grants, Map.of());
+        this(user, catalog, grants, Map.of(), false);
+    }
+
+    public AuthorizationFacts(User user, List<Permission> catalog, List<RoleGrant> grants,
+                             Map<String, Long> businessIdentities) {
+        this(user, catalog, grants, businessIdentities, false);
     }
 
     public record User(long userId, boolean active, boolean deleted, boolean businessAdmin,

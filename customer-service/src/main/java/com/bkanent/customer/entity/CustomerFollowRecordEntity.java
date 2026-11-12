@@ -19,6 +19,8 @@ public class CustomerFollowRecordEntity extends BaseEntity {
      * 业务属性：brokerId。
      */
     private Long brokerId;
+    /** Auth user who authored this follow record; legacy rows remain null pending review. */
+    private Long ownerUserId;
     /**
      * 业务属性：followType。
      */
@@ -55,6 +57,10 @@ public class CustomerFollowRecordEntity extends BaseEntity {
     public void setBrokerId(Long brokerId) {
         this.brokerId = brokerId;
     }
+
+    public Long getOwnerUserId() { return ownerUserId; }
+
+    public void setOwnerUserId(Long ownerUserId) { this.ownerUserId = ownerUserId; }
 
     public String getFollowType() {
         return followType;

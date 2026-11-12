@@ -18,6 +18,8 @@ public class MarketingContentEntity extends BaseEntity {
     private Long listingId;
     /** Trusted Auth-derived owner; legacy rows remain null and are inaccessible to broker-scoped callers. */
     private Long ownerBrokerId;
+    /** Auth platform user responsible for this content; null only for legacy rows pending evidence review. */
+    private Long ownerUserId;
     /**
      * 业务属性：platform。
      */
@@ -101,6 +103,10 @@ public class MarketingContentEntity extends BaseEntity {
     public Long getOwnerBrokerId() { return ownerBrokerId; }
 
     public void setOwnerBrokerId(Long ownerBrokerId) { this.ownerBrokerId = ownerBrokerId; }
+
+    public Long getOwnerUserId() { return ownerUserId; }
+
+    public void setOwnerUserId(Long ownerUserId) { this.ownerUserId = ownerUserId; }
 
     public String getPlatform() {
         return platform;

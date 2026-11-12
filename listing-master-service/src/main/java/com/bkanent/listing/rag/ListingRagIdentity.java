@@ -64,7 +64,7 @@ public class ListingRagIdentity {
     }
     public AuthRagPrincipal requireReader(RagCredentialContext credentials) {
         if (com.bkanent.common.authz.AuthzRequestScope.present()) {
-            String operation = com.bkanent.common.authz.AuthzRequestScope.businessAdmin()
+            String operation = com.bkanent.common.authz.AuthzRequestScope.hasOperation("listing.read.all")
                     ? "listing.read.all" : "listing.read";
             com.bkanent.common.authz.AuthzRequestScope.requireOperation(operation);
             return scopedPrincipal();
@@ -77,7 +77,6 @@ public class ListingRagIdentity {
     public AuthRagPrincipal requireAdmin(RagCredentialContext credentials) {
         if (com.bkanent.common.authz.AuthzRequestScope.present()) {
             com.bkanent.common.authz.AuthzRequestScope.requireOperation("listing.index.manage");
-            if (!com.bkanent.common.authz.AuthzRequestScope.businessAdmin()) throw new RagException(RagErrorCode.FORBIDDEN);
             return scopedPrincipal();
         }
         AuthRagPrincipal p = resolve(credentials);
@@ -99,7 +98,7 @@ public class ListingRagIdentity {
         return new AuthRagPrincipal(Long.parseLong(context.actorId()), "SIGNED", true, true, expires,
                 AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION, context.permissionRevision(),
                 context.credentialEpoch(), response.snapshot().businessAdmin(),
-                response.snapshot().businessAdmin() ? java.util.List.of("BUSINESS_ADMIN") : java.util.List.of("BROKER"),
+                java.util.List.of(),
                 response.snapshot().permissions(), null);
     }
     public static void requireCurrent(AuthRagPrincipal principal) {
@@ -116,7 +115,7 @@ public class ListingRagIdentity {
     }
     public static boolean activeOnly(AuthRagPrincipal principal) {
         requireCurrent(principal);
-        return principal.versionedAuthorization() ? !principal.businessAdmin() : !"ADMIN".equals(principal.roleCode());
+        return principal.versionedAuthorization() ? !principal.hasPermission("listing.read.all") : !"ADMIN".equals(principal.roleCode());
     }
     public static boolean canRead(AuthRagPrincipal principal, com.bkanent.listing.entity.ListingEntity entity) {
         return entity != null && Integer.valueOf(0).equals(entity.getDeleted())
@@ -208,10 +207,6 @@ public class ListingRagIdentity {
                         com.bkanent.common.authz.AuthzErrorCode.PERMISSION_DENIED);
             }
             Long brokerId = context.businessIdentities().get("BROKER");
-            if (!businessWide && (brokerId == null || brokerId <= 0)) {
-                throw new com.bkanent.common.authz.AuthzException(
-                        com.bkanent.common.authz.AuthzErrorCode.PERMISSION_DENIED);
-            }
             return new com.bkanent.listing.source.ListingAccessScope(Long.parseLong(context.actorId()),
                     businessWide ? null : brokerId, businessWide);
         } catch (com.bkanent.common.authz.AuthzException failure) {
@@ -263,7 +258,7 @@ public class ListingRagIdentity {
             var scope = com.bkanent.common.authz.AuthzRequestScope.verifyAndOpenForwarded(authorization,
                     envelope.callerService(), authorityKeys, Instant.now());
             try {
-                String operationCode = authorization.snapshot().businessAdmin()
+                String operationCode = context.allowedOperations().contains(businessWideOperation)
                         ? businessWideOperation : ownOperation;
                 com.bkanent.common.authz.AuthzRequestScope.requireOperation(operationCode);
                 return scope;
@@ -330,10 +325,10 @@ public class ListingRagIdentity {
             }
             long expires = Math.min(context.expiresAtEpochSecond(), Math.min(context.runHardDeadlineEpochSecond(),
                     freshness.notAfterEpochSecond()));
+            boolean platformAdministrator = context.allowedOperations().contains("auth.users.manage");
             return new AuthRagPrincipal(Long.parseLong(context.actorId()), "SIGNED", true, true, expires,
                     AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION, context.permissionRevision(),
-                    context.credentialEpoch(), businessWide,
-                    businessWide ? java.util.List.of("BUSINESS_ADMIN") : java.util.List.of("USER"),
+                    context.credentialEpoch(), platformAdministrator, java.util.List.of(),
                     context.allowedOperations(), null);
         } catch (com.bkanent.common.authz.AuthzException failure) {
             throw toRagException(failure);
@@ -469,10 +464,10 @@ public class ListingRagIdentity {
             }
             long expires = Math.min(context.expiresAtEpochSecond(), Math.min(context.runHardDeadlineEpochSecond(),
                     freshness.notAfterEpochSecond()));
+            boolean platformAdministrator = context.allowedOperations().contains("auth.users.manage");
             return new AuthRagPrincipal(Long.parseLong(context.actorId()), "SIGNED", true, true, expires,
                     AuthRagPrincipal.VERSIONED_AUTHORIZATION_VERSION, context.permissionRevision(),
-                    context.credentialEpoch(), businessWide,
-                    businessWide ? java.util.List.of("BUSINESS_ADMIN") : java.util.List.of("USER"),
+                    context.credentialEpoch(), platformAdministrator, java.util.List.of(),
                     context.allowedOperations(), null);
         } catch (com.bkanent.common.authz.AuthzException failure) {
             throw toRagException(failure);

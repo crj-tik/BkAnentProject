@@ -18,5 +18,9 @@ public interface MarketingContentSearchService {
     /**
      * 业务方法：search。
      */
-    List<MarketingContentEntity> search(MarketingContentSearchRequest request, Long ownerBrokerId);
+    default List<MarketingContentEntity> search(MarketingContentSearchRequest request, Long ownerBrokerId) {
+        return search(request, ownerBrokerId, null);
+    }
+
+    List<MarketingContentEntity> search(MarketingContentSearchRequest request, Long ownerBrokerId, Long ownerUserId);
 }

@@ -9,6 +9,7 @@
         <result column="customer_id" property="customerId"/>
         <result column="listing_id" property="listingId"/>
         <result column="broker_id" property="brokerId"/>
+        <result column="owner_user_id" property="ownerUserId"/>
         <result column="inquiry_channel" property="inquiryChannel"/>
         <result column="inquiry_content" property="inquiryContent"/>
         <result column="status" property="status"/>
@@ -21,7 +22,7 @@
     </resultMap>
 
     <sql id="Base_Column_List">
-        id, customer_id, listing_id, broker_id, inquiry_channel, inquiry_content, status, validation_state,
+        id, customer_id, listing_id, broker_id, owner_user_id, inquiry_channel, inquiry_content, status, validation_state,
         checked_listing_version, checked_at, created_at, updated_at, deleted
     </sql>
 

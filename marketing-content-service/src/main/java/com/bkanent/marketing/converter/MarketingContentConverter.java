@@ -83,6 +83,7 @@ public class MarketingContentConverter {
                 entity.getId(),
                 entity.getListingId(),
                 entity.getOwnerBrokerId(),
+                entity.getOwnerUserId(),
                 entity.getPlatform(),
                 entity.getTitle(),
                 entity.getContentType(),

@@ -35,6 +35,7 @@ public class MemoryV2ConsumerConfiguration {
         reference.setCheck(false);
         reference.setRetries(0);
         reference.setTimeout(5000);
+        reference.setParameters(java.util.Map.of("serialization", "fastjson2ctor"));
         return reference;
     }
 }

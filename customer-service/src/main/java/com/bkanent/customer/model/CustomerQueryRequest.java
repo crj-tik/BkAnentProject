@@ -17,6 +17,12 @@ public record CustomerQueryRequest(
         /** 业务属性：budgetMin。 */
         BigDecimal budgetMin,
         /** 业务属性：budgetMax。 */
-        BigDecimal budgetMax
+        BigDecimal budgetMax,
+        /** Trusted Auth user owner filter; never accepted from an external request. */
+        Long ownerUserId
 ) {
+    public CustomerQueryRequest(String profileType, String keyword, Long brokerId, String intention,
+                                BigDecimal budgetMin, BigDecimal budgetMax) {
+        this(profileType, keyword, brokerId, intention, budgetMin, budgetMax, null);
+    }
 }

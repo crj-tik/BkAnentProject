@@ -62,14 +62,46 @@ public final class AuthzRequestScope {
                 response.snapshot().permissions()), AuthzErrorCode.PERMISSION_DENIED);
     }
 
-    /** Admin scope is explicit business-wide; a missing broker mapping never turns into userId-as-brokerId. */
+    /** Checks an explicit effective operation, without treating the compatibility admin bit as authority. */
+    public static boolean hasOperation(String operation) {
+        AuthzResponse response = requireCurrent();
+        return AuthzOperationPolicy.allows(operation, response.context().allowedOperations(),
+                response.snapshot().permissions());
+    }
+
+    /** Wide scope comes only from the exact wide operation; a missing broker mapping never implies ownership. */
     public static void requireBrokerOwnership(Long resourceBrokerId, String operation, String businessWideOperation) {
         AuthzResponse response = requireCurrent();
-        if (response.snapshot().businessAdmin()) {
+        if (AuthzOperationPolicy.allows(businessWideOperation, response.context().allowedOperations(),
+                response.snapshot().permissions())) {
             requireOperation(businessWideOperation);
             return;
         }
         requireOperation(operation);
+        Long brokerId = response.context().businessIdentities().get("BROKER");
+        AuthzContract.check(brokerId != null && resourceBrokerId != null && brokerId.equals(resourceBrokerId),
+                AuthzErrorCode.PERMISSION_DENIED);
+    }
+
+    /**
+     * Authorizes a platform-user owner first and accepts the legacy broker identity only for rows
+     * that have not yet received an evidence-backed owner_user_id.
+     */
+    public static void requireUserOrLegacyBrokerOwnership(Long ownerUserId, Long resourceBrokerId,
+                                                         String operation, String businessWideOperation) {
+        AuthzResponse response = requireCurrent();
+        if (AuthzOperationPolicy.allows(businessWideOperation, response.context().allowedOperations(),
+                response.snapshot().permissions())) {
+            requireOperation(businessWideOperation);
+            return;
+        }
+        requireOperation(operation);
+        if (ownerUserId != null) {
+            AuthzContract.check(ownerUserId > 0
+                            && response.context().actorId().equals(Long.toString(ownerUserId)),
+                    AuthzErrorCode.PERMISSION_DENIED);
+            return;
+        }
         Long brokerId = response.context().businessIdentities().get("BROKER");
         AuthzContract.check(brokerId != null && resourceBrokerId != null && brokerId.equals(resourceBrokerId),
                 AuthzErrorCode.PERMISSION_DENIED);

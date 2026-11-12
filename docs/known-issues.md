@@ -1,5 +1,37 @@
 # Bug 与已知问题清单
 
+## KI-263 [OPEN·P2] 营销房源效果查询缺少结果数量上限
+
+**发现日期与依据**：2026-11-10，静态复核 `CampaignJdbcRepository.findEffectsByOwnerAndListingId`。该方法按可信 owner 和房源查询并一次性返回全部匹配的效果观察，没有分页或最大行数；已有房源索引但不能直接覆盖观察时间排序。
+
+**影响与边界**：效果记录增长后，单次合法查询可能增加数据库、内存和响应开销。本次未进行数据规模、MySQL 执行计划或性能验证。
+
+**待处理**：定义稳定排序与分页或有界查询契约，保留 owner 隔离和数据模式标记，并验证大量记录、并发翻页和索引计划。
+
+## KI-262 [OPEN·P3] 营销 ROI 汇总按发布尝试逐条查询效果
+
+**发现日期与依据**：2026-11-10，静态核对 `CampaignLifecycleService.roiReport`。服务先获取当前用户的发布尝试，再对每条尝试调用 `CampaignJdbcRepository.findEffect`，查询次数随尝试数线性增长。
+
+**影响与边界**：尝试较多时可能增加数据库往返和报表延迟；本次未做性能测试，也未验证实际数据规模或运行影响。新按房源效果查询已改为按 owner 和房源联合查询，该处置不覆盖 ROI 汇总路径。
+
+**待处理**：在保持当前用户范围及模拟/真实数据模式区分的前提下，评估批量获取或有界分页，并增加查询次数与结果一致性测试。
+
+## KI-260 [OPEN·P1] 业主委托写入与受管表的房源字段约束不一致
+
+**发现日期与依据**：2026-11-10，静态核对 `CustomerManagementServiceImpl.saveEntrust` 与受管初始化 SQL。服务拒绝非空 `listingId`，但 `owner_entrust_record.listing_id` 定义为 `BIGINT NOT NULL`，仓库迁移中未发现后续修改此约束。
+
+**影响与边界**：按该表结构，新建委托无法以合法房源 ID 通过服务校验；空值写入在严格 SQL 模式下也无法满足数据库约束。实际目标库结构、SQL 模式和接口行为尚未核验，不据此断言所有环境的运行结果。
+
+**待处理**：明确委托是否必须绑定房源及其可信归属校验，再统一服务校验、数据库约束与迁移；覆盖空值、有效房源、越权房源及更新场景。关联 KI-206。
+
+## KI-261 [OPEN·P2] 房源咨询创建未检查客户档案是否为买方
+
+**发现日期与依据**：2026-11-10，静态核对买方咨询规范与 `CustomerListingInquiryServiceImpl.createInquiry`。规范要求可访问的买方档案；创建入口的 `requireCustomer` 只检查权限、档案存在和经纪人归属，未检查 `profileType`。
+
+**影响与边界**：符合其他授权与房源验证条件的非买方档案可能被用于创建咨询；本次未执行接口或数据库测试，具体运行结果待验证。
+
+**待处理**：在创建入口按业务规范验证档案类型，并覆盖买方、业主及无效类型的正反例；保留既有客户和房源的权限校验。
+
 ## KI-259 [FIXED·本提交·P1] 知识候选生成因 evidence 规则提示不清与数字 assetId 拒绝而必然失败
 
 **发现日期与依据**：2026-11-10，配置有效模型密钥后知识 E2E 的 generate 任务仍 GENERATION_FAILED（模型调用 ~8-10s 后失败，异常被吞无日志）。手动复现定位两处根因：其一，系统提示词未说明"每个 assetId 至多一条 quote、总条数不超过来源数"，模型对单一来源返回 3 条 evidence，触发 `entries.size() > sources.size()` 拒绝；其二，模型将 assetId 输出为 JSON 数字（`"assetId": 2`），`text()` 只接受文本节点返回 null，`byId.get(null)` 直接 INVALID_GENERATION_EVIDENCE——即真实模型生成在该环境从未成功过。
@@ -87,7 +119,7 @@
 
 **发现日期与依据**：2026-11-09。`CampaignPlanPrepareRequest` 包含 `requestId`，但 `CampaignLifecycleService.prepare` 未读取该字段，每次生成新 `planId` 并插入计划；`/promotions/publish` 复用该请求。兼容接口 `/promotions/effects/sync` 的 `LegacyEffectSyncRequest` 包含 `statDate`，Controller 仅将 `publishRecordId` 传给服务。
 
-**影响与待处理**：调用方若把准备请求的 `requestId` 当作幂等键，重试可能生成多个计划；提供 `statDate` 不会选择统计日期。契约已按当前实现标明这两个字段未生效；需明确业务语义，再实现可验证的幂等和日期筛选，或修订接口移除无效字段。当前未修改业务行为，不能宣称已修复。
+**影响与待处理**：调用方若把准备请求的 `requestId` 当作幂等键，重试可能生成多个计划。仓库中旧 `/promotions/**` 兼容入口已移除，因此旧 `statDate` 不再是当前接口参数；实际部署切换仍待验证。规范 prepare 的幂等问题仍未修复，需明确业务语义并实现可验证的幂等，或修订接口移除无效字段。
 
 ## KI-255 [FIXED·本提交·P2] Agent 部分查询和控制入口重复要求当前用户 ID
 
@@ -536,7 +568,7 @@
 
 **现象与根因**：`common/.../rpc/AuthenticatedPrincipal.java` 只返回 userId；`auth-service/.../rpc/AuthPermissionRpcServiceImpl.java:36-60` 验证账号/角色活跃，但 hasPermission 不按具体权限码授予资源范围。房源 brokerId 来自业务请求，当前未证明等于认证 userId。固定 gateway 标记、普通 userId 或 Dubbo 服务名不能作为新 RAG 的服务认证或跨空间授权证明。
 
-**处置（实施中）**：在现有RAG principal/独立scope基础上，新增Auth唯一维护的类型化userId→brokerId表、受权管理API、版本化outbox及签名快照；Listing详情与写操作、Customer档案及子记录使用签名映射核资源归属，公开Listing摘要继续只返回未删除ON_SALE范围。Customer→Listing RPC已转发原Auth签名响应，并以服务请求证明绑定授权摘要与查询，由Listing本地验签，不逐次调用Auth或转发用户Bearer。Common/Auth/RAG/Listing/Customer定向回归通过。无历史映射回填；Gateway/服务公钥与生产配置未接线，其他跨服务入口尚未迁移，新入口仍默认关闭。因此当前代码回归不证明线上资源授权已启用，本项保持OPEN。
+**处置（源码与开发栈部分验收）**：在现有RAG principal/独立scope基础上，新增Auth唯一维护的类型化userId→brokerId表、受权管理API、版本化outbox及签名快照；Listing详情与写操作、Customer档案及子记录使用签名映射核资源归属，公开Listing摘要继续只返回未删除ON_SALE范围。Customer→Listing RPC以请求证明绑定授权摘要与查询，由Listing本地验签，不逐次调用Auth或转发用户Bearer。2026-11-12 WSL开发栈的Gateway/Auth/Agent链和两次Listing A2A读取已通过真实API验收。开发库只读报告仍有3条Customer档案、1条Customer咨询、3条Listing记录缺少`owner_user_id`，三域迁移账本均无候选记录；没有历史映射证据，未自动回填。未验收的私有数据范围继续拒绝访问，本项保持OPEN；开发验收不等于生产部署。
 
 **本批实施提交**：`9f87f87`（Auth映射及领域归属）与`53dbb66`（Customer→Listing请求级上下文）；跨服务其余接线、生产配置和历史映射回填仍未完成。
 
@@ -1645,7 +1677,7 @@
 
 **发现日期与依据**：2026-10-26，实施`unify-versioned-permission-context`任务10.2时核对`BusinessAnalyticsServiceImpl`、Settlement REST/RPC/Tool/MCP及定时入口。Business数据按employee/store标识聚合，Auth当前只保存userId→brokerId；Settlement记录另使用employeeId、contractId、payeeEmployeeId。现有合同自动生成直接调Contract与Business Dubbo RPC，未附请求绑定委托；`markBatchPaid`会生成`BANK-{id}`流水并写PAID，银行callback也未验签。
 
-**当前处置**：新增精确Business/Settlement操作码与本地REST/MCP/A2A请求scope检查，直连无用户上下文的RPC在读取前拒绝。Settlement计算、自动生成、批次准备、状态变更和模拟付款保持失败关闭；自动任务默认关闭。新REST过滤器默认关闭、MCP操作映射为空，未部署Auth密钥，不能据本地测试宣称新链已启用。
+**当前处置**：新增精确Business/Settlement操作码与本地REST/MCP/A2A请求scope检查，直连无用户上下文的RPC在读取前拒绝。Settlement计算、自动生成、批次准备、状态变更和模拟付款保持失败关闭；自动任务默认关闭。2026-11-12 开发环境已完成 Auth 管理员 role-only 切换，但没有建立 employee/contract/payee 映射；Business/Settlement 新 REST 过滤器仍默认关闭、MCP 操作映射为空，不能据 Auth/Agent API 验收宣称财务链路开放。
 
 **后续验收**：需要可信userId→employee/store/payee映射及审计维护、Contract调用请求证明、Settlement有效状态转换、真实支付渠道签名callback，再补REST/RPC/A2A/MCP跨协议与版本刷新测试。未完成之前不得开放需要这些关系的Settlement副作用；Business宽域数据仅按Auth明确授予的精确`.all`操作访问。
 
@@ -1665,9 +1697,9 @@
 
 **发现日期与依据**：2026-10-26，实施Notification任务10.5时复核`ContractReminderServiceImpl`与`CustomerReminderServiceImpl`。两个提醒任务从合同或客户记录读取`brokerId`，旧`NotificationRpcService.sendStationMessage`却把参数当作`recipientUserId`；两者是不同业务ID，偶然同值也不证明身份。Auth现维护的权威方向是`userId→brokerId`，当前定时调用没有可验证的反向解析或收件人绑定。
 
-**当前处置**：旧无请求证明Dubbo发送方法拒绝；Contract/Customer提醒缺省关闭，即使配置显式启用仍记录跳过且不查询或发送。没有把经纪人私有消息误投到同号用户。
+**当前处置（2026-11-12）**：旧无请求证明 Dubbo 方法继续拒绝。Customer 侧负责人为空即跳过，以已存 `owner_user_id` 构造 30 秒服务签名 permit；Notification 仅接受登记的 Customer 服务密钥、固定提醒操作/场景及收件人、正文 hash、幂等键，并以唯一键实现重复投递幂等。全量单测和 Auth/Graph API 验收通过，但本轮没有触发 Customer→Notification permit 的真实定时投递。开发库 3 条 Customer 档案、1 条咨询均缺少 owner，Customer reminder 不会发送；Contract 提醒仍无可信 userId 来源并继续失败关闭。没有把 brokerId 当作收件人。
 
-**解除条件**：由Auth对已维护映射做受限、唯一的broker反查，或签发可在Notification本地验证的服务请求证明，将受管服务身份、精确通知操作、recipientUserId、正文hash、幂等标识与期限绑定。映射缺失/多值时保持拒绝；实现后补跨服务反例与定时重试/幂等验证。不得按同号、姓名或模型字段猜测收件人。
+**解除条件**：完成本 change 的 Customer→Notification 实际密钥加载、manifest upgrade/repeat、正反 permit、重复重试和已回填/未回填收件验收；为 Contract 提醒建立权威 `userId→brokerId` 或 owner_user_id 来源及同等服务证明后再开放。映射缺失、密钥缺失、过期、正文或收件篡改必须拒绝。不得按同号、姓名或模型字段猜测收件人。
 
 **关联**：LR-150；KI-151；change `unify-versioned-permission-context`任务10.5/10.6。
 
@@ -2082,3 +2114,67 @@ Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/
 **修复**：上述 113 处请求参数和路径变量均按原 Java 形参名显式绑定；另将 88 处位置参数或 `value` 别名统一为 `name = ...`。根 POM 启用 `<parameters>true</parameters>`，作为其他反射型框架的兼容元数据。新增仓库约定，后续 MVC 入口不得依赖编译参数元数据完成 HTTP 绑定。
 
 **验证**：2026-11-06，源码扫描确认所有 `@RequestParam` / `@PathVariable` 均使用显式 `name` 属性，没有隐式、位置参数或 `value` 别名；有效 POM 显示 `<parameters>true</parameters>`，Agent 模块打包成功且新 JAR 中存在 `MethodParameters`；根工程 19 个 Maven 模块 `compile` 全部成功。未运行全量测试或容器运行态验收。
+
+## KI-252 [OPEN·P1] 更改 Auth 门店映射时可能遗留旧 STORE 签名身份
+
+**发现日期与依据**：2026-11-11，检查 Auth 组织映射与旧 `auth_user_store_identity` 过渡读取时发现，`setStoreBusinessId` 会版本化当前 primary 成员，但未阻止在旧身份行仍引用映射门店时清空/替换 `store_business_id`。`AuthorizationRepository.readFacts` 仍会独立读取旧身份，因此操作表面成功后旧 STORE 范围可能继续签发。
+
+**当前源码处置（待测试）**：映射变更增加旧身份引用检查，存在引用时返回 409；新增 API 回归用例确认映射及旧身份均保留。尚未运行测试或开发库验证，不能关闭问题。
+
+**关联**：LR-182/188；`OrganizationManagementService.setStoreBusinessId`；change `unify-user-organization-and-role-authorization` 任务 2.4/3.6。
+
+## KI-253 [OPEN·P1] 房源域全量读取被错误投影为平台管理员身份
+
+**发现日期与依据**：2026-11-11，检查 Listing Authz/MCP 到 RAG principal 的签名桥接时发现，代码以 `listing.read.all` 生成 `businessAdmin=true` 和伪 `BUSINESS_ADMIN` role。该域操作可独立授予非平台管理员，兼容字段会混淆全局管理员身份。
+
+**当前源码处置（待测试）**：Listing principal 现在只在签名操作含 `auth.users.manage` 时投影管理员兼容标记，v2 principal 不合成角色名；`listing.read.all` 仍只控制房源范围。尚未运行本轮回归。
+
+**关联**：LR-187；`ListingManagementServiceImpl`、`ListingRagIdentity`；change `unify-user-organization-and-role-authorization` 任务 3.4/4.3。
+
+## KI-254 [OPEN·P2] 可选 Listing HTTP source 只传过滤头而未本地验证负责人
+
+**发现日期与依据**：2026-11-11，核对 opt-in `HttpListingSourceAdapter` 时发现，owner scope 仅作为 HTTP header 发送；旧适配器未检查上游返回记录的负责人，忽略过滤头的 provider 可能返回别的用户数据。该 provider 不在正式默认配置中，但源码仍可显式启用。
+
+**当前源码处置（待测试）**：search、batch-read、check 响应增加 ownerUserId/brokerId 证据并在 Listing adapter 本地复核；显式其他 owner 或缺少受信 broker 兼容映射的记录拒绝/隐藏。测试和可选 provider 契约联调尚未运行。
+
+**关联**：LR-185/187；`HttpListingSourceAdapter`、`ListingSourceAdapterTest`；change `unify-user-organization-and-role-authorization` 任务 4.3。
+
+## KI-264 [FIXED·本提交·P1] Auth 管理接口仅凭权限码可能允许普通角色自我提权
+
+**发现日期与依据**：2026-11-11，代码审查 Auth v2 账号、组织、角色授权入口时发现，部分路径只检查 `auth.users.manage` / `auth.roles.manage`，未同时验证 Auth 快照中的管理员身份。普通角色一旦错误获得管理权限，可读取或修改角色及授予关系，可能为自身补上管理员角色。
+
+**修复与验证**：Auth 控制器、账号写服务、角色/身份管理和组织管理入口统一要求管理员身份与对应精确权限码；服务和 MVC 回归用例覆盖普通角色持有管理码但不具管理员身份时的拒绝。2026-11-12 真实 API 将开发环境两名管理员逐项对账后切换到显式 `PLATFORM_ADMIN` 角色并启用 role-only；经纪人/运营验收账号均不能访问管理或经营分析操作。全量 Maven 回归及 Auth API 验收通过。
+
+**关联**：LR-189；`AuthController`、`AuthAccountMutationService`、`RoleAuthorizationManagementService`、`OrganizationManagementService`；change `unify-user-organization-and-role-authorization` 任务 3.4/3.5。
+
+## KI-265 [FIXED·本提交·P1] 新 Graph 会话被 Memory 空记录查询拒绝
+
+**发现日期与依据**：2026-11-12，真实 API 验收中两位非管理员用户已能登录并读取本人档案；首次创建 Graph run 时，`SupervisorSessionOwnershipService.claim` 先查询尚未写入的 session，Memory `requireSessionOwner` 将“无记录”返回 403，导致 Agent 将合法的新 run 终止为 HTTP 500。此前验收记录曾要求在发起 Graph 前预建 Memory session。
+
+**源码修复（待验证）**：内部 session 查询仍先验证 Bearer 与 `X-Memory-Owner`；未存在的 session 返回空数据供当前可信 actor 初始化，已存在的 session 仍按持久 owner 校验，其他 owner 和不存在状态对外保持相同拒绝语义。写入、artifact、handoff、snapshot 仍要求 session 已建立并属于本人。
+
+**验证状态**：`MemoryControllerTest.authenticatedOwnerGetsEmptyResultForSessionNotCreatedYet` 及 Memory 定向回归通过；2026-11-12 新 session 首次 Graph run 实际通过，无须预建 Memory session，并成功持久化 run/session 及两次 Listing subAgent 调用。历史验收文件记录的是旧状态，不代表当前仍需预建 session。
+
+**关联**：LR-145；`MemoryController.getSessionMemory`、`SupervisorSessionOwnershipService.claim`；change `unify-user-organization-and-role-authorization` 任务 5.4。
+
+## KI-266 [FIXED·本提交·P1] Listing A2A 基础操作被误配为退役角色权限
+
+**发现日期与依据**：2026-11-12，真实 Graph 验收返回成功但未调用 Listing 子 Agent。Agent 配置把 `a2a:listing-agent` 映射到 `listing.read` 角色权限；该操作已按基础能力从 Auth 权限目录退役，验收角色无法获得这一授权，导致子 Agent 调用被拒绝。
+
+**源码修复（待验证）**：A2A 能力通过精确 `AGENT_AUTHORIZATION_BASELINE_CAPABILITIES` 登记，再映射到固定签名操作；Listing 和平台经营角色均保持零受限权限。签名上下文及下游 actor、run/session、owner 和资源范围校验不变，平台经营子操作仍要求其精确受限权限。
+
+**验证状态**：Agent 定向及全量 Maven 回归通过；Nacos 读回 12 个服务 Data ID；2026-11-12 两轮真实 Graph 验收各观察到至少两次 `a2a:listing-agent` 调用。
+
+**关联**：LR-190；`AgentAuthorizationProperties`、`OfficialA2aAgentClient`；change `unify-user-organization-and-role-authorization` 任务 5.4。
+
+## KI-267 [FIXED·本提交·P1] Agent 到 Memory V2 的 Dubbo 请求未统一使用 constructor codec
+
+**发现日期与依据**：2026-11-12，重跑真实 Graph API 时，HTTP 返回成功但业务状态为 `MEMORY_MEMORY_UNAVAILABLE`，模型轮数与子 Agent 调用数均为 0。Memory 服务收到 Agent 请求时记录 `Decode rpc invocation failed`，Dubbo 内建 `FastJson2ObjectInput` 解析授权上下文权限列表时报 `array not support input TYPED_ANY`。Agent 有单个 Memory 引用的 codec 设置，但应用/Nacos 的协议级 codec 未统一固定；共享/自动创建引用因此仍可能选择内建 serializer。
+
+**二次定位**：Agent 的 Memory V2 consumer metadata 已声明 `serialization=fastjson2ctor`，但真实 Memory provider metadata 仍公布 `prefer.serialization=fastjson2,hessian2`；Dubbo 按 provider 的优先协议选择 fastjson2，因而 provider 的 `serialization=fastjson2ctor` fallback 和 consumer 引用参数不足以固定实际 wire 格式。
+
+**三次定位**：修正 provider 首选 serializer 后，真实请求已到达 `manageWriter`；Memory 日志随后发现 `MemoryArchiveStore.jdbc` 在直接字段访问时为空。该 bean 被 `@Repository` 异常翻译后处理器代理，代理实例的字段未初始化；手工构造的测试没有代理，因此此前未发现。
+
+**修复与验证**：Memory V2 provider 显式声明 `serialization` 与 `preferSerialization` 为 `fastjson2ctor`；移除 Agent 全局协议覆盖，仅保留 Memory V2 精确 consumer pin。constructor 序列化对 `MemoryException` 使用固定 code/field 信封。`MemoryArchiveStore` 改为无异常翻译代理的 `@Component`，并加入容器装配回归。全量 Maven 回归后 Memory 定向测试通过；重建开发镜像并通过两轮真实 Graph API，Memory 初始化正常，Listing subAgent 各调用两次，LLM 伪造用户字段未替换 actor。
+
+**关联**：LR-145/180/191；`SupervisorMemoryConfiguration`、`MemoryV2ConsumerConfiguration`、`nacos/agent-service.yaml`；change `unify-user-organization-and-role-authorization` 任务 5.4。

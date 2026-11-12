@@ -50,6 +50,24 @@ class AuthzRequestScopeTest {
         }
     }
 
+    @Test
+    void explicitUserOwnerTakesPrecedenceAndLegacyBrokerIsOnlyUsedForUnmigratedRows() throws Exception {
+        var key = keyPair();
+        var user = admission(key, false, BROKER_PERMISSIONS, Map.of("BROKER", 41L));
+        try (var ignored = AuthzRequestScope.verifyAndOpen(user.response(), user.binding(), TOKEN,
+                "customer-service", "POST", "/customers", null, BODY,
+                Map.of(KID, key.getPublic()), Instant.ofEpochSecond(NOW))) {
+            AuthzRequestScope.requireUserOrLegacyBrokerOwnership(123L, 999L,
+                    "customer.update.own", "customer.update.all");
+            assertThrows(AuthzException.class, () -> AuthzRequestScope.requireUserOrLegacyBrokerOwnership(
+                    124L, 41L, "customer.update.own", "customer.update.all"));
+            AuthzRequestScope.requireUserOrLegacyBrokerOwnership(null, 41L,
+                    "customer.update.own", "customer.update.all");
+            assertThrows(AuthzException.class, () -> AuthzRequestScope.requireUserOrLegacyBrokerOwnership(
+                    null, 42L, "customer.update.own", "customer.update.all"));
+        }
+    }
+
     private static Admission admission(KeyPair key, boolean admin, List<String> permissions,
                                        Map<String, Long> identities) {
         var binding = new RequestBinding("gateway", "customer-service", "POST", "/customers", "/customers",

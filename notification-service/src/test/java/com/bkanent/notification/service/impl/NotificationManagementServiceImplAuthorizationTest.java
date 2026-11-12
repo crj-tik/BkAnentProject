@@ -1,6 +1,8 @@
 package com.bkanent.notification.service.impl;
 
 import com.bkanent.common.agent.SessionStreamEvent;
+import com.bkanent.common.rpc.AuthorizedNotificationPermit;
+import com.bkanent.common.rpc.AuthorizedNotificationPermitSignature;
 import com.bkanent.common.authz.AuthzContract;
 import com.bkanent.common.authz.AuthzErrorCode;
 import com.bkanent.common.authz.AuthzException;
@@ -20,6 +22,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.security.KeyPairGenerator;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -152,6 +156,41 @@ class NotificationManagementServiceImplAuthorizationTest {
                     new RobotMessageRequest("WECOM", "https://example.test/hook", "title", "body", "agent")))
                     .isEqualTo(11L);
         }
+    }
+
+    @Test
+    void authorizedReminderRetriesReturnOneRecordAndRejectChangedContent() throws Exception {
+        var pair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        AtomicReference<NotificationRecordEntity> saved = new AtomicReference<>();
+        when(records.getOne(any(com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper.class)))
+                .thenAnswer(invocation -> saved.get());
+        when(records.save(any(NotificationRecordEntity.class))).thenAnswer(invocation -> {
+            NotificationRecordEntity row = invocation.getArgument(0);
+            row.setId(91L);
+            saved.set(row);
+            return true;
+        });
+        var valid = reminderPermit(pair, "please follow up");
+
+        assertThat(service.sendAuthorizedReminder(valid)).isEqualTo(91L);
+        assertThat(service.sendAuthorizedReminder(valid)).isEqualTo(91L);
+        verify(records, times(1)).save(any(NotificationRecordEntity.class));
+
+        var changed = reminderPermit(pair, "different body");
+        assertThatThrownBy(() -> service.sendAuthorizedReminder(changed))
+                .isInstanceOf(AuthzException.class)
+                .extracting(error -> ((AuthzException) error).code())
+                .isEqualTo(AuthzErrorCode.CONTEXT_CONFLICT);
+    }
+
+    private static AuthorizedNotificationPermit reminderPermit(java.security.KeyPair pair, String content) {
+        String scene = AuthorizedNotificationPermit.CUSTOMER_ENTRUST_EXPIRING_SCENE;
+        long issued = Instant.now().getEpochSecond();
+        var unsigned = new AuthorizedNotificationPermit("customer-service", "customer-service-current",
+                AuthorizedNotificationPermit.CUSTOMER_ENTRUST_REMINDER_OPERATION, ACTOR,
+                scene, "title", content, "customer-entrust-expiring:77:2026-12-01", issued, issued + 30,
+                AuthorizedNotificationPermitSignature.payloadHash(scene, "title", content), null);
+        return AuthorizedNotificationPermitSignature.sign(unsigned, pair.getPrivate());
     }
 
     @Test

@@ -2,12 +2,16 @@ package com.bkanent.notification.rpc;
 
 import com.bkanent.common.authz.AuthzErrorCode;
 import com.bkanent.common.authz.AuthzException;
+import com.bkanent.notification.security.AuthorizedNotificationPermitVerifier;
+import com.bkanent.notification.service.NotificationManagementService;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class NotificationRpcServiceImplAuthorizationTest {
-    private final NotificationRpcServiceImpl service = new NotificationRpcServiceImpl();
+    private final AuthorizedNotificationPermitVerifier verifier = org.mockito.Mockito.mock(AuthorizedNotificationPermitVerifier.class);
+    private final NotificationManagementService management = org.mockito.Mockito.mock(NotificationManagementService.class);
+    private final NotificationRpcServiceImpl service = new NotificationRpcServiceImpl(verifier, management);
 
     @Test
     void legacyRpcMethodsWithoutRequestBoundRecipientProofAreRejected() {

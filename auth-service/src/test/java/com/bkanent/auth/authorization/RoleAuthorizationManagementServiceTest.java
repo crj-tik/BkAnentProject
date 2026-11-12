@@ -48,6 +48,17 @@ class RoleAuthorizationManagementServiceTest {
     }
 
     @Test
+    void managementPermissionAloneCannotGrantRolesOrReadAuthorizationAdministration() {
+        fixture.jdbc.update("INSERT INTO auth_role_permission(role_id,permission_code) VALUES (20,'auth.roles.manage')");
+        fixture.jdbc.update("INSERT INTO auth_user_role(user_id,role_id,active) VALUES (1,20,1)");
+
+        status(HttpStatus.FORBIDDEN, () -> service.roles(ordinary));
+        status(HttpStatus.FORBIDDEN, () -> service.replaceUserRoles(ordinary, 2, List.of()));
+        assertEquals(0, fixture.jdbc.queryForObject("SELECT COUNT(*) FROM auth_user_role WHERE user_id=2", Integer.class));
+        assertEquals(0, fixture.jdbc.queryForObject("SELECT COUNT(*) FROM auth_authorization_audit", Integer.class));
+    }
+
+    @Test
     void inactiveDeletedOrMissingStateAdminCannotManage() {
         fixture.jdbc.update("UPDATE user_account SET account_status='DISABLED' WHERE id=3");
         status(HttpStatus.UNAUTHORIZED, () -> service.catalog(admin));
@@ -134,14 +145,20 @@ class RoleAuthorizationManagementServiceTest {
     }
 
     @Test
-    void selfAdminCannotBeGrantedByOrdinaryManagerOrRevokedByAdminAndLastAdminRemains() {
+    void legacyAdministratorCannotBeGrantedThroughCompatibilityApiAndLastRoleAdminRemains() {
         service.replaceUserRoles(admin,1,List.of(new RoleAuthorizationManagementService.UserRoleGrant(20,null,null)));
         status(HttpStatus.FORBIDDEN, () -> service.setBusinessAdmin(ordinary,1,true));
         status(HttpStatus.FORBIDDEN, () -> service.setBusinessAdmin(admin,3,false));
-        service.setBusinessAdmin(admin,2,true);
-        service.setBusinessAdmin(admin,2,false);
-        assertEquals(1,fixture.jdbc.queryForObject("SELECT COUNT(*) FROM user_account WHERE business_admin=1",Integer.class));
-        assertEquals(1,fixture.jdbc.queryForObject("SELECT business_admin FROM user_account WHERE id=3",Integer.class));
+        status(HttpStatus.CONFLICT, () -> service.setBusinessAdmin(admin,2,true));
+
+        prepareAdministratorRole();
+        service.setPlatformAdministrator(admin,2,true);
+        service.setPlatformAdministrator(admin,3,true);
+        service.setPlatformAdministrator(admin,2,false);
+        status(HttpStatus.CONFLICT, () -> service.setPlatformAdministrator(admin,3,false));
+        assertEquals(0,fixture.jdbc.queryForObject("SELECT COUNT(*) FROM user_account WHERE business_admin=1",Integer.class));
+        assertTrue(fixture.repository.snapshot(3,now).orElseThrow().businessAdmin());
+        assertFalse(fixture.repository.snapshot(2,now).orElseThrow().businessAdmin());
     }
 
     @Test
@@ -149,7 +166,7 @@ class RoleAuthorizationManagementServiceTest {
         fixture.jdbc.update("INSERT INTO auth_role(id,role_code,role_name,active,assignable,deleted,role_type) "
                 + "VALUES (50,'PLATFORM_ADMIN','平台管理员',1,0,0,'MANAGEMENT')");
         fixture.jdbc.update("INSERT INTO auth_role_permission(role_id,permission_code) VALUES (50,'auth.users.manage'),(50,'auth.roles.manage')");
-        service.setBusinessAdmin(admin, 2, true);
+        fixture.jdbc.update("UPDATE user_account SET business_admin=1 WHERE id=2");
         fixture.jdbc.update("INSERT INTO auth_user_role(user_id,role_id,active) VALUES (2,50,1)");
         assertTrue(fixture.repository.snapshot(2, now).orElseThrow().businessAdmin());
         var result = service.setBusinessAdmin(admin, 2, false);
@@ -165,7 +182,7 @@ class RoleAuthorizationManagementServiceTest {
     void administratorRevocationRestoresFlagAndPreparedRoleWhenAuditFails() {
         fixture.jdbc.update("INSERT INTO auth_role(id,role_code,role_name,active,assignable,deleted,role_type) "
                 + "VALUES (50,'PLATFORM_ADMIN','平台管理员',1,0,0,'MANAGEMENT')");
-        service.setBusinessAdmin(admin, 2, true);
+        fixture.jdbc.update("UPDATE user_account SET business_admin=1 WHERE id=2");
         fixture.jdbc.update("INSERT INTO auth_user_role(user_id,role_id,active) VALUES (2,50,1)");
         long revision = fixture.repository.currentVersion(2).orElseThrow().permissionRevision();
         fixture.jdbc.execute("DROP TABLE auth_authorization_audit");
@@ -173,6 +190,50 @@ class RoleAuthorizationManagementServiceTest {
         assertEquals(1, fixture.jdbc.queryForObject("SELECT business_admin FROM user_account WHERE id=2", Integer.class));
         assertEquals(1, fixture.jdbc.queryForObject("SELECT COUNT(*) FROM auth_user_role WHERE user_id=2 AND role_id=50", Integer.class));
         assertEquals(revision, fixture.repository.currentVersion(2).orElseThrow().permissionRevision());
+    }
+
+    @Test
+    void administratorMigrationIsPermissionEquivalentAndCannotRemoveTheLastAdministrator() {
+        fixture.jdbc.update("INSERT INTO auth_role(id,role_code,role_name,active,assignable,deleted,role_type) "
+                + "VALUES (50,'PLATFORM_ADMIN','平台管理员',1,0,0,'MANAGEMENT')");
+        List<String> catalog = service.catalog(admin).stream().filter(AuthorizationFacts.Permission::active)
+                .map(AuthorizationFacts.Permission::code)
+                .filter(code -> !com.bkanent.common.authz.AuthzOperationPolicy.isBaseline(code)).toList();
+        service.updatePreparedAdministratorPermissions(admin, catalog);
+
+        var migrated = service.setPlatformAdministrator(admin, 3, true);
+        var snapshot = fixture.repository.snapshot(3, now).orElseThrow();
+        assertEquals(0, fixture.jdbc.queryForObject("SELECT business_admin FROM user_account WHERE id=3", Integer.class));
+        assertTrue(snapshot.businessAdmin());
+        assertEquals(new java.util.TreeSet<>(catalog), new java.util.TreeSet<>(snapshot.permissions()));
+        assertNotNull(migrated.eventId());
+        status(HttpStatus.CONFLICT, () -> service.setPlatformAdministrator(admin, 3, false));
+
+        service.setPlatformAdministrator(admin, 2, true);
+        service.setPlatformAdministrator(admin, 3, false);
+        assertFalse(fixture.repository.snapshot(3, now).orElseThrow().businessAdmin());
+        String secondAdmin = tokens.issueAccessToken(account(2));
+        status(HttpStatus.CONFLICT, () -> service.setPlatformAdministrator(secondAdmin, 2, false));
+    }
+
+    @Test
+    void globalRoleOnlyCutoverWaitsForLegacyAdminsAndPermissionParity() {
+        fixture.jdbc.update("INSERT INTO auth_role(id,role_code,role_name,active,assignable,deleted,role_type) "
+                + "VALUES (50,'PLATFORM_ADMIN','平台管理员',1,0,0,'MANAGEMENT')");
+        status(HttpStatus.CONFLICT, () -> service.enableRoleOnlyMode(admin));
+        List<String> catalog = service.catalog(admin).stream().filter(AuthorizationFacts.Permission::active)
+                .map(AuthorizationFacts.Permission::code)
+                .filter(code -> !com.bkanent.common.authz.AuthzOperationPolicy.isBaseline(code)).toList();
+        service.updatePreparedAdministratorPermissions(admin, catalog);
+        service.setPlatformAdministrator(admin, 3, true);
+        var result = service.enableRoleOnlyMode(admin);
+        assertNotNull(result.eventId());
+        assertEquals(1, fixture.jdbc.queryForObject(
+                "SELECT role_only_mode FROM auth_authorization_policy WHERE policy_id=1", Integer.class));
+        assertTrue(fixture.repository.snapshot(3, now).orElseThrow().businessAdmin());
+        assertEquals(0, fixture.jdbc.queryForObject("SELECT COUNT(*) FROM user_account WHERE business_admin=1 "
+                + "AND deleted=0 AND account_status='ACTIVE'", Integer.class));
+        assertNull(service.enableRoleOnlyMode(admin).eventId());
     }
 
     @Test
@@ -242,6 +303,14 @@ class RoleAuthorizationManagementServiceTest {
 
     private RoleAuthorizationManagementService.RoleDefinition definition(String code,List<String> permissions) {
         return new RoleAuthorizationManagementService.RoleDefinition(code,"test",null,true,true,permissions);
+    }
+    private void prepareAdministratorRole() {
+        fixture.jdbc.update("INSERT INTO auth_role(id,role_code,role_name,active,assignable,deleted,role_type) "
+                + "VALUES (50,'PLATFORM_ADMIN','平台管理员',1,0,0,'MANAGEMENT')");
+        List<String> catalog = service.catalog(admin).stream().filter(AuthorizationFacts.Permission::active)
+                .map(AuthorizationFacts.Permission::code)
+                .filter(code -> !com.bkanent.common.authz.AuthzOperationPolicy.isBaseline(code)).toList();
+        service.updatePreparedAdministratorPermissions(admin, catalog);
     }
     private UserAccountEntity account(long id) { var account=new UserAccountEntity(); account.setId(id); return account; }
     private void status(HttpStatus status,Runnable call) {

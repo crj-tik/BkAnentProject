@@ -160,15 +160,15 @@ class ListingBusinessSourceServiceTest {
     }
 
     @Test
-    void ownListingReadRequiresSignedBrokerIdentityAndExactReadPermission() {
+    void ownListingReadUsesSignedUserOwnerWithoutLegacyBrokerMappingAndRequiresPermission() {
         ListingSourceAdapter source = mock(ListingSourceAdapter.class);
+        when(source.search(any(), any())).thenReturn(new ListingSourcePage(List.of(), null));
         ListingBusinessSourceService service = new ListingBusinessSourceService(source);
 
         try (AuthzRequestScope.Scope ignored = ListingAuthzScopeFixture.open(false,
                 List.of("listing.read"), List.of("listing.read"), Map.of())) {
-            AuthzException missingBroker = assertThrows(AuthzException.class, () -> service.search(
-                    new ListingBusinessSearchRequest("domain-parallel-v1", null, null, 10)));
-            assertEquals(AuthzErrorCode.PERMISSION_DENIED, missingBroker.code());
+            assertTrue(service.search(new ListingBusinessSearchRequest(
+                    "domain-parallel-v1", null, null, 10)).items().isEmpty());
         }
         try (AuthzRequestScope.Scope ignored = ListingAuthzScopeFixture.open(false,
                 List.of(), List.of(), Map.of("BROKER", 77L))) {
@@ -176,7 +176,8 @@ class ListingBusinessSourceServiceTest {
                     new ListingBusinessSearchRequest("domain-parallel-v1", null, null, 10)));
             assertEquals(AuthzErrorCode.PERMISSION_DENIED, missingPermission.code());
         }
-        verifyNoInteractions(source);
+        verify(source).search(any(), argThat(scope -> scope.actorId() == 123L
+                && scope.brokerId() == null && !scope.businessWideRead()));
     }
 
     @Test

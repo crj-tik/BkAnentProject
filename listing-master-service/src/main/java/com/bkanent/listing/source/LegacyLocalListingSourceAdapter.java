@@ -54,7 +54,15 @@ public class LegacyLocalListingSourceAdapter implements ListingSourceAdapter {
                 .like(ListingEntity::getTitle, keyword)
                 .or().like(ListingEntity::getAddress, keyword));
         query.gt(afterId != null, ListingEntity::getId, afterId);
-        query.eq(!scope.businessWideRead(), ListingEntity::getBrokerId, scope.brokerId());
+        if (!scope.businessWideRead()) {
+            if (scope.brokerId() == null) {
+                query.eq(ListingEntity::getOwnerUserId, scope.actorId());
+            } else {
+                query.and(owner -> owner.eq(ListingEntity::getOwnerUserId, scope.actorId())
+                        .or(legacy -> legacy.isNull(ListingEntity::getOwnerUserId)
+                                .eq(ListingEntity::getBrokerId, scope.brokerId())));
+            }
+        }
         query.eq(!scope.businessWideRead(), ListingEntity::getStatus, "ON_SALE");
         query.orderByAsc(ListingEntity::getId).last("limit " + (request.limit() + 1));
 
@@ -133,9 +141,12 @@ public class LegacyLocalListingSourceAdapter implements ListingSourceAdapter {
     }
 
     private boolean readable(ListingEntity entity, ListingAccessScope scope) {
-        return entity != null && Integer.valueOf(0).equals(entity.getDeleted())
-                && (scope.businessWideRead() || scope.brokerId().equals(entity.getBrokerId()))
-                && (scope.businessWideRead() || "ON_SALE".equals(entity.getStatus()));
+        if (entity == null || !Integer.valueOf(0).equals(entity.getDeleted())
+                || !scope.businessWideRead() && !"ON_SALE".equals(entity.getStatus())) return false;
+        if (scope.businessWideRead()) return true;
+        return entity.getOwnerUserId() != null
+                ? entity.getOwnerUserId() == scope.actorId()
+                : scope.brokerId() != null && scope.brokerId().equals(entity.getBrokerId());
     }
 
     private ListingSourceSnapshot snapshot(ListingEntity entity) {

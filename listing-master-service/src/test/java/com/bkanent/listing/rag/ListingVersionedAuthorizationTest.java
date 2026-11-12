@@ -93,6 +93,32 @@ class ListingVersionedAuthorizationTest {
     }
 
     @Test
+    void explicitUserOwnerTakesPrecedenceOverLegacyBrokerForPrivateListing() {
+        var domain = org.mockito.Mockito.mock(com.bkanent.listing.service.ListingDomainService.class);
+        var entity = row(41L, "ON_SALE");
+        entity.setId(9L);
+        entity.setOwnerUserId(124L);
+        org.mockito.Mockito.when(domain.getById(9L)).thenReturn(entity);
+        var service = new com.bkanent.listing.service.impl.ListingManagementServiceImpl(domain,
+                new com.bkanent.listing.converter.ListingConverter(),
+                org.mockito.Mockito.mock(com.bkanent.listing.service.ListingSearchService.class),
+                new com.bkanent.listing.search.ListingKnowledgeDocumentAssembler(),
+                org.mockito.Mockito.mock(ListingRagOutbox.class), identity,
+                org.mockito.Mockito.mock(com.bkanent.listing.mapper.ListingPriceRecordMapper.class),
+                org.mockito.Mockito.mock(com.bkanent.listing.mapper.ListingStatusRecordMapper.class),
+                org.mockito.Mockito.mock(com.bkanent.listing.service.ListingCommandReceiptService.class),
+                org.mockito.Mockito.mock(com.bkanent.listing.customer.CustomerProfileVerifyClient.class),
+                org.mockito.Mockito.mock(com.bkanent.listing.service.ListingAssetService.class),
+                org.mockito.Mockito.mock(com.bkanent.listing.service.ListingPrivateInfoService.class));
+        try (var ignored = ListingAuthzScopeFixture.open(false, java.util.List.of("listing.read"),
+                java.util.List.of("listing.read"), java.util.Map.of("BROKER", 41L))) {
+            assertThrows(AuthzException.class, () -> service.getListingDetail(9L));
+            entity.setOwnerUserId(123L);
+            assertEquals(9L, service.getListingDetail(9L).id());
+        }
+    }
+
+    @Test
     void businessWideRagSearchRequiresExplicitAdminReadOperationAndDoesNotInventBroker() {
         try (var ignored = ListingAuthzScopeFixture.open(true, java.util.List.of("listing.read.all"),
                 java.util.List.of("listing.read.all"), java.util.Map.of())) {

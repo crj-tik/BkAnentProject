@@ -57,7 +57,17 @@ public class ListingDomainServiceImpl extends ServiceImpl<ListingMapper, Listing
                     .or()
                     .like(ListingEntity::getOwnerName, request.keyword()));
             wrapper.eq(StringUtils.hasText(request.status()), ListingEntity::getStatus, request.status());
-            wrapper.eq(request.brokerId() != null, ListingEntity::getBrokerId, request.brokerId());
+            if (request.ownerUserId() != null) {
+                if (request.brokerId() == null) {
+                    wrapper.eq(ListingEntity::getOwnerUserId, request.ownerUserId());
+                } else {
+                    wrapper.and(scope -> scope.eq(ListingEntity::getOwnerUserId, request.ownerUserId())
+                            .or(legacy -> legacy.isNull(ListingEntity::getOwnerUserId)
+                                    .eq(ListingEntity::getBrokerId, request.brokerId())));
+                }
+            } else {
+                wrapper.eq(request.brokerId() != null, ListingEntity::getBrokerId, request.brokerId());
+            }
             wrapper.ge(request.minArea() != null, ListingEntity::getArea, request.minArea());
             wrapper.le(request.maxArea() != null, ListingEntity::getArea, request.maxArea());
             wrapper.ge(request.minTotalPrice() != null, ListingEntity::getTotalPrice, request.minTotalPrice());

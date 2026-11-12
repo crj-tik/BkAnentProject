@@ -24,6 +24,8 @@ public class CustomerListingInquiryEntity extends BaseEntity {
      * 业务属性：brokerId（可信负责经纪人）。
      */
     private Long brokerId;
+    /** Auth user responsible for this inquiry; legacy rows remain null pending review. */
+    private Long ownerUserId;
     /**
      * 业务属性：inquiryChannel（咨询渠道）。
      */
@@ -72,6 +74,10 @@ public class CustomerListingInquiryEntity extends BaseEntity {
     public void setBrokerId(Long brokerId) {
         this.brokerId = brokerId;
     }
+
+    public Long getOwnerUserId() { return ownerUserId; }
+
+    public void setOwnerUserId(Long ownerUserId) { this.ownerUserId = ownerUserId; }
 
     public String getInquiryChannel() {
         return inquiryChannel;

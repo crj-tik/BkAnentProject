@@ -236,7 +236,8 @@ public class AuthController {
         boolean permitted;
         if (userManagementService.isVersionedAuthorization()) {
             var snapshot = userManagementService.authorization(account.getId());
-            permitted = snapshot.businessAdmin() && snapshot.hasPermission("auth.users.manage", java.time.Instant.now());
+            java.time.Instant now = java.time.Instant.now();
+            permitted = snapshot.businessAdmin() && snapshot.hasPermission("auth.users.manage", now);
         } else permitted = "ADMIN".equals(account.getRoleCode());
         if (!permitted) {
             throw new UserManagementException(HttpStatus.FORBIDDEN, "AUTH_FORBIDDEN", "需要管理员权限");

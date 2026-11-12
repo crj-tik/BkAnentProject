@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -44,6 +45,28 @@ import static org.mockito.Mockito.never;
 import org.mockito.ArgumentCaptor;
 
 class OfficialA2aAgentClientTest {
+
+    @Test
+    void baselineA2aCapabilitiesResolveToSignedOperationsOnlyWhenExplicitlyRegistered() {
+        var properties = new com.bkanent.agent.config.AgentAuthorizationProperties();
+        assertThat(properties.operationForCapability("a2a:listing-agent")).isNull();
+        assertThat(properties.operationForCapability("a2a:platform-operations-agent")).isNull();
+
+        properties.setBaselineCapabilities(Set.of("a2a:listing-agent", "a2a:platform-operations-agent"));
+
+        assertThat(properties.operationForCapability("a2a:listing-agent")).isEqualTo("listing.read");
+        assertThat(properties.operationForCapability("a2a:platform-operations-agent")).isEqualTo("agent.chat.use");
+        assertThat(properties.permissionForCapability("a2a:listing-agent")).isNull();
+    }
+
+    @Test
+    void restrictedCapabilityStillResolvesOnlyFromItsExplicitPermissionMapping() {
+        var properties = new com.bkanent.agent.config.AgentAuthorizationProperties();
+        properties.setCapabilityPermissions(Map.of("local:milvusKnowledgeSearch", "agent.rag.search"));
+
+        assertThat(properties.operationForCapability("local:milvusKnowledgeSearch")).isEqualTo("agent.rag.search");
+        assertThat(properties.operationForCapability("local:unregisteredTool")).isNull();
+    }
 
     @Test
     void platformCapabilityRequiresItsExactPermissionBeforeTransport() {

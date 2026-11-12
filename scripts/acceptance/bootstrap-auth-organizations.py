@@ -87,7 +87,9 @@ def users_named(base, token, username):
 
 def check_role(role, expected_name):
     return (role.get('name') == expected_name and role.get('active') is True
-            and role.get('assignable') is True and role.get('permissionCodes') == [])
+            and role.get('assignable') is True
+            and role.get('permissionCodes') == []
+            and role.get('roleType') in ('JOB', 'UNCLASSIFIED'))
 
 
 def find_org(orgs, spec, parent):
@@ -166,8 +168,14 @@ def main():
     for _, _, _, role_code, role_name in SAMPLES:
         if not any(role.get('code') == role_code for role in roles):
             request(base, '/auth/authorization/roles', admin,
-                    {'code': role_code, 'name': role_name, 'description': '本地验收用，基础功能无权限码',
-                     'active': True, 'assignable': True, 'permissionCodes': []}, 'POST')
+                    {'code': role_code, 'name': role_name, 'description': '本地验收用，不授予受限权限',
+                     'active': True, 'assignable': True, 'permissionCodes': [],
+                     'roleType': 'JOB'}, 'POST')
+        else:
+            role = next(role for role in roles if role.get('code') == role_code)
+            if role.get('roleType') == 'UNCLASSIFIED':
+                request(base, f'/auth/authorization/roles/{role["id"]}/type', admin,
+                        {'roleType': 'JOB'}, 'PUT')
     if not company:
         company = request(base, '/auth/authorization/organizations', admin,
                           {'code': COMPANY[0], 'name': COMPANY[1], 'type': COMPANY[2]}, 'POST')

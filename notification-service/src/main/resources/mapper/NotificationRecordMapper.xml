@@ -19,6 +19,7 @@
         <result column="send_time" property="sendTime"/>
         <result column="external_message_id" property="externalMessageId"/>
         <result column="error_message" property="errorMessage"/>
+        <result column="idempotency_key" property="idempotencyKey"/>
         <result column="created_at" property="createdAt"/>
         <result column="updated_at" property="updatedAt"/>
         <result column="deleted" property="deleted"/>
@@ -26,7 +27,8 @@
 
     <sql id="Base_Column_List">
         id, recipient_user_id, channel, scene_code, title, content, receiver_address, external_webhook, send_status,
-        read_status, read_time, send_time, external_message_id, error_message, created_at, updated_at, deleted
+        read_status, read_time, send_time, external_message_id, error_message, idempotency_key,
+        created_at, updated_at, deleted
     </sql>
 
 </mapper>

@@ -8,7 +8,8 @@ import org.apache.dubbo.config.annotation.DubboService;
 import org.springframework.beans.factory.ObjectProvider;
 
 /** Required native Dubbo provider. Unimplemented learning/search capability fails explicitly. */
-@DubboService(group = MemoryV2Contract.DUBBO_GROUP, version = MemoryV2Contract.DUBBO_SERVICE_VERSION, protocol = "dubbo")
+@DubboService(group = MemoryV2Contract.DUBBO_GROUP, version = MemoryV2Contract.DUBBO_SERVICE_VERSION,
+        protocol = "dubbo", serialization = "fastjson2ctor", preferSerialization = "fastjson2ctor")
 public class MemoryV2RpcServiceImpl implements MemoryV2RpcService {
     private final MemoryArchiveService archive;
     private final MemorySharingAccessService sharing;

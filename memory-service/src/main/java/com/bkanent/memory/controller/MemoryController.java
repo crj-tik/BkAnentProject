@@ -79,7 +79,12 @@ public class MemoryController {
 
     @GetMapping("/sessions")
     public ApiResponse<SessionMemoryResponse> getSessionMemory(@RequestParam(name = "sessionId") String sessionId) {
-        return checkedResponse(requireSessionOwner(sessionId).orElse(null));
+        if (sessionId == null || sessionId.isBlank()) throw new RagException(RagErrorCode.FORBIDDEN);
+        var session = sessionSharedMemoryService.find(sessionId);
+        session.ifPresent(value -> ragSecurity.requireOwner(currentPrincipal(), value.userId()));
+        // A missing session is a normal first-run result. Authentication and OWNER are still
+        // checked by the request filter and again before returning; existing owners are checked above.
+        return checkedResponse(session.orElse(null));
     }
 
     @PostMapping("/artifacts")
