@@ -2178,3 +2178,13 @@ Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/
 **修复与验证**：Memory V2 provider 显式声明 `serialization` 与 `preferSerialization` 为 `fastjson2ctor`；移除 Agent 全局协议覆盖，仅保留 Memory V2 精确 consumer pin。constructor 序列化对 `MemoryException` 使用固定 code/field 信封。`MemoryArchiveStore` 改为无异常翻译代理的 `@Component`，并加入容器装配回归。全量 Maven 回归后 Memory 定向测试通过；重建开发镜像并通过两轮真实 Graph API，Memory 初始化正常，Listing subAgent 各调用两次，LLM 伪造用户字段未替换 actor。
 
 **关联**：LR-145/180/191；`SupervisorMemoryConfiguration`、`MemoryV2ConsumerConfiguration`、`nacos/agent-service.yaml`；change `unify-user-organization-and-role-authorization` 任务 5.4。
+
+## KI-268 [OPEN·P1] Redis 共享 default ACL 账号仍为无密码全权限
+
+**发现日期与证据**：2026-11-12，在验证 Auth/Agent 专用 Redis ACL 时，实际 Redis 7.4 返回 `default` 用户 `on nopass`、`~*`、`&*`、`+@all`；根目录 `.env` 没有配置 `REDIS_PASSWORD`。Auth writer 与 Agent reader 的独立账号及权限边界测试均通过，但可访问共享 Redis 的容器仍能使用 `default` 绕过这两组专用 ACL。
+
+**影响**：专用 `authz-writer` / `agent-authz-reader` 凭据能约束按预期接入的客户端，但当前还不能构成对同一 Docker 网络内其他服务的完整 Redis 隔离；拥有 Redis 网络连通性的进程可以通过无密码 `default` 读取或修改授权键及其他 Redis 数据。
+
+**处理方向**：先盘点并迁移普通 Redis 消费者到有密码且按服务收窄的 ACL 身份，再关闭 `default` 或至少撤销 `nopass` 与全权限。迁移前不直接关闭共享账号，避免让现有服务无预期中断。专用 Auth/Agent ACL 与 TLS 配置继续独立保留。
+
+**关联**：KI-209；`docker-compose.yml` Redis ACL/TLS 配置；`scripts/security/configure-authorization-redis-acl.sh`；`scripts/security/verify-authorization-redis-acl.sh`。
