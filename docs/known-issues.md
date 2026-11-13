@@ -568,7 +568,7 @@
 
 **现象与根因**：`common/.../rpc/AuthenticatedPrincipal.java` 只返回 userId；`auth-service/.../rpc/AuthPermissionRpcServiceImpl.java:36-60` 验证账号/角色活跃，但 hasPermission 不按具体权限码授予资源范围。房源 brokerId 来自业务请求，当前未证明等于认证 userId。固定 gateway 标记、普通 userId 或 Dubbo 服务名不能作为新 RAG 的服务认证或跨空间授权证明。
 
-**处置（源码与开发栈部分验收）**：在现有RAG principal/独立scope基础上，新增Auth唯一维护的类型化userId→brokerId表、受权管理API、版本化outbox及签名快照；Listing详情与写操作、Customer档案及子记录使用签名映射核资源归属，公开Listing摘要继续只返回未删除ON_SALE范围。Customer→Listing RPC以请求证明绑定授权摘要与查询，由Listing本地验签，不逐次调用Auth或转发用户Bearer。2026-11-12 WSL开发栈的Gateway/Auth/Agent链和两次Listing A2A读取已通过真实API验收。开发库当前有唯一 `BROKER:1→userId=1` 映射，Auth 审计记录显示由 userId=2 于 2026-11-06 16:15:13.419565（+08:00）登记；但3条Customer档案、1条Customer咨询、3条Listing记录的 `owner_user_id` 仍为空，三域迁移账本均为0。Customer档案1、2创建于映射登记前，其余五条记录创建于登记后；没有逐记录 `VERIFIED` 回填账本和完整写入者审计，故仍未自动回填。未完成逐域对账的私有数据范围继续拒绝访问，本项保持OPEN；开发验收不等于生产部署。
+**处置（源码与开发栈部分验收）**：在现有RAG principal/独立scope基础上，新增Auth唯一维护的类型化userId→brokerId表、受权管理API、版本化outbox及签名快照；Listing详情与写操作、Customer档案及子记录使用签名映射核资源归属，公开Listing摘要继续只返回未删除ON_SALE范围。Customer→Listing RPC以请求证明绑定授权摘要与查询，由Listing本地验签，不逐次调用Auth或转发用户Bearer。2026-11-12 WSL开发栈的Gateway/Auth/Agent链和两次Listing A2A读取已通过真实API验收。开发库当前有唯一 `BROKER:1→userId=1` 映射，Auth 审计记录显示由 userId=2 于 2026-11-06 16:15:13.419565（+08:00）登记。2026-11-13 项目负责人确认本批 `broker_id=1` 的客户及房源均由该经纪人负责后，通过逐行证据账本完成 3 条 Customer 档案、1 条 Customer 咨询和 3 条 Listing 的回填，`owner_user_id=1`，账本分别为 Customer `APPLIED=4`、Listing `APPLIED=3`；档案1、2早于映射登记，但也有本次负责人确认记录，未按数字相等推断。Marketing 未涉及。未完成逐域对账的其他私有数据范围继续拒绝访问，本项保持OPEN；开发验收不等于生产部署。
 
 **本批实施提交**：`9f87f87`（Auth映射及领域归属）与`53dbb66`（Customer→Listing请求级上下文）；跨服务其余接线、生产配置和历史映射回填仍未完成。
 
@@ -1697,7 +1697,7 @@
 
 **发现日期与依据**：2026-10-26，实施Notification任务10.5时复核`ContractReminderServiceImpl`与`CustomerReminderServiceImpl`。两个提醒任务从合同或客户记录读取`brokerId`，旧`NotificationRpcService.sendStationMessage`却把参数当作`recipientUserId`；两者是不同业务ID，偶然同值也不证明身份。Auth现维护的权威方向是`userId→brokerId`，当前定时调用没有可验证的反向解析或收件人绑定。
 
-**当前处置（2026-11-12）**：旧无请求证明 Dubbo 方法继续拒绝。Customer 侧负责人为空即跳过，以已存 `owner_user_id` 构造 30 秒服务签名 permit；Notification 仅接受登记的 Customer 服务密钥、固定提醒操作/场景及收件人、正文 hash、幂等键，并以唯一键实现重复投递幂等。全量单测和 Auth/Graph API 验收通过，但本轮没有触发 Customer→Notification permit 的真实定时投递。开发库 3 条 Customer 档案、1 条咨询均缺少 owner，Customer reminder 不会发送；Contract 提醒仍无可信 userId 来源并继续失败关闭。没有把 brokerId 当作收件人。
+**当前处置（2026-11-13）**：旧无请求证明 Dubbo 方法继续拒绝。Customer 侧负责人为空即跳过，以已存 `owner_user_id` 构造 30 秒服务签名 permit；Notification 仅接受登记的 Customer 服务密钥、固定提醒操作/场景及收件人、正文 hash、幂等键，并以唯一键实现重复投递幂等。全量单测和 Auth/Graph API 验收通过，但本轮没有触发 Customer→Notification permit 的真实定时投递。开发库 3 条 Customer 档案的 owner 已按逐行账本设为 Auth userId=1，另 1 条咨询也已回填；这仅提供可验证收件人，不代表提醒已实际投递。Contract 提醒仍无可信 userId 来源并继续失败关闭。没有把 brokerId 当作收件人。
 
 **解除条件**：完成本 change 的 Customer→Notification 实际密钥加载、manifest upgrade/repeat、正反 permit、重复重试和已回填/未回填收件验收；为 Contract 提醒建立权威 `userId→brokerId` 或 owner_user_id 来源及同等服务证明后再开放。映射缺失、密钥缺失、过期、正文或收件篡改必须拒绝。不得按同号、姓名或模型字段猜测收件人。
 
@@ -2047,9 +2047,9 @@ Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/
 
 **发现日期**：2026-11-03。客户业务方法要求已验证的授权上下文和经纪人身份，但早期应用与 Nacos 模板将入口授权固定关闭且缺少 Auth 验签公钥登记；普通业务请求无法建立所需上下文。
 
-**代码与配置处置**：客户入口开关可由 Compose 注入，Auth 公钥和签名请求回归已补；本机 `.env` 已开启 Customer 版本化授权。2026-11-12 只读核对确认 Auth 当前唯一经纪人映射为 `BROKER:1→userId=1`；门店验收用户 `org_sample_broker` 尚无 BROKER 身份，`admin01` 的平台管理员角色也不构成经纪人身份。该映射的登记晚于两条历史客户档案写入；映射和 owner 字段都不能单独证明逐条历史归属。
+**代码与配置处置**：客户入口开关可由 Compose 注入，Auth 公钥和签名请求回归已补；本机 `.env` 已开启 Customer 版本化授权。Auth 当前唯一经纪人映射为 `BROKER:1→userId=1`；门店验收用户 `org_sample_broker` 尚无 BROKER 身份，`admin01` 的平台管理员角色也不构成经纪人身份。该映射晚于两条历史客户档案写入；映射和 owner 字段单独都不能证明逐条历史归属。2026-11-13 项目负责人明确确认本批 `broker_id=1` 客户/房源均由该经纪人负责，并经逐行证据账本回填3条客户档案、1条咨询及3条房源为 `owner_user_id=1`；不以时间先后或 ID 数值相同代替负责人确认。
 
-**未闭环**：需逐条核验 Auth 映射登记时间与业务数据来源，填写并复核 owner 回填账本后再验收房源/客户自有范围和跨用户拒绝。`userId=1` 的 `BROKER:1` 映射虽已由 Auth 审计确认，但门店验收用户 `userId=4` 没有 BROKER 身份，且两条客户档案早于映射登记；不得据此自动回填。关联 KI-55。
+**未闭环**：本批7条开发数据已有逐行账本，但房源/客户自有范围和跨用户拒绝的真实 API 验收、生产映射/密钥部署及其他历史数据逐域核验仍需完成。门店验收用户 `userId=4` 没有 BROKER 身份，不能使用 `broker_id=1` 的负责人映射。关联 KI-55。
 
 ## KI-244 [FIXED·ebe5049b·P1] Elasticsearch 主机发布端口未启用认证且绑定业务网卡
 

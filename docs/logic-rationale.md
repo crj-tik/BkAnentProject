@@ -1200,7 +1200,7 @@
 
 **代码位置**：`common/authz/AuthzContract`、`AuthorizationSnapshot`、`AuthorizationContext`、`AuthzRequestScope`、`AuthzCanonicalHash`；`common/rag/RagAuthorizedListingReadRequest`；`auth-service/AuthorizationRepository`、`RoleAuthorizationManagementService`、`AuthAuthorizationRpcServiceImpl`；`listing-master-service/ListingAuthorizationIngressFilter`、`ListingManagementServiceImpl`、`ListingRagIdentity`、`ListingMasterRpcServiceImpl`；`customer-service/CustomerAuthorizationIngressFilter`、`CustomerManagementServiceImpl`、`ListingReadClient`；`rag-service/RagAccessControl`。
 
-**关联**：LR-31/145；KI-55；change `unify-versioned-permission-context`任务4.6、10.1。2026-11-12 实际 Graph API 已通过两次 Listing A2A 只读调用；但开发库 3 条客户档案、1 条客户咨询和 3 条房源仍没有 `owner_user_id`，三域迁移账本为空。历史 broker→user 映射未获证据前不回填；相关私有所有权操作继续受可信归属门禁保护。模板默认值和开发验收不代表生产开关/密钥配置。
+**关联**：LR-31/145；KI-55；change `unify-versioned-permission-context`任务4.6、10.1。2026-11-12 实际 Graph API 已通过两次 Listing A2A 只读调用。2026-11-13 项目负责人对开发库 `broker_id=1` 数据作出逐行适用的负责人确认；结合 Auth 审计中的唯一 `BROKER:1→userId=1` 映射，通过 Customer/Listing 证据账本将3条客户档案、1条咨询和3条房源回填为 `owner_user_id=1`，Customer账本4条、Listing账本3条均为 `APPLIED`。其他主体/数据没有该确认时仍不回填；本地数据验收不代表生产开关/密钥配置。
 
 ## LR-147 Business与Settlement使用精确域操作，未映射财务主体保持关闭
 
@@ -1675,7 +1675,7 @@
 
 **代码位置**：`common/authz/AuthzRequestScope.requireUserOrLegacyBrokerOwnership`、`common-a2a/VerifiedDomainAuthorization`；Customer、Listing、Marketing 的实体、查询和写入服务；`20261111_customer_user_owner.sql`、`20261111_listing_user_owner.sql`、`20261111_marketing_user_owner.sql`；`scripts/migrations/apply-user-owner-ledger.sql`。
 
-**关联**：LR-145/146/147；KI-243；change `unify-user-organization-and-role-authorization` 任务 4.1–4.5。迁移账本只提供经复核的候选和条件回填，运行库对账尚待验收。
+**关联**：LR-145/146/147；KI-243；change `unify-user-organization-and-role-authorization` 任务 4.1–4.5。2026-11-13 开发库按项目负责人对 `broker_id=1` 这批数据的确认，将3条客户档案、1条咨询及3条房源经账本回填给 Auth userId=1；证据同时引用 Auth 的唯一 BROKER 映射审计。该批次已完成运行库对账，不能推广到 Marketing、其他 brokerId 或没有负责人确认的数据。
 
 ## LR-186 定时通知使用窄范围服务证明并幂等投递
 
