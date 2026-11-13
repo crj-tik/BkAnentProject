@@ -154,5 +154,6 @@ Agent 内的 tool invocation、checkpoint、artifact 等多数行通过 `run_id`
 3. **目标主体（recipient/participant/ticket.user_id）**：填写真实被通知、被邀请或持有凭据的 Auth userId；它不是当前操作者。目标用户必须由业务关系/可信用户选择确认，不能让模型自由决定。
 4. **父子关系继承**：当子表通过不可变的 parent ID 继承 owner，且业务无需单独追踪该子操作人时不新增用户字段；一旦需要审计“谁做的”，单独加 actor 字段，不能用父 owner 冒充。
 5. **当前未打通的主要身份域**：运营 KPI/工作量中的 employeeId、Interview 工号、合同/结算收款员工和旧 broker 数据没有可审计的一致映射；Auth 里有用户—BROKER 映射及组织成员，但这不自动证明 employeeId、storeId 或历史数据的归属。对应链路应继续按缺少权威映射处理，不能通过角色名推用户。
+6. **同一 userId 的列类型不完全一致**：Auth、Customer、Listing、Interview 多用 BIGINT；Agent、Memory v2、Knowledge 的部分 owner/actor 列用 VARCHAR 保存十进制 userId。它们语义上仍必须是同一个 `user_account.id`，字符串只是序列化形式；不能因为目标列是字符串就把 brokerId、workNo 或 username 写进去。
 
 本清单是源码/迁移定义审计，不代表本地或生产数据库逐表行值、空值数量已经核验；实际数据回填仍须按独立证据与账本办理。
