@@ -1,6 +1,6 @@
 ## Context
 
-Auth 的 `user_account.id` 是现有数值型账号主键；`auth_user_business_identity` 将 userId 与类型化 brokerId 显式关联。Customer/Listing/Marketing 已有可空 owner 列，Customer/Listing 新建时取签名 actor 和 BROKER 映射。Agent、Memory 和 Knowledge 的部分持久字段以字符串保存用户 ID。现有清单 `docs/authorization-user-ownership-inventory.md` 为具体表、字段和旧链路索引；LR-145/146/167 附近的实际规则及 KI-55/204/206/243 需在实施时复核，编号以清单实际条目为准。
+Auth 的 `user_account.id` 是现有数值型账号主键；`auth_user_business_identity` 将 userId 与类型化 brokerId 显式关联。Customer/Listing/Marketing 已有可空 owner 列，Customer/Listing 新建时取签名 actor 和 BROKER 映射。Agent、Memory 和 Knowledge 的部分持久字段以字符串保存用户 ID。现有清单 `docs/authorization-user-ownership-inventory.md` 为具体表、字段和旧链路索引；相关既定规则见 LR-145/146/185/186，既有缺口见 KI-55/204/206/243。
 
 ## Goals / Non-Goals
 

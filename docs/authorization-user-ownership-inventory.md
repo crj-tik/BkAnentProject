@@ -1,5 +1,7 @@
 # 平台用户归属与业务身份盘点
 
+本系统 UCID 定义为 Auth `user_account.id`。文中 userId、actorId、ownerUserId 及其他实际表示用户的字段均引用该 UCID；字符串列使用其十进制表示。角色、经纪人和员工业务编号不构成另一种 UCID。
+
 核查范围：Auth、Customer、Listing、Marketing、通知、平台运营、Interview，以及 REST、Dubbo/RPC、MCP、RAG、A2A 和消息入口。`owner_user_id` 只表示平台账号负责人；`broker_id`、`store_id`、`employee_id`、`payee_employee_id` 继续保留其业务实体语义。
 
 ## 字段语义与处理
@@ -157,3 +159,19 @@ Agent 内的 tool invocation、checkpoint、artifact 等多数行通过 `run_id`
 6. **同一 userId 的列类型不完全一致**：Auth、Customer、Listing、Interview 多用 BIGINT；Agent、Memory v2、Knowledge 的部分 owner/actor 列用 VARCHAR 保存十进制 userId。它们语义上仍必须是同一个 `user_account.id`，字符串只是序列化形式；不能因为目标列是字符串就把 brokerId、workNo 或 username 写进去。
 
 本清单是源码/迁移定义审计，不代表本地或生产数据库逐表行值、空值数量已经核验；实际数据回填仍须按独立证据与账本办理。
+
+## UCID 实施核对（2026-11-16）
+
+| 模块/入口 | 当前实际身份来源与验证 | 本次处置 |
+| --- | --- | --- |
+| Auth 登录、管理 REST/RPC | token/principal、签名 actor 来自用户主键；受管用户与操作人分别记录，broker 关联有唯一约束、管理权限与版本推进 | 在实体、principal 和签名协议中明确 UCID 定义；保留既有映射错误及版本逻辑 |
+| Customer REST/RPC/MCP/A2A、提醒 | profile/inquiry owner 和 follow 作者从验签 actor 写入；BROKER 从签名映射取得，比较关联/回执记录当前 actor，提醒收件人为已存客户 owner | 修复 KI-270：新增跟进按 UCID 优先校验后不再重复比较客户历史 broker；作者仍保存当前受信身份 |
+| Listing REST/RPC/MCP/A2A/RAG | 新建 owner 与 broker 同源；asset/price/status/receipt 记录实际 actor；私有查询先核 owner，公开摘要仍限定业务状态 | 已接通；不把父房源负责人覆盖到历史操作人 |
+| Marketing REST/RPC/MCP/A2A/索引 | 新内容及计划 owner 为验签 actor；本人/全量分别验证，索引使用持久 owner | 修复 KI-269：平台版本 owner 为当前用户时，broker 也仅取该用户的签名映射，不复制原内容他人的 broker |
+| Notification REST/MCP/A2A/内部提醒 | actor 控本人查询，recipient 为业务目标，Customer permit 绑定收件人及正文/幂等信息 | 修复 KI-271：显式导入 HTTP 鉴权异常处理器，收件人替换返回 403；发起用户和目标收件人仍各自记录 |
+| Interview REST/MCP/A2A/异步 | 创建人取 scope actor；参与人和邀请人分开，ticket 绑定持有人；报告/命令与发布审批记录当前真实 actor | 已接通；工号仅元数据，不用于反推 UCID；未发布的审批人允许空 |
+| Platform Operations REST/MCP/A2A | VerifiedStoreScopeAdapter、KnowledgeAuthorization 从已验证上下文取 actor；知识作者、审核人、复盘发起人分别落库 | 已接通；employeeId 保持业务编号，权威用户映射未建立，不推测 |
+| Gateway/Agent/Studio/异步/A2A | Gateway 验凭据；AgentPrincipalContext 绑定 DTO；run、async、Studio 归属沿用原 actor；A2A proof、任务 owner 和 nonce 校验 | 已接通；后续模型字段不覆盖 UCID，不增加逐 subAgent Auth 身份调用 |
+| Memory/RAG/Media | Memory 当前用户与 session/私有 owner 比对，v2 验签及共享授权独立；RAG 强制受信 owner 元数据过滤；Media permit 绑定实际 actor | 已接通；不把共享目标、agentId、workerId 当作用户 |
+
+实施变更为 `unify-business-ucid-ownership`；运行数据与测试结果另见该变更验收记录。既有 KI-55/204/206/243 的其他生产、员工及通知验收缺口不因本次代码盘点自动关闭。

@@ -446,6 +446,8 @@
 
 **处置方向**：补齐规范的首启 schema，确保与已实现功能一致；用真实新库验证字段、表及相关业务访问，不能仅以数据库容器 healthy 作为完成标准。关联 KI-37、KI-38、KI-10。
 
+**开发库局部处置（2026-11-16）**：UCID 实施真实 API 再次证实 `marketing_content.source` 缺失导致查询 HTTP 500。该表 0 行，保存原结构后按既有 `20260929_marketing_content_source.sql` 的定义直接补为 `VARCHAR(16) NOT NULL DEFAULT 'manual'`，未新增迁移脚本，查询恢复并通过 API 验收。现有首启 manifest 未覆盖该列的问题仍保持 OPEN；本次不宣称所有新库初始化缺口已修复。
+
 ## KI-40 [OPEN·P1] Linux 初始化指南的环境覆盖未传入应用容器
 
 **确认日期**：2026-10-05。
@@ -2188,3 +2190,33 @@ Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/
 **处理方向**：先盘点并迁移普通 Redis 消费者到有密码且按服务收窄的 ACL 身份，再关闭 `default` 或至少撤销 `nopass` 与全权限。迁移前不直接关闭共享账号，避免让现有服务无预期中断。专用 Auth/Agent ACL 与 TLS 配置继续独立保留。
 
 **关联**：KI-209；`docker-compose.yml` Redis ACL/TLS 配置；`scripts/security/configure-authorization-redis-acl.sh`；`scripts/security/verify-authorization-redis-acl.sh`。
+
+## KI-269 [FIXED·本提交·P1] 营销平台版本可能混用不同用户的负责人和经纪人身份
+
+**发现日期与依据**：2026-11-16，`MarketingAssetServiceImpl.createPlatformVariant` 对拥有全量操作权限的调用者写入当前 actor 的 `owner_user_id`，却在全量 scope 返回空 broker 时复制原内容的 `owner_broker_id`。如果原内容负责人不是当前用户，两个字段可能指向不同的人。
+
+**源码修复**：新版本的用户负责人继续使用已验签 actor，经纪人编号只从同一已验签上下文取得；没有经纪人映射时保留空值，不把原内容经纪人身份赋给当前用户。
+
+**验证**：5 项平台版本归属回归通过；隔离构建部署 Marketing，并通过真实已授权内容查询。开发库营销内容 0 行，无历史混用记录可回填；真实发布及渠道 provider 不属于该回归。
+
+**关联**：LR-193；KI-55；change `unify-business-ucid-ownership` 任务 2.4、4.1、5.1。
+
+## KI-270 [FIXED·本提交·P1] 客户跟进在 UCID 归属校验后再次按旧 broker 拒绝本人
+
+**发现日期与依据**：2026-11-16，`CustomerManagementServiceImpl.addFollowRecord` 已由 `requireCustomer` 按非空 owner UCID 优先验证归属，随后又比较客户历史 broker 与当前签名 broker，导致负责人 UCID 一致但经纪人业务映射更新时无法跟进。
+
+**源码修复**：移除第二次旧 broker 比较，继续保留客户归属与精确操作校验、当前操作人 BROKER 映射和提交 broker 一致性检查；跟进作者 UCID 与其当前 broker 同源，不改写客户原负责人或历史 broker。新增本人旧 broker 变化和同 broker 不同 owner 拒绝测试。
+
+**验证**：Customer UCID 6 项定向回归通过（含本次 2 项跟进正反例）；隔离构建部署 Customer，真实 API 本人客户/房源读取、其他用户拒绝通过。旧客户/咨询/房源 owner 全部已与原确认及账本一致，未覆盖历史值。
+
+**关联**：LR-194；KI-243；change `unify-business-ucid-ownership` 任务 2.2、5.1。
+
+## KI-271 [FIXED·本提交·P2] 通知 HTTP 入口将 UCID 越权拒绝返回为 500
+
+**发现日期与依据**：2026-11-16，真实 Gateway API 验收中，本人通知读取成功，但同一用户将查询 userId 替换为另一人时返回 HTTP 500。通知业务正确抛出 PERMISSION_DENIED；通知启动类未导入包外的 `AuthzRestExceptionHandler`，MVC 异常未映射为 403。
+
+**源码修复**：通知应用显式导入共享鉴权异常处理器，新增使用实际应用配置的 MVC slice 回归；业务拒绝与查询过滤规则不变。
+
+**验证**：通知 10 项定向回归通过（含脱离 Nacos 的实际应用 MVC 配置回归）。开发 Notification 更新后，真实 Gateway API 本人查询成功，篡改收件 UCID 返回 403，完整 UCID 业务 API 脚本通过。
+
+**关联**：change `unify-business-ucid-ownership` 任务 2.5、5.1、5.2；`NotificationServiceApplication`、`NotificationControllerAuthorizationTest`。

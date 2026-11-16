@@ -105,6 +105,52 @@ class CustomerVersionedAuthorizationTest {
         assertEquals(123L, captor.getValue().getOwnerUserId());
     }
 
+    @Test
+    void followUsesVerifiedUcidEvenWhenLegacyCustomerBrokerChanged() {
+        var customers = mock(CustomerDomainService.class);
+        var follows = mock(CustomerFollowRecordDomainService.class);
+        var management = new CustomerManagementServiceImpl(customers, follows,
+                mock(OwnerEntrustRecordDomainService.class), mock(CustomerFavoriteListingDomainService.class),
+                new CustomerConverter(), mock(ListingReadClient.class), mock(CustomerListingInquiryDomainService.class));
+        var customer = new CustomerEntity();
+        customer.setId(1L);
+        customer.setOwnerUserId(123L);
+        customer.setBrokerId(82L);
+        when(customers.getById(1L)).thenReturn(customer);
+
+        try (var ignored = CustomerAuthzScopeFixture.open(false,
+                List.of("customer.follow.write.own"), java.util.Map.of("BROKER", 41L))) {
+            management.addFollowRecord(1L, new com.bkanent.customer.model.CustomerFollowRecordRequest(
+                    null, "PHONE", "电话跟进", null, null, null));
+        }
+        var captor = ArgumentCaptor.forClass(com.bkanent.customer.entity.CustomerFollowRecordEntity.class);
+        verify(follows).save(captor.capture());
+        assertEquals(123L, captor.getValue().getOwnerUserId());
+        assertEquals(41L, captor.getValue().getBrokerId());
+        assertEquals(123L, customer.getOwnerUserId());
+        assertEquals(82L, customer.getBrokerId());
+    }
+
+    @Test
+    void sameBrokerCannotAddFollowToAnotherUcidsCustomer() {
+        var customers = mock(CustomerDomainService.class);
+        var follows = mock(CustomerFollowRecordDomainService.class);
+        var management = new CustomerManagementServiceImpl(customers, follows,
+                mock(OwnerEntrustRecordDomainService.class), mock(CustomerFavoriteListingDomainService.class),
+                new CustomerConverter(), mock(ListingReadClient.class), mock(CustomerListingInquiryDomainService.class));
+        var customer = new CustomerEntity();
+        customer.setId(1L);
+        customer.setOwnerUserId(124L);
+        customer.setBrokerId(41L);
+        when(customers.getById(1L)).thenReturn(customer);
+        try (var ignored = CustomerAuthzScopeFixture.open(false,
+                List.of("customer.follow.write.own"), java.util.Map.of("BROKER", 41L))) {
+            assertThrows(AuthzException.class, () -> management.addFollowRecord(1L,
+                    new com.bkanent.customer.model.CustomerFollowRecordRequest(null, "PHONE", "电话跟进", null, null, null)));
+        }
+        verifyNoInteractions(follows);
+    }
+
     private static CustomerUpsertRequest request(Long brokerId) {
         return new CustomerUpsertRequest("CUSTOMER", "客户", "13800000000", null, null, null,
                 null, null, null, null, null, null, brokerId, null, null);

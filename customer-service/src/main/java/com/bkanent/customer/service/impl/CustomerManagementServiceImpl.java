@@ -131,7 +131,7 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public CustomerFollowRecordResponse addFollowRecord(Long customerId, CustomerFollowRecordRequest request) {
-        CustomerEntity customer = requireCustomer(customerId, "customer.follow.write.own", "customer.follow.write.all");
+        requireCustomer(customerId, "customer.follow.write.own", "customer.follow.write.all");
         if (!FollowTypeEnum.contains(request.followType())) {
             throw new IllegalArgumentException("跟进方式不合法: " + request.followType());
         }
@@ -140,8 +140,7 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
         long brokerId = com.bkanent.common.authz.AuthzRequestScope.requireBrokerIdentity();
         entity.setOwnerUserId(com.bkanent.common.authz.AuthzRequestScope.actorId());
         if (request.brokerId() != null && request.brokerId() != brokerId) deny();
-        if (!com.bkanent.common.authz.AuthzRequestScope.hasOperation("customer.follow.write.all")
-                && !brokerIdEquals(customer.getBrokerId(), brokerId)) deny();
+        // 档案归属已按 UCID 优先验证；本条跟进只记录实际操作人的当前经纪人映射。
         entity.setBrokerId(brokerId);
         entity.setFollowType(request.followType().toUpperCase());
         entity.setContent(request.content());
@@ -386,10 +385,6 @@ public class CustomerManagementServiceImpl implements CustomerManagementService 
 
     private void requireSubmittedBroker(Long submittedBrokerId, long trustedBrokerId) {
         if (submittedBrokerId != null && submittedBrokerId != trustedBrokerId) deny();
-    }
-
-    private static boolean brokerIdEquals(Long storedBrokerId, long trustedBrokerId) {
-        return storedBrokerId != null && storedBrokerId == trustedBrokerId;
     }
 
     private static void deny() {

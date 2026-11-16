@@ -123,14 +123,15 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
     @Override
     @Transactional(rollbackFor = Exception.class)
     public MarketingContentDetailResponse createPlatformVariant(Long sourceContentId, MarketingContentUpsertRequest request) {
-        Long ownerBrokerId = VerifiedDomainAuthorization.requireBrokerScope(
+        VerifiedDomainAuthorization.requireBrokerScope(
                 "marketing.content.variant.create.own", "marketing.content.variant.create.all");
         MarketingContentEntity sourceEntity = requireContent(sourceContentId,
                 "marketing.content.variant.create.own", "marketing.content.variant.create.all");
         validateUpsertRequest(request);
         MarketingContentEntity entity = new MarketingContentEntity();
         applyUpsert(entity, request);
-        entity.setOwnerBrokerId(ownerBrokerId == null ? sourceEntity.getOwnerBrokerId() : ownerBrokerId);
+        // 全量权限只扩大访问范围，不代表操作者拥有原内容负责人的经纪人身份。
+        entity.setOwnerBrokerId(VerifiedDomainAuthorization.brokerIdentityOrNull());
         entity.setOwnerUserId(VerifiedDomainAuthorization.requireActorId());
         entity.setParentContentId(sourceContentId);
         entity.setVersionNo(sourceEntity.getVersionNo() == null ? 1 : sourceEntity.getVersionNo() + 1);

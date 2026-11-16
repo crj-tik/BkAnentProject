@@ -1744,3 +1744,23 @@
 **代码位置**：`MemoryArchiveStore`、`MemoryArchiveProviderTest`、`MemoryArchiveService` 与其他共享 Store 的 Memory 服务。
 
 **关联**：KI-267；change `unify-user-organization-and-role-authorization` 任务 5.4。2026-11-12 修复后 Memory 定向测试和真实 Graph API 均通过。后续新增 Store 注入测试需同时验证代理形态和共享 JDBC 可用性。
+
+## LR-193 营销平台版本的经纪人身份来自新版本负责人
+
+**结论**：营销平台版本创建时，`owner_user_id` 保存已认证的创建用户；若其授权上下文含 BROKER 映射，`owner_broker_id` 保存该映射，否则为空。全量操作权限不构成原内容经纪人身份。
+
+**根因**：全量权限允许操作他人内容，原内容的 broker 可能属于另一个用户；将其复制给新版本的当前用户会让负责人和经纪人字段指向不同的人。
+
+**代码位置**：`MarketingAssetServiceImpl.createPlatformVariant`、`VerifiedDomainAuthorization.brokerIdentityOrNull`。
+
+**关联**：KI-269；change `unify-business-ucid-ownership` 任务 2.4。5 项归属回归通过；开发镜像已更新，营销内容查询通过；该环境暂无历史内容可回填。
+
+## LR-194 跟进继承客户 UCID 归属，作者记录当前业务身份
+
+**结论**：新增跟进先按客户非空 owner UCID 验证本人范围（历史无 owner 才按受信 broker 兼容），然后记录实际操作人的 UCID 和当前签名 BROKER。客户旧 broker 不再作为已通过 UCID 校验后的第二个本人条件。
+
+**根因**：经纪人业务映射可变化；稳定用户 UCID 已证明归属时，重复比较历史业务编号会把同一用户拒绝。客户和跟进作者是不同语义的记录，不能为匹配当前编号而修改客户历史字段。
+
+**代码位置**：`CustomerManagementServiceImpl.addFollowRecord`、`CustomerVersionedAuthorizationTest`。
+
+**关联**：LR-185；KI-270；change `unify-business-ucid-ownership` 任务 2.2。

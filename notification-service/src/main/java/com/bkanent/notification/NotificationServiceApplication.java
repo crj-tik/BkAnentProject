@@ -1,9 +1,11 @@
 package com.bkanent.notification;
 
+import com.bkanent.common.authz.AuthzRestExceptionHandler;
 import org.apache.dubbo.config.spring.context.annotation.EnableDubbo;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Import;
 
 /**
  * 通知服务启动类。
@@ -11,6 +13,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @MapperScan("com.bkanent.notification.mapper")
 @EnableDubbo
 @SpringBootApplication
+@Import(AuthzRestExceptionHandler.class)
 public class NotificationServiceApplication {
 
     public static void main(String[] args) {

@@ -28,6 +28,7 @@ public final class AuthzContract {
         if (!condition) throw new AuthzException(code);
     }
 
+    /** Auth UCID 的十进制表示，与 BIGINT 用户编号一一对应。 */
     static String actor(String value) {
         require(value != null && value.matches("[1-9][0-9]{0,18}"));
         try {

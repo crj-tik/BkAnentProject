@@ -4,7 +4,7 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import com.bkanent.common.model.BaseEntity;
 
 /**
- * UserAccountEntity 实体类。
+ * 用户档案；继承的 id 是本系统 UCID，在各服务用户归属和操作人字段中引用。
  */
 @TableName("user_account")
 public class UserAccountEntity extends BaseEntity {
