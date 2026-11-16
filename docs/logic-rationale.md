@@ -1764,3 +1764,13 @@
 **代码位置**：`CustomerManagementServiceImpl.addFollowRecord`、`CustomerVersionedAuthorizationTest`。
 
 **关联**：LR-185；KI-270；change `unify-business-ucid-ownership` 任务 2.2。
+
+## LR-195 业务归属回退必须保留可信 UCID
+
+**结论**：业务切换回退使用已验证仍以非空 owner UCID 优先的服务版本或兼容模式，并保留负责人数据和账本；不能通过清空负责人来恢复以 BROKER 为权威的旧行为。经纪人和门店的独立业务编号以及仍需使用的可信映射继续保留。
+
+**根因**：用户与业务经纪人映射会随时间变化，即使回填账本和业务记录未变，清空已确认 owner 后的兼容读取也可能把资源交给新映射用户。映射此刻一致也不足以保证后续或已有签名上下文的一致性。
+
+**代码位置**：`scripts/migrations/rollback-user-owner-ledger.sql`、`AuthzRequestScope.requireUserOrLegacyBrokerOwnership`、`VerifiedDomainAuthorization.requireUserOrLegacyBrokerOwnership`。
+
+**关联**：LR-185；KI-272；change `unify-user-organization-and-role-authorization` 任务 4.5。当前对账脚本只读，服务版本切换及回退演练仍待逐域验证。

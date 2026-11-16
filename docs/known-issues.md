@@ -2051,7 +2051,7 @@ Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/
 
 **代码与配置处置**：客户入口开关可由 Compose 注入，Auth 公钥和签名请求回归已补；本机 `.env` 已开启 Customer 版本化授权。Auth 当前唯一经纪人映射为 `BROKER:1→userId=1`；门店验收用户 `org_sample_broker` 尚无 BROKER 身份，`admin01` 的平台管理员角色也不构成经纪人身份。该映射晚于两条历史客户档案写入；映射和 owner 字段单独都不能证明逐条历史归属。2026-11-13 项目负责人明确确认本批 `broker_id=1` 客户/房源均由该经纪人负责，并经逐行证据账本回填3条客户档案、1条咨询及3条房源为 `owner_user_id=1`；不以时间先后或 ID 数值相同代替负责人确认。
 
-**未闭环**：本批7条开发数据已有逐行账本，但房源/客户自有范围和跨用户拒绝的真实 API 验收、生产映射/密钥部署及其他历史数据逐域核验仍需完成。门店验收用户 `userId=4` 没有 BROKER 身份，不能使用 `broker_id=1` 的负责人映射。关联 KI-55。
+**未闭环**：本批7条开发数据已有逐行账本；2026-11-16 使用 broker01 和运营账号完成真实 Gateway API 本人客户/房源读取及跨用户拒绝。生产映射/密钥部署、其他历史数据逐域核验和安全回退演练仍需完成。门店验收用户 `userId=4` 没有 BROKER 身份，不能使用 `broker_id=1` 的负责人映射。关联 KI-55、KI-272。
 
 ## KI-244 [FIXED·ebe5049b·P1] Elasticsearch 主机发布端口未启用认证且绑定业务网卡
 
@@ -2220,3 +2220,13 @@ Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/
 **验证**：通知 10 项定向回归通过（含脱离 Nacos 的实际应用 MVC 配置回归）。开发 Notification 更新后，真实 Gateway API 本人查询成功，篡改收件 UCID 返回 403，完整 UCID 业务 API 脚本通过。
 
 **关联**：change `unify-business-ucid-ownership` 任务 2.5、5.1、5.2；`NotificationServiceApplication`、`NotificationControllerAuthorizationTest`。
+
+## KI-272 [FIXED·本提交·P1] 旧负责人回退脚本可能转移私有数据访问权
+
+**发现日期与依据**：2026-11-16，逐域核对回退路径发现，原 `rollback-user-owner-ledger.sql` 在账本、业务 broker 和 owner 匹配时清空已确认的 `owner_user_id`，但未核实 Auth 的 BROKER 当前映射。映射可能在回填后变更；清空 UCID 会让兼容读取按新映射识别负责人，可能让另一用户访问资源，即使账本记录没有发生变化。
+
+**修复与验证**：原脚本改为只读对账，逐条报告负责人、经纪人或当前映射变化；任何结果都保留已确认 UCID。MySQL 开发库实际执行得到 Customer 4 条、Listing 3 条一致，Marketing 账本为空；连接级临时表覆盖一致、映射变化、负责人变化、broker 变化、记录缺失和映射缺失以及三域查询，不改写真实业务表。原脚本自动清空功能已移除。
+
+**仍需完成**：各域需验证可回退版本仍以非空 UCID 优先，完成真实版本切换和回退演练；映射一致也不是清空负责人的授权。此项不代表所有历史数据或生产环境已迁移。
+
+**关联**：LR-185/195；KI-55/243；change `unify-user-organization-and-role-authorization` 任务 4.5。

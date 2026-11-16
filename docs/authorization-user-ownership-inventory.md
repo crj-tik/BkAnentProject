@@ -42,7 +42,7 @@ Customer、Listing 和 Marketing 各自有 owner migration ledger，按记录类
 
 ## 运行前对账
 
-升级后按域统计空 owner 与账本状态。部署代码前先应用受管 manifest，再发布同时支持新列的代码。只有以下条件全部满足后，才能在对应域关闭旧 broker 兼容读取或退役 broker 字段：账本无未处理冲突、已回填行数与独立审核报告一致、所有 REST/RPC/MCP/RAG/A2A/消息消费者均支持 userId、授权撤销和失败回退已验收。收藏、委托、员工、门店、收款字段不随平台负责人字段一起退役。
+升级后按域统计空 owner 与账本状态。部署代码前先应用受管 manifest，再发布同时支持新列的代码。只有以下条件全部满足后，才能在对应域关闭旧 broker 负责人兼容读取：账本无未处理冲突、已回填行数与独立审核报告一致、所有 REST/RPC/MCP/RAG/A2A/消息消费者均支持 userId、授权撤销和失败回退已验收。具有独立业务含义的 broker、收藏、委托、员工、门店、收款字段及仍需使用的映射不随兼容读取一起退役。回退必须保留已确认的 owner UCID；`scripts/migrations/rollback-user-owner-ledger.sql` 仅供只读对账，不执行数据回滚（KI-272）。
 
 ## 调用面清点索引（OpenSpec 任务 1.2）
 
