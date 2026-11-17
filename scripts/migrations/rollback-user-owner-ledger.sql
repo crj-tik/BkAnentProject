@@ -10,6 +10,9 @@ SELECT r.domain_name, r.record_type, r.record_id, r.ledger_user_id,
        r.current_owner_user_id, r.legacy_broker_id, r.current_broker_id,
        i.user_id AS mapped_user_id,
        CASE
+         WHEN r.ledger_user_id IS NULL OR r.ledger_user_id <= 0
+              OR r.legacy_broker_id IS NULL OR r.legacy_broker_id <= 0
+           THEN 'INVALID_LEDGER'
          WHEN r.record_exists IS NULL THEN 'RECORD_MISSING'
          WHEN NOT (r.current_owner_user_id <=> r.ledger_user_id) THEN 'OWNER_CHANGED'
          WHEN NOT (r.current_broker_id <=> r.legacy_broker_id) THEN 'BROKER_CHANGED'

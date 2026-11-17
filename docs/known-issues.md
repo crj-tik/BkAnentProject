@@ -2229,4 +2229,6 @@ Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/
 
 **仍需完成**：各域需验证可回退版本仍以非空 UCID 优先，完成真实版本切换和回退演练；映射一致也不是清空负责人的授权。此项不代表所有历史数据或生产环境已迁移。
 
+**2026-11-17 补充**：账本中的候选用户或旧 broker 为空或非正数时明确报告 `INVALID_LEDGER`，避免 SQL 的 NULL 比较将异常账本误报为一致。新增可重复的 MySQL 连接级临时表回归，核对 12 条记录的分类，以及执行前后 owner 和账本状态不变；开发库 7 条记录仍一致。
+
 **关联**：LR-185/195；KI-55/243；change `unify-user-organization-and-role-authorization` 任务 4.5。
