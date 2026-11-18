@@ -2232,3 +2232,13 @@ Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/
 **2026-11-17 补充**：账本中的候选用户或旧 broker 为空或非正数时明确报告 `INVALID_LEDGER`，避免 SQL 的 NULL 比较将异常账本误报为一致。新增可重复的 MySQL 连接级临时表回归，核对 12 条记录的分类，以及执行前后 owner 和账本状态不变；开发库 7 条记录仍一致。
 
 **关联**：LR-185/195；KI-55/243；change `unify-user-organization-and-role-authorization` 任务 4.5。
+
+## KI-273 [OPEN·P1] 门店复盘的房源取数缺少授权接入与样本范围绑定
+
+**发现日期与依据**：2026-11-18。`ReviewApplicationService.create` 校验可信 STORE 身份，将门店编号传给 `DomainParallelHttpReadAdapter.read`。该适配器对 Listing v1 发出服务间委托证明，`ListingAuthorizationIngressFilter` 使用的 `AuthzIngressFilter` 只消费网关提供的授权响应和请求绑定。仓库当前没有 Listing HTTP 入口消费该委托证明。
+
+**数据流影响**：当前两端授权契约不匹配。即使接通委托验证，房源查询也只提交固定关键词“房源维护”及 20 条上限，未使用传入的 `storeId` 或时间范围。Listing v1 内部来源按关键词和用户房源读取权限查询。复盘随后将样本写入目标门店的事项并附上近 30 天窗口，样本归属和事件时间均缺少对应约束，高权限读取时可能混入其他门店房源。上述结论来自源码核对，未运行跨门店请求。
+
+**待处理**：为复盘建立可验证的门店房源来源契约。取数与复查均绑定可信 STORE、事实类型和事件时间范围，对空结果、权限拒绝及来源不可用返回可区分结果。以两家门店和窗口内外的事实验收创建、来源核验和复盘观察。
+
+**关联**：KI-252（复盘数据集输入）、KI-248（来源检查请求与快照字段）、`implement-store-business-review` 真实来源验收。
