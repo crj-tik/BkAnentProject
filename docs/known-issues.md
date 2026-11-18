@@ -2242,3 +2242,59 @@ Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/
 **待处理**：为复盘建立可验证的门店房源来源契约。取数与复查均绑定可信 STORE、事实类型和事件时间范围，对空结果、权限拒绝及来源不可用返回可区分结果。以两家门店和窗口内外的事实验收创建、来源核验和复盘观察。
 
 **关联**：KI-252（复盘数据集输入）、KI-248（来源检查请求与快照字段）、`implement-store-business-review` 真实来源验收。
+
+## KI-274 [OPEN·P1] 营销内容和发布计划对同一内容采用不同的负责人规则
+
+**发现日期与依据**：2026-11-18。`MarketingAssetServiceImpl.requireContent` 对有 `owner_user_id` 的内容按平台用户判断归属，仅对缺失该字段的历史记录使用 broker 兼容规则。`CampaignLifecycleService.requireContentOwner` 在本人准备和确认路径仍只比较 `owner_broker_id`，不读取 `owner_user_id`。拥有全量读取操作的路径另有显式授权。
+
+**影响**：两种身份不一致时，本人可读取内容却可能无法创建计划。旧 broker 映射发生变更时，内容侧已明确的负责人也可能被 Campaign 入口忽略。源码确认判定不一致，未在实际数据库验证冲突样本。
+
+**待处理**：Campaign 复用同一内容归属规则，覆盖已有 UCID、空 UCID、broker 变更及本人/他人两个方向。关联 LR-185、KI-196、KI-269。
+
+## KI-275 [OPEN·P1] 客户咨询的房源复查缺少后续执行入口
+
+**发现日期与依据**：2026-11-18。`CustomerListingInquiryServiceImpl` 只在创建提交后注册一次房源复查。复查调用异常时保留原确认状态。`recheckInquiries` 可处理 `NEEDS_RECHECK`，但调用点只有测试。`listInquiries` 仅校验客户范围并返回存量房源引用及验证字段，未执行 `buyer-listing-consultation` 规范要求的当前房源范围检查。
+
+**影响**：待复查咨询无业务入口使其收敛，房源在创建后下架或范围变化时，列表仍会显示历史验证结果且没有当前可访问结论。列表仅返回咨询与关联引用，未发现这里返回房源快照正文。结论来自源码与规范对照。
+
+**待处理**：明确历史确认与当前可访问状态，接通可恢复复查并处理依赖故障。验证创建后的房源变更、撤权、复查失败与恢复。关联 KI-261。
+
+## KI-276 [OPEN·P1] 营销审核通过没有绑定审过的素材版本
+
+**发现日期与依据**：2026-11-18。`MarketingAssetServiceImpl.updateAuditStatus` 仅写内容行的审核状态。`bindGeneratedAssets` 可更新同一行的图片、封面及视频且保留原审核状态。`CampaignLifecycleService.prepare` 检查行状态为 `APPROVED` 后，才从当前内容构造发布版本及快照。确认环节比较的是准备时快照，不能证明截至准备时的内容版本曾被审核。
+
+**影响**：在有权的素材写路径实际修改已审核内容后，后续计划能把新素材纳入原通过状态。当前真实渠道缺失会限制外部副作用，但审核版本缺口已存在。未执行真实发布。
+
+**待处理**：审核决策绑定不可变内容与素材版本。审核后修改需使新版本重新审核，计划同时验证审核决策、内容版本和目标。关联 LR-130、LR-135。
+
+## KI-277 [OPEN·P1] 站内通知忽略当前 Supervisor 审批与终态事件
+
+**发现日期与依据**：2026-11-18。`SupervisorToolLoopGraph` 发布 `supervisor.waiting_user_approval` 和 `supervisor.completed` 等事件，异步服务发布 `supervisor.async.completed/failed`。事件总线保留原事件类型。`NotificationWorkflowEventService.supports` 和 `NotificationManagementServiceImpl` 的受理集合仍要求 `task.waiting_approval`、`task.completed/failed` 等类型，未找到当前事件类型的转换。
+
+**影响**：当前工具循环的这些事件可到达事件总线，但通知消费端会在创建站内消息前忽略。审批和任务的原状态仍可通过各自入口查询。结论来自生产代码核对，未发送实际消息。
+
+**待处理**：生产者和消费者共享可验证的事件契约，覆盖等待审批、完成、失败和异步终态，使用同一运行编号及可信收件人验收站内通知。
+
+## KI-278 [OPEN·P1] 工作流站内消息与事件消费回执分开提交
+
+**发现日期与依据**：2026-11-18。`NotificationWorkflowEventService.consume` 分别调用 `tryStartConsume`、`sendWorkflowEventMessage`、`markConsumed`。工作流消息写入没有使用消费幂等键，已存在的 `PROCESSING` 消费记录可再次领取，领取更新不带旧状态或尝试号条件。
+
+**影响**：消息写入后、消费回执提交前中断，同一事件重投可能再次插入通知。既有待重试记录并发领取也可能重复。Customer 定时提醒使用另一条带幂等键的受限投递路径，本条针对工作流事件。未注入实际故障或执行并发投递。
+
+**待处理**：为工作流投递建立原子领取和同一幂等标识。验证写信后中断、并发重投及完成回执一致。关联 LR-186。
+
+## KI-279 [OPEN·P1] 媒体任务无法关联营销内容自动回写
+
+**发现日期与依据**：2026-11-18。`MediaGenerationTaskServiceImpl.validateRequest` 拒绝非空 `contentId`，入队前也将该字段规范为空。`MediaGenerateTaskConsumer.callbackResult` 只有在任务结果携带 `contentId` 时才会通知营销服务绑定素材。当前媒体任务仍可生成房源图片并返回链接。
+
+**影响**：通过现有任务入口提交的异步任务不会自动回写指定营销内容，素材上传成功与营销内容拥有可发布素材是不同的状态。素材任务和回执只保存在本地进程的已知问题见 KI-117。本次未提交真实生成任务。
+
+**待处理**：明确由用户确认绑定还是由受限业务委托自动绑定。若支持自动绑定，必须核对目标内容、房源、内容版本及当前授权，并记录可幂等核对的交付回执。
+
+## KI-280 [OPEN·P2] 房源状态变更未记录业务原因
+
+**发现日期与依据**：2026-11-18。`listing-internal-management` 要求记录状态变更的操作者、时间和原因。`ListingStatusUpdateRequest` 不含原因，`ListingManagementServiceImpl.updateStatus` 写状态历史时只设置状态、动作及操作人等字段，未写 `ListingStatusRecordEntity.reason`。
+
+**影响**：有历史状态和操作者，但下架、成交等变更无法以持久原因区分实际业务情形。源码确认，未写入业务记录。
+
+**待处理**：明确需要原因的状态动作、既有请求兼容与历史数据展示，写状态和历史时同事务保存原因。
