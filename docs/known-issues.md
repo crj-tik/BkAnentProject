@@ -2322,3 +2322,35 @@ Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/
 **影响**：同一个事件可能叫 completed，实际状态仍等待审批或已失败。按事件类型判断终态的消费方会提前结束等待，按状态字段读取的调用方仍看得到实际状态。本条基于源码，未执行真实异步任务；与旧版通知事件名不兼容的 KI-277 分开处理。
 
 **待处理**：完成事件、终态时间与外层任务状态使用同一状态定义，并测试等待、审批后恢复、失败、取消和成功的事件与查询一致性。
+
+## KI-284 [OPEN·P2] Studio 命令 Schema 未按动作约束必填输入
+
+**发现日期与依据**：2026-11-23。`docs/contracts/studio-v2.schema.json` 的 `$defs.command` 只要求 `requestId`、`actionId`、`expectedContextRevision`，没有用动作变体约束 `input` 和 `artifactRefs`。`StudioCommandService.execute` 分别处理候选展开、房源比较和发布计划，按动作读取不同的必要字段。
+
+**本地复核**：以仓库的 JSON Schema 校验器及 Studio 服务实现执行合成样例，未知动作通过 Schema，服务返回 503 `CAPABILITY_UNAVAILABLE`；符合命名形式但缺 `input` 和 `artifactRefs` 的比较命令亦通过 Schema，服务返回 400 `INVALID_ARGUMENT`。以本地替身提供可用的工作与候选成果，未连接实际业务数据库。
+
+**待处理**：按支持的命令动作定义输入分支，明确契约外动作和已知但不可用动作的错误语义。将同一请求样例分别用于 Schema 验证和实际入口测试。关联 KI-253、KI-114。
+
+## KI-285 [OPEN·P2] 平台经营通用成功 Schema 无法验证复盘业务响应
+
+**发现日期与依据**：2026-11-23。`platform-operations-v1.openapi.yaml` 的创建复盘、查询复盘、写计划、确认等 `200` 复用通用 `Success`。其 `ApiResponse.data` 只有说明，且 `success` 仅限制为布尔值。Controller 实际分别返回 `ReviewMatter`、`ReviewPlan`、`ConfirmationReceipt` 等不同结构。
+
+**本地复核**：按创建复盘操作的 `200` 引用解析实际 YAML，Schema 同时接受 `data` 为任意字符串和 `success=false` 的失败回执。该复核表明契约漏报无效输出，未观察到 Controller 实际返回这些无效样例。
+
+**待处理**：为每个成功响应绑定具体业务 DTO Schema，按 HTTP 状态分别约束成功和错误结构。契约回归应读取 Controller 的实际序列化结果。关联 KI-253。
+
+## KI-286 [OPEN·P1] Supervisor 的 MCP 能力版本未包含返回契约
+
+**发现日期与依据**：2026-11-23。`HttpAgentMcpClient` 的发现结果包含 `inputSchema` 和 `outputSchema`；`SupervisorCapabilityCatalog.snapshot` 只用输入 Schema 作为 MCP 能力版本。`SupervisorToolLoopGraph.validateCall` 用该版本判定已记录能力是否变更。
+
+**本地复核**：使用合成 MCP 目录，把同一工具返回字段的类型从整数改成字符串，输入 Schema 保持一致，Supervisor 得到的能力版本仍相同。发现端的输出变更无法触发 `CAPABILITY_VERSION_CHANGED`，原工作流可能接续到形状已经改变的返回契约。此问题针对 Supervisor 绑定的版本，底层 MCP SDK 自身对当前响应的 Schema 校验是独立环节。
+
+**待处理**：明确可安全兼容的输出演进规则，将不能兼容的输出变更纳入能力版本，并验证任务跨版本恢复、重新审批或失败提示。
+
+## KI-287 [OPEN·P1] 复盘观察查询会新增记录且未声明来源冲突响应
+
+**发现日期与依据**：2026-11-23。`GET /platform-operations/reviews/{reviewId}/observations` 在 OpenAPI 标为查询，未声明 HTTP 409。`ReviewApplicationService.observe` 成功时调用 `JdbcReviewRepository.saveObservation`，每次按新 UUID 插入观察记录；来源过期时会标记事项待复核并抛出 `SOURCE_VERSION_CONFLICT`，由 `ReviewExceptionHandler` 映射为 HTTP 409。
+
+**影响**：刷新页面或重发成功的查询会生成更多业务观察记录；来源失效时，按契约生成的客户端也缺少显式冲突分支。结论来自控制器、服务、仓储和响应契约核对，本轮未对运行库重复发请求。
+
+**待处理**：明确查看已有观察与生成新观察的独立操作，给有状态变更的命令定义重试及回执，并验收查询无写入、来源失效和重复请求。
