@@ -2362,3 +2362,11 @@ Auth、Gateway Docker readiness 均为健康；运行容器实际装载的 Auth/
 **影响**：新房源登记或已有房源维护提交证号时，会沿主表写入路径持久化证号明文。已核验房源再次提交该字段时也会写入明文，而详情读取优先返回主表值。这与房源接口文档约定的敏感写入加密边界不一致。本轮通过源码、表映射和受管 SQL 确认写入路径，未读取实际证号或运行库。
 
 **待处理**：统一登记、维护和核验的证号写入入口，密钥不可用时拒绝敏感写入，并按受管流程核对历史残留。验收覆盖首次登记、已核验房源再次维护和加密失败时的事务回滚。
+
+## KI-289 [OPEN·P1] 房源对比的 A2A 与 MCP 入口未覆盖完整授权动作
+
+**发现日期与依据**：2026-11-24。`ListingComparisonService` 创建报告时要求 `compare.report.create`，读取报告时要求 `compare.report.read.own`，两者均经 `ListingBusinessSourceService` 检查房源来源权限。A2A 的 `AgentAuthorizationProperties` 把基线 `a2a:listing-agent` 固定映射为 `listing.read`，`OfficialA2aAgentClient` 和 `BeaconA2aHttpClient` 只委托该动作，Auth 按委托操作集签发子上下文。MCP 的创建及读取工具分别绑定报告动作，来源读取通过 `VerifiedDomainAuthorization.requireOperation` 走 `McpAuthorizationScope.requireOperation`，后者要求来源操作码等于当前工具操作码。
+
+**影响**：版本化 A2A 使用仓库基线映射时，创建或读取对比报告缺少对应的签名动作。MCP 开启工具授权时，报告动作通过后仍会在来源读取检查被拒绝。两处阻断均与业务角色无关。本轮为源码核对，未执行运行态对比请求。KI-266 跟踪的是查询基线被误当作角色权限。
+
+**待处理**：按 A2A 技能和用途限定报告动作及所需来源读取动作。MCP 保留工具自身的精确校验，以可信上下文独立检查来源读取权限。对两条路径分别验收创建、读取本人报告和来源超范围拒绝。
