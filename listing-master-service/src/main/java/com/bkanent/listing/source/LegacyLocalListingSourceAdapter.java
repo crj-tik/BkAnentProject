@@ -11,8 +11,8 @@ import com.bkanent.common.listing.ListingSnapshotBatchReadRequest;
 import com.bkanent.common.listing.ListingSourceSnapshot;
 import com.bkanent.common.listing.ListingSourceStatus;
 import com.bkanent.common.listing.ListingSnapshotFacts;
-import com.bkanent.listing.rag.ListingRagIdentity;
 import com.bkanent.listing.entity.ListingEntity;
+import com.bkanent.listing.enums.ListingStatusEnum;
 import com.bkanent.listing.mapper.ListingMapper;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.DataAccessException;
@@ -63,7 +63,7 @@ public class LegacyLocalListingSourceAdapter implements ListingSourceAdapter {
                                 .eq(ListingEntity::getBrokerId, scope.brokerId())));
             }
         }
-        query.eq(!scope.businessWideRead(), ListingEntity::getStatus, "ON_SALE");
+        query.eq(ListingEntity::getStatus, ListingStatusEnum.ON_SALE.name());
         query.orderByAsc(ListingEntity::getId).last("limit " + (request.limit() + 1));
 
         List<ListingEntity> rows = select(query);
@@ -142,7 +142,7 @@ public class LegacyLocalListingSourceAdapter implements ListingSourceAdapter {
 
     private boolean readable(ListingEntity entity, ListingAccessScope scope) {
         if (entity == null || !Integer.valueOf(0).equals(entity.getDeleted())
-                || !scope.businessWideRead() && !"ON_SALE".equals(entity.getStatus())) return false;
+                || !ListingStatusEnum.ON_SALE.name().equals(entity.getStatus())) return false;
         if (scope.businessWideRead()) return true;
         return entity.getOwnerUserId() != null
                 ? entity.getOwnerUserId() == scope.actorId()

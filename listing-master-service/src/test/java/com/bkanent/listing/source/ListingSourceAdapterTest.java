@@ -6,8 +6,10 @@ import com.bkanent.common.listing.ListingRef;
 import com.bkanent.common.listing.ListingSnapshotBatchReadRequest;
 import com.bkanent.common.listing.ListingSnapshotCheckRequest;
 import com.bkanent.common.listing.ListingSourceStatus;
+import com.bkanent.common.listing.ListingSourceVersionRef;
 import com.bkanent.listing.entity.ListingEntity;
 import com.bkanent.listing.mapper.ListingMapper;
+import com.bkanent.listing.service.ListingMybatisH2Fixture;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -99,6 +101,70 @@ class ListingSourceAdapterTest {
         verify(mapper).selectList(query.capture());
         assertTrue(query.getValue().getSqlSegment().contains("owner_user_id"));
         assertTrue(query.getValue().getSqlSegment().contains("broker_id"));
+    }
+
+    @Test
+    void legacyBusinessWideSearchPaginatesOnlyOnSaleListingsAcrossOwners() {
+        try (var fixture = new ListingMybatisH2Fixture()) {
+            fixture.jdbc.update("""
+                    INSERT INTO listing_info (id, owner_user_id, status, deleted) VALUES
+                        (41, 7, 'PENDING_REVIEW', 0),
+                        (42, 7, 'OFFLINE', 0),
+                        (43, 8, 'ON_SALE', 0),
+                        (44, 8, 'SOLD', 0),
+                        (45, 7, 'ON_SALE', 0),
+                        (46, 7, 'ON_SALE', 1)
+                    """);
+            var source = new LegacyLocalListingSourceAdapter(fixture.listingMapper, new ListingSourceProperties());
+            var scope = new ListingAccessScope(7, null, true);
+
+            var first = source.search(new ListingBusinessSearchRequest("domain-parallel-v1", null, null, 1), scope);
+            assertEquals(List.of(new ListingRef("legacy-local", "43")),
+                    first.items().stream().map(item -> item.listingRef()).toList());
+            assertNotNull(first.nextCursor());
+
+            var second = source.search(new ListingBusinessSearchRequest(
+                    "domain-parallel-v1", null, first.nextCursor(), 1), scope);
+            assertEquals(List.of(new ListingRef("legacy-local", "45")),
+                    second.items().stream().map(item -> item.listingRef()).toList());
+            assertNull(second.nextCursor());
+        }
+    }
+
+    @Test
+    void legacyBusinessWideBatchAndCheckRejectNonSaleListingsAndPreviouslyReadListingsAfterDelisting() {
+        ListingMapper mapper = mock(ListingMapper.class);
+        ListingEntity onSale = listing(41L, "4.2");
+        onSale.setOwnerUserId(8L);
+        ListingEntity pending = listing(42L, "4.2");
+        pending.setStatus("PENDING_REVIEW");
+        ListingEntity offline = listing(43L, "4.2");
+        offline.setStatus("OFFLINE");
+        ListingEntity sold = listing(44L, "4.2");
+        sold.setStatus("SOLD");
+        ListingEntity deleted = listing(45L, "4.2");
+        deleted.setDeleted(1);
+        List<ListingEntity> rows = List.of(onSale, pending, offline, sold, deleted);
+        when(mapper.selectBatchIds(any())).thenReturn(rows);
+        var source = new LegacyLocalListingSourceAdapter(mapper, new ListingSourceProperties());
+        var scope = new ListingAccessScope(7, null, true);
+        var refs = rows.stream().map(row -> new ListingSourceVersionRef(
+                new ListingRef("legacy-local", row.getId().toString()), null)).toList();
+
+        var read = source.batchRead(new ListingSnapshotBatchReadRequest("domain-parallel-v1", refs), scope);
+        assertEquals(List.of(ListingSourceStatus.CURRENT, ListingSourceStatus.NOT_ACCESSIBLE,
+                        ListingSourceStatus.NOT_ACCESSIBLE, ListingSourceStatus.NOT_ACCESSIBLE,
+                        ListingSourceStatus.NOT_ACCESSIBLE),
+                read.stream().map(item -> item.status()).toList());
+        assertTrue(read.subList(1, read.size()).stream().allMatch(item -> item.snapshot() == null));
+
+        var snapshot = read.get(0).snapshot();
+        var checkRequest = new ListingSnapshotCheckRequest("domain-parallel-v1",
+                List.of(new ListingSourceVersionRef(snapshot.listingRef(), snapshot.revision())));
+        assertEquals(ListingSourceStatus.CURRENT, source.check(checkRequest, scope).get(0).status());
+
+        onSale.setStatus("OFFLINE");
+        assertEquals(ListingSourceStatus.NOT_ACCESSIBLE, source.check(checkRequest, scope).get(0).status());
     }
 
     @Test

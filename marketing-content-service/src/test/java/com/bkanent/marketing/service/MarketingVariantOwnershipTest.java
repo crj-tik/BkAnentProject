@@ -3,6 +3,7 @@ package com.bkanent.marketing.service;
 import com.bkanent.common.authz.*;
 import com.bkanent.common.mcp.authz.McpAuthorizationContract;
 import com.bkanent.common.mcp.authz.McpAuthorizationScope;
+import com.bkanent.marketing.campaign.CampaignDomainException;
 import com.bkanent.marketing.converter.MarketingContentConverter;
 import com.bkanent.marketing.entity.MarketingContentEntity;
 import com.bkanent.marketing.model.MarketingContentUpsertRequest;
@@ -74,6 +75,21 @@ class MarketingVariantOwnershipTest {
         verifyNoInteractions(fixture.search);
     }
 
+    @Test
+    void manualDraftAndVariantRejectUnavailableListingBeforeSaving() throws Exception {
+        Fixture fixture = new Fixture(42L, 99L);
+        doThrow(CampaignDomainException.invalid("房源不可选用")).when(fixture.listings).requireOnSale(3L);
+        try (var ignored = McpAuthorizationScope.open(context("marketing.content.create.own", Map.of("BROKER", 99L)))) {
+            assertThrows(CampaignDomainException.class, () -> fixture.service.createContent(request()));
+        }
+        try (var ignored = McpAuthorizationScope.open(context(OWN, Map.of("BROKER", 99L)))) {
+            assertThrows(CampaignDomainException.class, () -> fixture.service.createPlatformVariant(8L, request()));
+        }
+        verify(fixture.listings, times(2)).requireOnSale(3L);
+        assertNull(fixture.saved);
+        verifyNoInteractions(fixture.search);
+    }
+
     private static MarketingContentUpsertRequest request() {
         return new MarketingContentUpsertRequest(3L, "douyin", "标题", "TEXT", "文案",
                 List.of(), null, null, "douyin", List.of(), "DRAFT", null, "manual");
@@ -96,9 +112,10 @@ class MarketingVariantOwnershipTest {
 
     private static class Fixture {
         private final MarketingContentSearchService search = mock(MarketingContentSearchService.class);
+        private final MarketingListingReadClient listings = mock(MarketingListingReadClient.class);
         private final MarketingContentEntity source = new MarketingContentEntity();
         private MarketingContentEntity saved;
-        private final MarketingAssetServiceImpl service = new MarketingAssetServiceImpl(new MarketingContentConverter(), search) {
+        private final MarketingAssetServiceImpl service = new MarketingAssetServiceImpl(new MarketingContentConverter(), search, listings) {
             @Override public MarketingContentEntity getById(java.io.Serializable id) { return source; }
             @Override public boolean save(MarketingContentEntity entity) {
                 entity.setId(9L);

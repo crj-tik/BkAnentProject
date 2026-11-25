@@ -18,9 +18,9 @@ class ListingBusinessAuthorizationTest {
     private ListingEntity row(String status, int deleted) {
         var row = new ListingEntity(); row.setId(11L); row.setStatus(status); row.setDeleted(deleted); return row;
     }
-    @Test void adminReadsEveryNonDeletedStatusMemberOnlyOnSaleAndNoThirdRole() {
+    @Test void businessReadsOnlyOnSaleForBothAdminAndBroker() {
         for (String status : List.of("PENDING_REVIEW", "ON_SALE", "SOLD", "OFFLINE")) {
-            assertTrue(ListingRagIdentity.canRead(principal("ADMIN"), row(status, 0)));
+            assertEquals("ON_SALE".equals(status), ListingRagIdentity.canRead(principal("ADMIN"), row(status, 0)));
             assertEquals("ON_SALE".equals(status), ListingRagIdentity.canRead(principal("BROKER"), row(status, 0)));
             assertFalse(ListingRagIdentity.canRead(principal("ADMIN"), row(status, 1)));
         }
@@ -41,7 +41,7 @@ class ListingBusinessAuthorizationTest {
             assertThrows(com.bkanent.common.authz.AuthzException.class, () -> tools.getListingDetail(11L));
             assertThrows(RagException.class, () -> tools.getListingSummary(11L));
             when(identity.requireReader(any())).thenReturn(principal("ADMIN"));
-            assertEquals("OFFLINE", tools.getListingSummary(11L).status());
+            assertThrows(RagException.class, () -> tools.getListingSummary(11L));
         }
         assertThrows(RagException.class, ListingRagCredentialContext::current);
     }
@@ -116,9 +116,9 @@ class ListingBusinessAuthorizationTest {
         }
         verify(identity, times(2)).requireReader(credentials);
     }
-    @Test void memberSqlSearchIsNarrowedBeforeLimitAndRechecksReturnedRows() {
+    @Test void adminSqlCandidateSearchIsNarrowedBeforeLimitAndRechecksReturnedRows() {
         var domain = mock(ListingDomainService.class); var identity = mock(ListingRagIdentity.class);
-        when(identity.requireReader(any())).thenReturn(principal("BROKER"));
+        when(identity.requireReader(any())).thenReturn(principal("ADMIN"));
         when(domain.search(any())).thenReturn(List.of(row("ON_SALE",0), row("SOLD",0), row("ON_SALE",1)));
         var service = managementService(domain, identity, mock(ListingSearchService.class));
         try (var ignored = ListingRagCredentialContext.open(new RagCredentialContext("dedicated-access"))) {

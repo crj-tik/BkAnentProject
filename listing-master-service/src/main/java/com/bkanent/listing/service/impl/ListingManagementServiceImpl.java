@@ -1,6 +1,7 @@
 package com.bkanent.listing.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.bkanent.common.authz.AuthzRequestScope;
 import com.bkanent.common.model.KnowledgeDocument;
 import com.bkanent.common.model.ListingDTO;
 import com.bkanent.common.model.ListingKeywordSearchRequest;
@@ -312,11 +313,24 @@ public class ListingManagementServiceImpl implements ListingManagementService {
             throw new com.bkanent.common.authz.AuthzException(
                     com.bkanent.common.authz.AuthzErrorCode.AUTHENTICATION_REQUIRED);
         }
+        ListingEntity entity = requireOwnedListingForRead(listingId);
+        requireReadable(entity, currentReader());
+        return toDetail(entity);
+    }
+
+    @Override
+    public ListingDetailResponse getManagedListingDetail(Long listingId) {
+        AuthzRequestScope.requireCurrent();
+        ListingEntity entity = requireOwnedListingForRead(listingId);
+        requireUnpublishedManagementAccess(entity);
+        return toDetail(entity);
+    }
+
+    private ListingEntity requireOwnedListingForRead(Long listingId) {
         requireReadPermission();
         ListingEntity entity = requireListing(listingId);
         requireOwner(entity, "listing.read", "listing.read.all");
-        requireReadable(entity, currentReader());
-        return toDetail(entity);
+        return entity;
     }
 
     /**
@@ -325,25 +339,28 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     @Override
     public List<ListingDetailResponse> searchListings(ListingQueryRequest request) {
         request = authorizedQuery(request, "listing.read", "listing.read.all");
-        var principal = currentReader();
-        if (com.bkanent.listing.rag.ListingRagIdentity.activeOnly(principal)) {
-            if (request != null && StringUtils.hasText(request.status()) && !"ON_SALE".equals(request.status())) {
-                return List.of();
-            }
-            request = request == null ? new ListingQueryRequest(null, "ON_SALE", null, null, null, null, null, null)
-                    : new ListingQueryRequest(request.keyword(), "ON_SALE", request.brokerId(), request.minArea(),
-                    request.maxArea(), request.minTotalPrice(), request.maxTotalPrice(), request.verifiedOnly(),
-                    request.ownerUserId());
-        }
-        var rows = listingDomainService.search(request);
-        principal = currentReader();
-        var current = principal;
-        List<ListingDetailResponse> result = new java.util.ArrayList<>();
+        var rows = AuthzRequestScope.hasOperation("listing.read.all") && !AuthzRequestScope.businessAdmin()
+                ? listingDomainService.searchWithOwnedUnpublished(request, AuthzRequestScope.actorId(),
+                        AuthzRequestScope.businessIdentity("BROKER"))
+                : listingDomainService.search(request);
+        AuthzRequestScope.requireCurrent();
+        List<ListingDetailResponse> result = new ArrayList<>();
         for (ListingEntity row : rows) {
             requireOwner(row, "listing.read", "listing.read.all");
-            if (com.bkanent.listing.rag.ListingRagIdentity.canRead(current, row)) result.add(toDetail(row));
+            if (Integer.valueOf(0).equals(row.getDeleted())) {
+                requireUnpublishedManagementAccess(row);
+                result.add(toDetail(row));
+            }
         }
         return List.copyOf(result);
+    }
+
+    private void requireUnpublishedManagementAccess(ListingEntity entity) {
+        if (!ListingStatusEnum.ON_SALE.name().equals(entity.getStatus())
+                && !AuthzRequestScope.businessAdmin() && AuthzRequestScope.hasOperation("listing.read.all")) {
+            AuthzRequestScope.requireUserOrLegacyBrokerOwnership(entity.getOwnerUserId(), entity.getBrokerId(),
+                    "listing.read.all", null);
+        }
     }
 
     /**
@@ -353,9 +370,8 @@ public class ListingManagementServiceImpl implements ListingManagementService {
     public List<ListingDTO> searchListingSummaries(String keyword) {
         ListingQueryRequest query = authorizedSummaryQuery(new ListingQueryRequest(keyword, null, null,
                 null, null, null, null, null));
-        var principal = currentReader();
-        var rows = listingDomainService.search(new ListingQueryRequest(keyword,
-                com.bkanent.listing.rag.ListingRagIdentity.activeOnly(principal) ? "ON_SALE" : null,
+        currentReader();
+        var rows = listingDomainService.search(new ListingQueryRequest(keyword, ListingStatusEnum.ON_SALE.name(),
                 query.brokerId(), null, null, null, null, null));
         var current = currentReader();
         List<ListingDTO> result = new java.util.ArrayList<>();

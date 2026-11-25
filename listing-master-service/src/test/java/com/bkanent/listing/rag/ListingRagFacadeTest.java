@@ -138,7 +138,9 @@ class ListingRagFacadeTest {
         var facade = new ListingRagFacade(identity,grants,factory.getBeanProvider(RagRetrievalRpcService.class),mapper,
                 new ListingConverter(),new ListingKnowledgeDocumentAssembler(),revisions());
         when(identity.requireReader(any())).thenReturn(admin);
-        assertEquals(List.of(1L),facade.search(input(null,null,null),new RagCredentialContext("token"),"7").matches().stream().map(m -> m.listing().id()).toList());
+        var offline = facade.search(input(null,null,null),new RagCredentialContext("token"),"7");
+        assertTrue(offline.matches().isEmpty());
+        assertTrue(offline.retrieval().candidates().isEmpty());
         when(identity.requireReader(any())).thenReturn(admin,member);
         assertTrue(facade.search(input(null,null,null),new RagCredentialContext("token"),"7").matches().isEmpty());
         when(identity.requireReader(any())).thenReturn(admin).thenThrow(new RagException(RagErrorCode.AUTHENTICATION_FAILED));

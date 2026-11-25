@@ -3,6 +3,8 @@ package com.bkanent.listing.rag;
 import com.bkanent.common.rag.*;
 import com.bkanent.common.rpc.RagPrincipalRpcService;
 import com.bkanent.listing.config.ListingRagProperties;
+import com.bkanent.listing.entity.ListingEntity;
+import com.bkanent.listing.enums.ListingStatusEnum;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
@@ -113,13 +115,15 @@ public class ListingRagIdentity {
             throw new RagException(RagErrorCode.FORBIDDEN);
         }
     }
+    /** 保留现有签名范围的编码，全量读取身份与候选的在售条件相互独立。 */
     public static boolean activeOnly(AuthRagPrincipal principal) {
         requireCurrent(principal);
         return principal.versionedAuthorization() ? !principal.hasPermission("listing.read.all") : !"ADMIN".equals(principal.roleCode());
     }
-    public static boolean canRead(AuthRagPrincipal principal, com.bkanent.listing.entity.ListingEntity entity) {
-        return entity != null && Integer.valueOf(0).equals(entity.getDeleted())
-                && (!activeOnly(principal) || "ON_SALE".equals(entity.getStatus()));
+    public static boolean canRead(AuthRagPrincipal principal, ListingEntity entity) {
+        if (entity == null || !Integer.valueOf(0).equals(entity.getDeleted())) return false;
+        requireCurrent(principal);
+        return ListingStatusEnum.ON_SALE.name().equals(entity.getStatus());
     }
     public RagAuthEnvelope sign(String audience, RagOperation operation, String requestId, String hash,
                                 RagActorMode mode, String actor, RagCredentialContext credentials) {

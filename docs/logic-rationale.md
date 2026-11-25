@@ -1774,3 +1774,13 @@
 **代码位置**：`scripts/migrations/rollback-user-owner-ledger.sql`、`AuthzRequestScope.requireUserOrLegacyBrokerOwnership`、`VerifiedDomainAuthorization.requireUserOrLegacyBrokerOwnership`。
 
 **关联**：LR-185；KI-272；change `unify-user-organization-and-role-authorization` 任务 4.5。当前对账脚本只读，服务版本切换及回退演练仍待逐域验证。
+
+## LR-196 房源管理查看与下游选用各有状态条件
+
+**结论**：未删除的非在售房源可在房源管理入口由记录负责人、受信旧经纪人归属或持有 `listing.read.all` 的 Auth 平台管理员查看。普通账号的 `listing.read.all` 扩大在售房源范围，对其他负责人的非在售房源仍不放行。内部房源摘要、检索、业务来源及新营销草稿只允许选用 `ON_SALE` 房源。
+
+**根因**：录入人需要查看待上架记录并补齐资料。管理端的查看权限也不应让待上架、下架或已成交记录进入匹配、对比和新营销草稿。检索兼容原有签名范围编码，在召回时过滤 `active`，并以房源当前状态复核输出。
+
+**代码位置**：`ListingController`、`ListingManagementServiceImpl`、`ListingDomainServiceImpl`、`LegacyLocalListingSourceAdapter`、`ListingRagIdentity`、`RagAccessControl`、`MarketingAssetServiceImpl`、`MarketingListingReadClient`。
+
+**关联**：LR-176、LR-185、LR-187；KI-290。

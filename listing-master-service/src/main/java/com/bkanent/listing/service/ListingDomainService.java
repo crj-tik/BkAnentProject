@@ -22,6 +22,9 @@ public interface ListingDomainService extends IService<ListingEntity> {
      */
     List<ListingEntity> search(ListingQueryRequest request);
 
+    /** 非管理员的全量管理搜索仅包含在售房源和本人负责的非在售房源。 */
+    List<ListingEntity> searchWithOwnedUnpublished(ListingQueryRequest request, long actorId, Long brokerId);
+
     /**
      * 业务方法：searchOnSalePage（买方可见在售房源分页查询）。
      * 条件 status=ON_SALE、deleted=0 及区域/小区/户型/面积/挂牌价过滤

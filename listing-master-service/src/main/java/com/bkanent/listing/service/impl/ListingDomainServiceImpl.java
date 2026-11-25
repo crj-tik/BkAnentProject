@@ -48,6 +48,18 @@ public class ListingDomainServiceImpl extends ServiceImpl<ListingMapper, Listing
 
     @Override
     public List<ListingEntity> search(ListingQueryRequest request) {
+        return searchResults(searchCriteria(request));
+    }
+
+    @Override
+    public List<ListingEntity> searchWithOwnedUnpublished(ListingQueryRequest request, long actorId, Long brokerId) {
+        var wrapper = searchCriteria(request);
+        wrapper.and(scope -> scope.eq(ListingEntity::getStatus, ListingStatusEnum.ON_SALE.name())
+                .or(owned -> appendOwnership(owned, actorId, brokerId)));
+        return searchResults(wrapper);
+    }
+
+    private static LambdaQueryWrapper<ListingEntity> searchCriteria(ListingQueryRequest request) {
         LambdaQueryWrapper<ListingEntity> wrapper = new LambdaQueryWrapper<>();
         if (request != null) {
             wrapper.and(StringUtils.hasText(request.keyword()), query -> query
@@ -58,13 +70,7 @@ public class ListingDomainServiceImpl extends ServiceImpl<ListingMapper, Listing
                     .like(ListingEntity::getOwnerName, request.keyword()));
             wrapper.eq(StringUtils.hasText(request.status()), ListingEntity::getStatus, request.status());
             if (request.ownerUserId() != null) {
-                if (request.brokerId() == null) {
-                    wrapper.eq(ListingEntity::getOwnerUserId, request.ownerUserId());
-                } else {
-                    wrapper.and(scope -> scope.eq(ListingEntity::getOwnerUserId, request.ownerUserId())
-                            .or(legacy -> legacy.isNull(ListingEntity::getOwnerUserId)
-                                    .eq(ListingEntity::getBrokerId, request.brokerId())));
-                }
+                wrapper.and(scope -> appendOwnership(scope, request.ownerUserId(), request.brokerId()));
             } else {
                 wrapper.eq(request.brokerId() != null, ListingEntity::getBrokerId, request.brokerId());
             }
@@ -74,8 +80,18 @@ public class ListingDomainServiceImpl extends ServiceImpl<ListingMapper, Listing
             wrapper.le(request.maxTotalPrice() != null, ListingEntity::getTotalPrice, request.maxTotalPrice());
             wrapper.eq(Boolean.TRUE.equals(request.verifiedOnly()), ListingEntity::getVerificationStatus, "VERIFIED");
         }
-        wrapper.orderByDesc(ListingEntity::getUpdatedAt).last("limit 50");
-        return list(wrapper);
+        return wrapper;
+    }
+
+    private static void appendOwnership(LambdaQueryWrapper<ListingEntity> scope, long actorId, Long brokerId) {
+        scope.eq(ListingEntity::getOwnerUserId, actorId);
+        if (brokerId != null) {
+            scope.or(legacy -> legacy.isNull(ListingEntity::getOwnerUserId).eq(ListingEntity::getBrokerId, brokerId));
+        }
+    }
+
+    private List<ListingEntity> searchResults(LambdaQueryWrapper<ListingEntity> wrapper) {
+        return list(wrapper.orderByDesc(ListingEntity::getUpdatedAt).last("limit 50"));
     }
 
     /**

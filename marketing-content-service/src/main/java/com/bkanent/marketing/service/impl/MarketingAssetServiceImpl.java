@@ -15,6 +15,7 @@ import com.bkanent.marketing.model.MarketingContentUpsertRequest;
 import com.bkanent.marketing.model.MarketingPublishStatusUpdateRequest;
 import com.bkanent.marketing.service.MarketingAssetService;
 import com.bkanent.marketing.service.MarketingContentSearchService;
+import com.bkanent.marketing.service.MarketingListingReadClient;
 import com.bkanent.common.a2a.VerifiedDomainAuthorization;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,11 +35,19 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
 
     private final MarketingContentConverter marketingContentConverter;
     private final MarketingContentSearchService marketingContentSearchService;
+    private final MarketingListingReadClient listingReadClient;
 
     public MarketingAssetServiceImpl(MarketingContentConverter marketingContentConverter,
-                                     MarketingContentSearchService marketingContentSearchService) {
+                                     MarketingContentSearchService marketingContentSearchService,
+                                     MarketingListingReadClient listingReadClient) {
         this.marketingContentConverter = marketingContentConverter;
         this.marketingContentSearchService = marketingContentSearchService;
+        this.listingReadClient = listingReadClient;
+    }
+
+    @Override
+    public void requireDraftListing(Long listingId) {
+        listingReadClient.requireOnSale(listingId);
     }
 
     @Override
@@ -47,6 +56,7 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
         VerifiedDomainAuthorization.requireOperation("marketing.content.create.own");
         long ownerBrokerId = VerifiedDomainAuthorization.requireBrokerIdentity();
         long ownerUserId = VerifiedDomainAuthorization.requireActorId();
+        contents.stream().map(MarketingContentDTO::listingId).distinct().forEach(this::requireDraftListing);
         List<MarketingContentEntity> entities = contents.stream()
                 .map(marketingContentConverter::toEntity)
                 .peek(entity -> {
@@ -107,6 +117,7 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
         long ownerBrokerId = VerifiedDomainAuthorization.requireBrokerIdentity();
         long ownerUserId = VerifiedDomainAuthorization.requireActorId();
         validateUpsertRequest(request);
+        requireDraftListing(request.listingId());
         MarketingContentEntity entity = new MarketingContentEntity();
         applyUpsert(entity, request);
         entity.setOwnerBrokerId(ownerBrokerId);
@@ -128,6 +139,7 @@ public class MarketingAssetServiceImpl extends ServiceImpl<MarketingContentMappe
         MarketingContentEntity sourceEntity = requireContent(sourceContentId,
                 "marketing.content.variant.create.own", "marketing.content.variant.create.all");
         validateUpsertRequest(request);
+        requireDraftListing(request.listingId());
         MarketingContentEntity entity = new MarketingContentEntity();
         applyUpsert(entity, request);
         // 全量权限只扩大访问范围，不代表操作者拥有原内容负责人的经纪人身份。

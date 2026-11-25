@@ -16,6 +16,7 @@ import com.bkanent.common.mcp.authz.McpAuthorizationContract;
 import com.bkanent.common.mcp.authz.McpAuthorizationScope;
 import com.bkanent.common.model.MarketingContentDTO;
 import com.bkanent.common.rpc.MediaWorkerRpcService;
+import com.bkanent.marketing.campaign.CampaignDomainException;
 import com.bkanent.marketing.campaign.CampaignLifecycleService;
 import com.bkanent.marketing.service.MarketingAssetService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -29,9 +30,12 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class MarketingMcpToolsTest {
@@ -65,6 +69,21 @@ class MarketingMcpToolsTest {
                 new MarketingContentDraftResponse(41L, "DOUYIN", "DRAFT"),
                 new MarketingContentDraftResponse(42L, "XIAOHONGSHU", "DRAFT"));
         verify(assets).saveContents(any());
+    }
+
+    @Test
+    void unavailableListingStopsDraftToolBeforeMediaOrPersistence() throws Exception {
+        var media = mock(MediaWorkerRpcService.class);
+        when(mediaWorkerProvider.getIfAvailable()).thenReturn(media);
+        var toolWithMedia = new MarketingMcpTools(assets, mediaWorkerProvider, campaigns, new ObjectMapper());
+        doThrow(CampaignDomainException.invalid("房源不可选用")).when(assets).requireDraftListing(9L);
+
+        try (var ignored = McpAuthorizationScope.open(marketingCreateContext())) {
+            assertThrows(CampaignDomainException.class,
+                    () -> toolWithMedia.createMarketingContentDraft(9L, "DOUYIN", "draft text"));
+        }
+        verifyNoInteractions(media);
+        verify(assets, org.mockito.Mockito.never()).saveContents(any());
     }
 
     @Test

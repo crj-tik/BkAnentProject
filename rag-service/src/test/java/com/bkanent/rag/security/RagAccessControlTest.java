@@ -366,7 +366,8 @@ class RagAccessControlTest {
         var adminScope = versionedScope(request, "listing-current", "listing-master-service", "listing-master-service",
                 null, false, true, true, "listing.read.all", null, List.of(), List.of("listing.read.all"));
         assertThat(access.search(request, envelope(request, RagOperation.SEARCH, "req", RagActorMode.USER,
-                "consumer-current", null), null, adminScope)).isEmpty();
+                "consumer-current", null), null, adminScope))
+                .containsExactly(new RagFilter("active", RagFilterOperator.EQ, RagValue.bool(true)));
 
         var weakerScope = versionedScope(request, "listing-current", "listing-master-service", "listing-master-service",
                 null, false, true, true, "listing.read", null, List.of(), List.of("listing.read.all"));
@@ -472,11 +473,12 @@ class RagAccessControlTest {
         denied(() -> unknownAccess.search(unknownRequest, envelope(unknownRequest, RagOperation.SEARCH,
                 "unknown-req", RagActorMode.USER, "consumer-current", null), null, unknownScope), RagErrorCode.FORBIDDEN);
     }
-    @Test void administratorBusinessScopeAllowsNonActiveListingsWithoutResourceWildcard() {
+    @Test void administratorBusinessScopeStillRestrictsCandidatesToActiveListings() {
         var request = RagSearchRequest.defaults("req", "listing.knowledge", "query");
         assertThat(listingAccess("ADMIN").search(request,
                 envelope(request, RagOperation.SEARCH, "req", RagActorMode.USER, "consumer-current"), credentials,
-                listingScope(request, true, false))).isEmpty();
+                listingScope(request, true, false)))
+                .containsExactly(new RagFilter("active", RagFilterOperator.EQ, RagValue.bool(true)));
     }
     @Test void memberBusinessScopeAlwaysRestrictsBothRoutesToActiveListings() {
         var request = RagSearchRequest.defaults("req", "listing.knowledge", "query");

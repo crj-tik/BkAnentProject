@@ -14,6 +14,8 @@ import java.util.List;
  * 营销素材服务接口。
  */
 public interface MarketingAssetService extends IService<MarketingContentEntity> {
+    /** 在生成素材前确认房源仍可用于新草稿。保存时会再次检查。 */
+    void requireDraftListing(Long listingId);
 
     /**
      * 业务方法：saveContents。

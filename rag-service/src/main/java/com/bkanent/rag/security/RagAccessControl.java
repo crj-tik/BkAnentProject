@@ -61,7 +61,8 @@ public final class RagAccessControl {
                     && space.searchRoles().contains(principal.roleCode()));
         }
         List<RagFilter> mandatory = new ArrayList<>();
-        if ("listing.knowledge".equals(space.spaceId())) {
+        boolean listingSearch = "listing.knowledge".equals(space.spaceId());
+        if (listingSearch) {
             if (scope.businessWideRead()) {
                 require(scope.ownerId() == null && scope.allowedResourceIds().isEmpty());
                 boolean businessWidePermission = principal.versionedAuthorization()
@@ -92,7 +93,8 @@ public final class RagAccessControl {
                         RagValue.string(principal.userId().toString())));
             }
         }
-        if (Boolean.TRUE.equals(scope.activeOnly())) {
+        // 房源检索只收录可选的在售候选。兼容旧版全量读取范围的签名编码。
+        if (listingSearch || Boolean.TRUE.equals(scope.activeOnly())) {
             requiredField(space, "active", RagValueType.BOOLEAN);
             mandatory.add(new RagFilter("active", RagFilterOperator.EQ, RagValue.bool(true)));
         }

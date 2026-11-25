@@ -2,9 +2,12 @@ package com.bkanent.marketing.service;
 
 import com.bkanent.common.a2a.A2aCredentialContext;
 import com.bkanent.common.authz.*;
+import com.bkanent.common.mcp.authz.McpAuthorizationContract;
+import com.bkanent.common.mcp.authz.McpAuthorizationScope;
 import com.bkanent.common.model.ListingDTO;
 import com.bkanent.common.rag.*;
 import com.bkanent.common.rpc.*;
+import com.bkanent.marketing.campaign.CampaignDomainException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -179,6 +182,47 @@ class MarketingListingReadClientTest {
             assertThrows(AuthzException.class, () -> client.get(7L));
         }
         verifyNoInteractions(listings, auth);
+    }
+
+    @Test void draftEligibilityEvenWithWideAccessRequiresOnSale() {
+        var client = client();
+        var offline = new ListingDTO(7L, "title", "address", "layout", null, null, "OFFLINE",
+                null, null, null, null, null);
+        try (var ignored = MarketingAuthzScopeFixture.open(List.of("listing.read.all"))) {
+            when(listings.readAuthorized(any(), any(), any())).thenReturn(List.of(offline), List.of(listing(7)));
+            assertThrows(CampaignDomainException.class, () -> client.requireOnSale(7L));
+            assertDoesNotThrow(() -> client.requireOnSale(7L));
+        }
+    }
+
+    @Test void mcpDraftUsesListingReadFromSignedContextInsteadOfRequiringAnotherToolOperation() throws Exception {
+        var client = client();
+        var key = java.security.KeyPairGenerator.getInstance("Ed25519").generateKeyPair();
+        String draftOperation = "marketing.content.create.own";
+        long now = Instant.now().getEpochSecond();
+        String hash = "0".repeat(64);
+        String nonce = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(new byte[32]);
+        var context = AuthzSignature.sign(new AuthorizationContext("42", 1, 1, hash, List.of("listing.read", draftOperation),
+                "agent-service", "req-1", "run-1", "session-1", hash, hash, nonce, now - 1, now + 60,
+                now + 60, java.util.Map.of("BROKER", 84L), "Ed25519", "auth-current", null), key.getPrivate());
+        var freshness = AuthzSignature.sign(new AuthzFreshness("42", 1, 1, AuthorizationStatus.ACTIVE, hash,
+                now - 1, now + 20, nonce, "Ed25519", "auth-current", null), key.getPrivate());
+        var binding = new DelegationBinding("agent-service", "marketing-content-service", "42", List.of(draftOperation),
+                "run-1", null, "req-1", hash, hash, nonce, now - 1, now + 20);
+        var access = new McpAuthorizationContract.Verified("42", "agent-service", "marketing-content-service",
+                draftOperation, "req-1", "createMarketingContentDraft", context, freshness, binding);
+        when(listings.readAuthorizedContext(any(), any())).thenAnswer(call -> {
+            RagContextAuthorizedListingReadRequest query = call.getArgument(0);
+            assertSame(context, query.authorizationContext());
+            assertEquals(7L, query.request().listingId());
+            return List.of(listing(7));
+        });
+
+        try (var ignored = McpAuthorizationScope.open(access)) {
+            assertDoesNotThrow(() -> client.requireOnSale(7L));
+        }
+        verify(listings).readAuthorizedContext(any(), any());
+        verifyNoInteractions(auth);
     }
 
     private static final class MarketingAuthzScopeFixture {

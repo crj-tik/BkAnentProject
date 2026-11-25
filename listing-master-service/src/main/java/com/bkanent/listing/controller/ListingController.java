@@ -59,7 +59,7 @@ public class ListingController {
 
     @GetMapping("/{id}")
     public ApiResponse<ListingDetailResponse> detail(@PathVariable(name = "id") Long id) {
-        return ApiResponse.ok(listingManagementService.getListingDetail(id));
+        return ApiResponse.ok(listingManagementService.getManagedListingDetail(id));
     }
 
     @GetMapping("/search")

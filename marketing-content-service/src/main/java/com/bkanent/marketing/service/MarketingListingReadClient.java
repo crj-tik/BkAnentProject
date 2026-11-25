@@ -2,11 +2,15 @@ package com.bkanent.marketing.service;
 
 import com.bkanent.common.a2a.A2aCredentialContext;
 import com.bkanent.common.authz.AuthzCanonicalHash;
+import com.bkanent.common.authz.AuthzFreshness;
 import com.bkanent.common.authz.AuthzRequestScope;
+import com.bkanent.common.authz.AuthorizationContext;
+import com.bkanent.common.mcp.authz.McpAuthorizationScope;
 import com.bkanent.common.model.ListingDTO;
 import com.bkanent.common.rag.*;
 import com.bkanent.common.rpc.AuthPermissionRpcService;
 import com.bkanent.common.rpc.ListingMasterRpcService;
+import com.bkanent.marketing.campaign.CampaignDomainException;
 import org.apache.dubbo.config.annotation.DubboReference;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -31,8 +35,17 @@ public class MarketingListingReadClient {
     public ListingDTO get(Long id) {
         if (id == null || id <= 0) throw new RagException(RagErrorCode.INVALID_ARGUMENT);
         if (AuthzRequestScope.present()) return getWithSignedAuthorization(id);
+        if (McpAuthorizationScope.current() != null) {
+            var verified = McpAuthorizationScope.requireCurrent();
+            McpAuthorizationScope.requireContextPermission(listingReadOperation(verified.context()));
+            return getWithVersionedContext(id, verified.context(), verified.freshness());
+        }
         A2aCredentialContext.Lease lease = A2aCredentialContext.snapshot();
-        if (lease != null && lease.versioned()) return getWithVersionedContext(id, lease);
+        if (lease != null && lease.versioned()) {
+            lease.verify();
+            lease.requireOperation(listingReadOperation(lease.authorizationContext()));
+            return getWithVersionedContext(id, lease.authorizationContext(), lease.freshness());
+        }
         RagCredentialContext credentials;
         String actor;
         var attributes = RequestContextHolder.getRequestAttributes();
@@ -63,13 +76,18 @@ public class MarketingListingReadClient {
         catch (RuntimeException failure) { throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE); }
     }
 
-    private ListingDTO getWithVersionedContext(Long id, A2aCredentialContext.Lease lease) {
-        lease.verify();
-        var context = lease.authorizationContext();
-        var freshness = lease.freshness();
-        String operation = context.allowedOperations().contains("listing.read.all")
+    public void requireOnSale(Long id) {
+        if (id == null || id <= 0 || get(id) == null) {
+            throw CampaignDomainException.invalid("房源不可选用，请选择在售房源");
+        }
+    }
+
+    private static String listingReadOperation(AuthorizationContext context) {
+        return context.allowedOperations().contains("listing.read.all")
                 ? "listing.read.all" : "listing.read";
-        lease.requireOperation(operation);
+    }
+
+    private ListingDTO getWithVersionedContext(Long id, AuthorizationContext context, AuthzFreshness freshness) {
         if (listings == null) throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
         if (secret == null || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
             throw new RagException(RagErrorCode.AUTHENTICATION_FAILED);
@@ -125,6 +143,6 @@ public class MarketingListingReadClient {
         if (results == null || results.size() > 1 || !results.isEmpty() && !id.equals(results.get(0).id())) {
             throw new RagException(RagErrorCode.DEPENDENCY_UNAVAILABLE);
         }
-        return results.isEmpty() ? null : results.get(0);
+        return results.isEmpty() || !"ON_SALE".equals(results.get(0).status()) ? null : results.get(0);
     }
 }

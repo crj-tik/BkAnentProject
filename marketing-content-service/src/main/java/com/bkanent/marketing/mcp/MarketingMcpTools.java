@@ -50,7 +50,11 @@ public class MarketingMcpTools implements McpTool {
         VerifiedDomainAuthorization.requireOperation("marketing.content.create.own");
         VerifiedDomainAuthorization.requireBrokerIdentity();
         List<String> platformList = parsePlatforms(platforms);
-        List<String> assets = mediaWorkerRpcService == null ? List.of() : mediaWorkerRpcService.generateAssets(listingId, copywriting);
+        if (mediaWorkerRpcService != null) {
+            marketingAssetService.requireDraftListing(listingId);
+        }
+        List<String> assets = mediaWorkerRpcService == null
+                ? List.of() : mediaWorkerRpcService.generateAssets(listingId, copywriting);
         List<MarketingContentDTO> contents = platformList.stream()
                 .map(platform -> new MarketingContentDTO(null, listingId, platform, null, "TEXT", copywriting,
                         assets, null, null, 1, "DEFAULT", List.of("agent-generated"), "DRAFT", "DRAFT"))

@@ -43,6 +43,11 @@ public interface ListingManagementService {
     ListingDetailResponse getListingDetail(Long listingId);
 
     /**
+     * 读取房源管理详情，按负责人或全量读取权限校验，包含非在售房源。
+     */
+    ListingDetailResponse getManagedListingDetail(Long listingId);
+
+    /**
      * 查询房源详情列表。
      */
     List<ListingDetailResponse> searchListings(ListingQueryRequest request);

@@ -123,7 +123,8 @@ class ListingVersionedAuthorizationTest {
         try (var ignored = ListingAuthzScopeFixture.open(true, java.util.List.of("listing.read.all"),
                 java.util.List.of("listing.read.all"), java.util.Map.of())) {
             AuthRagPrincipal principal = identity.requireReader(null);
-            assertTrue(ListingRagIdentity.canRead(principal, row(82L, "OFFLINE")));
+            assertTrue(ListingRagIdentity.canRead(principal, row(82L, "ON_SALE")));
+            assertFalse(ListingRagIdentity.canRead(principal, row(82L, "OFFLINE")));
             assertThrows(AuthzException.class,
                     com.bkanent.common.authz.AuthzRequestScope::requireBrokerIdentity);
         }

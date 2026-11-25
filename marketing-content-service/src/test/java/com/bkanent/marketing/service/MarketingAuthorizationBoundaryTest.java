@@ -19,7 +19,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 class MarketingAuthorizationBoundaryTest {
     private final MarketingContentSearchService search = mock(MarketingContentSearchService.class);
-    private final MarketingAssetServiceImpl assets = new MarketingAssetServiceImpl(new MarketingContentConverter(), search);
+    private final MarketingAssetServiceImpl assets = new MarketingAssetServiceImpl(new MarketingContentConverter(),
+            search, mock(MarketingListingReadClient.class));
 
     @Test
     void brokerContentReadRequiresVerifiedOwnerContextBeforeQuery() {
