@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bkanent:a2a:listing-actions:1.0",
+  "title": "房源域 A2A 动作契约",
+  "description": "定义共用 A2A 信封内的业务请求和结果。分派时按 x-actions 注册的动作和版本选择输入与输出定义。房源来源不可达等技术失败使用共用信封的 FAILED。",
+  "oneOf": [
+    { "$ref": "#/$defs/SnapshotReadRequest" },
+    { "$ref": "#/$defs/SnapshotReadResult" }
+  ],
+  "x-actions": {
+    "listing.snapshot.read": {
+      "contractVersion": "1.0",
+      "request": { "$ref": "#/$defs/SnapshotReadRequest" },
+      "result": { "$ref": "#/$defs/SnapshotReadResult" }
+    }
+  },
+  "$defs": {
+    "ListingId": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,18}$",
+      "description": "内部正整数房源 ID 的十进制字符串，由房源域校验数据库 ID 范围。"
+    },
+    "ListingRef": {
+      "type": "object",
+      "required": ["sourceSystem", "sourceId"],
+      "properties": {
+        "sourceSystem": { "const": "legacy-local" },
+        "sourceId": { "$ref": "#/$defs/ListingId" }
+      },
+      "additionalProperties": false
+    },
+    "SnapshotReadRequest": {
+      "type": "object",
+      "required": ["listingRef", "purpose"],
+      "properties": {
+        "listingRef": { "$ref": "#/$defs/ListingRef" },
+        "purpose": {
+          "enum": ["MARKETING_DRAFT_CREATE", "MARKETING_DRAFT_CONFIRM"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "PublicMarketingFacts": {
+      "type": "object",
+      "required": ["title", "layout", "areaSquareMetres"],
+      "properties": {
+        "title": { "type": "string", "maxLength": 128, "pattern": "\\S" },
+        "layout": { "type": "string", "maxLength": 32, "pattern": "\\S" },
+        "areaSquareMetres": {
+          "type": "string",
+          "pattern": "^(?:[1-9][0-9]{0,7}(?:\\.[0-9]{1,2})?|0\\.(?:0[1-9]|[1-9][0-9]?))$"
+        },
+        "communityName": { "type": "string", "maxLength": 128, "pattern": "\\S" },
+        "districtCode": { "type": "string", "maxLength": 32, "pattern": "\\S" }
+      },
+      "additionalProperties": false
+    },
+    "AvailableSnapshot": {
+      "type": "object",
+      "required": ["listingId", "listingVersion", "contentHash", "observedAt", "askingPriceYuan", "listingStatus", "facts"],
+      "properties": {
+        "listingId": { "$ref": "#/$defs/ListingId" },
+        "listingVersion": {
+          "type": "string",
+          "pattern": "^\\S{1,255}$",
+          "description": "房源域返回的来源版本。用于引用和比较，接收方按原值保存。"
+        },
+        "contentHash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "observedAt": { "type": "string", "format": "date-time" },
+        "askingPriceYuan": {
+          "type": "string",
+          "pattern": "^(?:[1-9][0-9]{0,13}(?:\\.[0-9]{1,2})?|0\\.(?:0[1-9]|[1-9][0-9]?))$",
+          "description": "CNY 元，使用正十进制字符串，至多两位小数。"
+        },
+        "listingStatus": { "const": "ON_SALE" },
+        "facts": { "$ref": "#/$defs/PublicMarketingFacts" }
+      },
+      "additionalProperties": false
+    },
+    "SnapshotReadResult": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["status", "snapshot"],
+          "properties": {
+            "status": { "const": "AVAILABLE" },
+            "snapshot": { "$ref": "#/$defs/AvailableSnapshot" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "description": "目标不存在、当前身份无权读取该房源，或房源未处于在售状态时使用同一公开结果。",
+          "required": ["status"],
+          "properties": {
+            "status": { "const": "UNAVAILABLE" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

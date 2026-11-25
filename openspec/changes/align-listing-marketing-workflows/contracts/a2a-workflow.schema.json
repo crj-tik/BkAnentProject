@@ -1,0 +1,666 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bkanent:agent:supervised-workflow:1.0",
+  "title": "受监督业务的 A2A 信封",
+  "description": "存于官方 A2A DataPart data。服务签名、用户授权凭据、续接 Task 和动作登记均由受信服务验证。",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/Dispatch"
+    },
+    {
+      "$ref": "#/$defs/SuccessResult"
+    },
+    {
+      "$ref": "#/$defs/HumanWaitResult"
+    },
+    {
+      "$ref": "#/$defs/DomainWaitResult"
+    },
+    {
+      "$ref": "#/$defs/FailureResult"
+    },
+    {
+      "$ref": "#/$defs/HumanResume"
+    },
+    {
+      "$ref": "#/$defs/DomainResume"
+    }
+  ],
+  "$defs": {
+    "Id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "Action": {
+      "type": "string",
+      "maxLength": 96,
+      "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$"
+    },
+    "Subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "resourceType",
+        "resourceId",
+        "revision"
+      ],
+      "properties": {
+        "resourceType": {
+          "$ref": "#/$defs/Id"
+        },
+        "resourceId": {
+          "$ref": "#/$defs/Id"
+        },
+        "revision": {
+          "$ref": "#/$defs/Id"
+        }
+      }
+    },
+    "Failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message",
+        "recovery"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "recovery": {
+          "enum": [
+            "NONE",
+            "SAFE_RETRY",
+            "HUMAN_RECONCILIATION"
+          ]
+        },
+        "diagnosticId": {
+          "$ref": "#/$defs/Id"
+        }
+      }
+    },
+    "TypedPayload": {
+      "type": "object",
+      "description": "按动作和契约版本从登记表读取具体 JSON Schema，再验证内层对象。"
+    },
+    "HumanWait": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "challengeId",
+        "humanAction",
+        "subject",
+        "allowedDecisions",
+        "view"
+      ],
+      "properties": {
+        "challengeId": {
+          "$ref": "#/$defs/Id"
+        },
+        "humanAction": {
+          "$ref": "#/$defs/Action"
+        },
+        "subject": {
+          "$ref": "#/$defs/Subject"
+        },
+        "allowedDecisions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 64,
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "uniqueItems": true,
+          "minItems": 1,
+          "maxItems": 12
+        },
+        "view": {
+          "$ref": "#/$defs/TypedPayload"
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "DomainWait": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dependencyId",
+        "targetAgent",
+        "action",
+        "contractVersion",
+        "request"
+      ],
+      "properties": {
+        "dependencyId": {
+          "$ref": "#/$defs/Id"
+        },
+        "targetAgent": {
+          "$ref": "#/$defs/Id"
+        },
+        "action": {
+          "$ref": "#/$defs/Action"
+        },
+        "contractVersion": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*\\.(0|[1-9][0-9]*)$"
+        },
+        "request": {
+          "$ref": "#/$defs/TypedPayload"
+        }
+      }
+    },
+    "HumanDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agentTaskId",
+        "challengeId",
+        "approvalId",
+        "decisionId",
+        "humanAction",
+        "subject",
+        "decision",
+        "answers"
+      ],
+      "properties": {
+        "agentTaskId": {
+          "$ref": "#/$defs/Id"
+        },
+        "challengeId": {
+          "$ref": "#/$defs/Id"
+        },
+        "approvalId": {
+          "$ref": "#/$defs/Id"
+        },
+        "decisionId": {
+          "$ref": "#/$defs/Id"
+        },
+        "humanAction": {
+          "$ref": "#/$defs/Action"
+        },
+        "subject": {
+          "$ref": "#/$defs/Subject"
+        },
+        "decision": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "answers": {
+          "$ref": "#/$defs/TypedPayload"
+        }
+      }
+    },
+    "DomainDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agentTaskId",
+        "dependencyId",
+        "outcome"
+      ],
+      "properties": {
+        "agentTaskId": {
+          "$ref": "#/$defs/Id"
+        },
+        "dependencyId": {
+          "$ref": "#/$defs/Id"
+        },
+        "outcome": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "messageId",
+                "status",
+                "payload"
+              ],
+              "properties": {
+                "messageId": {
+                  "$ref": "#/$defs/Id"
+                },
+                "status": {
+                  "const": "SUCCEEDED"
+                },
+                "payload": {
+                  "$ref": "#/$defs/TypedPayload"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "messageId",
+                "status",
+                "payload"
+              ],
+              "properties": {
+                "messageId": {
+                  "$ref": "#/$defs/Id"
+                },
+                "status": {
+                  "const": "FAILED"
+                },
+                "payload": {
+                  "$ref": "#/$defs/Failure"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "Dispatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "messageId",
+        "workflowId",
+        "sourceAgent",
+        "targetAgent",
+        "action",
+        "contractVersion",
+        "sentAt",
+        "kind",
+        "idempotencyKey",
+        "payload"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "messageId": {
+          "$ref": "#/$defs/Id"
+        },
+        "workflowId": {
+          "$ref": "#/$defs/Id"
+        },
+        "sourceAgent": {
+          "$ref": "#/$defs/Id"
+        },
+        "targetAgent": {
+          "$ref": "#/$defs/Id"
+        },
+        "action": {
+          "$ref": "#/$defs/Action"
+        },
+        "contractVersion": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*\\.(0|[1-9][0-9]*)$"
+        },
+        "sentAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "kind": {
+          "const": "REQUEST"
+        },
+        "idempotencyKey": {
+          "$ref": "#/$defs/Id"
+        },
+        "payload": {
+          "$ref": "#/$defs/TypedPayload"
+        },
+        "causationId": {
+          "$ref": "#/$defs/Id"
+        }
+      }
+    },
+    "SuccessResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "messageId",
+        "workflowId",
+        "sourceAgent",
+        "targetAgent",
+        "action",
+        "contractVersion",
+        "sentAt",
+        "kind",
+        "inReplyTo",
+        "status",
+        "payload"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "messageId": {
+          "$ref": "#/$defs/Id"
+        },
+        "workflowId": {
+          "$ref": "#/$defs/Id"
+        },
+        "sourceAgent": {
+          "$ref": "#/$defs/Id"
+        },
+        "targetAgent": {
+          "$ref": "#/$defs/Id"
+        },
+        "action": {
+          "$ref": "#/$defs/Action"
+        },
+        "contractVersion": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*\\.(0|[1-9][0-9]*)$"
+        },
+        "sentAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "kind": {
+          "const": "RESULT"
+        },
+        "inReplyTo": {
+          "$ref": "#/$defs/Id"
+        },
+        "status": {
+          "const": "SUCCEEDED"
+        },
+        "payload": {
+          "$ref": "#/$defs/TypedPayload"
+        }
+      }
+    },
+    "HumanWaitResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "messageId",
+        "workflowId",
+        "sourceAgent",
+        "targetAgent",
+        "action",
+        "contractVersion",
+        "sentAt",
+        "kind",
+        "inReplyTo",
+        "status",
+        "payload"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "messageId": {
+          "$ref": "#/$defs/Id"
+        },
+        "workflowId": {
+          "$ref": "#/$defs/Id"
+        },
+        "sourceAgent": {
+          "$ref": "#/$defs/Id"
+        },
+        "targetAgent": {
+          "$ref": "#/$defs/Id"
+        },
+        "action": {
+          "$ref": "#/$defs/Action"
+        },
+        "contractVersion": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*\\.(0|[1-9][0-9]*)$"
+        },
+        "sentAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "kind": {
+          "const": "RESULT"
+        },
+        "inReplyTo": {
+          "$ref": "#/$defs/Id"
+        },
+        "status": {
+          "const": "WAITING_HUMAN"
+        },
+        "payload": {
+          "$ref": "#/$defs/HumanWait"
+        }
+      }
+    },
+    "DomainWaitResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "messageId",
+        "workflowId",
+        "sourceAgent",
+        "targetAgent",
+        "action",
+        "contractVersion",
+        "sentAt",
+        "kind",
+        "inReplyTo",
+        "status",
+        "payload"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "messageId": {
+          "$ref": "#/$defs/Id"
+        },
+        "workflowId": {
+          "$ref": "#/$defs/Id"
+        },
+        "sourceAgent": {
+          "$ref": "#/$defs/Id"
+        },
+        "targetAgent": {
+          "$ref": "#/$defs/Id"
+        },
+        "action": {
+          "$ref": "#/$defs/Action"
+        },
+        "contractVersion": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*\\.(0|[1-9][0-9]*)$"
+        },
+        "sentAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "kind": {
+          "const": "RESULT"
+        },
+        "inReplyTo": {
+          "$ref": "#/$defs/Id"
+        },
+        "status": {
+          "const": "WAITING_DOMAIN"
+        },
+        "payload": {
+          "$ref": "#/$defs/DomainWait"
+        }
+      }
+    },
+    "FailureResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "messageId",
+        "workflowId",
+        "sourceAgent",
+        "targetAgent",
+        "action",
+        "contractVersion",
+        "sentAt",
+        "kind",
+        "inReplyTo",
+        "status",
+        "payload"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "messageId": {
+          "$ref": "#/$defs/Id"
+        },
+        "workflowId": {
+          "$ref": "#/$defs/Id"
+        },
+        "sourceAgent": {
+          "$ref": "#/$defs/Id"
+        },
+        "targetAgent": {
+          "$ref": "#/$defs/Id"
+        },
+        "action": {
+          "$ref": "#/$defs/Action"
+        },
+        "contractVersion": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*\\.(0|[1-9][0-9]*)$"
+        },
+        "sentAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "kind": {
+          "const": "RESULT"
+        },
+        "inReplyTo": {
+          "$ref": "#/$defs/Id"
+        },
+        "status": {
+          "const": "FAILED"
+        },
+        "payload": {
+          "$ref": "#/$defs/Failure"
+        }
+      }
+    },
+    "HumanResume": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "messageId",
+        "workflowId",
+        "sourceAgent",
+        "targetAgent",
+        "action",
+        "contractVersion",
+        "sentAt",
+        "kind",
+        "inReplyTo",
+        "payload"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "messageId": {
+          "$ref": "#/$defs/Id"
+        },
+        "workflowId": {
+          "$ref": "#/$defs/Id"
+        },
+        "sourceAgent": {
+          "$ref": "#/$defs/Id"
+        },
+        "targetAgent": {
+          "$ref": "#/$defs/Id"
+        },
+        "action": {
+          "$ref": "#/$defs/Action"
+        },
+        "contractVersion": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*\\.(0|[1-9][0-9]*)$"
+        },
+        "sentAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "kind": {
+          "const": "RESUME_HUMAN"
+        },
+        "inReplyTo": {
+          "$ref": "#/$defs/Id"
+        },
+        "payload": {
+          "$ref": "#/$defs/HumanDecision"
+        }
+      }
+    },
+    "DomainResume": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "messageId",
+        "workflowId",
+        "sourceAgent",
+        "targetAgent",
+        "action",
+        "contractVersion",
+        "sentAt",
+        "kind",
+        "inReplyTo",
+        "payload"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "1.0"
+        },
+        "messageId": {
+          "$ref": "#/$defs/Id"
+        },
+        "workflowId": {
+          "$ref": "#/$defs/Id"
+        },
+        "sourceAgent": {
+          "$ref": "#/$defs/Id"
+        },
+        "targetAgent": {
+          "$ref": "#/$defs/Id"
+        },
+        "action": {
+          "$ref": "#/$defs/Action"
+        },
+        "contractVersion": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*\\.(0|[1-9][0-9]*)$"
+        },
+        "sentAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "kind": {
+          "const": "RESUME_DOMAIN"
+        },
+        "inReplyTo": {
+          "$ref": "#/$defs/Id"
+        },
+        "payload": {
+          "$ref": "#/$defs/DomainDecision"
+        }
+      }
+    }
+  }
+}

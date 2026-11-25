@@ -1784,3 +1784,13 @@
 **代码位置**：`ListingController`、`ListingManagementServiceImpl`、`ListingDomainServiceImpl`、`LegacyLocalListingSourceAdapter`、`ListingRagIdentity`、`RagAccessControl`、`MarketingAssetServiceImpl`、`MarketingListingReadClient`。
 
 **关联**：LR-176、LR-185、LR-187；KI-290。
+
+## LR-197 首次上架审核、草稿自审与发布确认各自绑定业务版本
+
+**结论**：首次上架由授权管理员审核房源真实性，授权经纪人负责跟踪及直接调价。营销发起人审核已存的草稿版本，确认前按房源域的现时状态与价格复查，确认后发布使用冻结的内容和素材。对外发布有独立的计划确认，Supervisor 处理受监督任务的统一暂停、授权与续接。
+
+**根因**：房源资料真实性、营销表述和渠道发布分别是三种业务决定。将它们绑定到具体版本，能保留调价后的知情选择，避免重启、串域或登录恢复导致未经确认的发布。
+
+**设计位置**：[房源与营销工作流设计](../openspec/changes/align-listing-marketing-workflows/design.md)。已确认规则，代码变更待实施。
+
+**关联**：LR-196、KI-276、KI-283、KI-289、KI-290 至 KI-293。

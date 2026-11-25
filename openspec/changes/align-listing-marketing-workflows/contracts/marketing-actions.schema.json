@@ -1,0 +1,706 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bkanent:a2a:marketing-actions:1.0",
+  "title": "受 Supervisor 编排的营销领域动作载荷",
+  "description": "通过动作登记选择对应请求或结果载荷引用。人工待办的 view 与答案按照已登记的人工作业及决定校验。信封、主体和可信授权上下文采用共享契约。",
+  "x-actions": {
+    "marketing.draft.create": {
+      "contractVersion": "1.0",
+      "request": {
+        "$ref": "#/$defs/DraftCreateInput"
+      },
+      "result": {
+        "$ref": "#/$defs/ApprovedDraft"
+      },
+      "waitingHumanActionIds": [
+        "marketing.review-draft",
+        "marketing.decide-price-change",
+        "marketing.select-replacement-listing"
+      ]
+    },
+    "marketing.publish.prepare": {
+      "contractVersion": "1.0",
+      "request": {
+        "$ref": "#/$defs/PublishPrepareInput"
+      },
+      "result": {
+        "$ref": "#/$defs/PublicationReceipt"
+      },
+      "waitingHumanActionIds": [
+        "marketing.confirm-publish",
+        "marketing.restore-channel-login"
+      ]
+    },
+    "marketing.publish.mark-not-published": {
+      "contractVersion": "1.0",
+      "request": {
+        "$ref": "#/$defs/MarkNotPublishedInput"
+      },
+      "result": {
+        "$ref": "#/$defs/PublicationCorrection"
+      }
+    },
+    "marketing.publish.republish": {
+      "contractVersion": "1.0",
+      "request": {
+        "$ref": "#/$defs/RepublishInput"
+      },
+      "result": {
+        "$ref": "#/$defs/RepublishReceipt"
+      },
+      "waitingHumanActionIds": [
+        "marketing.confirm-republish",
+        "marketing.restore-channel-login"
+      ]
+    }
+  },
+  "x-humanActions": {
+    "marketing.review-draft": {
+      "view": {
+        "$ref": "#/$defs/DraftReviewView"
+      },
+      "answersByDecision": {
+        "APPROVE": {
+          "$ref": "#/$defs/NoAnswers"
+        },
+        "RETURN_FOR_CHANGES": {
+          "$ref": "#/$defs/ReturnForChangesAnswers"
+        }
+      }
+    },
+    "marketing.decide-price-change": {
+      "view": {
+        "$ref": "#/$defs/PriceChangeView"
+      },
+      "answersByDecision": {
+        "UPDATE_DRAFT_PRICE": {
+          "$ref": "#/$defs/NoAnswers"
+        },
+        "KEEP_DRAFT_PRICE": {
+          "$ref": "#/$defs/NoAnswers"
+        }
+      }
+    },
+    "marketing.select-replacement-listing": {
+      "view": {
+        "$ref": "#/$defs/ReplacementListingView"
+      },
+      "answersByDecision": {
+        "SELECT_LISTING": {
+          "$ref": "#/$defs/SelectListingAnswers"
+        }
+      }
+    },
+    "marketing.confirm-publish": {
+      "view": {
+        "$ref": "#/$defs/PublicationPlan"
+      },
+      "answersByDecision": {
+        "PUBLISH": {
+          "$ref": "#/$defs/NoAnswers"
+        }
+      }
+    },
+    "marketing.restore-channel-login": {
+      "view": {
+        "$ref": "#/$defs/ChannelLoginView"
+      },
+      "answersByDecision": {
+        "CHECK_LOGIN": {
+          "$ref": "#/$defs/NoAnswers"
+        }
+      }
+    },
+    "marketing.confirm-republish": {
+      "view": {
+        "$ref": "#/$defs/RepublishConfirmView"
+      },
+      "answersByDecision": {
+        "REPUBLISH": {
+          "$ref": "#/$defs/NoAnswers"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "Id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "\\S"
+    },
+    "Version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "Sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "MoneyCny": {
+      "description": "使用元表示挂牌价。",
+      "type": "object",
+      "required": [
+        "amount",
+        "currency"
+      ],
+      "properties": {
+        "amount": {
+          "type": "string",
+          "pattern": "^(?:[1-9][0-9]{0,13}(?:\\.[0-9]{1,2})?|0\\.(?:0[1-9]|[1-9][0-9]?))$"
+        },
+        "currency": {
+          "const": "CNY"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ListingRef": {
+      "type": "object",
+      "required": [
+        "sourceSystem",
+        "sourceId"
+      ],
+      "properties": {
+        "sourceSystem": {
+          "const": "legacy-local"
+        },
+        "sourceId": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]{0,18}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ListingSnapshot": {
+      "type": "object",
+      "required": [
+        "listingRef",
+        "sourceRevision",
+        "contentHash",
+        "status",
+        "askingPrice",
+        "observedAt"
+      ],
+      "properties": {
+        "listingRef": {
+          "$ref": "#/$defs/ListingRef"
+        },
+        "sourceRevision": {
+          "type": "string",
+          "pattern": "^\\S{1,255}$"
+        },
+        "contentHash": {
+          "$ref": "#/$defs/Sha256"
+        },
+        "status": {
+          "const": "ON_SALE"
+        },
+        "askingPrice": {
+          "$ref": "#/$defs/MoneyCny"
+        },
+        "observedAt": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      },
+      "additionalProperties": false
+    },
+    "AssetVersionRef": {
+      "type": "object",
+      "required": [
+        "assetId",
+        "version",
+        "contentHash"
+      ],
+      "properties": {
+        "assetId": {
+          "$ref": "#/$defs/Id"
+        },
+        "version": {
+          "$ref": "#/$defs/Version"
+        },
+        "contentHash": {
+          "$ref": "#/$defs/Sha256"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DraftRevisionRef": {
+      "type": "object",
+      "required": [
+        "contentId",
+        "revision",
+        "contentHash"
+      ],
+      "properties": {
+        "contentId": {
+          "$ref": "#/$defs/Id"
+        },
+        "revision": {
+          "$ref": "#/$defs/Version"
+        },
+        "contentHash": {
+          "$ref": "#/$defs/Sha256"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DraftRevision": {
+      "type": "object",
+      "required": [
+        "ref",
+        "listingSnapshot",
+        "title",
+        "body",
+        "assetRefs",
+        "assetHash"
+      ],
+      "properties": {
+        "ref": {
+          "$ref": "#/$defs/DraftRevisionRef"
+        },
+        "listingSnapshot": {
+          "$ref": "#/$defs/ListingSnapshot"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "body": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "assetRefs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AssetVersionRef"
+          },
+          "uniqueItems": true
+        },
+        "assetHash": {
+          "$ref": "#/$defs/Sha256"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ApprovedDraft": {
+      "type": "object",
+      "required": [
+        "draft",
+        "approvalId",
+        "approvedAt"
+      ],
+      "properties": {
+        "draft": {
+          "$ref": "#/$defs/DraftRevision"
+        },
+        "approvalId": {
+          "$ref": "#/$defs/Id"
+        },
+        "approvedAt": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DraftCreateInput": {
+      "type": "object",
+      "required": [
+        "listingRef"
+      ],
+      "properties": {
+        "listingRef": {
+          "$ref": "#/$defs/ListingRef"
+        },
+        "instructions": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S",
+          "description": "本次生成文案的业务提示。"
+        }
+      },
+      "additionalProperties": false
+    },
+    "DraftReviewView": {
+      "type": "object",
+      "required": [
+        "draft"
+      ],
+      "properties": {
+        "draft": {
+          "$ref": "#/$defs/DraftRevision"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PriceChangeView": {
+      "description": "档案保留提示中的新旧价格及本次所见的来源版本。",
+      "type": "object",
+      "required": [
+        "draft",
+        "draftPrice",
+        "currentListingSnapshot"
+      ],
+      "properties": {
+        "draft": {
+          "$ref": "#/$defs/DraftRevisionRef"
+        },
+        "draftPrice": {
+          "$ref": "#/$defs/MoneyCny"
+        },
+        "currentListingSnapshot": {
+          "$ref": "#/$defs/ListingSnapshot"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ReplacementListingView": {
+      "type": "object",
+      "required": [
+        "draft",
+        "previousListingRef",
+        "listingStatus"
+      ],
+      "properties": {
+        "draft": {
+          "$ref": "#/$defs/DraftRevisionRef"
+        },
+        "previousListingRef": {
+          "$ref": "#/$defs/ListingRef"
+        },
+        "listingStatus": {
+          "enum": [
+            "PENDING_REVIEW",
+            "OFFLINE",
+            "SOLD"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "NoAnswers": {
+      "type": "object",
+      "required": [],
+      "properties": {},
+      "additionalProperties": false
+    },
+    "ReturnForChangesAnswers": {
+      "type": "object",
+      "required": [
+        "reason"
+      ],
+      "properties": {
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SelectListingAnswers": {
+      "type": "object",
+      "required": [
+        "listingRef"
+      ],
+      "properties": {
+        "listingRef": {
+          "$ref": "#/$defs/ListingRef"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PublishPrepareInput": {
+      "description": "接收端从该版本的审核记录及当前授权解析本部门渠道账号。",
+      "type": "object",
+      "required": [
+        "approvedDraft",
+        "platform"
+      ],
+      "properties": {
+        "approvedDraft": {
+          "$ref": "#/$defs/DraftRevisionRef"
+        },
+        "platform": {
+          "const": "XIAOHONGSHU"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PlanRef": {
+      "type": "object",
+      "required": [
+        "planId",
+        "planVersion",
+        "snapshotHash"
+      ],
+      "properties": {
+        "planId": {
+          "$ref": "#/$defs/Id"
+        },
+        "planVersion": {
+          "$ref": "#/$defs/Version"
+        },
+        "snapshotHash": {
+          "$ref": "#/$defs/Sha256"
+        }
+      },
+      "additionalProperties": false
+    },
+    "SharedChannelAccount": {
+      "description": "显示给办理人的业务身份。",
+      "type": "object",
+      "required": [
+        "platform",
+        "departmentId",
+        "accountId",
+        "accountDisplayName"
+      ],
+      "properties": {
+        "platform": {
+          "const": "XIAOHONGSHU"
+        },
+        "departmentId": {
+          "$ref": "#/$defs/Id"
+        },
+        "accountId": {
+          "$ref": "#/$defs/Id"
+        },
+        "accountDisplayName": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PublicationPlan": {
+      "type": "object",
+      "required": [
+        "ref",
+        "approvedDraft",
+        "target"
+      ],
+      "properties": {
+        "ref": {
+          "$ref": "#/$defs/PlanRef"
+        },
+        "approvedDraft": {
+          "$ref": "#/$defs/ApprovedDraft"
+        },
+        "target": {
+          "$ref": "#/$defs/SharedChannelAccount"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ChannelLoginView": {
+      "description": "qrRef 为受控短期引用。CHECK_LOGIN 仅请求服务端核对该部门渠道会话。",
+      "type": "object",
+      "required": [
+        "plan",
+        "target",
+        "qrRef",
+        "expiresAt"
+      ],
+      "properties": {
+        "plan": {
+          "$ref": "#/$defs/PlanRef"
+        },
+        "target": {
+          "$ref": "#/$defs/SharedChannelAccount"
+        },
+        "qrRef": {
+          "$ref": "#/$defs/Id"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PublicationReceipt": {
+      "description": "status 表示渠道执行结论。结果待核对时此引用指向原发布尝试。明确成功即可取得回执，外部发布标识由渠道可用结果提供。",
+      "type": "object",
+      "required": [
+        "receiptId",
+        "attemptId",
+        "attemptVersion",
+        "plan",
+        "status",
+        "recordedAt"
+      ],
+      "properties": {
+        "receiptId": {
+          "$ref": "#/$defs/Id"
+        },
+        "attemptId": {
+          "$ref": "#/$defs/Id"
+        },
+        "attemptVersion": {
+          "$ref": "#/$defs/Version"
+        },
+        "plan": {
+          "$ref": "#/$defs/PlanRef"
+        },
+        "status": {
+          "enum": [
+            "SUCCEEDED",
+            "OUTCOME_UNKNOWN",
+            "FAILED"
+          ]
+        },
+        "recordedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "externalPublishId": {
+          "$ref": "#/$defs/Id"
+        },
+        "previousAttemptId": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "OUTCOME_UNKNOWN",
+                  "FAILED"
+                ]
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "externalPublishId"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "MarkNotPublishedInput": {
+      "type": "object",
+      "required": [
+        "attemptId",
+        "expectedAttemptVersion",
+        "reason"
+      ],
+      "properties": {
+        "attemptId": {
+          "$ref": "#/$defs/Id"
+        },
+        "expectedAttemptVersion": {
+          "$ref": "#/$defs/Version"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      },
+      "additionalProperties": false
+    },
+    "PublicationCorrection": {
+      "type": "object",
+      "required": [
+        "correctionId",
+        "attemptId",
+        "attemptVersion",
+        "plan",
+        "previousStatus",
+        "decision",
+        "reason",
+        "operatorUserId",
+        "recordedAt"
+      ],
+      "properties": {
+        "correctionId": {
+          "$ref": "#/$defs/Id"
+        },
+        "attemptId": {
+          "$ref": "#/$defs/Id"
+        },
+        "attemptVersion": {
+          "$ref": "#/$defs/Version"
+        },
+        "plan": {
+          "$ref": "#/$defs/PlanRef"
+        },
+        "previousStatus": {
+          "enum": [
+            "SUCCEEDED",
+            "OUTCOME_UNKNOWN",
+            "FAILED"
+          ]
+        },
+        "decision": {
+          "const": "NOT_PUBLISHED"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "operatorUserId": {
+          "$ref": "#/$defs/Id"
+        },
+        "recordedAt": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      },
+      "additionalProperties": false
+    },
+    "RepublishInput": {
+      "description": "由原人工核对记录解析本次重发应引用的计划和尝试。",
+      "type": "object",
+      "required": [
+        "correctionId"
+      ],
+      "properties": {
+        "correctionId": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "additionalProperties": false
+    },
+    "RepublishConfirmView": {
+      "type": "object",
+      "required": [
+        "plan",
+        "correction"
+      ],
+      "properties": {
+        "plan": {
+          "$ref": "#/$defs/PublicationPlan"
+        },
+        "correction": {
+          "$ref": "#/$defs/PublicationCorrection"
+        }
+      },
+      "additionalProperties": false
+    },
+    "RepublishReceipt": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/PublicationReceipt"
+        },
+        {
+          "required": [
+            "previousAttemptId"
+          ]
+        }
+      ]
+    }
+  }
+}
