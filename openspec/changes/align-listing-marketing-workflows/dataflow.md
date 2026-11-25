@@ -48,8 +48,11 @@ flowchart TD
     Active -->|下架| Delist[保存本次下架流水和当时的资料快照]
     Delist --> Registered[已登记：同一套房源的可编辑草稿]
     Registered -->|再次点击上架| Compare{与最近一次下架快照比对}
-    Compare -->|业主关联已变或解除| FixOwner[提示先调整业主关联，拦截本次申请]
-    FixOwner --> Registered
+    Compare -->|业主差异未处理或关联缺失| FixOwner[提示先调整业主关联，拦截本次申请]
+    FixOwner -->|实际更换业主| Rebind[原房源换绑有效业主档案，留存变更记录]
+    Rebind --> Registered
+    Compare -->|本次换绑已完成| OwnerChanged[展示已办理的业主变更及其他资料差异]
+    OwnerChanged -->|继续申请| Apply
     Compare -->|同一业主，基础资料变化| Changes[展示字段原值与现值]
     Changes -->|继续申请| Apply[提交时复核当前版本并受理申请]
     Compare -->|资料一致且有效| Apply
@@ -58,7 +61,7 @@ flowchart TD
 
 - 首次上架审核覆盖当前提交版本中的业主关联与基础展示信息。提交或退回留在房源管理范围，负责人和有权限的管理员按管理规则查看。审核通过和上架各留业务记录，可在同一事务提交。版本不符时向操作者展示当前资料并要求重新核对。产权、委托、合同、OCR 和核验资料沿用各自的既有业务含义。
 - 负责经纪人直接调整挂牌价，同事务提交原价与新价、操作者、时间、请求编号、更新后的版本和索引待更新记录。匹配、对比和营销草稿的候选及引用复查统一要求 `ON_SALE`。房源全量读取权限决定访问范围。 [现有登记和调价实现](../../../listing-master-service/src/main/java/com/bkanent/listing/service/impl/ListingManagementServiceImpl.java#L165) · [管理与选用规则 LR-196](../../../docs/logic-rationale.md#L1778)
-- 业主比对使用档案 ID。即使只更改一个关联且两位业主同名，也会触发拦截。若业主和基础资料都变了，系统同时列出基础资料差异。上图的再次上架流程止于「受理申请」，后续审批规则待确认。
+- 业主比对使用档案 ID。同名的两个档案也会产生差异。经纪人在原房源完成换绑后，再次申请时可看到原业主、现业主及其他资料差异。受理后的真实性审核规则待确认。
 
 ## 营销草稿、房源复查和人工决定
 
@@ -157,6 +160,7 @@ sequenceDiagram
 
 | 落库方与用途 | 现有表与字段 | 目标记录及关联 |
 | --- | --- | --- |
+| Listing 更换业主 | `listing_info.id, owner_customer_id, version`。新业主指向 `customer_profile.id` 对应的有效业主档案。 | 拟在变更记录保存 `listing_id, delist_record_id, from_owner_customer_id, to_owner_customer_id, listing_version, operator_user_id, created_at`。当前关联和记录在同一事务写入。申请时核对本次下架周期的变更记录和当前有效关联。 |
 | Listing 下架草稿与再次申请 | 当前草稿沿用 `listing_info.id, owner_customer_id, title, address, layout, area, asking_price_yuan, status, version`。下架动作见 `listing_status_record`。 | 拟按下架流水关联不可变的 `listing_id, delist_record_id, listing_version, owner_customer_id, facts_json`。预检和提交均由服务端读取最近一次下架快照。按当前办理人的管理权限展示字段、原值及现值。 |
 | Auth 和 Customer 提供可信身份、业主与部门关系 | `bk_auth.user_account.id`；`auth_user_business_identity.user_id, identity_type, identity_id`；`auth_org_membership.user_id, org_id, status, valid_from, valid_until`；`bk_customer.customer_profile.id, profile_type, owner_user_id`。 [用户和客户表](../../../sql/migrations/20261013_mysql_init_bootstrap.sql#L17) · [业务身份](../../../sql/migrations/20261026_auth_business_identity_mapping.sql#L4) · [组织](../../../sql/migrations/20261110_auth_organization.sql#L27) · [客户负责人](../../../sql/migrations/20261111_customer_user_owner.sql) | `actor_user_id` 取可信 Auth 主体，`broker_id` 取受信经纪人映射；`owner_customer_id` 引用客户域 `OWNER` 档案。发布管理员权限和部门范围用 Auth 事实核验。 |
 | Listing 房源及上架 | `listing_info.id, broker_id, owner_user_id, owner_customer_id, title, address, community_name, district_code, layout, area, floor_level, decoration, school_zone, traffic, total_price, asking_price_yuan, status, ocr_status, verification_status, verification_source, verification_remark, version, deleted`。主表还有历史 `owner_name, certificate_no, property_certificate_url, contract_url` 字段。关联 `listing_asset.listing_id, asset_type, storage_key, visibility, status` 和 `listing_private_info.listing_id, certificate_no_ciphertext, certificate_key_id`。 [房源表](../../../sql/migrations/20261013_mysql_init_bootstrap.sql#L71) · [扩展列和子表](../../../sql/migrations/20261105_listing_internal_business.sql#L5) · [房源负责人](../../../sql/migrations/20261111_listing_user_owner.sql#L4) | 首次审核记录绑定 `listing_id`、审核资料的 `listing_version`、`submitted_by_user_id`、`submitted_at`、审核决定、审核人、审核时间及退回理由。上架流水关联审核记录，业务状态转入 `ON_SALE`。 |
@@ -171,7 +175,7 @@ sequenceDiagram
 | 场景 | 从用户操作追溯到的结果 |
 | --- | --- |
 | 新登记、退回后重提、首次审核通过 | 管理可查 → 待审核记录绑定版本 → 审核通过有记录 → 只在 `ON_SALE` 后进入候选。 |
-| 下架后只改挂牌价 / 更换业主 | 前者在再申请时展示两次价格，后者要求先调整且申请数为零。两者都保留原编号、下架时资料及当前草稿。 |
+| 下架后只改挂牌价 / 更换业主 | 只改价时展示两次价格。换业主时在原房源办理换绑，保存前后业主，当次申请数为零。经纪人再次申请时可使用新的业主关联。 |
 | 在售房源调价 | 价格和版本同步更新，原价、新价、操作者、时间和请求编号可查。 |
 | 草稿退回、确认期间调价或下架 | 同任务生成新版并重新送审，或明确确认保留原价并有提醒审计；下架返回草稿阶段并保留原任务。 |
 | 草稿通过、发布计划确认 | 保存的发布版本可按确认记录追溯到草稿和素材快照；确认后的房源价格变化留在房源业务中。 |
