@@ -20,8 +20,8 @@
 
 **待确认**
 
-- 买方客户是否必须在首次登记时提供身份证，或允许先保存待补充的需求草稿。
-- 同一身份证已有关联经纪人时，其他经纪人的登记与私有需求应如何处理。
+- 同一人既买房又卖房时，是否使用同一份档案承载两种角色，还是仅复用人员身份及业主引用。
+- 同一位业主名下多套房源，是否允许不同经纪人分别负责并复用其业主档案。
 
 ## Decisions
 
@@ -33,9 +33,13 @@
 
 ### 身份与联系电话
 
-买方客户以身份证确定唯一身份。手机号为可重复的联系资料，买方与业主都可能填写亲属号码。经纪人自身手机号具有唯一性，按其账号或经纪人档案的登记入口校验。
+买方客户首次登记必须提供身份证，以证件确定唯一身份。手机号为可重复的联系资料，买方与业主都可能填写亲属号码。经纪人自身手机号具有唯一性，按其账号或经纪人档案的登记入口校验。
 
-客户身份证以受保护的文档数据及确定性查重标识表达，设计字段为 `identity_ref`、`document_ciphertext`、`document_lookup_key`，实际表归属在跨经纪人复用规则明确后确定。唯一约束针对客户身份，手机号不承担客户去重职责。规范化后的文档标识、联系方式和负责经纪人关联分别保存，重复请求与并发登记走同一业务约束。匹配请求及结果只传稳定客户引用，不携带完整身份证。
+客户身份证以受保护的文档数据及确定性查重标识表达，设计字段为 `identity_ref`、`document_ciphertext`、`document_lookup_key`。唯一约束针对客户身份，手机号不承担客户去重职责。规范化后的文档标识、联系方式和负责经纪人关联分别保存，实际表归属随买方和业主角色复用规则落定。匹配请求及结果只传稳定客户引用。
+
+首次登记缺少身份证时，提示补充所需信息，尚不创建客户档案。经纪人 B 提交已由 A 登记的身份证时，返回稳定业务结果 `IDENTITY_ALREADY_EXISTS`，B 的新建申请不产生第二份档案，也不改变原有负责人。内部查重结果定位至同一身份及其既有业主档案，受权的业务引用继续使用既有记录。重复命中本身不授予 B 查看原档案或关联资料的权限，响应内容按其当前范围输出。
+
+同一创建请求的重试返回其原结果。真正的新请求若命中已有证件，按重复登记处理。数据库唯一约束与事务共同处理并发首次登记，确保只有一份成功档案。历史缺少证件的记录按原事实保留，新增登记规则及补录路径在受管迁移中分别落实。
 
 ### 匹配条件与顺序
 
@@ -56,6 +60,20 @@
 已成功获取全部所需来源并返回候选后，任务完成。检索成功且候选为零，以空候选及原因完成。输入不足进入 Supervisor 补充信息节点，来源失败保留失败或待重试状态。当前 `List<CustomerMatchResponse>` 在兼容期继续提供既有字段，新受监督结果使用明确的结果分支。上层判断任务完成时同时检查信封状态和业务结果。
 
 ### 数据流
+
+首次登记按证件唯一查重，匹配按客户引用读取需求。
+
+```mermaid
+flowchart LR
+    Form[经纪人提交登记资料与身份证] --> Validate[校验必填信息、当前身份和证件]
+    Validate --> Lookup[以证件查重键查找既有身份]
+    Lookup -->|身份已存在| Duplicate[提示已存在，阻止重复新建]
+    Duplicate --> Existing[内部定位同一身份和既有业主档案]
+    Lookup -->|身份未存在| Create[事务内保存身份、联系方式和负责人]
+    Create --> Unique[以唯一约束处理并发冲突]
+    Unique -->|首次创建成功| Profile[返回有权查看的客户引用]
+    Unique -->|另一请求已成功| Duplicate
+```
 
 ```mermaid
 sequenceDiagram
@@ -88,9 +106,10 @@ sequenceDiagram
 | 数据用途 | 现有字段或接口 | 设计约束 |
 | --- | --- | --- |
 | 客源档案与责任人 | `customer_profile.id, profile_type, name, mobile, broker_id, owner_user_id, source_channel, remark, deleted, created_at, updated_at` | 新登记负责人从可信身份取得，读取按负责人或管理员授权过滤 |
+| 身份与业主档案引用 | 现有档案无证件身份字段，房源的业主引用使用 `listing_info.owner_customer_id` | 拟使用 `identity_ref, document_lookup_key, document_ciphertext` 标识与查重，关联既有业主档案。完整档案的读取继续按负责人及管理员范围校验 |
 | 客户需求 | `preferred_area, preferred_layout, budget_min, budget_max, preferred_area_min, preferred_area_max, intention` | 服务端读取当前需求，按本次需求生成内容摘要。旧字段金额单位在适配时明确，防止万元与元混用 |
 | 结构化匹配条件 | 当前区域与户型主要为文本字段 | 新增或投影 `region_refs_json, budget_upper_yuan, layout_constraint_json, criteria_hash, criteria_source_refs`。保留原字段及对话证据，明确必要条件和软偏好 |
-| 身份与联系资料 | 客户联系电话沿用 `customer_profile.mobile` | 买方身份证身份用受控引用和文档查重标识唯一约束。买方及业主联系电话可重复，经纪人手机号唯一。具体人员身份与经纪人私有资料关联待后续决策确定 |
+| 身份与联系资料 | 客户联系电话沿用 `customer_profile.mobile` | 新登记买方身份证必填，以受控引用及文档查重标识唯一约束。重复命中定位同一身份及既有业主档案。买方及业主联系电话可重复，经纪人手机号唯一 |
 | 房源候选 | `listing_info.id, owner_user_id, title, address, layout, area, asking_price_yuan, status, version, deleted` | 仅当次可读、在售、未删除的房源，跨域金额用元及十进制字符串 |
 | 当前匹配响应 | `CustomerMatchResponse.customerId, listing, matchReason, matchScore` | 保留既有字段及兼容读取，评分仅用于组内排序，补齐稳定引用、观察时间、版本与有结果/零候选分支 |
 | 任务关联 | `agent_orchestration_run`、`agent_tool_invocation`、`agent_workflow_checkpoint` | 复用运行、调用、等待和结果记录，区分空结果与未执行成功 |
