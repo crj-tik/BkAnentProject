@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:bkanent:a2a:customer-matching:1.0",
   "title": "买方客户房源匹配动作载荷",
-  "description": "共用 A2A 信封内的领域请求和正常结果。签名身份、权限和当前来源由服务端验证。输入不足走统一等待，依赖失败走统一失败。",
+  "description": "共用 A2A 信封内的匹配载荷。预算上限、区域和明确房厅约束由服务端逐项校验，先输出完整符合软偏好的候选，再输出标明差异的放宽候选。需要补充或执行失败使用信封的等待或失败分支。",
   "oneOf": [
     {
       "$ref": "#/$defs/MatchRequest"
@@ -52,6 +52,9 @@
       "properties": {
         "customerId": {
           "$ref": "#/$defs/Id"
+        },
+        "criteria": {
+          "$ref": "#/$defs/EffectiveCriteria"
         }
       },
       "required": [
@@ -91,11 +94,7 @@
           "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]{1,2})?$"
         },
         "askingPriceYuan": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]{1,2})?$"
+          "$ref": "#/$defs/PositiveDecimal"
         }
       },
       "required": [
@@ -136,6 +135,44 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 100
+        },
+        "regionRef": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "\\S"
+        },
+        "layoutFacts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "bedrooms": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "livingRooms": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          },
+          "required": []
+        },
+        "matchTier": {
+          "enum": [
+            "EXACT_PREFERENCES",
+            "RELAXED_PREFERENCES"
+          ]
+        },
+        "preferenceDifferences": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PreferenceDifference"
+          }
         }
       },
       "required": [
@@ -144,7 +181,50 @@
         "observedAt",
         "listingStatus",
         "summary",
-        "matchReason"
+        "matchReason",
+        "regionRef",
+        "matchTier",
+        "preferenceDifferences"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "matchTier": {
+                "const": "EXACT_PREFERENCES"
+              }
+            },
+            "required": [
+              "matchTier"
+            ]
+          },
+          "then": {
+            "properties": {
+              "preferenceDifferences": {
+                "maxItems": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "matchTier": {
+                "const": "RELAXED_PREFERENCES"
+              }
+            },
+            "required": [
+              "matchTier"
+            ]
+          },
+          "then": {
+            "properties": {
+              "preferenceDifferences": {
+                "minItems": 1
+              }
+            }
+          }
+        }
       ]
     },
     "Matched": {
@@ -172,6 +252,9 @@
           },
           "minItems": 1,
           "maxItems": 10
+        },
+        "effectiveCriteria": {
+          "$ref": "#/$defs/EffectiveCriteria"
         }
       },
       "required": [
@@ -179,7 +262,92 @@
         "demandHash",
         "observedAt",
         "outcome",
-        "matches"
+        "matches",
+        "effectiveCriteria"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "effectiveCriteria": {
+                "properties": {
+                  "exactLayout": {
+                    "required": [
+                      "bedrooms"
+                    ]
+                  }
+                },
+                "required": [
+                  "exactLayout"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "matches": {
+                "items": {
+                  "required": [
+                    "layoutFacts"
+                  ],
+                  "properties": {
+                    "layoutFacts": {
+                      "required": [
+                        "bedrooms"
+                      ],
+                      "properties": {
+                        "bedrooms": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "effectiveCriteria": {
+                "properties": {
+                  "exactLayout": {
+                    "required": [
+                      "livingRooms"
+                    ]
+                  }
+                },
+                "required": [
+                  "exactLayout"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "matches": {
+                "items": {
+                  "required": [
+                    "layoutFacts"
+                  ],
+                  "properties": {
+                    "layoutFacts": {
+                      "required": [
+                        "livingRooms"
+                      ],
+                      "properties": {
+                        "livingRooms": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       ]
     },
     "NoMatch": {
@@ -208,6 +376,9 @@
           "type": "string",
           "maxLength": 1000,
           "pattern": "\\S"
+        },
+        "effectiveCriteria": {
+          "$ref": "#/$defs/EffectiveCriteria"
         }
       },
       "required": [
@@ -216,7 +387,8 @@
         "observedAt",
         "outcome",
         "matches",
-        "reason"
+        "reason",
+        "effectiveCriteria"
       ]
     },
     "MatchResult": {
@@ -227,6 +399,141 @@
         {
           "$ref": "#/$defs/NoMatch"
         }
+      ]
+    },
+    "PositiveDecimal": {
+      "type": "string",
+      "pattern": "^(?:[1-9][0-9]*(?:\\.[0-9]{1,2})?|0\\.(?:0[1-9]|[1-9][0-9]?))$"
+    },
+    "ExactLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bedrooms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "livingRooms": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [],
+      "anyOf": [
+        {
+          "required": [
+            "bedrooms"
+          ]
+        },
+        {
+          "required": [
+            "livingRooms"
+          ]
+        }
+      ]
+    },
+    "PreferredArea": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "minimumSquareMetres": {
+          "$ref": "#/$defs/PositiveDecimal"
+        },
+        "maximumSquareMetres": {
+          "$ref": "#/$defs/PositiveDecimal"
+        }
+      },
+      "required": [],
+      "anyOf": [
+        {
+          "required": [
+            "minimumSquareMetres"
+          ]
+        },
+        {
+          "required": [
+            "maximumSquareMetres"
+          ]
+        }
+      ]
+    },
+    "EffectiveCriteria": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "regionRefs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "\\S"
+          }
+        },
+        "budgetUpperYuan": {
+          "$ref": "#/$defs/PositiveDecimal"
+        },
+        "exactLayout": {
+          "$ref": "#/$defs/ExactLayout"
+        },
+        "preferredLayout": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "\\S"
+        },
+        "preferredArea": {
+          "$ref": "#/$defs/PreferredArea"
+        },
+        "provenanceRefs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "\\S"
+          }
+        }
+      },
+      "required": [
+        "regionRefs",
+        "budgetUpperYuan"
+      ]
+    },
+    "PreferenceDifference": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "enum": [
+            "layout",
+            "areaSquareMetres"
+          ]
+        },
+        "preferred": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "\\S"
+        },
+        "actual": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1000,
+          "pattern": "\\S"
+        }
+      },
+      "required": [
+        "field",
+        "preferred",
+        "actual",
+        "description"
       ]
     }
   }
