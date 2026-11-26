@@ -1,0 +1,372 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bkanent:a2a:customer-demand:1.0",
+  "title": "买方需求结束落档与管理员转交载荷",
+  "description": "沿用统一 A2A 信封。结束事件、消息证据、角色版本和实际操作者在服务端核实，需求时间链由 Customer 域维护。",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/FinalizeRequest"
+    },
+    {
+      "$ref": "#/$defs/FinalizeResult"
+    },
+    {
+      "$ref": "#/$defs/TransferRequest"
+    },
+    {
+      "$ref": "#/$defs/TransferResult"
+    }
+  ],
+  "x-actions": {
+    "customer.demand.finalize": {
+      "contractVersion": "1.0",
+      "request": {
+        "$ref": "#/$defs/FinalizeRequest"
+      },
+      "result": {
+        "$ref": "#/$defs/FinalizeResult"
+      }
+    },
+    "customer.buyer-role.transfer": {
+      "contractVersion": "1.0",
+      "request": {
+        "$ref": "#/$defs/TransferRequest"
+      },
+      "result": {
+        "$ref": "#/$defs/TransferResult"
+      }
+    }
+  },
+  "$defs": {
+    "Id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "DbId": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,18}$"
+    },
+    "PositiveDecimal": {
+      "type": "string",
+      "pattern": "^(?:[1-9][0-9]*(?:\\.[0-9]{1,2})?|0\\.(?:0[1-9]|[1-9][0-9]?))$"
+    },
+    "ExactLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bedrooms": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "livingRooms": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [],
+      "anyOf": [
+        {
+          "required": [
+            "bedrooms"
+          ]
+        },
+        {
+          "required": [
+            "livingRooms"
+          ]
+        }
+      ]
+    },
+    "PreferredArea": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "minimumSquareMetres": {
+          "$ref": "#/$defs/NonNegativeDecimal"
+        },
+        "maximumSquareMetres": {
+          "$ref": "#/$defs/PositiveDecimal"
+        }
+      },
+      "required": [],
+      "anyOf": [
+        {
+          "required": [
+            "minimumSquareMetres"
+          ]
+        },
+        {
+          "required": [
+            "maximumSquareMetres"
+          ]
+        }
+      ]
+    },
+    "DemandSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "regionRefs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "\\S"
+          },
+          "description": "空数组表示区域尚未明确，匹配前需补充。"
+        },
+        "budgetLowerYuan": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NonNegativeDecimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "budgetUpperYuan": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PositiveDecimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "exactLayout": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExactLayout"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "preferredLayout": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "preferredArea": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PreferredArea"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "intention": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "required": [
+        "regionRefs",
+        "budgetLowerYuan",
+        "budgetUpperYuan",
+        "exactLayout",
+        "preferredLayout",
+        "preferredArea",
+        "intention"
+      ]
+    },
+    "FinalizeRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "customerId": {
+          "$ref": "#/$defs/DbId"
+        },
+        "closureId": {
+          "$ref": "#/$defs/Id"
+        },
+        "endEventRef": {
+          "$ref": "#/$defs/Id"
+        },
+        "baseDemandVersion": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "expectedRoleVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "finalDemand": {
+          "$ref": "#/$defs/DemandSnapshot"
+        },
+        "sourceRefs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "customerId",
+        "closureId",
+        "endEventRef",
+        "baseDemandVersion",
+        "expectedRoleVersion",
+        "finalDemand",
+        "sourceRefs"
+      ]
+    },
+    "FinalizeResult": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "customerId": {
+              "$ref": "#/$defs/DbId"
+            },
+            "closureId": {
+              "$ref": "#/$defs/Id"
+            },
+            "demandVersion": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "recordedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "outcome": {
+              "const": "UPDATED"
+            },
+            "demandRevisionId": {
+              "$ref": "#/$defs/Id"
+            },
+            "previousDemandVersion": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "customerId",
+            "closureId",
+            "demandVersion",
+            "recordedAt",
+            "outcome",
+            "demandRevisionId",
+            "previousDemandVersion"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "customerId": {
+              "$ref": "#/$defs/DbId"
+            },
+            "closureId": {
+              "$ref": "#/$defs/Id"
+            },
+            "demandVersion": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "recordedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "outcome": {
+              "const": "UNCHANGED"
+            }
+          },
+          "required": [
+            "customerId",
+            "closureId",
+            "demandVersion",
+            "recordedAt",
+            "outcome"
+          ]
+        }
+      ]
+    },
+    "TransferRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "customerId": {
+          "$ref": "#/$defs/DbId"
+        },
+        "expectedRoleVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "newOwnerUserId": {
+          "$ref": "#/$defs/DbId"
+        }
+      },
+      "required": [
+        "customerId",
+        "expectedRoleVersion",
+        "newOwnerUserId"
+      ]
+    },
+    "TransferResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "outcome": {
+          "const": "TRANSFERRED"
+        },
+        "transferId": {
+          "$ref": "#/$defs/Id"
+        },
+        "customerId": {
+          "$ref": "#/$defs/DbId"
+        },
+        "previousOwnerUserId": {
+          "$ref": "#/$defs/DbId"
+        },
+        "newOwnerUserId": {
+          "$ref": "#/$defs/DbId"
+        },
+        "roleVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "operatorUserId": {
+          "$ref": "#/$defs/DbId"
+        },
+        "transferredAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "outcome",
+        "transferId",
+        "customerId",
+        "previousOwnerUserId",
+        "newOwnerUserId",
+        "roleVersion",
+        "operatorUserId",
+        "transferredAt"
+      ]
+    },
+    "NonNegativeDecimal": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]{1,2})?$"
+    }
+  }
+}

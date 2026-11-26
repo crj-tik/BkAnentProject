@@ -255,6 +255,12 @@
         },
         "effectiveCriteria": {
           "$ref": "#/$defs/EffectiveCriteria"
+        },
+        "matchRecordId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
         }
       },
       "required": [
@@ -263,7 +269,8 @@
         "observedAt",
         "outcome",
         "matches",
-        "effectiveCriteria"
+        "effectiveCriteria",
+        "matchRecordId"
       ],
       "allOf": [
         {
@@ -379,6 +386,12 @@
         },
         "effectiveCriteria": {
           "$ref": "#/$defs/EffectiveCriteria"
+        },
+        "matchRecordId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
         }
       },
       "required": [
@@ -388,7 +401,8 @@
         "outcome",
         "matches",
         "reason",
-        "effectiveCriteria"
+        "effectiveCriteria",
+        "matchRecordId"
       ]
     },
     "MatchResult": {
