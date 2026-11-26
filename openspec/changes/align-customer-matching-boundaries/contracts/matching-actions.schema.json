@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bkanent:a2a:customer-matching:1.0",
+  "title": "买方客户房源匹配动作载荷",
+  "description": "共用 A2A 信封内的领域请求和正常结果。签名身份、权限和当前来源由服务端验证。输入不足走统一等待，依赖失败走统一失败。",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/MatchRequest"
+    },
+    {
+      "$ref": "#/$defs/Matched"
+    },
+    {
+      "$ref": "#/$defs/NoMatch"
+    }
+  ],
+  "x-actions": {
+    "customer.listings.match": {
+      "contractVersion": "1.0",
+      "request": {
+        "$ref": "#/$defs/MatchRequest"
+      },
+      "result": {
+        "$ref": "#/$defs/MatchResult"
+      }
+    }
+  },
+  "$defs": {
+    "Id": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]{0,18}$"
+    },
+    "ListingRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sourceSystem": {
+          "const": "legacy-local"
+        },
+        "sourceId": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "sourceSystem",
+        "sourceId"
+      ]
+    },
+    "MatchRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "customerId": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "customerId"
+      ]
+    },
+    "ListingSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "address": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "layout": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "areaSquareMetres": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]{1,2})?$"
+        },
+        "askingPriceYuan": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]{1,2})?$"
+        }
+      },
+      "required": [
+        "title",
+        "address",
+        "layout",
+        "areaSquareMetres",
+        "askingPriceYuan"
+      ]
+    },
+    "MatchItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "listingRef": {
+          "$ref": "#/$defs/ListingRef"
+        },
+        "listingVersion": {
+          "type": "string",
+          "pattern": "^\\S{1,255}$"
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "listingStatus": {
+          "const": "ON_SALE"
+        },
+        "summary": {
+          "$ref": "#/$defs/ListingSummary"
+        },
+        "matchReason": {
+          "type": "string",
+          "maxLength": 2000,
+          "pattern": "\\S"
+        },
+        "matchScore": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        }
+      },
+      "required": [
+        "listingRef",
+        "listingVersion",
+        "observedAt",
+        "listingStatus",
+        "summary",
+        "matchReason"
+      ]
+    },
+    "Matched": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "customerId": {
+          "$ref": "#/$defs/Id"
+        },
+        "demandHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "outcome": {
+          "const": "MATCHED"
+        },
+        "matches": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MatchItem"
+          },
+          "minItems": 1,
+          "maxItems": 10
+        }
+      },
+      "required": [
+        "customerId",
+        "demandHash",
+        "observedAt",
+        "outcome",
+        "matches"
+      ]
+    },
+    "NoMatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "customerId": {
+          "$ref": "#/$defs/Id"
+        },
+        "demandHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "outcome": {
+          "const": "NO_MATCH"
+        },
+        "matches": {
+          "type": "array",
+          "maxItems": 0
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 1000,
+          "pattern": "\\S"
+        }
+      },
+      "required": [
+        "customerId",
+        "demandHash",
+        "observedAt",
+        "outcome",
+        "matches",
+        "reason"
+      ]
+    },
+    "MatchResult": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Matched"
+        },
+        {
+          "$ref": "#/$defs/NoMatch"
+        }
+      ]
+    }
+  }
+}
