@@ -6,6 +6,8 @@
 
 当前 `customer_profile.mobile` 为普通索引，客户实体及登记请求没有身份证字段。`user_account` 当前也没有手机号字段，仅账号名有唯一索引。身份证身份与经纪人手机号唯一性需要新增相应字段和约束。
 
+当前 `profile_type` 为单值 `CUSTOMER` 或 `OWNER`，普通更新会覆盖该字段。房源业主验证要求 `OWNER` 类型，且引用现有档案依赖负责人归属或全量读取权限。多角色和跨经纪人房源引用需要同步调整数据表示及授权投影。
+
 ## Goals / Non-Goals
 
 **Goals**
@@ -18,28 +20,43 @@
 
 本期系统闭环至匹配结果交付。当前代码中的咨询状态和客户跟进入口需在功能盘点中注明用途，匹配任务本身以本提案定义的输出作为完成条件。
 
-**待确认**
+**后续业务问题**
 
-- 同一人既买房又卖房时，是否使用同一份档案承载两种角色，还是仅复用人员身份及业主引用。
-- 同一位业主名下多套房源，是否允许不同经纪人分别负责并复用其业主档案。
+买方负责人转交、角色停用和身份证错误更正的流程，随后续功能逐项确认。
 
 ## Decisions
 
 ### 客源负责人和查看权限
 
-新买方客源归录入经纪人，以可信 Auth 用户为 `owner_user_id`。`broker_id` 保存已验证的经纪人映射，业主档案和买方档案按 `profile_type` 区分。已核实归属的旧记录沿用现有证据和兼容路径。
+首次以买方用途登记人员档案时，买方角色负责人取当前经纪人的可信 Auth 用户。`broker_id` 保存已验证的经纪人映射。人员身份以同一个档案编号维持唯一，业务角色允许同时包含 `CUSTOMER` 和 `OWNER`，每套房源保存自己的负责经纪人。已核实归属的旧记录沿用现有证据和兼容路径。
 
-普通经纪人查看自己负责的客户。授权管理员还需同时满足管理员身份、所需操作及当前资源范围。服务端统一应用该规则于搜索、详情、匹配、Agent 输入和产物读取。搜索的请求参数只用于收窄范围。其他经纪人的同部门关系不构成查看许可。匹配仅向有权读取该客户的人展示该客户相关结果，来源调用使用最小需求字段。
+普通经纪人按买方角色的 `owner_user_id` 查看自己负责的需求及匹配资料。授权管理员还需同时满足管理员身份、所需操作及当前资源范围。服务端统一应用该规则于搜索、详情、匹配、Agent 输入和产物读取。搜索的请求参数只用于收窄范围。其他经纪人的同部门关系不构成买方资料查看许可。
+
+经纪人负责的房源引用某份档案时，可查看该业主的姓名、联系方式以及自己负责的关联房源。该经纪人和当前授权管理员可校正共同业主姓名、联系电话等基础信息，记录前后值、操作人和时间。买方预算、区域、偏好和匹配结果由买方角色权限单独控制。完整身份证不放入业主联系信息投影。
+
+共享联系资料修改拟增加 `profile_version` 及变更历史，按预期版本原子保存，避免 A、B 同时修改而静默覆盖。历史保存允许的字段前后值及实际操作人。角色添加、身份证身份及角色负责人采用各自的明确操作，联系资料更新只修改对应字段。
 
 ### 身份与联系电话
 
 买方客户首次登记必须提供身份证，以证件确定唯一身份。手机号为可重复的联系资料，买方与业主都可能填写亲属号码。经纪人自身手机号具有唯一性，按其账号或经纪人档案的登记入口校验。
 
-客户身份证以受保护的文档数据及确定性查重标识表达，设计字段为 `identity_ref`、`document_ciphertext`、`document_lookup_key`。唯一约束针对客户身份，手机号不承担客户去重职责。规范化后的文档标识、联系方式和负责经纪人关联分别保存，实际表归属随买方和业主角色复用规则落定。匹配请求及结果只传稳定客户引用。
+客户身份证以受保护的文档数据及确定性查重标识表达，拟在一对一的 `customer_profile_identity` 保存 `profile_id, document_ciphertext, document_lookup_key`，证件查重键唯一。它引用同一个人员档案编号，手机号保存在联系资料中。匹配请求及结果只传稳定客户引用。
 
-首次登记缺少身份证时，提示补充所需信息，尚不创建客户档案。经纪人 B 提交已由 A 登记的身份证时，返回稳定业务结果 `IDENTITY_ALREADY_EXISTS`，B 的新建申请不产生第二份档案，也不改变原有负责人。内部查重结果定位至同一身份及其既有业主档案，受权的业务引用继续使用既有记录。重复命中本身不授予 B 查看原档案或关联资料的权限，响应内容按其当前范围输出。
+首次登记缺少身份证时，提示补充所需信息，尚不创建人员档案。经纪人 B 提交已由 A 登记的身份证并尝试新建时，返回稳定业务结果 `IDENTITY_ALREADY_EXISTS`。查重定位到同一档案，继续办理使用既有引用。重复命中本身不授予 B 查看原有买方需求或接管其负责人的权限。
 
 同一创建请求的重试返回其原结果。真正的新请求若命中已有证件，按重复登记处理。数据库唯一约束与事务共同处理并发首次登记，确保只有一份成功档案。历史缺少证件的记录按原事实保留，新增登记规则及补录路径在受管迁移中分别落实。
+
+### 同一档案的买方与业主角色
+
+复用 `customer_profile.id` 作为人员档案编号，房源的 `owner_customer_id` 继续指向这个编号。拟新增 `customer_profile_role` 保存 `profile_id, role_code, owner_user_id, created_at, created_by_user_id`，以 `profile_id + role_code` 唯一表示角色。`CUSTOMER` 行的 `owner_user_id` 表示买方需求负责人。`OWNER` 角色的使用范围由各套房源关联和当前操作授权决定。
+
+迁移按原 `profile_type` 生成已有角色。原为 `CUSTOMER` 的记录按已核实主表归属初始化买方角色负责人，原为 `OWNER` 的记录只生成业主角色。原字段及原登记归属保留兼容，新增买方角色后，读取权以角色负责人为准。
+
+搜索、匹配和业主验证按角色集合判断。买方匹配要求存在 `CUSTOMER` 角色，房源关联要求存在 `OWNER` 角色，同一编号可以同时满足两者。给原档案添加角色时追加对应角色记录，日常编辑只修改明确提交的资料，不通过覆盖旧类型删除另一个角色。旧接口的单值字段按其兼容用途映射，真实的角色集合由版本化 DTO 提供。
+
+若 A 原先以业主身份建档，此人之后找 B 买房，B 可以在原档案添加 `CUSTOMER` 角色，其买方需求归 B。原有房源及其负责人继续按各房源记录管理。若该档案已经有买方角色，重复新建或再次添加角色不会转移既有买方负责人。角色添加使用唯一约束及稳定请求身份处理并发和重试。
+
+同一位业主的多套房源可以分别由 A、B 负责，人员档案不随各套房源的经纪人复制。业主引用验证按房源关联用途及当前资源范围返回必要引用，完整买方资料读取另行鉴权。首次房源创建使用已认证的登记动作及拟关联的档案验证引用，后续联系信息读取根据已保存的房源负责人关系校验，避免初次关联依赖尚未建立的房源关系。
 
 ### 匹配条件与顺序
 
@@ -61,7 +78,19 @@
 
 ### 数据流
 
-首次登记按证件唯一查重，匹配按客户引用读取需求。
+首次登记按证件唯一查重，业务角色和房源引用复用同一档案。
+
+```mermaid
+flowchart LR
+    Document[身份证查重键] --> Person[唯一人员档案 customer_profile.id]
+    Person --> Buyer[CUSTOMER 买方角色，独立负责经纪人]
+    Person --> Owner[OWNER 业主角色]
+    Buyer --> Demand[有权读取的买方需求与匹配结果]
+    Owner --> ListingA[房源甲，负责经纪人 A]
+    Owner --> ListingB[房源乙，负责经纪人 B]
+    ListingA --> Ref[owner_customer_id 指向同一档案]
+    ListingB --> Ref
+```
 
 ```mermaid
 flowchart LR
@@ -105,8 +134,10 @@ sequenceDiagram
 
 | 数据用途 | 现有字段或接口 | 设计约束 |
 | --- | --- | --- |
-| 客源档案与责任人 | `customer_profile.id, profile_type, name, mobile, broker_id, owner_user_id, source_channel, remark, deleted, created_at, updated_at` | 新登记负责人从可信身份取得，读取按负责人或管理员授权过滤 |
-| 身份与业主档案引用 | 现有档案无证件身份字段，房源的业主引用使用 `listing_info.owner_customer_id` | 拟使用 `identity_ref, document_lookup_key, document_ciphertext` 标识与查重，关联既有业主档案。完整档案的读取继续按负责人及管理员范围校验 |
+| 客源档案与责任人 | `customer_profile.id, profile_type, name, mobile, broker_id, owner_user_id, source_channel, remark, deleted, created_at, updated_at` | 保留历史字段，买方需求的新授权以对应角色负责人为准，业主联系信息按房源关联范围返回 |
+| 身份与业主档案引用 | 现有档案无证件身份字段，房源的业主引用使用 `listing_info.owner_customer_id` | 拟在 `customer_profile_identity(profile_id, document_lookup_key, document_ciphertext)` 查重并保护证件，同一 `profile_id` 兼具买方与业主角色。买方资料按角色权限读取 |
+| 人员业务角色 | 历史 `customer_profile.profile_type` 单值记录保留 | 拟新增 `customer_profile_role(profile_id, role_code, owner_user_id, created_at, created_by_user_id)`，买方需求负责人独立记录，房源引用仍使用同一档案 ID |
+| 共享联系信息校正 | 当前 `customer_profile.name, mobile, wechat_no, updated_at` | 拟增加 `profile_version` 和 `customer_profile_change_record(profile_id, from_version, to_version, changed_fields_json, operator_user_id, request_id, created_at)`，按当前作用域返回可见字段 |
 | 客户需求 | `preferred_area, preferred_layout, budget_min, budget_max, preferred_area_min, preferred_area_max, intention` | 服务端读取当前需求，按本次需求生成内容摘要。旧字段金额单位在适配时明确，防止万元与元混用 |
 | 结构化匹配条件 | 当前区域与户型主要为文本字段 | 新增或投影 `region_refs_json, budget_upper_yuan, layout_constraint_json, criteria_hash, criteria_source_refs`。保留原字段及对话证据，明确必要条件和软偏好 |
 | 身份与联系资料 | 客户联系电话沿用 `customer_profile.mobile` | 新登记买方身份证必填，以受控引用及文档查重标识唯一约束。重复命中定位同一身份及既有业主档案。买方及业主联系电话可重复，经纪人手机号唯一 |
