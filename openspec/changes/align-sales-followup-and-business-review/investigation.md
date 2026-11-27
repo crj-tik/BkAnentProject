@@ -6,6 +6,8 @@
 
 正式带看须绑定已建档买方；一次行程可看多套房源，逐套登记反馈，并允许持续多轮。经纪人在双方签订正式合同后登记成交，管理员确认后成交才生效、房源变为 SOLD 并计入成交统计。业主本人直接参与访谈，由经纪人发起并关联已有业主档案；访谈用于诊断经纪人、门店及房客不匹配的问题，也用于总结好方法复用。经营明细按本人、本门店及管理员获授权范围查看；同门店经纪人可看排行，不能看他人明细。复盘须形成具体改进计划，由门店负责人确认，每项行动有独立负责人及期限。
 
+补充确认：待审核签约登记仅互斥其他买方的签约登记，不阻止原在售条件下的推荐、新带看和营销草稿。成交确认生效后才关闭这些新的选用。管理员作废成交后保留历史、修正统计，房源回已登记并重新送审上架。业主档案对应受访者用户身份，仅具有获准被访谈能力，不取得系统业务操作能力。
+
 以下实线表示源码中已有调用或读写实现，**不代表运行验收通过**；虚线表示本次需补建或明确的业务对接。表间 ID 与跨库来源引用是业务关联，不据此推断数据库外键。
 
 ## 现状数据流与待补接口
@@ -24,6 +26,7 @@ flowchart TB
     broker -->|既有状态接口可 ON_SALE 转 SOLD| listing
     follow -.->|待建：结构化多轮行程与逐套反馈| visit[拟议带看事实；尚未建表]
     visit -.->|待建：正式合同签订后的成交登记| deal[拟议成交事实；尚未建表]
+    deal -.->|待建：仅互斥其他签约登记| reservation[拟议唯一房源签约占用]
     deal -.->|待建：成交记录与 SOLD 的一致性| listing
     stats[(经营 KPI／日工作量／流转／门店快照)]
     visit -.->|未找到当前事实到统计的写入链| stats
@@ -57,6 +60,7 @@ flowchart TB
 | 工作量 `employee_daily_workload` | `employee_id, employee_name, store_name, region_name, stat_date, viewing_count, new_listings, new_customers, follow_up_count` | 日汇总；未检出从已完成带看产生统计的生产写入链。[DDL](../../../sql/migrations/20261029_platform_operations_schema.sql#L32) |
 | 流转／门店快照 | `listing_turnover_stat.listing_id, stat_month, listing_to_viewing_days, viewing_to_deal_days, total_turnover_days`；`store_dashboard_snapshot.store_name, stat_date, active_listing_count, today_viewing_count, today_deal_count, today_performance_amount` | 既有只读分析源；成交总价、佣金和经营业绩不能混为一个金额。[DDL](../../../sql/migrations/20261029_platform_operations_schema.sql#L53) |
 | 访谈案例／会话 | `interview_case.id, scene, case_status, respondent_role, store_name, listing_name, respondent_name, created_by_user_id`；`interview_session.id, case_id, mode, status, version, started_at, closed_at` | 提纲已覆盖业主、经纪人、店长；案例缺少可核验的门店、人员档案及房源 ID 关联，姓名不能用于自动归并。[案例](../../../interview-service/src/main/java/com/bkanent/interview/entity/InterviewCaseEntity.java#L10)、[提纲路由](../../../interview-service/src/main/java/com/bkanent/interview/engine/OutlineRouter.java#L33) |
+| 访谈参与者／用途票据 | `interview_participant.session_id, user_id, relation, state, invited_by_user_id, confirmed_at, revision`；`interview_participant_ticket.session_id, user_id, purpose, ticket_hash, expires_at, revoked_at, revision` | 当前参与者和票据按已认证平台 user_id 匹配。业主档案受访主体需明确类型及认证绑定，不能将档案编号直接当平台用户编号。[参与关系](../../../interview-service/src/main/java/com/bkanent/interview/service/InterviewParticipantService.java#L26)、[票据](../../../interview-service/src/main/java/com/bkanent/interview/service/InterviewParticipantTicketService.java#L43) |
 | 逐字稿 `interview_asset` | `id, session_id, case_id, source, content, raw_content, snapshot_hash, archive_grade, metadata_json, content_hash, content_revision, sanitization_revision, visibility, publication_revision, approved_by_user_id, published_at` | 脱敏正文与原文分开；公开来源需显式发布、合格等级和版本校验，AUTO/UPLOAD 不证明真实业务效果。[实体](../../../interview-service/src/main/java/com/bkanent/interview/entity/InterviewAssetEntity.java#L12)、[来源读取](../../../platform-operations-service/src/main/java/com/bkanent/knowledge/source/InterviewTranscriptSource.java#L13) |
 | 知识及来源 | `knowledge_case.knowledge_id, scope_type, owner_actor_id, store_id, lifecycle_state, current_revision, published_revision`；`knowledge_revision.revision_no, content_hash, body_json, evidence_level, data_mode`；`knowledge_source_ref.asset_id, snapshot_hash, content_hash, content_revision, sanitization_revision, publication_revision` | 知识修订保存访谈证据绑定；已发布知识可供获准复盘复用，不等于复盘已直接读取访谈。[DDL](../../../sql/migrations/20261029_platform_operations_schema.sql#L213)、[生成](../../../platform-operations-service/src/main/java/com/bkanent/knowledge/service/KnowledgeGenerationService.java#L122) |
 | 复盘事项／证据 | `store_review_matter.review_id, store_id, actor_id, dataset_id, data_mode, status, version, matter_json`；`store_review_evidence.source_system, source_id, revision, observed_at, event_time, source_status, evidence_json` | 有来源版本和观察时间结构；当前 HTTP 来源是房源＋已发布知识，需补带看、成交及访谈用途。[DDL](../../../sql/migrations/20261029_platform_operations_schema.sql#L96)、[实际取数](../../../platform-operations-service/src/main/java/com/bkanent/businessreview/domain/DomainParallelHttpReadAdapter.java#L82) |
@@ -65,7 +69,7 @@ flowchart TB
 ## 对实际使用的主要缺口
 
 1. **带看事实不完整**：自由文本跟进不足以表达行程、逐套房源、实际发生时间、多轮复看和反馈。跟进新增直接 save，缺请求去重，不能直接作为带看次数的可靠计数源。
-2. **成交事实不完整**：`ON_SALE→SOLD` 没有正式合同签订事件、买方、签约时间及金额的稳定关联。咨询 CLOSED、人工动作 DONE 和房源 SOLD 不能相互替代，更不能直接推定业绩收入。
+2. **成交事实不完整**：`ON_SALE→SOLD` 没有正式合同签订事件、买方、签约时间及金额的稳定关联，没有唯一签约占用及作废回已登记路径。咨询 CLOSED、人工动作 DONE 和房源 SOLD 不能相互替代，更不能直接推定业绩收入。
 3. **汇总没有来源闭环**：四类经营统计表已有读接口，当前活动生产源码未检出从带看／成交事实生成或重建统计的链路。迁移对应用只授予这四表 SELECT。无来源与真实零发生需分别表达。
 4. **范围与投影未分层**：经营入口使用 `business.*.all`；尚无满足“本人明细／本门店明细／授权范围／同店排行摘要”的统一契约。KI-281、KI-282 已登记总量依赖 topN、按显示名称归并的问题。
 5. **访谈关联与诊断用途待接通**：现有角色提纲可复用，但文本门店名、房源名、姓名不能证明业务关联。需区分受访者陈述、可核实事实及分析假设；遵守既有脱敏、来源撤回与 LR-116/117/167 边界。
@@ -74,5 +78,5 @@ flowchart TB
 
 ## 拟议对象，不是现有表
 
-- 带看行程、行程内房源及其反馈、正式合同签订后的成交登记、管理员确认及生效记录、事实修订及操作去重回执。须保留建档买方、实际操作者、事件时间、业务引用和版本；成交生效、SOLD 及成交统计需关联同一次管理员确认，未经确认的登记不计为已成交。具体表名、领域承载和最终字段由设计阶段确定。
-- 经纪人发起的业主本人访谈及其已有业主档案引用、可信门店／相关房客源的明确引用及受权诊断投影；由门店负责人确认的改进计划、逐项独立负责人及期限、验收依据及后续观察。它们尚未落库或接通，不能从同名字段、任意摘要或 Memory 自动推断。
+- 带看行程、行程内房源及其反馈、正式合同签订后的成交登记、唯一签约占用、管理员确认/作废记录、事实修订及操作去重回执。占用绑定稳定房源和登记，成交生效、SOLD 及成交统计关联同一次确认；作废关联统计修正和已登记状态。具体表名、领域承载和最终字段由设计阶段确定。
+- 经纪人发起的业主本人访谈及其已有业主档案受访主体、可信门店／相关房客源的明确引用及受权诊断投影；由门店负责人确认的改进计划、逐项独立负责人及期限、验收依据及后续观察。它们尚未落库或接通，不能从同名字段、任意摘要或 Memory 自动推断。
