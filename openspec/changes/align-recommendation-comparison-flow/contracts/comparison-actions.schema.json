@@ -1,0 +1,648 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bkanent:a2a:recommendation-comparison:1.0",
+  "title": "推荐、选择两套与历史对比载荷",
+  "description": "复用共同 A2A 信封及房客匹配条件和候选定义。用途、来源、当前使用权、两套身份不重复和报告行列同源由运行逻辑核实。",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/RecommendRequest"
+    },
+    {
+      "$ref": "#/$defs/RecommendResult"
+    },
+    {
+      "$ref": "#/$defs/CreatePairRequest"
+    },
+    {
+      "$ref": "#/$defs/CreatePairResult"
+    },
+    {
+      "$ref": "#/$defs/ReadRequest"
+    },
+    {
+      "$ref": "#/$defs/ReportView"
+    },
+    {
+      "$ref": "#/$defs/RegenerateRequest"
+    },
+    {
+      "$ref": "#/$defs/RegenerateResult"
+    }
+  ],
+  "x-actions": {
+    "listing.recommendation.prepare": {
+      "contractVersion": "1.0",
+      "request": {
+        "$ref": "#/$defs/RecommendRequest"
+      },
+      "result": {
+        "$ref": "#/$defs/RecommendResult"
+      }
+    },
+    "listing.comparison.create-pair": {
+      "contractVersion": "1.0",
+      "request": {
+        "$ref": "#/$defs/CreatePairRequest"
+      },
+      "result": {
+        "$ref": "#/$defs/CreatePairResult"
+      }
+    },
+    "listing.comparison.read": {
+      "contractVersion": "1.0",
+      "request": {
+        "$ref": "#/$defs/ReadRequest"
+      },
+      "result": {
+        "$ref": "#/$defs/ReportView"
+      }
+    },
+    "listing.comparison.regenerate": {
+      "contractVersion": "1.0",
+      "request": {
+        "$ref": "#/$defs/RegenerateRequest"
+      },
+      "result": {
+        "$ref": "#/$defs/RegenerateResult"
+      }
+    }
+  },
+  "$defs": {
+    "Id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "RecommendationRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "artifactId": {
+          "$ref": "#/$defs/Id"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "artifactId",
+        "version"
+      ]
+    },
+    "RecommendRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "criteria": {
+          "$ref": "urn:bkanent:a2a:customer-matching:1.0#/$defs/EffectiveCriteria"
+        },
+        "customerId": {
+          "$ref": "urn:bkanent:a2a:customer-matching:1.0#/$defs/Id"
+        }
+      },
+      "required": [
+        "criteria"
+      ]
+    },
+    "RecommendResult": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "outcome": {
+              "const": "READY"
+            },
+            "recommendationRef": {
+              "$ref": "#/$defs/RecommendationRef"
+            },
+            "criteria": {
+              "$ref": "urn:bkanent:a2a:customer-matching:1.0#/$defs/EffectiveCriteria"
+            },
+            "criteriaHash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "candidates": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 10,
+              "items": {
+                "$ref": "urn:bkanent:a2a:customer-matching:1.0#/$defs/MatchItem"
+              }
+            }
+          },
+          "required": [
+            "outcome",
+            "recommendationRef",
+            "criteria",
+            "criteriaHash",
+            "candidates"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "outcome": {
+              "const": "NO_CANDIDATES"
+            },
+            "recommendationRef": {
+              "$ref": "#/$defs/RecommendationRef"
+            },
+            "criteria": {
+              "$ref": "urn:bkanent:a2a:customer-matching:1.0#/$defs/EffectiveCriteria"
+            },
+            "criteriaHash": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$"
+            },
+            "candidates": {
+              "type": "array",
+              "maxItems": 0
+            },
+            "notice": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120
+            }
+          },
+          "required": [
+            "outcome",
+            "recommendationRef",
+            "criteria",
+            "criteriaHash",
+            "candidates",
+            "notice"
+          ]
+        }
+      ]
+    },
+    "SelectionRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "listingRef": {
+          "$ref": "urn:bkanent:a2a:customer-matching:1.0#/$defs/ListingRef"
+        },
+        "expectedRevision": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "\\S"
+        }
+      },
+      "required": [
+        "listingRef",
+        "expectedRevision"
+      ]
+    },
+    "CreatePairRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "criteria": {
+          "$ref": "urn:bkanent:a2a:customer-matching:1.0#/$defs/EffectiveCriteria"
+        },
+        "recommendationRef": {
+          "$ref": "#/$defs/RecommendationRef"
+        },
+        "selection": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/SelectionRef"
+          }
+        },
+        "customerId": {
+          "$ref": "urn:bkanent:a2a:customer-matching:1.0#/$defs/Id"
+        },
+        "includeConclusion": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "criteria",
+        "recommendationRef",
+        "selection"
+      ]
+    },
+    "CreatePairResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "outcome": {
+          "const": "CREATED"
+        },
+        "report": {
+          "$ref": "#/$defs/PairReportView"
+        }
+      },
+      "required": [
+        "outcome",
+        "report"
+      ]
+    },
+    "ReadRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reportId": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "reportId"
+      ]
+    },
+    "Money": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "type": "string",
+          "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+        },
+        "currency": {
+          "const": "CNY"
+        },
+        "unit": {
+          "const": "YUAN"
+        }
+      },
+      "required": [
+        "amount",
+        "currency",
+        "unit"
+      ]
+    },
+    "Card": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "listingRef": {
+          "$ref": "urn:bkanent:a2a:customer-matching:1.0#/$defs/ListingRef"
+        },
+        "revision": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "\\S"
+        },
+        "contentHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 256
+        },
+        "totalPrice": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Money"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "areaSquareMetres": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unitPriceCnyPerSquareMetre": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "attributes": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "unknownFields": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "maxLength": 256,
+            "pattern": "\\S"
+          }
+        },
+        "highlights": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "lowestTotalPriceCny",
+              "highestTotalPriceCny",
+              "lowestUnitPriceCnyPerSquareMetre",
+              "highestUnitPriceCnyPerSquareMetre",
+              "largestAreaSquareMetres"
+            ]
+          }
+        }
+      },
+      "required": [
+        "listingRef",
+        "revision",
+        "contentHash",
+        "title",
+        "totalPrice",
+        "areaSquareMetres",
+        "unitPriceCnyPerSquareMetre",
+        "attributes",
+        "unknownFields",
+        "highlights"
+      ]
+    },
+    "Freshness": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "state": {
+              "const": "CURRENT"
+            },
+            "checkedAt": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "state",
+            "checkedAt"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "state": {
+              "const": "CHANGED"
+            },
+            "checkedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "notice": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "state",
+            "checkedAt",
+            "notice"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "state": {
+              "const": "UNVERIFIED"
+            },
+            "checkedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "notice": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "state",
+            "checkedAt",
+            "notice"
+          ]
+        }
+      ]
+    },
+    "ReportView": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reportId": {
+          "$ref": "#/$defs/Id"
+        },
+        "rulesVersion": {
+          "type": "string",
+          "maxLength": 256,
+          "pattern": "\\S"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "cards": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 6,
+          "items": {
+            "$ref": "#/$defs/Card"
+          }
+        },
+        "metrics": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "metric": {
+                "type": "string",
+                "maxLength": 256,
+                "pattern": "\\S"
+              },
+              "value": {
+                "type": "string",
+                "maxLength": 256
+              }
+            },
+            "required": [
+              "metric",
+              "value"
+            ]
+          }
+        },
+        "metricWinners": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "metric": {
+                "type": "string",
+                "maxLength": 256,
+                "pattern": "\\S"
+              },
+              "listingRef": {
+                "$ref": "urn:bkanent:a2a:customer-matching:1.0#/$defs/ListingRef"
+              },
+              "value": {
+                "type": "string",
+                "maxLength": 256
+              }
+            },
+            "required": [
+              "metric",
+              "listingRef",
+              "value"
+            ]
+          }
+        },
+        "freshness": {
+          "$ref": "#/$defs/Freshness"
+        },
+        "previousReportId": {
+          "$ref": "#/$defs/Id"
+        },
+        "criteria": {
+          "$ref": "urn:bkanent:a2a:customer-matching:1.0#/$defs/EffectiveCriteria"
+        },
+        "criteriaHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "recommendationRef": {
+          "$ref": "#/$defs/RecommendationRef"
+        },
+        "pdfDownloadPath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      },
+      "required": [
+        "reportId",
+        "rulesVersion",
+        "createdAt",
+        "cards",
+        "metrics",
+        "metricWinners",
+        "freshness"
+      ]
+    },
+    "PairReportView": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/ReportView"
+        },
+        {
+          "required": [
+            "criteria",
+            "criteriaHash"
+          ],
+          "properties": {
+            "cards": {
+              "minItems": 2,
+              "maxItems": 2
+            }
+          }
+        }
+      ]
+    },
+    "RegenerateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reportId": {
+          "$ref": "#/$defs/Id"
+        },
+        "criteria": {
+          "$ref": "urn:bkanent:a2a:customer-matching:1.0#/$defs/EffectiveCriteria"
+        }
+      },
+      "required": [
+        "reportId",
+        "criteria"
+      ]
+    },
+    "RegenerateResult": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "outcome": {
+              "const": "REGENERATED"
+            },
+            "report": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/PairReportView"
+                },
+                {
+                  "required": [
+                    "previousReportId"
+                  ]
+                }
+              ]
+            }
+          },
+          "required": [
+            "outcome",
+            "report"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "outcome": {
+              "const": "REGENERATION_UNAVAILABLE"
+            },
+            "reportId": {
+              "$ref": "#/$defs/Id"
+            },
+            "reason": {
+              "enum": [
+                "SOURCE_OFF_SALE",
+                "CONDITIONS_NOT_MET",
+                "NEW_COMPARISON_REQUIRED"
+              ]
+            },
+            "notice": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 120,
+              "pattern": "\\S"
+            }
+          },
+          "required": [
+            "outcome",
+            "reportId",
+            "reason",
+            "notice"
+          ]
+        }
+      ]
+    }
+  }
+}
