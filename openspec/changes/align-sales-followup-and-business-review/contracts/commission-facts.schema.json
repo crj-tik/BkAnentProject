@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:bkanent:domain:commission-facts:1.0",
+  "title": "佣金费用快照与逐笔确认事实草案",
+  "description": "共用 A2A 信封内可复用的领域数据定义，不定义新的信封或动作。费用快照按用户提供图片配置广州买方和卖方各 1.5% 的默认值，不声明当前市场统一或法定费率。default 仅为注释，不自动填充请求。身份授权、人工决定、金额公式、侧别归属、原记录关联及去重均由服务端核验。",
+  "oneOf": [
+    { "$ref": "#/$defs/CommissionTerms" },
+    { "$ref": "#/$defs/PendingEntry" },
+    { "$ref": "#/$defs/AdminConfirmedEntry" }
+  ],
+  "$defs": {
+    "Id": { "$ref": "urn:bkanent:agent:supervised-workflow:1.0#/$defs/Id" },
+    "UserId": { "$ref": "urn:bkanent:a2a:customer-matching:1.0#/$defs/Id" },
+    "Version": { "type": "integer", "minimum": 1 },
+    "PositiveAmountYuan": {
+      "type": "string",
+      "maxLength": 32,
+      "pattern": "^(?:[1-9][0-9]*\\.[0-9]{2}|0\\.(?:0[1-9]|[1-9][0-9]))$",
+      "description": "CNY 元的精确正金额，固定两位小数；不是浮点数。单笔金额为绝对值，退款/更正的汇总效果按已发布业务规则处理，不能仅把正字符串解释为收入增加。"
+    },
+    "NonNegativeAmountYuan": {
+      "type": "string", "maxLength": 32,
+      "pattern": "^(?:0|[1-9][0-9]*)\\.[0-9]{2}$",
+      "description": "更正候选允许零金额；不是实际到账或退款的正向金额。调整效果由原笔类型和明确业务规则决定。"
+    },
+    "Timestamp": { "type": "string", "format": "date-time" },
+    "Hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "FeeSide": { "enum": ["BUYER", "SELLER"] },
+    "RateBps": {
+      "type": "integer", "minimum": 0, "maximum": 10000,
+      "description": "费率基点，100 基点为 1%，150 基点为 1.5%；不表示经纪人的收入分配比例。允许的实际收费仍由当前费用政策和业务确认核验。"
+    },
+    "PolicyRef": {
+      "type": "object", "additionalProperties": false,
+      "required": ["policyId", "version"],
+      "properties": {
+        "policyId": { "$ref": "#/$defs/Id" },
+        "version": { "$ref": "#/$defs/Version" }
+      }
+    },
+    "CommissionTerms": {
+      "type": "object", "additionalProperties": false,
+      "description": "服务端保存的成交费用及负责经纪人快照。两侧按各自实际到账归属；同一经纪人可以同时承担买卖两侧，不强制两个用户不同。费率默认值不能代替已保存的实际快照，也不能用于推造实收。",
+      "required": ["kind", "dealId", "version", "policyRef", "cityRef", "capturedAt", "baseDealAmountYuan", "currency", "unit", "buyerRateBps", "sellerRateBps", "buyerBrokerUserId", "sellerBrokerUserId", "buyerStoreId", "sellerStoreId"],
+      "properties": {
+        "kind": { "const": "COMMISSION_TERMS" },
+        "dealId": { "$ref": "#/$defs/Id" },
+        "version": { "$ref": "#/$defs/Version" },
+        "policyRef": { "$ref": "#/$defs/PolicyRef" },
+        "cityRef": { "$ref": "#/$defs/Id" },
+        "capturedAt": { "$ref": "#/$defs/Timestamp" },
+        "baseDealAmountYuan": { "$ref": "#/$defs/PositiveAmountYuan" },
+        "currency": { "const": "CNY" },
+        "unit": { "const": "YUAN" },
+        "buyerRateBps": { "$ref": "#/$defs/RateBps", "default": 150 },
+        "sellerRateBps": { "$ref": "#/$defs/RateBps", "default": 150 },
+        "buyerBrokerUserId": { "$ref": "#/$defs/UserId" },
+        "sellerBrokerUserId": { "$ref": "#/$defs/UserId" },
+        "buyerStoreId": { "$ref": "urn:bkanent:a2a:customer-matching:1.0#/$defs/Id" },
+        "sellerStoreId": { "$ref": "urn:bkanent:a2a:customer-matching:1.0#/$defs/Id" }
+      }
+    },
+    "EntryFields": {
+      "type": "object",
+      "required": ["dealId", "termsVersion", "feeSide", "entryType", "amountYuan", "currency", "unit", "occurredAt"],
+      "properties": {
+        "dealId": { "$ref": "#/$defs/Id" },
+        "termsVersion": { "$ref": "#/$defs/Version" },
+        "feeSide": { "$ref": "#/$defs/FeeSide" },
+        "entryType": { "enum": ["RECEIPT", "REFUND", "CORRECTION"] },
+        "amountYuan": { "$ref": "#/$defs/NonNegativeAmountYuan" },
+        "currency": { "const": "CNY" },
+        "unit": { "const": "YUAN" },
+        "occurredAt": { "$ref": "#/$defs/Timestamp" },
+        "originalEntryId": { "$ref": "#/$defs/Id" },
+        "evidenceRef": { "$ref": "#/$defs/Id" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "entryType": { "enum": ["REFUND", "CORRECTION"] } }, "required": ["entryType"] },
+          "then": { "required": ["originalEntryId"] }
+        },
+        {
+          "if": { "properties": { "entryType": { "enum": ["RECEIPT", "REFUND"] } }, "required": ["entryType"] },
+          "then": { "properties": { "amountYuan": { "$ref": "#/$defs/PositiveAmountYuan" } } }
+        }
+      ],
+      "description": "逐笔到账/退款/更正事实的共用业务字段。originalEntryId 必须由服务端验证为同一成交、同侧的有效关联，不能自引用；更正的替代或冲正含义及汇总规则仍需在执行契约中明确。"
+    },
+    "EntryRegistrationInput": {
+      "allOf": [{ "$ref": "#/$defs/EntryFields" }],
+      "type": "object", "unevaluatedProperties": false,
+      "description": "登记写入仅接受本定义，禁止把包含已确认输出的根 oneOf 用作写入口。操作者、笔号、记录时间和初始版本由服务端生成，操作去重沿用共同信封。"
+    },
+    "EntryData": {
+      "allOf": [{ "$ref": "#/$defs/EntryFields" }],
+      "type": "object",
+      "required": ["entryId", "version", "recordedAt", "recordedByUserId"],
+      "properties": {
+        "entryId": { "$ref": "#/$defs/Id" },
+        "version": { "$ref": "#/$defs/Version" },
+        "recordedAt": { "$ref": "#/$defs/Timestamp" },
+        "recordedByUserId": { "$ref": "#/$defs/UserId" }
+      }
+    },
+    "PendingEntry": {
+      "allOf": [{ "$ref": "#/$defs/EntryData" }],
+      "type": "object", "unevaluatedProperties": false,
+      "required": ["kind", "status"],
+      "properties": {
+        "kind": { "const": "COMMISSION_ENTRY_PENDING" },
+        "status": { "const": "PENDING_CONFIRMATION" }
+      },
+      "description": "经纪人登记后的待管理员确认事实。该结构不能携带确认人或伪造确认结果，尚不计入已生效实收。登记主体和权限从可信上下文取得。"
+    },
+    "AdminConfirmedEntry": {
+      "allOf": [{ "$ref": "#/$defs/EntryData" }],
+      "type": "object", "unevaluatedProperties": false,
+      "required": ["kind", "status", "confirmationSource", "confirmationId", "reviewedVersion", "entryDataHash", "confirmedByUserId", "confirmedAt", "attributedBrokerUserId"],
+      "properties": {
+        "kind": { "const": "COMMISSION_ENTRY_CONFIRMED" },
+        "status": { "const": "CONFIRMED" },
+        "confirmationSource": { "const": "ADMIN" },
+        "confirmationId": { "$ref": "#/$defs/Id" },
+        "reviewedVersion": { "$ref": "#/$defs/Version" },
+        "entryDataHash": { "$ref": "#/$defs/Hash" },
+        "confirmedByUserId": { "$ref": "#/$defs/UserId" },
+        "confirmedAt": { "$ref": "#/$defs/Timestamp" },
+        "attributedBrokerUserId": { "$ref": "#/$defs/UserId" }
+      },
+      "description": "仅用于服务端输出。确认人来自已验证的管理员决定，归属人按费用快照及 feeSide 解析，不能用确认人或录入人代替；不能仅凭载荷声称 CONFIRMED 就入账。外部财务确认暂不属于本版本的生效记录分支。"
+    },
+    "ExternalFinanceConfirmationCandidate": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "sourceSystem", "sourceRecordKey", "sourceEventId", "entryId", "expectedEntryVersion", "entryDataHash", "decision", "sourceOccurredAt", "evidenceRef"],
+      "properties": {
+        "kind": { "const": "EXTERNAL_FINANCE_CONFIRMATION" },
+        "sourceSystem": { "$ref": "#/$defs/Id" },
+        "sourceRecordKey": { "$ref": "#/$defs/Id" },
+        "sourceEventId": { "$ref": "#/$defs/Id" },
+        "entryId": { "$ref": "#/$defs/Id" },
+        "expectedEntryVersion": { "$ref": "#/$defs/Version" },
+        "entryDataHash": { "$ref": "#/$defs/Hash" },
+        "decision": { "const": "CONFIRM" },
+        "sourceOccurredAt": { "$ref": "#/$defs/Timestamp" },
+        "evidenceRef": { "$ref": "#/$defs/Id" }
+      },
+      "description": "外部财务扩展预留定义，不在根 oneOf 中，因此当前事实入口拒绝此种载荷。将来启用必须先登记可信来源、签名/防重放、事件去重、精确待确认版本和内容哈希绑定，并与管理员确认共用单一业务结果。Schema 存在不表示接口开放。"
+    }
+  }
+}
